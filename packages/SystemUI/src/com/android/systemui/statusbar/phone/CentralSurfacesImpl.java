@@ -31,7 +31,7 @@ import static androidx.core.view.ViewCompat.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_
 import static androidx.lifecycle.Lifecycle.State.RESUMED;
 
 import static com.android.systemui.Dependency.TIME_TICK_HANDLER_NAME;
-import static com.android.systemui.charging.WirelessChargingLayout.UNKNOWN_BATTERY_LEVEL;
+import static com.android.systemui.charging.WirelessChargingAnimation.UNKNOWN_BATTERY_LEVEL;
 import static com.android.systemui.keyguard.WakefulnessLifecycle.WAKEFULNESS_ASLEEP;
 import static com.android.systemui.statusbar.NotificationLockscreenUserManager.PERMISSION_SELF;
 import static com.android.systemui.statusbar.phone.BarTransitions.MODE_LIGHTS_OUT;
@@ -67,7 +67,6 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.res.Configuration;
 import android.graphics.Point;
-import android.graphics.PointF;
 import android.hardware.devicestate.DeviceStateManager;
 import android.metrics.LogMaker;
 import android.net.Uri;
@@ -153,7 +152,6 @@ import com.android.systemui.flags.Flags;
 import com.android.systemui.fragments.ExtensionFragmentListener;
 import com.android.systemui.fragments.FragmentHostManager;
 import com.android.systemui.fragments.FragmentService;
-import com.android.systemui.keyguard.KeyguardService;
 import com.android.systemui.keyguard.KeyguardUnlockAnimationController;
 import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.keyguard.ScreenLifecycle;
@@ -171,11 +169,13 @@ import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.qs.QSFragment;
 import com.android.systemui.qs.QSPanelController;
 import com.android.systemui.recents.ScreenPinningRequest;
+import com.android.systemui.ripple.RippleShader.RippleShape;
 import com.android.systemui.scrim.ScrimView;
 import com.android.systemui.settings.brightness.BrightnessSliderController;
 import com.android.systemui.shade.NotificationPanelViewController;
 import com.android.systemui.shade.NotificationShadeWindowView;
 import com.android.systemui.shade.NotificationShadeWindowViewController;
+import com.android.systemui.shade.ShadeController;
 import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.statusbar.AutoHideUiElement;
 import com.android.systemui.statusbar.BackDropView;
@@ -194,19 +194,16 @@ import com.android.systemui.statusbar.NotificationRemoteInputManager;
 import com.android.systemui.statusbar.NotificationShadeDepthController;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.NotificationShelfController;
-import com.android.systemui.statusbar.NotificationViewHierarchyManager;
 import com.android.systemui.statusbar.PowerButtonReveal;
 import com.android.systemui.statusbar.PulseExpansionHandler;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.core.StatusBarInitializer;
 import com.android.systemui.statusbar.notification.DynamicPrivacyController;
-import com.android.systemui.statusbar.notification.NotifPipelineFlags;
 import com.android.systemui.statusbar.notification.NotificationActivityStarter;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.NotificationLaunchAnimatorControllerProvider;
 import com.android.systemui.statusbar.notification.NotificationWakeUpCoordinator;
-import com.android.systemui.statusbar.notification.collection.legacy.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.init.NotificationsController;
 import com.android.systemui.statusbar.notification.interruption.NotificationInterruptStateProvider;
 import com.android.systemui.statusbar.notification.logging.NotificationLogger;
@@ -447,7 +444,6 @@ public class CentralSurfacesImpl extends CoreStartable implements
     @VisibleForTesting
     DozeServiceHost mDozeServiceHost;
     private boolean mWakeUpComingFromTouch;
-    private PointF mWakeUpTouchLocation;
     private LightRevealScrim mLightRevealScrim;
     private PowerButtonReveal mPowerButtonReveal;
 
@@ -469,7 +465,7 @@ public class CentralSurfacesImpl extends CoreStartable implements
     private final Lazy<BiometricUnlockController> mBiometricUnlockControllerLazy;
     private final CentralSurfacesComponent.Factory mCentralSurfacesComponentFactory;
     private final PluginManager mPluginManager;
-    private final ShadeController mShadeController;
+    private final com.android.systemui.shade.ShadeController mShadeController;
     private final InitController mInitController;
 
     private final PluginDependencyProvider mPluginDependencyProvider;
@@ -498,7 +494,6 @@ public class CentralSurfacesImpl extends CoreStartable implements
     protected final NotificationEntryManager mEntryManager;
     private final NotificationGutsManager mGutsManager;
     private final NotificationLogger mNotificationLogger;
-    private final NotificationViewHierarchyManager mViewHierarchyManager;
     private final PanelExpansionStateManager mPanelExpansionStateManager;
     private final KeyguardViewMediator mKeyguardViewMediator;
     protected final NotificationInterruptStateProvider mNotificationInterruptStateProvider;
@@ -605,8 +600,6 @@ public class CentralSurfacesImpl extends CoreStartable implements
     private int mLastCameraLaunchSource;
     protected PowerManager.WakeLock mGestureWakeLock;
 
-    private final int[] mTmpInt2 = new int[2];
-
     // Fingerprint (as computed by getLoggingFingerprint() of the last logged state.
     private int mLastLoggedStateFingerprint;
     private boolean mIsLaunchingActivityOverLockscreen;
@@ -634,7 +627,6 @@ public class CentralSurfacesImpl extends CoreStartable implements
     private final Optional<Bubbles> mBubblesOptional;
     private final Bubbles.BubbleExpandListener mBubbleExpandListener;
     private final Optional<StartingSurface> mStartingSurfaceOptional;
-    private final NotifPipelineFlags mNotifPipelineFlags;
 
     private final ActivityIntentHelper mActivityIntentHelper;
     private NotificationStackScrollLayoutController mStackScrollerController;
@@ -676,7 +668,6 @@ public class CentralSurfacesImpl extends CoreStartable implements
             NotificationGutsManager notificationGutsManager,
             NotificationLogger notificationLogger,
             NotificationInterruptStateProvider notificationInterruptStateProvider,
-            NotificationViewHierarchyManager notificationViewHierarchyManager,
             PanelExpansionStateManager panelExpansionStateManager,
             KeyguardViewMediator keyguardViewMediator,
             DisplayMetrics displayMetrics,
@@ -692,7 +683,6 @@ public class CentralSurfacesImpl extends CoreStartable implements
             WakefulnessLifecycle wakefulnessLifecycle,
             SysuiStatusBarStateController statusBarStateController,
             Optional<Bubbles> bubblesOptional,
-            VisualStabilityManager visualStabilityManager,
             DeviceProvisionedController deviceProvisionedController,
             NavigationBarController navigationBarController,
             AccessibilityFloatingMenuController accessibilityFloatingMenuController,
@@ -739,7 +729,6 @@ public class CentralSurfacesImpl extends CoreStartable implements
             WallpaperManager wallpaperManager,
             Optional<StartingSurface> startingSurfaceOptional,
             ActivityLaunchAnimator activityLaunchAnimator,
-            NotifPipelineFlags notifPipelineFlags,
             InteractionJankMonitor jankMonitor,
             DeviceStateManager deviceStateManager,
             WiredChargingRippleController wiredChargingRippleController,
@@ -766,7 +755,6 @@ public class CentralSurfacesImpl extends CoreStartable implements
         mGutsManager = notificationGutsManager;
         mNotificationLogger = notificationLogger;
         mNotificationInterruptStateProvider = notificationInterruptStateProvider;
-        mViewHierarchyManager = notificationViewHierarchyManager;
         mPanelExpansionStateManager = panelExpansionStateManager;
         mKeyguardViewMediator = keyguardViewMediator;
         mDisplayMetrics = displayMetrics;
@@ -782,7 +770,6 @@ public class CentralSurfacesImpl extends CoreStartable implements
         mWakefulnessLifecycle = wakefulnessLifecycle;
         mStatusBarStateController = statusBarStateController;
         mBubblesOptional = bubblesOptional;
-        mVisualStabilityManager = visualStabilityManager;
         mDeviceProvisionedController = deviceProvisionedController;
         mNavigationBarController = navigationBarController;
         mAccessibilityFloatingMenuController = accessibilityFloatingMenuController;
@@ -827,7 +814,6 @@ public class CentralSurfacesImpl extends CoreStartable implements
 
         mLockscreenShadeTransitionController = lockscreenShadeTransitionController;
         mStartingSurfaceOptional = startingSurfaceOptional;
-        mNotifPipelineFlags = notifPipelineFlags;
         mDreamManager = dreamManager;
         lockscreenShadeTransitionController.setCentralSurfaces(this);
         statusBarWindowStateController.addListener(this::onStatusBarWindowStateChanged);
@@ -1096,7 +1082,6 @@ public class CentralSurfacesImpl extends CoreStartable implements
                     isFolded, willGoToSleep, isShadeOpen, leaveOpen));
         }
         if (leaveOpen) {
-            mStatusBarStateController.setLeaveOpenOnKeyguardHide(true);
             if (mKeyguardStateController.isShowing()) {
                 // When device state changes on keyguard we don't want to keep the state of
                 // the shade and instead we open clean state of keyguard with shade closed.
@@ -1105,6 +1090,9 @@ public class CentralSurfacesImpl extends CoreStartable implements
                 // expanded. To prevent that we can close QS which resets QS and some parts of
                 // the shade to its default state. Read more in b/201537421
                 mCloseQsBeforeScreenOff = true;
+            } else {
+                // below makes shade stay open when going from folded to unfolded
+                mStatusBarStateController.setLeaveOpenOnKeyguardHide(true);
             }
         }
     }
@@ -1437,16 +1425,6 @@ public class CentralSurfacesImpl extends CoreStartable implements
             mPowerManager.wakeUp(
                     time, PowerManager.WAKE_REASON_GESTURE, "com.android.systemui:" + why);
             mWakeUpComingFromTouch = true;
-
-            // NOTE, the incoming view can sometimes be the entire container... unsure if
-            // this location is valuable enough
-            if (where != null) {
-                where.getLocationInWindow(mTmpInt2);
-                mWakeUpTouchLocation = new PointF(mTmpInt2[0] + where.getWidth() / 2,
-                        mTmpInt2[1] + where.getHeight() / 2);
-            } else {
-                mWakeUpTouchLocation = new PointF(-1, -1);
-            }
             mFalsingCollector.onScreenOnFromTouch();
         }
     }
@@ -1896,11 +1874,9 @@ public class CentralSurfacesImpl extends CoreStartable implements
             return true;
         }
 
-        // If we are locked and have to dismiss the keyguard, only animate if remote unlock
-        // animations are enabled. We also don't animate non-activity launches as they can break the
-        // animation.
+        // We don't animate non-activity launches as they can break the animation.
         // TODO(b/184121838): Support non activity launches on the lockscreen.
-        return isActivityIntent && KeyguardService.sEnableRemoteKeyguardGoingAwayAnimation;
+        return isActivityIntent;
     }
 
     /** Whether we should animate an activity launch. */
@@ -1962,7 +1938,6 @@ public class CentralSurfacesImpl extends CoreStartable implements
                     PowerManager.WAKE_REASON_APPLICATION,
                     "com.android.systemui:full_screen_intent");
             mWakeUpComingFromTouch = false;
-            mWakeUpTouchLocation = null;
         }
     }
 
@@ -2199,7 +2174,8 @@ public class CentralSurfacesImpl extends CoreStartable implements
                     public void onAnimationEnded() {
                         mNotificationShadeWindowController.setRequestTopUi(false, TAG);
                     }
-                }, false, sUiEventLogger).show(animationDelay);
+                }, /* isDozing= */ false, RippleShape.CIRCLE,
+                sUiEventLogger).show(animationDelay);
     }
 
     @Override
@@ -3231,7 +3207,7 @@ public class CentralSurfacesImpl extends CoreStartable implements
                 || (mDozing && mDozeParameters.shouldControlScreenOff()
                 && visibleNotOccludedOrWillBe);
 
-        mNotificationPanelViewController.setDozing(mDozing, animate, mWakeUpTouchLocation);
+        mNotificationPanelViewController.setDozing(mDozing, animate);
         updateQsExpansionEnabled();
         Trace.endSection();
     }
@@ -3308,11 +3284,7 @@ public class CentralSurfacesImpl extends CoreStartable implements
             return true;
         }
         if (mNotificationPanelViewController.isQsExpanded()) {
-            if (mNotificationPanelViewController.isQsDetailShowing()) {
-                mNotificationPanelViewController.closeQsDetail();
-            } else {
                 mNotificationPanelViewController.animateCloseQs(false /* animateAway */);
-            }
             return true;
         }
         if (mNotificationPanelViewController.closeUserSwitcherIfOpen()) {
@@ -3566,7 +3538,6 @@ public class CentralSurfacesImpl extends CoreStartable implements
             mLaunchCameraWhenFinishedWaking = false;
             mDeviceInteractive = false;
             mWakeUpComingFromTouch = false;
-            mWakeUpTouchLocation = null;
             updateVisibleToUser();
 
             updateNotificationPanelTouchState();
@@ -3648,6 +3619,18 @@ public class CentralSurfacesImpl extends CoreStartable implements
         public void onFinishedWakingUp() {
             mWakeUpCoordinator.setFullyAwake(true);
             mWakeUpCoordinator.setWakingUp(false);
+            if (mKeyguardStateController.isOccluded()
+                    && !mDozeParameters.canControlUnlockedScreenOff()) {
+                // When the keyguard is occluded we don't use the KEYGUARD state which would
+                // normally cause these redaction updates.  If AOD is on, the KEYGUARD state is used
+                // to show the doze, AND UnlockedScreenOffAnimationController.onFinishedWakingUp()
+                // would force a KEYGUARD state that would take care of recalculating redaction.
+                // So if AOD is off or unsupported we need to trigger these updates at screen on
+                // when the keyguard is occluded.
+                mLockscreenUserManager.updatePublicMode();
+                mNotificationPanelViewController.getNotificationStackScrollLayoutController()
+                        .updateSensitivenessForOccludedWakeup();
+            }
             if (mLaunchCameraWhenFinishedWaking) {
                 mNotificationPanelViewController.launchCamera(mLastCameraLaunchSource);
                 mLaunchCameraWhenFinishedWaking = false;
@@ -3910,9 +3893,6 @@ public class CentralSurfacesImpl extends CoreStartable implements
     // all notifications
     protected NotificationStackScrollLayout mStackScroller;
 
-    // handling reordering
-    private final VisualStabilityManager mVisualStabilityManager;
-
     protected AccessibilityManager mAccessibilityManager;
 
     protected boolean mDeviceInteractive;
@@ -4067,7 +4047,7 @@ public class CentralSurfacesImpl extends CoreStartable implements
             final PendingIntent intent, @Nullable final Runnable intentSentUiThreadCallback,
             @Nullable ActivityLaunchAnimator.Controller animationController) {
         final boolean willLaunchResolverActivity = intent.isActivity()
-                && mActivityIntentHelper.wouldLaunchResolverActivity(intent.getIntent(),
+                && mActivityIntentHelper.wouldPendingLaunchResolverActivity(intent,
                 mLockscreenUserManager.getCurrentUserId());
 
         boolean animate = !willLaunchResolverActivity

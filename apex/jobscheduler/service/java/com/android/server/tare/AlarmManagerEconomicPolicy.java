@@ -91,6 +91,7 @@ import static android.app.tare.EconomyManager.KEY_AM_REWARD_TOP_ACTIVITY_ONGOING
 import static android.app.tare.EconomyManager.KEY_AM_REWARD_WIDGET_INTERACTION_INSTANT;
 import static android.app.tare.EconomyManager.KEY_AM_REWARD_WIDGET_INTERACTION_MAX;
 import static android.app.tare.EconomyManager.KEY_AM_REWARD_WIDGET_INTERACTION_ONGOING;
+import static android.app.tare.EconomyManager.arcToCake;
 import static android.provider.Settings.Global.TARE_ALARM_MANAGER_CONSTANTS;
 
 import static com.android.server.tare.Modifier.COST_MODIFIER_CHARGING;
@@ -103,7 +104,6 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.ContentResolver;
 import android.provider.DeviceConfig;
-import android.provider.Settings;
 import android.util.IndentingPrintWriter;
 import android.util.KeyValueListParser;
 import android.util.Slog;
@@ -149,28 +149,31 @@ public class AlarmManagerEconomicPolicy extends EconomicPolicy {
     private long mHardSatiatedConsumptionLimit;
 
     private final KeyValueListParser mParser = new KeyValueListParser(',');
-    private final InternalResourceService mInternalResourceService;
+    private final Injector mInjector;
 
     private final SparseArray<Action> mActions = new SparseArray<>();
     private final SparseArray<Reward> mRewards = new SparseArray<>();
 
-    AlarmManagerEconomicPolicy(InternalResourceService irs) {
+    AlarmManagerEconomicPolicy(InternalResourceService irs, Injector injector) {
         super(irs);
-        mInternalResourceService = irs;
+        mInjector = injector;
         loadConstants("", null);
     }
 
     @Override
     void setup(@NonNull DeviceConfig.Properties properties) {
         super.setup(properties);
-        ContentResolver resolver = mInternalResourceService.getContext().getContentResolver();
-        loadConstants(Settings.Global.getString(resolver, TARE_ALARM_MANAGER_CONSTANTS),
+        ContentResolver resolver = mIrs.getContext().getContentResolver();
+        loadConstants(mInjector.getSettingsGlobalString(resolver, TARE_ALARM_MANAGER_CONSTANTS),
                 properties);
     }
 
     @Override
     long getMinSatiatedBalance(final int userId, @NonNull final String pkgName) {
-        if (mInternalResourceService.isPackageExempted(userId, pkgName)) {
+        if (mIrs.isPackageRestricted(userId, pkgName)) {
+            return 0;
+        }
+        if (mIrs.isPackageExempted(userId, pkgName)) {
             return mMinSatiatedBalanceExempted;
         }
         // TODO: take other exemptions into account
@@ -178,7 +181,10 @@ public class AlarmManagerEconomicPolicy extends EconomicPolicy {
     }
 
     @Override
-    long getMaxSatiatedBalance() {
+    long getMaxSatiatedBalance(int userId, @NonNull String pkgName) {
+        if (mIrs.isPackageRestricted(userId, pkgName)) {
+            return 0;
+        }
         // TODO(230501287): adjust balance based on whether the app has the SCHEDULE_EXACT_ALARM
         // permission granted. Apps without the permission granted shouldn't need a high balance
         // since they won't be able to use exact alarms. Apps with the permission granted could
@@ -226,20 +232,20 @@ public class AlarmManagerEconomicPolicy extends EconomicPolicy {
             Slog.e(TAG, "Global setting key incorrect: ", e);
         }
 
-        mMinSatiatedBalanceExempted = getConstantAsCake(mParser, properties,
-                KEY_AM_MIN_SATIATED_BALANCE_EXEMPTED,
-                DEFAULT_AM_MIN_SATIATED_BALANCE_EXEMPTED_CAKES);
         mMinSatiatedBalanceOther = getConstantAsCake(mParser, properties,
-                KEY_AM_MIN_SATIATED_BALANCE_OTHER_APP,
-                DEFAULT_AM_MIN_SATIATED_BALANCE_OTHER_APP_CAKES);
+            KEY_AM_MIN_SATIATED_BALANCE_OTHER_APP, DEFAULT_AM_MIN_SATIATED_BALANCE_OTHER_APP_CAKES);
+        mMinSatiatedBalanceExempted = getConstantAsCake(mParser, properties,
+            KEY_AM_MIN_SATIATED_BALANCE_EXEMPTED, DEFAULT_AM_MIN_SATIATED_BALANCE_EXEMPTED_CAKES,
+            mMinSatiatedBalanceOther);
         mMaxSatiatedBalance = getConstantAsCake(mParser, properties,
-                KEY_AM_MAX_SATIATED_BALANCE,
-                DEFAULT_AM_MAX_SATIATED_BALANCE_CAKES);
+            KEY_AM_MAX_SATIATED_BALANCE, DEFAULT_AM_MAX_SATIATED_BALANCE_CAKES,
+            Math.max(arcToCake(1), mMinSatiatedBalanceExempted));
         mInitialSatiatedConsumptionLimit = getConstantAsCake(mParser, properties,
-                KEY_AM_INITIAL_CONSUMPTION_LIMIT, DEFAULT_AM_INITIAL_CONSUMPTION_LIMIT_CAKES);
-        mHardSatiatedConsumptionLimit = Math.max(mInitialSatiatedConsumptionLimit,
-                getConstantAsCake(mParser, properties,
-                        KEY_AM_HARD_CONSUMPTION_LIMIT, DEFAULT_AM_HARD_CONSUMPTION_LIMIT_CAKES));
+            KEY_AM_INITIAL_CONSUMPTION_LIMIT, DEFAULT_AM_INITIAL_CONSUMPTION_LIMIT_CAKES,
+            arcToCake(1));
+        mHardSatiatedConsumptionLimit = getConstantAsCake(mParser, properties,
+            KEY_AM_HARD_CONSUMPTION_LIMIT, DEFAULT_AM_HARD_CONSUMPTION_LIMIT_CAKES,
+            mInitialSatiatedConsumptionLimit);
 
         final long exactAllowWhileIdleWakeupBasePrice = getConstantAsCake(mParser, properties,
                 KEY_AM_ACTION_ALARM_ALLOW_WHILE_IDLE_EXACT_WAKEUP_BASE_PRICE,

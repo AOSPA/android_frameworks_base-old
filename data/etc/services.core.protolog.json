@@ -13,11 +13,23 @@
       "group": "WM_DEBUG_STARTING_WINDOW",
       "at": "com\/android\/server\/wm\/ActivityRecord.java"
     },
+    "-2123789565": {
+      "message": "Found no matching mirror display for id=%d for DEFAULT_DISPLAY. Nothing to mirror.",
+      "level": "WARN",
+      "group": "WM_DEBUG_CONTENT_RECORDING",
+      "at": "com\/android\/server\/wm\/DisplayContent.java"
+    },
     "-2121056984": {
       "message": "%s",
       "level": "WARN",
       "group": "WM_DEBUG_LOCKTASK",
       "at": "com\/android\/server\/wm\/LockTaskController.java"
+    },
+    "-2113780196": {
+      "message": "Successfully created a ContentRecordingSession for displayId=%d to mirror content from displayId=%d",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_CONTENT_RECORDING",
+      "at": "com\/android\/server\/wm\/DisplayContent.java"
     },
     "-2111539867": {
       "message": "remove IME snapshot, caller=%s",
@@ -907,6 +919,12 @@
       "group": "WM_DEBUG_REMOTE_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RemoteAnimationController.java"
     },
+    "-1237827119": {
+      "message": "Schedule remove starting %s startingWindow=%s animate=%b Callers=%s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_STARTING_WINDOW",
+      "at": "com\/android\/server\/wm\/ActivityRecord.java"
+    },
     "-1228653755": {
       "message": "Launch on display check: displayId=%d callingPid=%d callingUid=%d",
       "level": "DEBUG",
@@ -1015,12 +1033,6 @@
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/WindowState.java"
     },
-    "-1128015008": {
-      "message": "Schedule remove starting %s startingWindow=%s startingView=%s Callers=%s",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_STARTING_WINDOW",
-      "at": "com\/android\/server\/wm\/ActivityRecord.java"
-    },
     "-1117599386": {
       "message": "Deferring rotation, display is not enabled.",
       "level": "VERBOSE",
@@ -1075,6 +1087,12 @@
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
+    "-1075136930": {
+      "message": "startLockTaskMode: Can't lock due to auth",
+      "level": "WARN",
+      "group": "WM_DEBUG_LOCKTASK",
+      "at": "com\/android\/server\/wm\/LockTaskController.java"
+    },
     "-1069336896": {
       "message": "onRootTaskOrderChanged(): rootTask=%s",
       "level": "DEBUG",
@@ -1104,6 +1122,12 @@
       "level": "DEBUG",
       "group": "WM_DEBUG_TASKS",
       "at": "com\/android\/server\/wm\/RootWindowContainer.java"
+    },
+    "-1018968224": {
+      "message": "Recorded task is removed, so stop recording on display %d",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_CONTENT_RECORDING",
+      "at": "com\/android\/server\/wm\/ContentRecorder.java"
     },
     "-1016578046": {
       "message": "Moving to %s Relaunching %s callers=%s",
@@ -1297,6 +1321,12 @@
       "group": "WM_DEBUG_CONFIGURATION",
       "at": "com\/android\/server\/wm\/ActivityRecord.java"
     },
+    "-838378223": {
+      "message": "Attempting to mirror self on %d",
+      "level": "WARN",
+      "group": "WM_DEBUG_CONTENT_RECORDING",
+      "at": "com\/android\/server\/wm\/DisplayContent.java"
+    },
     "-814760297": {
       "message": "Looking for task of %s in %s",
       "level": "DEBUG",
@@ -1404,6 +1434,12 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_CONTENT_RECORDING",
       "at": "com\/android\/server\/wm\/ContentRecorder.java"
+    },
+    "-729864558": {
+      "message": "Attempting to mirror %d from %d but no DisplayContent associated. Changing to mirror default display.",
+      "level": "WARN",
+      "group": "WM_DEBUG_CONTENT_RECORDING",
+      "at": "com\/android\/server\/wm\/DisplayContent.java"
     },
     "-729530161": {
       "message": "Moving to DESTROYED: %s (no app)",
@@ -2257,6 +2293,12 @@
       "group": "WM_DEBUG_FOCUS",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
+    "96494268": {
+      "message": "Stop MediaProjection on virtual display %d",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_CONTENT_RECORDING",
+      "at": "com\/android\/server\/wm\/ContentRecorder.java"
+    },
     "100936473": {
       "message": "Wallpaper animation!",
       "level": "VERBOSE",
@@ -2628,6 +2670,12 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_ANIM",
       "at": "com\/android\/server\/wm\/WindowContainer.java"
+    },
+    "390947100": {
+      "message": "Screenshotting %s [%s]",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_WINDOW_TRANSITIONS",
+      "at": "com\/android\/server\/wm\/Transition.java"
     },
     "397382873": {
       "message": "Moving to PAUSED: %s %s",
@@ -3061,6 +3109,12 @@
       "group": "WM_DEBUG_REMOTE_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RemoteAnimationController.java"
     },
+    "851368695": {
+      "message": "Deferred transition id=%d has been continued before the TaskFragmentTransaction=%s is finished",
+      "level": "WARN",
+      "group": "WM_DEBUG_WINDOW_TRANSITIONS",
+      "at": "com\/android\/server\/wm\/TaskFragmentOrganizerController.java"
+    },
     "872933199": {
       "message": "Changing focus from %s to %s displayId=%d Callers=%s",
       "level": "DEBUG",
@@ -3150,6 +3204,12 @@
       "level": "DEBUG",
       "group": "WM_DEBUG_LOCKTASK",
       "at": "com\/android\/server\/wm\/LockTaskController.java"
+    },
+    "956467125": {
+      "message": "Reparenting Activity to embedded TaskFragment, but the Activity is not collected",
+      "level": "WARN",
+      "group": "WM_DEBUG_WINDOW_TRANSITIONS",
+      "at": "com\/android\/server\/wm\/WindowOrganizerController.java"
     },
     "958338552": {
       "message": "grantEmbeddedWindowFocus win=%s dropped focus so setting focus to null since no candidate was found",
@@ -3253,6 +3313,12 @@
       "group": "WM_DEBUG_CONFIGURATION",
       "at": "com\/android\/server\/wm\/ActivityRecord.java"
     },
+    "1046228706": {
+      "message": "Defer transition id=%d for TaskFragmentTransaction=%s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_WINDOW_TRANSITIONS",
+      "at": "com\/android\/server\/wm\/TaskFragmentOrganizerController.java"
+    },
     "1046922686": {
       "message": "requestScrollCapture: caught exception dispatching callback: %s",
       "level": "WARN",
@@ -3294,6 +3360,12 @@
       "level": "DEBUG",
       "group": "WM_DEBUG_REMOTE_ANIMATIONS",
       "at": "com\/android\/server\/wm\/WallpaperAnimationAdapter.java"
+    },
+    "1075460705": {
+      "message": "Continue transition id=%d for TaskFragmentTransaction=%s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_WINDOW_TRANSITIONS",
+      "at": "com\/android\/server\/wm\/TaskFragmentOrganizerController.java"
     },
     "1087494661": {
       "message": "Clear window stuck on animatingExit status: %s",
@@ -3895,12 +3967,6 @@
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
-    "1742235936": {
-      "message": "Removing startingView=%s",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_STARTING_WINDOW",
-      "at": "com\/android\/server\/wm\/ActivityRecord.java"
-    },
     "1746778201": {
       "message": "Set freezing of %s: visible=%b freezing=%b visibleRequested=%b. %s",
       "level": "INFO",
@@ -4164,6 +4230,12 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_FOCUS_LIGHT",
       "at": "com\/android\/server\/wm\/InputMonitor.java"
+    },
+    "2004282287": {
+      "message": "Override sync-method for %s because seamless rotating",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_WINDOW_TRANSITIONS",
+      "at": "com\/android\/server\/wm\/Transition.java"
     },
     "2010476671": {
       "message": "Animation done in %s: reportedVisible=%b okToDisplay=%b okToAnimate=%b startingDisplayed=%b",

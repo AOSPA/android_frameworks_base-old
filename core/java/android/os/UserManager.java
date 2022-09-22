@@ -51,6 +51,7 @@ import android.content.IntentFilter;
 import android.content.IntentSender;
 import android.content.pm.UserInfo;
 import android.content.pm.UserInfo.UserInfoFlag;
+import android.content.pm.UserProperties;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -90,6 +91,7 @@ import java.util.Set;
 public class UserManager {
 
     private static final String TAG = "UserManager";
+    private static final boolean VERBOSE = false;
 
     @UnsupportedAppUsage
     private final IUserManager mService;
@@ -1993,7 +1995,8 @@ public class UserManager {
     /** @hide */
     public UserManager(Context context, IUserManager service) {
         mService = service;
-        mContext = context.getApplicationContext();
+        Context appContext = context.getApplicationContext();
+        mContext = (appContext == null ? context : appContext);
         mUserId = context.getUserId();
     }
 
@@ -2056,10 +2059,10 @@ public class UserManager {
         final String emulatedMode = SystemProperties.get(SYSTEM_USER_MODE_EMULATION_PROPERTY);
         switch (emulatedMode) {
             case SYSTEM_USER_MODE_EMULATION_FULL:
-                Log.d(TAG, "isHeadlessSystemUserMode(): emulating as false");
+                if (VERBOSE) Log.v(TAG, "isHeadlessSystemUserMode(): emulating as false");
                 return false;
             case SYSTEM_USER_MODE_EMULATION_HEADLESS:
-                Log.d(TAG, "isHeadlessSystemUserMode(): emulating as true");
+                if (VERBOSE) Log.v(TAG, "isHeadlessSystemUserMode(): emulating as true");
                 return true;
             case SYSTEM_USER_MODE_EMULATION_DEFAULT:
             case "": // property not set
@@ -2785,7 +2788,7 @@ public class UserManager {
         return isUserRunning(user.getIdentifier());
     }
 
-    /** {@hide} */
+    /** @hide */
     @RequiresPermission(anyOf = {Manifest.permission.MANAGE_USERS,
             Manifest.permission.INTERACT_ACROSS_USERS}, conditional = true)
     public boolean isUserRunning(@UserIdInt int userId) {
@@ -2832,6 +2835,66 @@ public class UserManager {
     public boolean isUserForeground() {
         try {
             return mService.isUserForeground(mUserId);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * @hide
+     */
+    @TestApi
+    public static boolean isUsersOnSecondaryDisplaysEnabled() {
+        return SystemProperties.getBoolean("fw.users_on_secondary_displays",
+                Resources.getSystem()
+                        .getBoolean(R.bool.config_multiuserUsersOnSecondaryDisplays));
+    }
+
+    /**
+     * Returns whether the device allows users to run (and launch activities) on secondary displays.
+     *
+     * @return {@code false} for most devices, except automotive vehicles with passenger displays.
+     *
+     * @hide
+     */
+    public boolean isUsersOnSecondaryDisplaysSupported() {
+        return isUsersOnSecondaryDisplaysEnabled();
+    }
+
+    /**
+     * Checks if the user is visible at the moment.
+     *
+     * <p>Roughly speaking, a "visible user" is a user that can present UI on at least one display.
+     * It includes:
+     *
+     * <ol>
+     *   <li>The current foreground user in the main display.
+     *   <li>Current background users in secondary displays (for example, passenger users on
+     *   automotive, using the display associated with their seats).
+     *   <li>Profile users (in the running / started state) of other visible users.
+     * </ol>
+     *
+     * @return whether the user is visible at the moment, as defined above.
+     */
+    @UserHandleAware
+    public boolean isUserVisible() {
+        try {
+            return mService.isUserVisible(mUserId);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Gets the visible users (as defined by {@link #isUserVisible()}.
+     *
+     * @return visible users at the moment.
+     */
+    @RequiresPermission(anyOf = {Manifest.permission.MANAGE_USERS,
+            Manifest.permission.INTERACT_ACROSS_USERS})
+    public @NonNull List<UserHandle> getVisibleUsers() {
+        try {
+            return mService.getVisibleUsers();
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }
@@ -2923,7 +2986,7 @@ public class UserManager {
                 }
             };
 
-    /** {@hide} */
+    /** @hide */
     @UnsupportedAppUsage
     @RequiresPermission(anyOf = {Manifest.permission.MANAGE_USERS,
             Manifest.permission.INTERACT_ACROSS_USERS}, conditional = true)
@@ -2931,13 +2994,13 @@ public class UserManager {
         return mIsUserUnlockedCache.query(userId);
     }
 
-    /** {@hide} */
+    /** @hide */
     public void disableIsUserUnlockedCache() {
         mIsUserUnlockedCache.disableLocal();
         mIsUserUnlockingOrUnlockedCache.disableLocal();
     }
 
-    /** {@hide} */
+    /** @hide */
     public static final void invalidateIsUserUnlockedCache() {
         PropertyInvalidatedCache.invalidateCache(CACHE_KEY_IS_USER_UNLOCKED_PROPERTY);
     }
@@ -2967,7 +3030,7 @@ public class UserManager {
         return isUserUnlockingOrUnlocked(user.getIdentifier());
     }
 
-    /** {@hide} */
+    /** @hide */
     @RequiresPermission(anyOf = {Manifest.permission.MANAGE_USERS,
             Manifest.permission.INTERACT_ACROSS_USERS}, conditional = true)
     public boolean isUserUnlockingOrUnlocked(@UserIdInt int userId) {
@@ -3035,6 +3098,30 @@ public class UserManager {
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }
+    }
+
+    /**
+     * Returns a {@link UserProperties} object describing the properties of the given user.
+     *
+     * Note that the caller may not have permission to access all items; requesting any item for
+     * which permission is lacking will throw a {@link SecurityException}.
+     *
+     * <p> Requires
+     * {@code android.Manifest.permission#MANAGE_USERS},
+     * {@code android.Manifest.permission#QUERY_USERS}, or
+     * {@code android.Manifest.permission#INTERACT_ACROSS_USERS}
+     * permission, or else the caller must be in the same profile group as the caller.
+     *
+     * @param userHandle the user handle of the user whose information is being requested.
+     * @return a UserProperties object for a specific user.
+     * @throws IllegalArgumentException if {@code userHandle} doesn't correspond to an existing user
+     */
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.MANAGE_USERS,
+            android.Manifest.permission.QUERY_USERS,
+            android.Manifest.permission.INTERACT_ACROSS_USERS}, conditional = true)
+    public @NonNull UserProperties getUserProperties(@NonNull UserHandle userHandle) {
+        return mUserPropertiesCache.query(userHandle.getIdentifier());
     }
 
     /**
@@ -4146,7 +4233,11 @@ public class UserManager {
     })
     public boolean canAddMoreUsers(@NonNull String userType) {
         try {
-            return canAddMoreUsers() && mService.canAddMoreUsersOfType(userType);
+            if (userType.equals(USER_TYPE_FULL_GUEST)) {
+                return mService.canAddMoreUsersOfType(userType);
+            } else {
+                return canAddMoreUsers() && mService.canAddMoreUsersOfType(userType);
+            }
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }
@@ -5171,23 +5262,13 @@ public class UserManager {
     })
     @UserHandleAware
     public boolean isUserSwitcherEnabled(boolean showEvenIfNotActionable) {
-        if (!supportsMultipleUsers()) {
-            return false;
-        }
-        if (hasUserRestrictionForUser(DISALLOW_USER_SWITCH, mUserId)) {
-            return false;
-        }
-        // If Demo Mode is on, don't show user switcher
-        if (isDeviceInDemoMode(mContext)) {
-            return false;
-        }
-        // Check the Settings.Global.USER_SWITCHER_ENABLED that the user can toggle on/off.
-        final boolean userSwitcherSettingOn = Settings.Global.getInt(mContext.getContentResolver(),
-                Settings.Global.USER_SWITCHER_ENABLED,
-                Resources.getSystem().getBoolean(R.bool.config_showUserSwitcherByDefault) ? 1 : 0)
-                != 0;
-        if (!userSwitcherSettingOn) {
-            return false;
+
+        try {
+            if (!mService.isUserSwitcherEnabled(mUserId)) {
+                return false;
+            }
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
         }
 
         // The feature is enabled. But is it worth showing?
@@ -5431,9 +5512,35 @@ public class UserManager {
                 }
             };
 
-    /** {@hide} */
+    /** @hide */
     public static final void invalidateStaticUserProperties() {
         PropertyInvalidatedCache.invalidateCache(CACHE_KEY_STATIC_USER_PROPERTIES);
+    }
+
+    /* Cache key for UserProperties object. */
+    private static final String CACHE_KEY_USER_PROPERTIES = "cache_key.user_properties";
+
+    // TODO: It would be better to somehow have this as static, so that it can work cross-context.
+    private final PropertyInvalidatedCache<Integer, UserProperties> mUserPropertiesCache =
+            new PropertyInvalidatedCache<Integer, UserProperties>(16, CACHE_KEY_USER_PROPERTIES) {
+                @Override
+                public UserProperties recompute(Integer userId) {
+                    try {
+                        // If the userId doesn't exist, this will throw rather than cache garbage.
+                        return mService.getUserPropertiesCopy(userId);
+                    } catch (RemoteException re) {
+                        throw re.rethrowFromSystemServer();
+                    }
+                }
+                @Override
+                public boolean bypass(Integer query) {
+                    return query < 0;
+                }
+            };
+
+    /** @hide */
+    public static final void invalidateUserPropertiesCache() {
+        PropertyInvalidatedCache.invalidateCache(CACHE_KEY_USER_PROPERTIES);
     }
 
     /**

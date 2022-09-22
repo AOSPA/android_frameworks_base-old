@@ -25,6 +25,7 @@ import android.app.ActivityManager.RunningTaskInfo;
 import android.app.ActivityTaskManager;
 import android.content.Context;
 import android.os.Handler;
+import android.view.Choreographer;
 import android.view.MotionEvent;
 import android.view.SurfaceControl;
 import android.view.View;
@@ -35,6 +36,8 @@ import com.android.wm.shell.R;
 import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.common.DisplayController;
 import com.android.wm.shell.common.SyncTransactionQueue;
+import com.android.wm.shell.freeform.FreeformTaskTransitionStarter;
+import com.android.wm.shell.transition.Transitions;
 
 /**
  * View model for the window decoration with a caption and shadows. Works with
@@ -45,17 +48,21 @@ public class CaptionWindowDecorViewModel implements WindowDecorViewModel<Caption
     private final ShellTaskOrganizer mTaskOrganizer;
     private final Context mContext;
     private final Handler mMainHandler;
+    private final Choreographer mMainChoreographer;
     private final DisplayController mDisplayController;
     private final SyncTransactionQueue mSyncQueue;
+    private FreeformTaskTransitionStarter mTransitionStarter;
 
     public CaptionWindowDecorViewModel(
             Context context,
             Handler mainHandler,
+            Choreographer mainChoreographer,
             ShellTaskOrganizer taskOrganizer,
             DisplayController displayController,
             SyncTransactionQueue syncQueue) {
         mContext = context;
         mMainHandler = mainHandler;
+        mMainChoreographer = mainChoreographer;
         mActivityTaskManager = mContext.getSystemService(ActivityTaskManager.class);
         mTaskOrganizer = taskOrganizer;
         mDisplayController = displayController;
@@ -63,8 +70,16 @@ public class CaptionWindowDecorViewModel implements WindowDecorViewModel<Caption
     }
 
     @Override
+    public void setFreeformTaskTransitionStarter(FreeformTaskTransitionStarter transitionStarter) {
+        mTransitionStarter = transitionStarter;
+    }
+
+    @Override
     public CaptionWindowDecoration createWindowDecoration(
-            ActivityManager.RunningTaskInfo taskInfo, SurfaceControl taskSurface) {
+            ActivityManager.RunningTaskInfo taskInfo,
+            SurfaceControl taskSurface,
+            SurfaceControl.Transaction startT,
+            SurfaceControl.Transaction finishT) {
         final CaptionWindowDecoration windowDecoration = new CaptionWindowDecoration(
                 mContext,
                 mDisplayController,
@@ -72,22 +87,44 @@ public class CaptionWindowDecorViewModel implements WindowDecorViewModel<Caption
                 taskInfo,
                 taskSurface,
                 mMainHandler,
+                mMainChoreographer,
                 mSyncQueue);
         TaskPositioner taskPositioner = new TaskPositioner(mTaskOrganizer, windowDecoration);
         CaptionTouchEventListener touchEventListener =
                 new CaptionTouchEventListener(taskInfo, taskPositioner);
         windowDecoration.setCaptionListeners(touchEventListener, touchEventListener);
         windowDecoration.setDragResizeCallback(taskPositioner);
-        onTaskInfoChanged(taskInfo, windowDecoration);
+        setupWindowDecorationForTransition(taskInfo, startT, finishT, windowDecoration);
+        setupCaptionColor(taskInfo, windowDecoration);
         return windowDecoration;
+    }
+
+    @Override
+    public CaptionWindowDecoration adoptWindowDecoration(AutoCloseable windowDecor) {
+        return (windowDecor instanceof CaptionWindowDecoration)
+                ? (CaptionWindowDecoration) windowDecor
+                : null;
     }
 
     @Override
     public void onTaskInfoChanged(RunningTaskInfo taskInfo, CaptionWindowDecoration decoration) {
         decoration.relayout(taskInfo);
 
+        setupCaptionColor(taskInfo, decoration);
+    }
+
+    private void setupCaptionColor(RunningTaskInfo taskInfo, CaptionWindowDecoration decoration) {
         int statusBarColor = taskInfo.taskDescription.getStatusBarColor();
         decoration.setCaptionColor(statusBarColor);
+    }
+
+    @Override
+    public void setupWindowDecorationForTransition(
+            RunningTaskInfo taskInfo,
+            SurfaceControl.Transaction startT,
+            SurfaceControl.Transaction finishT,
+            CaptionWindowDecoration decoration) {
+        decoration.relayout(taskInfo, startT, finishT);
     }
 
     private class CaptionTouchEventListener implements
@@ -100,7 +137,8 @@ public class CaptionWindowDecorViewModel implements WindowDecorViewModel<Caption
         private int mDragPointerId = -1;
 
         private CaptionTouchEventListener(
-                RunningTaskInfo taskInfo, DragResizeCallback dragResizeCallback) {
+                RunningTaskInfo taskInfo,
+                DragResizeCallback dragResizeCallback) {
             mTaskId = taskInfo.taskId;
             mTaskToken = taskInfo.token;
             mDragResizeCallback = dragResizeCallback;
@@ -108,7 +146,7 @@ public class CaptionWindowDecorViewModel implements WindowDecorViewModel<Caption
 
         @Override
         public void onClick(View v) {
-            int id = v.getId();
+            final int id = v.getId();
             if (id == R.id.close_window) {
                 mActivityTaskManager.removeTask(mTaskId);
             } else if (id == R.id.maximize_window) {
@@ -124,7 +162,19 @@ public class CaptionWindowDecorViewModel implements WindowDecorViewModel<Caption
                 if (targetWindowingMode == WINDOWING_MODE_FULLSCREEN) {
                     wct.setBounds(mTaskToken, null);
                 }
-                mSyncQueue.queue(wct);
+                if (Transitions.ENABLE_SHELL_TRANSITIONS) {
+                    mTransitionStarter.startWindowingModeTransition(targetWindowingMode, wct);
+                } else {
+                    mSyncQueue.queue(wct);
+                }
+            } else if (id == R.id.minimize_window) {
+                WindowContainerTransaction wct = new WindowContainerTransaction();
+                wct.reorder(mTaskToken, false);
+                if (Transitions.ENABLE_SHELL_TRANSITIONS) {
+                    mTransitionStarter.startMinimizedModeTransition(wct);
+                } else {
+                    mSyncQueue.queue(wct);
+                }
             }
         }
 
@@ -149,6 +199,10 @@ public class CaptionWindowDecorViewModel implements WindowDecorViewModel<Caption
         }
 
         private void handleEventForMove(MotionEvent e) {
+            if (mTaskOrganizer.getRunningTaskInfo(mTaskId).getWindowingMode()
+                    == WINDOWING_MODE_FULLSCREEN) {
+                return;
+            }
             switch (e.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                     mDragPointerId  = e.getPointerId(0);

@@ -23,8 +23,8 @@ import androidx.annotation.Nullable;
 
 import com.android.systemui.SystemUIInitializerFactory;
 import com.android.systemui.tv.TvWMComponent;
-import com.android.wm.shell.ShellCommandHandler;
-import com.android.wm.shell.ShellInit;
+import com.android.wm.shell.sysui.ShellCommandHandler;
+import com.android.wm.shell.sysui.ShellInit;
 import com.android.wm.shell.TaskViewFactory;
 import com.android.wm.shell.back.BackAnimation;
 import com.android.wm.shell.bubbles.Bubbles;
@@ -75,14 +75,8 @@ public interface WMComponent {
      * Initializes all the WMShell components before starting any of the SystemUI components.
      */
     default void init() {
-        getShellInit().init();
+        getShell().onInit();
     }
-
-    @WMSingleton
-    ShellInit getShellInit();
-
-    @WMSingleton
-    Optional<ShellCommandHandler> getShellCommandHandler();
 
     @WMSingleton
     ShellInterface getShell();

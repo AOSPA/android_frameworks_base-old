@@ -26,6 +26,7 @@ import android.os.Handler;
 import android.util.Slog;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.os.TimeoutRecord;
 import com.android.server.FgThread;
 import com.android.server.wm.WindowProcessController;
 
@@ -71,25 +72,26 @@ class AnrHelper {
         mService = service;
     }
 
-    void appNotResponding(ProcessRecord anrProcess, String annotation) {
+    void appNotResponding(ProcessRecord anrProcess, TimeoutRecord timeoutRecord) {
         appNotResponding(anrProcess, null /* activityShortComponentName */, null /* aInfo */,
                 null /* parentShortComponentName */, null /* parentProcess */,
-                false /* aboveSystem */, annotation);
+                false /* aboveSystem */, timeoutRecord);
     }
 
     void appNotResponding(ProcessRecord anrProcess, String activityShortComponentName,
          ApplicationInfo aInfo, String parentShortComponentName,
-         WindowProcessController parentProcess, boolean aboveSystem, String annotation) {
+         WindowProcessController parentProcess, boolean aboveSystem,
+         TimeoutRecord timeoutRecord) {
          appNotResponding(new AnrRecord(anrProcess, activityShortComponentName, aInfo,
-                   parentShortComponentName, parentProcess, aboveSystem, annotation));
+                   parentShortComponentName, parentProcess, aboveSystem, timeoutRecord));
     }
 
     void deferAppNotResponding(ProcessRecord anrProcess, String activityShortComponentName,
         ApplicationInfo aInfo, String parentShortComponentName,
         WindowProcessController parentProcess, boolean aboveSystem,
-        String annotation, long delayInMillis) {
+        TimeoutRecord timeoutRecord, long delayInMillis) {
         AnrRecord anrRecord = new AnrRecord(anrProcess, activityShortComponentName, aInfo,
-                parentShortComponentName, parentProcess, aboveSystem, annotation);
+                parentShortComponentName, parentProcess, aboveSystem, timeoutRecord);
         Message msg = Message.obtain();
         msg.what = APP_NOT_RESPONDING_DEFER_MSG;
         msg.obj = anrRecord;
@@ -98,7 +100,6 @@ class AnrHelper {
 
     private void appNotResponding(AnrRecord anrRecord) {
         final int incomingPid = anrRecord.mPid;
-        final String annotation = anrRecord.mAnnotation;
         synchronized (mAnrRecords) {
             if (incomingPid == 0) {
                 // Extreme corner case such as zygote is no response to return pid for the process.
@@ -107,12 +108,14 @@ class AnrHelper {
                 return;
             }
             if (mProcessingPid == incomingPid) {
-                Slog.i(TAG, "Skip duplicated ANR, pid=" + incomingPid + " " + annotation);
+                Slog.i(TAG,
+                        "Skip duplicated ANR, pid=" + incomingPid);
                 return;
             }
             for (int i = mAnrRecords.size() - 1; i >= 0; i--) {
                 if (mAnrRecords.get(i).mPid == incomingPid) {
-                    Slog.i(TAG, "Skip queued ANR, pid=" + incomingPid + " " + annotation);
+                    Slog.i(TAG,
+                            "Skip queued ANR, pid=" + incomingPid);
                     return;
                 }
             }
@@ -196,7 +199,7 @@ class AnrHelper {
         final int mPid;
         final String mActivityShortComponentName;
         final String mParentShortComponentName;
-        final String mAnnotation;
+        final TimeoutRecord mTimeoutRecord;
         final ApplicationInfo mAppInfo;
         final WindowProcessController mParentProcess;
         final boolean mAboveSystem;
@@ -204,12 +207,13 @@ class AnrHelper {
 
         AnrRecord(ProcessRecord anrProcess, String activityShortComponentName,
                 ApplicationInfo aInfo, String parentShortComponentName,
-                WindowProcessController parentProcess, boolean aboveSystem, String annotation) {
+                WindowProcessController parentProcess, boolean aboveSystem,
+                TimeoutRecord timeoutRecord) {
             mApp = anrProcess;
             mPid = anrProcess.mPid;
             mActivityShortComponentName = activityShortComponentName;
             mParentShortComponentName = parentShortComponentName;
-            mAnnotation = annotation;
+            mTimeoutRecord = timeoutRecord;
             mAppInfo = aInfo;
             mParentProcess = parentProcess;
             mAboveSystem = aboveSystem;
@@ -217,7 +221,8 @@ class AnrHelper {
 
         void appNotResponding(boolean onlyDumpSelf) {
             mApp.mErrorState.appNotResponding(mActivityShortComponentName, mAppInfo,
-                    mParentShortComponentName, mParentProcess, mAboveSystem, mAnnotation,
+                    mParentShortComponentName, mParentProcess, mAboveSystem,
+                    mTimeoutRecord,
                     onlyDumpSelf);
         }
     }

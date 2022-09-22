@@ -91,10 +91,8 @@ class StatusBarNotificationPresenter implements NotificationPresenter,
     private final HeadsUpManagerPhone mHeadsUpManager;
     private final AboveShelfObserver mAboveShelfObserver;
     private final DozeScrimController mDozeScrimController;
-    private final ScrimController mScrimController;
     private final KeyguardIndicationController mKeyguardIndicationController;
     private final CentralSurfaces mCentralSurfaces;
-    private final ShadeController mShadeController;
     private final LockscreenShadeTransitionController mShadeTransitionController;
     private final CommandQueue mCommandQueue;
 
@@ -109,20 +107,19 @@ class StatusBarNotificationPresenter implements NotificationPresenter,
     protected boolean mVrMode;
 
     @Inject
-    StatusBarNotificationPresenter(Context context,
+    StatusBarNotificationPresenter(
+            Context context,
             NotificationPanelViewController panel,
             HeadsUpManagerPhone headsUp,
             NotificationShadeWindowView statusBarWindow,
             ActivityStarter activityStarter,
             NotificationStackScrollLayoutController stackScrollerController,
             DozeScrimController dozeScrimController,
-            ScrimController scrimController,
             NotificationShadeWindowController notificationShadeWindowController,
             DynamicPrivacyController dynamicPrivacyController,
             KeyguardStateController keyguardStateController,
             KeyguardIndicationController keyguardIndicationController,
             CentralSurfaces centralSurfaces,
-            ShadeController shadeController,
             LockscreenShadeTransitionController shadeTransitionController,
             CommandQueue commandQueue,
             NotificationLockscreenUserManager lockscreenUserManager,
@@ -145,7 +142,6 @@ class StatusBarNotificationPresenter implements NotificationPresenter,
         mKeyguardIndicationController = keyguardIndicationController;
         // TODO: use KeyguardStateController#isOccluded to remove this dependency
         mCentralSurfaces = centralSurfaces;
-        mShadeController = shadeController;
         mShadeTransitionController = shadeTransitionController;
         mCommandQueue = commandQueue;
         mLockscreenUserManager = lockscreenUserManager;
@@ -161,7 +157,6 @@ class StatusBarNotificationPresenter implements NotificationPresenter,
                 R.id.notification_container_parent));
         mAccessibilityManager = context.getSystemService(AccessibilityManager.class);
         mDozeScrimController = dozeScrimController;
-        mScrimController = scrimController;
         mKeyguardManager = context.getSystemService(KeyguardManager.class);
         mBarService = IStatusBarService.Stub.asInterface(
                 ServiceManager.getService(Context.STATUS_BAR_SERVICE));
@@ -187,7 +182,7 @@ class StatusBarNotificationPresenter implements NotificationPresenter,
             notificationInterruptStateProvider.addSuppressor(mInterruptSuppressor);
             mLockscreenUserManager.setUpWithPresenter(this);
             mGutsManager.setUpWithPresenter(
-                    this, mNotifListContainer, mCheckSaveListener, mOnSettingsClickListener);
+                    this, mNotifListContainer, mOnSettingsClickListener);
             // ForegroundServiceNotificationListener adds its listener in its constructor
             // but we need to request it here in order for it to be instantiated.
             // TODO: figure out how to do this correctly once Dependency.get() is gone.
@@ -221,23 +216,6 @@ class StatusBarNotificationPresenter implements NotificationPresenter,
             // Finish the pulse.
             mDozeScrimController.pulseOutNow();
         }
-    }
-
-    @Override
-    public void updateNotificationViews(final String reason) {
-        if (!mNotifPipelineFlags.checkLegacyPipelineEnabled()) {
-            return;
-        }
-        // The function updateRowStates depends on both of these being non-null, so check them here.
-        // We may be called before they are set from DeviceProvisionedController's callback.
-        if (mScrimController == null) return;
-
-        // Do not modify the notifications during collapse.
-        if (isCollapsing()) {
-            mShadeController.addPostCollapseAction(() -> updateNotificationViews(reason));
-            return;
-        }
-        mNotificationPanel.updateNotificationViews(reason);
     }
 
     @Override
@@ -291,11 +269,6 @@ class StatusBarNotificationPresenter implements NotificationPresenter,
     @Override
     public void updateMediaMetaData(boolean metaDataChanged, boolean allowEnterAnimation) {
         mMediaManager.updateMediaMetaData(metaDataChanged, allowEnterAnimation);
-    }
-
-    @Override
-    public void onUpdateRowStates() {
-        mNotificationPanel.onUpdateRowStates();
     }
 
     @Override
@@ -390,7 +363,8 @@ class StatusBarNotificationPresenter implements NotificationPresenter,
                 return true;
             }
 
-            if (sbn.getNotification().fullScreenIntent != null) {
+            if (sbn.getNotification().fullScreenIntent != null
+                    && !mNotifPipelineFlags.fullScreenIntentRequiresKeyguard()) {
                 // we don't allow head-up on the lockscreen (unless there's a
                 // "showWhenLocked" activity currently showing)  if
                 // the potential HUN has a fullscreen intent

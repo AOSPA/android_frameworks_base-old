@@ -49,9 +49,12 @@ import android.app.BroadcastOptions;
 import android.app.IActivityController;
 import android.app.IActivityManager;
 import android.app.IActivityTaskManager;
+import android.app.IProcessObserver;
 import android.app.IStopUserCallback;
 import android.app.IUidObserver;
+import android.app.IUserSwitchObserver;
 import android.app.KeyguardManager;
+import android.app.ProcessStateEnum;
 import android.app.ProfilerInfo;
 import android.app.RemoteServiceException.CrashedByAdbException;
 import android.app.UserSwitchObserver;
@@ -358,6 +361,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     return runSetBgRestrictionLevel(pw);
                 case "get-bg-restriction-level":
                     return runGetBgRestrictionLevel(pw);
+                case "observe-foreground-process":
+                    return runGetCurrentForegroundProcess(pw, mInternal, mTaskInterface);
                 default:
                     return handleDefaultCommands(cmd);
             }
@@ -891,6 +896,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
         }
     }
 
+    // TODO(b/239982558): might need to support --displayId as well
     private int runProfile(PrintWriter pw) throws RemoteException {
         final PrintWriter err = getErrPrintWriter();
         String profileFile = null;
@@ -989,26 +995,40 @@ final class ActivityManagerShellCommand extends ShellCommand {
 
     @NeverCompile
     int runCompact(PrintWriter pw) {
-        String processName = getNextArgRequired();
-        String uid = getNextArgRequired();
-        String op = getNextArgRequired();
         ProcessRecord app;
-        synchronized (mInternal.mProcLock) {
-            app = mInternal.getProcessRecordLocked(processName, Integer.parseInt(uid));
-        }
-        pw.println("Process record found pid: " + app.mPid);
-        if (op.equals("full")) {
-            pw.println("Executing full compaction for " + app.mPid);
+        String op = getNextArgRequired();
+        boolean isFullCompact = op.equals("full");
+        boolean isSomeCompact = op.equals("some");
+        if (isFullCompact || isSomeCompact) {
+            String processName = getNextArgRequired();
+            String uid = getNextArgRequired();
             synchronized (mInternal.mProcLock) {
-                mInternal.mOomAdjuster.mCachedAppOptimizer.compactAppFull(app, true);
+                app = mInternal.getProcessRecordLocked(processName, Integer.parseInt(uid));
             }
-            pw.println("Finished full compaction for " + app.mPid);
-        } else if (op.equals("some")) {
-            pw.println("Executing some compaction for " + app.mPid);
+            pw.println("Process record found pid: " + app.mPid);
+            if (isFullCompact) {
+                pw.println("Executing full compaction for " + app.mPid);
+                synchronized (mInternal.mProcLock) {
+                    mInternal.mOomAdjuster.mCachedAppOptimizer.compactApp(app,
+                            CachedAppOptimizer.CompactProfile.FULL,
+                            CachedAppOptimizer.CompactSource.APP, true);
+                }
+                pw.println("Finished full compaction for " + app.mPid);
+            } else if (isSomeCompact) {
+                pw.println("Executing some compaction for " + app.mPid);
+                synchronized (mInternal.mProcLock) {
+                    mInternal.mOomAdjuster.mCachedAppOptimizer.compactApp(app,
+                            CachedAppOptimizer.CompactProfile.SOME,
+                            CachedAppOptimizer.CompactSource.APP, true);
+                }
+                pw.println("Finished some compaction for " + app.mPid);
+            }
+        } else if (op.equals("system")) {
+            pw.println("Executing system compaction");
             synchronized (mInternal.mProcLock) {
-                mInternal.mOomAdjuster.mCachedAppOptimizer.compactAppSome(app, true);
+                mInternal.mOomAdjuster.mCachedAppOptimizer.compactAllSystem();
             }
-            pw.println("Finished some compaction for " + app.mPid);
+            pw.println("Finished system compaction");
         } else {
             getErrPrintWriter().println("Error: unknown compact command '" + op + "'");
             return -1;
@@ -1937,31 +1957,36 @@ final class ActivityManagerShellCommand extends ShellCommand {
 
         // Register switch observer.
         final CountDownLatch switchLatch = new CountDownLatch(1);
-        mInterface.registerUserSwitchObserver(
-                new UserSwitchObserver() {
-                    @Override
-                    public void onUserSwitchComplete(int newUserId) {
-                        if (userId == newUserId) {
-                            switchLatch.countDown();
-                        }
-                    }
-                }, ActivityManagerShellCommand.class.getName());
-
-        // Switch.
-        boolean switched = mInterface.switchUser(userId);
-        if (!switched) {
-            // Switching failed, don't wait for the user switch observer.
-            return false;
-        }
-
-        // Wait.
+        final IUserSwitchObserver userSwitchObserver = new UserSwitchObserver() {
+            @Override
+            public void onUserSwitchComplete(int newUserId) {
+                if (userId == newUserId) {
+                    switchLatch.countDown();
+                }
+            }
+        };
         try {
-            switched = switchLatch.await(USER_OPERATION_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-        } catch (InterruptedException e) {
-            getErrPrintWriter().println("Error: Thread interrupted unexpectedly.");
-        }
+            mInterface.registerUserSwitchObserver(userSwitchObserver,
+                    ActivityManagerShellCommand.class.getName());
 
-        return switched;
+            // Switch.
+            boolean switched = mInterface.switchUser(userId);
+            if (!switched) {
+                // Switching failed, don't wait for the user switch observer.
+                return false;
+            }
+
+            // Wait.
+            try {
+                switched = switchLatch.await(USER_OPERATION_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                getErrPrintWriter().println("Error: Thread interrupted unexpectedly.");
+            }
+
+            return switched;
+        } finally {
+            mInterface.unregisterUserSwitchObserver(userSwitchObserver);
+        }
     }
 
     int runSwitchUser(PrintWriter pw) throws RemoteException {
@@ -2014,26 +2039,42 @@ final class ActivityManagerShellCommand extends ShellCommand {
     int runStartUser(PrintWriter pw) throws RemoteException {
         boolean wait = false;
         String opt;
+        int displayId = Display.INVALID_DISPLAY;
         while ((opt = getNextOption()) != null) {
-            if ("-w".equals(opt)) {
-                wait = true;
-            } else {
-                getErrPrintWriter().println("Error: unknown option: " + opt);
-                return -1;
+            switch(opt) {
+                case "-w":
+                    wait = true;
+                    break;
+                case "--display":
+                    displayId = getDisplayIdFromNextArg();
+                    break;
+                default:
+                    getErrPrintWriter().println("Error: unknown option: " + opt);
+                    return -1;
             }
         }
         int userId = Integer.parseInt(getNextArgRequired());
 
         final ProgressWaiter waiter = wait ? new ProgressWaiter() : null;
-        boolean success = mInterface.startUserInBackgroundWithListener(userId, waiter);
+
+        boolean success;
+        String displaySuffix;
+
+        if (displayId == Display.INVALID_DISPLAY) {
+            success = mInterface.startUserInBackgroundWithListener(userId, waiter);
+            displaySuffix = "";
+        } else {
+            success = mInterface.startUserInBackgroundOnSecondaryDisplay(userId, displayId);
+            displaySuffix = " on display " + displayId;
+        }
         if (wait && success) {
             success = waiter.waitForFinish(USER_OPERATION_TIMEOUT_MS);
         }
 
         if (success) {
-            pw.println("Success: user started");
+            pw.println("Success: user started" + displaySuffix);
         } else {
-            getErrPrintWriter().println("Error: could not start user");
+            getErrPrintWriter().println("Error: could not start user" + displaySuffix);
         }
         return 0;
     }
@@ -2486,6 +2527,14 @@ final class ActivityManagerShellCommand extends ShellCommand {
         }
     }
 
+    private int getDisplayIdFromNextArg() {
+        int displayId = Integer.parseInt(getNextArgRequired());
+        if (displayId < 0) {
+            throw new IllegalArgumentException("--display must be a non-negative integer");
+        }
+        return displayId;
+    }
+
     int runGetConfig(PrintWriter pw) throws RemoteException {
         int days = -1;
         int displayId = Display.DEFAULT_DISPLAY;
@@ -2504,10 +2553,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
             } else if (opt.equals("--device")) {
                 inclDevice = true;
             } else if (opt.equals("--display")) {
-                displayId = Integer.parseInt(getNextArgRequired());
-                if (displayId < 0) {
-                    throw new IllegalArgumentException("--display must be a non-negative integer");
-                }
+                displayId = getDisplayIdFromNextArg();
             } else {
                 getErrPrintWriter().println("Error: Unknown option: " + opt);
                 return -1;
@@ -3188,6 +3234,82 @@ final class ActivityManagerShellCommand extends ShellCommand {
         return -1;
     }
 
+    private int runGetCurrentForegroundProcess(PrintWriter pw,
+            IActivityManager iam, IActivityTaskManager iatm)
+            throws RemoteException {
+
+        ProcessObserver observer = new ProcessObserver(pw, iam, iatm, mInternal);
+        iam.registerProcessObserver(observer);
+
+        final InputStream mInput = getRawInputStream();
+        InputStreamReader converter = new InputStreamReader(mInput);
+        BufferedReader in = new BufferedReader(converter);
+        String line;
+        try {
+            while ((line = in.readLine()) != null) {
+                boolean addNewline = true;
+                if (line.length() <= 0) {
+                    addNewline = false;
+                } else if ("q".equals(line) || "quit".equals(line)) {
+                    break;
+                } else {
+                    pw.println("Invalid command: " + line);
+                }
+                if (addNewline) {
+                    pw.println("");
+                }
+                pw.flush();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+            pw.flush();
+        } finally {
+            iam.unregisterProcessObserver(observer);
+        }
+        return 0;
+    }
+
+    static final class ProcessObserver extends IProcessObserver.Stub {
+
+        private PrintWriter mPw;
+        private IActivityManager mIam;
+        private IActivityTaskManager mIatm;
+        private ActivityManagerService mInternal;
+
+        ProcessObserver(PrintWriter mPw, IActivityManager mIam,
+                IActivityTaskManager mIatm, ActivityManagerService ams) {
+            this.mPw = mPw;
+            this.mIam = mIam;
+            this.mIatm = mIatm;
+            this.mInternal = ams;
+        }
+
+        @Override
+        public void onForegroundActivitiesChanged(int pid, int uid, boolean foregroundActivities) {
+            if (foregroundActivities) {
+                try {
+                    int prcState = mIam.getUidProcessState(uid, "android");
+                    int topPid = mInternal.getTopApp().getPid();
+                    if (prcState == ProcessStateEnum.TOP && topPid == pid) {
+                        mPw.println("New foreground process: " + pid);
+                    }
+                    mPw.flush();
+                } catch (RemoteException e) {
+                    mPw.println("Error occurred in binder call");
+                    mPw.flush();
+                }
+            }
+        }
+
+        @Override
+        public void onForegroundServicesChanged(int pid, int uid, int serviceTypes) {
+        }
+
+        @Override
+        public void onProcessDied(int pid, int uid) {
+        }
+    }
+
     private int runSetMemoryFactor(PrintWriter pw) throws RemoteException {
         final String levelArg = getNextArgRequired();
         @MemFactor int level = ADJ_MEM_FACTOR_NOTHING;
@@ -3570,10 +3692,11 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("      --allow-background-activity-starts: The receiver may start activities");
             pw.println("          even if in the background.");
             pw.println("      --async: Send without waiting for the completion of the receiver.");
-            pw.println("  compact <process_name> <Package UID> [some|full]");
+            pw.println("  compact [some|full|system] <process_name> <Package UID>");
             pw.println("      Force process compaction.");
             pw.println("      some: execute file compaction.");
             pw.println("      full: execute anon + file compaction.");
+            pw.println("      system: system compaction.");
             pw.println("  instrument [-r] [-e <NAME> <VALUE>] [-p <FILE>] [-w]");
             pw.println("          [--user <USER_ID> | current]");
             pw.println("          [--no-hidden-api-checks [--no-test-api-access]]");
@@ -3693,10 +3816,13 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("      execution of that user if it is currently stopped.");
             pw.println("  get-current-user");
             pw.println("      Returns id of the current foreground user.");
-            pw.println("  start-user [-w] <USER_ID>");
+            pw.println("  start-user [-w] [--display DISPLAY_ID] <USER_ID>");
             pw.println("      Start USER_ID in background if it is currently stopped;");
             pw.println("      use switch-user if you want to start the user in foreground.");
             pw.println("      -w: wait for start-user to complete and the user to be unlocked.");
+            pw.println("      --display <DISPLAY_ID>: allows the user to launch activities in the");
+            pw.println("        given display, when supported (typically on automotive builds");
+            pw.println("        wherethe vehicle has multiple displays)");
             pw.println("  unlock-user <USER_ID>");
             pw.println("      Unlock the given user.  This will only work if the user doesn't");
             pw.println("      have an LSKF (PIN/pattern/password).");

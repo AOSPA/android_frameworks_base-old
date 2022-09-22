@@ -27,6 +27,7 @@ import static android.view.WindowManager.TRANSIT_FLAG_APP_CRASHED;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_CONFIGURATION;
 import static com.android.internal.util.Preconditions.checkArgument;
+import static com.android.server.am.ProcessList.INVALID_ADJ;
 import static com.android.server.wm.ActivityRecord.State.DESTROYED;
 import static com.android.server.wm.ActivityRecord.State.DESTROYING;
 import static com.android.server.wm.ActivityRecord.State.PAUSED;
@@ -79,7 +80,6 @@ import com.android.server.wm.ActivityTaskManagerService.HotPath;
 
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -126,6 +126,8 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
     private volatile int mCurProcState = PROCESS_STATE_NONEXISTENT;
     // Last reported process state;
     private volatile int mRepProcState = PROCESS_STATE_NONEXISTENT;
+    // Currently computed oom adj score
+    private volatile int mCurAdj = INVALID_ADJ;
     // are we in the process of crashing?
     private volatile boolean mCrashing;
     // does the app have a not responding dialog?
@@ -229,10 +231,6 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
     /** Whether our process is currently running a {@link IRemoteAnimationRunner} */
     private boolean mRunningRemoteAnimation;
 
-    /** List of "chained" processes that are running remote animations for this process */
-    private final ArrayList<WeakReference<WindowProcessController>> mRemoteAnimationDelegates =
-            new ArrayList<>();
-
     // The bits used for mActivityStateFlags.
     private static final int ACTIVITY_STATE_FLAG_IS_VISIBLE = 1 << 16;
     private static final int ACTIVITY_STATE_FLAG_IS_PAUSING_OR_PAUSED = 1 << 17;
@@ -322,6 +320,14 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
 
     int getCurrentProcState() {
         return mCurProcState;
+    }
+
+    public void setCurrentAdj(int curAdj) {
+        mCurAdj = curAdj;
+    }
+
+    int getCurrentAdj() {
+        return mCurAdj;
     }
 
     /**
@@ -1677,30 +1683,7 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         updateRunningRemoteOrRecentsAnimation();
     }
 
-    /**
-     * Marks another process as a "delegate" animator. This means that process is doing some part
-     * of a remote animation on behalf of this process.
-     */
-    void addRemoteAnimationDelegate(WindowProcessController delegate) {
-        if (!isRunningRemoteTransition()) {
-            throw new IllegalStateException("Can't add a delegate to a process which isn't itself"
-                    + " running a remote animation");
-        }
-        mRemoteAnimationDelegates.add(new WeakReference<>(delegate));
-    }
-
     void updateRunningRemoteOrRecentsAnimation() {
-        if (!isRunningRemoteTransition()) {
-            // Clean-up any delegates
-            for (int i = 0; i < mRemoteAnimationDelegates.size(); ++i) {
-                final WindowProcessController delegate = mRemoteAnimationDelegates.get(i).get();
-                if (delegate == null) continue;
-                delegate.setRunningRemoteAnimation(false);
-                delegate.setRunningRecentsAnimation(false);
-            }
-            mRemoteAnimationDelegates.clear();
-        }
-
         // Posting on handler so WM lock isn't held when we call into AM.
         mAtm.mH.sendMessage(PooledLambda.obtainMessage(
                 WindowProcessListener::setRunningRemoteAnimation, mListener,

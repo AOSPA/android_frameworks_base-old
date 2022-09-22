@@ -130,7 +130,6 @@ public final class SurfaceControl implements Parcelable {
             float x, float y);
     private static native void nativeSetScale(long transactionObj, long nativeObject,
             float x, float y);
-    private static native void nativeSetSize(long transactionObj, long nativeObject, int w, int h);
     private static native void nativeSetTransparentRegionHint(long transactionObj,
             long nativeObject, Region region);
     private static native void nativeSetAlpha(long transactionObj, long nativeObject, float alpha);
@@ -172,7 +171,6 @@ public final class SurfaceControl implements Parcelable {
     private static native boolean nativeGetAnimationFrameStats(WindowAnimationFrameStats outStats);
 
     private static native long[] nativeGetPhysicalDisplayIds();
-    private static native long nativeGetPrimaryPhysicalDisplayId();
     private static native IBinder nativeGetPhysicalDisplayToken(long physicalDisplayId);
     private static native IBinder nativeCreateDisplay(String name, boolean secure);
     private static native void nativeDestroyDisplay(IBinder displayToken);
@@ -233,7 +231,8 @@ public final class SurfaceControl implements Parcelable {
     private static native boolean nativeGetProtectedContentSupport();
     private static native void nativeSetMetadata(long transactionObj, long nativeObject, int key,
             Parcel data);
-    private static native void nativeSyncInputWindows(long transactionObj);
+    private static native void nativeAddWindowInfosReportedListener(long transactionObj,
+            Runnable listener);
     private static native boolean nativeGetDisplayBrightnessSupport(IBinder displayToken);
     private static native boolean nativeSetDisplayBrightness(IBinder displayToken,
             float sdrBrightness, float sdrBrightnessNits, float displayBrightness,
@@ -274,6 +273,9 @@ public final class SurfaceControl implements Parcelable {
     private static native void nativeSanitize(long transactionObject);
     private static native void nativeSetDestinationFrame(long transactionObj, long nativeObject,
             int l, int t, int r, int b);
+    private static native void nativeSetDefaultApplyToken(IBinder token);
+    private static native IBinder nativeGetDefaultApplyToken();
+
 
     /**
      * Transforms that can be applied to buffers as they are displayed to a window.
@@ -2397,15 +2399,6 @@ public final class SurfaceControl implements Parcelable {
     }
 
     /**
-     * Exposed to identify the correct display to apply the primary display orientation. Avoid using
-     * for any other purpose.
-     * @hide
-     */
-    public static long getPrimaryPhysicalDisplayId() {
-        return nativeGetPrimaryPhysicalDisplayId();
-    }
-
-    /**
      * @hide
      */
     public static IBinder getPhysicalDisplayToken(long physicalDisplayId) {
@@ -2786,6 +2779,22 @@ public final class SurfaceControl implements Parcelable {
         }
 
         /**
+         *
+         * @hide
+         */
+        public static void setDefaultApplyToken(IBinder token) {
+            nativeSetDefaultApplyToken(token);
+        }
+
+        /**
+         *
+         * @hide
+         */
+        public static IBinder getDefaultApplyToken() {
+            return nativeGetDefaultApplyToken();
+        }
+
+        /**
          * Apply the transaction, clearing it's state, and making it usable
          * as a new transaction.
          */
@@ -2966,7 +2975,6 @@ public final class SurfaceControl implements Parcelable {
                 @IntRange(from = 0) int w, @IntRange(from = 0) int h) {
             checkPreconditions(sc);
             mResizedSurfaces.put(sc, new Point(w, h));
-            nativeSetSize(mNativeObject, sc.mNativeObject, w, h);
             return this;
         }
 
@@ -3064,13 +3072,14 @@ public final class SurfaceControl implements Parcelable {
         }
 
         /**
-         * Waits until any changes to input windows have been sent from SurfaceFlinger to
-         * InputFlinger before returning.
+         * Adds a callback that is called after WindowInfosListeners from the systems server are
+         * complete. This is primarily used to ensure that InputDispatcher::setInputWindowsLocked
+         * has been called before running the added callback.
          *
          * @hide
          */
-        public Transaction syncInputWindows() {
-            nativeSyncInputWindows(mNativeObject);
+        public Transaction addWindowInfosReportedListener(@NonNull Runnable listener) {
+            nativeAddWindowInfosReportedListener(mNativeObject, listener);
             return this;
         }
 

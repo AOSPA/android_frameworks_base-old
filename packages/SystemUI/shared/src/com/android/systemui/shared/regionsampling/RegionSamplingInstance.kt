@@ -17,7 +17,7 @@ package com.android.systemui.shared.regionsampling
 
 import android.graphics.Rect
 import android.view.View
-import com.android.systemui.plugins.RegionDarkness
+import androidx.annotation.VisibleForTesting
 import com.android.systemui.shared.navigationbar.RegionSamplingHelper
 import com.android.systemui.shared.navigationbar.RegionSamplingHelper.SamplingCallback
 import java.io.PrintWriter
@@ -26,7 +26,7 @@ import java.util.concurrent.Executor
 /**
  * Class for instance of RegionSamplingHelper
  */
-class RegionSamplingInstance(
+open class RegionSamplingInstance(
         sampledView: View?,
         mainExecutor: Executor?,
         bgExecutor: Executor?,
@@ -35,7 +35,8 @@ class RegionSamplingInstance(
 ) {
     private var isDark = RegionDarkness.DEFAULT
     private var samplingBounds = Rect()
-    private var regionSampler: RegionSamplingHelper? = null
+    private val tmpScreenLocation = IntArray(2)
+    @VisibleForTesting var regionSampler: RegionSamplingHelper? = null
 
     /**
      * Interface for method to be passed into RegionSamplingHelper
@@ -46,6 +47,16 @@ class RegionSamplingInstance(
          * Method to update the text colors after clock darkness changed.
          */
         fun updateColors()
+    }
+
+    @VisibleForTesting
+    open fun createRegionSamplingHelper(
+            sampledView: View,
+            callback: SamplingCallback,
+            mainExecutor: Executor?,
+            bgExecutor: Executor?
+    ): RegionSamplingHelper {
+        return RegionSamplingHelper(sampledView, callback, mainExecutor, bgExecutor)
     }
 
     private fun convertToClockDarkness(isRegionDark: Boolean): RegionDarkness {
@@ -81,25 +92,29 @@ class RegionSamplingInstance(
         regionSampler?.dump(pw)
     }
 
-    /**
-     * Restart
-     */
-    fun restart(sampledView: View?) {
-        regionSampler?.onViewAttachedToWindow(sampledView)
-    }
-
     init {
         if (regionSamplingEnabled && sampledView != null) {
-            regionSampler = RegionSamplingHelper(sampledView,
+            regionSampler = createRegionSamplingHelper(sampledView,
                     object : SamplingCallback {
                         override fun onRegionDarknessChanged(isRegionDark: Boolean) {
                             isDark = convertToClockDarkness(isRegionDark)
                             updateFun.updateColors()
                         }
-
+                        /**
+                        * The method getLocationOnScreen is used to obtain the view coordinates
+                        * relative to its left and top edges on the device screen.
+                        * Directly accessing the X and Y coordinates of the view returns the
+                        * location relative to its parent view instead.
+                        */
                         override fun getSampledRegion(sampledView: View): Rect {
-                            samplingBounds = Rect(sampledView.left, sampledView.top,
-                                    sampledView.right, sampledView.bottom)
+                            val screenLocation = tmpScreenLocation
+                            sampledView.getLocationOnScreen(screenLocation)
+                            val left = screenLocation[0]
+                            val top = screenLocation[1]
+                            samplingBounds.left = left
+                            samplingBounds.top = top
+                            samplingBounds.right = left + sampledView.width
+                            samplingBounds.bottom = top + sampledView.height
                             return samplingBounds
                         }
 

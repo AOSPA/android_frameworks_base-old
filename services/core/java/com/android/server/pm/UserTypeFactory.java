@@ -37,6 +37,7 @@ import static android.os.UserManager.USER_TYPE_SYSTEM_HEADLESS;
 import static com.android.server.pm.UserTypeDetails.UNLIMITED_NUMBER_OF_USERS;
 
 import android.content.pm.UserInfo;
+import android.content.pm.UserProperties;
 import android.content.res.Resources;
 import android.content.res.XmlResourceParser;
 import android.os.Build;
@@ -122,7 +123,12 @@ public final class UserTypeFactory {
                 .setLabel(0)
                 .setDefaultRestrictions(null)
                 .setIsMediaSharedWithParent(true)
-                .setIsCredentialSharableWithParent(true);
+                .setCrossProfileIntentFilterAccessControl(
+                        CrossProfileIntentFilter.ACCESS_LEVEL_SYSTEM)
+                .setIsCredentialSharableWithParent(true)
+                .setDefaultUserProperties(new UserProperties.Builder()
+                        .setStartWithParent(true)
+                        .setShowInLauncher(UserProperties.SHOW_IN_LAUNCHER_WITH_PARENT));
     }
 
     /**
@@ -154,7 +160,10 @@ public final class UserTypeFactory {
                 .setDefaultRestrictions(getDefaultManagedProfileRestrictions())
                 .setDefaultSecureSettings(getDefaultManagedProfileSecureSettings())
                 .setDefaultCrossProfileIntentFilters(getDefaultManagedCrossProfileIntentFilter())
-                .setIsCredentialSharableWithParent(true);
+                .setIsCredentialSharableWithParent(true)
+                .setDefaultUserProperties(new UserProperties.Builder()
+                        .setStartWithParent(true)
+                        .setShowInLauncher(UserProperties.SHOW_IN_LAUNCHER_SEPARATE));
     }
 
     /**
@@ -394,6 +403,9 @@ public final class UserTypeFactory {
                         setResAttributeArray(parser, builder::setBadgeColors);
                     } else if (isProfile && "badge-colors-dark".equals(childName)) {
                         setResAttributeArray(parser, builder::setDarkThemeBadgeColors);
+                    } else if ("user-properties".equals(childName)) {
+                        builder.getDefaultUserProperties()
+                                .updateFromXml(XmlUtils.makeTyped(parser));
                     } else {
                         Slog.w(LOG_TAG, "Unrecognized tag " + childName + " in "
                                 + parser.getPositionDescription());

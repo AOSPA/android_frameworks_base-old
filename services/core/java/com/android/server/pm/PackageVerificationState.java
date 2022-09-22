@@ -30,7 +30,8 @@ class PackageVerificationState {
 
     private final SparseBooleanArray mSufficientVerifierUids;
 
-    private int mRequiredVerifierUid;
+    private final SparseBooleanArray mRequiredVerifierUids;
+    private final SparseBooleanArray mUnrespondedRequiredVerifierUids;
 
     private boolean mSufficientVerificationComplete;
 
@@ -59,6 +60,10 @@ class PackageVerificationState {
     PackageVerificationState(VerifyingSession verifyingSession) {
         mVerifyingSession = verifyingSession;
         mSufficientVerifierUids = new SparseBooleanArray();
+        mRequiredVerifierUids = new SparseBooleanArray();
+        mUnrespondedRequiredVerifierUids = new SparseBooleanArray();
+        mRequiredVerificationComplete = false;
+        mRequiredVerificationPassed = true;
         mExtendedTimeout = false;
     }
 
@@ -66,9 +71,15 @@ class PackageVerificationState {
         return mVerifyingSession;
     }
 
-    /** Sets the user ID of the required package verifier. */
-    void setRequiredVerifierUid(int uid) {
-        mRequiredVerifierUid = uid;
+    /** Add the user ID of the required package verifier. */
+    void addRequiredVerifierUid(int uid) {
+        mRequiredVerifierUids.put(uid, true);
+        mUnrespondedRequiredVerifierUids.put(uid, true);
+    }
+
+    /** Returns true if the uid a required verifier. */
+    boolean checkRequiredVerifierUid(int uid) {
+        return mRequiredVerifierUids.get(uid, false);
     }
 
     /**
@@ -93,14 +104,16 @@ class PackageVerificationState {
      * @return {@code true} if the verifying agent actually exists in our list
      */
     boolean setVerifierResponse(int uid, int code) {
-        if (uid == mRequiredVerifierUid) {
-            mRequiredVerificationComplete = true;
+        if (mRequiredVerifierUids.get(uid)) {
             switch (code) {
                 case PackageManager.VERIFICATION_ALLOW_WITHOUT_SUFFICIENT:
                     mSufficientVerifierUids.clear();
                     // fall through
                 case PackageManager.VERIFICATION_ALLOW:
-                    mRequiredVerificationPassed = true;
+                    // Two possible options:
+                    // - verification result is true,
+                    // - another verifier set it to false.
+                    // In both cases we don't need to assign anything, just exit.
                     break;
                 default:
                     mRequiredVerificationPassed = false;
@@ -115,24 +128,38 @@ class PackageVerificationState {
                 default:
                     mOptionalVerificationPassed = false;
             }
-            return true;
-        } else {
-            if (mSufficientVerifierUids.get(uid)) {
-                if (code == PackageManager.VERIFICATION_ALLOW) {
-                    mSufficientVerificationComplete = true;
-                    mSufficientVerificationPassed = true;
-                }
 
-                mSufficientVerifierUids.delete(uid);
-                if (mSufficientVerifierUids.size() == 0) {
-                    mSufficientVerificationComplete = true;
-                }
-
-                return true;
+            mUnrespondedRequiredVerifierUids.delete(uid);
+            if (mUnrespondedRequiredVerifierUids.size() == 0) {
+                mRequiredVerificationComplete = true;
             }
+            return true;
+        } else if (mSufficientVerifierUids.get(uid)) {
+            if (code == PackageManager.VERIFICATION_ALLOW) {
+                mSufficientVerificationPassed = true;
+                mSufficientVerificationComplete = true;
+            }
+
+            mSufficientVerifierUids.delete(uid);
+            if (mSufficientVerifierUids.size() == 0) {
+                mSufficientVerificationComplete = true;
+            }
+
+            return true;
         }
 
         return false;
+    }
+
+    /**
+     * Mark the session as passed required verification.
+     */
+    void passRequiredVerification() {
+        if (mUnrespondedRequiredVerifierUids.size() > 0) {
+            throw new RuntimeException("Required verifiers still present.");
+        }
+        mRequiredVerificationPassed = true;
+        mRequiredVerificationComplete = true;
     }
 
     /**
@@ -142,7 +169,7 @@ class PackageVerificationState {
      * @return {@code true} when verification is considered complete
      */
     boolean isVerificationComplete() {
-        if (mRequiredVerifierUid != -1 && !mRequiredVerificationComplete) {
+        if (mRequiredVerifierUids.size() > 0 && !mRequiredVerificationComplete) {
             return false;
         }
 
@@ -164,7 +191,7 @@ class PackageVerificationState {
      * @return {@code true} if installation should be allowed
      */
     boolean isInstallAllowed() {
-        if (mRequiredVerifierUid != -1 && !mRequiredVerificationPassed) {
+        if (mRequiredVerifierUids.size() > 0 && (!mRequiredVerificationComplete || !mRequiredVerificationPassed)) {
             return false;
         }
 

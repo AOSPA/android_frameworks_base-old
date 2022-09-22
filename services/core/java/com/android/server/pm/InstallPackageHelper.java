@@ -2626,7 +2626,7 @@ final class InstallPackageHelper {
                     }
                     final String[] pkgNames = new String[]{res.mRemovedInfo.mRemovedPackage};
                     final int[] uids = new int[]{res.mRemovedInfo.mUid};
-                    mBroadcastHelper.sendResourcesChangedBroadcast(mPm.snapshotComputer(),
+                    mBroadcastHelper.sendResourcesChangedBroadcast(mPm::snapshotComputer,
                             false /* mediaStatus */, true /* replacing */, pkgNames, uids);
                 }
                 res.mRemovedInfo.sendPackageRemovedBroadcasts(killApp, false /*removedBySystem*/);
@@ -2719,15 +2719,16 @@ final class InstallPackageHelper {
                             installerPackageName, null /*finishedReceiver*/,
                             updateUserIds, instantUserIds, null /* broadcastAllowList */, null);
                 }
-                // if the required verifier is defined, but, is not the installer of record
-                // for the package, it gets notified
-                final boolean notifyVerifier = mPm.mRequiredVerifierPackage != null
-                        && !mPm.mRequiredVerifierPackage.equals(installerPackageName);
-                if (notifyVerifier) {
-                    mPm.sendPackageBroadcast(Intent.ACTION_PACKAGE_ADDED, packageName,
-                            extras, 0 /*flags*/,
-                            mPm.mRequiredVerifierPackage, null /*finishedReceiver*/,
-                            updateUserIds, instantUserIds, null /* broadcastAllowList */, null);
+                // Notify required verifier(s) that are not the installer of record for the package.
+                for (String verifierPackageName : mPm.mRequiredVerifierPackages) {
+                    if (verifierPackageName != null && !verifierPackageName.equals(
+                            installerPackageName)) {
+                        mPm.sendPackageBroadcast(Intent.ACTION_PACKAGE_ADDED, packageName,
+                                extras, 0 /*flags*/,
+                                verifierPackageName, null /*finishedReceiver*/,
+                                updateUserIds, instantUserIds, null /* broadcastAllowList */,
+                                null);
+                    }
                 }
                 // If package installer is defined, notify package installer about new
                 // app installed
@@ -2752,12 +2753,14 @@ final class InstallPackageHelper {
                                 updateUserIds, instantUserIds, null /*broadcastAllowList*/,
                                 null);
                     }
-                    if (notifyVerifier) {
-                        mPm.sendPackageBroadcast(Intent.ACTION_PACKAGE_REPLACED, packageName,
-                                extras, 0 /*flags*/,
-                                mPm.mRequiredVerifierPackage, null /*finishedReceiver*/,
-                                updateUserIds, instantUserIds, null /*broadcastAllowList*/,
-                                null);
+                    for (String verifierPackageName : mPm.mRequiredVerifierPackages) {
+                        if (verifierPackageName != null && !verifierPackageName.equals(
+                                installerPackageName)) {
+                            mPm.sendPackageBroadcast(Intent.ACTION_PACKAGE_REPLACED,
+                                    packageName, extras, 0 /*flags*/, verifierPackageName,
+                                    null /*finishedReceiver*/, updateUserIds, instantUserIds,
+                                    null /*broadcastAllowList*/, null);
+                        }
                     }
                     mPm.sendPackageBroadcast(Intent.ACTION_MY_PACKAGE_REPLACED,
                             null /*package*/, null /*extras*/, 0 /*flags*/,
@@ -2801,7 +2804,7 @@ final class InstallPackageHelper {
                     }
                     final String[] pkgNames = new String[]{packageName};
                     final int[] uids = new int[]{res.mPkg.getUid()};
-                    mBroadcastHelper.sendResourcesChangedBroadcast(mPm.snapshotComputer(),
+                    mBroadcastHelper.sendResourcesChangedBroadcast(mPm::snapshotComputer,
                             true /* mediaStatus */, true /* replacing */, pkgNames, uids);
                 }
             } else if (!ArrayUtils.isEmpty(res.mLibraryConsumers)) { // if static shared lib

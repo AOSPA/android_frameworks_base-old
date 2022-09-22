@@ -25,10 +25,11 @@ import android.view.WindowManagerPolicyConstants
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
+import com.android.server.wm.flicker.annotation.FlickerServiceCompatible
 import com.android.server.wm.flicker.annotation.Group1
 import com.android.server.wm.flicker.helpers.NonResizeableAppHelper
 import com.android.server.wm.flicker.statusBarLayerPositionAtEnd
-import com.android.server.wm.traces.common.ComponentMatcher
+import com.android.server.wm.traces.common.ComponentNameMatcher
 import org.junit.Assume
 import org.junit.FixMethodOrder
 import org.junit.Ignore
@@ -57,6 +58,7 @@ import org.junit.runners.Parameterized
  *        apps are running before setup
  */
 @RequiresDevice
+@FlickerServiceCompatible
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
@@ -72,10 +74,11 @@ open class OpenAppNonResizeableTest(testSpec: FlickerTestParameter) :
     @FlakyTest(bugId = 227083463)
     @Test
     fun navBarLayerVisibilityChanges() {
+        Assume.assumeFalse(testSpec.isTablet)
         testSpec.assertLayers {
-            this.isInvisible(ComponentMatcher.NAV_BAR)
+            this.isInvisible(ComponentNameMatcher.NAV_BAR)
                 .then()
-                .isVisible(ComponentMatcher.NAV_BAR)
+                .isVisible(ComponentNameMatcher.NAV_BAR)
         }
     }
 
@@ -99,9 +102,9 @@ open class OpenAppNonResizeableTest(testSpec: FlickerTestParameter) :
     fun navBarWindowsVisibilityChanges() {
         Assume.assumeFalse(testSpec.isTablet)
         testSpec.assertWm {
-            this.isNonAppWindowInvisible(ComponentMatcher.NAV_BAR)
+            this.isNonAppWindowInvisible(ComponentNameMatcher.NAV_BAR)
                 .then()
-                .isAboveAppWindowVisible(ComponentMatcher.NAV_BAR)
+                .isAboveAppWindowVisible(ComponentNameMatcher.NAV_BAR)
         }
     }
 
@@ -114,7 +117,7 @@ open class OpenAppNonResizeableTest(testSpec: FlickerTestParameter) :
     fun taskBarLayerIsVisibleAtEnd() {
         Assume.assumeTrue(testSpec.isTablet)
         testSpec.assertLayersEnd {
-            this.isVisible(ComponentMatcher.TASK_BAR)
+            this.isVisible(ComponentNameMatcher.TASK_BAR)
         }
     }
 
@@ -127,29 +130,39 @@ open class OpenAppNonResizeableTest(testSpec: FlickerTestParameter) :
     @Test
     override fun statusBarLayerIsVisibleAtStartAndEnd() {
         testSpec.assertLayersEnd {
-            this.isVisible(ComponentMatcher.STATUS_BAR)
+            this.isVisible(ComponentNameMatcher.STATUS_BAR)
         }
     }
 
     /** {@inheritDoc} */
+    @Test
     @Ignore("Not applicable to this CUJ. Display starts off and app is full screen at the end")
-    override fun taskBarLayerIsVisibleAtStartAndEnd() { }
+    override fun taskBarLayerIsVisibleAtStartAndEnd() {
+    }
 
     /** {@inheritDoc} */
+    @Test
     @Ignore("Not applicable to this CUJ. Display starts off and app is full screen at the end")
-    override fun navBarLayerIsVisibleAtStartAndEnd() { }
+    override fun navBarLayerIsVisibleAtStartAndEnd() {
+    }
 
     /** {@inheritDoc} */
+    @Test
     @Ignore("Not applicable to this CUJ. Display starts off and app is full screen at the end")
-    override fun taskBarWindowIsAlwaysVisible() { }
+    override fun taskBarWindowIsAlwaysVisible() {
+    }
 
     /** {@inheritDoc} */
+    @Test
     @Ignore("Not applicable to this CUJ. Display starts off and app is full screen at the end")
-    override fun navBarWindowIsAlwaysVisible() { }
+    override fun navBarWindowIsAlwaysVisible() {
+    }
 
     /** {@inheritDoc} */
+    @Test
     @Ignore("Not applicable to this CUJ. Display starts off and app is full screen at the end")
-    override fun statusBarWindowIsAlwaysVisible() { }
+    override fun statusBarWindowIsAlwaysVisible() {
+    }
 
     /**
      * Checks the position of the [ComponentMatcher.STATUS_BAR] at the end of the
@@ -165,8 +178,9 @@ open class OpenAppNonResizeableTest(testSpec: FlickerTestParameter) :
     @Postsubmit
     @Test
     fun navBarLayerIsVisibleAtEnd() {
+        Assume.assumeFalse(testSpec.isTablet)
         testSpec.assertLayersEnd {
-            this.isVisible(ComponentMatcher.NAV_BAR)
+            this.isVisible(ComponentNameMatcher.NAV_BAR)
         }
     }
 
@@ -174,7 +188,7 @@ open class OpenAppNonResizeableTest(testSpec: FlickerTestParameter) :
     @FlakyTest
     @Test
     override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
-            super.visibleLayersShownMoreThanOneConsecutiveEntry()
+        super.visibleLayersShownMoreThanOneConsecutiveEntry()
 
     /** {@inheritDoc} */
     @Presubmit
@@ -200,7 +214,7 @@ open class OpenAppNonResizeableTest(testSpec: FlickerTestParameter) :
     @FlakyTest(bugId = 218470989)
     @Test
     override fun visibleWindowsShownMoreThanOneConsecutiveEntry() =
-            super.visibleWindowsShownMoreThanOneConsecutiveEntry()
+        super.visibleWindowsShownMoreThanOneConsecutiveEntry()
 
     @FlakyTest(bugId = 227143265)
     @Test
@@ -218,12 +232,12 @@ open class OpenAppNonResizeableTest(testSpec: FlickerTestParameter) :
         @JvmStatic
         fun getParams(): Collection<FlickerTestParameter> {
             return FlickerTestParameterFactory.getInstance()
-                    .getConfigNonRotationTests(
-                            repetitions = 3,
-                            supportedNavigationModes =
-                            listOf(WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL_OVERLAY),
-                            supportedRotations = listOf(Surface.ROTATION_0)
-                    )
+                .getConfigNonRotationTests(
+                    repetitions = 3,
+                    supportedNavigationModes =
+                    listOf(WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL_OVERLAY),
+                    supportedRotations = listOf(Surface.ROTATION_0)
+                )
         }
     }
 }

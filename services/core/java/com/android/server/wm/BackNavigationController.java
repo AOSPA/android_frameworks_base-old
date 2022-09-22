@@ -31,6 +31,7 @@ import android.os.RemoteCallback;
 import android.os.RemoteException;
 import android.os.SystemProperties;
 import android.util.Slog;
+import android.view.IWindowFocusObserver;
 import android.view.RemoteAnimationTarget;
 import android.view.SurfaceControl;
 import android.window.BackNavigationInfo;
@@ -45,10 +46,9 @@ import com.android.server.LocalServices;
  * Controller to handle actions related to the back gesture on the server side.
  */
 class BackNavigationController {
-
     private static final String TAG = "BackNavigationController";
-    @Nullable
-    private TaskSnapshotController mTaskSnapshotController;
+    private WindowManagerService mWindowManagerService;
+    private IWindowFocusObserver mFocusObserver;
 
     /**
      * Returns true if the back predictability feature is enabled
@@ -69,26 +69,13 @@ class BackNavigationController {
      * for the animation, or null if we don't know how to animate the current window and need to
      * fallback on dispatching the key event.
      */
-    @Nullable
-    BackNavigationInfo startBackNavigation(@NonNull WindowManagerService wmService,
-            boolean requestAnimation) {
-        return startBackNavigation(wmService, null, requestAnimation);
-    }
-
-    /**
-     * @param tx, a transaction to be used for the attaching the animation leash.
-     *            This is used in tests. If null, the object will be initialized with a new {@link
-     *            SurfaceControl.Transaction}
-     * @see #startBackNavigation(WindowManagerService, boolean)
-     */
     @VisibleForTesting
     @Nullable
-    BackNavigationInfo startBackNavigation(WindowManagerService wmService,
-            @Nullable SurfaceControl.Transaction tx, boolean requestAnimation) {
-
-        if (tx == null) {
-            tx = new SurfaceControl.Transaction();
-        }
+    BackNavigationInfo startBackNavigation(boolean requestAnimation,
+            IWindowFocusObserver observer) {
+        final WindowManagerService wmService = mWindowManagerService;
+        final SurfaceControl.Transaction tx = wmService.mTransactionFactory.get();
+        mFocusObserver = observer;
 
         int backType = BackNavigationInfo.TYPE_UNDEFINED;
 
@@ -110,13 +97,14 @@ class BackNavigationController {
         SurfaceControl animationLeashParent = null;
         HardwareBuffer screenshotBuffer = null;
         RemoteAnimationTarget topAppTarget = null;
+        WindowState window;
+
         int prevTaskId;
         int prevUserId;
         boolean prepareAnimation;
 
         BackNavigationInfo.Builder infoBuilder = new BackNavigationInfo.Builder();
         synchronized (wmService.mGlobalLock) {
-            WindowState window;
             WindowConfiguration taskWindowConfiguration;
             WindowManagerInternal windowManagerInternal =
                     LocalServices.getService(WindowManagerInternal.class);
@@ -143,7 +131,6 @@ class BackNavigationController {
                         "Focused window found using getFocusedWindowToken");
             }
 
-            OnBackInvokedCallbackInfo overrideCallbackInfo = null;
             if (window != null) {
                 // This is needed to bridge the old and new back behavior with recents.  While in
                 // Overview with live tile enabled, the previous app is technically focused but we
@@ -152,15 +139,18 @@ class BackNavigationController {
                 // the right window to consume back while in overview, so we need to route it to
                 // launcher and use the legacy behavior of injecting KEYCODE_BACK since the existing
                 // compat callback in VRI only works when the window is focused.
+                // This symptom also happen while shell transition enabled, we can check that by
+                // isTransientLaunch to know whether the focus window is point to live tile.
                 final RecentsAnimationController recentsAnimationController =
                         wmService.getRecentsAnimationController();
-                if (recentsAnimationController != null
-                        && recentsAnimationController.shouldApplyInputConsumer(
-                        window.getActivityRecord())) {
-                    window = recentsAnimationController.getTargetAppMainWindow();
-                    overrideCallbackInfo = recentsAnimationController.getBackInvokedInfo();
+                final ActivityRecord ar = window.mActivityRecord;
+                if ((ar != null && ar.isActivityTypeHomeOrRecents()
+                        && ar.mTransitionController.isTransientLaunch(ar))
+                        || (recentsAnimationController != null
+                        && recentsAnimationController.shouldApplyInputConsumer(ar))) {
                     ProtoLog.d(WM_DEBUG_BACK_PREVIEW, "Current focused window being animated by "
                             + "recents. Overriding back callback to recents controller callback.");
+                    return null;
                 }
             }
 
@@ -178,9 +168,7 @@ class BackNavigationController {
             if (window != null) {
                 currentActivity = window.mActivityRecord;
                 currentTask = window.getTask();
-                callbackInfo = overrideCallbackInfo != null
-                        ? overrideCallbackInfo
-                        : window.getOnBackInvokedCallbackInfo();
+                callbackInfo = window.getOnBackInvokedCallbackInfo();
                 if (callbackInfo == null) {
                     Slog.e(TAG, "No callback registered, returning null.");
                     return null;
@@ -189,6 +177,9 @@ class BackNavigationController {
                     backType = BackNavigationInfo.TYPE_CALLBACK;
                 }
                 infoBuilder.setOnBackInvokedCallback(callbackInfo.getCallback());
+                if (mFocusObserver != null) {
+                    window.registerFocusObserver(mFocusObserver);
+                }
             }
 
             ProtoLog.d(WM_DEBUG_BACK_PREVIEW, "startBackNavigation currentTask=%s, "
@@ -209,17 +200,23 @@ class BackNavigationController {
                     || currentActivity == null
                     || currentTask == null
                     || currentActivity.isActivityTypeHome()) {
-                return infoBuilder
-                        .setType(backType)
-                        .build();
+                infoBuilder.setType(BackNavigationInfo.TYPE_CALLBACK);
+                final WindowState finalFocusedWindow = window;
+                infoBuilder.setOnBackNavigationDone(new RemoteCallback(result ->
+                        onBackNavigationDone(result, finalFocusedWindow, finalFocusedWindow,
+                                BackNavigationInfo.TYPE_CALLBACK, null, null, false)));
+
+                return infoBuilder.setType(backType).build();
             }
 
             // We don't have an application callback, let's find the destination of the back gesture
             Task finalTask = currentTask;
             prevActivity = currentTask.getActivity(
                     (r) -> !r.finishing && r.getTask() == finalTask && !r.isTopRunningActivity());
-            if (window.getParent().getChildCount() > 1 && window.getParent().getChildAt(0)
-                    != window) {
+            // TODO Dialog window does not need to attach on activity, check
+            // window.mAttrs.type != TYPE_BASE_APPLICATION
+            if ((window.getParent().getChildCount() > 1
+                    && window.getParent().getChildAt(0) != window)) {
                 // Are we the top window of our parent? If not, we are a window on top of the
                 // activity, we won't close the activity.
                 backType = BackNavigationInfo.TYPE_DIALOG_CLOSE;
@@ -345,11 +342,12 @@ class BackNavigationController {
             }
 
             int finalBackType = backType;
-            ActivityRecord finalprevActivity = prevActivity;
-            Task finalTask = currentTask;
+            final ActivityRecord finalprevActivity = prevActivity;
+            final Task finalTask = currentTask;
+            final WindowState finalFocusedWindow = window;
             RemoteCallback onBackNavigationDone = new RemoteCallback(result -> onBackNavigationDone(
-                    result, finalRemovedWindowContainer, finalBackType, finalTask,
-                    finalprevActivity, prepareAnimation));
+                    result, finalFocusedWindow, finalRemovedWindowContainer, finalBackType,
+                    finalTask, finalprevActivity, prepareAnimation));
             infoBuilder.setOnBackNavigationDone(onBackNavigationDone);
         }
 
@@ -382,8 +380,9 @@ class BackNavigationController {
     }
 
     private void onBackNavigationDone(
-            Bundle result, WindowContainer<?> windowContainer, int backType,
-            Task task, ActivityRecord prevActivity, boolean prepareAnimation) {
+            Bundle result, WindowState focusedWindow, WindowContainer<?> windowContainer,
+            int backType, @Nullable Task task, @Nullable ActivityRecord prevActivity,
+            boolean prepareAnimation) {
         SurfaceControl surfaceControl = windowContainer.getSurfaceControl();
         boolean triggerBack = result != null && result.getBoolean(
                 BackNavigationInfo.KEY_TRIGGER_BACK);
@@ -408,10 +407,15 @@ class BackNavigationController {
                         "Setting Activity.mLauncherTaskBehind to false. Activity=%s",
                         prevActivity);
             }
-        } else {
+        } else if (task != null) {
             task.mBackGestureStarted = false;
         }
         resetSurfaces(windowContainer);
+
+        if (mFocusObserver != null) {
+            focusedWindow.unregisterFocusObserver(mFocusObserver);
+            mFocusObserver = null;
+        }
     }
 
     private HardwareBuffer getActivitySnapshot(@NonNull Task task,
@@ -425,10 +429,10 @@ class BackNavigationController {
     }
 
     private HardwareBuffer getTaskSnapshot(int taskId, int userId) {
-        if (mTaskSnapshotController == null) {
+        if (mWindowManagerService.mTaskSnapshotController == null) {
             return null;
         }
-        TaskSnapshot snapshot = mTaskSnapshotController.getSnapshot(taskId,
+        TaskSnapshot snapshot = mWindowManagerService.mTaskSnapshotController.getSnapshot(taskId,
                 userId, true /* restoreFromDisk */, false  /* isLowResolution */);
         return snapshot != null ? snapshot.getHardwareBuffer() : null;
     }
@@ -458,7 +462,7 @@ class BackNavigationController {
         }
     }
 
-    void setTaskSnapshotController(@Nullable TaskSnapshotController taskSnapshotController) {
-        mTaskSnapshotController = taskSnapshotController;
+    void setWindowManager(WindowManagerService wm) {
+        mWindowManagerService = wm;
     }
 }

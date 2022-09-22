@@ -755,17 +755,21 @@ public final class BatteryStatsService extends IBatteryStats.Stub
                 case FrameworkStatsLog.BATTERY_USAGE_STATS_SINCE_RESET:
                     final BatteryUsageStatsQuery querySinceReset =
                             new BatteryUsageStatsQuery.Builder()
+                                    .setMaxStatsAgeMs(0)
                                     .includeProcessStateData()
                                     .includeVirtualUids()
+                                    .includePowerModels()
                                     .build();
                     bus = getBatteryUsageStats(List.of(querySinceReset)).get(0);
                     break;
                 case FrameworkStatsLog.BATTERY_USAGE_STATS_SINCE_RESET_USING_POWER_PROFILE_MODEL:
                     final BatteryUsageStatsQuery queryPowerProfile =
                             new BatteryUsageStatsQuery.Builder()
+                                    .setMaxStatsAgeMs(0)
                                     .includeProcessStateData()
                                     .includeVirtualUids()
                                     .powerProfileModeledOnly()
+                                    .includePowerModels()
                                     .build();
                     bus = getBatteryUsageStats(List.of(queryPowerProfile)).get(0);
                     break;
@@ -779,6 +783,7 @@ public final class BatteryStatsService extends IBatteryStats.Stub
                     final long sessionEnd = mStats.getStartClockTime();
                     final BatteryUsageStatsQuery queryBeforeReset =
                             new BatteryUsageStatsQuery.Builder()
+                                    .setMaxStatsAgeMs(0)
                                     .includeProcessStateData()
                                     .includeVirtualUids()
                                     .aggregateSnapshots(sessionStart, sessionEnd)

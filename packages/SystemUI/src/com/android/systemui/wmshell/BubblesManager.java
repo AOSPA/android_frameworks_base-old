@@ -38,9 +38,9 @@ import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.UserHandle;
 import android.provider.Settings;
+import android.service.dreams.IDreamManager;
 import android.service.notification.NotificationListenerService.RankingMap;
 import android.service.notification.ZenModeConfig;
-import android.util.ArraySet;
 import android.util.Log;
 import android.util.Pair;
 import android.util.SparseArray;
@@ -50,10 +50,9 @@ import androidx.annotation.Nullable;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.statusbar.IStatusBarService;
-import com.android.systemui.Dumpable;
 import com.android.systemui.dagger.SysUISingleton;
-import com.android.systemui.dump.DumpManager;
 import com.android.systemui.model.SysUiState;
+import com.android.systemui.shade.ShadeController;
 import com.android.systemui.shared.system.QuickStepContract;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
@@ -69,7 +68,6 @@ import com.android.systemui.statusbar.notification.collection.notifcollection.Di
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifCollectionListener;
 import com.android.systemui.statusbar.notification.collection.render.NotificationVisibilityProvider;
 import com.android.systemui.statusbar.notification.interruption.NotificationInterruptStateProvider;
-import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.phone.StatusBarWindowCallback;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.statusbar.policy.ZenModeController;
@@ -77,12 +75,12 @@ import com.android.wm.shell.bubbles.Bubble;
 import com.android.wm.shell.bubbles.BubbleEntry;
 import com.android.wm.shell.bubbles.Bubbles;
 
-import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
@@ -91,7 +89,7 @@ import java.util.function.IntConsumer;
  * The SysUi side bubbles manager which communicate with other SysUi components.
  */
 @SysUISingleton
-public class BubblesManager implements Dumpable {
+public class BubblesManager {
 
     private static final String TAG = TAG_WITH_CLASS_NAME ? "BubblesManager" : TAG_BUBBLES;
 
@@ -101,6 +99,7 @@ public class BubblesManager implements Dumpable {
     private final ShadeController mShadeController;
     private final IStatusBarService mBarService;
     private final INotificationManager mNotificationManager;
+    private final IDreamManager mDreamManager;
     private final NotificationVisibilityProvider mVisibilityProvider;
     private final NotificationInterruptStateProvider mNotificationInterruptStateProvider;
     private final NotificationLockscreenUserManager mNotifUserManager;
@@ -126,6 +125,7 @@ public class BubblesManager implements Dumpable {
             ShadeController shadeController,
             @Nullable IStatusBarService statusBarService,
             INotificationManager notificationManager,
+            IDreamManager dreamManager,
             NotificationVisibilityProvider visibilityProvider,
             NotificationInterruptStateProvider interruptionStateProvider,
             ZenModeController zenModeController,
@@ -134,7 +134,6 @@ public class BubblesManager implements Dumpable {
             CommonNotifCollection notifCollection,
             NotifPipeline notifPipeline,
             SysUiState sysUiState,
-            DumpManager dumpManager,
             Executor sysuiMainExecutor) {
         if (bubblesOptional.isPresent()) {
             return new BubblesManager(context,
@@ -144,6 +143,7 @@ public class BubblesManager implements Dumpable {
                     shadeController,
                     statusBarService,
                     notificationManager,
+                    dreamManager,
                     visibilityProvider,
                     interruptionStateProvider,
                     zenModeController,
@@ -152,7 +152,6 @@ public class BubblesManager implements Dumpable {
                     notifCollection,
                     notifPipeline,
                     sysUiState,
-                    dumpManager,
                     sysuiMainExecutor);
         } else {
             return null;
@@ -167,6 +166,7 @@ public class BubblesManager implements Dumpable {
             ShadeController shadeController,
             @Nullable IStatusBarService statusBarService,
             INotificationManager notificationManager,
+            IDreamManager dreamManager,
             NotificationVisibilityProvider visibilityProvider,
             NotificationInterruptStateProvider interruptionStateProvider,
             ZenModeController zenModeController,
@@ -175,13 +175,13 @@ public class BubblesManager implements Dumpable {
             CommonNotifCollection notifCollection,
             NotifPipeline notifPipeline,
             SysUiState sysUiState,
-            DumpManager dumpManager,
             Executor sysuiMainExecutor) {
         mContext = context;
         mBubbles = bubbles;
         mNotificationShadeWindowController = notificationShadeWindowController;
         mShadeController = shadeController;
         mNotificationManager = notificationManager;
+        mDreamManager = dreamManager;
         mVisibilityProvider = visibilityProvider;
         mNotificationInterruptStateProvider = interruptionStateProvider;
         mNotifUserManager = notifUserManager;
@@ -197,13 +197,11 @@ public class BubblesManager implements Dumpable {
 
         setupNotifPipeline();
 
-        dumpManager.registerDumpable(TAG, this);
-
         keyguardStateController.addCallback(new KeyguardStateController.Callback() {
             @Override
             public void onKeyguardShowingChanged() {
                 boolean isUnlockedShade = !keyguardStateController.isShowing()
-                        && !keyguardStateController.isOccluded();
+                        && !isDreamingOrInPreview();
                 bubbles.onStatusBarStateChanged(isUnlockedShade);
             }
         });
@@ -262,7 +260,7 @@ public class BubblesManager implements Dumpable {
             }
 
             @Override
-            public void getShouldRestoredEntries(ArraySet<String> savedBubbleKeys,
+            public void getShouldRestoredEntries(Set<String> savedBubbleKeys,
                     Consumer<List<BubbleEntry>> callback) {
                 sysuiMainExecutor.execute(() -> {
                     List<BubbleEntry> result = new ArrayList<>();
@@ -397,6 +395,15 @@ public class BubblesManager implements Dumpable {
         mBubbles.setSysuiProxy(mSysuiProxy);
     }
 
+    private boolean isDreamingOrInPreview() {
+        try {
+            return mDreamManager.isDreamingOrInPreview();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Failed to query dream manager.", e);
+            return false;
+        }
+    }
+
     private void setupNotifPipeline() {
         mNotifPipeline.addCollectionListener(new NotifCollectionListener() {
             @Override
@@ -405,8 +412,8 @@ public class BubblesManager implements Dumpable {
             }
 
             @Override
-            public void onEntryUpdated(NotificationEntry entry) {
-                BubblesManager.this.onEntryUpdated(entry);
+            public void onEntryUpdated(NotificationEntry entry, boolean fromSystem) {
+                BubblesManager.this.onEntryUpdated(entry, fromSystem);
             }
 
             @Override
@@ -444,9 +451,10 @@ public class BubblesManager implements Dumpable {
         }
     }
 
-    void onEntryUpdated(NotificationEntry entry) {
+    void onEntryUpdated(NotificationEntry entry, boolean fromSystem) {
+        boolean shouldBubble = mNotificationInterruptStateProvider.shouldBubbleUp(entry);
         mBubbles.onEntryUpdated(notifToBubbleEntry(entry),
-                mNotificationInterruptStateProvider.shouldBubbleUp(entry));
+                shouldBubble, fromSystem);
     }
 
     void onEntryRemoved(NotificationEntry entry) {
@@ -630,11 +638,6 @@ public class BubblesManager implements Dumpable {
                 entry.getRow().updateBubbleButton();
             }
         }
-    }
-
-    @Override
-    public void dump(@NonNull PrintWriter pw, @NonNull String[] args) {
-        mBubbles.dump(pw, args);
     }
 
     /** Checks whether bubbles are enabled for this user, handles negative userIds. */
