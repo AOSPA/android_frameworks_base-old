@@ -182,6 +182,7 @@ public class SecureSettings {
         Settings.Secure.PEOPLE_STRIP,
         Settings.Secure.MEDIA_CONTROLS_RESUME,
         Settings.Secure.MEDIA_CONTROLS_RECOMMENDATION,
+        Settings.Secure.MEDIA_CONTROLS_LOCK_SCREEN,
         Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE,
         Settings.Secure.ACCESSIBILITY_BUTTON_TARGETS,
         Settings.Secure.ACCESSIBILITY_MAGNIFICATION_CAPABILITY,
@@ -211,6 +212,11 @@ public class SecureSettings {
         Settings.Secure.LOCKSCREEN_USE_DOUBLE_LINE_CLOCK,
         Settings.Secure.STATUS_BAR_SHOW_VIBRATE_ICON,
         Settings.Secure.WEAR_TALKBACK_ENABLED,
-        Settings.Secure.HBM_SETTING_KEY
+        Settings.Secure.HBM_SETTING_KEY,
+        Settings.Secure.ACCESSIBILITY_SOFTWARE_CURSOR_ENABLED,
+        Settings.Secure.ACCESSIBILITY_SOFTWARE_CURSOR_TRIGGER_HINTS_ENABLED,
+        Settings.Secure.ACCESSIBILITY_SOFTWARE_CURSOR_KEYBOARD_SHIFT_ENABLED,
+        Settings.Secure.ASSIST_TOUCH_GESTURE_ENABLED,
+        Settings.Secure.ASSIST_LONG_PRESS_HOME_ENABLED,
     };
 }

@@ -16,20 +16,21 @@
 
 package com.android.wm.shell.freeform;
 
-import static android.content.pm.PackageManager.FEATURE_FREEFORM_WINDOW_MANAGEMENT;
-import static android.provider.Settings.Global.DEVELOPMENT_ENABLE_FREEFORM_WINDOWS_SUPPORT;
+import static com.android.wm.shell.ShellTaskOrganizer.TASK_LISTENER_TYPE_FREEFORM;
 
 import android.app.ActivityManager.RunningTaskInfo;
-import android.content.Context;
-import android.provider.Settings;
-import android.util.Slog;
+import android.util.Log;
 import android.util.SparseArray;
 import android.view.SurfaceControl;
+import android.window.TransitionInfo;
+
+import androidx.annotation.Nullable;
 
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.wm.shell.ShellTaskOrganizer;
-import com.android.wm.shell.common.SyncTransactionQueue;
 import com.android.wm.shell.protolog.ShellProtoLogGroup;
+import com.android.wm.shell.sysui.ShellInit;
+import com.android.wm.shell.transition.Transitions;
 import com.android.wm.shell.windowdecor.WindowDecorViewModel;
 
 import java.io.PrintWriter;
@@ -44,10 +45,11 @@ public class FreeformTaskListener<T extends AutoCloseable>
         implements ShellTaskOrganizer.TaskListener {
     private static final String TAG = "FreeformTaskListener";
 
+    private final ShellTaskOrganizer mShellTaskOrganizer;
     private final WindowDecorViewModel<T> mWindowDecorationViewModel;
-    private final SyncTransactionQueue mSyncQueue;
 
     private final SparseArray<State<T>> mTasks = new SparseArray<>();
+    private final SparseArray<T> mWindowDecorOfVanishedTasks = new SparseArray<>();
 
     private static class State<T extends AutoCloseable> {
         RunningTaskInfo mTaskInfo;
@@ -56,56 +58,88 @@ public class FreeformTaskListener<T extends AutoCloseable>
     }
 
     public FreeformTaskListener(
-            WindowDecorViewModel<T> windowDecorationViewModel,
-            SyncTransactionQueue syncQueue) {
+            ShellInit shellInit,
+            ShellTaskOrganizer shellTaskOrganizer,
+            WindowDecorViewModel<T> windowDecorationViewModel) {
+        mShellTaskOrganizer = shellTaskOrganizer;
         mWindowDecorationViewModel = windowDecorationViewModel;
-        mSyncQueue = syncQueue;
+        if (shellInit != null) {
+            shellInit.addInitCallback(this::onInit, this);
+        }
+    }
+
+    private void onInit() {
+        mShellTaskOrganizer.addListenerForType(this, TASK_LISTENER_TYPE_FREEFORM);
     }
 
     @Override
     public void onTaskAppeared(RunningTaskInfo taskInfo, SurfaceControl leash) {
-        if (mTasks.get(taskInfo.taskId) != null) {
-            throw new RuntimeException("Task appeared more than once: #" + taskInfo.taskId);
-        }
         ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TASK_ORG, "Freeform Task Appeared: #%d",
                 taskInfo.taskId);
-        final State<T> state = new State<>();
+        final State<T> state = createOrUpdateTaskState(taskInfo, leash);
+        if (!Transitions.ENABLE_SHELL_TRANSITIONS) {
+            SurfaceControl.Transaction t = new SurfaceControl.Transaction();
+            state.mWindowDecoration =
+                    mWindowDecorationViewModel.createWindowDecoration(taskInfo, leash, t, t);
+            t.apply();
+        }
+    }
+
+    private State<T> createOrUpdateTaskState(RunningTaskInfo taskInfo, SurfaceControl leash) {
+        State<T> state = mTasks.get(taskInfo.taskId);
+        if (state != null) {
+            updateTaskInfo(taskInfo);
+            return state;
+        }
+
+        state = new State<>();
         state.mTaskInfo = taskInfo;
         state.mLeash = leash;
-        state.mWindowDecoration =
-                mWindowDecorationViewModel.createWindowDecoration(taskInfo, leash);
         mTasks.put(taskInfo.taskId, state);
+
+        return state;
     }
 
     @Override
     public void onTaskVanished(RunningTaskInfo taskInfo) {
-        State<T> state = mTasks.get(taskInfo.taskId);
+        final State<T> state = mTasks.get(taskInfo.taskId);
         if (state == null) {
-            Slog.e(TAG, "Task already vanished: #" + taskInfo.taskId);
+            // This is possible if the transition happens before this method.
             return;
         }
         ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TASK_ORG, "Freeform Task Vanished: #%d",
                 taskInfo.taskId);
         mTasks.remove(taskInfo.taskId);
 
-        try {
-            state.mWindowDecoration.close();
-        } catch (Exception e) {
-            Slog.e(TAG, "Failed to release window decoration.", e);
+        if (Transitions.ENABLE_SHELL_TRANSITIONS) {
+            // Save window decorations of closing tasks so that we can hand them over to the
+            // transition system if this method happens before the transition. In case where the
+            // transition didn't happen, it'd be cleared when the next transition finished.
+            if (state.mWindowDecoration != null) {
+                mWindowDecorOfVanishedTasks.put(taskInfo.taskId, state.mWindowDecoration);
+            }
+            return;
         }
+        releaseWindowDecor(state.mWindowDecoration);
     }
 
     @Override
     public void onTaskInfoChanged(RunningTaskInfo taskInfo) {
-        State<T> state = mTasks.get(taskInfo.taskId);
-        if (state == null) {
-            throw new RuntimeException(
-                    "Task info changed before appearing: #" + taskInfo.taskId);
-        }
+        final State<T> state = updateTaskInfo(taskInfo);
         ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TASK_ORG, "Freeform Task Info Changed: #%d",
                 taskInfo.taskId);
+        if (state.mWindowDecoration != null) {
+            mWindowDecorationViewModel.onTaskInfoChanged(state.mTaskInfo, state.mWindowDecoration);
+        }
+    }
+
+    private State<T> updateTaskInfo(RunningTaskInfo taskInfo) {
+        final State<T> state = mTasks.get(taskInfo.taskId);
+        if (state == null) {
+            throw new RuntimeException("Task info changed before appearing: #" + taskInfo.taskId);
+        }
         state.mTaskInfo = taskInfo;
-        mWindowDecorationViewModel.onTaskInfoChanged(state.mTaskInfo, state.mWindowDecoration);
+        return state;
     }
 
     @Override
@@ -126,6 +160,96 @@ public class FreeformTaskListener<T extends AutoCloseable>
         return mTasks.get(taskId).mLeash;
     }
 
+    /**
+     * Creates a window decoration for a transition.
+     *
+     * @param change the change of this task transition that needs to have the task layer as the
+     *               leash
+     * @return {@code true} if it adopts the window decoration; {@code false} otherwise
+     */
+    void createWindowDecoration(
+            TransitionInfo.Change change,
+            SurfaceControl.Transaction startT,
+            SurfaceControl.Transaction finishT) {
+        final State<T> state = createOrUpdateTaskState(change.getTaskInfo(), change.getLeash());
+        state.mWindowDecoration = mWindowDecorationViewModel.createWindowDecoration(
+                state.mTaskInfo, state.mLeash, startT, finishT);
+    }
+
+    /**
+     * Gives out the ownership of the task's window decoration. The given task is leaving (of has
+     * left) this task listener. This is the transition system asking for the ownership.
+     *
+     * @param taskInfo the maximizing task
+     * @return the window decor of the maximizing task if any
+     */
+    T giveWindowDecoration(
+            RunningTaskInfo taskInfo,
+            SurfaceControl.Transaction startT,
+            SurfaceControl.Transaction finishT) {
+        T windowDecor;
+        final State<T> state = mTasks.get(taskInfo.taskId);
+        if (state != null) {
+            windowDecor = state.mWindowDecoration;
+            state.mWindowDecoration = null;
+        } else {
+            windowDecor =
+                    mWindowDecorOfVanishedTasks.removeReturnOld(taskInfo.taskId);
+        }
+        mWindowDecorationViewModel.setupWindowDecorationForTransition(
+                taskInfo, startT, finishT, windowDecor);
+        return windowDecor;
+    }
+
+    /**
+     * Adopt the incoming window decoration and lets the window decoration prepare for a transition.
+     *
+     * @param change the change of this task transition that needs to have the task layer as the
+     *               leash
+     * @param startT the start transaction of this transition
+     * @param finishT the finish transaction of this transition
+     * @param windowDecor the window decoration to adopt
+     * @return {@code true} if it adopts the window decoration; {@code false} otherwise
+     */
+    boolean adoptWindowDecoration(
+            TransitionInfo.Change change,
+            SurfaceControl.Transaction startT,
+            SurfaceControl.Transaction finishT,
+            @Nullable AutoCloseable windowDecor) {
+        final State<T> state = createOrUpdateTaskState(change.getTaskInfo(), change.getLeash());
+        state.mWindowDecoration = mWindowDecorationViewModel.adoptWindowDecoration(windowDecor);
+        if (state.mWindowDecoration != null) {
+            mWindowDecorationViewModel.setupWindowDecorationForTransition(
+                    state.mTaskInfo, startT, finishT, state.mWindowDecoration);
+            return true;
+        } else {
+            state.mWindowDecoration = mWindowDecorationViewModel.createWindowDecoration(
+                    state.mTaskInfo, state.mLeash, startT, finishT);
+            return false;
+        }
+    }
+
+    void onTaskTransitionFinished() {
+        if (mWindowDecorOfVanishedTasks.size() == 0) {
+            return;
+        }
+        ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TRANSITIONS,
+                "Clearing window decors of vanished tasks. There could be visual defects "
+                + "if any of them is used later in transitions.");
+        for (int i = 0; i < mWindowDecorOfVanishedTasks.size(); ++i) {
+            releaseWindowDecor(mWindowDecorOfVanishedTasks.valueAt(i));
+        }
+        mWindowDecorOfVanishedTasks.clear();
+    }
+
+    private void releaseWindowDecor(T windowDecor) {
+        try {
+            windowDecor.close();
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to release window decoration.", e);
+        }
+    }
+
     @Override
     public void dump(PrintWriter pw, String prefix) {
         final String innerPrefix = prefix + "  ";
@@ -136,17 +260,5 @@ public class FreeformTaskListener<T extends AutoCloseable>
     @Override
     public String toString() {
         return TAG;
-    }
-
-    /**
-     * Checks if freeform support is enabled in system.
-     *
-     * @param context context used to check settings and package manager.
-     * @return {@code true} if freeform is enabled, {@code false} if not.
-     */
-    public static boolean isFreeformEnabled(Context context) {
-        return context.getPackageManager().hasSystemFeature(FEATURE_FREEFORM_WINDOW_MANAGEMENT)
-                || Settings.Global.getInt(context.getContentResolver(),
-                DEVELOPMENT_ENABLE_FREEFORM_WINDOWS_SUPPORT, 0) != 0;
     }
 }

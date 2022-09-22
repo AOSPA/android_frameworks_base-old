@@ -34,6 +34,7 @@ import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.JobSchedulerBackgroundThread;
 import com.android.server.LocalServices;
 import com.android.server.job.JobSchedulerService;
@@ -61,16 +62,19 @@ public final class BatteryController extends RestrictingController {
 
     private final PowerTracker mPowerTracker;
 
+    private final FlexibilityController mFlexibilityController;
     /**
      * Helper set to avoid too much GC churn from frequent calls to
      * {@link #maybeReportNewChargingStateLocked()}.
      */
     private final ArraySet<JobStatus> mChangedJobs = new ArraySet<>();
 
-    public BatteryController(JobSchedulerService service) {
+    public BatteryController(JobSchedulerService service,
+            FlexibilityController flexibilityController) {
         super(service);
         mPowerTracker = new PowerTracker();
         mPowerTracker.startTracking();
+        mFlexibilityController = flexibilityController;
     }
 
     @Override
@@ -100,6 +104,10 @@ public final class BatteryController extends RestrictingController {
     @Override
     @GuardedBy("mLock")
     public void prepareForExecutionLocked(JobStatus jobStatus) {
+        if (!jobStatus.hasPowerConstraint()) {
+            // Ignore all jobs the controller wouldn't be tracking.
+            return;
+        }
         if (DEBUG) {
             Slog.d(TAG, "Prepping for " + jobStatus.toShortString());
         }
@@ -169,6 +177,12 @@ public final class BatteryController extends RestrictingController {
                     + powerConnected + "/" + stablePower + "/" + batteryNotLow);
         }
         final long nowElapsed = sElapsedRealtimeClock.millis();
+
+        mFlexibilityController.setConstraintSatisfied(
+                JobStatus.CONSTRAINT_CHARGING, mService.isBatteryCharging(), nowElapsed);
+        mFlexibilityController.setConstraintSatisfied(
+                        JobStatus.CONSTRAINT_BATTERY_NOT_LOW, batteryNotLow, nowElapsed);
+
         for (int i = mTrackedTasks.size() - 1; i >= 0; i--) {
             final JobStatus ts = mTrackedTasks.valueAt(i);
             if (ts.hasChargingConstraint()) {
@@ -257,6 +271,16 @@ public final class BatteryController extends RestrictingController {
                 maybeReportNewChargingStateLocked();
             }
         }
+    }
+
+    @VisibleForTesting
+    ArraySet<JobStatus> getTrackedJobs() {
+        return mTrackedTasks;
+    }
+
+    @VisibleForTesting
+    ArraySet<JobStatus> getTopStartedJobs() {
+        return mTopStartedJobs;
     }
 
     @Override

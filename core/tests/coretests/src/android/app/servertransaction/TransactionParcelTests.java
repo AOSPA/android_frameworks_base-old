@@ -187,7 +187,6 @@ public class TransactionParcelTests {
         activityInfo.name = "name";
         Configuration overrideConfig = new Configuration();
         overrideConfig.assetsSeq = 5;
-        CompatibilityInfo compat = CompatibilityInfo.DEFAULT_COMPATIBILITY_INFO;
         String referrer = "referrer";
         int procState = 4;
         Bundle bundle = new Bundle();
@@ -198,7 +197,7 @@ public class TransactionParcelTests {
 
         LaunchActivityItem item = new LaunchActivityItemBuilder()
                 .setIntent(intent).setIdent(ident).setInfo(activityInfo).setCurConfig(config())
-                .setOverrideConfig(overrideConfig).setCompatInfo(compat).setReferrer(referrer)
+                .setOverrideConfig(overrideConfig).setReferrer(referrer)
                 .setProcState(procState).setState(bundle).setPersistentState(persistableBundle)
                 .setPendingResults(resultInfoList()).setActivityOptions(ActivityOptions.makeBasic())
                 .setPendingNewIntents(referrerIntentList()).setIsForward(true)
@@ -235,7 +234,8 @@ public class TransactionParcelTests {
     public void testPause() {
         // Write to parcel
         PauseActivityItem item = PauseActivityItem.obtain(true /* finished */,
-                true /* userLeaving */, 135 /* configChanges */, true /* dontReport */);
+                true /* userLeaving */, 135 /* configChanges */, true /* dontReport */,
+                true /* autoEnteringPip */);
         writeAndPrepareForReading(item);
 
         // Read from parcel and assert
@@ -489,13 +489,13 @@ public class TransactionParcelTests {
 
         @Override
         public void scheduleCreateBackupAgent(ApplicationInfo applicationInfo,
-                CompatibilityInfo compatibilityInfo, int i, int userId, int operatioType)
+                int i, int userId, int operatioType)
                 throws RemoteException {
         }
 
         @Override
         public void scheduleDestroyBackupAgent(ApplicationInfo applicationInfo,
-                CompatibilityInfo compatibilityInfo, int userId) throws RemoteException {
+                int userId) throws RemoteException {
         }
 
         @Override

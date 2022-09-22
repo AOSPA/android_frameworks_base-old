@@ -50,6 +50,7 @@ import com.android.server.policy.WindowManagerPolicy;
 import java.lang.annotation.Retention;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Window manager local system service interface.
@@ -219,9 +220,10 @@ public abstract class WindowManagerInternal {
         /**
          * Called when a pending app transition gets cancelled.
          *
-         * @param keyguardGoingAway true if keyguard going away transition got cancelled.
+         * @param keyguardGoingAwayCancelled {@code true} if keyguard going away transition was
+         *        cancelled.
          */
-        public void onAppTransitionCancelledLocked(boolean keyguardGoingAway) {}
+        public void onAppTransitionCancelledLocked(boolean keyguardGoingAwayCancelled) {}
 
         /**
          * Called when an app transition is timed out.
@@ -231,9 +233,6 @@ public abstract class WindowManagerInternal {
         /**
          * Called when an app transition gets started
          *
-         * @param keyguardGoingAway true if keyguard going away transition is started.
-         * @param keyguardOccluding true if keyguard (un)occlude transition is started.
-         * @param duration the total duration of the transition
          * @param statusBarAnimationStartTime the desired start time for all visual animations in
          *        the status bar caused by this app transition in uptime millis
          * @param statusBarAnimationDuration the duration for all visual animations in the status
@@ -244,8 +243,7 @@ public abstract class WindowManagerInternal {
          * {@link WindowManagerPolicy#FINISH_LAYOUT_REDO_WALLPAPER},
          * or {@link WindowManagerPolicy#FINISH_LAYOUT_REDO_ANIM}.
          */
-        public int onAppTransitionStartingLocked(boolean keyguardGoingAway,
-                boolean keyguardOccluding, long duration, long statusBarAnimationStartTime,
+        public int onAppTransitionStartingLocked(long statusBarAnimationStartTime,
                 long statusBarAnimationDuration) {
             return 0;
         }
@@ -303,12 +301,13 @@ public abstract class WindowManagerInternal {
      * An interface to customize drag and drop behaviors.
      */
     public interface IDragDropCallback {
-        default boolean registerInputChannel(
+        default CompletableFuture<Boolean> registerInputChannel(
                 DragState state, Display display, InputManagerService service,
                 InputChannel source) {
-            state.register(display);
-            return service.transferTouchFocus(source, state.getInputChannel(),
-                    true /* isDragDrop */);
+            return state.register(display)
+                .thenApply(unused ->
+                    service.transferTouchFocus(source, state.getInputChannel(),
+                            true /* isDragDrop */));
         }
 
         /**
@@ -808,12 +807,17 @@ public abstract class WindowManagerInternal {
          */
         public final String imeLayerTargetName;
 
+        /** The surface parent of the IME container. */
+        public final String imeSurfaceParentName;
+
         public ImeTargetInfo(String focusedWindowName, String requestWindowName,
-                String imeControlTargetName, String imeLayerTargetName) {
+                String imeControlTargetName, String imeLayerTargetName,
+                String imeSurfaceParentName) {
             this.focusedWindowName = focusedWindowName;
             this.requestWindowName = requestWindowName;
             this.imeControlTargetName = imeControlTargetName;
             this.imeLayerTargetName = imeLayerTargetName;
+            this.imeSurfaceParentName = imeSurfaceParentName;
         }
     }
 
@@ -880,6 +884,8 @@ public abstract class WindowManagerInternal {
      * Must be invoked for a valid MediaProjection session.
      *
      * @param incomingSession the nullable incoming content recording session
+     * @return {@code true} if successfully set the session, or {@code false} if the session
+     * could not be prepared and the session needs to be torn down.
      */
-    public abstract void setContentRecordingSession(ContentRecordingSession incomingSession);
+    public abstract boolean setContentRecordingSession(ContentRecordingSession incomingSession);
 }

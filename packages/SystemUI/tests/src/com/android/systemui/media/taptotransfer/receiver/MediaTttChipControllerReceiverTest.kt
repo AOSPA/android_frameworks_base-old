@@ -36,7 +36,7 @@ import com.android.systemui.R
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.media.taptotransfer.common.MediaTttLogger
 import com.android.systemui.statusbar.CommandQueue
-import com.android.systemui.statusbar.gesture.TapGestureDetector
+import com.android.systemui.statusbar.policy.ConfigurationController
 import com.android.systemui.util.concurrency.FakeExecutor
 import com.android.systemui.util.mockito.any
 import com.android.systemui.util.mockito.eq
@@ -67,6 +67,8 @@ class MediaTttChipControllerReceiverTest : SysuiTestCase() {
     private lateinit var logger: MediaTttLogger
     @Mock
     private lateinit var accessibilityManager: AccessibilityManager
+    @Mock
+    private lateinit var configurationController: ConfigurationController
     @Mock
     private lateinit var powerManager: PowerManager
     @Mock
@@ -103,7 +105,7 @@ class MediaTttChipControllerReceiverTest : SysuiTestCase() {
             viewUtil,
             FakeExecutor(FakeSystemClock()),
             accessibilityManager,
-            TapGestureDetector(context),
+            configurationController,
             powerManager,
             Handler.getMain(),
             receiverUiEventLogger
@@ -239,5 +241,5 @@ private const val PACKAGE_NAME = "com.android.systemui"
 
 private val routeInfo = MediaRoute2Info.Builder("id", "Test route name")
     .addFeature("feature")
-    .setPackageName(PACKAGE_NAME)
+    .setClientPackageName(PACKAGE_NAME)
     .build()

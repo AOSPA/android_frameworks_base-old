@@ -1828,6 +1828,15 @@ class SettingsProtoDumpUtil {
                 Settings.Secure.ACCESSIBILITY_MAGNIFICATION_FOLLOW_TYPING_ENABLED,
                 SecureSettingsProto.Accessibility
                         .ACCESSIBILITY_MAGNIFICATION_FOLLOW_TYPING_ENABLED);
+        dumpSetting(s, p,
+                Settings.Secure.ACCESSIBILITY_SOFTWARE_CURSOR_ENABLED,
+                SecureSettingsProto.Accessibility.ACCESSIBILITY_SOFTWARE_CURSOR_ENABLED);
+        dumpSetting(s, p,
+                Settings.Secure.ACCESSIBILITY_SOFTWARE_CURSOR_TRIGGER_HINTS_ENABLED,
+                SecureSettingsProto.Accessibility.SoftwareCursorSettings.TRIGGER_HINTS_ENABLED);
+        dumpSetting(s, p,
+                Settings.Secure.ACCESSIBILITY_SOFTWARE_CURSOR_KEYBOARD_SHIFT_ENABLED,
+                SecureSettingsProto.Accessibility.SoftwareCursorSettings.KEYBOARD_SHIFT_ENABLED);
         p.end(accessibilityToken);
 
         final long adaptiveSleepToken = p.start(SecureSettingsProto.ADAPTIVE_SLEEP);
@@ -2366,6 +2375,12 @@ class SettingsProtoDumpUtil {
                 Settings.Secure.POWER_MENU_LOCKED_SHOW_CONTENT,
                 SecureSettingsProto.PowerMenuPrivacy.SHOW);
         p.end(powerMenuPrivacyToken);
+
+        final long extraLowPowerModeToken = p.start(SecureSettingsProto.EXTRA_LOW_POWER_MODE);
+        dumpSetting(s, p,
+                Settings.Secure.EXTRA_AUTOMATIC_POWER_SAVE_MODE,
+                SecureSettingsProto.ExtraLowPowerMode.EXTRA_AUTOMATIC_POWER_SAVE_MODE);
+        p.end(extraLowPowerModeToken);
 
         final long printServiceToken = p.start(SecureSettingsProto.PRINT_SERVICE);
         dumpSetting(s, p,

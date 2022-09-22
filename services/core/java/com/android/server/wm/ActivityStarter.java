@@ -56,6 +56,7 @@ import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.os.Process.INVALID_UID;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.WindowManager.TRANSIT_OPEN;
+import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_START_ACTIVITY_IN_TASK_FRAGMENT;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_CONFIGURATION;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_TASKS;
@@ -82,6 +83,7 @@ import static com.android.server.wm.Task.REPARENT_MOVE_ROOT_TASK_TO_FRONT;
 import static com.android.server.wm.TaskFragment.EMBEDDING_ALLOWED;
 import static com.android.server.wm.TaskFragment.EMBEDDING_DISALLOWED_MIN_DIMENSION_VIOLATION;
 import static com.android.server.wm.TaskFragment.EMBEDDING_DISALLOWED_NEW_TASK;
+import static com.android.server.wm.TaskFragment.EMBEDDING_DISALLOWED_NEW_TASK_FRAGMENT;
 import static com.android.server.wm.TaskFragment.EMBEDDING_DISALLOWED_UNTRUSTED_HOST;
 import static com.android.server.wm.WindowContainer.POSITION_TOP;
 
@@ -130,6 +132,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.HeavyWeightSwitcherActivity;
 import com.android.internal.app.IVoiceInteractor;
 import com.android.internal.protolog.common.ProtoLog;
+import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.am.PendingIntentRecord;
 import com.android.server.pm.InstantAppResolver;
 import com.android.server.power.ShutdownCheckPoints;
@@ -728,13 +731,15 @@ class ActivityStarter {
                 // used here because it may be cleared in setTargetRootTaskIfNeeded.
                 final ActivityOptions originalOptions = mRequest.activityOptions != null
                         ? mRequest.activityOptions.getOriginalOptions() : null;
+                // Only track the launch time of activity that will be resumed.
+                final ActivityRecord launchingRecord = mDoResume ? mLastStartActivityRecord : null;
                 // If the new record is the one that started, a new activity has created.
-                final boolean newActivityCreated = mStartActivity == mLastStartActivityRecord;
+                final boolean newActivityCreated = mStartActivity == launchingRecord;
                 // Notify ActivityMetricsLogger that the activity has launched.
                 // ActivityMetricsLogger will then wait for the windows to be drawn and populate
                 // WaitResult.
                 mSupervisor.getActivityMetricsLogger().notifyActivityLaunched(launchingState, res,
-                        newActivityCreated, mLastStartActivityRecord, originalOptions);
+                        newActivityCreated, launchingRecord, originalOptions);
                 if (mRequest.waitResult != null) {
                     mRequest.waitResult.result = res;
                     res = waitResultIfNeeded(mRequest.waitResult, mLastStartActivityRecord,
@@ -1218,7 +1223,7 @@ class ActivityStarter {
         }
 
         mLastStartActivityResult = startActivityUnchecked(r, sourceRecord, voiceSession,
-                request.voiceInteractor, startFlags, true /* doResume */, checkedOptions,
+                request.voiceInteractor, startFlags, checkedOptions,
                 inTask, inTaskFragment, restrictedBgActivity, intentGrants);
 
         if (request.outActivity != null) {
@@ -1266,7 +1271,7 @@ class ActivityStarter {
     }
 
     private void onExecutionStarted() {
-        mController.onExecutionStarted(this);
+        mController.onExecutionStarted();
     }
 
     private boolean isHomeApp(int uid, @Nullable String packageName) {
@@ -1644,7 +1649,7 @@ class ActivityStarter {
      */
     private int startActivityUnchecked(final ActivityRecord r, ActivityRecord sourceRecord,
             IVoiceInteractionSession voiceSession, IVoiceInteractor voiceInteractor,
-            int startFlags, boolean doResume, ActivityOptions options, Task inTask,
+            int startFlags, ActivityOptions options, Task inTask,
             TaskFragment inTaskFragment, boolean restrictedBgActivity,
             NeededUriGrants intentGrants) {
         int result = START_CANCELED;
@@ -1659,16 +1664,13 @@ class ActivityStarter {
                 && transitionController.getTransitionPlayer() != null)
                 ? transitionController.createTransition(TRANSIT_OPEN) : null;
         RemoteTransition remoteTransition = r.takeRemoteTransition();
-        if (newTransition != null && remoteTransition != null) {
-            newTransition.setRemoteTransition(remoteTransition);
-        }
         transitionController.collect(r);
         try {
             mService.deferWindowLayout();
             try {
                 Trace.traceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "startActivityInner");
                 result = startActivityInner(r, sourceRecord, voiceSession, voiceInteractor,
-                        startFlags, doResume, options, inTask, inTaskFragment, restrictedBgActivity,
+                        startFlags, options, inTask, inTaskFragment, restrictedBgActivity,
                         intentGrants);
             } finally {
                 Trace.traceEnd(Trace.TRACE_TAG_WINDOW_MANAGER);
@@ -1812,10 +1814,10 @@ class ActivityStarter {
     @VisibleForTesting
     int startActivityInner(final ActivityRecord r, ActivityRecord sourceRecord,
             IVoiceInteractionSession voiceSession, IVoiceInteractor voiceInteractor,
-            int startFlags, boolean doResume, ActivityOptions options, Task inTask,
+            int startFlags, ActivityOptions options, Task inTask,
             TaskFragment inTaskFragment, boolean restrictedBgActivity,
             NeededUriGrants intentGrants) {
-        setInitialState(r, options, inTask, inTaskFragment, doResume, startFlags, sourceRecord,
+        setInitialState(r, options, inTask, inTaskFragment, startFlags, sourceRecord,
                 voiceSession, voiceInteractor, restrictedBgActivity);
 
         computeLaunchingTaskFlags();
@@ -2095,6 +2097,49 @@ class ActivityStarter {
                             + " on display area " + mPreferredTaskDisplayArea);
                     return START_ABORTED;
                 }
+            }
+        }
+
+        // Log activity starts which violate one of the following rules of the
+        // activity security model (ASM):
+        // 1. Only the top activity on a task can start activities on that task
+        // 2. Only the top activity on the top task can create new (top) tasks
+        // We don't currently block, but these checks may later become blocks
+        // TODO(b/236234252): Shift to BackgroundActivityStartController once
+        // class is ready
+        if (mSourceRecord != null) {
+            int callerUid = mSourceRecord.getUid();
+            ActivityRecord targetTopActivity =
+                    targetTask != null ? targetTask.getTopNonFinishingActivity() : null;
+            boolean passesAsmChecks = newTask
+                    ? mRootWindowContainer.hasResumedActivity(callerUid)
+                    : targetTopActivity != null && targetTopActivity.getUid() == callerUid;
+
+            if (!passesAsmChecks) {
+                Slog.i(TAG, "Launching r: " + r
+                        + " from background: " + mSourceRecord
+                        + ". New task: " + newTask);
+                boolean newOrEmptyTask = newTask || (targetTopActivity == null);
+                FrameworkStatsLog.write(FrameworkStatsLog.ACTIVITY_ACTION_BLOCKED,
+                        /* caller_uid */
+                        callerUid,
+                        /* caller_activity_class_name */
+                        mSourceRecord.info.name,
+                        /* target_task_top_activity_uid */
+                        newOrEmptyTask ? -1 : targetTopActivity.getUid(),
+                        /* target_task_top_activity_class_name */
+                        newOrEmptyTask ? null : targetTopActivity.info.name,
+                        /* target_task_is_different */
+                        newTask || !mSourceRecord.getTask().equals(targetTask),
+                        /* target_activity_uid */
+                        r.getUid(),
+                        /* target_activity_class_name */
+                        r.info.name,
+                        /* target_intent_action */
+                        r.intent.getAction(),
+                        /* target_intent_flags */
+                        r.intent.getFlags()
+                );
             }
         }
 
@@ -2433,7 +2478,7 @@ class ActivityStarter {
     }
 
     private void setInitialState(ActivityRecord r, ActivityOptions options, Task inTask,
-            TaskFragment inTaskFragment, boolean doResume, int startFlags,
+            TaskFragment inTaskFragment, int startFlags,
             ActivityRecord sourceRecord, IVoiceInteractionSession voiceSession,
             IVoiceInteractor voiceInteractor, boolean restrictedBgActivity) {
         reset(false /* clearRequest */);
@@ -2498,10 +2543,11 @@ class ActivityStarter {
         // If the caller has asked not to resume at this point, we make note
         // of this in the record so that we can skip it when trying to find
         // the top running activity.
-        mDoResume = doResume;
-        if (!doResume || !r.showToCurrentUser() || mLaunchTaskBehind) {
+        if (!r.showToCurrentUser() || mLaunchTaskBehind) {
             r.delayedResume = true;
             mDoResume = false;
+        } else {
+            mDoResume = true;
         }
 
         if (mOptions != null) {
@@ -2951,6 +2997,10 @@ class ActivityStarter {
                 newParent = candidateTf;
             }
         }
+        if (newParent.canHaveEmbeddingActivityTransition(mStartActivity)) {
+            // Make sure the embedded TaskFragment is included in the start activity transition.
+            newParent.collectEmbeddedTaskFragmentIfNeeded();
+        }
         if (mStartActivity.getTaskFragment() == null
                 || mStartActivity.getTaskFragment() == newParent) {
             newParent.addChild(mStartActivity, POSITION_TOP);
@@ -2983,12 +3033,18 @@ class ActivityStarter {
                 errMsg = "The app:" + mCallingUid + "is not trusted to " + mStartActivity;
                 break;
             }
+            case EMBEDDING_DISALLOWED_NEW_TASK_FRAGMENT: {
+                errMsg = "Cannot embed activity across TaskFragments for result, resultTo: "
+                        + mStartActivity.resultTo;
+                break;
+            }
             default:
                 errMsg = "Unhandled embed result:" + result;
         }
         if (taskFragment.isOrganized()) {
             mService.mWindowOrganizerController.sendTaskFragmentOperationFailure(
                     taskFragment.getTaskFragmentOrganizer(), mRequest.errorCallbackToken,
+                    taskFragment, HIERARCHY_OP_TYPE_START_ACTIVITY_IN_TASK_FRAGMENT,
                     new SecurityException(errMsg));
         } else {
             // If the taskFragment is not organized, just dump error message as warning logs.

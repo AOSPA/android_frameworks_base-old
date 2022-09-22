@@ -23,7 +23,6 @@ import android.app.servertransaction.PendingTransactionActions;
 import android.app.servertransaction.TransactionExecutor;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
-import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.os.IBinder;
 import android.util.MergedConfiguration;
@@ -97,8 +96,8 @@ public abstract class ClientTransactionHandler {
 
     /** Pause the activity. */
     public abstract void handlePauseActivity(@NonNull ActivityClientRecord r, boolean finished,
-            boolean userLeaving, int configChanges, PendingTransactionActions pendingActions,
-            String reason);
+            boolean userLeaving, int configChanges, boolean autoEnteringPip,
+            PendingTransactionActions pendingActions, String reason);
 
     /**
      * Resume the activity.
@@ -180,8 +179,7 @@ public abstract class ClientTransactionHandler {
             PendingTransactionActions pendingActions, ActivityOptions activityOptions);
 
     /** Get package info. */
-    public abstract LoadedApk getPackageInfoNoCheck(ApplicationInfo ai,
-            CompatibilityInfo compatInfo);
+    public abstract LoadedApk getPackageInfoNoCheck(ApplicationInfo ai);
 
     /** Deliver app configuration change notification. */
     public abstract void handleConfigurationChanged(Configuration config);

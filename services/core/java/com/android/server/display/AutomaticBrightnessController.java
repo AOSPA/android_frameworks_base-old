@@ -46,7 +46,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.display.BrightnessSynchronizer;
 import com.android.internal.os.BackgroundThread;
 import com.android.server.EventLogTags;
-import com.android.server.display.DisplayPowerController.BrightnessEvent;
+import com.android.server.display.brightness.BrightnessEvent;
 
 import java.io.PrintWriter;
 
@@ -147,6 +147,12 @@ class AutomaticBrightnessController {
 
     // The currently accepted nominal ambient light level.
     private float mAmbientLux;
+
+    // The last calculated ambient light level (long time window).
+    private float mSlowAmbientLux;
+
+    // The last calculated ambient light level (short time window).
+    private float mFastAmbientLux;
 
     // The last ambient lux value prior to passing the darkening or brightening threshold.
     private float mPreThresholdLux;
@@ -337,14 +343,17 @@ class AutomaticBrightnessController {
 
     float getAutomaticScreenBrightness(BrightnessEvent brightnessEvent) {
         if (brightnessEvent != null) {
-            brightnessEvent.lux =
-                    mAmbientLuxValid ? mAmbientLux : PowerManager.BRIGHTNESS_INVALID_FLOAT;
-            brightnessEvent.preThresholdLux = mPreThresholdLux;
-            brightnessEvent.preThresholdBrightness = mPreThresholdBrightness;
-            brightnessEvent.recommendedBrightness = mScreenAutoBrightness;
-            brightnessEvent.flags |= (!mAmbientLuxValid ? BrightnessEvent.FLAG_INVALID_LUX : 0)
+            brightnessEvent.setLux(
+                    mAmbientLuxValid ? mAmbientLux : PowerManager.BRIGHTNESS_INVALID_FLOAT);
+            brightnessEvent.setPreThresholdLux(mPreThresholdLux);
+            brightnessEvent.setPreThresholdBrightness(mPreThresholdBrightness);
+            brightnessEvent.setRecommendedBrightness(mScreenAutoBrightness);
+            brightnessEvent.setFlags(brightnessEvent.getFlags()
+                    | (!mAmbientLuxValid ? BrightnessEvent.FLAG_INVALID_LUX : 0)
                     | (mDisplayPolicy == DisplayPowerRequest.POLICY_DOZE
-                        ? BrightnessEvent.FLAG_DOZE_SCALE : 0);
+                        ? BrightnessEvent.FLAG_DOZE_SCALE : 0)
+                    | (mCurrentBrightnessMapper.isForIdleMode()
+                        ? BrightnessEvent.FLAG_IDLE_CURVE : 0));
         }
 
         if (!mAmbientLuxValid) {
@@ -435,6 +444,14 @@ class AutomaticBrightnessController {
     @VisibleForTesting
     float getAmbientLux() {
         return mAmbientLux;
+    }
+
+    float getSlowAmbientLux() {
+        return mSlowAmbientLux;
+    }
+
+    float getFastAmbientLux() {
+        return mFastAmbientLux;
     }
 
     private boolean setDisplayPolicy(int policy) {
@@ -809,20 +826,20 @@ class AutomaticBrightnessController {
         // proposed ambient light value since the slow value might be sufficiently far enough away
         // from the fast value to cause a recalculation while its actually just converging on
         // the fast value still.
-        float slowAmbientLux = calculateAmbientLux(time, mAmbientLightHorizonLong);
-        float fastAmbientLux = calculateAmbientLux(time, mAmbientLightHorizonShort);
+        mSlowAmbientLux = calculateAmbientLux(time, mAmbientLightHorizonLong);
+        mFastAmbientLux = calculateAmbientLux(time, mAmbientLightHorizonShort);
 
-        if ((slowAmbientLux >= mAmbientBrighteningThreshold
-                && fastAmbientLux >= mAmbientBrighteningThreshold
+        if ((mSlowAmbientLux >= mAmbientBrighteningThreshold
+                && mFastAmbientLux >= mAmbientBrighteningThreshold
                 && nextBrightenTransition <= time)
-                || (slowAmbientLux <= mAmbientDarkeningThreshold
-                        && fastAmbientLux <= mAmbientDarkeningThreshold
+                || (mSlowAmbientLux <= mAmbientDarkeningThreshold
+                        && mFastAmbientLux <= mAmbientDarkeningThreshold
                         && nextDarkenTransition <= time)) {
             mPreThresholdLux = mAmbientLux;
-            setAmbientLux(fastAmbientLux);
+            setAmbientLux(mFastAmbientLux);
             if (mLoggingEnabled) {
                 Slog.d(TAG, "updateAmbientLux: "
-                        + ((fastAmbientLux > mAmbientLux) ? "Brightened" : "Darkened") + ": "
+                        + ((mFastAmbientLux > mAmbientLux) ? "Brightened" : "Darkened") + ": "
                         + "mBrighteningLuxThreshold=" + mAmbientBrighteningThreshold + ", "
                         + "mAmbientLightRingBuffer=" + mAmbientLightRingBuffer + ", "
                         + "mAmbientLux=" + mAmbientLux);
@@ -991,8 +1008,9 @@ class AutomaticBrightnessController {
                     final String packageName = info.topActivity.getPackageName();
                     // If the app didn't change, there's nothing to do. Otherwise, we have to
                     // update the category and re-apply the brightness correction.
-                    if (mForegroundAppPackageName != null
-                            && mForegroundAppPackageName.equals(packageName)) {
+                    String currentForegroundAppPackageName = mForegroundAppPackageName;
+                    if (currentForegroundAppPackageName != null
+                            && currentForegroundAppPackageName.equals(packageName)) {
                         return;
                     }
                     mPendingForegroundAppPackageName = packageName;

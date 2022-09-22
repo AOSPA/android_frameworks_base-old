@@ -1791,8 +1791,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
             return;
         }
         Log.w(TAG, "Communication client died");
-        removeCommunicationRouteClient(client.getBinder(), true);
-        onUpdateCommunicationRouteClient("onCommunicationRouteClientDied");
+        setCommunicationRouteForClient(client.getBinder(), client.getPid(), null,
+                BtHelper.SCO_MODE_UNDEFINED, "onCommunicationRouteClientDied");
     }
 
     /**
@@ -1935,7 +1935,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
         return null;
     }
 
-    UUID getDeviceSensorUuid(AudioDeviceAttributes device) {
+    @Nullable UUID getDeviceSensorUuid(AudioDeviceAttributes device) {
         synchronized (mDeviceStateLock) {
             return mDeviceInventory.getDeviceSensorUuid(device);
         }

@@ -257,11 +257,6 @@ public class BatteryExternalStatsWorker implements BatteryStatsImpl.ExternalStat
     }
 
     @Override
-    public synchronized Future<?> scheduleCpuSyncDueToSettingChange() {
-        return scheduleSyncLocked("setting-change", UPDATE_CPU);
-    }
-
-    @Override
     public Future<?> scheduleSyncDueToScreenStateChange(int flags, boolean onBattery,
             boolean onBatteryScreenOff, int screenState, int[] perDisplayScreenStates) {
         synchronized (BatteryExternalStatsWorker.this) {
@@ -662,7 +657,7 @@ public class BatteryExternalStatsWorker implements BatteryStatsImpl.ExternalStat
 
         // Now that we have finally received all the data, we can tell mStats about it.
         synchronized (mStats) {
-            mStats.addHistoryEventLocked(
+            mStats.recordHistoryEventLocked(
                     elapsedRealtime,
                     uptime,
                     BatteryStats.HistoryItem.EVENT_COLLECT_EXTERNAL_STATS,

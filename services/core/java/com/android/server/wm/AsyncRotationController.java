@@ -481,7 +481,16 @@ class AsyncRotationController extends FadeAnimationController implements Consume
         if (op == null) return false;
         if (DEBUG) Slog.d(TAG, "handleFinishDrawing " + w);
         if (op.mDrawTransaction == null) {
-            op.mDrawTransaction = postDrawTransaction;
+            if (w.isClientLocal()) {
+                // Use a new transaction to merge the draw transaction of local window because the
+                // same instance will be cleared (Transaction#clear()) after reporting draw.
+                op.mDrawTransaction = mService.mTransactionFactory.get();
+                op.mDrawTransaction.merge(postDrawTransaction);
+            } else {
+                // The transaction read from parcel (the client is in a different process) is
+                // already a copy, so just reference it directly.
+                op.mDrawTransaction = postDrawTransaction;
+            }
         } else {
             op.mDrawTransaction.merge(postDrawTransaction);
         }

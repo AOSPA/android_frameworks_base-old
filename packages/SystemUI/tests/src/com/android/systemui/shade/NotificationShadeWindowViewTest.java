@@ -48,7 +48,6 @@ import com.android.systemui.statusbar.notification.stack.AmbientState;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayoutController;
 import com.android.systemui.statusbar.phone.CentralSurfaces;
-import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
 import com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManager;
 import com.android.systemui.statusbar.window.StatusBarWindowStateController;
@@ -90,6 +89,7 @@ public class NotificationShadeWindowViewTest extends SysuiTestCase {
     @Mock private LowLightClockController mLowLightClockController;
     @Mock private KeyguardUnlockAnimationController mKeyguardUnlockAnimationController;
     @Mock private AmbientState mAmbientState;
+    @Mock private PulsingGestureListener mPulsingGestureListener;
 
     @Captor private ArgumentCaptor<NotificationShadeWindowView.InteractionEventHandler>
             mInteractionEventHandlerCaptor;
@@ -111,7 +111,6 @@ public class NotificationShadeWindowViewTest extends SysuiTestCase {
         mController = new NotificationShadeWindowViewController(
                 mLockscreenShadeTransitionController,
                 new FalsingCollectorFake(),
-                mTunerService,
                 mStatusBarStateController,
                 mDockManager,
                 mNotificationShadeDepthController,
@@ -126,7 +125,9 @@ public class NotificationShadeWindowViewTest extends SysuiTestCase {
                 mCentralSurfaces,
                 mNotificationShadeWindowController,
                 mKeyguardUnlockAnimationController,
-                mAmbientState);
+                mAmbientState,
+                mPulsingGestureListener
+        );
         mController.setupExpandedStatusBar();
         mController.setDragDownHelper(mDragDownHelper);
     }

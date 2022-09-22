@@ -40,6 +40,7 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
 
     boolean mKeyguardShowingAndNotOccluded = false;
     boolean mOkToAnimate = true;
+    boolean mIsUserSetupComplete = false;
 
     TestWindowManagerPolicy() {
     }
@@ -244,7 +245,7 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
     }
 
     @Override
-    public void userActivity() {
+    public void userActivity(int displayGroupId, int event) {
     }
 
     @Override
@@ -284,7 +285,7 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
 
     @Override
     public boolean isUserSetupComplete() {
-        return false;
+        return mIsUserSetupComplete;
     }
 
     @Override
@@ -309,11 +310,11 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
     }
 
     @Override
-    public void startKeyguardExitAnimation(long startTime, long fadeoutDuration) {
+    public void startKeyguardExitAnimation(long startTime) {
     }
 
     @Override
-    public int applyKeyguardOcclusionChange(boolean keyguardOccludingStarted) {
+    public int applyKeyguardOcclusionChange(boolean notify) {
         return 0;
     }
 

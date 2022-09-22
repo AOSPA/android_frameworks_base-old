@@ -32,7 +32,6 @@ import com.android.server.wm.flicker.statusBarLayerPositionAtStartAndEnd
 import com.android.server.wm.flicker.statusBarWindowIsAlwaysVisible
 import com.android.server.wm.flicker.taskBarLayerIsVisibleAtStartAndEnd
 import com.android.server.wm.flicker.taskBarWindowIsAlwaysVisible
-import com.android.server.wm.traces.common.ComponentMatcher
 import com.android.server.wm.traces.parser.windowmanager.WindowManagerStateHelper
 import org.junit.Assume
 import org.junit.Test
@@ -49,7 +48,10 @@ abstract class BaseTest @JvmOverloads constructor(
 ) {
     init {
         testSpec.setIsTablet(
-            WindowManagerStateHelper(instrumentation).currentState.wmState.isTablet
+            WindowManagerStateHelper(
+                instrumentation,
+                clearCacheAfterParsing = false
+            ).currentState.wmState.isTablet
         )
     }
 

@@ -109,6 +109,8 @@ import com.android.systemui.shade.NotificationPanelView;
 import com.android.systemui.shade.NotificationPanelViewController;
 import com.android.systemui.shade.NotificationShadeWindowView;
 import com.android.systemui.shade.NotificationShadeWindowViewController;
+import com.android.systemui.shade.ShadeController;
+import com.android.systemui.shade.ShadeControllerImpl;
 import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.KeyguardIndicationController;
@@ -119,7 +121,6 @@ import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
 import com.android.systemui.statusbar.NotificationShadeDepthController;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
-import com.android.systemui.statusbar.NotificationViewHierarchyManager;
 import com.android.systemui.statusbar.OperatorNameViewController;
 import com.android.systemui.statusbar.PulseExpansionHandler;
 import com.android.systemui.statusbar.StatusBarState;
@@ -127,7 +128,6 @@ import com.android.systemui.statusbar.StatusBarStateControllerImpl;
 import com.android.systemui.statusbar.notification.DynamicPrivacyController;
 import com.android.systemui.statusbar.notification.NotifPipelineFlags;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
-import com.android.systemui.statusbar.notification.NotificationFilter;
 import com.android.systemui.statusbar.notification.NotificationWakeUpCoordinator;
 import com.android.systemui.statusbar.notification.collection.NotifLiveDataStore;
 import com.android.systemui.statusbar.notification.collection.NotifPipeline;
@@ -218,7 +218,6 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
     @Mock private BatteryController mBatteryController;
     @Mock private DeviceProvisionedController mDeviceProvisionedController;
     @Mock private StatusBarNotificationPresenter mNotificationPresenter;
-    @Mock private NotificationFilter mNotificationFilter;
     @Mock private AmbientDisplayConfiguration mAmbientDisplayConfiguration;
     @Mock private NotificationLogger.ExpansionStateLogger mExpansionStateLogger;
     @Mock private KeyguardUpdateMonitor mKeyguardUpdateMonitor;
@@ -240,7 +239,6 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
     @Mock private AutoHideController mAutoHideController;
     @Mock private StatusBarWindowController mStatusBarWindowController;
     @Mock private StatusBarWindowStateController mStatusBarWindowStateController;
-    @Mock private NotificationViewHierarchyManager mNotificationViewHierarchyManager;
     @Mock private UserSwitcherController mUserSwitcherController;
     @Mock private Bubbles mBubbles;
     @Mock private NotificationShadeWindowController mNotificationShadeWindowController;
@@ -281,7 +279,6 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
     @Mock private OperatorNameViewController mOperatorNameViewController;
     @Mock private OperatorNameViewController.Factory mOperatorNameViewControllerFactory;
     @Mock private ActivityLaunchAnimator mActivityLaunchAnimator;
-    @Mock private NotifPipelineFlags mNotifPipelineFlags;
     @Mock private NotifLiveDataStore mNotifLiveDataStore;
     @Mock private InteractionJankMonitor mJankMonitor;
     @Mock private DeviceStateManager mDeviceStateManager;
@@ -296,7 +293,6 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
     @Before
     public void setup() throws Exception {
         MockitoAnnotations.initMocks(this);
-        mDependency.injectTestDependency(NotificationFilter.class, mNotificationFilter);
 
         IPowerManager powerManagerService = mock(IPowerManager.class);
         IThermalService thermalService = mock(IThermalService.class);
@@ -306,8 +302,12 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
         mNotificationInterruptStateProvider =
                 new TestableNotificationInterruptStateProviderImpl(mContext.getContentResolver(),
                         mPowerManager,
-                        mDreamManager, mAmbientDisplayConfiguration, mNotificationFilter,
-                        mStatusBarStateController, mBatteryController, mHeadsUpManager,
+                        mDreamManager,
+                        mAmbientDisplayConfiguration,
+                        mStatusBarStateController,
+                        mKeyguardStateController,
+                        mBatteryController,
+                        mHeadsUpManager,
                         mock(NotificationInterruptLogger.class),
                         new Handler(TestableLooper.get(this).getLooper()),
                         mock(NotifPipelineFlags.class),
@@ -403,7 +403,6 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
                 mNotificationGutsManager,
                 notificationLogger,
                 mNotificationInterruptStateProvider,
-                mNotificationViewHierarchyManager,
                 new PanelExpansionStateManager(),
                 mKeyguardViewMediator,
                 new DisplayMetrics(),
@@ -419,7 +418,6 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
                 wakefulnessLifecycle,
                 mStatusBarStateController,
                 Optional.of(mBubbles),
-                mVisualStabilityManager,
                 mDeviceProvisionedController,
                 mNavigationBarController,
                 mAccessibilityFloatingMenuController,
@@ -465,7 +463,6 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
                 mWallpaperManager,
                 Optional.of(mStartingSurface),
                 mActivityLaunchAnimator,
-                mNotifPipelineFlags,
                 mJankMonitor,
                 mDeviceStateManager,
                 mWiredChargingRippleController, mDreamManager);
@@ -652,7 +649,6 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
     public void testShouldHeadsUp_nonSuppressedGroupSummary() throws Exception {
         when(mPowerManager.isScreenOn()).thenReturn(true);
         when(mHeadsUpManager.isSnoozed(anyString())).thenReturn(false);
-        when(mNotificationFilter.shouldFilterOut(any())).thenReturn(false);
         when(mDreamManager.isDreaming()).thenReturn(false);
 
         Notification n = new Notification.Builder(getContext(), "a")
@@ -676,7 +672,6 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
     public void testShouldHeadsUp_suppressedGroupSummary() throws Exception {
         when(mPowerManager.isScreenOn()).thenReturn(true);
         when(mHeadsUpManager.isSnoozed(anyString())).thenReturn(false);
-        when(mNotificationFilter.shouldFilterOut(any())).thenReturn(false);
         when(mDreamManager.isDreaming()).thenReturn(false);
 
         Notification n = new Notification.Builder(getContext(), "a")
@@ -700,7 +695,6 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
     public void testShouldHeadsUp_suppressedHeadsUp() throws Exception {
         when(mPowerManager.isScreenOn()).thenReturn(true);
         when(mHeadsUpManager.isSnoozed(anyString())).thenReturn(false);
-        when(mNotificationFilter.shouldFilterOut(any())).thenReturn(false);
         when(mDreamManager.isDreaming()).thenReturn(false);
 
         Notification n = new Notification.Builder(getContext(), "a").build();
@@ -722,7 +716,6 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
     public void testShouldHeadsUp_noSuppressedHeadsUp() throws Exception {
         when(mPowerManager.isScreenOn()).thenReturn(true);
         when(mHeadsUpManager.isSnoozed(anyString())).thenReturn(false);
-        when(mNotificationFilter.shouldFilterOut(any())).thenReturn(false);
         when(mDreamManager.isDreaming()).thenReturn(false);
 
         Notification n = new Notification.Builder(getContext(), "a").build();
@@ -971,6 +964,7 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
 
     @Test
     public void deviceStateChange_unfolded_shadeOpen_setsLeaveOpenOnKeyguardHide() {
+        when(mKeyguardStateController.isShowing()).thenReturn(false);
         setFoldedStates(FOLD_STATE_FOLDED);
         setGoToSleepStates(FOLD_STATE_FOLDED);
         when(mNotificationPanelViewController.isFullyExpanded()).thenReturn(true);
@@ -979,6 +973,19 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
 
         verify(mStatusBarStateController).setLeaveOpenOnKeyguardHide(true);
     }
+
+    @Test
+    public void deviceStateChange_unfolded_shadeOpen_onKeyguard_doesNotSetLeaveOpenOnKeyguardHide() {
+        when(mKeyguardStateController.isShowing()).thenReturn(true);
+        setFoldedStates(FOLD_STATE_FOLDED);
+        setGoToSleepStates(FOLD_STATE_FOLDED);
+        when(mNotificationPanelViewController.isFullyExpanded()).thenReturn(true);
+
+        setDeviceState(FOLD_STATE_UNFOLDED);
+
+        verify(mStatusBarStateController, never()).setLeaveOpenOnKeyguardHide(true);
+    }
+
 
     @Test
     public void deviceStateChange_unfolded_shadeClose_doesNotSetLeaveOpenOnKeyguardHide() {
@@ -1034,17 +1041,28 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
                 PowerManager powerManager,
                 IDreamManager dreamManager,
                 AmbientDisplayConfiguration ambientDisplayConfiguration,
-                NotificationFilter filter,
                 StatusBarStateController controller,
+                KeyguardStateController keyguardStateController,
                 BatteryController batteryController,
                 HeadsUpManager headsUpManager,
                 NotificationInterruptLogger logger,
                 Handler mainHandler,
                 NotifPipelineFlags flags,
                 KeyguardNotificationVisibilityProvider keyguardNotificationVisibilityProvider) {
-            super(contentResolver, powerManager, dreamManager, ambientDisplayConfiguration, filter,
-                    batteryController, controller, headsUpManager, logger, mainHandler,
-                    flags, keyguardNotificationVisibilityProvider);
+            super(
+                    contentResolver,
+                    powerManager,
+                    dreamManager,
+                    ambientDisplayConfiguration,
+                    batteryController,
+                    controller,
+                    keyguardStateController,
+                    headsUpManager,
+                    logger,
+                    mainHandler,
+                    flags,
+                    keyguardNotificationVisibilityProvider
+            );
             mUseHeadsUp = true;
         }
     }

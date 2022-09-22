@@ -37,13 +37,12 @@ import com.android.systemui.R
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.media.taptotransfer.common.MediaTttLogger
 import com.android.systemui.statusbar.CommandQueue
-import com.android.systemui.statusbar.gesture.TapGestureDetector
+import com.android.systemui.statusbar.policy.ConfigurationController
 import com.android.systemui.util.concurrency.FakeExecutor
 import com.android.systemui.util.mockito.any
 import com.android.systemui.util.mockito.eq
 import com.android.systemui.util.time.FakeSystemClock
 import com.android.systemui.util.view.ViewUtil
-
 import com.google.common.truth.Truth.assertThat
 import org.junit.Before
 import org.junit.Test
@@ -52,8 +51,8 @@ import org.mockito.ArgumentCaptor
 import org.mockito.Mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
-import org.mockito.Mockito.`when` as whenever
 import org.mockito.MockitoAnnotations
+import org.mockito.Mockito.`when` as whenever
 
 @SmallTest
 @RunWith(AndroidTestingRunner::class)
@@ -69,6 +68,8 @@ class MediaTttChipControllerSenderTest : SysuiTestCase() {
     private lateinit var logger: MediaTttLogger
     @Mock
     private lateinit var accessibilityManager: AccessibilityManager
+    @Mock
+    private lateinit var configurationController: ConfigurationController
     @Mock
     private lateinit var powerManager: PowerManager
     @Mock
@@ -112,7 +113,7 @@ class MediaTttChipControllerSenderTest : SysuiTestCase() {
             viewUtil,
             fakeExecutor,
             accessibilityManager,
-            TapGestureDetector(context),
+            configurationController,
             powerManager,
             senderUiEventLogger
         )
@@ -685,5 +686,5 @@ private const val TIMEOUT = 10000
 
 private val routeInfo = MediaRoute2Info.Builder("id", OTHER_DEVICE_NAME)
     .addFeature("feature")
-    .setPackageName(PACKAGE_NAME)
+    .setClientPackageName(PACKAGE_NAME)
     .build()

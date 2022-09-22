@@ -17,16 +17,23 @@
 package android.inputmethodservice;
 
 import android.annotation.AnyThread;
+import android.annotation.CallbackExecutor;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.os.Bundle;
 import android.os.RemoteException;
+import android.os.ResultReceiver;
 import android.view.KeyEvent;
 import android.view.inputmethod.CompletionInfo;
 import android.view.inputmethod.CorrectionInfo;
+import android.view.inputmethod.DeleteGesture;
 import android.view.inputmethod.ExtractedText;
 import android.view.inputmethod.ExtractedTextRequest;
+import android.view.inputmethod.HandwritingGesture;
+import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputContentInfo;
+import android.view.inputmethod.InsertGesture;
+import android.view.inputmethod.SelectGesture;
 import android.view.inputmethod.SurroundingText;
 import android.view.inputmethod.TextAttribute;
 
@@ -35,6 +42,8 @@ import com.android.internal.inputmethod.IRemoteInputConnection;
 import com.android.internal.inputmethod.InputConnectionCommandHeader;
 
 import java.util.Objects;
+import java.util.concurrent.Executor;
+import java.util.function.IntConsumer;
 
 /**
  * A stateless wrapper of {@link com.android.internal.inputmethod.IRemoteInputConnection} to
@@ -51,6 +60,38 @@ final class IRemoteInputConnectionInvoker {
         mConnection = inputConnection;
         mSessionId = sessionId;
     }
+
+    /**
+     * Subclass of {@link ResultReceiver} used by
+     * {@link #performHandwritingGesture(HandwritingGesture, Executor, IntConsumer)} for providing
+     * callback.
+     */
+    private static final class IntResultReceiver extends ResultReceiver {
+        @NonNull
+        private IntConsumer mConsumer;
+        @NonNull
+        private Executor mExecutor;
+
+        IntResultReceiver(@NonNull Executor executor, @NonNull IntConsumer consumer) {
+            super(null);
+            mExecutor = executor;
+            mConsumer = consumer;
+        }
+
+        @Override
+        protected void onReceiveResult(int resultCode, Bundle resultData) {
+            if (mExecutor != null && mConsumer != null) {
+                mExecutor.execute(() -> mConsumer.accept(resultCode));
+                // provide callback only once.
+                clear();
+            }
+        }
+
+        private void clear() {
+            mExecutor = null;
+            mConsumer = null;
+        }
+    };
 
     /**
      * Creates a new instance of {@link IRemoteInputConnectionInvoker} for the given
@@ -588,6 +629,50 @@ final class IRemoteInputConnectionInvoker {
             return true;
         } catch (RemoteException e) {
             return false;
+        }
+    }
+
+    /**
+     * Invokes one of {@link IRemoteInputConnection#performHandwritingSelectGesture(
+     * InputConnectionCommandHeader, SelectGesture, AndroidFuture)},
+     * {@link IRemoteInputConnection#performHandwritingDeleteGesture(InputConnectionCommandHeader,
+     * DeleteGesture, AndroidFuture)},
+     * {@link IRemoteInputConnection#performHandwritingInsertGesture(InputConnectionCommandHeader,
+     * InsertGesture, AndroidFuture)}
+     *
+     * @param {@code gesture} parameter {@link HandwritingGesture}.
+     * @return {@link AndroidFuture<Integer>} that can be used to retrieve the invocation
+     *         result. {@link RemoteException} will be treated as an error.
+     */
+    @AnyThread
+    public void performHandwritingGesture(
+            @NonNull HandwritingGesture gesture, @Nullable @CallbackExecutor Executor executor,
+            @Nullable IntConsumer consumer) {
+
+        ResultReceiver resultReceiver = null;
+        if (consumer != null) {
+            Objects.requireNonNull(executor);
+            resultReceiver = new IntResultReceiver(executor, consumer);
+        }
+        try {
+            if (gesture instanceof SelectGesture) {
+                mConnection.performHandwritingSelectGesture(
+                        createHeader(), (SelectGesture) gesture, resultReceiver);
+            } else if (gesture instanceof InsertGesture) {
+                mConnection.performHandwritingInsertGesture(
+                        createHeader(), (InsertGesture) gesture, resultReceiver);
+            } else if (gesture instanceof DeleteGesture) {
+                mConnection.performHandwritingDeleteGesture(
+                        createHeader(), (DeleteGesture) gesture, resultReceiver);
+            } else if (consumer != null && executor != null) {
+                executor.execute(()
+                        -> consumer.accept(InputConnection.HANDWRITING_GESTURE_RESULT_UNSUPPORTED));
+            }
+        } catch (RemoteException e) {
+            if (consumer != null && executor != null) {
+                executor.execute(() -> consumer.accept(
+                        InputConnection.HANDWRITING_GESTURE_RESULT_CANCELLED));
+            }
         }
     }
 

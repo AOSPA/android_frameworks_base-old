@@ -493,6 +493,7 @@ class Task extends TaskFragment {
     static final int FLAG_FORCE_HIDDEN_FOR_PINNED_TASK = 1;
     static final int FLAG_FORCE_HIDDEN_FOR_TASK_ORG = 1 << 1;
     private int mForceHiddenFlags = 0;
+    private boolean mForceTranslucent = false;
 
     // TODO(b/160201781): Revisit double invocation issue in Task#removeChild.
     /**
@@ -926,7 +927,7 @@ class Task extends TaskFragment {
                 // If the original state is resumed, there is no state change to update focused app.
                 // So here makes sure the activity focus is set if it is the top.
                 if (r.isState(RESUMED) && r == mRootWindowContainer.getTopResumedActivity()) {
-                    mAtmService.setResumedActivityUncheckLocked(r, reason);
+                    mAtmService.setLastResumedActivityUncheckLocked(r, reason);
                 }
             }
             if (!animate) {
@@ -1116,6 +1117,9 @@ class Task extends TaskFragment {
         // as the one in the task because either one of them could be the alias activity.
         if (Objects.equals(realActivity, r.mActivityComponent) && this.intent != null) {
             intent.setComponent(this.intent.getComponent());
+            // Make sure the package name the same to prevent one of the intent is set while the
+            // other one is not.
+            intent.setPackage(this.intent.getPackage());
         }
         return intent.filterEquals(this.intent);
     }
@@ -1886,8 +1890,7 @@ class Task extends TaskFragment {
         }
 
         final int newWinMode = getWindowingMode();
-        if ((prevWinMode != newWinMode) && (mDisplayContent != null)
-                && shouldStartChangeTransition(prevWinMode, newWinMode)) {
+        if (shouldStartChangeTransition(prevWinMode, mTmpPrevBounds)) {
             initializeChangeTransition(mTmpPrevBounds);
         }
 
@@ -2138,9 +2141,15 @@ class Task extends TaskFragment {
         bounds.offset(horizontalDiff, verticalDiff);
     }
 
-    private boolean shouldStartChangeTransition(int prevWinMode, int newWinMode) {
+    private boolean shouldStartChangeTransition(int prevWinMode, @NonNull Rect prevBounds) {
         if (!isLeafTask() || !canStartChangeTransition()) {
             return false;
+        }
+        final int newWinMode = getWindowingMode();
+        if (mTransitionController.inTransition(this)) {
+            final Rect newBounds = getConfiguration().windowConfiguration.getBounds();
+            return prevWinMode != newWinMode || prevBounds.width() != newBounds.width()
+                    || prevBounds.height() != newBounds.height();
         }
         // Only do an animation into and out-of freeform mode for now. Other mode
         // transition animations are currently handled by system-ui.
@@ -2436,11 +2445,7 @@ class Task extends TaskFragment {
         focusableTask.moveToFront(myReason);
         // Top display focused root task is changed, update top resumed activity if needed.
         if (rootTask.getTopResumedActivity() != null) {
-            mTaskSupervisor.updateTopResumedActivityIfNeeded();
-            // Set focused app directly because if the next focused activity is already resumed
-            // (e.g. the next top activity is on a different display), there won't have activity
-            // state change to update it.
-            mAtmService.setResumedActivityUncheckLocked(rootTask.getTopResumedActivity(), reason);
+            mTaskSupervisor.updateTopResumedActivityIfNeeded(reason);
         }
         return rootTask;
     }
@@ -4346,6 +4351,10 @@ class Task extends TaskFragment {
         return true;
     }
 
+    void setForceTranslucent(boolean set) {
+        mForceTranslucent = set;
+    }
+
     @Override
     public boolean isAlwaysOnTop() {
         return !isForceHidden() && super.isAlwaysOnTop();
@@ -4361,6 +4370,11 @@ class Task extends TaskFragment {
     @Override
     protected boolean isForceHidden() {
         return mForceHiddenFlags != 0;
+    }
+
+    @Override
+    protected boolean isForceTranslucent() {
+        return mForceTranslucent;
     }
 
     @Override
@@ -5329,7 +5343,23 @@ class Task extends TaskFragment {
                     parentLaunchMode == ActivityInfo.LAUNCH_SINGLE_TASK ||
                     parentLaunchMode == ActivityInfo.LAUNCH_SINGLE_TOP ||
                     (destIntentFlags & Intent.FLAG_ACTIVITY_CLEAR_TOP) != 0) {
-                parent.deliverNewIntentLocked(callingUid, destIntent, destGrants, srec.packageName);
+                boolean abort;
+                try {
+                    abort = !mTaskSupervisor.checkStartAnyActivityPermission(destIntent,
+                            parent.info, null /* resultWho */, -1 /* requestCode */, srec.getPid(),
+                            callingUid, srec.info.packageName, null /* callingFeatureId */,
+                            false /* ignoreTargetSecurity */, false /* launchingInTask */, srec.app,
+                            null /* resultRecord */, null /* resultRootTask */);
+                } catch (SecurityException e) {
+                    abort = true;
+                }
+                if (abort) {
+                    android.util.EventLog.writeEvent(0x534e4554, "238605611", callingUid, "");
+                    foundParentInTask = false;
+                } else {
+                    parent.deliverNewIntentLocked(callingUid, destIntent, destGrants,
+                            srec.packageName);
+                }
             } else {
                 try {
                     ActivityInfo aInfo = AppGlobals.getPackageManager().getActivityInfo(

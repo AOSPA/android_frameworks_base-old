@@ -36,8 +36,10 @@ import static android.window.TransitionInfo.FLAG_SHOW_WALLPAPER;
 import static android.window.TransitionInfo.FLAG_TRANSLUCENT;
 import static android.window.TransitionInfo.isIndependent;
 
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
+import static com.android.server.wm.WindowContainer.POSITION_TOP;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -55,6 +57,7 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import android.content.res.Configuration;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.IBinder;
@@ -63,12 +66,15 @@ import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.view.SurfaceControl;
 import android.window.IDisplayAreaOrganizer;
+import android.window.IRemoteTransition;
 import android.window.ITaskFragmentOrganizer;
 import android.window.ITaskOrganizer;
 import android.window.ITransitionPlayer;
+import android.window.RemoteTransition;
 import android.window.TaskFragmentOrganizer;
 import android.window.TransitionInfo;
 
+import androidx.annotation.NonNull;
 import androidx.test.filters.SmallTest;
 
 import org.junit.Test;
@@ -90,6 +96,7 @@ import java.util.function.Function;
 @RunWith(WindowTestRunner.class)
 public class TransitionTests extends WindowTestsBase {
     final SurfaceControl.Transaction mMockT = mock(SurfaceControl.Transaction.class);
+    private BLASTSyncEngine mSyncEngine;
 
     private Transition createTestTransition(int transitType) {
         TransitionTracer tracer = mock(TransitionTracer.class);
@@ -97,8 +104,8 @@ public class TransitionTests extends WindowTestsBase {
                 mock(ActivityTaskManagerService.class), mock(TaskSnapshotController.class),
                 mock(TransitionTracer.class));
 
-        final BLASTSyncEngine sync = createTestBLASTSyncEngine();
-        final Transition t = new Transition(transitType, 0 /* flags */, controller, sync);
+        mSyncEngine = createTestBLASTSyncEngine();
+        final Transition t = new Transition(transitType, 0 /* flags */, controller, mSyncEngine);
         t.startCollecting(0 /* timeoutMs */);
         return t;
     }
@@ -413,6 +420,38 @@ public class TransitionTests extends WindowTestsBase {
         // Make sure no intermediate display areas were pulled in between wallpaper and display.
         assertEquals(mDisplayContent.mRemoteToken.toWindowContainerToken(),
                 info.getChanges().get(0).getParent());
+    }
+
+    @Test
+    public void testRunningRemoteTransition() {
+        final TestTransitionPlayer testPlayer = new TestTransitionPlayer(
+                mAtm.getTransitionController(), mAtm.mWindowOrganizerController);
+        final WindowProcessController playerProc = mSystemServicesTestRule.addProcess(
+                "pkg.player", "proc.player", 5000 /* pid */, 5000 /* uid */);
+        testPlayer.mController.registerTransitionPlayer(testPlayer, playerProc);
+        doReturn(mock(IBinder.class)).when(playerProc.getThread()).asBinder();
+        final WindowProcessController delegateProc = mSystemServicesTestRule.addProcess(
+                "pkg.delegate", "proc.delegate", 6000 /* pid */, 6000 /* uid */);
+        doReturn(mock(IBinder.class)).when(delegateProc.getThread()).asBinder();
+        final ActivityRecord app = new ActivityBuilder(mAtm).setCreateTask(true).build();
+        final TransitionController controller = app.mTransitionController;
+        final Transition transition = controller.createTransition(TRANSIT_OPEN);
+        final RemoteTransition remoteTransition = new RemoteTransition(
+                mock(IRemoteTransition.class));
+        remoteTransition.setAppThread(delegateProc.getThread());
+        transition.collectExistenceChange(app.getTask());
+        controller.requestStartTransition(transition, app.getTask(), remoteTransition,
+                null /* displayChange */);
+        testPlayer.startTransition();
+        testPlayer.onTransactionReady(app.getSyncTransaction());
+        assertTrue(playerProc.isRunningRemoteTransition());
+        assertTrue(delegateProc.isRunningRemoteTransition());
+        assertTrue(controller.mRemotePlayer.reportRunning(delegateProc.getThread()));
+
+        testPlayer.finish();
+        assertFalse(playerProc.isRunningRemoteTransition());
+        assertFalse(delegateProc.isRunningRemoteTransition());
+        assertFalse(controller.mRemotePlayer.reportRunning(delegateProc.getThread()));
     }
 
     @Test
@@ -864,7 +903,7 @@ public class TransitionTests extends WindowTestsBase {
         final TransitionController controller = new TransitionController(mAtm, snapshotController,
                 mock(TransitionTracer.class));
         final ITransitionPlayer player = new ITransitionPlayer.Default();
-        controller.registerTransitionPlayer(player, null /* appThread */);
+        controller.registerTransitionPlayer(player, null /* playerProc */);
         final Transition openTransition = controller.createTransition(TRANSIT_OPEN);
 
         // Start out with task2 visible and set up a transition that closes task2 and opens task1
@@ -929,7 +968,7 @@ public class TransitionTests extends WindowTestsBase {
         final TransitionController controller = new TransitionController(mAtm, snapshotController,
                 mock(TransitionTracer.class));
         final ITransitionPlayer player = new ITransitionPlayer.Default();
-        controller.registerTransitionPlayer(player, null /* appThread */);
+        controller.registerTransitionPlayer(player, null /* playerProc */);
         final Transition openTransition = controller.createTransition(TRANSIT_OPEN);
 
         // Start out with task2 visible and set up a transition that closes task2 and opens task1
@@ -993,7 +1032,7 @@ public class TransitionTests extends WindowTestsBase {
         final TransitionController controller = new TransitionController(mAtm, snapshotController,
                 mock(TransitionTracer.class));
         final ITransitionPlayer player = new ITransitionPlayer.Default();
-        controller.registerTransitionPlayer(player, null /* appThread */);
+        controller.registerTransitionPlayer(player, null /* playerProc */);
         final Transition openTransition = controller.createTransition(TRANSIT_OPEN);
 
         // Start out with task2 visible and set up a transition that closes task2 and opens task1
@@ -1046,6 +1085,89 @@ public class TransitionTests extends WindowTestsBase {
         assertEquals(2, info.getChanges().size());
         assertTrue((info.getChanges().get(0).getFlags() & FLAG_IS_EMBEDDED) != 0);
         assertTrue((info.getChanges().get(1).getFlags() & FLAG_IS_EMBEDDED) != 0);
+    }
+
+    @Test
+    public void testIncludeEmbeddedActivityReparent() {
+        final Transition transition = createTestTransition(TRANSIT_OPEN);
+        final Task task = createTask(mDisplayContent);
+        task.setBounds(new Rect(0, 0, 2000, 1000));
+        final ActivityRecord activity = createActivityRecord(task);
+        activity.mVisibleRequested = true;
+        // Skip manipulate the SurfaceControl.
+        doNothing().when(activity).setDropInputMode(anyInt());
+        final TaskFragmentOrganizer organizer = new TaskFragmentOrganizer(Runnable::run);
+        mAtm.mTaskFragmentOrganizerController.registerOrganizer(
+                ITaskFragmentOrganizer.Stub.asInterface(organizer.getOrganizerToken().asBinder()));
+        final TaskFragment embeddedTf = new TaskFragmentBuilder(mAtm)
+                .setParentTask(task)
+                .setOrganizer(organizer)
+                .build();
+        // TaskFragment with different bounds from Task.
+        embeddedTf.setBounds(new Rect(0, 0, 1000, 1000));
+
+        // Start states.
+        transition.collect(activity);
+        transition.collectExistenceChange(embeddedTf);
+
+        // End states.
+        activity.reparent(embeddedTf, POSITION_TOP);
+
+        // Verify that both activity and TaskFragment are included.
+        final ArrayList<WindowContainer> targets = Transition.calculateTargets(
+                transition.mParticipants, transition.mChanges);
+        assertTrue(targets.contains(embeddedTf));
+        assertTrue(targets.contains(activity));
+    }
+
+    @Test
+    public void testTransitionVisibleChange() {
+        registerTestTransitionPlayer();
+        final ActivityRecord app = createActivityRecord(mDisplayContent);
+        final Transition transition = new Transition(TRANSIT_OPEN, 0 /* flags */,
+                app.mTransitionController, mWm.mSyncEngine);
+        app.mTransitionController.moveToCollecting(transition, BLASTSyncEngine.METHOD_NONE);
+        final ArrayList<WindowContainer> freezeCalls = new ArrayList<>();
+        transition.setContainerFreezer(new Transition.IContainerFreezer() {
+            @Override
+            public boolean freeze(@NonNull WindowContainer wc, @NonNull Rect bounds) {
+                freezeCalls.add(wc);
+                return true;
+            }
+
+            @Override
+            public void cleanUp(SurfaceControl.Transaction t) {
+            }
+        });
+        final Task task = app.getTask();
+        transition.collect(task);
+        final Rect bounds = new Rect(task.getBounds());
+        Configuration c = new Configuration(task.getRequestedOverrideConfiguration());
+        bounds.inset(10, 10);
+        c.windowConfiguration.setBounds(bounds);
+        task.onRequestedOverrideConfigurationChanged(c);
+        assertTrue(freezeCalls.contains(task));
+        transition.abort();
+    }
+
+    @Test
+    public void testDeferTransitionReady_deferStartedTransition() {
+        final Transition transition = createTestTransition(TRANSIT_OPEN);
+        transition.setAllReady();
+        transition.start();
+
+        assertTrue(mSyncEngine.isReady(transition.getSyncId()));
+
+        transition.deferTransitionReady();
+
+        // Both transition ready tracker and sync engine should be deferred.
+        assertFalse(transition.allReady());
+        assertFalse(mSyncEngine.isReady(transition.getSyncId()));
+
+        transition.continueTransitionReady();
+
+        assertTrue(transition.allReady());
+        assertTrue(mSyncEngine.isReady(transition.getSyncId()));
     }
 
     private static void makeTaskOrganized(Task... tasks) {

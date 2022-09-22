@@ -20,6 +20,7 @@ import static android.app.ActivityTaskManager.INVALID_TASK_ID;
 import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
+import static android.view.RemoteAnimationTarget.MODE_OPENING;
 
 import static com.android.wm.shell.common.split.SplitScreenConstants.CONTROLLED_ACTIVITY_TYPES;
 import static com.android.wm.shell.common.split.SplitScreenConstants.CONTROLLED_WINDOWING_MODES_WHEN_ACTIVE;
@@ -32,7 +33,9 @@ import android.content.Context;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.IBinder;
+import android.util.Slog;
 import android.util.SparseArray;
+import android.view.RemoteAnimationTarget;
 import android.view.SurfaceControl;
 import android.view.SurfaceSession;
 import android.window.WindowContainerToken;
@@ -334,6 +337,19 @@ class StageTaskListener implements ShellTaskOrganizer.TaskListener {
         }
     }
 
+    void evictNonOpeningChildren(RemoteAnimationTarget[] apps, WindowContainerTransaction wct) {
+        final SparseArray<ActivityManager.RunningTaskInfo> toBeEvict = mChildrenTaskInfo.clone();
+        for (int i = 0; i < apps.length; i++) {
+            if (apps[i].mode == MODE_OPENING) {
+                toBeEvict.remove(apps[i].taskId);
+            }
+        }
+        for (int i = toBeEvict.size() - 1; i >= 0; i--) {
+            final ActivityManager.RunningTaskInfo taskInfo = toBeEvict.valueAt(i);
+            wct.reparent(taskInfo.token, null /* parent */, false /* onTop */);
+        }
+    }
+
     void evictInvisibleChildren(WindowContainerTransaction wct) {
         for (int i = mChildrenTaskInfo.size() - 1; i >= 0; i--) {
             final ActivityManager.RunningTaskInfo taskInfo = mChildrenTaskInfo.valueAt(i);
@@ -361,7 +377,13 @@ class StageTaskListener implements ShellTaskOrganizer.TaskListener {
             SurfaceControl leash, boolean firstAppeared) {
         final Point taskPositionInParent = taskInfo.positionInParent;
         mSyncQueue.runInSync(t -> {
-            t.setWindowCrop(leash, null);
+            // The task surface might be released before running in the sync queue for the case like
+            // trampoline launch, so check if the surface is valid before processing it.
+            if (!leash.isValid()) {
+                Slog.w(TAG, "Skip updating invalid child task surface of task#" + taskInfo.taskId);
+                return;
+            }
+            t.setCrop(leash, null);
             t.setPosition(leash, taskPositionInParent.x, taskPositionInParent.y);
             if (firstAppeared && !ENABLE_SHELL_TRANSITIONS) {
                 t.setAlpha(leash, 1f);

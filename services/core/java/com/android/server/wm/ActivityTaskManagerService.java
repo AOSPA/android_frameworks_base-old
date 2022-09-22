@@ -222,6 +222,7 @@ import android.util.SparseArray;
 import android.util.TimeUtils;
 import android.util.proto.ProtoOutputStream;
 import android.view.IRecentsAnimationRunner;
+import android.view.IWindowFocusObserver;
 import android.view.RemoteAnimationAdapter;
 import android.view.RemoteAnimationDefinition;
 import android.view.WindowManager;
@@ -310,7 +311,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     /**
      * The duration to keep a process in animating state (top scheduling group) when the
-     * wakefulness is changing from awake to doze or sleep.
+     * wakefulness is dozing (unlocking) or changing from awake to doze or sleep (locking).
      */
     private static final long DOZE_ANIMATING_STATE_RETAIN_TIME_MS = 2000;
 
@@ -1027,7 +1028,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             mTaskSupervisor.setWindowManager(wm);
             mRootWindowContainer.setWindowManager(wm);
             if (mBackNavigationController != null) {
-                mBackNavigationController.setTaskSnapshotController(wm.mTaskSnapshotController);
+                mBackNavigationController.setWindowManager(wm);
             }
         }
     }
@@ -1485,6 +1486,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         a.colorMode = ActivityInfo.COLOR_MODE_DEFAULT;
         a.flags |= ActivityInfo.FLAG_EXCLUDE_FROM_RECENTS;
         a.resizeMode = RESIZE_MODE_UNRESIZEABLE;
+        a.configChanges = 0xffffffff;
 
         final ActivityOptions options = ActivityOptions.makeBasic();
         options.setLaunchActivityType(ACTIVITY_TYPE_DREAM);
@@ -1833,13 +1835,14 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     }
 
     @Override
-    public BackNavigationInfo startBackNavigation(boolean requestAnimation) {
+    public BackNavigationInfo startBackNavigation(boolean requestAnimation,
+            IWindowFocusObserver observer) {
         mAmInternal.enforceCallingPermission(START_TASKS_FROM_RECENTS,
                 "startBackNavigation()");
         if (mBackNavigationController == null) {
             return null;
         }
-        return mBackNavigationController.startBackNavigation(mWindowManager, requestAnimation);
+        return mBackNavigationController.startBackNavigation(requestAnimation, observer);
     }
 
     /**
@@ -2309,16 +2312,25 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
      * @return a list of {@link ActivityManager.RunningTaskInfo} with up to {@code maxNum} items
      */
     public List<ActivityManager.RunningTaskInfo> getTasks(int maxNum) {
-        return getTasks(maxNum, false /* filterForVisibleRecents */, false /* keepIntentExtra */);
+        return getTasks(maxNum, false /* filterForVisibleRecents */, false /* keepIntentExtra */,
+                INVALID_DISPLAY);
     }
 
     /**
      * @param filterOnlyVisibleRecents whether to filter the tasks based on whether they would ever
      *                                 be visible in the recent task list in systemui
      */
-    @Override
     public List<ActivityManager.RunningTaskInfo> getTasks(int maxNum,
             boolean filterOnlyVisibleRecents, boolean keepIntentExtra) {
+        return getTasks(maxNum, filterOnlyVisibleRecents, keepIntentExtra, INVALID_DISPLAY);
+    }
+
+    /**
+     * @param displayId the target display id, or {@link INVALID_DISPLAY} not to filter by displayId
+     */
+    @Override
+    public List<ActivityManager.RunningTaskInfo> getTasks(int maxNum,
+            boolean filterOnlyVisibleRecents, boolean keepIntentExtra, int displayId) {
         final int callingUid = Binder.getCallingUid();
         final int callingPid = Binder.getCallingPid();
 
@@ -2340,7 +2352,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             final boolean allowed = isGetTasksAllowed("getTasks", callingPid, callingUid);
             flags |= (allowed ? RunningTasks.FLAG_ALLOWED : 0);
             mRootWindowContainer.getRunningTasks(
-                    maxNum, list, flags, callingUid, callingProfileIds);
+                    maxNum, list, flags, callingUid, callingProfileIds, displayId);
         }
 
         return list;
@@ -2566,6 +2578,9 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                     }
                     task = r.getTask();
                 }
+                // If {@code isSystemCaller} is {@code true}, it means the user intends to stop
+                // pinned mode through UI; otherwise, it's called by an app and we need to stop
+                // locked or pinned mode, subject to checks.
                 getLockTaskController().stopLockTaskMode(task, isSystemCaller, callingUid);
             }
             // Launch in-call UI if a call is ongoing. This is necessary to allow stopping the lock
@@ -2913,12 +2928,14 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             mDemoteTopAppReasons &= ~DEMOTE_TOP_REASON_DURING_UNLOCKING;
             final WindowState notificationShade = mRootWindowContainer.getDefaultDisplay()
                     .getDisplayPolicy().getNotificationShade();
-            proc = notificationShade != null
-                    ? mProcessMap.getProcess(notificationShade.mSession.mPid) : null;
+            proc = notificationShade != null ? notificationShade.getProcess() : null;
         }
-        if (proc == null) {
-            return;
-        }
+        setProcessAnimatingWhileDozing(proc);
+    }
+
+    // The caller MUST NOT hold the global lock because it calls AM method directly.
+    void setProcessAnimatingWhileDozing(WindowProcessController proc) {
+        if (proc == null) return;
         // Set to activity manager directly to make sure the state can be seen by the subsequent
         // update of scheduling group.
         proc.setRunningAnimationUnsafe();
@@ -2984,7 +3001,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     @Override
     public boolean requestAssistDataForTask(IAssistDataReceiver receiver, int taskId,
-            String callingPackageName) {
+            String callingPackageName, @Nullable String callingAttributionTag) {
         mAmInternal.enforceCallingPermission(android.Manifest.permission.GET_TOP_ACTIVITY_INFO,
                 "requestAssistDataForTask()");
         final long callingId = Binder.clearCallingIdentity();
@@ -3011,7 +3028,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         requester.requestAssistData(topActivityToken, true /* fetchData */,
                 false /* fetchScreenshot */, false /* fetchStructure */, true /* allowFetchData */,
                 false /* allowFetchScreenshot*/, true /* ignoreFocusCheck */,
-                Binder.getCallingUid(), callingPackageName);
+                Binder.getCallingUid(), callingPackageName, callingAttributionTag);
 
         return true;
     }
@@ -3546,7 +3563,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 // Continue the pausing process after entering pip.
                 if (r.isState(PAUSING)) {
                     r.getTask().schedulePauseActivity(r, false /* userLeaving */,
-                            false /* pauseImmediately */, "auto-pip");
+                            false /* pauseImmediately */, true /* autoEnteringPip */, "auto-pip");
                 }
             }
         };
@@ -4607,7 +4624,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     }
 
     /** Update AMS states when an activity is resumed. */
-    void setResumedActivityUncheckLocked(ActivityRecord r, String reason) {
+    void setLastResumedActivityUncheckLocked(ActivityRecord r, String reason) {
         final Task task = r.getTask();
         if (task.isActivityTypeStandard()) {
             if (mCurAppTimeTracker != r.appTimeTracker) {
@@ -5322,7 +5339,13 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     }
 
     @Override
-    public void setRunningRemoteTransitionDelegate(IApplicationThread caller) {
+    public void setRunningRemoteTransitionDelegate(IApplicationThread delegate) {
+        final TransitionController controller = getTransitionController();
+        // A quick path without entering WM lock.
+        if (delegate != null && controller.mRemotePlayer.reportRunning(delegate)) {
+            // The delegate was known as running remote transition.
+            return;
+        }
         mAmInternal.enforceCallingPermission(CONTROL_REMOTE_APP_TRANSITION_ANIMATIONS,
                 "setRunningRemoteTransition");
         final int callingPid = Binder.getCallingPid();
@@ -5339,13 +5362,12 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 Slog.e(TAG, msg);
                 throw new SecurityException(msg);
             }
-            final WindowProcessController wpc = getProcessController(caller);
+            final WindowProcessController wpc = getProcessController(delegate);
             if (wpc == null) {
-                Slog.w(TAG, "Unable to find process for application " + caller);
+                Slog.w(TAG, "setRunningRemoteTransition: no process for " + delegate);
                 return;
             }
-            wpc.setRunningRemoteAnimation(true /* running */);
-            callingProc.addRemoteAnimationDelegate(wpc);
+            controller.mRemotePlayer.update(wpc, true /* running */, false /* predict */);
         }
     }
 

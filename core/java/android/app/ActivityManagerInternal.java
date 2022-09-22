@@ -41,10 +41,13 @@ import android.os.WorkSource;
 import android.util.ArraySet;
 import android.util.Pair;
 
+import com.android.internal.os.TimeoutRecord;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiFunction;
 
 /**
  * Activity manager local system service interface.
@@ -440,10 +443,13 @@ public abstract class ActivityManagerInternal {
 
     /** Input dispatch timeout to a window, start the ANR process. Return the timeout extension,
      * in milliseconds, or 0 to abort dispatch. */
-    public abstract long inputDispatchingTimedOut(int pid, boolean aboveSystem, String reason);
+    public abstract long inputDispatchingTimedOut(int pid, boolean aboveSystem,
+            TimeoutRecord timeoutRecord);
+
     public abstract boolean inputDispatchingTimedOut(Object proc, String activityShortComponentName,
             ApplicationInfo aInfo, String parentShortComponentName, Object parentProc,
-            boolean aboveSystem, String reason);
+            boolean aboveSystem, TimeoutRecord timeoutRecord);
+
     /**
      * App started responding to input events. This signal can be used to abort the ANR process and
      * hide the ANR dialog.
@@ -618,6 +624,11 @@ public abstract class ActivityManagerInternal {
      * broadcast my be sent to; any app Ids < {@link android.os.Process#FIRST_APPLICATION_UID} are
      * automatically allowlisted.
      *
+     * @param filterExtrasForReceiver A function to filter intent extras for the given receiver by
+     * using the rules of package visibility. Returns extras with legitimate package info that the
+     * receiver is able to access, or {@code null} if none of the packages is visible to the
+     * receiver.
+     *
      * @see com.android.server.am.ActivityManagerService#broadcastIntentWithFeature(
      *      IApplicationThread, String, Intent, String, IIntentReceiver, int, String, Bundle,
      *      String[], int, Bundle, boolean, boolean, int)
@@ -625,7 +636,9 @@ public abstract class ActivityManagerInternal {
     public abstract int broadcastIntent(Intent intent,
             IIntentReceiver resultTo,
             String[] requiredPermissions, boolean serialized,
-            int userId, int[] appIdAllowList, @Nullable Bundle bOptions);
+            int userId, int[] appIdAllowList,
+            @Nullable BiFunction<Integer, Bundle, Bundle> filterExtrasForReceiver,
+            @Nullable Bundle bOptions);
 
     /**
      * Add uid to the ActivityManagerService PendingStartActivityUids list.

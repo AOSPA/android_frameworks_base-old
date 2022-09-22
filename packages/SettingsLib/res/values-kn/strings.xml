@@ -117,8 +117,8 @@
     <string name="bluetooth_profile_opp" msgid="6692618568149493430">"ಫೈಲ್ ವರ್ಗಾವಣೆ"</string>
     <string name="bluetooth_profile_hid" msgid="2969922922664315866">"ಇನ್‌ಪುಟ್‌ ಸಾಧನ"</string>
     <string name="bluetooth_profile_pan" msgid="1006235139308318188">"ಇಂಟರ್ನೆಟ್ ಪ್ರವೇಶ"</string>
-    <string name="bluetooth_profile_pbap" msgid="7064307749579335765">"ಸಂಪರ್ಕ ಹಂಚಿಕೆ"</string>
-    <string name="bluetooth_profile_pbap_summary" msgid="2955819694801952056">"ಸಂಪರ್ಕ ಹಂಚಿಕೆಗಾಗಿ ಬಳಸಿ"</string>
+    <string name="bluetooth_profile_pbap" msgid="4262303387989406171">"ಸಂಪರ್ಕಗಳು ಹಾಗೂ ಕರೆ ಇತಿಹಾಸ ಹಂಚಿಕೊಳ್ಳುವಿಕೆ"</string>
+    <string name="bluetooth_profile_pbap_summary" msgid="6466456791354759132">"ಸಂಪರ್ಕಗಳು ಮತ್ತು ಕರೆ ಇತಿಹಾಸ ಹಂಚಿಕೆಗಾಗಿ ಬಳಸಿ"</string>
     <string name="bluetooth_profile_pan_nap" msgid="7871974753822470050">"ಇಂಟರ್ನೆಟ್ ಸಂಪರ್ಕ ಹಂಚಿಕೊಳ್ಳುವಿಕೆ"</string>
     <string name="bluetooth_profile_map" msgid="8907204701162107271">"ಪಠ್ಯ ಸಂದೇಶಗಳು"</string>
     <string name="bluetooth_profile_sap" msgid="8304170950447934386">"ಸಿಮ್ ಪ್ರವೇಶ"</string>
@@ -232,7 +232,7 @@
     <string name="vpn_settings_not_available" msgid="2894137119965668920">"VPN ಸೆಟ್ಟಿಂಗ್‌ಗಳು ಈ ಬಳಕೆದಾರರಿಗೆ ಲಭ್ಯವಿಲ್ಲ"</string>
     <string name="tethering_settings_not_available" msgid="266821736434699780">"ಟೆಥರಿಂಗ್ ಸೆಟ್ಟಿಂಗ್‌ಗಳು ಈ ಬಳಕೆದಾರರಿಗೆ ಲಭ್ಯವಿಲ್ಲ"</string>
     <string name="apn_settings_not_available" msgid="1147111671403342300">"ಪ್ರವೇಶ ಬಿಂದು ಹೆಸರಿನ ಸೆಟ್ಟಿಂಗ್‌ಗಳು ಈ ಬಳಕೆದಾರರಿಗೆ ಲಭ್ಯವಿಲ್ಲ"</string>
-    <string name="enable_adb" msgid="8072776357237289039">"USB ಡೀಬಗಿಂಗ್‌"</string>
+    <string name="enable_adb" msgid="8072776357237289039">"USB ಡೀಬಗ್ ಮಾಡುವಿಕೆ"</string>
     <string name="enable_adb_summary" msgid="3711526030096574316">"USB ಸಂಪರ್ಕಗೊಂಡಾಗ ಡೀಬಗ್ ಮೋಡ್"</string>
     <string name="clear_adb_keys" msgid="3010148733140369917">"USB ಡೀಬಗ್‌ ಮಾಡುವಿಕೆಯ ಅಧಿಕೃತಗೊಳಿಸುವಿಕೆಗಳನ್ನು ಹಿಂತೆಗೆದುಕೊಳ್ಳಿ"</string>
     <string name="enable_adb_wireless" msgid="6973226350963971018">"ವೈರ್‌ಲೆಸ್ ಡೀಬಗಿಂಗ್"</string>
@@ -660,6 +660,9 @@
     <string name="dream_complication_title_weather" msgid="598609151677172783">"ಹವಾಮಾನ"</string>
     <string name="dream_complication_title_aqi" msgid="4587552608957834110">"ವಾಯು ಗುಣಮಟ್ಟ"</string>
     <string name="dream_complication_title_cast_info" msgid="4038776652841885084">"ಬಿತ್ತರಿಸಿದ ಮಾಹಿತಿ"</string>
+    <string name="dream_complication_title_home_controls" msgid="9153381632476738811">"ಹೋಮ್ ನಿಯಂತ್ರಣಗಳು"</string>
+    <!-- no translation found for dream_complication_title_smartspace (4197829945636051120) -->
+    <skip />
     <string name="avatar_picker_title" msgid="8492884172713170652">"ಪ್ರೊಫೈಲ್ ಚಿತ್ರವನ್ನು ಆಯ್ಕೆ ಮಾಡಿ"</string>
     <string name="default_user_icon_description" msgid="6554047177298972638">"ಡೀಫಾಲ್ಟ್ ಬಳಕೆದಾರರ ಐಕಾನ್"</string>
     <string name="physical_keyboard_title" msgid="4811935435315835220">"ಭೌತಿಕ ಕೀಬೋರ್ಡ್"</string>

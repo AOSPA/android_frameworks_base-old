@@ -329,7 +329,7 @@ status_t NativeInputEventReceiver::consumeEvents(JNIEnv* env,
                 &motionEventType, &touchMoveNum, &flag);
 
         if (!receiverObj.get()) {
-            receiverObj.reset(jniGetReferent(env, mReceiverWeakGlobal));
+            receiverObj.reset(GetReferent(env, mReceiverWeakGlobal));
             if (!receiverObj.get()) {
                 ALOGW("channel '%s' ~ Receiver object was finalized "
                         "without being disposed.", getInputChannelName().c_str());
@@ -356,7 +356,7 @@ status_t NativeInputEventReceiver::consumeEvents(JNIEnv* env,
             if (!skipCallbacks && !mBatchedInputEventPending && mInputConsumer.hasPendingBatch()) {
                 // There is a pending batch.  Come back later.
                 if (!receiverObj.get()) {
-                    receiverObj.reset(jniGetReferent(env, mReceiverWeakGlobal));
+                    receiverObj.reset(GetReferent(env, mReceiverWeakGlobal));
                     if (!receiverObj.get()) {
                         ALOGW("channel '%s' ~ Receiver object was finalized "
                               "without being disposed.",
@@ -385,7 +385,7 @@ status_t NativeInputEventReceiver::consumeEvents(JNIEnv* env,
 
         if (!skipCallbacks) {
             if (!receiverObj.get()) {
-                receiverObj.reset(jniGetReferent(env, mReceiverWeakGlobal));
+                receiverObj.reset(GetReferent(env, mReceiverWeakGlobal));
                 if (!receiverObj.get()) {
                     ALOGW("channel '%s' ~ Receiver object was finalized "
                             "without being disposed.", getInputChannelName().c_str());

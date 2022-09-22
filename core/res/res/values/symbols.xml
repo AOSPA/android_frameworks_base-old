@@ -97,10 +97,12 @@
   <java-symbol type="id" name="icon" />
   <java-symbol type="id" name="image" />
   <java-symbol type="id" name="increment" />
+  <java-symbol type="id" name="indicator" />
   <java-symbol type="id" name="internalEmpty" />
   <java-symbol type="id" name="inputExtractAccessories" />
   <java-symbol type="id" name="inputExtractAction" />
   <java-symbol type="id" name="issued_on" />
+  <java-symbol type="id" name="language_item" />
   <java-symbol type="id" name="left_icon" />
   <java-symbol type="id" name="leftSpacer" />
   <java-symbol type="id" name="line1" />
@@ -276,6 +278,10 @@
   <java-symbol type="bool" name="action_bar_embed_tabs" />
   <java-symbol type="bool" name="action_bar_expanded_action_views_exclusive" />
   <java-symbol type="bool" name="config_alias_ring_notif_stream_types" />
+  <java-symbol type="integer" name="config_audio_notif_vol_default" />
+  <java-symbol type="integer" name="config_audio_notif_vol_steps" />
+  <java-symbol type="integer" name="config_audio_ring_vol_default" />
+  <java-symbol type="integer" name="config_audio_ring_vol_steps" />
   <java-symbol type="bool" name="config_avoidGfxAccel" />
   <java-symbol type="bool" name="config_bluetooth_address_validation" />
   <java-symbol type="integer" name="config_chooser_max_targets_per_row" />
@@ -453,6 +459,7 @@
   <java-symbol type="integer" name="config_multiuserMaximumUsers" />
   <java-symbol type="integer" name="config_multiuserMaxRunningUsers" />
   <java-symbol type="bool" name="config_multiuserDelayUserDataLocking" />
+  <java-symbol type="bool" name="config_multiuserUsersOnSecondaryDisplays" />
   <java-symbol type="bool" name="config_enableTimeoutToUserZeroWhenDocked" />
   <java-symbol type="integer" name="config_userTypePackageWhitelistMode"/>
   <java-symbol type="xml" name="config_user_types" />
@@ -919,6 +926,7 @@
   <java-symbol type="string" name="mobile_provisioning_apn" />
   <java-symbol type="string" name="mobile_provisioning_url" />
   <java-symbol type="string" name="quick_contacts_not_available" />
+  <java-symbol type="string" name="rating_label" />
   <java-symbol type="string" name="reboot_to_update_package" />
   <java-symbol type="string" name="reboot_to_update_prepare" />
   <java-symbol type="string" name="reboot_to_update_title" />
@@ -1585,6 +1593,7 @@
   <java-symbol type="layout" name="time_picker_dialog" />
   <java-symbol type="layout" name="tooltip" />
   <java-symbol type="layout" name="transient_notification" />
+  <java-symbol type="layout" name="transient_notification_with_icon" />
   <java-symbol type="layout" name="voice_interaction_session" />
   <java-symbol type="layout" name="web_text_view_dropdown" />
   <java-symbol type="layout" name="webview_find" />
@@ -1742,6 +1751,7 @@
   <java-symbol type="bool" name="config_enableLockBeforeUnlockScreen" />
   <java-symbol type="bool" name="config_enableLockScreenRotation" />
   <java-symbol type="bool" name="config_remoteInsetsControllerControlsSystemBars" />
+  <java-symbol type="bool" name="config_remoteInsetsControllerSystemBarsCanBeShownByUserAction" />
   <java-symbol type="bool" name="config_lidControlsScreenLock" />
   <java-symbol type="bool" name="config_lidControlsSleep" />
   <java-symbol type="bool" name="config_lockDayNightMode" />
@@ -1862,8 +1872,7 @@
   <java-symbol type="string" name="fp_power_button_bp_negative_button" />
   <java-symbol type="string" name="fp_power_button_enrollment_title" />
   <java-symbol type="string" name="fp_power_button_enrollment_message" />
-  <java-symbol type="string" name="fp_power_button_enrollment_positive_button" />
-  <java-symbol type="string" name="fp_power_button_enrollment_negative_button" />
+  <java-symbol type="string" name="fp_power_button_enrollment_button_text" />
   <java-symbol type="string" name="global_actions" />
   <java-symbol type="string" name="global_action_power_off" />
   <java-symbol type="string" name="global_action_power_options" />
@@ -1984,6 +1993,7 @@
   <java-symbol type="bool" name="config_allowTheaterModeWakeFromLidSwitch" />
   <java-symbol type="bool" name="config_allowTheaterModeWakeFromDock" />
   <java-symbol type="bool" name="config_allowTheaterModeWakeFromWindowLayout" />
+  <java-symbol type="bool" name="config_keepDreamingWhenUndocking" />
   <java-symbol type="bool" name="config_goToSleepOnButtonPressTheaterMode" />
   <java-symbol type="bool" name="config_supportLongPressPowerWhenNonInteractive" />
   <java-symbol type="bool" name="config_wimaxEnabled" />
@@ -2237,7 +2247,6 @@
   <java-symbol type="string" name="config_dreamsDefaultComponent" />
   <java-symbol type="bool" name="config_dreamsOnlyEnabledForSystemUser" />
   <java-symbol type="array" name="config_supportedDreamComplications" />
-  <java-symbol type="array" name="config_dreamComplicationsEnabledByDefault" />
   <java-symbol type="array" name="config_disabledDreamComponents" />
   <java-symbol type="bool" name="config_dismissDreamOnActivityStart" />
   <java-symbol type="string" name="config_loggable_dream_prefix" />
@@ -2642,7 +2651,13 @@
   <java-symbol type="integer" name="config_sidefpsBpPowerPressWindow"/>
   <java-symbol type="integer" name="config_sidefpsKeyguardPowerPressWindow"/>
   <java-symbol type="integer" name="config_sidefpsPostAuthDowntime"/>
-  <java-symbol type="integer" name="config_sidefpsEnrollPowerPressWindow"/>
+  <java-symbol type="integer" name="config_sideFpsToastTimeout"/>
+  <java-symbol type="integer" name="config_sidefpsSkipWaitForPowerAcquireMessage"/>
+  <java-symbol type="integer" name="config_sidefpsSkipWaitForPowerVendorAcquireMessage"/>
+
+  <!-- Clickable toast used during sidefps enrollment -->
+  <java-symbol type="layout" name="side_fps_toast" />
+  <java-symbol type="id" name="turn_off_screen" />
 
   <!-- Face authentication messages -->
   <java-symbol type="string" name="face_recalibrate_notification_name" />
@@ -3134,6 +3149,12 @@
   <java-symbol type="id" name="locale_search_menu" />
   <java-symbol type="layout" name="language_picker_item" />
   <java-symbol type="layout" name="language_picker_bilingual_item" />
+  <java-symbol type="color" name="language_picker_item_text_color" />
+  <java-symbol type="color" name="language_picker_item_text_color_selected" />
+  <java-symbol type="color" name="language_picker_item_text_color_secondary_selected" />
+  <java-symbol type="drawable" name="language_picker_item_text_color_selector" />
+  <java-symbol type="drawable" name="language_picker_item_text_color2_selector" />
+  <java-symbol type="drawable" name="language_picker_item_bg_selected" />
   <java-symbol type="layout" name="language_picker_section_header" />
   <java-symbol type="layout" name="language_picker_bilingual_section_header" />
   <java-symbol type="menu" name="language_selection_list" />
@@ -3141,6 +3162,7 @@
   <java-symbol type="string" name="language_picker_section_all" />
   <java-symbol type="string" name="region_picker_section_all" />
   <java-symbol type="string" name="language_picker_section_suggested" />
+  <java-symbol type="string" name="language_picker_regions_section_suggested" />
   <java-symbol type="string" name="language_picker_section_suggested_bilingual" />
   <java-symbol type="string" name="region_picker_section_suggested_bilingual" />
   <java-symbol type="string" name="language_selection_title" />
@@ -3325,10 +3347,11 @@
   <java-symbol type="string" name="app_streaming_blocked_title_for_camera_dialog" />
   <java-symbol type="string" name="app_streaming_blocked_title_for_fingerprint_dialog" />
   <java-symbol type="string" name="app_streaming_blocked_title_for_microphone_dialog" />
+  <java-symbol type="string" name="app_streaming_blocked_title_for_playstore_dialog" />
   <java-symbol type="string" name="app_streaming_blocked_title_for_settings_dialog" />
   <java-symbol type="string" name="app_streaming_blocked_message" />
-  <java-symbol type="string" name="app_streaming_blocked_message_for_permission_dialog" />
   <java-symbol type="string" name="app_streaming_blocked_message_for_fingerprint_dialog" />
+  <java-symbol type="string" name="app_streaming_blocked_message_for_settings_dialog" />
 
   <!-- Used internally for assistant to launch activity transitions -->
   <java-symbol type="id" name="cross_task_transition" />
@@ -4000,6 +4023,8 @@
   <java-symbol type="bool" name="config_maskMainBuiltInDisplayCutout" />
 
   <java-symbol type="string" name="config_customCountryDetector" />
+
+  <java-symbol type="integer" name="config_maxScanTasksForHomeVisibility" />
 
   <!-- For Foldables -->
   <java-symbol type="array" name="config_foldedDeviceStates" />
@@ -4727,6 +4752,8 @@
 
   <java-symbol type="bool" name="config_volumeAdjustmentForRemoteGroupSessions" />
 
+  <java-symbol type="integer" name="config_mediaOutputSwitchDialogVersion" />
+
   <!-- List of shared library packages that should be loaded by the classloader after the
        code and resources provided by applications. -->
   <java-symbol type="array" name="config_sharedLibrariesLoadedAfterApp" />
@@ -4807,6 +4834,7 @@
 
   <!-- For VirtualDeviceManager -->
   <java-symbol type="string" name="vdm_camera_access_denied" />
+  <java-symbol type="string" name="vdm_secure_window" />
 
   <java-symbol type="color" name="camera_privacy_light_day"/>
   <java-symbol type="color" name="camera_privacy_light_night"/>
@@ -4833,6 +4861,7 @@
   <java-symbol type="drawable" name="ic_swap_horiz" />
   <java-symbol type="array" name="config_deviceStatesAvailableForAppRequests" />
   <java-symbol type="array" name="config_serviceStateLocationAllowedPackages" />
+  <java-symbol type="integer" name="config_deviceStateRearDisplay"/>
 
   <!-- For app language picker -->
   <java-symbol type="string" name="system_locale_title" />

@@ -630,7 +630,7 @@ public final class DeviceConfig {
     private static final List<String> PUBLIC_NAMESPACES =
             Arrays.asList(NAMESPACE_TEXTCLASSIFIER, NAMESPACE_RUNTIME, NAMESPACE_STATSD_JAVA,
                     NAMESPACE_STATSD_JAVA_BOOT, NAMESPACE_SELECTION_TOOLBAR, NAMESPACE_AUTOFILL,
-                    NAMESPACE_DEVICE_POLICY_MANAGER);
+                    NAMESPACE_DEVICE_POLICY_MANAGER, NAMESPACE_CONTENT_CAPTURE);
     /**
      * Privacy related properties definitions.
      *
@@ -755,11 +755,25 @@ public final class DeviceConfig {
     public static final String NAMESPACE_VENDOR_SYSTEM_NATIVE = "vendor_system_native";
 
     /**
+     * Namespace for Vendor System Native Boot related features.
+     *
+     * @hide
+     */
+    public static final String NAMESPACE_VENDOR_SYSTEM_NATIVE_BOOT = "vendor_system_native_boot";
+
+    /**
      * Namespace for memory safety related features (e.g. MTE)
      *
      * @hide
      */
     public static final String NAMESPACE_MEMORY_SAFETY_NATIVE = "memory_safety_native";
+
+    /**
+     * Namespace for wear OS platform features.
+     *
+     * @hide
+     */
+    public static final String NAMESPACE_WEAR = "wear";
 
     private static final Object sLock = new Object();
     @GuardedBy("sLock")

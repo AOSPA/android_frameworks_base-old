@@ -17,18 +17,12 @@
 #define LOG_TAG "SurfaceControl"
 #define LOG_NDEBUG 0
 
-#include "android_os_Parcel.h"
-#include "android_util_Binder.h"
-#include "android_hardware_input_InputWindowHandle.h"
-#include "core_jni_helpers.h"
-
-#include <memory>
-
 #include <aidl/android/hardware/graphics/common/PixelFormat.h>
 #include <android-base/chrono_utils.h>
 #include <android/graphics/properties.h>
 #include <android/graphics/region.h>
 #include <android/gui/BnScreenCaptureListener.h>
+#include <android/gui/BnWindowInfosReportedListener.h>
 #include <android/hardware/display/IDeviceProductInfoConstants.h>
 #include <android/os/IInputConstants.h>
 #include <android_runtime/AndroidRuntime.h>
@@ -60,6 +54,13 @@
 #include <utils/LightRefBase.h>
 #include <utils/Log.h>
 
+#include <memory>
+
+#include "android_hardware_input_InputWindowHandle.h"
+#include "android_os_Parcel.h"
+#include "android_util_Binder.h"
+#include "core_jni_helpers.h"
+
 // ----------------------------------------------------------------------------
 
 namespace android {
@@ -86,6 +87,11 @@ static struct {
 static jobject toInteger(JNIEnv* env, int32_t i) {
     return env->NewObject(gIntegerClassInfo.clazz, gIntegerClassInfo.ctor, i);
 }
+
+static struct {
+    jclass clazz;
+    jmethodID run;
+} gRunnableClassInfo;
 
 static struct {
     jclass clazz;
@@ -308,12 +314,12 @@ public:
     binder::Status onScreenCaptureCompleted(
             const gui::ScreenCaptureResults& captureResults) override {
         JNIEnv* env = getenv();
-        if (captureResults.result != NO_ERROR || captureResults.buffer == nullptr) {
+        if (!captureResults.fenceResult.ok() || captureResults.buffer == nullptr) {
             env->CallVoidMethod(screenCaptureListenerObject,
                                 gScreenCaptureListenerClassInfo.onScreenCaptureComplete, nullptr);
             return binder::Status::ok();
         }
-        captureResults.fence->waitForever("");
+        captureResults.fenceResult.value()->waitForever("");
         jobject jhardwareBuffer = android_hardware_HardwareBuffer_createFromAHardwareBuffer(
                 env, captureResults.buffer->toAHardwareBuffer());
         const jint namedColorSpace =
@@ -372,6 +378,38 @@ public:
 
 private:
     jobject mTransactionCommittedListenerObject;
+    JavaVM* mVm;
+
+    JNIEnv* getenv() {
+        JNIEnv* env;
+        mVm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6);
+        return env;
+    }
+};
+
+class WindowInfosReportedListenerWrapper : public gui::BnWindowInfosReportedListener {
+public:
+    explicit WindowInfosReportedListenerWrapper(JNIEnv* env, jobject listener) {
+        env->GetJavaVM(&mVm);
+        mListener = env->NewGlobalRef(listener);
+        LOG_ALWAYS_FATAL_IF(!mListener, "Failed to make global ref");
+    }
+
+    ~WindowInfosReportedListenerWrapper() {
+        if (mListener) {
+            getenv()->DeleteGlobalRef(mListener);
+            mListener = nullptr;
+        }
+    }
+
+    binder::Status onWindowInfosReported() override {
+        JNIEnv* env = getenv();
+        env->CallVoidMethod(mListener, gRunnableClassInfo.run);
+        return binder::Status::ok();
+    }
+
+private:
+    jobject mListener;
     JavaVM* mVm;
 
     JNIEnv* getenv() {
@@ -782,14 +820,6 @@ static void nativeSetStretchEffect(JNIEnv* env, jclass clazz, jlong transactionO
     transaction->setStretchEffect(ctrl, stretch);
 }
 
-static void nativeSetSize(JNIEnv* env, jclass clazz, jlong transactionObj,
-        jlong nativeObject, jint w, jint h) {
-    auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
-
-    SurfaceControl* const ctrl = reinterpret_cast<SurfaceControl *>(nativeObject);
-    transaction->setSize(ctrl, w, h);
-}
-
 static void nativeSetFlags(JNIEnv* env, jclass clazz, jlong transactionObj,
         jlong nativeObject, jint flags, jint mask) {
     auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
@@ -890,9 +920,11 @@ static void nativeSetInputWindowInfo(JNIEnv* env, jclass clazz, jlong transactio
     transaction->setInputWindowInfo(ctrl, *handle->getInfo());
 }
 
-static void nativeSyncInputWindows(JNIEnv* env, jclass clazz, jlong transactionObj) {
+static void nativeAddWindowInfosReportedListener(JNIEnv* env, jclass clazz, jlong transactionObj,
+                                                 jobject runnable) {
+    auto listener = sp<WindowInfosReportedListenerWrapper>::make(env, runnable);
     auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
-    transaction->syncInputWindows();
+    transaction->addWindowInfosReportedListener(listener);
 }
 
 static void nativeSetMetadata(JNIEnv* env, jclass clazz, jlong transactionObj,
@@ -1074,12 +1106,6 @@ static jlongArray nativeGetPhysicalDisplayIds(JNIEnv* env, jclass clazz) {
 
     env->ReleaseLongArrayElements(array, values, 0);
     return array;
-}
-
-static jlong nativeGetPrimaryPhysicalDisplayId(JNIEnv* env, jclass clazz) {
-    PhysicalDisplayId displayId;
-    SurfaceComposerClient::getPrimaryPhysicalDisplayId(&displayId);
-    return static_cast<jlong>(displayId.value);
 }
 
 static jobject nativeGetPhysicalDisplayToken(JNIEnv* env, jclass clazz, jlong physicalDisplayId) {
@@ -2087,6 +2113,20 @@ static jint nativeGetLayerId(JNIEnv* env, jclass clazz, jlong nativeSurfaceContr
     return surface->getLayerId();
 }
 
+static void nativeSetDefaultApplyToken(JNIEnv* env, jclass clazz, jobject applyToken) {
+    sp<IBinder> token(ibinderForJavaObject(env, applyToken));
+    if (token == nullptr) {
+        ALOGE("Null apply token provided.");
+        return;
+    }
+    SurfaceComposerClient::Transaction::setDefaultApplyToken(token);
+}
+
+static jobject nativeGetDefaultApplyToken(JNIEnv* env, jclass clazz) {
+    sp<IBinder> token = SurfaceComposerClient::Transaction::getDefaultApplyToken();
+    return javaObjectForIBinder(env, token);
+}
+
 // ----------------------------------------------------------------------------
 
 static const JNINativeMethod sSurfaceControlMethods[] = {
@@ -2129,8 +2169,6 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeSetPosition },
     {"nativeSetScale", "(JJFF)V",
             (void*)nativeSetScale },
-    {"nativeSetSize", "(JJII)V",
-            (void*)nativeSetSize },
     {"nativeSetTransparentRegionHint", "(JJLandroid/graphics/Region;)V",
             (void*)nativeSetTransparentRegionHint },
     {"nativeSetDamageRegion", "(JJLandroid/graphics/Region;)V",
@@ -2170,8 +2208,6 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeSetDefaultFrameRateCompatibility},
     {"nativeGetPhysicalDisplayIds", "()[J",
             (void*)nativeGetPhysicalDisplayIds },
-    {"nativeGetPrimaryPhysicalDisplayId", "()J",
-            (void*)nativeGetPrimaryPhysicalDisplayId },
     {"nativeGetPhysicalDisplayToken", "(J)Landroid/os/IBinder;",
             (void*)nativeGetPhysicalDisplayToken },
     {"nativeCreateDisplay", "(Ljava/lang/String;Z)Landroid/os/IBinder;",
@@ -2258,8 +2294,8 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
     {"nativeSetBufferTransform", "(JJI)V", (void*) nativeSetBufferTransform},
     {"nativeSetDataSpace", "(JJI)V",
             (void*)nativeSetDataSpace },
-    {"nativeSyncInputWindows", "(J)V",
-            (void*)nativeSyncInputWindows },
+    {"nativeAddWindowInfosReportedListener", "(JLjava/lang/Runnable;)V",
+            (void*)nativeAddWindowInfosReportedListener },
     {"nativeGetDisplayBrightnessSupport", "(Landroid/os/IBinder;)Z",
             (void*)nativeGetDisplayBrightnessSupport },
     {"nativeSetDisplayBrightness", "(Landroid/os/IBinder;FFFF)Z",
@@ -2311,6 +2347,10 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*) nativeSanitize },
     {"nativeSetDestinationFrame", "(JJIIII)V",
                 (void*)nativeSetDestinationFrame },
+    {"nativeSetDefaultApplyToken", "(Landroid/os/IBinder;)V",
+                (void*)nativeSetDefaultApplyToken },
+    {"nativeGetDefaultApplyToken", "()Landroid/os/IBinder;",
+                (void*)nativeGetDefaultApplyToken },
         // clang-format on
 };
 
@@ -2322,6 +2362,10 @@ int register_android_view_SurfaceControl(JNIEnv* env)
     jclass integerClass = FindClassOrDie(env, "java/lang/Integer");
     gIntegerClassInfo.clazz = MakeGlobalRefOrDie(env, integerClass);
     gIntegerClassInfo.ctor = GetMethodIDOrDie(env, gIntegerClassInfo.clazz, "<init>", "(I)V");
+
+    jclass runnableClazz = FindClassOrDie(env, "java/lang/Runnable");
+    gRunnableClassInfo.clazz = MakeGlobalRefOrDie(env, runnableClazz);
+    gRunnableClassInfo.run = GetMethodIDOrDie(env, runnableClazz, "run", "()V");
 
     jclass infoClazz = FindClassOrDie(env, "android/view/SurfaceControl$StaticDisplayInfo");
     gStaticDisplayInfoClassInfo.clazz = MakeGlobalRefOrDie(env, infoClazz);

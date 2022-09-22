@@ -78,6 +78,11 @@ import static android.content.pm.ActivityInfo.LOCK_TASK_LAUNCH_MODE_ALWAYS;
 import static android.content.pm.ActivityInfo.LOCK_TASK_LAUNCH_MODE_DEFAULT;
 import static android.content.pm.ActivityInfo.LOCK_TASK_LAUNCH_MODE_IF_ALLOWLISTED;
 import static android.content.pm.ActivityInfo.LOCK_TASK_LAUNCH_MODE_NEVER;
+import static android.content.pm.ActivityInfo.OVERRIDE_MIN_ASPECT_RATIO;
+import static android.content.pm.ActivityInfo.OVERRIDE_MIN_ASPECT_RATIO_LARGE;
+import static android.content.pm.ActivityInfo.OVERRIDE_MIN_ASPECT_RATIO_MEDIUM;
+import static android.content.pm.ActivityInfo.OVERRIDE_MIN_ASPECT_RATIO_PORTRAIT_ONLY;
+import static android.content.pm.ActivityInfo.OVERRIDE_MIN_ASPECT_RATIO_TO_ALIGN_WITH_SPLIT_SCREEN;
 import static android.content.pm.ActivityInfo.PERSIST_ACROSS_REBOOTS;
 import static android.content.pm.ActivityInfo.PERSIST_ROOT_ONLY;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_FORCE_RESIZEABLE;
@@ -273,7 +278,6 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.ConstrainDisplayApisConfig;
 import android.content.pm.PackageManager;
-import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
@@ -310,7 +314,6 @@ import android.util.TypedXmlPullParser;
 import android.util.TypedXmlSerializer;
 import android.util.proto.ProtoOutputStream;
 import android.view.AppTransitionAnimationSpec;
-import android.view.DisplayCutout;
 import android.view.DisplayInfo;
 import android.view.IAppTransitionAnimationSpecsFuture;
 import android.view.InputApplicationHandle;
@@ -339,6 +342,7 @@ import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.ResolverActivity;
 import com.android.internal.content.ReferrerIntent;
+import com.android.internal.os.TimeoutRecord;
 import com.android.internal.os.TransferPipe;
 import com.android.internal.policy.AttributeCache;
 import com.android.internal.protolog.common.ProtoLog;
@@ -354,6 +358,7 @@ import com.android.server.wm.ActivityMetricsLogger.TransitionInfoSnapshot;
 import com.android.server.wm.SurfaceAnimator.AnimationType;
 import com.android.server.wm.WindowManagerService.H;
 import com.android.server.wm.utils.InsetUtils;
+import com.android.server.wm.utils.WmDisplayCutout;
 
 import dalvik.annotation.optimization.NeverCompile;
 
@@ -485,7 +490,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     private int mLastReportedDisplayId;
     boolean mLastReportedMultiWindowMode;
     boolean mLastReportedPictureInPictureMode;
-    CompatibilityInfo compat;// last used compatibility mode
     ActivityRecord resultTo; // who started this entry, so will get our reply
     final String resultWho; // additional identifier for use by resultTo.
     final int requestCode;  // code given by requester (resultTo)
@@ -666,6 +670,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             new WindowState.UpdateReportedVisibilityResults();
 
     boolean mUseTransferredAnimation;
+
+    /** Whether we need to setup the animation to animate only within the letterbox. */
+    private boolean mNeedsLetterboxedAnimation;
 
     /**
      * @see #currentLaunchCanTurnScreenOn()
@@ -1034,7 +1041,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         if (rootVoiceInteraction) {
             pw.print(prefix); pw.print("rootVoiceInteraction="); pw.println(rootVoiceInteraction);
         }
-        pw.print(prefix); pw.print("compat="); pw.print(compat);
+        pw.print(prefix); pw.print("compat=");
+        pw.print(mAtmService.compatibilityInfoForPackageLocked(info.applicationInfo));
                 pw.print(" labelRes=0x"); pw.print(Integer.toHexString(labelRes));
                 pw.print(" icon=0x"); pw.print(Integer.toHexString(icon));
                 pw.print(" theme=0x"); pw.println(Integer.toHexString(theme));
@@ -1573,7 +1581,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         if (task == mLastParentBeforePip && task != null) {
             // Notify the TaskFragmentOrganizer that the activity is reparented back from pip.
             mAtmService.mWindowOrganizerController.mTaskFragmentOrganizerController
-                    .onActivityReparentToTask(this);
+                    .onActivityReparentedToTask(this);
             // Activity's reparented back from pip, clear the links once established
             clearLastParentBeforePip();
         }
@@ -1769,8 +1777,12 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         mLetterboxUiController.layoutLetterbox(winHint);
     }
 
-    boolean hasWallpaperBackgroudForLetterbox() {
-        return mLetterboxUiController.hasWallpaperBackgroudForLetterbox();
+    boolean hasWallpaperBackgroundForLetterbox() {
+        return mLetterboxUiController.hasWallpaperBackgroundForLetterbox();
+    }
+
+    void updateLetterboxSurface(WindowState winHint, Transaction t) {
+        mLetterboxUiController.updateLetterboxSurface(winHint, t);
     }
 
     void updateLetterboxSurface(WindowState winHint) {
@@ -2631,7 +2643,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // either way, abort and reset the sequence.
         if (parcelable == null
                 || mTransferringSplashScreenState != TRANSFER_SPLASH_SCREEN_COPYING
-                || mStartingWindow == null
+                || mStartingWindow == null || mStartingWindow.mRemoved
                 || finishing) {
             if (parcelable != null) {
                 parcelable.clearIfNeeded();
@@ -2747,8 +2759,13 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
 
         final StartingSurfaceController.StartingSurface surface;
-        final StartingData startingData = mStartingData;
+        final boolean animate;
         if (mStartingData != null) {
+            animate = prepareAnimation && mStartingData.needRevealAnimation()
+                    && mStartingWindow.isVisibleByPolicy();
+            ProtoLog.v(WM_DEBUG_STARTING_WINDOW, "Schedule remove starting %s startingWindow=%s"
+                            + " animate=%b Callers=%s", this, mStartingWindow, animate,
+                    Debug.getCallers(5));
             surface = mStartingSurface;
             mStartingData = null;
             mStartingSurface = null;
@@ -2766,21 +2783,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             return;
         }
 
-
-        ProtoLog.v(WM_DEBUG_STARTING_WINDOW, "Schedule remove starting %s startingWindow=%s"
-                + " startingView=%s Callers=%s", this, mStartingWindow, mStartingSurface,
-                Debug.getCallers(5));
-
-        final Runnable removeSurface = () -> {
-            ProtoLog.v(WM_DEBUG_STARTING_WINDOW, "Removing startingView=%s", surface);
-            try {
-                surface.remove(prepareAnimation && startingData.needRevealAnimation());
-            } catch (Exception e) {
-                Slog.w(TAG_WM, "Exception when removing starting window", e);
-            }
-        };
-
-        removeSurface.run();
+        surface.remove(animate);
     }
 
     /**
@@ -3261,7 +3264,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         rootTask.moveToFront(reason, task);
         // Report top activity change to tracking services and WM
         if (mRootWindowContainer.getTopResumedActivity() == this) {
-            mAtmService.setResumedActivityUncheckLocked(this, reason);
+            mAtmService.setLastResumedActivityUncheckLocked(this, reason);
         }
         return true;
     }
@@ -4994,8 +4997,12 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     ActivityOptions takeOptions() {
         if (DEBUG_TRANSITION) Slog.i(TAG, "Taking options for " + this + " callers="
                 + Debug.getCallers(6));
+        if (mPendingOptions == null) return null;
         final ActivityOptions opts = mPendingOptions;
         mPendingOptions = null;
+        // Strip sensitive information from options before sending it to app.
+        opts.setRemoteTransition(null);
+        opts.setRemoteAnimationAdapter(null);
         return opts;
     }
 
@@ -5353,6 +5360,18 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         commitVisibility(visible, performLayout, false /* fromTransition */);
     }
 
+    void setNeedsLetterboxedAnimation(boolean needsLetterboxedAnimation) {
+        mNeedsLetterboxedAnimation = needsLetterboxedAnimation;
+    }
+
+    boolean isNeedsLetterboxedAnimation() {
+        return mNeedsLetterboxedAnimation;
+    }
+
+    boolean isInLetterboxAnimation() {
+        return mNeedsLetterboxedAnimation && isAnimating();
+    }
+
     /**
      * Post process after applying an app transition animation.
      *
@@ -5371,7 +5390,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 ANIMATION_TYPE_APP_TRANSITION | ANIMATION_TYPE_WINDOW_ANIMATION
                         | ANIMATION_TYPE_RECENTS);
         if (!delayed) {
+            // We aren't delayed anything, but exiting windows rely on the animation finished
+            // callback being called in case the ActivityRecord was pretending to be delayed,
+            // which we might have done because we were in closing/opening apps list.
             if (!usingShellTransitions) {
+                onAnimationFinished(ANIMATION_TYPE_APP_TRANSITION, null /* AnimationAdapter */);
                 if (visible) {
                     // The token was made immediately visible, there will be no entrance animation.
                     // We need to inform the client the enter animation was finished.
@@ -5736,7 +5759,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         ProtoLog.v(WM_DEBUG_ADD_REMOVE, "notifyAppResumed: wasStopped=%b %s",
                 wasStopped, this);
         mAppStopped = false;
-        // Allow the window to turn the screen on once the app is resumed again.
+        // Allow the window to turn the screen on once the app is started and resumed.
         if (mAtmService.getActivityStartController().isInExecution()) {
             setCurrentLaunchCanTurnScreenOn(true);
         }
@@ -5965,7 +5988,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             try {
                 mAtmService.getLifecycleManager().scheduleTransaction(app.getThread(), token,
                         PauseActivityItem.obtain(finishing, false /* userLeaving */,
-                                configChangeFlags, false /* dontReport */));
+                                configChangeFlags, false /* dontReport */,
+                                false /* autoEnteringPip */));
             } catch (Exception e) {
                 Slog.w(TAG, "Exception thrown sending pause: " + intent.getComponent(), e);
             }
@@ -6851,7 +6875,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      * @param windowPid The pid of the window input dispatching timed out on.
      * @return True if input dispatching should be aborted.
      */
-    public boolean inputDispatchingTimedOut(String reason, int windowPid) {
+    public boolean inputDispatchingTimedOut(TimeoutRecord timeoutRecord, int windowPid) {
         ActivityRecord anrActivity;
         WindowProcessController anrApp;
         boolean blameActivityProcess;
@@ -6865,12 +6889,12 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         if (blameActivityProcess) {
             return mAtmService.mAmInternal.inputDispatchingTimedOut(anrApp.mOwner,
                     anrActivity.shortComponentName, anrActivity.info.applicationInfo,
-                    shortComponentName, app, false, reason);
+                    shortComponentName, app, false, timeoutRecord);
         } else {
             // In this case another process added windows using this activity token. So, we call the
             // generic service input dispatch timed out method so that the right process is blamed.
             long timeoutMillis = mAtmService.mAmInternal.inputDispatchingTimedOut(
-                    windowPid, false /* aboveSystem */, reason);
+                    windowPid, false /* aboveSystem */, timeoutRecord);
             return timeoutMillis <= 0;
         }
     }
@@ -7372,6 +7396,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 .setParent(getAnimationLeashParent())
                 .setName(getSurfaceControl() + " - animation-bounds")
                 .setCallsite("ActivityRecord.createAnimationBoundsLayer");
+        if (mNeedsLetterboxedAnimation) {
+            // Needs to be an effect layer to support rounded corners
+            builder.setEffectLayer();
+        }
         final SurfaceControl boundsLayer = builder.build();
         t.show(boundsLayer);
         return boundsLayer;
@@ -7409,6 +7437,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             mAnimatingActivityRegistry.notifyStarting(this);
         }
 
+        if (mNeedsLetterboxedAnimation) {
+            updateLetterboxSurface(findMainWindow(), t);
+            mNeedsAnimationBoundsLayer = true;
+        }
+
         // If the animation needs to be cropped then an animation bounds layer is created as a
         // child of the root pinned task or animation layer. The leash is then reparented to this
         // new layer.
@@ -7430,6 +7463,17 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             // Crop to root task bounds.
             t.setLayer(leash, 0);
             t.setLayer(mAnimationBoundsLayer, getLastLayer());
+
+            if (mNeedsLetterboxedAnimation) {
+                final int cornerRadius = mLetterboxUiController
+                        .getRoundedCornersRadius(findMainWindow());
+
+                final Rect letterboxInnerBounds = new Rect();
+                getLetterboxInnerBounds(letterboxInnerBounds);
+
+                t.setCornerRadius(mAnimationBoundsLayer, cornerRadius)
+                        .setCrop(mAnimationBoundsLayer, letterboxInnerBounds);
+            }
 
             // Reparent leash to animation bounds layer.
             t.reparent(leash, mAnimationBoundsLayer);
@@ -7544,6 +7588,12 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             mAnimationBoundsLayer = null;
         }
 
+        mNeedsAnimationBoundsLayer = false;
+        if (mNeedsLetterboxedAnimation) {
+            mNeedsLetterboxedAnimation = false;
+            updateLetterboxSurface(findMainWindow(), t);
+        }
+
         if (mAnimatingActivityRegistry != null) {
             mAnimatingActivityRegistry.notifyFinished(this);
         }
@@ -7556,7 +7606,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "AR#onAnimationFinished");
         mTransit = TRANSIT_OLD_UNSET;
         mTransitFlags = 0;
-        mNeedsAnimationBoundsLayer = false;
 
         setAppLayoutChanges(FINISH_LAYOUT_REDO_ANIM | FINISH_LAYOUT_REDO_WALLPAPER,
                 "ActivityRecord");
@@ -8876,15 +8925,35 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     /**
      * Returns the min aspect ratio of this activity.
      */
-    private float getMinAspectRatio() {
-        return info.getMinAspectRatio(getRequestedOrientation());
+    float getMinAspectRatio() {
+        if (info.applicationInfo == null || !info.isChangeEnabled(OVERRIDE_MIN_ASPECT_RATIO) || (
+                info.isChangeEnabled(OVERRIDE_MIN_ASPECT_RATIO_PORTRAIT_ONLY)
+                        && !ActivityInfo.isFixedOrientationPortrait(getRequestedOrientation()))) {
+            return info.getMinAspectRatio();
+        }
+
+        if (info.isChangeEnabled(OVERRIDE_MIN_ASPECT_RATIO_TO_ALIGN_WITH_SPLIT_SCREEN)) {
+            return Math.max(mLetterboxUiController.getSplitScreenAspectRatio(),
+                    info.getMinAspectRatio());
+        }
+
+        if (info.isChangeEnabled(OVERRIDE_MIN_ASPECT_RATIO_LARGE)) {
+            return Math.max(ActivityInfo.OVERRIDE_MIN_ASPECT_RATIO_LARGE_VALUE,
+                    info.getMinAspectRatio());
+        }
+
+        if (info.isChangeEnabled(OVERRIDE_MIN_ASPECT_RATIO_MEDIUM)) {
+            return Math.max(ActivityInfo.OVERRIDE_MIN_ASPECT_RATIO_MEDIUM_VALUE,
+                    info.getMinAspectRatio());
+        }
+        return info.getMinAspectRatio();
     }
 
     /**
      * Returns true if the activity has maximum or minimum aspect ratio.
      */
     private boolean hasFixedAspectRatio() {
-        return info.hasFixedAspectRatio(getRequestedOrientation());
+        return info.getMaxAspectRatio() != 0 || getMinAspectRatio() != 0;
     }
 
     /**
@@ -9741,9 +9810,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 final boolean rotated = (rotation == ROTATION_90 || rotation == ROTATION_270);
                 final int dw = rotated ? display.mBaseDisplayHeight : display.mBaseDisplayWidth;
                 final int dh = rotated ? display.mBaseDisplayWidth : display.mBaseDisplayHeight;
-                final DisplayCutout cutout = display.calculateDisplayCutoutForRotation(rotation)
-                        .getDisplayCutout();
-                policy.getNonDecorInsetsLw(rotation, cutout, mNonDecorInsets[rotation]);
+                final WmDisplayCutout cutout = display.calculateDisplayCutoutForRotation(rotation);
+                policy.getNonDecorInsetsLw(rotation, dw, dh, cutout, mNonDecorInsets[rotation]);
                 mStableInsets[rotation].set(mNonDecorInsets[rotation]);
                 policy.convertNonDecorInsetsToStableInsets(mStableInsets[rotation], rotation);
 
@@ -9876,6 +9944,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 record.mThumbnailAdapter != null ? record.mThumbnailAdapter.mCapturedLeash : null,
                 record.mStartBounds, task.getTaskInfo(), checkEnterPictureInPictureAppOpsState());
         target.setShowBackdrop(record.mShowBackdrop);
+        target.setWillShowImeOnTarget(mStartingData != null && mStartingData.hasImeSurface());
         target.hasAnimatingParent = record.hasAnimatingParent();
         return target;
     }

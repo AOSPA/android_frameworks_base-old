@@ -16,6 +16,7 @@
 
 package android.view.inputmethod;
 
+import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
 import android.annotation.IntRange;
 import android.annotation.NonNull;
@@ -31,6 +32,8 @@ import com.android.internal.util.Preconditions;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.concurrent.Executor;
+import java.util.function.IntConsumer;
 
 /**
  * The InputConnection interface is the communication channel from an
@@ -152,6 +155,59 @@ public interface InputConnection {
      * would like to receive updates when the extracted text changes.
      */
     int GET_EXTRACTED_TEXT_MONITOR = 0x0001;
+
+    /**
+     * Result for {@link #performHandwritingGesture(HandwritingGesture, Executor, IntConsumer)} when
+     * editor didn't provide any result.
+     */
+    int HANDWRITING_GESTURE_RESULT_UNKNOWN = 0;
+
+    /**
+     * Result for {@link #performHandwritingGesture(HandwritingGesture, Executor, IntConsumer)} when
+     * {@link HandwritingGesture} is successfully executed on text.
+     */
+    int HANDWRITING_GESTURE_RESULT_SUCCESS = 1;
+
+    /**
+     * Result for {@link #performHandwritingGesture(HandwritingGesture, Executor, IntConsumer)} when
+     * {@link HandwritingGesture} is unsupported by the current editor.
+     */
+    int HANDWRITING_GESTURE_RESULT_UNSUPPORTED = 2;
+
+    /**
+     * Result for {@link #performHandwritingGesture(HandwritingGesture, Executor, IntConsumer)} when
+     * {@link HandwritingGesture} failed and there was no applicable
+     * {@link HandwritingGesture#getFallbackText()} or it couldn't
+     * be applied for any other reason.
+     */
+    int HANDWRITING_GESTURE_RESULT_FAILED = 3;
+
+    /**
+     * Result for {@link #performHandwritingGesture(HandwritingGesture, Executor, IntConsumer)} when
+     * {@link HandwritingGesture} was cancelled. This happens when the {@link InputConnection} is
+     * or becomes invalidated while performing the gesture, for example because a new
+     * {@code InputConnection} was started, or due to {@link InputMethodManager#invalidateInput}.
+     */
+    int HANDWRITING_GESTURE_RESULT_CANCELLED = 4;
+
+    /**
+     * Result for {@link #performHandwritingGesture(HandwritingGesture, Executor, IntConsumer)} when
+     * {@link HandwritingGesture} failed but {@link HandwritingGesture#getFallbackText()} was
+     * committed.
+     */
+    int HANDWRITING_GESTURE_RESULT_FALLBACK = 5;
+
+    /** @hide */
+    @IntDef(prefix = { "HANDWRITING_GESTURE_RESULT_" }, value = {
+            HANDWRITING_GESTURE_RESULT_UNKNOWN,
+            HANDWRITING_GESTURE_RESULT_SUCCESS,
+            HANDWRITING_GESTURE_RESULT_UNSUPPORTED,
+            HANDWRITING_GESTURE_RESULT_FAILED,
+            HANDWRITING_GESTURE_RESULT_CANCELLED,
+            HANDWRITING_GESTURE_RESULT_FALLBACK
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    @interface HandwritingGestureResult {}
 
     /**
      * Get <var>n</var> characters of text before the current cursor
@@ -966,6 +1022,28 @@ public interface InputConnection {
      * valid.
      */
     boolean performPrivateCommand(String action, Bundle data);
+
+    /**
+     * Perform a handwriting gesture on text.
+     *
+     * @param gesture the gesture to perform
+     * @param executor The executor to run the callback on.
+     * @param consumer if the caller passes a non-null consumer, the editor must invoke this
+     * with one of {@link #HANDWRITING_GESTURE_RESULT_UNKNOWN},
+     * {@link #HANDWRITING_GESTURE_RESULT_SUCCESS}, {@link #HANDWRITING_GESTURE_RESULT_FAILED},
+     * {@link #HANDWRITING_GESTURE_RESULT_CANCELLED}, {@link #HANDWRITING_GESTURE_RESULT_FALLBACK},
+     * {@link #HANDWRITING_GESTURE_RESULT_UNSUPPORTED} after applying the {@code gesture} has
+     * completed. Will be invoked on the given {@link Executor}.
+     * Default implementation provides a callback to {@link IntConsumer} with
+     * {@link #HANDWRITING_GESTURE_RESULT_UNSUPPORTED}.
+     */
+    default void performHandwritingGesture(
+            @NonNull HandwritingGesture gesture, @Nullable @CallbackExecutor Executor executor,
+            @Nullable IntConsumer consumer) {
+        if (executor != null && consumer != null) {
+            executor.execute(() -> consumer.accept(HANDWRITING_GESTURE_RESULT_UNSUPPORTED));
+        }
+    }
 
     /**
      * The editor is requested to call

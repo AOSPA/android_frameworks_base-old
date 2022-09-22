@@ -16,12 +16,17 @@
 
 package com.android.server.job.controllers;
 
+import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED;
+import static android.text.format.DateUtils.HOUR_IN_MILLIS;
+
 import static com.android.server.job.JobSchedulerService.ACTIVE_INDEX;
 import static com.android.server.job.JobSchedulerService.EXEMPTED_INDEX;
 import static com.android.server.job.JobSchedulerService.NEVER_INDEX;
 import static com.android.server.job.JobSchedulerService.RESTRICTED_INDEX;
 import static com.android.server.job.JobSchedulerService.WORKING_INDEX;
 import static com.android.server.job.JobSchedulerService.sElapsedRealtimeClock;
+import static com.android.server.job.controllers.FlexibilityController.NUM_SYSTEM_WIDE_FLEXIBLE_CONSTRAINTS;
+import static com.android.server.job.controllers.FlexibilityController.SYSTEM_WIDE_FLEXIBLE_CONSTRAINTS;
 
 import android.annotation.ElapsedRealtimeLong;
 import android.app.AppGlobals;
@@ -30,7 +35,6 @@ import android.app.job.JobParameters;
 import android.app.job.JobWorkItem;
 import android.content.ClipData;
 import android.content.ComponentName;
-import android.content.pm.ServiceInfo;
 import android.net.Network;
 import android.net.NetworkRequest;
 import android.net.Uri;
@@ -46,6 +50,7 @@ import android.util.Slog;
 import android.util.TimeUtils;
 import android.util.proto.ProtoOutputStream;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.LocalServices;
@@ -99,6 +104,7 @@ public final class JobStatus {
     static final int CONSTRAINT_WITHIN_QUOTA = 1 << 24;      // Implicit constraint
     static final int CONSTRAINT_PREFETCH = 1 << 23;
     static final int CONSTRAINT_BACKGROUND_NOT_RESTRICTED = 1 << 22; // Implicit constraint
+    static final int CONSTRAINT_FLEXIBLE = 1 << 21; // Implicit constraint
 
     // The following set of dynamic constraints are for specific use cases (as explained in their
     // relative naming and comments). Right now, they apply different constraints, which is fine,
@@ -116,6 +122,19 @@ public final class JobStatus {
                     | CONSTRAINT_CHARGING
                     | CONSTRAINT_CONNECTIVITY
                     | CONSTRAINT_IDLE;
+
+    /**
+     * Keeps track of how many flexible constraints must be satisfied for the job to execute.
+     */
+    private int mNumRequiredFlexibleConstraints;
+
+    /**
+     * Number of required flexible constraints that have been dropped.
+     */
+    private int mNumDroppedFlexibleConstraints;
+
+    /** If the job is going to be passed an unmetered network. */
+    private boolean mHasAccessToUnmetered;
 
     /**
      * The additional set of dynamic constraints that must be met if this is an expedited job that
@@ -305,6 +324,12 @@ public final class JobStatus {
     public static final int TRACKING_QUOTA = 1 << 6;
 
     /**
+     * Flag for {@link #trackingControllers}: the flexibility controller is currently tracking this
+     * job.
+     */
+    public static final int TRACKING_FLEXIBILITY = 1 << 7;
+
+    /**
      * Bit mask of controllers that are currently tracking the job.
      */
     private int trackingControllers;
@@ -318,6 +343,8 @@ public final class JobStatus {
      */
     public static final int INTERNAL_FLAG_HAS_FOREGROUND_EXEMPTION = 1 << 0;
 
+    /** Minimum difference between start and end time to have flexible constraint */
+    private static final long MIN_WINDOW_FOR_FLEXIBILITY_MS = HOUR_IN_MILLIS;
     /**
      * Versatile, persistable flags for a job that's updated within the system server,
      * as opposed to {@link JobInfo#flags} that's set by callers.
@@ -328,7 +355,7 @@ public final class JobStatus {
     public ArraySet<Uri> changedUris;
     public ArraySet<String> changedAuthorities;
     public Network network;
-    public ServiceInfo serviceInfo;
+    public String serviceProcessName;
 
     /** The evaluated bias of the job when it started running. */
     public int lastEvaluatedBias;
@@ -438,6 +465,12 @@ public final class JobStatus {
     /** The job's dynamic requirements have been satisfied. */
     private boolean mReadyDynamicSatisfied;
 
+    /**
+     * The job prefers an unmetered network if it has the connectivity constraint but is
+     * okay with any meteredness.
+     */
+    private final boolean mPreferUnmetered;
+
     /** The reason a job most recently went from ready to not ready. */
     private int mReasonReadyToUnready = JobParameters.STOP_REASON_UNDEFINED;
 
@@ -513,6 +546,9 @@ public final class JobStatus {
         if (latestRunTimeElapsedMillis != NO_LATEST_RUNTIME) {
             requiredConstraints |= CONSTRAINT_DEADLINE;
         }
+        if (job.isPrefetch()) {
+            requiredConstraints |= CONSTRAINT_PREFETCH;
+        }
         boolean exemptedMediaUrisOnly = false;
         if (job.getTriggerContentUris() != null) {
             requiredConstraints |= CONSTRAINT_CONTENT_TRIGGER;
@@ -525,6 +561,28 @@ public final class JobStatus {
             }
         }
         mHasExemptedMediaUrisOnly = exemptedMediaUrisOnly;
+
+        mPreferUnmetered = job.getRequiredNetwork() != null
+                && !job.getRequiredNetwork().hasCapability(NET_CAPABILITY_NOT_METERED);
+
+        final boolean lacksSomeFlexibleConstraints =
+                ((~requiredConstraints) & SYSTEM_WIDE_FLEXIBLE_CONSTRAINTS) != 0
+                        || mPreferUnmetered;
+        final boolean satisfiesMinWindowException =
+                (latestRunTimeElapsedMillis - earliestRunTimeElapsedMillis)
+                >= MIN_WINDOW_FOR_FLEXIBILITY_MS;
+
+        // The first time a job is rescheduled it will not be subject to flexible constraints.
+        // Otherwise, every consecutive reschedule increases a jobs' flexibility deadline.
+        if (!isRequestedExpeditedJob()
+                && satisfiesMinWindowException
+                && numFailures != 1
+                && lacksSomeFlexibleConstraints) {
+            mNumRequiredFlexibleConstraints =
+                    NUM_SYSTEM_WIDE_FLEXIBLE_CONSTRAINTS + (mPreferUnmetered ? 1 : 0);
+            requiredConstraints |= CONSTRAINT_FLEXIBLE;
+        }
+
         this.requiredConstraints = requiredConstraints;
         mRequiredConstraintsOfInterest = requiredConstraints & CONSTRAINTS_OF_INTEREST;
         addDynamicConstraints(dynamicConstraints);
@@ -1088,6 +1146,24 @@ public final class JobStatus {
         return (requiredConstraints&CONSTRAINT_CONTENT_TRIGGER) != 0;
     }
 
+    /** Returns true if the job has flexible job constraints enabled */
+    public boolean hasFlexibilityConstraint() {
+        return (requiredConstraints & CONSTRAINT_FLEXIBLE) != 0;
+    }
+
+    /** Returns the number of flexible job constraints required to be satisfied to execute */
+    public int getNumRequiredFlexibleConstraints() {
+        return mNumRequiredFlexibleConstraints;
+    }
+
+    /**
+     * Returns the number of required flexible job constraints that have been dropped with time.
+     * The lower this number is the easier it is for the flexibility constraint to be satisfied.
+     */
+    public int getNumDroppedFlexibleConstraints() {
+        return mNumDroppedFlexibleConstraints;
+    }
+
     /**
      * Checks both {@link #requiredConstraints} and {@link #mDynamicConstraints} to see if this job
      * requires the specified constraint.
@@ -1130,6 +1206,19 @@ public final class JobStatus {
 
     public void setOriginalLatestRunTimeElapsed(long latestRunTimeElapsed) {
         mOriginalLatestRunTimeElapsedMillis = latestRunTimeElapsed;
+    }
+
+    /** Sets the jobs access to an unmetered network. */
+    void setHasAccessToUnmetered(boolean access) {
+        mHasAccessToUnmetered = access;
+    }
+
+    boolean getHasAccessToUnmetered() {
+        return mHasAccessToUnmetered;
+    }
+
+    boolean getPreferUnmetered() {
+        return mPreferUnmetered;
     }
 
     @JobParameters.StopReason
@@ -1299,6 +1388,11 @@ public final class JobStatus {
             return true;
         }
         return false;
+    }
+
+    /** @return true if the constraint was changed, false otherwise. */
+    boolean setFlexibilityConstraintSatisfied(final long nowElapsed, boolean state) {
+        return setConstraintSatisfied(CONSTRAINT_FLEXIBLE, nowElapsed, state);
     }
 
     /**
@@ -1490,6 +1584,18 @@ public final class JobStatus {
         trackingControllers |= which;
     }
 
+    /** Adjusts the number of required flexible constraints by the given number */
+    public void adjustNumRequiredFlexibleConstraints(int adjustment) {
+        mNumRequiredFlexibleConstraints += adjustment;
+        if (mNumRequiredFlexibleConstraints < 0) {
+            mNumRequiredFlexibleConstraints = 0;
+        }
+        mNumDroppedFlexibleConstraints -= adjustment;
+        if (mNumDroppedFlexibleConstraints < 0) {
+            mNumDroppedFlexibleConstraints = 0;
+        }
+    }
+
     /**
      * Add additional constraints to prevent this job from running when doze or battery saver are
      * active.
@@ -1565,7 +1671,8 @@ public final class JobStatus {
         return readinessStatusWithConstraint(constraint, true);
     }
 
-    private boolean readinessStatusWithConstraint(int constraint, boolean value) {
+    @VisibleForTesting
+    boolean readinessStatusWithConstraint(int constraint, boolean value) {
         boolean oldValue = false;
         int satisfied = mSatisfiedConstraintsOfInterest;
         switch (constraint) {
@@ -1599,6 +1706,15 @@ public final class JobStatus {
                         && mDynamicConstraints == (satisfied & mDynamicConstraints);
 
                 break;
+        }
+
+        // The flexibility constraint relies on other constraints to be satisfied.
+        // This function lacks the information to determine if flexibility will be satisfied.
+        // But for the purposes of this function it is still useful to know the jobs' readiness
+        // not including the flexibility constraint. If flexibility is the constraint in question
+        // we can proceed as normal.
+        if (constraint != CONSTRAINT_FLEXIBLE) {
+            satisfied |= CONSTRAINT_FLEXIBLE;
         }
 
         boolean toReturn = isReady(satisfied);
@@ -1643,19 +1759,21 @@ public final class JobStatus {
         // run if its constraints are satisfied).
         // DeviceNotDozing implicit constraint must be satisfied
         // NotRestrictedInBackground implicit constraint must be satisfied
-        return mReadyNotDozing && mReadyNotRestrictedInBg && (serviceInfo != null)
+        return mReadyNotDozing && mReadyNotRestrictedInBg && (serviceProcessName != null)
                 && (mReadyDeadlineSatisfied || isConstraintsSatisfied(satisfiedConstraints));
     }
 
     /** All constraints besides implicit and deadline. */
     static final int CONSTRAINTS_OF_INTEREST = CONSTRAINT_CHARGING | CONSTRAINT_BATTERY_NOT_LOW
             | CONSTRAINT_STORAGE_NOT_LOW | CONSTRAINT_TIMING_DELAY | CONSTRAINT_CONNECTIVITY
-            | CONSTRAINT_IDLE | CONSTRAINT_CONTENT_TRIGGER | CONSTRAINT_PREFETCH;
+            | CONSTRAINT_IDLE | CONSTRAINT_CONTENT_TRIGGER | CONSTRAINT_PREFETCH
+            | CONSTRAINT_FLEXIBLE;
 
     // Soft override covers all non-"functional" constraints
     static final int SOFT_OVERRIDE_CONSTRAINTS =
             CONSTRAINT_CHARGING | CONSTRAINT_BATTERY_NOT_LOW | CONSTRAINT_STORAGE_NOT_LOW
-                    | CONSTRAINT_TIMING_DELAY | CONSTRAINT_IDLE | CONSTRAINT_PREFETCH;
+                    | CONSTRAINT_TIMING_DELAY | CONSTRAINT_IDLE | CONSTRAINT_PREFETCH
+                    | CONSTRAINT_FLEXIBLE;
 
     /** Returns true whenever all dynamically set constraints are satisfied. */
     public boolean areDynamicConstraintsSatisfied() {
@@ -1813,35 +1931,38 @@ public final class JobStatus {
         proto.end(token);
     }
 
-    void dumpConstraints(PrintWriter pw, int constraints) {
-        if ((constraints&CONSTRAINT_CHARGING) != 0) {
+    static void dumpConstraints(PrintWriter pw, int constraints) {
+        if ((constraints & CONSTRAINT_CHARGING) != 0) {
             pw.print(" CHARGING");
         }
-        if ((constraints& CONSTRAINT_BATTERY_NOT_LOW) != 0) {
+        if ((constraints & CONSTRAINT_BATTERY_NOT_LOW) != 0) {
             pw.print(" BATTERY_NOT_LOW");
         }
-        if ((constraints& CONSTRAINT_STORAGE_NOT_LOW) != 0) {
+        if ((constraints & CONSTRAINT_STORAGE_NOT_LOW) != 0) {
             pw.print(" STORAGE_NOT_LOW");
         }
-        if ((constraints&CONSTRAINT_TIMING_DELAY) != 0) {
+        if ((constraints & CONSTRAINT_TIMING_DELAY) != 0) {
             pw.print(" TIMING_DELAY");
         }
-        if ((constraints&CONSTRAINT_DEADLINE) != 0) {
+        if ((constraints & CONSTRAINT_DEADLINE) != 0) {
             pw.print(" DEADLINE");
         }
-        if ((constraints&CONSTRAINT_IDLE) != 0) {
+        if ((constraints & CONSTRAINT_IDLE) != 0) {
             pw.print(" IDLE");
         }
-        if ((constraints&CONSTRAINT_CONNECTIVITY) != 0) {
+        if ((constraints & CONSTRAINT_CONNECTIVITY) != 0) {
             pw.print(" CONNECTIVITY");
         }
-        if ((constraints&CONSTRAINT_CONTENT_TRIGGER) != 0) {
+        if ((constraints & CONSTRAINT_FLEXIBLE) != 0) {
+            pw.print(" FLEXIBILITY");
+        }
+        if ((constraints & CONSTRAINT_CONTENT_TRIGGER) != 0) {
             pw.print(" CONTENT_TRIGGER");
         }
-        if ((constraints&CONSTRAINT_DEVICE_NOT_DOZING) != 0) {
+        if ((constraints & CONSTRAINT_DEVICE_NOT_DOZING) != 0) {
             pw.print(" DEVICE_NOT_DOZING");
         }
-        if ((constraints&CONSTRAINT_BACKGROUND_NOT_RESTRICTED) != 0) {
+        if ((constraints & CONSTRAINT_BACKGROUND_NOT_RESTRICTED) != 0) {
             pw.print(" BACKGROUND_NOT_RESTRICTED");
         }
         if ((constraints & CONSTRAINT_PREFETCH) != 0) {
@@ -2127,6 +2248,14 @@ public final class JobStatus {
                     ((requiredConstraints | CONSTRAINT_WITHIN_QUOTA | CONSTRAINT_TARE_WEALTH)
                             & ~satisfiedConstraints));
             pw.println();
+            if (hasFlexibilityConstraint()) {
+                pw.print("Num Required Flexible constraints: ");
+                pw.print(getNumRequiredFlexibleConstraints());
+                pw.println();
+                pw.print("Num Dropped Flexible constraints: ");
+                pw.print(getNumDroppedFlexibleConstraints());
+                pw.println();
+            }
 
             pw.println("Constraint history:");
             pw.increaseIndent();
@@ -2180,7 +2309,7 @@ public final class JobStatus {
             pw.println(mReadyDynamicSatisfied);
         }
         pw.print("readyComponentEnabled: ");
-        pw.println(serviceInfo != null);
+        pw.println(serviceProcessName != null);
         if ((getFlags() & JobInfo.FLAG_EXPEDITED) != 0) {
             pw.print("expeditedQuotaApproved: ");
             pw.print(mExpeditedQuotaApproved);
