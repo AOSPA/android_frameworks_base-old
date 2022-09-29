@@ -52,6 +52,24 @@
       "parentUuid": "51dd7199_93aed34a",
       "revId": "3628b287cc903de58225c4f39c69ac91d0da66f4",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "6737f373_991302a9",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2022-09-29T07:52:21Z",
+      "side": 1,
+      "message": "It **is** a problem because this force enables screen-off udfps with no option to disable it, and the other patches have been rejected by Alex, semi-rightfully so /:",
+      "parentUuid": "04e8f130_05f7fc13",
+      "revId": "3628b287cc903de58225c4f39c69ac91d0da66f4",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
