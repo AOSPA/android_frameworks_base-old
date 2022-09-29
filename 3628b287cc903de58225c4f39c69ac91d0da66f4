@@ -34,6 +34,24 @@
       "parentUuid": "279e130a_994c3b98",
       "revId": "3628b287cc903de58225c4f39c69ac91d0da66f4",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "04e8f130_05f7fc13",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000488
+      },
+      "writtenOn": "2022-09-29T05:52:03Z",
+      "side": 1,
+      "message": "I feel having its better to have a sensor sub HAL for fingerprint to detect touch. It\u0027s not a problem to have this but regardless let\u0027s follow google\u0027s way.",
+      "parentUuid": "51dd7199_93aed34a",
+      "revId": "3628b287cc903de58225c4f39c69ac91d0da66f4",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
