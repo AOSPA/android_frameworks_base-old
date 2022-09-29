@@ -100,9 +100,7 @@ class FaceAuthenticationClient extends AuthenticationClient<AidlSession>
                 owner, cookie, requireConfirmation, sensorId, logger, biometricContext,
                 isStrongBiometric, null /* taskStackListener */, lockoutCache,
                 allowBackgroundAuthentication,
-                context.getResources().getBoolean(
-                        com.android.internal.R.bool.system_server_plays_face_haptics)
-                /* shouldVibrate */,
+                false /* shouldVibrate */,
                 isKeyguardBypassEnabled);
         setRequestId(requestId);
         mUsageStats = usageStats;
@@ -131,7 +129,7 @@ class FaceAuthenticationClient extends AuthenticationClient<AidlSession>
     @Override
     protected ClientMonitorCallback wrapCallbackForStart(@NonNull ClientMonitorCallback callback) {
         return new ClientMonitorCompositeCallback(
-                getLogger().createALSCallback(true /* startWithClient */), callback);
+                getLogger().getAmbientLightProbe(true /* startWithClient */), callback);
     }
 
     @Override
@@ -274,7 +272,6 @@ class FaceAuthenticationClient extends AuthenticationClient<AidlSession>
 
     @Override
     public void onLockoutTimed(long durationMillis) {
-        super.onLockoutTimed(durationMillis);
         mLockoutCache.setLockoutModeForUser(getTargetUserId(), LockoutTracker.LOCKOUT_TIMED);
         // Lockout metrics are logged as an error code.
         final int error = BiometricFaceConstants.FACE_ERROR_LOCKOUT;
@@ -290,7 +287,6 @@ class FaceAuthenticationClient extends AuthenticationClient<AidlSession>
 
     @Override
     public void onLockoutPermanent() {
-        super.onLockoutPermanent();
         mLockoutCache.setLockoutModeForUser(getTargetUserId(), LockoutTracker.LOCKOUT_PERMANENT);
         // Lockout metrics are logged as an error code.
         final int error = BiometricFaceConstants.FACE_ERROR_LOCKOUT_PERMANENT;

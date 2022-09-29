@@ -42,18 +42,19 @@ import android.util.Pair;
 import android.util.Slog;
 import android.util.BoostFramework;
 import android.util.SparseArray;
+
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.os.ProcLocksReader;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.ServiceThread;
+
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumMap;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
@@ -112,6 +113,7 @@ public final class CachedAppOptimizer {
     private static final int COMPACT_ACTION_ANON_FLAG = 2;
 
     private static final String ATRACE_COMPACTION_TRACK = "Compaction";
+    private static final String ATRACE_FREEZER_TRACK = "Freezer";
 
     // Defaults for phenotype flags.
     @VisibleForTesting static final Boolean DEFAULT_USE_COMPACTION = false;
@@ -1408,6 +1410,7 @@ public final class CachedAppOptimizer {
         }
 
         try {
+            traceAppFreeze(app.processName, pid, false);
             Process.setProcessFrozen(pid, app.uid, false);
 
             opt.setFreezeUnfreezeTime(SystemClock.uptimeMillis());
@@ -1450,8 +1453,25 @@ public final class CachedAppOptimizer {
                 return;
             }
             Slog.d(TAG_AM, "quick sync unfreeze " + pid);
-            unfreezeAppLSP(app, reason);
+            try {
+                freezeBinder(pid, false);
+            } catch (RuntimeException e) {
+                Slog.e(TAG_AM, "Unable to quick unfreeze binder for " + pid);
+                return;
+            }
+
+            try {
+                traceAppFreeze(app.processName, pid, false);
+                Process.setProcessFrozen(pid, app.uid, false);
+            } catch (Exception e) {
+                Slog.e(TAG_AM, "Unable to quick unfreeze " + pid);
+            }
         }
+    }
+
+    private static void traceAppFreeze(String processName, int pid, boolean freeze) {
+        Trace.instantForTrack(Trace.TRACE_TAG_ACTIVITY_MANAGER, ATRACE_FREEZER_TRACK,
+                (freeze ? "Freeze " : "Unfreeze ") + processName + ":" + pid);
     }
 
     /**
@@ -2047,6 +2067,7 @@ public final class CachedAppOptimizer {
                 long unfreezeTime = opt.getFreezeUnfreezeTime();
 
                 try {
+                    traceAppFreeze(proc.processName, pid, true);
                     Process.setProcessFrozen(pid, proc.uid, true);
 
                     opt.setFreezeUnfreezeTime(SystemClock.uptimeMillis());

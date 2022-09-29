@@ -127,13 +127,11 @@ import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.StatusBarStateControllerImpl;
 import com.android.systemui.statusbar.notification.DynamicPrivacyController;
 import com.android.systemui.statusbar.notification.NotifPipelineFlags;
-import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.NotificationWakeUpCoordinator;
 import com.android.systemui.statusbar.notification.collection.NotifLiveDataStore;
 import com.android.systemui.statusbar.notification.collection.NotifPipeline;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.collection.NotificationEntryBuilder;
-import com.android.systemui.statusbar.notification.collection.legacy.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.collection.render.NotificationVisibilityProvider;
 import com.android.systemui.statusbar.notification.init.NotificationsController;
 import com.android.systemui.statusbar.notification.interruption.KeyguardNotificationVisibilityProvider;
@@ -209,7 +207,6 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
     @Mock private DozeScrimController mDozeScrimController;
     @Mock private Lazy<BiometricUnlockController> mBiometricUnlockControllerLazy;
     @Mock private BiometricUnlockController mBiometricUnlockController;
-    @Mock private VisualStabilityManager mVisualStabilityManager;
     @Mock private NotificationListener mNotificationListener;
     @Mock private KeyguardViewMediator mKeyguardViewMediator;
     @Mock private NotificationLockscreenUserManager mLockscreenUserManager;
@@ -225,7 +222,6 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
     @Mock private NotificationShadeWindowView mNotificationShadeWindowView;
     @Mock private BroadcastDispatcher mBroadcastDispatcher;
     @Mock private AssistManager mAssistManager;
-    @Mock private NotificationEntryManager mNotificationEntryManager;
     @Mock private NotificationGutsManager mNotificationGutsManager;
     @Mock private NotificationMediaManager mNotificationMediaManager;
     @Mock private NavigationBarController mNavigationBarController;
@@ -399,7 +395,6 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
                 new FalsingManagerFake(),
                 new FalsingCollectorFake(),
                 mBroadcastDispatcher,
-                mNotificationEntryManager,
                 mNotificationGutsManager,
                 notificationLogger,
                 mNotificationInterruptStateProvider,

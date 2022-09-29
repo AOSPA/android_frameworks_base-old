@@ -479,6 +479,10 @@
 
     <dimen name="volume_tool_tip_arrow_corner_radius">2dp</dimen>
 
+    <!-- Volume panel slices dimensions -->
+    <dimen name="volume_panel_slice_vertical_padding">8dp</dimen>
+    <dimen name="volume_panel_slice_horizontal_padding">24dp</dimen>
+
     <!-- Size of each item in the ringer selector drawer. -->
     <dimen name="volume_ringer_drawer_item_size">42dp</dimen>
     <dimen name="volume_ringer_drawer_item_size_half">21dp</dimen>
@@ -665,7 +669,7 @@
     <!-- When large clock is showing, offset the smartspace by this amount -->
     <dimen name="keyguard_smartspace_top_offset">12dp</dimen>
     <!-- With the large clock, move up slightly from the center -->
-    <dimen name="keyguard_large_clock_top_padding">100dp</dimen>
+    <dimen name="keyguard_large_clock_top_margin">-60dp</dimen>
 
     <dimen name="notification_scrim_corner_radius">32dp</dimen>
 
@@ -1449,6 +1453,8 @@
 
     <dimen name="fgs_manager_list_top_spacing">12dp</dimen>
 
+    <dimen name="media_projection_app_selector_icon_size">32dp</dimen>
+
     <!-- Dream overlay related dimensions -->
     <dimen name="dream_overlay_status_bar_height">60dp</dimen>
     <dimen name="dream_overlay_status_bar_margin">40dp</dimen>
@@ -1471,14 +1477,14 @@
          if their end is aligned with the parent end. Represented as the percentage over from the
          start of the parent container. -->
     <item name="dream_overlay_complication_guide_end_percent" format="float" type="dimen">
-        0.75
+        0.5
     </item>
 
     <!-- The position of the start guide, which dream overlay complications can align their end to
          if their start is aligned with the parent start. Represented as the percentage over from
          the start of the parent container. -->
     <item name="dream_overlay_complication_guide_start_percent" format="float" type="dimen">
-        0.25
+        0.5
     </item>
 
     <!-- The position of the bottom guide, which dream overlay complications can align their top to

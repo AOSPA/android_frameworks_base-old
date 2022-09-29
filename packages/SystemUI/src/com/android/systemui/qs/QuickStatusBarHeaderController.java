@@ -126,6 +126,8 @@ class QuickStatusBarHeaderController extends ViewController<QuickStatusBarHeader
     protected void onViewAttached() {
         mPrivacyIconsController.onParentVisible();
         mPrivacyIconsController.setChipVisibilityListener(this);
+        mIconContainer.addIgnoredSlot(
+                getResources().getString(com.android.internal.R.string.status_bar_alarm_clock));
         mIconContainer.setShouldRestrictIcons(false);
         mStatusBarIconController.addIconGroup(mIconManager);
 

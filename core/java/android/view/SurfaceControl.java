@@ -1946,7 +1946,7 @@ public final class SurfaceControl implements Parcelable {
 
         @Override
         public int hashCode() {
-            return Objects.hash(supportedDisplayModes, activeDisplayModeId, activeDisplayModeId,
+            return Objects.hash(Arrays.hashCode(supportedDisplayModes), activeDisplayModeId,
                     activeColorMode, hdrCapabilities);
         }
     }
@@ -3615,6 +3615,8 @@ public final class SurfaceControl implements Parcelable {
          *                                black screen for a second or two. This parameter is
          *                                ignored when <code>frameRate</code> is 0.
          * @return This transaction object.
+         *
+         * @see #clearFrameRate(SurfaceControl)
          */
         @NonNull
         public Transaction setFrameRate(@NonNull SurfaceControl sc,
@@ -3624,6 +3626,30 @@ public final class SurfaceControl implements Parcelable {
             checkPreconditions(sc);
             nativeSetFrameRate(mNativeObject, sc.mNativeObject, frameRate, compatibility,
                     changeFrameRateStrategy);
+            return this;
+        }
+
+        /**
+         * Clears the frame rate which was set for the surface {@link SurfaceControl}.
+         *
+         * <p>This is equivalent to calling {@link #setFrameRate(SurfaceControl, float, int, int)}
+         * using {@code 0} for {@code frameRate}.
+         * <p>
+         * Note that this only has an effect for surfaces presented on the display. If this
+         * surface is consumed by something other than the system compositor, e.g. a media
+         * codec, this call has no effect.
+         *
+         * @param sc The SurfaceControl to clear the frame rate of.
+         * @return This transaction object.
+         *
+         * @see #setFrameRate(SurfaceControl, float, int)
+         */
+        @NonNull
+        public Transaction clearFrameRate(@NonNull SurfaceControl sc) {
+            checkPreconditions(sc);
+            nativeSetFrameRate(mNativeObject, sc.mNativeObject, 0.0f,
+                    Surface.FRAME_RATE_COMPATIBILITY_DEFAULT,
+                    Surface.CHANGE_FRAME_RATE_ALWAYS);
             return this;
         }
 

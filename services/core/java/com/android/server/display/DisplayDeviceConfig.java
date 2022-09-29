@@ -159,11 +159,11 @@ import javax.xml.datatype.DatatypeConfigurationException;
  *          <displayBrightnessMapping>
  *              <displayBrightnessPoint>
  *                  <lux>50</lux>
- *                  <nits>45</nits>
+ *                  <nits>45.32</nits>
  *              </displayBrightnessPoint>
  *              <displayBrightnessPoint>
  *                  <lux>80</lux>
- *                  <nits>75</nits>
+ *                  <nits>75.43</nits>
  *              </displayBrightnessPoint>
  *          </displayBrightnessMapping>
  *      </autoBrightness>
@@ -291,19 +291,14 @@ public class DisplayDeviceConfig {
     /**
      * Array of light sensor lux values to define our levels for auto backlight
      * brightness support.
-     * The N entries of this array define N + 1 control points as follows:
-     * (1-based arrays)
-     *
-     * Point 1:            (0, value[1]):             lux <= 0
-     * Point 2:     (level[1], value[2]):  0        < lux <= level[1]
-     * Point 3:     (level[2], value[3]):  level[2] < lux <= level[3]
-     * ...
-     * Point N+1: (level[N], value[N+1]):  level[N] < lux
-     *
+
+     * The N + 1 entries of this array define N control points defined in mBrightnessLevelsNits,
+     * with first value always being 0 lux
+
      * The control points must be strictly increasing.  Each control point
      * corresponds to an entry in the brightness backlight values arrays.
-     * For example, if lux == level[1] (first element of the levels array)
-     * then the brightness will be determined by value[2] (second element
+     * For example, if lux == level[1] (second element of the levels array)
+     * then the brightness will be determined by value[0] (first element
      * of the brightness values array).
      *
      * Spline interpolation is used to determine the auto-brightness
@@ -1094,19 +1089,21 @@ public class DisplayDeviceConfig {
                 || autoBrightnessConfig.getDisplayBrightnessMapping() == null) {
             mBrightnessLevelsNits = getFloatArray(mContext.getResources()
                     .obtainTypedArray(com.android.internal.R.array
-                            .config_autoBrightnessDisplayValuesNits));
-            mBrightnessLevelsLux = getFloatArray(mContext.getResources()
-                    .obtainTypedArray(com.android.internal.R.array
+                            .config_autoBrightnessDisplayValuesNits), PowerManager
+                    .BRIGHTNESS_OFF_FLOAT);
+            mBrightnessLevelsLux = getLuxLevels(mContext.getResources()
+                    .getIntArray(com.android.internal.R.array
                             .config_autoBrightnessLevels));
         } else {
             final int size = autoBrightnessConfig.getDisplayBrightnessMapping()
                     .getDisplayBrightnessPoint().size();
             mBrightnessLevelsNits = new float[size];
-            mBrightnessLevelsLux = new float[size];
+            // The first control point is implicit and always at 0 lux.
+            mBrightnessLevelsLux = new float[size + 1];
             for (int i = 0; i < size; i++) {
                 mBrightnessLevelsNits[i] = autoBrightnessConfig.getDisplayBrightnessMapping()
                         .getDisplayBrightnessPoint().get(i).getNits().floatValue();
-                mBrightnessLevelsLux[i] = autoBrightnessConfig.getDisplayBrightnessMapping()
+                mBrightnessLevelsLux[i + 1] = autoBrightnessConfig.getDisplayBrightnessMapping()
                         .getDisplayBrightnessPoint().get(i).getLux().floatValue();
             }
         }
@@ -1489,14 +1486,23 @@ public class DisplayDeviceConfig {
      * @param array The array to convert.
      * @return the given array as a float array.
      */
-    public static float[] getFloatArray(TypedArray array) {
+    public static float[] getFloatArray(TypedArray array, float defaultValue) {
         final int n = array.length();
         float[] vals = new float[n];
         for (int i = 0; i < n; i++) {
-            vals[i] = array.getFloat(i, PowerManager.BRIGHTNESS_OFF_FLOAT);
+            vals[i] = array.getFloat(i, defaultValue);
         }
         array.recycle();
         return vals;
+    }
+
+    private static float[] getLuxLevels(int[] lux) {
+        // The first control point is implicit and always at 0 lux.
+        float[] levels = new float[lux.length + 1];
+        for (int i = 0; i < lux.length; i++) {
+            levels[i + 1] = (float) lux[i];
+        }
+        return levels;
     }
 
     static class SensorData {

@@ -134,7 +134,6 @@ import com.android.server.SystemConfig;
 import com.android.server.Watchdog;
 import com.android.server.am.ActivityManagerService.ProcessChangeItem;
 import com.android.server.compat.PlatformCompat;
-import com.android.server.pm.dex.DexManager;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.pkg.PackageStateInternal;
 import com.android.server.wm.ActivityServiceConnectionsHolder;
@@ -278,6 +277,8 @@ public final class ProcessList {
     // Memory pages are 4K.
     static final int PAGE_SIZE = 4 * 1024;
 
+    // Activity manager's version of an undefined schedule group
+    static final int SCHED_GROUP_UNDEFINED = Integer.MIN_VALUE;
     // Activity manager's version of Process.THREAD_GROUP_BACKGROUND
     static final int SCHED_GROUP_BACKGROUND = 0;
       // Activity manager's version of Process.THREAD_GROUP_RESTRICTED
@@ -820,12 +821,14 @@ public final class ProcessList {
                                                 < LmkdStatsReporter.KILL_OCCURRED_MSG_SIZE) {
                                             return false;
                                         }
-                                        Pair<Integer, Integer> temp = getNumForegroundServices();
-                                        final int totalForegroundServices = temp.first;
-                                        final int procsWithForegroundServices = temp.second;
+                                        // Note: directly access
+                                        // ActiveServices.sNumForegroundServices, do not try to
+                                        // hold AMS lock here, otherwise it is a potential deadlock.
+                                        Pair<Integer, Integer> foregroundServices =
+                                                ActiveServices.sNumForegroundServices.get();
                                         LmkdStatsReporter.logKillOccurred(inputData,
-                                                totalForegroundServices,
-                                                procsWithForegroundServices);
+                                                foregroundServices.first,
+                                                foregroundServices.second);
                                         return true;
                                     case LMK_STATE_CHANGED:
                                         if (receivedLen
@@ -1796,14 +1799,6 @@ public final class ProcessList {
 
             if (app.info.isEmbeddedDexUsed()) {
                 runtimeFlags |= Zygote.ONLY_USE_SYSTEM_OAT_FILES;
-            } else if (app.info.isPrivilegedApp()) {
-                final PackageList pkgList = app.getPkgList();
-                synchronized (pkgList) {
-                    if (DexManager.isPackageSelectedToRunOob(
-                            pkgList.getPackageListLocked().keySet())) {
-                        runtimeFlags |= Zygote.ONLY_USE_SYSTEM_OAT_FILES;
-                    }
-                }
             }
 
             if (!disableHiddenApiChecks && !mService.mHiddenApiBlacklist.isDisabled()) {
@@ -3665,7 +3660,14 @@ public final class ProcessList {
         if (thread == null) {
             return null;
         }
-        final IBinder threadBinder = thread.asBinder();
+        return getLRURecordForAppLOSP(thread.asBinder());
+    }
+
+    @GuardedBy(anyOf = {"mService", "mProcLock"})
+    ProcessRecord getLRURecordForAppLOSP(IBinder threadBinder) {
+        if (threadBinder == null) {
+            return null;
+        }
         // Find the application record.
         for (int i = mLruProcesses.size() - 1; i >= 0; i--) {
             final ProcessRecord rec = mLruProcesses.get(i);
@@ -3749,6 +3751,10 @@ public final class ProcessList {
                 ActivityManager.RunningAppProcessInfo currApp =
                         new ActivityManager.RunningAppProcessInfo(app.processName,
                                 app.getPid(), app.getPackageList());
+                if (app.getPkgDeps() != null) {
+                    final int size = app.getPkgDeps().size();
+                    currApp.pkgDeps = app.getPkgDeps().toArray(new String[size]);
+                }
                 fillInProcMemInfoLOSP(app, currApp, clientTargetSdk);
                 if (state.getAdjSource() instanceof ProcessRecord) {
                     currApp.importanceReasonPid = ((ProcessRecord) state.getAdjSource()).getPid();

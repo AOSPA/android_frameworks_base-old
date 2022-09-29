@@ -60,8 +60,8 @@ public class Flags {
     public static final ResourceBooleanFlag NOTIFICATION_DRAG_TO_CONTENTS =
             new ResourceBooleanFlag(108, R.bool.config_notificationToContents);
 
-    public static final UnreleasedFlag REMOVE_UNRANKED_NOTIFICATIONS =
-            new UnreleasedFlag(109, true);
+    public static final ReleasedFlag REMOVE_UNRANKED_NOTIFICATIONS =
+            new ReleasedFlag(109);
 
     public static final UnreleasedFlag FSI_REQUIRES_KEYGUARD =
             new UnreleasedFlag(110, true);
@@ -186,6 +186,9 @@ public class Flags {
     // 801 - region sampling
     public static final UnreleasedFlag REGION_SAMPLING = new UnreleasedFlag(801);
 
+    // 802 - wallpaper rendering
+    public static final UnreleasedFlag USE_CANVAS_RENDERER = new UnreleasedFlag(802);
+
     /***************************************/
     // 900 - media
     public static final ReleasedFlag MEDIA_TAP_TO_TRANSFER = new ReleasedFlag(900);
@@ -251,6 +254,9 @@ public class Flags {
 
     // 1400 - columbus, b/242800729
     public static final UnreleasedFlag QUICK_TAP_IN_PCC = new UnreleasedFlag(1400);
+
+    // 1500 - chooser
+    public static final UnreleasedFlag CHOOSER_UNBUNDLED = new UnreleasedFlag(1500);
 
     // Pay no attention to the reflection behind the curtain.
     // ========================== Curtain ==========================

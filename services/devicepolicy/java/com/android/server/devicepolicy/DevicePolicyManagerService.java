@@ -671,6 +671,15 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     @EnabledSince(targetSdkVersion = Build.VERSION_CODES.S)
     private static final long PREVENT_SETTING_PASSWORD_QUALITY_ON_PARENT = 165573442L;
 
+    /**
+     * For Admin Apps targeting U+
+     * If {@link android.security.IKeyChainService#setGrant} is called with an alias with no
+     * existing key, throw IllegalArgumentException.
+     */
+    @ChangeId
+    @EnabledSince(targetSdkVersion = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    private static final long THROW_EXCEPTION_WHEN_KEY_MISSING = 175101461L;
+
     private static final String CREDENTIAL_MANAGEMENT_APP_INVALID_ALIAS_MSG =
             "The alias provided must be contained in the aliases specified in the credential "
                     + "management app's authentication policy";
@@ -5654,8 +5663,16 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
         final CallerIdentity caller = getCallerIdentity(callerPackage);
         Preconditions.checkCallAuthorization(canChooseCertificates(caller));
-
-        return setKeyChainGrantInternal(alias, hasGrant, Process.WIFI_UID, caller.getUserHandle());
+        try {
+            return setKeyChainGrantInternal(
+                    alias, hasGrant, Process.WIFI_UID, caller.getUserHandle());
+        } catch (IllegalArgumentException e) {
+            if (mInjector.isChangeEnabled(THROW_EXCEPTION_WHEN_KEY_MISSING, caller.getPackageName(),
+                    caller.getUserId())) {
+                throw e;
+            }
+            return false;
+        }
     }
 
     @Override
@@ -5705,8 +5722,15 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         } catch (RemoteException e) {
             throw new IllegalStateException("Failure getting grantee uid", e);
         }
-
-        return setKeyChainGrantInternal(alias, hasGrant, granteeUid, caller.getUserHandle());
+        try {
+            return setKeyChainGrantInternal(alias, hasGrant, granteeUid, caller.getUserHandle());
+        } catch (IllegalArgumentException e) {
+            if (mInjector.isChangeEnabled(THROW_EXCEPTION_WHEN_KEY_MISSING, packageName,
+                    caller.getUserId())) {
+                throw e;
+            }
+            return false;
+        }
     }
 
     private boolean setKeyChainGrantInternal(String alias, boolean hasGrant, int granteeUid,
@@ -5758,36 +5782,6 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             }
         });
         return new ParcelableGranteeMap(result);
-    }
-
-    /**
-     * Enforce one the following conditions are met:
-     * (1) The device has a Device Owner, and one of the following holds:
-     *   (1.1) The caller is the Device Owner
-     *   (1.2) The caller is another app in the same user as the device owner, AND
-     *         The caller is the delegated certificate installer.
-     *   (1.3) The caller is a Profile Owner and the calling user is affiliated.
-     * (2) The user has a profile owner, AND:
-     *   (2.1) The profile owner has been granted access to Device IDs and one of the following
-     *         holds:
-     *     (2.1.1) The caller is the profile owner.
-     *     (2.1.2) The caller is from another app in the same user as the profile owner, AND
-     *       (2.1.2.1) The caller is the delegated cert installer.
-     *
-     *  For the device owner case, simply check that the caller is the device owner or the
-     *  delegated certificate installer.
-     *
-     *  For the profile owner case, first check that the caller is the profile owner or can
-     *  manage the DELEGATION_CERT_INSTALL scope.
-     *  If that check succeeds, ensure the profile owner was granted access to device
-     *  identifiers. The grant is transitive: The delegated cert installer is implicitly allowed
-     *  access to device identifiers in this case as part of the delegation.
-     */
-    @VisibleForTesting
-    public void enforceCallerCanRequestDeviceIdAttestation(CallerIdentity caller)
-            throws SecurityException {
-        Preconditions.checkCallAuthorization(hasDeviceIdAccessUnchecked(caller.getPackageName(),
-                caller.getUid()));
     }
 
     @VisibleForTesting
@@ -5844,8 +5838,8 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         final boolean isCallerDelegate = isCallerDelegate(caller, DELEGATION_CERT_INSTALL);
         final boolean isCredentialManagementApp = isCredentialManagementApp(caller);
         if (deviceIdAttestationRequired && attestationUtilsFlags.length > 0) {
-            // TODO: replace enforce methods
-            enforceCallerCanRequestDeviceIdAttestation(caller);
+            Preconditions.checkCallAuthorization(hasDeviceIdAccessUnchecked(
+                    caller.getPackageName(), caller.getUid()));
             enforceIndividualAttestationSupportedIfRequested(attestationUtilsFlags);
         } else {
             Preconditions.checkCallAuthorization((caller.hasAdminComponent()
@@ -8342,9 +8336,8 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 + PackageManager.FEATURE_DEVICE_ADMIN + " feature.");
     }
 
-    // TODO(b/240562946): Remove owner name from API parameters.
     @Override
-    public boolean setDeviceOwner(ComponentName admin, String ownerName, int userId,
+    public boolean setDeviceOwner(ComponentName admin, int userId,
             boolean setProfileOwnerOnCurrentUserIfNecessary) {
         if (!mHasFeature) {
             logMissingFeatureAction("Cannot set " + ComponentName.flattenToShortString(admin)
@@ -9376,21 +9369,36 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     }
 
     /**
-     * Check if caller is device owner, delegate cert installer or profile owner of
-     * affiliated user. Or if caller is profile owner for a specified user or delegate cert
-     * installer on an organization-owned device.
+     * Check if one the following conditions hold:
+     * (1) The device has a Device Owner, and one of the following holds:
+     *   (1.1) The caller is the Device Owner
+     *   (1.2) The caller is another app in the same user as the device owner, AND
+     *         The caller is the delegated certificate installer.
+     *   (1.3) The caller is a Profile Owner and the calling user is affiliated.
+     * (2) The user has a profile owner, AND:
+     *   (2.1) The profile owner has been granted access to Device IDs and one of the following
+     *         holds:
+     *     (2.1.1) The caller is the profile owner.
+     *     (2.1.2) The caller is from another app in the same user as the profile owner, AND
+     *             the caller is the delegated cert installer.
+     *
+     *  For the device owner case, simply check that the caller is the device owner or the
+     *  delegated certificate installer.
+     *
+     *  For the profile owner case, first check that the caller is the profile owner or can
+     *  manage the DELEGATION_CERT_INSTALL scope.
+     *  If that check succeeds, ensure the profile owner was granted access to device
+     *  identifiers. The grant is transitive: The delegated cert installer is implicitly allowed
+     *  access to device identifiers in this case as part of the delegation.
      */
-    private boolean hasDeviceIdAccessUnchecked(String packageName, int uid) {
-        // Is the caller a  device owner, delegate cert installer or profile owner of an
-        // affiliated user.
+    @VisibleForTesting
+    boolean hasDeviceIdAccessUnchecked(String packageName, int uid) {
         ComponentName deviceOwner = getDeviceOwnerComponent(true);
         if (deviceOwner != null && (deviceOwner.getPackageName().equals(packageName)
                 || isCallerDelegate(packageName, uid, DELEGATION_CERT_INSTALL))) {
             return true;
         }
         final int userId = UserHandle.getUserId(uid);
-        // Is the caller the profile owner for the specified user, or delegate cert installer on an
-        // organization-owned device.
         ComponentName profileOwner = getProfileOwnerAsUser(userId);
         final boolean isCallerProfileOwnerOrDelegate = profileOwner != null
                 && (profileOwner.getPackageName().equals(packageName)
@@ -14696,12 +14704,6 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             if (parentUser == null) {
                 throw new IllegalStateException(String.format("User %d is not a profile", userId));
             }
-            if (!parentUser.isSystem()) {
-                throw new IllegalStateException(
-                        String.format("Only the profile owner of a managed profile on the"
-                                + " primary user can be granted access to device identifiers, not"
-                                + " on user %d", parentUser.getIdentifier()));
-            }
 
             mUserManager.setUserRestriction(UserManager.DISALLOW_REMOVE_MANAGED_PROFILE,
                     isProfileOwnerOnOrganizationOwnedDevice,
@@ -18045,11 +18047,9 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             }
 
 
-            if (!setActiveAdminAndDeviceOwner(
-                    deviceOwnerUserId, deviceAdmin, provisioningParams.getOwnerName())) {
+            if (!setActiveAdminAndDeviceOwner(deviceOwnerUserId, deviceAdmin)) {
                 throw new ServiceSpecificException(
-                        ERROR_SET_DEVICE_OWNER_FAILED,
-                        "Failed to set device owner.");
+                        ERROR_SET_DEVICE_OWNER_FAILED, "Failed to set device owner.");
             }
 
             disallowAddUser();
@@ -18176,12 +18176,12 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     }
 
     private boolean setActiveAdminAndDeviceOwner(
-            @UserIdInt int userId, ComponentName adminComponent, String name) {
+            @UserIdInt int userId, ComponentName adminComponent) {
         enableAndSetActiveAdmin(userId, userId, adminComponent);
         // TODO(b/178187130): Directly set DO and remove the check once silent provisioning is no
         //  longer used.
         if (getDeviceOwnerComponent(/* callingUserOnly= */ true) == null) {
-            return setDeviceOwner(adminComponent, name, userId,
+            return setDeviceOwner(adminComponent, userId,
                     /* setProfileOwnerOnCurrentUserIfNecessary= */ true);
         }
         return true;

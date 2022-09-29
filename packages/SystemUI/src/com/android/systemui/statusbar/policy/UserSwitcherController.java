@@ -45,6 +45,7 @@ import android.os.UserManager;
 import android.provider.Settings;
 import android.telephony.TelephonyCallback;
 import android.text.TextUtils;
+import android.util.ArraySet;
 import android.util.Log;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
@@ -54,6 +55,7 @@ import android.widget.BaseAdapter;
 import android.widget.Toast;
 
 import androidx.annotation.Nullable;
+import androidx.collection.SimpleArrayMap;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.jank.InteractionJankMonitor;
@@ -83,6 +85,8 @@ import com.android.systemui.settings.UserTracker;
 import com.android.systemui.statusbar.phone.SystemUIDialog;
 import com.android.systemui.telephony.TelephonyListenerManager;
 import com.android.systemui.user.CreateUserActivity;
+import com.android.systemui.user.data.source.UserRecord;
+import com.android.systemui.user.legacyhelper.ui.LegacyUserUiHelper;
 import com.android.systemui.util.settings.GlobalSettings;
 import com.android.systemui.util.settings.SecureSettings;
 
@@ -97,14 +101,20 @@ import java.util.function.Consumer;
 
 import javax.inject.Inject;
 
+import kotlinx.coroutines.flow.Flow;
+import kotlinx.coroutines.flow.MutableStateFlow;
+import kotlinx.coroutines.flow.StateFlowKt;
+
 /**
  * Keeps a list of all users on the device for user switching.
  */
 @SysUISingleton
 public class UserSwitcherController implements Dumpable {
 
-    public static final float USER_SWITCH_ENABLED_ALPHA = 1.0f;
-    public static final float USER_SWITCH_DISABLED_ALPHA = 0.38f;
+    public static final float USER_SWITCH_ENABLED_ALPHA =
+            LegacyUserUiHelper.USER_SWITCHER_USER_VIEW_SELECTABLE_ALPHA;
+    public static final float USER_SWITCH_DISABLED_ALPHA =
+            LegacyUserUiHelper.USER_SWITCHER_USER_VIEW_NOT_SELECTABLE_ALPHA;
 
     private static final String TAG = "UserSwitcherController";
     private static final boolean DEBUG = false;
@@ -138,6 +148,9 @@ public class UserSwitcherController implements Dumpable {
     private final InteractionJankMonitor mInteractionJankMonitor;
     private final LatencyTracker mLatencyTracker;
     private final DialogLaunchAnimator mDialogLaunchAnimator;
+    private final SimpleArrayMap<UserRecord, EnforcedAdmin> mEnforcedAdminByUserRecord =
+            new SimpleArrayMap<>();
+    private final ArraySet<UserRecord> mDisabledByAdmin = new ArraySet<>();
 
     private ArrayList<UserRecord> mUsers = new ArrayList<>();
     @VisibleForTesting
@@ -149,7 +162,8 @@ public class UserSwitcherController implements Dumpable {
     private boolean mSimpleUserSwitcher;
     // When false, there won't be any visual affordance to add a new user from the keyguard even if
     // the user is unlocked
-    private boolean mAddUsersFromLockScreen;
+    private final MutableStateFlow<Boolean> mAddUsersFromLockScreen =
+            StateFlowKt.MutableStateFlow(false);
     private boolean mUserSwitcherEnabled;
     @VisibleForTesting
     boolean mPauseRefreshUsers;
@@ -252,8 +266,11 @@ public class UserSwitcherController implements Dumpable {
             @Override
             public void onChange(boolean selfChange) {
                 mSimpleUserSwitcher = shouldUseSimpleUserSwitcher();
-                mAddUsersFromLockScreen = mGlobalSettings.getIntForUser(
-                        Settings.Global.ADD_USERS_WHEN_LOCKED, 0, UserHandle.USER_SYSTEM) != 0;
+                mAddUsersFromLockScreen.setValue(
+                        mGlobalSettings.getIntForUser(
+                                Settings.Global.ADD_USERS_WHEN_LOCKED,
+                                0,
+                                UserHandle.USER_SYSTEM) != 0);
                 mUserSwitcherEnabled = mGlobalSettings.getIntForUser(
                         Settings.Global.USER_SWITCHER_ENABLED, 0, UserHandle.USER_SYSTEM) != 0;
                 refreshUsers(UserHandle.USER_NULL);
@@ -317,7 +334,6 @@ public class UserSwitcherController implements Dumpable {
         }
         mForcePictureLoadForUserId.clear();
 
-        final boolean addUsersWhenLocked = mAddUsersFromLockScreen;
         mBgExecutor.execute(() ->  {
             List<UserInfo> infos = mUserManager.getAliveUsers();
             if (infos == null) {
@@ -428,7 +444,7 @@ public class UserSwitcherController implements Dumpable {
     }
 
     boolean anyoneCanCreateUsers() {
-        return systemCanCreateUsers() && mAddUsersFromLockScreen;
+        return systemCanCreateUsers() && mAddUsersFromLockScreen.getValue();
     }
 
     boolean canCreateGuest(boolean hasExistingGuest) {
@@ -444,7 +460,7 @@ public class UserSwitcherController implements Dumpable {
     }
 
     boolean createIsRestricted() {
-        return !mAddUsersFromLockScreen;
+        return !mAddUsersFromLockScreen.getValue();
     }
 
     boolean canCreateSupervisedUser() {
@@ -510,17 +526,48 @@ public class UserSwitcherController implements Dumpable {
         return null;
     }
 
+    /**
+     * Notifies that a user has been selected.
+     *
+     * <p>This will trigger the right user journeys to create a guest user, switch users, and/or
+     * navigate to the correct destination.
+     *
+     * <p>If a user with the given ID is not found, this method is a no-op.
+     *
+     * @param userId The ID of the user to switch to.
+     * @param dialogShower An optional {@link DialogShower} in case we need to show dialogs.
+     */
+    public void onUserSelected(int userId, @Nullable DialogShower dialogShower) {
+        UserRecord userRecord = mUsers.stream()
+                .filter(x -> x.resolveId() == userId)
+                .findFirst()
+                .orElse(null);
+        if (userRecord == null) {
+            return;
+        }
+
+        onUserListItemClicked(userRecord, dialogShower);
+    }
+
+    /** Whether it is allowed to add users while the device is locked. */
+    public Flow<Boolean> getAddUsersFromLockScreen() {
+        return mAddUsersFromLockScreen;
+    }
+
+    /** Returns {@code true} if the guest user is configured to always be present on the device. */
+    public boolean isGuestUserAutoCreated() {
+        return mGuestUserAutoCreated;
+    }
+
+    /** Returns {@code true} if the guest user is currently being reset. */
+    public boolean isGuestUserResetting() {
+        return mGuestIsResetting.get();
+    }
+
     @VisibleForTesting
     void onUserListItemClicked(UserRecord record, DialogShower dialogShower) {
         if (record.isGuest && record.info == null) {
-            // No guest user. Create one.
-            createGuestAsync(guestId -> {
-                // guestId may be USER_NULL if we haven't reloaded the user list yet.
-                if (guestId != UserHandle.USER_NULL) {
-                    mUiEventLogger.log(QSUserSwitcherEvent.QS_USER_GUEST_ADD);
-                    onUserListItemClicked(guestId, record, dialogShower);
-                }
-            });
+            createAndSwitchToGuestUser(dialogShower);
         } else if (record.isAddUser) {
             showAddUserDialog(dialogShower);
         } else if (record.isAddSupervisedUser) {
@@ -598,7 +645,23 @@ public class UserSwitcherController implements Dumpable {
         }
     }
 
-    private void showAddUserDialog(DialogShower dialogShower) {
+    /**
+     * Creates and switches to the guest user.
+     */
+    public void createAndSwitchToGuestUser(@Nullable DialogShower dialogShower) {
+        createGuestAsync(guestId -> {
+            // guestId may be USER_NULL if we haven't reloaded the user list yet.
+            if (guestId != UserHandle.USER_NULL) {
+                mUiEventLogger.log(QSUserSwitcherEvent.QS_USER_GUEST_ADD);
+                onUserListItemClicked(guestId, UserRecord.createForGuest(), dialogShower);
+            }
+        });
+    }
+
+    /**
+     * Shows the add user dialog.
+     */
+    public void showAddUserDialog(@Nullable DialogShower dialogShower) {
         if (mAddUserDialog != null && mAddUserDialog.isShowing()) {
             mAddUserDialog.cancel();
         }
@@ -614,7 +677,10 @@ public class UserSwitcherController implements Dumpable {
         }
     }
 
-    private void startSupervisedUserActivity() {
+    /**
+     * Starts an activity to add a supervised user to the device.
+     */
+    public void startSupervisedUserActivity() {
         final Intent intent = new Intent()
                 .setAction(UserManager.ACTION_CREATE_SUPERVISED_USER)
                 .setPackage(mCreateSupervisedUserPackage)
@@ -766,7 +832,7 @@ public class UserSwitcherController implements Dumpable {
      * Removes guest user and switches to target user. The guest must be the current user and its id
      * must be {@code guestUserId}.
      *
-     * <p>If {@code targetUserId} is {@link UserHandle.USER_NULL}, then create a new guest user in
+     * <p>If {@code targetUserId} is {@link UserHandle#USER_NULL}, then create a new guest user in
      * the foreground, and immediately switch to it. This is used for wiping the current guest and
      * replacing it with a new one.
      *
@@ -776,11 +842,11 @@ public class UserSwitcherController implements Dumpable {
      * <p>If device is configured with {@link
      * com.android.internal.R.bool.config_guestUserAutoCreated}, then after guest user is removed, a
      * new one is created in the background. This has no effect if {@code targetUserId} is {@link
-     * UserHandle.USER_NULL}.
+     * UserHandle#USER_NULL}.
      *
      * @param guestUserId id of the guest user to remove
      * @param targetUserId id of the user to switch to after guest is removed. If {@link
-     * UserHandle.USER_NULL}, then switch immediately to the newly created guest user.
+     * UserHandle#USER_NULL}, then switch immediately to the newly created guest user.
      */
     public void removeGuestUser(@UserIdInt int guestUserId, @UserIdInt int targetUserId) {
         UserInfo currentUser = mUserTracker.getUserInfo();
@@ -833,7 +899,7 @@ public class UserSwitcherController implements Dumpable {
      * user.
      *
      * @param guestUserId user id of the guest user to exit
-     * @param targetUserId user id of the guest user to exit, set to UserHandle.USER_NULL when
+     * @param targetUserId user id of the guest user to exit, set to UserHandle#USER_NULL when
      *                       target user id is not known
      * @param forceRemoveGuestOnExit true: remove guest before switching user,
      *                               false: remove guest only if its ephemeral, else keep guest
@@ -946,7 +1012,7 @@ public class UserSwitcherController implements Dumpable {
      * {@link UserManager} to create a new one.
      *
      * @return The multi-user user ID of the newly created guest user, or
-     * {@link UserHandle.USER_NULL} if the guest couldn't be created.
+     * {@link UserHandle#USER_NULL} if the guest couldn't be created.
      */
     public @UserIdInt int createGuest() {
         UserInfo guest;
@@ -973,6 +1039,21 @@ public class UserSwitcherController implements Dumpable {
     @VisibleForTesting
     public KeyguardStateController getKeyguardStateController() {
         return mKeyguardStateController;
+    }
+
+    /**
+     * Returns the {@link EnforcedAdmin} for the given record, or {@code null} if there isn't one.
+     */
+    @Nullable
+    public EnforcedAdmin getEnforcedAdmin(UserRecord record) {
+        return mEnforcedAdminByUserRecord.get(record);
+    }
+
+    /**
+     * Returns {@code true} if the given record is disabled by the admin; {@code false} otherwise.
+     */
+    public boolean isDisabledByAdmin(UserRecord record) {
+        return mDisabledByAdmin.contains(record);
     }
 
     public static abstract class BaseUserAdapter extends BaseAdapter {
@@ -1041,38 +1122,11 @@ public class UserSwitcherController implements Dumpable {
         }
 
         public String getName(Context context, UserRecord item) {
-            if (item.isGuest) {
-                if (item.isCurrent) {
-                    return context.getString(
-                            com.android.settingslib.R.string.guest_exit_quick_settings_button);
-                } else {
-                    if (item.info != null) {
-                        return context.getString(com.android.internal.R.string.guest_name);
-                    } else {
-                        if (mController.mGuestUserAutoCreated) {
-                            // If mGuestIsResetting=true, we expect the guest user to be created
-                            // shortly, so display a "Resetting guest..." as an indicator that we
-                            // are busy. Otherwise, if mGuestIsResetting=false, we probably failed
-                            // to create a guest at some point. In this case, always show guest
-                            // nickname instead of "Add guest" to make it seem as though the device
-                            // always has a guest ready for use.
-                            return context.getString(
-                                    mController.mGuestIsResetting.get()
-                                            ? com.android.settingslib.R.string.guest_resetting
-                                            : com.android.internal.R.string.guest_name);
-                        } else {
-                            // we always show "guest" as string, instead of "add guest"
-                            return context.getString(com.android.internal.R.string.guest_name);
-                        }
-                    }
-                }
-            } else if (item.isAddUser) {
-                return context.getString(com.android.settingslib.R.string.user_add_user);
-            } else if (item.isAddSupervisedUser) {
-                return context.getString(R.string.add_user_supervised);
-            } else {
-                return item.info.name;
-            }
+            return LegacyUserUiHelper.getUserRecordName(
+                    context,
+                    item,
+                    mController.isGuestUserAutoCreated(),
+                    mController.isGuestUserResetting());
         }
 
         protected static ColorFilter getDisabledUserAvatarColorFilter() {
@@ -1082,17 +1136,8 @@ public class UserSwitcherController implements Dumpable {
         }
 
         protected static Drawable getIconDrawable(Context context, UserRecord item) {
-            int iconRes;
-            if (item.isAddUser) {
-                iconRes = R.drawable.ic_add;
-            } else if (item.isGuest) {
-                iconRes = R.drawable.ic_account_circle;
-            } else if (item.isAddSupervisedUser) {
-                iconRes = R.drawable.ic_add_supervised_user;
-            } else {
-                iconRes = R.drawable.ic_avatar_user;
-            }
-
+            int iconRes = LegacyUserUiHelper.getUserSwitcherActionIconResourceId(
+                    item.isAddUser, item.isGuest, item.isAddSupervisedUser);
             return context.getDrawable(iconRes);
         }
 
@@ -1106,11 +1151,11 @@ public class UserSwitcherController implements Dumpable {
                 UserManager.DISALLOW_ADD_USER, mUserTracker.getUserId());
         if (admin != null && !RestrictedLockUtilsInternal.hasBaseUserRestriction(mContext,
                 UserManager.DISALLOW_ADD_USER, mUserTracker.getUserId())) {
-            record.isDisabledByAdmin = true;
-            record.enforcedAdmin = admin;
+            mDisabledByAdmin.add(record);
+            mEnforcedAdminByUserRecord.put(record, admin);
         } else {
-            record.isDisabledByAdmin = false;
-            record.enforcedAdmin = null;
+            mDisabledByAdmin.remove(record);
+            mEnforcedAdminByUserRecord.put(record, null);
         }
     }
 
@@ -1149,74 +1194,6 @@ public class UserSwitcherController implements Dumpable {
         }
         for (UserSwitchCallback callback : temp) {
             callback.onUserSwitched();
-        }
-    }
-
-    public static final class UserRecord {
-        public final UserInfo info;
-        public final Bitmap picture;
-        public final boolean isGuest;
-        public final boolean isCurrent;
-        public final boolean isAddUser;
-        public final boolean isAddSupervisedUser;
-        /** If true, the record is only visible to the owner and only when unlocked. */
-        public final boolean isRestricted;
-        public boolean isDisabledByAdmin;
-        public EnforcedAdmin enforcedAdmin;
-        public boolean isSwitchToEnabled;
-
-        public UserRecord(UserInfo info, Bitmap picture, boolean isGuest, boolean isCurrent,
-                boolean isAddUser, boolean isRestricted, boolean isSwitchToEnabled,
-                boolean isAddSupervisedUser) {
-            this.info = info;
-            this.picture = picture;
-            this.isGuest = isGuest;
-            this.isCurrent = isCurrent;
-            this.isAddUser = isAddUser;
-            this.isRestricted = isRestricted;
-            this.isSwitchToEnabled = isSwitchToEnabled;
-            this.isAddSupervisedUser = isAddSupervisedUser;
-        }
-
-        public UserRecord copyWithIsCurrent(boolean _isCurrent) {
-            return new UserRecord(info, picture, isGuest, _isCurrent, isAddUser, isRestricted,
-                    isSwitchToEnabled, isAddSupervisedUser);
-        }
-
-        public int resolveId() {
-            if (isGuest || info == null) {
-                return UserHandle.USER_NULL;
-            }
-            return info.id;
-        }
-
-        public String toString() {
-            StringBuilder sb = new StringBuilder();
-            sb.append("UserRecord(");
-            if (info != null) {
-                sb.append("name=\"").append(info.name).append("\" id=").append(info.id);
-            } else {
-                if (isGuest) {
-                    sb.append("<add guest placeholder>");
-                } else if (isAddUser) {
-                    sb.append("<add user placeholder>");
-                }
-            }
-            if (isGuest) sb.append(" <isGuest>");
-            if (isAddUser) sb.append(" <isAddUser>");
-            if (isAddSupervisedUser) sb.append(" <isAddSupervisedUser>");
-            if (isCurrent) sb.append(" <isCurrent>");
-            if (picture != null) sb.append(" <hasPicture>");
-            if (isRestricted) sb.append(" <isRestricted>");
-            if (isDisabledByAdmin) {
-                sb.append(" <isDisabledByAdmin>");
-                sb.append(" enforcedAdmin=").append(enforcedAdmin);
-            }
-            if (isSwitchToEnabled) {
-                sb.append(" <isSwitchToEnabled>");
-            }
-            sb.append(')');
-            return sb.toString();
         }
     }
 

@@ -223,7 +223,7 @@ public class KeyguardSecurityContainerController extends ViewController<Keyguard
         @Override
         public void onSwipeUp() {
             if (!mUpdateMonitor.isFaceDetectionRunning()) {
-                mUpdateMonitor.requestFaceAuth(true);
+                mUpdateMonitor.requestFaceAuth(true, FaceAuthApiRequestReason.SWIPE_UP_ON_BOUNCER);
                 mKeyguardSecurityCallback.userActivity();
                 showMessage(null, null);
             }
@@ -418,6 +418,7 @@ public class KeyguardSecurityContainerController extends ViewController<Keyguard
             SysUiStatsLog.write(SysUiStatsLog.KEYGUARD_BOUNCER_STATE_CHANGED, state);
 
             getCurrentSecurityController().onResume(reason);
+            updateSideFpsVisibility();
         }
         mView.onResume(
                 mSecurityModel.getSecurityMode(KeyguardUpdateMonitor.getCurrentUser()),

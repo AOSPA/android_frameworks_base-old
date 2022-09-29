@@ -49,12 +49,13 @@ import com.android.wm.shell.common.TaskStackListenerImpl;
 import com.android.wm.shell.common.TransactionPool;
 import com.android.wm.shell.common.annotations.ShellBackgroundThread;
 import com.android.wm.shell.common.annotations.ShellMainThread;
-import com.android.wm.shell.desktopmode.DesktopModeConstants;
+import com.android.wm.shell.desktopmode.DesktopMode;
 import com.android.wm.shell.desktopmode.DesktopModeController;
 import com.android.wm.shell.draganddrop.DragAndDropController;
 import com.android.wm.shell.freeform.FreeformComponents;
 import com.android.wm.shell.freeform.FreeformTaskListener;
 import com.android.wm.shell.freeform.FreeformTaskTransitionHandler;
+import com.android.wm.shell.freeform.FreeformTaskTransitionObserver;
 import com.android.wm.shell.fullscreen.FullscreenTaskListener;
 import com.android.wm.shell.onehanded.OneHandedController;
 import com.android.wm.shell.pip.Pip;
@@ -71,9 +72,9 @@ import com.android.wm.shell.pip.PipTransition;
 import com.android.wm.shell.pip.PipTransitionController;
 import com.android.wm.shell.pip.PipTransitionState;
 import com.android.wm.shell.pip.PipUiEventLogger;
+import com.android.wm.shell.pip.phone.PhonePipKeepClearAlgorithm;
 import com.android.wm.shell.pip.phone.PhonePipMenuController;
 import com.android.wm.shell.pip.phone.PipController;
-import com.android.wm.shell.pip.phone.PipKeepClearAlgorithm;
 import com.android.wm.shell.pip.phone.PipMotionHelper;
 import com.android.wm.shell.pip.phone.PipTouchHandler;
 import com.android.wm.shell.recents.RecentTasksController;
@@ -207,8 +208,10 @@ public abstract class WMShellModule {
     @DynamicOverride
     static FreeformComponents provideFreeformComponents(
             FreeformTaskListener<?> taskListener,
-            FreeformTaskTransitionHandler transitionHandler) {
-        return new FreeformComponents(taskListener, Optional.of(transitionHandler));
+            FreeformTaskTransitionHandler transitionHandler,
+            FreeformTaskTransitionObserver transitionObserver) {
+        return new FreeformComponents(
+                taskListener, Optional.of(transitionHandler), Optional.of(transitionObserver));
     }
 
     @WMSingleton
@@ -217,32 +220,36 @@ public abstract class WMShellModule {
             Context context,
             ShellInit shellInit,
             ShellTaskOrganizer shellTaskOrganizer,
+            Optional<RecentTasksController> recentTasksController,
             WindowDecorViewModel<?> windowDecorViewModel) {
         // TODO(b/238217847): Temporarily add this check here until we can remove the dynamic
         //                    override for this controller from the base module
         ShellInit init = FreeformComponents.isFreeformEnabled(context)
                 ? shellInit
                 : null;
-        return new FreeformTaskListener<>(init, shellTaskOrganizer,
+        return new FreeformTaskListener<>(init, shellTaskOrganizer, recentTasksController,
                 windowDecorViewModel);
     }
 
     @WMSingleton
     @Provides
     static FreeformTaskTransitionHandler provideFreeformTaskTransitionHandler(
+            ShellInit shellInit,
+            Transitions transitions,
+            WindowDecorViewModel<?> windowDecorViewModel) {
+        return new FreeformTaskTransitionHandler(shellInit, transitions, windowDecorViewModel);
+    }
+
+    @WMSingleton
+    @Provides
+    static FreeformTaskTransitionObserver provideFreeformTaskTransitionObserver(
             Context context,
             ShellInit shellInit,
             Transitions transitions,
-            WindowDecorViewModel<?> windowDecorViewModel,
             FullscreenTaskListener<?> fullscreenTaskListener,
             FreeformTaskListener<?> freeformTaskListener) {
-        // TODO(b/238217847): Temporarily add this check here until we can remove the dynamic
-        //                    override for this controller from the base module
-        ShellInit init = FreeformComponents.isFreeformEnabled(context)
-                ? shellInit
-                : null;
-        return new FreeformTaskTransitionHandler(init, transitions,
-                windowDecorViewModel, fullscreenTaskListener, freeformTaskListener);
+        return new FreeformTaskTransitionObserver(
+                context, shellInit, transitions, fullscreenTaskListener, freeformTaskListener);
     }
 
     //
@@ -314,7 +321,7 @@ public abstract class WMShellModule {
             DisplayController displayController,
             PipAppOpsListener pipAppOpsListener,
             PipBoundsAlgorithm pipBoundsAlgorithm,
-            PipKeepClearAlgorithm pipKeepClearAlgorithm,
+            PhonePipKeepClearAlgorithm pipKeepClearAlgorithm,
             PipBoundsState pipBoundsState,
             PipMotionHelper pipMotionHelper,
             PipMediaController pipMediaController,
@@ -351,15 +358,17 @@ public abstract class WMShellModule {
 
     @WMSingleton
     @Provides
-    static PipKeepClearAlgorithm providePipKeepClearAlgorithm() {
-        return new PipKeepClearAlgorithm();
+    static PhonePipKeepClearAlgorithm providePhonePipKeepClearAlgorithm(Context context) {
+        return new PhonePipKeepClearAlgorithm(context);
     }
 
     @WMSingleton
     @Provides
     static PipBoundsAlgorithm providesPipBoundsAlgorithm(Context context,
-            PipBoundsState pipBoundsState, PipSnapAlgorithm pipSnapAlgorithm) {
-        return new PipBoundsAlgorithm(context, pipBoundsState, pipSnapAlgorithm);
+            PipBoundsState pipBoundsState, PipSnapAlgorithm pipSnapAlgorithm,
+            PhonePipKeepClearAlgorithm pipKeepClearAlgorithm) {
+        return new PipBoundsAlgorithm(context, pipBoundsState, pipSnapAlgorithm,
+                pipKeepClearAlgorithm);
     }
 
     // Handler is used by Icon.loadDrawableAsync
@@ -591,7 +600,7 @@ public abstract class WMShellModule {
             RootDisplayAreaOrganizer rootDisplayAreaOrganizer,
             @ShellMainThread Handler mainHandler
     ) {
-        if (DesktopModeConstants.IS_FEATURE_ENABLED) {
+        if (DesktopMode.IS_SUPPORTED) {
             return Optional.of(new DesktopModeController(context, shellInit, shellTaskOrganizer,
                     rootDisplayAreaOrganizer,
                     mainHandler));

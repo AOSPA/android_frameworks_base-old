@@ -35,6 +35,7 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK;
 import static android.content.Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
+import static android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT;
 import static android.content.Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED;
 import static android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP;
 import static android.content.pm.ActivityInfo.FLAG_ALLOW_UNTRUSTED_ACTIVITY_EMBEDDING;
@@ -66,6 +67,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -148,6 +150,9 @@ public class ActivityStarterTests extends WindowTestsBase {
     @Before
     public void setUp() throws Exception {
         mController = mock(ActivityStartController.class);
+        BackgroundActivityStartController balController =
+                new BackgroundActivityStartController(mAtm, mSupervisor);
+        doReturn(balController).when(mController).getBackgroundActivityLaunchController();
         mActivityMetricsLogger = mock(ActivityMetricsLogger.class);
         clearInvocations(mActivityMetricsLogger);
     }
@@ -209,10 +214,13 @@ public class ActivityStarterTests extends WindowTestsBase {
             int expectedResult) {
         final ActivityTaskManagerService service = mAtm;
         final IPackageManager packageManager = mock(IPackageManager.class);
-        final ActivityStartController controller = mock(ActivityStartController.class);
 
-        final ActivityStarter starter = new ActivityStarter(controller, service,
-                service.mTaskSupervisor, mock(ActivityStartInterceptor.class));
+        final ActivityStarter starter =
+                new ActivityStarter(
+                        mController,
+                        service,
+                        service.mTaskSupervisor,
+                        mock(ActivityStartInterceptor.class));
         prepareStarter(launchFlags);
         final IApplicationThread caller = mock(IApplicationThread.class);
         final WindowProcessListener listener = mock(WindowProcessListener.class);
@@ -1405,6 +1413,39 @@ public class ActivityStarterTests extends WindowTestsBase {
 
         assertEquals(EMBEDDING_DISALLOWED_MIN_DIMENSION_VIOLATION,
                 canEmbedActivity(taskFragment, starting, task));
+    }
+
+    @Test
+    public void testRecordActivityMovementBeforeDeliverToTop() {
+        final Task task = new TaskBuilder(mAtm.mTaskSupervisor).build();
+        final ActivityRecord activityBot = new ActivityBuilder(mAtm).setTask(task).build();
+        final ActivityRecord activityTop = new ActivityBuilder(mAtm).setTask(task).build();
+
+        activityBot.setVisible(false);
+        activityBot.mVisibleRequested = false;
+
+        assertTrue(activityTop.isVisible());
+        assertTrue(activityTop.mVisibleRequested);
+
+        final ActivityStarter starter = prepareStarter(FLAG_ACTIVITY_REORDER_TO_FRONT
+                        | FLAG_ACTIVITY_NEW_TASK, false /* mockGetRootTask */);
+        starter.mStartActivity = activityBot;
+        task.inRecents = true;
+        starter.setInTask(task);
+        starter.getIntent().setComponent(activityBot.mActivityComponent);
+        final int result = starter.setReason("testRecordActivityMovement").execute();
+
+        assertEquals(START_DELIVERED_TO_TOP, result);
+        assertNotNull(starter.mMovedToTopActivity);
+
+        final ActivityStarter starter2 = prepareStarter(FLAG_ACTIVITY_REORDER_TO_FRONT
+                        | FLAG_ACTIVITY_NEW_TASK, false /* mockGetRootTask */);
+        starter2.setInTask(task);
+        starter2.getIntent().setComponent(activityBot.mActivityComponent);
+        final int result2 = starter2.setReason("testRecordActivityMovement").execute();
+
+        assertEquals(START_DELIVERED_TO_TOP, result2);
+        assertNull(starter2.mMovedToTopActivity);
     }
 
     private static void startActivityInner(ActivityStarter starter, ActivityRecord target,

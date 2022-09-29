@@ -149,6 +149,7 @@ import static com.android.server.wm.ActivityTaskManagerService.DUMP_RECENTS_CMD;
 import static com.android.server.wm.ActivityTaskManagerService.DUMP_RECENTS_SHORT_CMD;
 import static com.android.server.wm.ActivityTaskManagerService.DUMP_STARTER_CMD;
 import static com.android.server.wm.ActivityTaskManagerService.DUMP_TOP_RESUMED_ACTIVITY;
+import static com.android.server.wm.ActivityTaskManagerService.DUMP_VISIBLE_ACTIVITIES;
 import static com.android.server.wm.ActivityTaskManagerService.RELAUNCH_REASON_NONE;
 import static com.android.server.wm.ActivityTaskManagerService.relaunchReasonToString;
 
@@ -379,6 +380,7 @@ import com.android.internal.util.function.QuintFunction;
 import com.android.internal.util.function.TriFunction;
 import com.android.internal.util.function.UndecFunction;
 import com.android.server.AlarmManagerInternal;
+import com.android.server.BootReceiver;
 import com.android.server.DeviceIdleInternal;
 import com.android.server.DisplayThread;
 import com.android.server.IntentResolver;
@@ -673,7 +675,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     final BroadcastQueue mFgOffloadBroadcastQueue;
     // Convenient for easy iteration over the queues. Foreground is first
     // so that dispatch of foreground broadcasts gets precedence.
-    final BroadcastQueue[] mBroadcastQueues = new BroadcastQueue[4];
+    final BroadcastQueue[] mBroadcastQueues;
 
     @GuardedBy("this")
     BroadcastStats mLastBroadcastStats;
@@ -684,25 +686,33 @@ public class ActivityManagerService extends IActivityManager.Stub
     TraceErrorLogger mTraceErrorLogger;
 
     BroadcastQueue broadcastQueueForIntent(Intent intent) {
-        if (isOnFgOffloadQueue(intent.getFlags())) {
+        return broadcastQueueForFlags(intent.getFlags(), intent);
+    }
+
+    BroadcastQueue broadcastQueueForFlags(int flags) {
+        return broadcastQueueForFlags(flags, null);
+    }
+
+    BroadcastQueue broadcastQueueForFlags(int flags, Object cookie) {
+        if (isOnFgOffloadQueue(flags)) {
             if (DEBUG_BROADCAST_BACKGROUND) {
                 Slog.i(TAG_BROADCAST,
-                        "Broadcast intent " + intent + " on foreground offload queue");
+                        "Broadcast intent " + cookie + " on foreground offload queue");
             }
             return mFgOffloadBroadcastQueue;
         }
 
-        if (isOnBgOffloadQueue(intent.getFlags())) {
+        if (isOnBgOffloadQueue(flags)) {
             if (DEBUG_BROADCAST_BACKGROUND) {
                 Slog.i(TAG_BROADCAST,
-                        "Broadcast intent " + intent + " on background offload queue");
+                        "Broadcast intent " + cookie + " on background offload queue");
             }
             return mBgOffloadBroadcastQueue;
         }
 
-        final boolean isFg = (intent.getFlags() & Intent.FLAG_RECEIVER_FOREGROUND) != 0;
+        final boolean isFg = (flags & Intent.FLAG_RECEIVER_FOREGROUND) != 0;
         if (DEBUG_BROADCAST_BACKGROUND) Slog.i(TAG_BROADCAST,
-                "Broadcast intent " + intent + " on "
+                "Broadcast intent " + cookie + " on "
                 + (isFg ? "foreground" : "background") + " queue");
         return (isFg) ? mFgBroadcastQueue : mBgBroadcastQueue;
     }
@@ -2345,7 +2355,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         mOomAdjuster = new OomAdjuster(this, mProcessList, activeUids, handlerThread);
 
         mIntentFirewall = null;
-        mProcessStats = null;
+        mProcessStats = new ProcessStatsService(this, mContext.getCacheDir());
         mCpHelper = new ContentProviderHelper(this, false);
         mServices = null;
         mSystemThread = null;
@@ -2365,6 +2375,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         mPendingStartActivityUids = new PendingStartActivityUids();
         mUseFifoUiScheduling = false;
         mEnableOffloadQueue = false;
+        mBroadcastQueues = new BroadcastQueue[0];
         mFgBroadcastQueue = mBgBroadcastQueue = mBgOffloadBroadcastQueue =
                 mFgOffloadBroadcastQueue = null;
         mComponentAliasResolver = new ComponentAliasResolver(this);
@@ -2423,14 +2434,15 @@ public class ActivityManagerService extends IActivityManager.Stub
         mEnableOffloadQueue = SystemProperties.getBoolean(
                 "persist.device_config.activity_manager_native_boot.offload_queue_enabled", true);
 
+        mBroadcastQueues = new BroadcastQueue[4];
         mFgBroadcastQueue = new BroadcastQueueImpl(this, mHandler,
-                "foreground", foreConstants, false);
+                "foreground", foreConstants, false, ProcessList.SCHED_GROUP_DEFAULT);
         mBgBroadcastQueue = new BroadcastQueueImpl(this, mHandler,
-                "background", backConstants, true);
+                "background", backConstants, true, ProcessList.SCHED_GROUP_BACKGROUND);
         mBgOffloadBroadcastQueue = new BroadcastQueueImpl(this, mHandler,
-                "offload_bg", offloadConstants, true);
+                "offload_bg", offloadConstants, true, ProcessList.SCHED_GROUP_BACKGROUND);
         mFgOffloadBroadcastQueue = new BroadcastQueueImpl(this, mHandler,
-                "offload_fg", foreConstants, true);
+                "offload_fg", foreConstants, true, ProcessList.SCHED_GROUP_BACKGROUND);
         mBroadcastQueues[0] = mFgBroadcastQueue;
         mBroadcastQueues[1] = mBgBroadcastQueue;
         mBroadcastQueues[2] = mBgOffloadBroadcastQueue;
@@ -3316,13 +3328,20 @@ public class ActivityManagerService extends IActivityManager.Stub
         if (thread == null) {
             return null;
         }
+        return getRecordForAppLOSP(thread.asBinder());
+    }
 
-        ProcessRecord record = mProcessList.getLRURecordForAppLOSP(thread);
+    @GuardedBy(anyOf = {"this", "mProcLock"})
+    ProcessRecord getRecordForAppLOSP(IBinder threadBinder) {
+        if (threadBinder == null) {
+            return null;
+        }
+
+        ProcessRecord record = mProcessList.getLRURecordForAppLOSP(threadBinder);
         if (record != null) return record;
 
         // Validation: if it isn't in the LRU list, it shouldn't exist, but let's
         // double-check that.
-        final IBinder threadBinder = thread.asBinder();
         final ArrayMap<String, SparseArray<ProcessRecord>> pmap =
                 mProcessList.getProcessNamesLOSP().getMap();
         for (int i = pmap.size()-1; i >= 0; i--) {
@@ -6811,9 +6830,8 @@ public class ActivityManagerService extends IActivityManager.Stub
         // TODO: how set package stopped state should work for sdk sandboxes?
         if (!isSdkSandbox) {
             try {
-                AppGlobals.getPackageManager().setPackageStoppedState(
+                mPackageManagerInt.setPackageStoppedState(
                         info.packageName, false, UserHandle.getUserId(app.uid));
-            } catch (RemoteException e) {
             } catch (IllegalArgumentException e) {
                 Slog.w(TAG, "Failed trying to unstop package "
                         + info.packageName + ": " + e);
@@ -8823,10 +8841,38 @@ public class ActivityManagerService extends IActivityManager.Stub
             if (process.info.isInstantApp()) {
                 sb.append("Instant-App: true\n");
             }
+
             if (isSdkSandboxUid(process.uid)) {
+                final int appUid = Process.getAppUidForSdkSandboxUid(process.uid);
+                try {
+                    String[] clientPackages = pm.getPackagesForUid(appUid);
+                    // In shared UID case, don't add the package information
+                    if (clientPackages.length == 1) {
+                        appendSdkSandboxClientPackageHeader(sb, clientPackages[0], callingUserId);
+                    }
+                } catch (RemoteException e) {
+                    Slog.e(TAG, "Error getting packages for client app uid: " + appUid, e);
+                }
                 sb.append("SdkSandbox: true\n");
             }
         }
+    }
+
+    private void appendSdkSandboxClientPackageHeader(StringBuilder sb, String pkg, int userId) {
+        final IPackageManager pm = AppGlobals.getPackageManager();
+        sb.append("SdkSandbox-Client-Package: ").append(pkg);
+        try {
+            final PackageInfo pi = pm.getPackageInfo(pkg, 0, userId);
+            if (pi != null) {
+                sb.append(" v").append(pi.getLongVersionCode());
+                if (pi.versionName != null) {
+                    sb.append(" (").append(pi.versionName).append(")");
+                }
+            }
+        } catch (RemoteException e) {
+            Slog.e(TAG, "Error getting package info for SDK sandbox client: " + pkg, e);
+        }
+        sb.append("\n");
     }
 
     private static String processClass(ProcessRecord process) {
@@ -9602,7 +9648,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                     || DUMP_LASTANR_CMD.equals(cmd) || DUMP_LASTANR_TRACES_CMD.equals(cmd)
                     || DUMP_STARTER_CMD.equals(cmd) || DUMP_CONTAINERS_CMD.equals(cmd)
                     || DUMP_RECENTS_CMD.equals(cmd) || DUMP_RECENTS_SHORT_CMD.equals(cmd)
-                    || DUMP_TOP_RESUMED_ACTIVITY.equals(cmd)) {
+                    || DUMP_TOP_RESUMED_ACTIVITY.equals(cmd)
+                    || DUMP_VISIBLE_ACTIVITIES.equals(cmd)) {
                 mAtmInternal.dump(
                         cmd, fd, pw, args, opti, true /* dumpAll */, dumpClient, dumpPackage);
             } else if ("binder-proxies".equals(cmd)) {
@@ -10696,7 +10743,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         if (!onlyHistory && !onlyReceivers && dumpAll) {
             pw.println();
             for (BroadcastQueue queue : mBroadcastQueues) {
-                pw.println("  Queue " + queue.toString() + ": " + queue.describeState());
+                pw.println("  Queue " + queue.toString() + ": " + queue.describeStateLocked());
             }
             pw.println("  mHandler:");
             mHandler.dump(new PrintWriterPrinter(pw), "    ");
@@ -12951,9 +12998,8 @@ public class ActivityManagerService extends IActivityManager.Stub
             // !!! TODO: currently no check here that we're already bound
             // Backup agent is now in use, its package can't be stopped.
             try {
-                AppGlobals.getPackageManager().setPackageStoppedState(
+                mPackageManagerInt.setPackageStoppedState(
                         app.packageName, false, UserHandle.getUserId(app.uid));
-            } catch (RemoteException e) {
             } catch (IllegalArgumentException e) {
                 Slog.w(TAG, "Failed trying to unstop package "
                         + app.packageName + ": " + e);
@@ -13434,20 +13480,18 @@ public class ActivityManagerService extends IActivityManager.Stub
         final long origId = Binder.clearCallingIdentity();
         try {
             boolean doTrim = false;
-
             synchronized(this) {
                 ReceiverList rl = mRegisteredReceivers.get(receiver.asBinder());
                 if (rl != null) {
                     final BroadcastRecord r = rl.curBroadcast;
-                    if (r != null && r == r.queue.getMatchingOrderedReceiver(r)) {
+                    if (r != null) {
                         final boolean doNext = r.queue.finishReceiverLocked(
-                                r, r.resultCode, r.resultData, r.resultExtras,
+                                rl.app, r.resultCode, r.resultData, r.resultExtras,
                                 r.resultAbort, false);
                         if (doNext) {
                             doTrim = true;
                         }
                     }
-
                     if (rl.app != null) {
                         rl.app.mReceivers.removeReceiver(rl);
                     }
@@ -14610,9 +14654,9 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
     }
 
-    public void finishReceiver(IBinder who, int resultCode, String resultData,
+    public void finishReceiver(IBinder caller, int resultCode, String resultData,
             Bundle resultExtras, boolean resultAbort, int flags) {
-        if (DEBUG_BROADCAST) Slog.v(TAG_BROADCAST, "Finish receiver: " + who);
+        if (DEBUG_BROADCAST) Slog.v(TAG_BROADCAST, "Finish receiver: " + caller);
 
         // Refuse possible leaked file descriptors
         if (resultExtras != null && resultExtras.hasFileDescriptors()) {
@@ -14621,25 +14665,16 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         final long origId = Binder.clearCallingIdentity();
         try {
-            boolean doNext = false;
-            BroadcastRecord r;
-            BroadcastQueue queue;
-
             synchronized(this) {
-                if (isOnFgOffloadQueue(flags)) {
-                    queue = mFgOffloadBroadcastQueue;
-                } else if (isOnBgOffloadQueue(flags)) {
-                    queue = mBgOffloadBroadcastQueue;
-                } else {
-                    queue = (flags & Intent.FLAG_RECEIVER_FOREGROUND) != 0
-                            ? mFgBroadcastQueue : mBgBroadcastQueue;
+                final ProcessRecord callerApp = getRecordForAppLOSP(caller);
+                if (callerApp == null) {
+                    Slog.w(TAG, "finishReceiver: no app for " + caller);
+                    return;
                 }
 
-                r = queue.getMatchingOrderedReceiver(who);
-                if (r != null) {
-                    doNext = r.queue.finishReceiverLocked(r, resultCode,
+                final BroadcastQueue queue = broadcastQueueForFlags(flags);
+                queue.finishReceiverLocked(callerApp, resultCode,
                         resultData, resultExtras, resultAbort, true);
-                }
                 // updateOomAdjLocked() will be done here
                 trimApplicationsLocked(false, OomAdjuster.OOM_ADJ_REASON_FINISH_RECEIVER);
             }
@@ -15190,30 +15225,13 @@ public class ActivityManagerService extends IActivityManager.Stub
     // LIFETIME MANAGEMENT
     // =========================================================
 
-    // Returns whether the app is receiving broadcast.
-    // If receiving, fetch all broadcast queues which the app is
-    // the current [or imminent] receiver on.
-    boolean isReceivingBroadcastLocked(ProcessRecord app,
-            ArraySet<BroadcastQueue> receivingQueues) {
-        final ProcessReceiverRecord prr = app.mReceivers;
-        final int numOfReceivers = prr.numberOfCurReceivers();
-        if (numOfReceivers > 0) {
-            for (int i = 0; i < numOfReceivers; i++) {
-                receivingQueues.add(prr.getCurReceiverAt(i).queue);
-            }
-            return true;
-        }
-
-        // It's not the current receiver, but it might be starting up to become one
+    boolean isReceivingBroadcastLocked(ProcessRecord app, int[] outSchedGroup) {
+        int res = ProcessList.SCHED_GROUP_UNDEFINED;
         for (BroadcastQueue queue : mBroadcastQueues) {
-            final BroadcastRecord r = queue.getPendingBroadcastLocked();
-            if (r != null && r.curApp == app) {
-                // found it; report which queue it's in
-                receivingQueues.add(queue);
-            }
+            res = Math.max(res, queue.getPreferredSchedulingGroupLocked(app));
         }
-
-        return !receivingQueues.isEmpty();
+        outSchedGroup[0] = res;
+        return res != ProcessList.SCHED_GROUP_UNDEFINED;
     }
 
     Association startAssociationLocked(int sourceUid, String sourceProcess, int sourceState,
@@ -15321,7 +15339,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     @GuardedBy("this")
     final boolean canGcNowLocked() {
         for (BroadcastQueue q : mBroadcastQueues) {
-            if (!q.isIdle()) {
+            if (!q.isIdleLocked()) {
                 return false;
             }
         }
@@ -17903,35 +17921,19 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     public void waitForBroadcastIdle(@Nullable PrintWriter pw) {
         enforceCallingPermission(permission.DUMP, "waitForBroadcastIdle()");
-        while (true) {
-            boolean idle = true;
-            synchronized (this) {
-                for (BroadcastQueue queue : mBroadcastQueues) {
-                    if (!queue.isIdle()) {
-                        final String msg = "Waiting for queue " + queue + " to become idle...";
-                        if (pw != null) {
-                            pw.println(msg);
-                            pw.println(queue.describeState());
-                            pw.flush();
-                        }
-                        Slog.v(TAG, msg);
-                        queue.flush();
-                        idle = false;
-                    }
-                }
-            }
+        for (BroadcastQueue queue : mBroadcastQueues) {
+            queue.waitForIdle(pw);
+        }
+        if (pw != null) {
+            pw.println("All broadcast queues are idle!");
+            pw.flush();
+        }
+    }
 
-            if (idle) {
-                final String msg = "All broadcast queues are idle!";
-                if (pw != null) {
-                    pw.println(msg);
-                    pw.flush();
-                }
-                Slog.v(TAG, msg);
-                return;
-            } else {
-                SystemClock.sleep(1000);
-            }
+    public void waitForBroadcastBarrier(@Nullable PrintWriter pw) {
+        enforceCallingPermission(permission.DUMP, "waitForBroadcastBarrier()");
+        for (BroadcastQueue queue : mBroadcastQueues) {
+            queue.waitForBarrier(pw);
         }
     }
 
@@ -17989,6 +17991,14 @@ public class ActivityManagerService extends IActivityManager.Stub
      */
     void refreshSettingsCache() {
         mCoreSettingsObserver.onChange(true);
+    }
+
+    /**
+     * Reset the dropbox rate limiter here and in BootReceiver
+     */
+    void resetDropboxRateLimiter() {
+        mDropboxRateLimiter.reset();
+        BootReceiver.resetDropboxRateLimiter();
     }
 
     /**

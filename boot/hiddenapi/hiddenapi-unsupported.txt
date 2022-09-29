@@ -62,7 +62,6 @@ Landroid/app/job/IJobService$Stub;-><init>()V
 Landroid/app/job/IJobService$Stub;->asInterface(Landroid/os/IBinder;)Landroid/app/job/IJobService;
 Landroid/app/trust/ITrustManager$Stub$Proxy;-><init>(Landroid/os/IBinder;)V
 Landroid/app/usage/IUsageStatsManager$Stub;->asInterface(Landroid/os/IBinder;)Landroid/app/usage/IUsageStatsManager;
-Landroid/bluetooth/IBluetooth$Stub$Proxy;->getAddress()Ljava/lang/String;
 Landroid/bluetooth/IBluetooth$Stub;->asInterface(Landroid/os/IBinder;)Landroid/bluetooth/IBluetooth;
 Landroid/bluetooth/IBluetoothA2dp$Stub;->asInterface(Landroid/os/IBinder;)Landroid/bluetooth/IBluetoothA2dp;
 Landroid/bluetooth/IBluetoothCallback$Stub;-><init>()V

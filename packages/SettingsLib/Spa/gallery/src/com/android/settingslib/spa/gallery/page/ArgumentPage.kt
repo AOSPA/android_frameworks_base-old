@@ -19,63 +19,84 @@ package com.android.settingslib.spa.gallery.page
 import android.os.Bundle
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.navigation.NavType
-import androidx.navigation.navArgument
-import com.android.settingslib.spa.framework.api.SettingsPageProvider
-import com.android.settingslib.spa.framework.compose.navigator
-import com.android.settingslib.spa.framework.compose.toState
+import com.android.settingslib.spa.framework.common.SettingsEntry
+import com.android.settingslib.spa.framework.common.SettingsEntryBuilder
+import com.android.settingslib.spa.framework.common.SettingsPage
+import com.android.settingslib.spa.framework.common.SettingsPageProvider
 import com.android.settingslib.spa.framework.theme.SettingsTheme
 import com.android.settingslib.spa.widget.preference.Preference
-import com.android.settingslib.spa.widget.preference.PreferenceModel
 import com.android.settingslib.spa.widget.scaffold.RegularScaffold
 
-private const val TITLE = "Sample page with arguments"
-private const val STRING_PARAM_NAME = "stringParam"
-private const val INT_PARAM_NAME = "intParam"
-
 object ArgumentPageProvider : SettingsPageProvider {
-    override val name = "Argument"
+    override val name = ArgumentPageModel.name
 
-    override val arguments = listOf(
-        navArgument(STRING_PARAM_NAME) { type = NavType.StringType },
-        navArgument(INT_PARAM_NAME) { type = NavType.IntType },
-    )
+    override val parameter = ArgumentPageModel.parameter
 
-    @Composable
-    override fun Page(arguments: Bundle?) {
-        ArgumentPage(
-            stringParam = arguments!!.getString(STRING_PARAM_NAME, "default"),
-            intParam = arguments.getInt(INT_PARAM_NAME),
+    override fun buildEntry(arguments: Bundle?): List<SettingsEntry> {
+        if (!ArgumentPageModel.isValidArgument(arguments)) return emptyList()
+
+        val owner = SettingsPage.create(name, parameter, arguments)
+        val entryList = mutableListOf<SettingsEntry>()
+        entryList.add(
+            SettingsEntryBuilder.create("string_param", owner)
+                // Set attributes
+                .setIsAllowSearch(true)
+                .setUiLayoutFn {
+                    // Set ui rendering
+                    Preference(ArgumentPageModel.create(arguments).genStringParamPreferenceModel())
+                }.build()
+        )
+
+        entryList.add(
+            SettingsEntryBuilder.create("int_param", owner)
+                // Set attributes
+                .setIsAllowSearch(true)
+                .setUiLayoutFn {
+                    // Set ui rendering
+                    Preference(ArgumentPageModel.create(arguments).genIntParamPreferenceModel())
+                }.build()
+        )
+
+        val entryFoo = buildInjectEntry(ArgumentPageModel.buildNextArgument("foo", arguments))
+        val entryBar = buildInjectEntry(ArgumentPageModel.buildNextArgument("bar", arguments))
+        if (entryFoo != null) entryList.add(entryFoo.setLink(fromPage = owner).build())
+        if (entryBar != null) entryList.add(entryBar.setLink(fromPage = owner).build())
+
+        return entryList
+    }
+
+    private fun buildInjectEntry(arguments: Bundle?): SettingsEntryBuilder? {
+        if (!ArgumentPageModel.isValidArgument(arguments)) return null
+
+        return SettingsEntryBuilder.createInject(SettingsPage.create(name, parameter, arguments))
+            // Set attributes
+            .setIsAllowSearch(false)
+            .setUiLayoutFn {
+                // Set ui rendering
+                Preference(ArgumentPageModel.create(arguments).genInjectPreferenceModel())
+            }
+    }
+
+    fun buildRootPages(): List<SettingsPage> {
+        return listOf(
+            SettingsPage.create(name, parameter, ArgumentPageModel.buildArgument("foo")),
+            SettingsPage.create(name, parameter, ArgumentPageModel.buildArgument("bar")),
         )
     }
 
     @Composable
-    fun EntryItem(stringParam: String, intParam: Int) {
-        Preference(object : PreferenceModel {
-            override val title = TITLE
-            override val summary =
-                "$STRING_PARAM_NAME=$stringParam, $INT_PARAM_NAME=$intParam".toState()
-            override val onClick = navigator("$name/$stringParam/$intParam")
-        })
+    override fun Page(arguments: Bundle?) {
+        RegularScaffold(title = ArgumentPageModel.create(arguments).genPageTitle()) {
+            for (entry in buildEntry(arguments)) {
+                entry.uiLayout()
+            }
+        }
     }
-}
 
-@Composable
-fun ArgumentPage(stringParam: String, intParam: Int) {
-    RegularScaffold(title = TITLE) {
-        Preference(object : PreferenceModel {
-            override val title = "String param value"
-            override val summary = stringParam.toState()
-        })
-
-        Preference(object : PreferenceModel {
-            override val title = "Int param value"
-            override val summary = intParam.toString().toState()
-        })
-
-        ArgumentPageProvider.EntryItem(stringParam = "foo", intParam = intParam + 1)
-
-        ArgumentPageProvider.EntryItem(stringParam = "bar", intParam = intParam + 1)
+    @Composable
+    fun EntryItem(stringParam: String, intParam: Int) {
+        buildInjectEntry(ArgumentPageModel.buildArgument(stringParam, intParam))
+            ?.build()?.uiLayout?.let { it() }
     }
 }
 
@@ -83,6 +104,8 @@ fun ArgumentPage(stringParam: String, intParam: Int) {
 @Composable
 private fun ArgumentPagePreview() {
     SettingsTheme {
-        ArgumentPage(stringParam = "foo", intParam = 0)
+        ArgumentPageProvider.Page(
+            ArgumentPageModel.buildArgument(stringParam = "foo", intParam = 0)
+        )
     }
 }

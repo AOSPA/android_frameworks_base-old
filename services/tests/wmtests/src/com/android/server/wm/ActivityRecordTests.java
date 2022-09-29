@@ -158,7 +158,6 @@ import androidx.test.filters.MediumTest;
 
 import com.android.internal.R;
 import com.android.server.wm.ActivityRecord.State;
-import com.android.server.wm.utils.WmDisplayCutout;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -552,9 +551,9 @@ public class ActivityRecordTests extends WindowTestsBase {
         final Rect insets = new Rect();
         final DisplayInfo displayInfo = task.mDisplayContent.getDisplayInfo();
         final DisplayPolicy policy = task.mDisplayContent.getDisplayPolicy();
-        policy.getNonDecorInsetsLw(displayInfo.rotation, displayInfo.logicalWidth,
-                displayInfo.logicalHeight, WmDisplayCutout.NO_CUTOUT, insets);
-        policy.convertNonDecorInsetsToStableInsets(insets, displayInfo.rotation);
+
+        insets.set(policy.getDecorInsetsInfo(displayInfo.rotation, displayInfo.logicalWidth,
+                displayInfo.logicalHeight).mConfigInsets);
         Task.intersectWithInsetsIfFits(stableRect, stableRect, insets);
 
         final boolean isScreenPortrait = stableRect.width() <= stableRect.height();
@@ -594,9 +593,8 @@ public class ActivityRecordTests extends WindowTestsBase {
         final Rect insets = new Rect();
         final DisplayInfo displayInfo = rootTask.mDisplayContent.getDisplayInfo();
         final DisplayPolicy policy = rootTask.mDisplayContent.getDisplayPolicy();
-        policy.getNonDecorInsetsLw(displayInfo.rotation, displayInfo.logicalWidth,
-                displayInfo.logicalHeight, WmDisplayCutout.NO_CUTOUT, insets);
-        policy.convertNonDecorInsetsToStableInsets(insets, displayInfo.rotation);
+        insets.set(policy.getDecorInsetsInfo(displayInfo.rotation, displayInfo.logicalWidth,
+                displayInfo.logicalHeight).mConfigInsets);
         Task.intersectWithInsetsIfFits(stableRect, stableRect, insets);
 
         final boolean isScreenPortrait = stableRect.width() <= stableRect.height();
@@ -2869,6 +2867,7 @@ public class ActivityRecordTests extends WindowTestsBase {
                 mAtm, null /* fragmentToken */, false /* createdByOrganizer */);
         fragmentSetup.accept(taskFragment1, new Rect(0, 0, width / 2, height));
         task.addChild(taskFragment1, POSITION_TOP);
+        assertEquals(task, activity1.mStartingData.mAssociatedTask);
 
         final TaskFragment taskFragment2 = new TaskFragment(
                 mAtm, null /* fragmentToken */, false /* createdByOrganizer */);
@@ -2890,7 +2889,6 @@ public class ActivityRecordTests extends WindowTestsBase {
                 eq(task.mSurfaceControl));
         assertEquals(activity1.mStartingData, startingWindow.mStartingData);
         assertEquals(task.mSurfaceControl, startingWindow.getAnimationLeashParent());
-        assertEquals(task, activity1.mStartingData.mAssociatedTask);
         assertEquals(taskFragment1.getBounds(), activity1.getBounds());
         // The activity was resized by task fragment, but starting window must still cover the task.
         assertEquals(taskBounds, activity1.mStartingWindow.getBounds());
@@ -2898,7 +2896,6 @@ public class ActivityRecordTests extends WindowTestsBase {
         // The starting window is only removed when all embedded activities are drawn.
         final WindowState activityWindow = mock(WindowState.class);
         activity1.onFirstWindowDrawn(activityWindow);
-        assertNotNull(activity1.mStartingWindow);
         activity2.onFirstWindowDrawn(activityWindow);
         assertNull(activity1.mStartingWindow);
     }
@@ -2987,31 +2984,27 @@ public class ActivityRecordTests extends WindowTestsBase {
     }
 
     @Test
-    public void testCloseToSquareFixedOrientationPortrait() {
+    public void testCloseToSquareFixedOrientation() {
         // create a square display
         final DisplayContent squareDisplay = new TestDisplayContent.Builder(mAtm, 2000, 2000)
                 .setSystemDecorations(true).build();
+        // Add a decor insets provider window.
+        final WindowState navbar = createNavBarWithProvidedInsets(squareDisplay);
+        squareDisplay.getDisplayPolicy().updateDecorInsetsInfoIfNeeded(navbar);
         final Task task = new TaskBuilder(mSupervisor).setDisplay(squareDisplay).build();
 
         // create a fixed portrait activity
-        final ActivityRecord activity = new ActivityBuilder(mAtm).setTask(task)
+        ActivityRecord activity = new ActivityBuilder(mAtm).setTask(task)
                 .setScreenOrientation(SCREEN_ORIENTATION_PORTRAIT).build();
 
-        // check that both the configuration and app bounds are portrait
+        // The available space could be landscape because of decor insets, but the configuration
+        // should still respect the requested portrait orientation.
         assertEquals(ORIENTATION_PORTRAIT, activity.getConfiguration().orientation);
         assertTrue(activity.getConfiguration().windowConfiguration.getAppBounds().width()
                 <= activity.getConfiguration().windowConfiguration.getAppBounds().height());
-    }
-
-    @Test
-    public void testCloseToSquareFixedOrientationLandscape() {
-        // create a square display
-        final DisplayContent squareDisplay = new TestDisplayContent.Builder(mAtm, 2000, 2000)
-                .setSystemDecorations(true).build();
-        final Task task = new TaskBuilder(mSupervisor).setDisplay(squareDisplay).build();
 
         // create a fixed landscape activity
-        final ActivityRecord activity = new ActivityBuilder(mAtm).setTask(task)
+        activity = new ActivityBuilder(mAtm).setTask(task)
                 .setScreenOrientation(SCREEN_ORIENTATION_LANDSCAPE).build();
 
         // check that both the configuration and app bounds are landscape

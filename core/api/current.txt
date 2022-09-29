@@ -10317,7 +10317,9 @@ package android.content {
     field public static final String ACTION_POWER_USAGE_SUMMARY = "android.intent.action.POWER_USAGE_SUMMARY";
     field public static final String ACTION_PROCESS_TEXT = "android.intent.action.PROCESS_TEXT";
     field public static final String ACTION_PROFILE_ACCESSIBLE = "android.intent.action.PROFILE_ACCESSIBLE";
+    field public static final String ACTION_PROFILE_ADDED = "android.intent.action.PROFILE_ADDED";
     field public static final String ACTION_PROFILE_INACCESSIBLE = "android.intent.action.PROFILE_INACCESSIBLE";
+    field public static final String ACTION_PROFILE_REMOVED = "android.intent.action.PROFILE_REMOVED";
     field public static final String ACTION_PROVIDER_CHANGED = "android.intent.action.PROVIDER_CHANGED";
     field public static final String ACTION_QUICK_CLOCK = "android.intent.action.QUICK_CLOCK";
     field public static final String ACTION_QUICK_VIEW = "android.intent.action.QUICK_VIEW";
@@ -15122,7 +15124,7 @@ package android.graphics {
     field @NonNull public static final android.os.Parcelable.Creator<android.graphics.ParcelableColorSpace> CREATOR;
   }
 
-  public class Path {
+  public class Path implements java.lang.Iterable<android.graphics.PathIterator.Segment> {
     ctor public Path();
     ctor public Path(@Nullable android.graphics.Path);
     method public void addArc(@NonNull android.graphics.RectF, float, float);
@@ -15145,13 +15147,18 @@ package android.graphics {
     method public void arcTo(float, float, float, float, float, float, boolean);
     method public void close();
     method public void computeBounds(@NonNull android.graphics.RectF, boolean);
+    method public void conicTo(float, float, float, float, float);
     method public void cubicTo(float, float, float, float, float, float);
     method @NonNull public android.graphics.Path.FillType getFillType();
+    method public int getGenerationId();
     method public void incReserve(int);
+    method public boolean interpolate(@NonNull android.graphics.Path, float, @NonNull android.graphics.Path);
     method @Deprecated public boolean isConvex();
     method public boolean isEmpty();
+    method public boolean isInterpolatable(@NonNull android.graphics.Path);
     method public boolean isInverseFillType();
     method public boolean isRect(@Nullable android.graphics.RectF);
+    method @NonNull public android.graphics.PathIterator iterator();
     method public void lineTo(float, float);
     method public void moveTo(float, float);
     method public void offset(float, float, @Nullable android.graphics.Path);
@@ -15159,6 +15166,7 @@ package android.graphics {
     method public boolean op(@NonNull android.graphics.Path, @NonNull android.graphics.Path.Op);
     method public boolean op(@NonNull android.graphics.Path, @NonNull android.graphics.Path, @NonNull android.graphics.Path.Op);
     method public void quadTo(float, float, float, float);
+    method public void rConicTo(float, float, float, float, float);
     method public void rCubicTo(float, float, float, float, float, float);
     method public void rLineTo(float, float);
     method public void rMoveTo(float, float);
@@ -15205,6 +15213,27 @@ package android.graphics {
 
   public class PathEffect {
     ctor public PathEffect();
+  }
+
+  public class PathIterator implements java.util.Iterator<android.graphics.PathIterator.Segment> {
+    method public boolean hasNext();
+    method @NonNull public int next(@NonNull float[], int);
+    method @NonNull public android.graphics.PathIterator.Segment next();
+    method @NonNull public int peek();
+    field public static final int VERB_CLOSE = 5; // 0x5
+    field public static final int VERB_CONIC = 3; // 0x3
+    field public static final int VERB_CUBIC = 4; // 0x4
+    field public static final int VERB_DONE = 6; // 0x6
+    field public static final int VERB_LINE = 1; // 0x1
+    field public static final int VERB_MOVE = 0; // 0x0
+    field public static final int VERB_QUAD = 2; // 0x2
+  }
+
+  public static class PathIterator.Segment {
+    ctor public PathIterator.Segment(@NonNull int, @NonNull float[], float);
+    method public float getConicWeight();
+    method @NonNull public float[] getPoints();
+    method @NonNull public int getVerb();
   }
 
   public class PathMeasure {
@@ -32143,6 +32172,7 @@ package android.os {
     method @NonNull public android.os.StrictMode.ThreadPolicy.Builder detectCustomSlowCalls();
     method @NonNull public android.os.StrictMode.ThreadPolicy.Builder detectDiskReads();
     method @NonNull public android.os.StrictMode.ThreadPolicy.Builder detectDiskWrites();
+    method @NonNull public android.os.StrictMode.ThreadPolicy.Builder detectExplicitGc();
     method @NonNull public android.os.StrictMode.ThreadPolicy.Builder detectNetwork();
     method @NonNull public android.os.StrictMode.ThreadPolicy.Builder detectResourceMismatches();
     method @NonNull public android.os.StrictMode.ThreadPolicy.Builder detectUnbufferedIo();
@@ -32157,6 +32187,7 @@ package android.os {
     method @NonNull public android.os.StrictMode.ThreadPolicy.Builder permitCustomSlowCalls();
     method @NonNull public android.os.StrictMode.ThreadPolicy.Builder permitDiskReads();
     method @NonNull public android.os.StrictMode.ThreadPolicy.Builder permitDiskWrites();
+    method @NonNull public android.os.StrictMode.ThreadPolicy.Builder permitExplicitGc();
     method @NonNull public android.os.StrictMode.ThreadPolicy.Builder permitNetwork();
     method @NonNull public android.os.StrictMode.ThreadPolicy.Builder permitResourceMismatches();
     method @NonNull public android.os.StrictMode.ThreadPolicy.Builder permitUnbufferedIo();
@@ -32736,6 +32767,9 @@ package android.os.strictmode {
   }
 
   public final class DiskWriteViolation extends android.os.strictmode.Violation {
+  }
+
+  public final class ExplicitGcViolation extends android.os.strictmode.Violation {
   }
 
   public final class FileUriExposedViolation extends android.os.strictmode.Violation {
@@ -41331,6 +41365,7 @@ package android.telephony {
     field public static final String KEY_CALL_COMPOSER_PICTURE_SERVER_URL_STRING = "call_composer_picture_server_url_string";
     field public static final String KEY_CALL_FORWARDING_BLOCKS_WHILE_ROAMING_STRING_ARRAY = "call_forwarding_blocks_while_roaming_string_array";
     field public static final String KEY_CALL_REDIRECTION_SERVICE_COMPONENT_NAME_STRING = "call_redirection_service_component_name_string";
+    field public static final String KEY_CAPABILITIES_EXEMPT_FROM_SINGLE_DC_CHECK_INT_ARRAY = "capabilities_exempt_from_single_dc_check_int_array";
     field public static final String KEY_CARRIER_ALLOW_DEFLECT_IMS_CALL_BOOL = "carrier_allow_deflect_ims_call_bool";
     field public static final String KEY_CARRIER_ALLOW_TURNOFF_IMS_BOOL = "carrier_allow_turnoff_ims_bool";
     field public static final String KEY_CARRIER_APP_REQUIRED_DURING_SIM_SETUP_BOOL = "carrier_app_required_during_setup_bool";
@@ -42320,6 +42355,7 @@ package android.telephony {
     field public static final int IRAT_HANDOVER_FAILED = 2194; // 0x892
     field public static final int IS707B_MAX_ACCESS_PROBES = 2089; // 0x829
     field public static final int IWLAN_AUTHORIZATION_REJECTED = 9003; // 0x232b
+    field public static final int IWLAN_CONGESTION = 15500; // 0x3c8c
     field public static final int IWLAN_DNS_RESOLUTION_NAME_FAILURE = 16388; // 0x4004
     field public static final int IWLAN_DNS_RESOLUTION_TIMEOUT = 16389; // 0x4005
     field public static final int IWLAN_IKEV2_AUTH_FAILURE = 16385; // 0x4001
@@ -49421,6 +49457,7 @@ package android.view {
   public class Surface implements android.os.Parcelable {
     ctor public Surface(@NonNull android.view.SurfaceControl);
     ctor public Surface(android.graphics.SurfaceTexture);
+    method public void clearFrameRate();
     method public int describeContents();
     method public boolean isValid();
     method public android.graphics.Canvas lockCanvas(android.graphics.Rect) throws java.lang.IllegalArgumentException, android.view.Surface.OutOfResourcesException;
@@ -49478,6 +49515,7 @@ package android.view {
     ctor public SurfaceControl.Transaction();
     method @NonNull public android.view.SurfaceControl.Transaction addTransactionCommittedListener(@NonNull java.util.concurrent.Executor, @NonNull android.view.SurfaceControl.TransactionCommittedListener);
     method public void apply();
+    method @NonNull public android.view.SurfaceControl.Transaction clearFrameRate(@NonNull android.view.SurfaceControl);
     method public void close();
     method public int describeContents();
     method @NonNull public android.view.SurfaceControl.Transaction merge(@NonNull android.view.SurfaceControl.Transaction);
@@ -51988,7 +52026,6 @@ package android.view.accessibility {
     method public boolean isTextEntryKey();
     method public boolean isTextSelectable();
     method public boolean isVisibleToUser();
-    method public void makeQueryableFromAppProcess(@NonNull android.view.View);
     method @Deprecated public static android.view.accessibility.AccessibilityNodeInfo obtain(android.view.View);
     method @Deprecated public static android.view.accessibility.AccessibilityNodeInfo obtain(android.view.View, int);
     method @Deprecated public static android.view.accessibility.AccessibilityNodeInfo obtain();
@@ -52041,6 +52078,7 @@ package android.view.accessibility {
     method public void setParent(android.view.View);
     method public void setParent(android.view.View, int);
     method public void setPassword(boolean);
+    method public void setQueryFromAppProcessEnabled(@NonNull android.view.View, boolean);
     method public void setRangeInfo(android.view.accessibility.AccessibilityNodeInfo.RangeInfo);
     method public void setScreenReaderFocusable(boolean);
     method public void setScrollable(boolean);
@@ -52976,6 +53014,7 @@ package android.view.inputmethod {
     method public android.graphics.Matrix getMatrix();
     method public int getSelectionEnd();
     method public int getSelectionStart();
+    method @NonNull public java.util.List<android.graphics.RectF> getVisibleLineBounds();
     method public void writeToParcel(android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.view.inputmethod.CursorAnchorInfo> CREATOR;
     field public static final int FLAG_HAS_INVISIBLE_REGION = 2; // 0x2
@@ -52986,7 +53025,9 @@ package android.view.inputmethod {
   public static final class CursorAnchorInfo.Builder {
     ctor public CursorAnchorInfo.Builder();
     method public android.view.inputmethod.CursorAnchorInfo.Builder addCharacterBounds(int, float, float, float, float, int);
+    method @NonNull public android.view.inputmethod.CursorAnchorInfo.Builder addVisibleLineBounds(float, float, float, float);
     method public android.view.inputmethod.CursorAnchorInfo build();
+    method @NonNull public android.view.inputmethod.CursorAnchorInfo.Builder clearVisibleLineBounds();
     method public void reset();
     method public android.view.inputmethod.CursorAnchorInfo.Builder setComposingText(int, CharSequence);
     method @NonNull public android.view.inputmethod.CursorAnchorInfo.Builder setEditorBoundsInfo(@Nullable android.view.inputmethod.EditorBoundsInfo);
@@ -53224,6 +53265,7 @@ package android.view.inputmethod {
     field public static final int CURSOR_UPDATE_FILTER_CHARACTER_BOUNDS = 8; // 0x8
     field public static final int CURSOR_UPDATE_FILTER_EDITOR_BOUNDS = 4; // 0x4
     field public static final int CURSOR_UPDATE_FILTER_INSERTION_MARKER = 16; // 0x10
+    field public static final int CURSOR_UPDATE_FILTER_VISIBLE_LINE_BOUNDS = 32; // 0x20
     field public static final int CURSOR_UPDATE_IMMEDIATE = 1; // 0x1
     field public static final int CURSOR_UPDATE_MONITOR = 2; // 0x2
     field public static final int GET_EXTRACTED_TEXT_MONITOR = 1; // 0x1

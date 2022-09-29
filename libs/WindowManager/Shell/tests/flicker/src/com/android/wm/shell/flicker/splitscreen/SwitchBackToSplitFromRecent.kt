@@ -16,6 +16,7 @@
 
 package com.android.wm.shell.flicker.splitscreen
 
+import android.platform.test.annotations.IwTest
 import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
 import android.view.WindowManagerPolicyConstants
@@ -30,8 +31,6 @@ import com.android.wm.shell.flicker.helpers.SplitScreenHelper
 import com.android.wm.shell.flicker.layerBecomesVisible
 import com.android.wm.shell.flicker.splitAppLayerBoundsIsVisibleAtEnd
 import com.android.wm.shell.flicker.splitScreenDividerBecomesVisible
-import org.junit.Assume
-import org.junit.Before
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -43,6 +42,7 @@ import org.junit.runners.Parameterized
  *
  * To run this test: `atest WMShellFlickerTests:SwitchBackToSplitFromRecent`
  */
+@IwTest(focusArea = "sysui")
 @RequiresDevice
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
@@ -50,28 +50,15 @@ import org.junit.runners.Parameterized
 @Group1
 class SwitchBackToSplitFromRecent(testSpec: FlickerTestParameter) : SplitScreenBase(testSpec) {
 
-    // TODO(b/231399940): Remove this once we can use recent shortcut to enter split.
-    @Before
-    open fun before() {
-        Assume.assumeTrue(tapl.isTablet)
-    }
-
     override val transition: FlickerBuilder.() -> Unit
         get() = {
             super.transition(this)
             setup {
                 eachRun {
-                    primaryApp.launchViaIntent(wmHelper)
-                    // TODO(b/231399940): Use recent shortcut to enter split.
-                    tapl.launchedAppState.taskbar
-                        .openAllApps()
-                        .getAppIcon(secondaryApp.appName)
-                        .dragToSplitscreen(secondaryApp.`package`, primaryApp.`package`)
-                    SplitScreenHelper.waitForSplitComplete(wmHelper, primaryApp, secondaryApp)
+                    SplitScreenHelper.enterSplit(wmHelper, tapl, primaryApp, secondaryApp)
 
                     tapl.goHome()
                     wmHelper.StateSyncBuilder()
-                        .withAppTransitionIdle()
                         .withHomeActivityVisible()
                         .waitForAndVerify()
                 }
@@ -99,12 +86,12 @@ class SwitchBackToSplitFromRecent(testSpec: FlickerTestParameter) : SplitScreenB
     @Presubmit
     @Test
     fun primaryAppBoundsIsVisibleAtEnd() = testSpec.splitAppLayerBoundsIsVisibleAtEnd(
-        primaryApp, landscapePosLeft = false, portraitPosTop = false)
+        primaryApp, landscapePosLeft = tapl.isTablet, portraitPosTop = false)
 
     @Presubmit
     @Test
     fun secondaryAppBoundsIsVisibleAtEnd() = testSpec.splitAppLayerBoundsIsVisibleAtEnd(
-        secondaryApp, landscapePosLeft = true, portraitPosTop = true)
+        secondaryApp, landscapePosLeft = !tapl.isTablet, portraitPosTop = true)
 
     @Presubmit
     @Test
@@ -185,7 +172,6 @@ class SwitchBackToSplitFromRecent(testSpec: FlickerTestParameter) : SplitScreenB
         @JvmStatic
         fun getParams(): List<FlickerTestParameter> {
             return FlickerTestParameterFactory.getInstance().getConfigNonRotationTests(
-                repetitions = SplitScreenHelper.TEST_REPETITIONS,
                 // TODO(b/176061063):The 3 buttons of nav bar do not exist in the hierarchy.
                 supportedNavigationModes =
                     listOf(WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL_OVERLAY))

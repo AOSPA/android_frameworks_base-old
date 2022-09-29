@@ -406,7 +406,7 @@
             <!-- Desired screen brightness in nits corresponding to the suggested lux values.
              The display brightness is defined as the measured brightness of an all-white image.
              This must be a non-negative integer -->
-            <xs:element name="nits" type="xs:nonNegativeInteger"
+            <xs:element name="nits" type="nonNegativeDecimal"
                         minOccurs="1" maxOccurs="1">
                 <xs:annotation name="final"/>
             </xs:element>

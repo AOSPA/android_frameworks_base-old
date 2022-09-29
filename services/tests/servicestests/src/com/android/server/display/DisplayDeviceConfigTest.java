@@ -86,23 +86,22 @@ public final class DisplayDeviceConfigTest {
         assertEquals(mDisplayDeviceConfig.getAutoBrightnessBrighteningLightDebounce(), 2000);
         assertEquals(mDisplayDeviceConfig.getAutoBrightnessDarkeningLightDebounce(), 1000);
         assertArrayEquals(mDisplayDeviceConfig.getAutoBrightnessBrighteningLevelsLux(), new
-                float[]{50.0f, 80.0f}, 0.0f);
+                float[]{0.0f, 50.0f, 80.0f}, 0.0f);
         assertArrayEquals(mDisplayDeviceConfig.getAutoBrightnessBrighteningLevelsNits(), new
-                float[]{45.0f, 75.0f}, 0.0f);
+                float[]{45.32f, 75.43f}, 0.0f);
         // Todo(brup): Add asserts for BrightnessThrottlingData, DensityMapping,
         // HighBrightnessModeData AmbientLightSensor, RefreshRateLimitations and ProximitySensor.
     }
 
     @Test
-    public void testConfigValuesFromDeviceConfig() {
-        setupDisplayDeviceConfigFromDeviceConfigFile();
-        assertArrayEquals(mDisplayDeviceConfig.getAutoBrightnessBrighteningLevelsLux(), new
-                float[]{0.0f, 110.0f, 500.0f}, 0.0f);
+    public void testConfigValuesFromConfigResource() {
+        setupDisplayDeviceConfigFromConfigResourceFile();
         assertArrayEquals(mDisplayDeviceConfig.getAutoBrightnessBrighteningLevelsNits(), new
                 float[]{2.0f, 200.0f, 600.0f}, 0.0f);
+        assertArrayEquals(mDisplayDeviceConfig.getAutoBrightnessBrighteningLevelsLux(), new
+                float[]{0.0f, 0.0f, 110.0f, 500.0f}, 0.0f);
         // Todo(brup): Add asserts for BrightnessThrottlingData, DensityMapping,
         // HighBrightnessModeData AmbientLightSensor, RefreshRateLimitations and ProximitySensor.
-
     }
 
     private String getContent() {
@@ -128,11 +127,11 @@ public final class DisplayDeviceConfigTest {
                 +       "<displayBrightnessMapping>\n"
                 +            "<displayBrightnessPoint>\n"
                 +                "<lux>50</lux>\n"
-                +                "<nits>45</nits>\n"
+                +                "<nits>45.32</nits>\n"
                 +            "</displayBrightnessPoint>\n"
                 +            "<displayBrightnessPoint>\n"
                 +                "<lux>80</lux>\n"
-                +                "<nits>75</nits>\n"
+                +                "<nits>75.43</nits>\n"
                 +            "</displayBrightnessPoint>\n"
                 +       "</displayBrightnessMapping>\n"
                 +   "</autoBrightness>\n"
@@ -214,7 +213,7 @@ public final class DisplayDeviceConfigTest {
         mDisplayDeviceConfig.initFromFile(tempFile.toFile());
     }
 
-    private void setupDisplayDeviceConfigFromDeviceConfigFile() {
+    private void setupDisplayDeviceConfigFromConfigResourceFile() {
         TypedArray screenBrightnessNits = createFloatTypedArray(new float[]{2.0f, 250.0f, 650.0f});
         when(mResources.obtainTypedArray(
                 com.android.internal.R.array.config_screenBrightnessNits))
@@ -237,9 +236,8 @@ public final class DisplayDeviceConfigTest {
         when(mResources.obtainTypedArray(
                 com.android.internal.R.array.config_autoBrightnessDisplayValuesNits))
                 .thenReturn(screenBrightnessLevelNits);
-        TypedArray screenBrightnessLevelLux = createFloatTypedArray(new
-                float[]{0.0f, 110.0f, 500.0f});
-        when(mResources.obtainTypedArray(
+        int[] screenBrightnessLevelLux = new int[]{0, 110, 500};
+        when(mResources.getIntArray(
                 com.android.internal.R.array.config_autoBrightnessLevels))
                 .thenReturn(screenBrightnessLevelLux);
 

@@ -592,9 +592,19 @@ public class CarrierConfigManager {
      * List of network type constants which support only a single data connection at a time.
      * Some carriers do not support multiple PDP on UMTS.
      * @see TelephonyManager NETWORK_TYPE_*
+     * @see #KEY_ONLY_SINGLE_DC_ALLOWED_INT_ARRAY
      */
     public static final String
             KEY_ONLY_SINGLE_DC_ALLOWED_INT_ARRAY = "only_single_dc_allowed_int_array";
+
+    /**
+     * Only apply if {@link #KEY_ONLY_SINGLE_DC_ALLOWED_INT_ARRAY} specifies the network types that
+     * support a single data connection at a time. This key defines a list of network capabilities
+     * which, if requested, will exempt the request from single data connection checks.
+     * @see NetworkCapabilities NET_CAPABILITY_*
+     */
+    public static final String KEY_CAPABILITIES_EXEMPT_FROM_SINGLE_DC_CHECK_INT_ARRAY =
+            "capabilities_exempt_from_single_dc_check_int_array";
 
     /**
      * Override the platform's notion of a network operator being considered roaming.
@@ -9069,6 +9079,8 @@ public class CarrierConfigManager {
                 new int[] {TelephonyManager.NETWORK_TYPE_CDMA, TelephonyManager.NETWORK_TYPE_1xRTT,
                         TelephonyManager.NETWORK_TYPE_EVDO_0, TelephonyManager.NETWORK_TYPE_EVDO_A,
                         TelephonyManager.NETWORK_TYPE_EVDO_B});
+        sDefaults.putIntArray(KEY_CAPABILITIES_EXEMPT_FROM_SINGLE_DC_CHECK_INT_ARRAY,
+                new int[] {NetworkCapabilities.NET_CAPABILITY_IMS});
         sDefaults.putStringArray(KEY_GSM_ROAMING_NETWORKS_STRING_ARRAY, null);
         sDefaults.putStringArray(KEY_GSM_NONROAMING_NETWORKS_STRING_ARRAY, null);
         sDefaults.putString(KEY_CONFIG_IMS_PACKAGE_OVERRIDE_STRING, null);

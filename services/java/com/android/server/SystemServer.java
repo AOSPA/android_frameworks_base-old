@@ -2235,7 +2235,7 @@ public final class SystemServer implements Dumpable {
                 Slog.e(TAG, "Failure starting HardwarePropertiesManagerService", e);
             }
             t.traceEnd();
-          
+
             if (!isWatch) {
                 t.traceBegin("StartTwilightService");
                 mSystemServiceManager.startService(TwilightService.class);
@@ -2762,7 +2762,7 @@ public final class SystemServer implements Dumpable {
         t.traceEnd();
 
         t.traceBegin("ArtManagerLocal");
-        LocalManagerRegistry.addManager(ArtManagerLocal.class, new ArtManagerLocal());
+        LocalManagerRegistry.addManager(ArtManagerLocal.class, new ArtManagerLocal(context));
         t.traceEnd();
 
         if (context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_UWB)) {

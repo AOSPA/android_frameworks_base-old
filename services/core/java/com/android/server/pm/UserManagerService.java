@@ -173,6 +173,8 @@ public class UserManagerService extends IUserManager.Stub {
 
     private static final String LOG_TAG = "UserManagerService";
     static final boolean DBG = false; // DO NOT SUBMIT WITH TRUE
+    // For Multiple Users on Multiple Displays
+    static final boolean DBG_MUMD = false; // DO NOT SUBMIT WITH TRUE
     private static final boolean DBG_WITH_STACKTRACE = false; // DO NOT SUBMIT WITH TRUE
     // Can be used for manual testing of id recycling
     private static final boolean RELEASE_DELETED_USER_ID = false; // DO NOT SUBMIT WITH TRUE
@@ -303,6 +305,7 @@ public class UserManagerService extends IUserManager.Stub {
 
     private PackageManagerInternal mPmInternal;
     private DevicePolicyManagerInternal mDevicePolicyManagerInternal;
+    private ActivityManagerInternal mAmInternal;
 
     /** Indicates that this is the 1st boot after the system user mode was changed by emulation. */
     private boolean mUpdatingSystemUserMode;
@@ -381,7 +384,7 @@ public class UserManagerService extends IUserManager.Stub {
     }
 
     @GuardedBy("mUsersLock")
-    private final SparseArray<UserData> mUsers = new SparseArray<>();
+    private final SparseArray<UserData> mUsers;
 
     /**
      * Map of user type names to their corresponding {@link UserTypeDetails}.
@@ -625,14 +628,13 @@ public class UserManagerService extends IUserManager.Stub {
     private final WatchedUserStates mUserStates = new WatchedUserStates();
 
     /**
-     * Used on devices that support background users (key) running on secondary displays (value).
-     *
-     * <p>Is {@code null} by default and instantiated on demand when the users are started on
-     * secondary displays.
+     * Set on on devices that support background users (key) running on secondary displays (value).
      */
+    // TODO(b/239982558): move such logic to a different class (like UserDisplayAssigner)
     @Nullable
-    @GuardedBy("mUsersLock")
-    private SparseIntArray mUsersOnSecondaryDisplays;
+    @GuardedBy("mUsersOnSecondaryDisplays")
+    private final SparseIntArray mUsersOnSecondaryDisplays;
+    private final boolean mUsersOnSecondaryDisplaysEnabled;
 
     private static UserManagerService sInstance;
 
@@ -704,10 +706,11 @@ public class UserManagerService extends IUserManager.Stub {
         }
     }
 
-    // TODO b/28848102 Add support for test dependencies injection
+    // TODO(b/28848102) Add support for test dependencies injection
     @VisibleForTesting
     UserManagerService(Context context) {
-        this(context, null, null, new Object(), context.getCacheDir());
+        this(context, /* pm= */ null, /* userDataPreparer= */ null,
+                /* packagesLock= */ new Object(), context.getCacheDir(), /* users= */ null);
     }
 
     /**
@@ -717,14 +720,18 @@ public class UserManagerService extends IUserManager.Stub {
      */
     UserManagerService(Context context, PackageManagerService pm, UserDataPreparer userDataPreparer,
             Object packagesLock) {
-        this(context, pm, userDataPreparer, packagesLock, Environment.getDataDirectory());
+        this(context, pm, userDataPreparer, packagesLock, Environment.getDataDirectory(),
+                /* users= */ null);
     }
 
-    private UserManagerService(Context context, PackageManagerService pm,
-            UserDataPreparer userDataPreparer, Object packagesLock, File dataDir) {
+    @VisibleForTesting
+    UserManagerService(Context context, PackageManagerService pm,
+            UserDataPreparer userDataPreparer, Object packagesLock, File dataDir,
+            SparseArray<UserData> users) {
         mContext = context;
         mPm = pm;
         mPackagesLock = packagesLock;
+        mUsers = users != null ? users : new SparseArray<>();
         mHandler = new MainHandler();
         mUserDataPreparer = userDataPreparer;
         mUserTypes = UserTypeFactory.getUserTypes();
@@ -750,6 +757,8 @@ public class UserManagerService extends IUserManager.Stub {
         mUserStates.put(UserHandle.USER_SYSTEM, UserState.STATE_BOOTING);
         mUser0Allocations = DBG_ALLOCATION ? new AtomicInteger() : null;
         emulateSystemUserModeIfNeeded();
+        mUsersOnSecondaryDisplaysEnabled = UserManager.isUsersOnSecondaryDisplaysEnabled();
+        mUsersOnSecondaryDisplays = mUsersOnSecondaryDisplaysEnabled ? new SparseIntArray() : null;
     }
 
     void systemReady() {
@@ -1083,8 +1092,19 @@ public class UserManagerService extends IUserManager.Stub {
     @Override
     public int getProfileParentId(@UserIdInt int userId) {
         checkManageUsersPermission("get the profile parent");
-        return mLocalService.getProfileParentId(userId);
+        return getProfileParentIdUnchecked(userId);
     }
+
+    private @UserIdInt int getProfileParentIdUnchecked(@UserIdInt int userId) {
+        synchronized (mUsersLock) {
+            UserInfo profileParent = getProfileParentLU(userId);
+            if (profileParent == null) {
+                return userId;
+            }
+            return profileParent.id;
+        }
+    }
+
 
     @GuardedBy("mUsersLock")
     private UserInfo getProfileParentLU(@UserIdInt int userId) {
@@ -1697,8 +1717,7 @@ public class UserManagerService extends IUserManager.Stub {
                     + ") is running in the foreground");
         }
 
-        int currentUser = Binder.withCleanCallingIdentity(() -> ActivityManager.getCurrentUser());
-        return currentUser == userId;
+        return userId == getCurrentUserId();
     }
 
     @Override
@@ -1720,26 +1739,65 @@ public class UserManagerService extends IUserManager.Stub {
             return true;
         }
 
-        // TODO(b/239824814): STOPSHIP - add CTS tests (requires change on testing infra)
-        synchronized (mUsersLock) {
-            if (mUsersOnSecondaryDisplays != null) {
-                // TODO(b/239824814): make sure it handles profile as well
-                return (mUsersOnSecondaryDisplays.indexOfKey(userId) >= 0);
-            }
+        // Device doesn't support multiple users on multiple displays, so only users checked above
+        // can be visible
+        if (!mUsersOnSecondaryDisplaysEnabled) {
+            return false;
         }
 
-        return false;
+        synchronized (mUsersOnSecondaryDisplays) {
+            return mUsersOnSecondaryDisplays.indexOfKey(userId) >= 0;
+        }
     }
 
-    private boolean isCurrentUserOrRunningProfileOfCurrentUser(@UserIdInt int userId) {
-        int currentUserId = Binder.withCleanCallingIdentity(() -> ActivityManager.getCurrentUser());
+    // TODO(b/239982558): add unit test
+    private int getDisplayAssignedToUser(@UserIdInt int userId) {
+        if (isCurrentUserOrRunningProfileOfCurrentUser(userId)) {
+            return Display.DEFAULT_DISPLAY;
+        }
+
+        if (!mUsersOnSecondaryDisplaysEnabled) {
+            return Display.INVALID_DISPLAY;
+        }
+
+        synchronized (mUsersOnSecondaryDisplays) {
+            return mUsersOnSecondaryDisplays.get(userId, Display.INVALID_DISPLAY);
+        }
+    }
+
+    /**
+     * Gets the current user id, calling {@link ActivityManagerInternal} directly (and without
+     * performing any permission check).
+     *
+     * @return id of current foreground user, or {@link UserHandle#USER_NULL} if
+     * {@link ActivityManagerInternal} is not available yet.
+     */
+    @VisibleForTesting
+    int getCurrentUserId() {
+        ActivityManagerInternal activityManagerInternal = getActivityManagerInternal();
+        if (activityManagerInternal == null) {
+            Slog.w(LOG_TAG, "getCurrentUserId() called too early, ActivityManagerInternal"
+                    + " is not set yet");
+            return UserHandle.USER_NULL;
+        }
+        return activityManagerInternal.getCurrentUserId();
+    }
+
+    /**
+     * Gets whether the user is the current foreground user or a started profile of that user.
+     *
+     * <p>Doesn't perform any permission check.
+     */
+    @VisibleForTesting
+    boolean isCurrentUserOrRunningProfileOfCurrentUser(@UserIdInt int userId) {
+        int currentUserId = getCurrentUserId();
 
         if (currentUserId == userId) {
             return true;
         }
 
-        if (isProfile(userId)) {
-            int parentId = Binder.withCleanCallingIdentity(() -> getProfileParentId(userId));
+        if (isProfileUnchecked(userId)) {
+            int parentId = getProfileParentIdUnchecked(userId);
             if (parentId == currentUserId) {
                 return isUserRunning(userId);
             }
@@ -1748,18 +1806,27 @@ public class UserManagerService extends IUserManager.Stub {
         return false;
     }
 
-    // TODO(b/239982558): currently used just by shell command, might need to move to
-    // UserManagerInternal if needed by other components (like WindowManagerService)
-    // TODO(b/239982558): add unit test
-    // TODO(b/239982558): try to merge with isUserVisibleUnchecked()
+    // TODO(b/239982558): try to merge with isUserVisibleUnchecked() (once both are unit tested)
     boolean isUserVisibleOnDisplay(@UserIdInt int userId, int displayId) {
+        // TODO(b/244644281): temporary workaround to let WM use this API without breaking current
+        // behavior (otherwise current user / profiles wouldn't be able to launch activities on
+        // other non-passenger displays, like cluster, display, or virtual displays)
+        if (isCurrentUserOrRunningProfileOfCurrentUser(userId)) {
+            return true;
+        }
+
         if (displayId == Display.DEFAULT_DISPLAY) {
             return isCurrentUserOrRunningProfileOfCurrentUser(userId);
         }
-        synchronized (mUsersLock) {
-            // TODO(b/239824814): make sure it handles profile as well
-            return mUsersOnSecondaryDisplays != null && mUsersOnSecondaryDisplays.get(userId,
-                    Display.INVALID_DISPLAY) == displayId;
+
+        // Device doesn't support multiple users on multiple displays, so only users checked above
+        // can be visible
+        if (!mUsersOnSecondaryDisplaysEnabled) {
+            return false;
+        }
+
+        synchronized (mUsersOnSecondaryDisplays) {
+            return mUsersOnSecondaryDisplays.get(userId, Display.INVALID_DISPLAY) == displayId;
         }
     }
 
@@ -2601,6 +2668,11 @@ public class UserManagerService extends IUserManager.Stub {
         if (!UserRestrictionsUtils.isValidRestriction(key)) {
             return;
         }
+
+        if (!userExists(userId)) {
+            throw new IllegalArgumentException("Cannot set user restriction. "
+                    + "User with this id does not exist");
+        }
         synchronized (mRestrictionsLock) {
             // Note we can't modify Bundles stored in mBaseUserRestrictions directly, so create
             // a copy.
@@ -3185,6 +3257,22 @@ public class UserManagerService extends IUserManager.Stub {
     }
 
     /**
+     * Checks whether user with a given ID exists.
+     * @param id User id to be checked.
+     */
+    @VisibleForTesting
+    boolean userExists(int id) {
+        synchronized (mUsersLock) {
+            for (int userId : mUserIds) {
+                if (userId == id) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
      * Returns an array of user ids, including pre-created users.
      *
      * <p>This method should only used for the specific cases that need to handle pre-created users;
@@ -3707,7 +3795,6 @@ public class UserManagerService extends IUserManager.Stub {
             }
         }
 
-        updateUserIds();
         initDefaultGuestRestrictions();
 
         writeUserLP(userData);
@@ -4904,6 +4991,7 @@ public class UserManagerService extends IUserManager.Stub {
         synchronized (mUsersLock) {
             mUsers.put(userInfo.id, userData);
         }
+        updateUserIds();
         return userData;
     }
 
@@ -5051,7 +5139,7 @@ public class UserManagerService extends IUserManager.Stub {
         final long ident = Binder.clearCallingIdentity();
         try {
             final UserData userData;
-            int currentUser = ActivityManager.getCurrentUser();
+            int currentUser = getCurrentUserId();
             if (currentUser == userId) {
                 Slog.w(LOG_TAG, "Current user cannot be removed.");
                 return false;
@@ -5099,12 +5187,9 @@ public class UserManagerService extends IUserManager.Stub {
                 Slog.w(LOG_TAG, "Unable to notify AppOpsService of removing user.", e);
             }
 
-            // TODO(b/142482943): Send some sort of broadcast for profiles even if non-managed?
-            if (userData.info.profileGroupId != UserInfo.NO_PROFILE_GROUP_ID
-                    && userData.info.isManagedProfile()) {
-                // Send broadcast to notify system that the user removed was a
-                // managed user.
-                sendProfileRemovedBroadcast(userData.info.profileGroupId, userData.info.id);
+            if (userData.info.profileGroupId != UserInfo.NO_PROFILE_GROUP_ID) {
+                sendProfileRemovedBroadcast(userData.info.profileGroupId, userData.info.id,
+                        userData.info.userType);
             }
 
             if (DBG) Slog.i(LOG_TAG, "Stopping user " + userId);
@@ -5182,7 +5267,7 @@ public class UserManagerService extends IUserManager.Stub {
                 }
 
                 // Attempt to immediately remove a non-current user
-                final int currentUser = ActivityManager.getCurrentUser();
+                final int currentUser = getCurrentUserId();
                 if (currentUser != userId) {
                     // Attempt to remove the user. This will fail if the user is the current user
                     if (removeUserUnchecked(userId)) {
@@ -5331,11 +5416,43 @@ public class UserManagerService extends IUserManager.Stub {
         }
     }
 
-    private void sendProfileRemovedBroadcast(int parentUserId, int removedUserId) {
+    /**
+     * Send {@link Intent#ACTION_PROFILE_REMOVED} broadcast when a user of type
+     * {@link UserInfo#isProfile()} is removed. Additionally sends
+     * {@link Intent#ACTION_MANAGED_PROFILE_REMOVED} broadcast if the profile is of type
+     * {@link UserManager#USER_TYPE_PROFILE_MANAGED}
+     *
+     * <p> {@link Intent#ACTION_PROFILE_REMOVED} is a generalized broadcast for all users of type
+     *     {@link UserInfo#isProfile()} and is sent only to dynamic receivers.
+     *
+     * <p> In contrast, the {@link Intent#ACTION_MANAGED_PROFILE_REMOVED} broadcast is specific to
+     *     {@link UserManager#USER_TYPE_PROFILE_MANAGED} and is sent to both manifest and dynamic
+     *     receivers thus it is still needed as manifest receivers will not be able to listen to
+     *     the aforementioned generalized broadcast.
+     */
+    private void sendProfileRemovedBroadcast(int parentUserId, int removedUserId, String userType) {
+        if (Objects.equals(userType, UserManager.USER_TYPE_PROFILE_MANAGED)) {
+            sendManagedProfileRemovedBroadcast(parentUserId, removedUserId);
+        }
+        sendProfileBroadcastToRegisteredReceivers(
+                new Intent(Intent.ACTION_PROFILE_REMOVED),
+                parentUserId, removedUserId);
+    }
+
+    private void sendProfileBroadcastToRegisteredReceivers(Intent intent,
+            int parentUserId, int userId) {
+        final UserHandle parentHandle = UserHandle.of(parentUserId);
+        intent.putExtra(Intent.EXTRA_USER, UserHandle.of(userId));
+        intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY
+                | Intent.FLAG_RECEIVER_FOREGROUND);
+        mContext.sendBroadcastAsUser(intent, parentHandle, /* receiverPermission= */null);
+    }
+
+    private void sendManagedProfileRemovedBroadcast(int parentUserId, int removedUserId) {
         Intent managedProfileIntent = new Intent(Intent.ACTION_MANAGED_PROFILE_REMOVED);
         managedProfileIntent.putExtra(Intent.EXTRA_USER, new UserHandle(removedUserId));
         managedProfileIntent.putExtra(Intent.EXTRA_USER_HANDLE, removedUserId);
-        final UserHandle parentHandle = new UserHandle(parentUserId);
+        final UserHandle parentHandle = UserHandle.of(parentUserId);
         getDevicePolicyManagerInternal().broadcastIntentToManifestReceivers(
                 managedProfileIntent, parentHandle, /* requiresPermission= */ false);
         managedProfileIntent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY
@@ -5951,11 +6068,10 @@ public class UserManagerService extends IUserManager.Stub {
             return;
         }
 
-        final ActivityManagerInternal amInternal = LocalServices
-                .getService(ActivityManagerInternal.class);
+        final int currentUserId = getCurrentUserId();
         pw.print("Current user: ");
-        if (amInternal != null) {
-            pw.println(amInternal.getCurrentUserId());
+        if (currentUserId != UserHandle.USER_NULL) {
+            pw.println(currentUserId);
         } else {
             pw.println("N/A");
         }
@@ -6013,11 +6129,14 @@ public class UserManagerService extends IUserManager.Stub {
         } // synchronized (mPackagesLock)
 
         // Multiple Users on Multiple Display info
-        pw.println("  Supports users on secondary displays: "
+        pw.println("  Supports users on secondary displays: " + mUsersOnSecondaryDisplaysEnabled);
+        // mUsersOnSecondaryDisplaysEnabled is set on constructor, while the UserManager API is
+        // set dynamically, so print both to help cases where the developer changed it on the fly
+        pw.println("  UM.isUsersOnSecondaryDisplaysEnabled(): "
                 + UserManager.isUsersOnSecondaryDisplaysEnabled());
-        synchronized (mUsersLock) {
-            if (mUsersOnSecondaryDisplays != null) {
-                pw.print("  Users on secondary displays: ");
+        if (mUsersOnSecondaryDisplaysEnabled) {
+            pw.print("  Users on secondary displays: ");
+            synchronized (mUsersOnSecondaryDisplays) {
                 pw.println(mUsersOnSecondaryDisplays);
             }
         }
@@ -6079,13 +6198,13 @@ public class UserManagerService extends IUserManager.Stub {
     private void dumpUser(PrintWriter pw, @UserIdInt int userId, StringBuilder sb, long now,
             long nowRealtime) {
         if (userId == UserHandle.USER_CURRENT) {
-            final ActivityManagerInternal amInternal = LocalServices
-                    .getService(ActivityManagerInternal.class);
-            if (amInternal == null) {
+            final int currentUserId = getCurrentUserId();
+            pw.print("Current user: ");
+            if (currentUserId == UserHandle.USER_NULL) {
                 pw.println("Cannot determine current user");
                 return;
             }
-            userId = amInternal.getCurrentUserId();
+            userId = currentUserId;
         }
 
         synchronized (mUsersLock) {
@@ -6331,7 +6450,7 @@ public class UserManagerService extends IUserManager.Stub {
 
         @Override
         public void removeAllUsers() {
-            if (UserHandle.USER_SYSTEM == ActivityManager.getCurrentUser()) {
+            if (UserHandle.USER_SYSTEM == getCurrentUserId()) {
                 // Remove the non-system users straight away.
                 removeNonSystemUsers();
             } else {
@@ -6513,13 +6632,7 @@ public class UserManagerService extends IUserManager.Stub {
 
         @Override
         public int getProfileParentId(@UserIdInt int userId) {
-            synchronized (mUsersLock) {
-                UserInfo profileParent = getProfileParentLU(userId);
-                if (profileParent == null) {
-                    return userId;
-                }
-                return profileParent.id;
-            }
+            return getProfileParentIdUnchecked(userId);
         }
 
         @Override
@@ -6587,44 +6700,32 @@ public class UserManagerService extends IUserManager.Stub {
 
         @Override
         public void assignUserToDisplay(int userId, int displayId) {
-            if (DBG) {
-                Slogf.d(LOG_TAG, "assignUserToDisplay(%d, %d): mUsersOnSecondaryDisplays=%s",
-                        userId, displayId, mUsersOnSecondaryDisplays);
+            if (DBG_MUMD) {
+                Slogf.d(LOG_TAG, "assignUserToDisplay(%d, %d)", userId, displayId);
             }
-            // TODO(b/240613396) throw exception if feature not supported
 
-            if (displayId == Display.INVALID_DISPLAY) {
-                synchronized (mUsersLock) {
-                    if (mUsersOnSecondaryDisplays == null) {
-                        if (false) {
-                            // TODO(b/240613396): remove this if once we check for support above
-                            Slogf.wtf(LOG_TAG, "assignUserToDisplay(%d, %d): no "
-                                    + "mUsersOnSecondaryDisplays", userId, displayId);
-                        }
-                        return;
-                    }
-                    if (DBG) {
-                        Slogf.d(LOG_TAG, "Removing %d from mUsersOnSecondaryDisplays", userId);
-                    }
-                    mUsersOnSecondaryDisplays.delete(userId);
-                    if (mUsersOnSecondaryDisplays.size() == 0) {
-                        if (DBG) {
-                            Slogf.d(LOG_TAG, "Removing mUsersOnSecondaryDisplays");
-                        }
-                        mUsersOnSecondaryDisplays = null;
-                    }
+            if (displayId == Display.DEFAULT_DISPLAY) {
+                // Don't need to do anything because methods (such as isUserVisible()) already know
+                // that the current user (and their profiles) is assigned to the default display.
+                if (DBG_MUMD) {
+                    Slogf.d(LOG_TAG, "ignoring on default display");
                 }
                 return;
             }
 
-            synchronized (mUsersLock) {
-                if (mUsersOnSecondaryDisplays == null) {
-                    if (DBG) {
-                        Slogf.d(LOG_TAG, "Creating mUsersOnSecondaryDisplays");
-                    }
-                    mUsersOnSecondaryDisplays = new SparseIntArray();
-                }
-                if (DBG) {
+            if (!mUsersOnSecondaryDisplaysEnabled) {
+                throw new UnsupportedOperationException("assignUserToDisplay(" + userId + ", "
+                        + displayId + ") called on device that doesn't support multiple "
+                        + "users on multiple displays");
+            }
+
+            Preconditions.checkArgument(userId != UserHandle.USER_SYSTEM, "Cannot start system user"
+                    + " on secondary display (%d)", displayId);
+            // TODO(b/239982558): call DisplayManagerInternal to check if display is valid instead
+            Preconditions.checkArgument(displayId > 0, "Invalid display id (%d)", displayId);
+
+            synchronized (mUsersOnSecondaryDisplays) {
+                if (DBG_MUMD) {
                     Slogf.d(LOG_TAG, "Adding %d->%d to mUsersOnSecondaryDisplays",
                             userId, displayId);
                 }
@@ -6663,8 +6764,41 @@ public class UserManagerService extends IUserManager.Stub {
         }
 
         @Override
+        public void unassignUserFromDisplay(@UserIdInt int userId) {
+            if (DBG_MUMD) {
+                Slogf.d(LOG_TAG, "unassignUserFromDisplay(%d)", userId);
+            }
+            if (!mUsersOnSecondaryDisplaysEnabled) {
+                // Don't need to do anything because methods (such as isUserVisible()) already know
+                // that the current user (and their profiles) is assigned to the default display.
+                if (DBG_MUMD) {
+                    Slogf.d(LOG_TAG, "ignoring when device doesn't support MUMD");
+                }
+                return;
+            }
+
+            synchronized (mUsersOnSecondaryDisplays) {
+                if (DBG_MUMD) {
+                    Slogf.d(LOG_TAG, "Removing %d from mUsersOnSecondaryDisplays (%s)", userId,
+                            mUsersOnSecondaryDisplays);
+                }
+                mUsersOnSecondaryDisplays.delete(userId);
+            }
+        }
+
+        @Override
+        public boolean isUserVisible(int userId) {
+            return isUserVisibleUnchecked(userId);
+        }
+
+        @Override
         public boolean isUserVisible(int userId, int displayId) {
             return isUserVisibleOnDisplay(userId, displayId);
+        }
+
+        @Override
+        public int getDisplayAssignedToUser(int userId) {
+            return UserManagerService.this.getDisplayAssignedToUser(userId);
         }
     } // class LocalService
 
@@ -6826,5 +6960,13 @@ public class UserManagerService extends IUserManager.Stub {
                     LocalServices.getService(DevicePolicyManagerInternal.class);
         }
         return mDevicePolicyManagerInternal;
+    }
+
+    /** Returns the internal activity manager interface. */
+    private @Nullable ActivityManagerInternal getActivityManagerInternal() {
+        if (mAmInternal == null) {
+            mAmInternal = LocalServices.getService(ActivityManagerInternal.class);
+        }
+        return mAmInternal;
     }
 }

@@ -16,8 +16,6 @@
 
 package com.android.server.wm.flicker.quickswitch
 
-import android.platform.test.annotations.FlakyTest
-import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
 import android.platform.test.annotations.RequiresDevice
 import android.view.Surface
@@ -274,21 +272,9 @@ open class QuickSwitchBetweenTwoAppsForwardTest(
     }
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @Presubmit
     @Test
     override fun taskBarLayerIsVisibleAtStartAndEnd() = super.taskBarLayerIsVisibleAtStartAndEnd()
-
-    /** {@inheritDoc} */
-    @FlakyTest(bugId = 239148258)
-    @Test
-    override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
-        super.visibleLayersShownMoreThanOneConsecutiveEntry()
-
-    /** {@inheritDoc} */
-    @FlakyTest(bugId = 239148258)
-    @Test
-    override fun visibleWindowsShownMoreThanOneConsecutiveEntry() =
-        super.visibleWindowsShownMoreThanOneConsecutiveEntry()
 
     companion object {
         private var startDisplayBounds = Rect.EMPTY
@@ -298,8 +284,7 @@ open class QuickSwitchBetweenTwoAppsForwardTest(
         fun getParams(): Collection<FlickerTestParameter> {
             return FlickerTestParameterFactory.getInstance()
                     .getConfigNonRotationTests(
-                            repetitions = 3,
-                            supportedNavigationModes = listOf(
+                                                        supportedNavigationModes = listOf(
                                     WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL_OVERLAY
                             ),
                             supportedRotations = listOf(Surface.ROTATION_0, Surface.ROTATION_90)

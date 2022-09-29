@@ -16,7 +16,6 @@
 
 package com.android.server.wm.flicker.quickswitch
 
-import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
 import android.platform.test.annotations.RequiresDevice
 import android.view.Surface
@@ -266,7 +265,7 @@ open class QuickSwitchBetweenTwoAppsBackTest(
     }
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @Presubmit
     @Test
     override fun taskBarLayerIsVisibleAtStartAndEnd() = super.taskBarLayerIsVisibleAtStartAndEnd()
 
@@ -278,8 +277,7 @@ open class QuickSwitchBetweenTwoAppsBackTest(
         fun getParams(): Collection<FlickerTestParameter> {
             return FlickerTestParameterFactory.getInstance()
                 .getConfigNonRotationTests(
-                    repetitions = 3,
-                    supportedNavigationModes = listOf(
+                                        supportedNavigationModes = listOf(
                         WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL_OVERLAY
                     ),
                     supportedRotations = listOf(Surface.ROTATION_0, Surface.ROTATION_90)

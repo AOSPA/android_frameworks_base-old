@@ -46,7 +46,7 @@ import org.junit.runners.Parameterized
 /**
  * Test entering pip while changing orientation (from app in landscape to pip window in portrait)
  *
- * To run this test: `atest EnterPipToOtherOrientationTest:EnterPipToOtherOrientationTest`
+ * To run this test: `atest WMShellFlickerTests:EnterPipToOtherOrientationTest`
  *
  * Actions:
  *     Launch [testApp] on a fixed portrait orientation
@@ -246,8 +246,7 @@ class EnterPipToOtherOrientationTest(
         fun getParams(): Collection<FlickerTestParameter> {
             return FlickerTestParameterFactory.getInstance()
                 .getConfigNonRotationTests(
-                    supportedRotations = listOf(Surface.ROTATION_0),
-                    repetitions = 3
+                    supportedRotations = listOf(Surface.ROTATION_0)
                 )
         }
     }

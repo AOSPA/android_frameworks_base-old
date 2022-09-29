@@ -16,6 +16,7 @@
 
 package com.android.wm.shell.flicker.splitscreen
 
+import android.platform.test.annotations.IwTest
 import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
 import android.view.WindowManagerPolicyConstants
@@ -30,8 +31,6 @@ import com.android.wm.shell.flicker.appWindowKeepVisible
 import com.android.wm.shell.flicker.helpers.SplitScreenHelper
 import com.android.wm.shell.flicker.layerKeepVisible
 import com.android.wm.shell.flicker.splitAppLayerBoundsKeepVisible
-import org.junit.Assume
-import org.junit.Before
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -43,36 +42,25 @@ import org.junit.runners.Parameterized
  *
  * To run this test: `atest WMShellFlickerTests:CopyContentInSplit`
  */
+@IwTest(focusArea = "sysui")
 @RequiresDevice
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @Group1
 class CopyContentInSplit(testSpec: FlickerTestParameter) : SplitScreenBase(testSpec) {
-    protected val textEditApp = SplitScreenHelper.getIme(instrumentation)
-
-    // TODO(b/231399940): Remove this once we can use recent shortcut to enter split.
-    @Before
-    open fun before() {
-        Assume.assumeTrue(tapl.isTablet)
-    }
+    private val textEditApp = SplitScreenHelper.getIme(instrumentation)
 
     override val transition: FlickerBuilder.() -> Unit
         get() = {
             super.transition(this)
             setup {
                 eachRun {
-                    textEditApp.launchViaIntent(wmHelper)
-                    // TODO(b/231399940): Use recent shortcut to enter split.
-                    tapl.launchedAppState.taskbar
-                        .openAllApps()
-                        .getAppIcon(primaryApp.appName)
-                        .dragToSplitscreen(primaryApp.`package`, textEditApp.`package`)
-                    SplitScreenHelper.waitForSplitComplete(wmHelper, textEditApp, primaryApp)
+                    SplitScreenHelper.enterSplit(wmHelper, tapl, primaryApp, textEditApp)
                 }
             }
             transitions {
-                SplitScreenHelper.copyContentFromLeftToRight(
+                SplitScreenHelper.copyContentInSplit(
                     instrumentation, device, primaryApp, textEditApp)
             }
         }
@@ -92,12 +80,12 @@ class CopyContentInSplit(testSpec: FlickerTestParameter) : SplitScreenBase(testS
     @Presubmit
     @Test
     fun primaryAppBoundsKeepVisible() = testSpec.splitAppLayerBoundsKeepVisible(
-        primaryApp, landscapePosLeft = true, portraitPosTop = true)
+        primaryApp, landscapePosLeft = tapl.isTablet, portraitPosTop = false)
 
     @Presubmit
     @Test
     fun textEditAppBoundsKeepVisible() = testSpec.splitAppLayerBoundsKeepVisible(
-        textEditApp, landscapePosLeft = false, portraitPosTop = false)
+        textEditApp, landscapePosLeft = !tapl.isTablet, portraitPosTop = true)
 
     @Presubmit
     @Test
@@ -178,7 +166,6 @@ class CopyContentInSplit(testSpec: FlickerTestParameter) : SplitScreenBase(testS
         @JvmStatic
         fun getParams(): List<FlickerTestParameter> {
             return FlickerTestParameterFactory.getInstance().getConfigNonRotationTests(
-                repetitions = SplitScreenHelper.TEST_REPETITIONS,
                 // TODO(b/176061063):The 3 buttons of nav bar do not exist in the hierarchy.
                 supportedNavigationModes =
                     listOf(WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL_OVERLAY))
