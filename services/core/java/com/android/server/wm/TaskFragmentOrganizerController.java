@@ -19,6 +19,7 @@ package com.android.server.wm;
 import static android.window.TaskFragmentOrganizer.putExceptionInBundle;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_WINDOW_ORGANIZER;
+import static com.android.server.wm.TaskFragment.EMBEDDING_ALLOWED;
 import static com.android.server.wm.WindowOrganizerController.configurationsAreEqualForOrganizer;
 
 import android.annotation.IntDef;
@@ -235,7 +236,7 @@ public class TaskFragmentOrganizerController extends ITaskFragmentOrganizerContr
                         + " is not in a task belong to the organizer app.");
                 return;
             }
-            if (!task.isAllowedToEmbedActivity(activity, mOrganizerUid)) {
+            if (task.isAllowedToEmbedActivity(activity, mOrganizerUid) != EMBEDDING_ALLOWED) {
                 Slog.d(TAG, "Reparent activity=" + activity.token
                         + " is not allowed to be embedded.");
                 return;
@@ -378,6 +379,11 @@ public class TaskFragmentOrganizerController extends ITaskFragmentOrganizerContr
         }
     }
 
+    int getTaskFragmentOrganizerUid(ITaskFragmentOrganizer organizer) {
+        final TaskFragmentOrganizerState state = validateAndGetState(organizer);
+        return state.mOrganizerUid;
+    }
+
     void onTaskFragmentAppeared(ITaskFragmentOrganizer organizer, TaskFragment taskFragment) {
         final TaskFragmentOrganizerState state = validateAndGetState(organizer);
         if (!state.addTaskFragment(taskFragment)) {
@@ -465,6 +471,8 @@ public class TaskFragmentOrganizerController extends ITaskFragmentOrganizerContr
                 .setException(exception)
                 .build();
         mPendingTaskFragmentEvents.add(pendingEvent);
+        // Make sure the error event will be dispatched if there are no other changes.
+        mAtmService.mWindowManager.mWindowPlacerLocked.requestTraversal();
     }
 
     void onActivityReparentToTask(ActivityRecord activity) {

@@ -35,14 +35,18 @@ import com.android.systemui.demomode.DemoModeController;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.dock.DockManagerImpl;
 import com.android.systemui.doze.DozeHost;
+import com.android.systemui.navigationbar.gestural.GestureModule;
 import com.android.systemui.plugins.qs.QSFactory;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.power.EnhancedEstimates;
 import com.android.systemui.power.dagger.PowerModule;
+import com.android.systemui.privacy.MediaProjectionPrivacyItemMonitor;
+import com.android.systemui.privacy.PrivacyItemMonitor;
 import com.android.systemui.qs.dagger.QSModule;
 import com.android.systemui.qs.tileimpl.QSFactoryImpl;
 import com.android.systemui.recents.Recents;
 import com.android.systemui.recents.RecentsImplementation;
+import com.android.systemui.screenshot.ReferenceScreenshotModule;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.NotificationListener;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
@@ -78,14 +82,17 @@ import javax.inject.Named;
 import dagger.Binds;
 import dagger.Module;
 import dagger.Provides;
+import dagger.multibindings.IntoSet;
 
 /**
  * A dagger module for injecting default implementations of components of System UI that may be
  * overridden by the System UI implementation.
  */
 @Module(includes = {
+            GestureModule.class,
             PowerModule.class,
             QSModule.class,
+            ReferenceScreenshotModule.class,
             VolumeModule.class,
         },
         subcomponents = {
@@ -214,4 +221,12 @@ public abstract class TvSystemUIModule {
             NotificationListener notificationListener) {
         return new TvNotificationHandler(context, notificationListener);
     }
+
+    /**
+     * Binds {@link MediaProjectionPrivacyItemMonitor} into the set of {@link PrivacyItemMonitor}.
+     */
+    @Binds
+    @IntoSet
+    abstract PrivacyItemMonitor bindMediaProjectionPrivacyItemMonitor(
+            MediaProjectionPrivacyItemMonitor mediaProjectionPrivacyItemMonitor);
 }

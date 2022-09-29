@@ -58,7 +58,6 @@ public abstract class ExpandableView extends FrameLayout implements Dumpable {
     private ArrayList<View> mMatchParentViews = new ArrayList<View>();
     private static Rect mClipRect = new Rect();
     private boolean mWillBeGone;
-    private int mMinClipTopAmount = 0;
     private boolean mClipToActualHeight = true;
     private boolean mChangingPosition = false;
     private ViewGroup mTransientContainer;
@@ -157,7 +156,7 @@ public abstract class ExpandableView extends FrameLayout implements Dumpable {
 
     @Override
     public boolean pointInView(float localX, float localY, float slop) {
-        float top = mClipTopAmount;
+        float top = Math.max(0, mClipTopAmount);
         float bottom = mActualHeight;
         return localX >= -slop && localY >= top - slop && localX < ((mRight - mLeft) + slop) &&
                 localY < (bottom + slop);
@@ -187,10 +186,12 @@ public abstract class ExpandableView extends FrameLayout implements Dumpable {
      * @param notifyListeners Whether the listener should be informed about the change.
      */
     public void setActualHeight(int actualHeight, boolean notifyListeners) {
-        mActualHeight = actualHeight;
-        updateClipping();
-        if (notifyListeners) {
-            notifyHeightChanged(false  /* needsAnimation */);
+        if (mActualHeight != actualHeight) {
+            mActualHeight = actualHeight;
+            updateClipping();
+            if (notifyListeners) {
+                notifyHeightChanged(false  /* needsAnimation */);
+            }
         }
     }
 
@@ -422,7 +423,7 @@ public abstract class ExpandableView extends FrameLayout implements Dumpable {
             outRect.top += getTop() + getTranslationY();
         }
         outRect.bottom = outRect.top + getActualHeight();
-        outRect.top += getClipTopAmount();
+        outRect.top += Math.max(0, getClipTopAmount());
     }
 
     public boolean isSummaryWithChildren() {
@@ -475,14 +476,6 @@ public abstract class ExpandableView extends FrameLayout implements Dumpable {
 
     public void setWillBeGone(boolean willBeGone) {
         mWillBeGone = willBeGone;
-    }
-
-    public int getMinClipTopAmount() {
-        return mMinClipTopAmount;
-    }
-
-    public void setMinClipTopAmount(int minClipTopAmount) {
-        mMinClipTopAmount = minClipTopAmount;
     }
 
     @Override

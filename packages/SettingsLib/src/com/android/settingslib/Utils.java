@@ -263,6 +263,8 @@ public class Utils {
                             statusString = res.getString(R.string.battery_info_status_charging);
                             break;
                     }
+                } else if (batteryStatus.isPluggedInDock()) {
+                    statusString = res.getString(R.string.battery_info_status_charging_dock);
                 } else {
                     statusString = res.getString(R.string.battery_info_status_charging_wireless);
                 }

@@ -25,9 +25,9 @@ import android.view.inputmethod.InlineSuggestionsRequest;
 import android.view.inputmethod.InputMethodInfo;
 
 import com.android.internal.inputmethod.IAccessibilityInputMethodSession;
+import com.android.internal.inputmethod.IInlineSuggestionsRequestCallback;
+import com.android.internal.inputmethod.InlineSuggestionsRequestInfo;
 import com.android.internal.inputmethod.SoftInputShowHideReason;
-import com.android.internal.view.IInlineSuggestionsRequestCallback;
-import com.android.internal.view.InlineSuggestionsRequestInfo;
 import com.android.server.LocalServices;
 
 import java.util.Collections;
@@ -73,11 +73,6 @@ public abstract class InputMethodManagerInternal {
      * @return A list of {@link InputMethodInfo} that are enabled for {@code userId}.
      */
     public abstract List<InputMethodInfo> getEnabledInputMethodListAsUser(@UserIdInt int userId);
-
-    /**
-     * Returns {@code true} if currently selected IME supports Stylus handwriting.
-     */
-    public abstract boolean isStylusHandwritingAvailable();
 
     /**
      * Called by the Autofill Frameworks to request an {@link InlineSuggestionsRequest} from
@@ -260,11 +255,6 @@ public abstract class InputMethodManagerInternal {
 
                 @Override
                 public void maybeFinishStylusHandwriting() {
-                }
-
-                @Override
-                public boolean isStylusHandwritingAvailable() {
-                    return false;
                 }
             };
 

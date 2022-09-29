@@ -369,6 +369,7 @@ public class UsageStatsService extends SystemService implements
             getDpmInternal();
             // initialize mShortcutServiceInternal
             getShortcutServiceInternal();
+            mResponseStatsTracker.onSystemServicesReady(getContext());
 
             if (ENABLE_KERNEL_UPDATES && KERNEL_COUNTER_FILE.exists()) {
                 try {
@@ -886,11 +887,16 @@ public class UsageStatsService extends SystemService implements
             return;
         }
 
-        final File usageStatsDeDir = new File(Environment.getDataSystemDeDirectory(userId),
-                "usagestats");
-        if (!usageStatsDeDir.mkdirs() && !usageStatsDeDir.exists()) {
-            throw new IllegalStateException("Usage stats DE directory does not exist: "
-                    + usageStatsDeDir.getAbsolutePath());
+        final File deDir = Environment.getDataSystemDeDirectory(userId);
+        final File usageStatsDeDir = new File(deDir, "usagestats");
+        if (!usageStatsDeDir.mkdir() && !usageStatsDeDir.exists()) {
+            if (deDir.exists()) {
+                Slog.e(TAG, "Failed to create " + usageStatsDeDir);
+            } else {
+                Slog.w(TAG, "User " + userId + " was already removed! Discarding pending events");
+                pendingEvents.clear();
+            }
+            return;
         }
         final File pendingEventsFile = new File(usageStatsDeDir,
                 "pendingevents_" + System.currentTimeMillis());
@@ -2371,10 +2377,9 @@ public class UsageStatsService extends SystemService implements
             }
         }
 
+        @android.annotation.EnforcePermission(android.Manifest.permission.CHANGE_APP_IDLE_STATE)
         @Override
         public void setAppStandbyBucket(String packageName, int bucket, int userId) {
-            getContext().enforceCallingPermission(Manifest.permission.CHANGE_APP_IDLE_STATE,
-                    "No permission to change app standby state");
 
             final int callingUid = Binder.getCallingUid();
             final int callingPid = Binder.getCallingPid();
@@ -2420,10 +2425,9 @@ public class UsageStatsService extends SystemService implements
             }
         }
 
+        @android.annotation.EnforcePermission(android.Manifest.permission.CHANGE_APP_IDLE_STATE)
         @Override
         public void setAppStandbyBuckets(ParceledListSlice appBuckets, int userId) {
-            getContext().enforceCallingPermission(Manifest.permission.CHANGE_APP_IDLE_STATE,
-                    "No permission to change app standby state");
 
             final int callingUid = Binder.getCallingUid();
             final int callingPid = Binder.getCallingPid();
@@ -2471,12 +2475,10 @@ public class UsageStatsService extends SystemService implements
             }
         }
 
+        @android.annotation.EnforcePermission(android.Manifest.permission.CHANGE_APP_LAUNCH_TIME_ESTIMATE)
         @Override
         public void setEstimatedLaunchTime(String packageName, long estimatedLaunchTime,
                 int userId) {
-            getContext().enforceCallingPermission(
-                    Manifest.permission.CHANGE_APP_LAUNCH_TIME_ESTIMATE,
-                    "No permission to change app launch estimates");
 
             final long token = Binder.clearCallingIdentity();
             try {
@@ -2487,11 +2489,9 @@ public class UsageStatsService extends SystemService implements
             }
         }
 
+        @android.annotation.EnforcePermission(android.Manifest.permission.CHANGE_APP_LAUNCH_TIME_ESTIMATE)
         @Override
         public void setEstimatedLaunchTimes(ParceledListSlice estimatedLaunchTimes, int userId) {
-            getContext().enforceCallingPermission(
-                    Manifest.permission.CHANGE_APP_LAUNCH_TIME_ESTIMATE,
-                    "No permission to change app launch estimates");
 
             final long token = Binder.clearCallingIdentity();
             try {
@@ -2789,18 +2789,9 @@ public class UsageStatsService extends SystemService implements
                 throw new IllegalArgumentException("id needs to be >=0");
             }
 
-            final int result = getContext().checkCallingOrSelfPermission(
-                    android.Manifest.permission.ACCESS_BROADCAST_RESPONSE_STATS);
-            // STOPSHIP (206518114): Temporarily check for PACKAGE_USAGE_STATS permission as well
-            // until the clients switch to using the new permission.
-            if (result != PackageManager.PERMISSION_GRANTED) {
-                if (!hasPermission(callingPackage)) {
-                    throw new SecurityException(
-                            "Caller does not have the permission needed to call this API; "
-                                    + "callingPackage=" + callingPackage
-                                    + ", callingUid=" + Binder.getCallingUid());
-                }
-            }
+            getContext().enforceCallingOrSelfPermission(
+                    android.Manifest.permission.ACCESS_BROADCAST_RESPONSE_STATS,
+                    "queryBroadcastResponseStats");
             final int callingUid = Binder.getCallingUid();
             userId = ActivityManager.handleIncomingUser(Binder.getCallingPid(), callingUid,
                     userId, false /* allowAll */, false /* requireFull */,
@@ -2822,18 +2813,9 @@ public class UsageStatsService extends SystemService implements
             }
 
 
-            final int result = getContext().checkCallingOrSelfPermission(
-                    android.Manifest.permission.ACCESS_BROADCAST_RESPONSE_STATS);
-            // STOPSHIP (206518114): Temporarily check for PACKAGE_USAGE_STATS permission as well
-            // until the clients switch to using the new permission.
-            if (result != PackageManager.PERMISSION_GRANTED) {
-                if (!hasPermission(callingPackage)) {
-                    throw new SecurityException(
-                            "Caller does not have the permission needed to call this API; "
-                                    + "callingPackage=" + callingPackage
-                                    + ", callingUid=" + Binder.getCallingUid());
-                }
-            }
+            getContext().enforceCallingOrSelfPermission(
+                    android.Manifest.permission.ACCESS_BROADCAST_RESPONSE_STATS,
+                    "clearBroadcastResponseStats");
             final int callingUid = Binder.getCallingUid();
             userId = ActivityManager.handleIncomingUser(Binder.getCallingPid(), callingUid,
                     userId, false /* allowAll */, false /* requireFull */,
@@ -2846,18 +2828,9 @@ public class UsageStatsService extends SystemService implements
         public void clearBroadcastEvents(@NonNull String callingPackage, @UserIdInt int userId) {
             Objects.requireNonNull(callingPackage);
 
-            final int result = getContext().checkCallingOrSelfPermission(
-                    android.Manifest.permission.ACCESS_BROADCAST_RESPONSE_STATS);
-            // STOPSHIP (206518114): Temporarily check for PACKAGE_USAGE_STATS permission as well
-            // until the clients switch to using the new permission.
-            if (result != PackageManager.PERMISSION_GRANTED) {
-                if (!hasPermission(callingPackage)) {
-                    throw new SecurityException(
-                            "Caller does not have the permission needed to call this API; "
-                                    + "callingPackage=" + callingPackage
-                                    + ", callingUid=" + Binder.getCallingUid());
-                }
-            }
+            getContext().enforceCallingOrSelfPermission(
+                    android.Manifest.permission.ACCESS_BROADCAST_RESPONSE_STATS,
+                    "clearBroadcastEvents");
             final int callingUid = Binder.getCallingUid();
             userId = ActivityManager.handleIncomingUser(Binder.getCallingPid(), callingUid,
                     userId, false /* allowAll */, false /* requireFull */,
@@ -3081,7 +3054,8 @@ public class UsageStatsService extends SystemService implements
                     if (userStats == null) {
                         return; // user was stopped or removed
                     }
-                    userStats.applyRestoredPayload(key, payload);
+                    final Set<String> restoredApps = userStats.applyRestoredPayload(key, payload);
+                    mAppStandby.restoreAppsToRare(restoredApps, user);
                 }
             }
         }

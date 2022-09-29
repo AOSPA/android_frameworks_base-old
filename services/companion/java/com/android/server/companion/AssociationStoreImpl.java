@@ -29,6 +29,7 @@ import android.util.SparseArray;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.CollectionUtils;
 
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -72,6 +73,9 @@ class AssociationStoreImpl implements AssociationStore {
     private final Set<OnChangeListener> mListeners = new LinkedHashSet<>();
 
     void addAssociation(@NonNull AssociationInfo association) {
+        // Validity check first.
+        checkNotRevoked(association);
+
         final int id = association.getId();
 
         if (DEBUG) {
@@ -98,6 +102,9 @@ class AssociationStoreImpl implements AssociationStore {
     }
 
     void updateAssociation(@NonNull AssociationInfo updated) {
+        // Validity check first.
+        checkNotRevoked(updated);
+
         final int id = updated.getId();
 
         if (DEBUG) {
@@ -267,6 +274,21 @@ class AssociationStoreImpl implements AssociationStore {
         }
     }
 
+    /**
+     * Dumps current companion device association states.
+     */
+    public void dump(@NonNull PrintWriter out) {
+        out.append("Companion Device Associations: ");
+        if (getAssociations().isEmpty()) {
+            out.append("<empty>\n");
+        } else {
+            out.append("\n");
+            for (AssociationInfo a : getAssociations()) {
+                out.append("  ").append(a.toString()).append('\n');
+            }
+        }
+    }
+
     private void broadcastChange(@ChangeType int changeType, AssociationInfo association) {
         synchronized (mListeners) {
             for (OnChangeListener listener : mListeners) {
@@ -276,6 +298,9 @@ class AssociationStoreImpl implements AssociationStore {
     }
 
     void setAssociations(Collection<AssociationInfo> allAssociations) {
+        // Validity check first.
+        allAssociations.forEach(AssociationStoreImpl::checkNotRevoked);
+
         if (DEBUG) {
             Log.i(TAG, "setAssociations() n=" + allAssociations.size());
             final StringJoiner stringJoiner = new StringJoiner(", ");
@@ -307,5 +332,12 @@ class AssociationStoreImpl implements AssociationStore {
         mIdMap.clear();
         mAddressMap.clear();
         mCachedPerUser.clear();
+    }
+
+    private static void checkNotRevoked(@NonNull AssociationInfo association) {
+        if (association.isRevoked()) {
+            throw new IllegalArgumentException(
+                    "Revoked (removed) associations MUST NOT appear in the AssociationStore");
+        }
     }
 }

@@ -368,7 +368,7 @@ public final class UserHandle implements Parcelable {
     @UnsupportedAppUsage
     @TestApi
     public static int getUid(@UserIdInt int userId, @AppIdInt int appId) {
-        if (MU_ENABLED) {
+        if (MU_ENABLED && appId >= 0) {
             return userId * PER_USER_RANGE + (appId % PER_USER_RANGE);
         } else {
             return appId;
@@ -404,7 +404,12 @@ public final class UserHandle implements Parcelable {
         return getUid(userId, Process.SHARED_USER_GID);
     }
 
-    /** @hide */
+    /**
+     * Returns the gid shared between all users with the app that this uid represents, or -1 if the
+     * uid is invalid.
+     * @hide
+     */
+    @SystemApi
     public static int getSharedAppGid(int uid) {
         return getSharedAppGid(getUserId(uid), getAppId(uid));
     }

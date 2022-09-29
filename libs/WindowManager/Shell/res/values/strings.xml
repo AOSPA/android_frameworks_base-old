@@ -30,6 +30,9 @@
     <!-- Title of menu shown over picture-in-picture. Used for accessibility. -->
     <string name="pip_menu_title">Menu</string>
 
+    <!-- accessibility Title of menu shown over picture-in-picture [CHAR LIMIT=NONE] -->
+    <string name="pip_menu_accessibility_title">Picture-in-Picture Menu</string>
+
     <!-- PiP BTW notification title. [CHAR LIMIT=50] -->
     <string name="pip_notification_title"><xliff:g id="name" example="Google Maps">%s</xliff:g> is in picture-in-picture</string>
 
@@ -73,8 +76,10 @@
     <!-- Warning message when we try to launch a non-resizeable activity on a secondary display and launch it on the primary instead. -->
     <string name="activity_launch_on_secondary_display_failed_text">App does not support launch on secondary displays.</string>
 
-    <!-- Accessibility label for the divider that separates the windows in split-screen mode [CHAR LIMIT=NONE] -->
+    <!-- Accessibility label and window tile for the divider that separates the windows in split-screen mode [CHAR LIMIT=NONE] -->
     <string name="accessibility_divider">Split-screen divider</string>
+    <!-- Accessibility window title for the split-screen divider window [CHAR LIMIT=NONE] -->
+    <string name="divider_title">Split-screen divider</string>
 
     <!-- Accessibility action for moving docked stack divider to make the left screen full screen [CHAR LIMIT=NONE] -->
     <string name="accessibility_action_divider_left_full">Left full screen</string>
@@ -157,7 +162,7 @@
     <string name="accessibility_bubble_dismissed">Bubble dismissed.</string>
 
     <!-- Description of the restart button in the hint of size compatibility mode. [CHAR LIMIT=NONE] -->
-    <string name="restart_button_description">Tap to restart this app and go full screen.</string>
+    <string name="restart_button_description">Tap to restart this app for a better view.</string>
 
     <!-- Description of the camera compat button for applying stretched issues treatment in the hint for
          compatibility control. [CHAR LIMIT=NONE] -->
@@ -186,4 +191,12 @@
     <!-- Button text for dismissing the letterbox education dialog. [CHAR LIMIT=20] -->
     <string name="letterbox_education_got_it">Got it</string>
 
+    <!-- Accessibility description of the letterbox education toast expand to dialog button. [CHAR LIMIT=NONE] -->
+    <string name="letterbox_education_expand_button_description">Expand for more information.</string>
+
+    <!-- Freeform window caption strings -->
+    <!-- Accessibility text for the maximize window button [CHAR LIMIT=NONE] -->
+    <string name="maximize_button_text">Maximize</string>
+    <!-- Accessibility text for the close window button [CHAR LIMIT=NONE] -->
+    <string name="close_button_text">Close</string>
 </resources>

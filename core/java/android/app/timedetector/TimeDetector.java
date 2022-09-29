@@ -24,7 +24,12 @@ import android.os.SystemClock;
 import android.os.TimestampedValue;
 
 /**
- * The interface through which system components can send signals to the TimeDetectorService.
+ * The interface through which system components can query and send signals to the
+ * TimeDetectorService.
+ *
+ * <p>SDK APIs are exposed on {@link android.app.time.TimeManager} to obscure the internal split
+ * between time and time zone detection services. Migrate APIs there if they need to be part of an
+ * SDK API.
  *
  * @hide
  */
@@ -42,6 +47,42 @@ public interface TimeDetector {
      * @hide
      */
     String SHELL_COMMAND_IS_AUTO_DETECTION_ENABLED = "is_auto_detection_enabled";
+
+    /**
+     * A shell command that sets the current "auto time detection" global setting value.
+     * @hide
+     */
+    String SHELL_COMMAND_SET_AUTO_DETECTION_ENABLED = "set_auto_detection_enabled";
+
+    /**
+     * A shell command that injects a manual time suggestion.
+     * @hide
+     */
+    String SHELL_COMMAND_SUGGEST_MANUAL_TIME = "suggest_manual_time";
+
+    /**
+     * A shell command that injects a telephony time suggestion.
+     * @hide
+     */
+    String SHELL_COMMAND_SUGGEST_TELEPHONY_TIME = "suggest_telephony_time";
+
+    /**
+     * A shell command that injects a network time suggestion.
+     * @hide
+     */
+    String SHELL_COMMAND_SUGGEST_NETWORK_TIME = "suggest_network_time";
+
+    /**
+     * A shell command that injects a GNSS time suggestion.
+     * @hide
+     */
+    String SHELL_COMMAND_SUGGEST_GNSS_TIME = "suggest_gnss_time";
+
+    /**
+     * A shell command that injects a external time suggestion.
+     * @hide
+     */
+    String SHELL_COMMAND_SUGGEST_EXTERNAL_TIME = "suggest_external_time";
 
     /**
      * A shared utility method to create a {@link ManualTimeSuggestion}.
@@ -75,20 +116,4 @@ public interface TimeDetector {
      */
     @RequiresPermission(android.Manifest.permission.SUGGEST_MANUAL_TIME_AND_ZONE)
     boolean suggestManualTime(@NonNull ManualTimeSuggestion timeSuggestion);
-
-    /**
-     * Suggests the time according to a network time source like NTP.
-     *
-     * @hide
-     */
-    @RequiresPermission(android.Manifest.permission.SET_TIME)
-    void suggestNetworkTime(NetworkTimeSuggestion timeSuggestion);
-
-    /**
-     * Suggests the time according to a gnss time source.
-     *
-     * @hide
-     */
-    @RequiresPermission(android.Manifest.permission.SET_TIME)
-    void suggestGnssTime(GnssTimeSuggestion timeSuggestion);
 }

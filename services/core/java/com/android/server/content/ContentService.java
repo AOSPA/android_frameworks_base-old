@@ -26,6 +26,7 @@ import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
+import android.app.ActivityManager.RestrictionLevel;
 import android.app.ActivityManagerInternal;
 import android.app.AppGlobals;
 import android.app.AppOpsManager;
@@ -51,6 +52,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ProviderInfo;
 import android.database.IContentObserver;
 import android.net.Uri;
+import android.os.AppBackgroundRestrictionsInfo;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
@@ -77,6 +79,7 @@ import com.android.internal.os.BackgroundThread;
 import com.android.internal.os.BinderDeathDispatcher;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.DumpUtils;
+import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
@@ -115,6 +118,13 @@ public final class ContentService extends IContentService.Stub {
     @ChangeId
     @EnabledAfter(targetSdkVersion = android.os.Build.VERSION_CODES.S_V2)
     public static final long ACCOUNT_ACCESS_CHECK_CHANGE_ID = 201794303L;
+
+    /**
+     * Enables checking for authority access for the calling uid on all sync-related APIs.
+     */
+    @ChangeId
+    @EnabledAfter(targetSdkVersion = android.os.Build.VERSION_CODES.TIRAMISU)
+    public static final long AUTHORITY_ACCESS_CHECK_CHANGE_ID = 207133734L;
 
     public static class Lifecycle extends SystemService {
         private ContentService mService;
@@ -605,6 +615,9 @@ public final class ContentService extends IContentService.Stub {
         if (!hasAccountAccess(true, account, callingUid)) {
             return;
         }
+        if (!hasAuthorityAccess(authority, callingUid, userId)) {
+            return;
+        }
 
         validateExtras(callingUid, extras);
         final int syncExemption = getSyncExemptionAndCleanUpExtrasForCaller(callingUid, extras);
@@ -656,6 +669,9 @@ public final class ContentService extends IContentService.Stub {
         final int callingUid = Binder.getCallingUid();
         final int callingPid = Binder.getCallingPid();
         if (!hasAccountAccess(true, request.getAccount(), callingUid)) {
+            return;
+        }
+        if (!hasAuthorityAccess(request.getProvider(), callingUid, userId)) {
             return;
         }
 
@@ -860,7 +876,12 @@ public final class ContentService extends IContentService.Stub {
                 "no permission to read the sync settings for user " + userId);
         mContext.enforceCallingOrSelfPermission(Manifest.permission.READ_SYNC_SETTINGS,
                 "no permission to read the sync settings");
-        if (!hasAccountAccess(true, account, Binder.getCallingUid())) {
+
+        final int callingUid = Binder.getCallingUid();
+        if (!hasAccountAccess(true, account, callingUid)) {
+            return false;
+        }
+        if (!hasAuthorityAccess(providerName, callingUid, userId)) {
             return false;
         }
 
@@ -894,6 +915,9 @@ public final class ContentService extends IContentService.Stub {
         if (!hasAccountAccess(true, account, callingUid)) {
             return;
         }
+        if (!hasAuthorityAccess(providerName, callingUid, userId)) {
+            return;
+        }
 
         final int syncExemptionFlag = getSyncExemptionForCaller(callingUid);
 
@@ -921,7 +945,11 @@ public final class ContentService extends IContentService.Stub {
                 "no permission to write the sync settings");
 
         final int callingUid = Binder.getCallingUid();
+        final int userId = UserHandle.getCallingUserId();
         if (!hasAccountAccess(true, account, callingUid)) {
+            return;
+        }
+        if (!hasAuthorityAccess(authority, callingUid, userId)) {
             return;
         }
 
@@ -930,7 +958,6 @@ public final class ContentService extends IContentService.Stub {
         pollFrequency = clampPeriod(pollFrequency);
         long defaultFlex = SyncStorageEngine.calculateDefaultFlexTime(pollFrequency);
 
-        int userId = UserHandle.getCallingUserId();
         final long identityToken = clearCallingIdentity();
         try {
             SyncStorageEngine.EndPoint info =
@@ -955,13 +982,16 @@ public final class ContentService extends IContentService.Stub {
                 "no permission to write the sync settings");
 
         final int callingUid = Binder.getCallingUid();
+        final int userId = UserHandle.getCallingUserId();
         if (!hasAccountAccess(true, account, callingUid)) {
+            return;
+        }
+        if (!hasAuthorityAccess(authority, callingUid, userId)) {
             return;
         }
 
         validateExtras(callingUid, extras);
 
-        int userId = UserHandle.getCallingUserId();
         final long identityToken = clearCallingIdentity();
         try {
             getSyncManager().removePeriodicSync(
@@ -983,11 +1013,16 @@ public final class ContentService extends IContentService.Stub {
         }
         mContext.enforceCallingOrSelfPermission(Manifest.permission.READ_SYNC_SETTINGS,
                 "no permission to read the sync settings");
-        if (!hasAccountAccess(true, account, Binder.getCallingUid())) {
+
+        final int callingUid = Binder.getCallingUid();
+        final int userId = UserHandle.getCallingUserId();
+        if (!hasAccountAccess(true, account, callingUid)) {
             return new ArrayList<>(); // return a new empty list for consistent behavior
         }
+        if (!hasAuthorityAccess(providerName, callingUid, userId)) {
+            return new ArrayList<>();
+        }
 
-        int userId = UserHandle.getCallingUserId();
         final long identityToken = clearCallingIdentity();
         try {
             return getSyncManager().getPeriodicSyncs(
@@ -1012,8 +1047,13 @@ public final class ContentService extends IContentService.Stub {
                 "no permission to read the sync settings for user " + userId);
         mContext.enforceCallingOrSelfPermission(Manifest.permission.READ_SYNC_SETTINGS,
                 "no permission to read the sync settings");
-        if (!hasAccountAccess(true, account, Binder.getCallingUid())) {
+
+        final int callingUid = Binder.getCallingUid();
+        if (!hasAccountAccess(true, account, callingUid)) {
             return SyncStorageEngine.AuthorityInfo.NOT_SYNCABLE; // to keep behavior consistent
+        }
+        if (!hasAuthorityAccess(providerName, callingUid, userId)) {
+            return SyncStorageEngine.AuthorityInfo.NOT_SYNCABLE;
         }
 
         final long identityToken = clearCallingIdentity();
@@ -1047,6 +1087,9 @@ public final class ContentService extends IContentService.Stub {
         final int callingUid = Binder.getCallingUid();
         final int callingPid = Binder.getCallingPid();
         if (!hasAccountAccess(true, account, callingUid)) {
+            return;
+        }
+        if (!hasAuthorityAccess(providerName, callingUid, userId)) {
             return;
         }
 
@@ -1111,11 +1154,16 @@ public final class ContentService extends IContentService.Stub {
     public boolean isSyncActive(Account account, String authority, ComponentName cname) {
         mContext.enforceCallingOrSelfPermission(Manifest.permission.READ_SYNC_STATS,
                 "no permission to read the sync stats");
-        if (!hasAccountAccess(true, account, Binder.getCallingUid())) {
+
+        final int callingUid = Binder.getCallingUid();
+        final int userId = UserHandle.getCallingUserId();
+        if (!hasAccountAccess(true, account, callingUid)) {
+            return false;
+        }
+        if (!hasAuthorityAccess(authority, callingUid, userId)) {
             return false;
         }
 
-        int userId = UserHandle.getCallingUserId();
         final long identityToken = clearCallingIdentity();
         try {
             return getSyncManager().getSyncStorageEngine().isSyncActive(
@@ -1144,13 +1192,17 @@ public final class ContentService extends IContentService.Stub {
         final boolean canAccessAccounts =
             mContext.checkCallingOrSelfPermission(Manifest.permission.GET_ACCOUNTS)
                 == PackageManager.PERMISSION_GRANTED;
+        final List<SyncInfo> results;
+        final int callingUid = Binder.getCallingUid();
         final long identityToken = clearCallingIdentity();
         try {
-            return getSyncManager().getSyncStorageEngine()
+            results = getSyncManager().getSyncStorageEngine()
                     .getCurrentSyncsCopy(userId, canAccessAccounts);
         } finally {
             restoreCallingIdentity(identityToken);
         }
+        results.removeIf(i -> !hasAuthorityAccess(i.authority, callingUid, userId));
+        return results;
     }
 
     @Override
@@ -1174,7 +1226,12 @@ public final class ContentService extends IContentService.Stub {
                 "no permission to read the sync stats for user " + userId);
         mContext.enforceCallingOrSelfPermission(Manifest.permission.READ_SYNC_STATS,
                 "no permission to read the sync stats");
-        if (!hasAccountAccess(true, account, Binder.getCallingUid())) {
+
+        final int callingUid = Binder.getCallingUid();
+        if (!hasAccountAccess(true, account, callingUid)) {
+            return null;
+        }
+        if (!hasAuthorityAccess(authority, callingUid, userId)) {
             return null;
         }
 
@@ -1204,7 +1261,12 @@ public final class ContentService extends IContentService.Stub {
                 "no permission to read the sync stats");
         enforceCrossUserPermission(userId,
                 "no permission to retrieve the sync settings for user " + userId);
-        if (!hasAccountAccess(true, account, Binder.getCallingUid())) {
+
+        final int callingUid = Binder.getCallingUid();
+        if (!hasAccountAccess(true, account, callingUid)) {
+            return false;
+        }
+        if (!hasAuthorityAccess(authority, callingUid, userId)) {
             return false;
         }
 
@@ -1438,6 +1500,30 @@ public final class ContentService extends IContentService.Stub {
         }
     }
 
+    /**
+     * Checks to see if the given authority is accessible by the caller.
+     *
+     * @param authority the authority to be accessed
+     * @param uid the uid trying to access the authority
+     * @param userId the user id for which to access the authority
+     * @return {@code true} if the authority is accessible by the caller, {@code false} otherwise
+     */
+    private boolean hasAuthorityAccess(@Nullable String authority, int uid, @UserIdInt int userId) {
+        if (TextUtils.isEmpty(authority)) {
+            return true;
+        }
+        if (!CompatChanges.isChangeEnabled(AUTHORITY_ACCESS_CHECK_CHANGE_ID, uid)) {
+            return true;
+        }
+        // Since #getSyncAdapterPackagesForAuthorityAsUser would filter out the packages
+        // that aren't visible to the callers, using this to check if the given authority
+        // is accessible by the callers.
+        final String[] syncAdapterPackages =
+                getSyncAdapterPackagesForAuthorityAsUser(authority, userId);
+        return !ArrayUtils.isEmpty(syncAdapterPackages);
+    }
+
+
     private static int normalizeSyncable(int syncable) {
         if (syncable > 0) {
             return SyncStorageEngine.AuthorityInfo.SYNCABLE;
@@ -1493,9 +1579,82 @@ public final class ContentService extends IContentService.Stub {
             return ContentResolver.SYNC_EXEMPTION_PROMOTE_BUCKET_WITH_TEMP;
         }
         if (procState <= ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND || isUidActive) {
+            FrameworkStatsLog.write(FrameworkStatsLog.SYNC_EXEMPTION_OCCURRED,
+                    callingUid, getProcStateForStatsd(procState), isUidActive,
+                    getRestrictionLevelForStatsd(ami.getRestrictionLevel(callingUid)));
             return ContentResolver.SYNC_EXEMPTION_PROMOTE_BUCKET;
         }
         return ContentResolver.SYNC_EXEMPTION_NONE;
+    }
+
+    private int getProcStateForStatsd(int procState) {
+        switch (procState) {
+            case ActivityManager.PROCESS_STATE_UNKNOWN:
+                return FrameworkStatsLog.SYNC_EXEMPTION_OCCURRED__PROC_STATE__UNKNOWN;
+            case ActivityManager.PROCESS_STATE_PERSISTENT:
+                return FrameworkStatsLog.SYNC_EXEMPTION_OCCURRED__PROC_STATE__PERSISTENT;
+            case ActivityManager.PROCESS_STATE_PERSISTENT_UI:
+                return FrameworkStatsLog.SYNC_EXEMPTION_OCCURRED__PROC_STATE__PERSISTENT_UI;
+            case ActivityManager.PROCESS_STATE_TOP:
+                return FrameworkStatsLog.SYNC_EXEMPTION_OCCURRED__PROC_STATE__TOP;
+            case ActivityManager.PROCESS_STATE_BOUND_TOP:
+                return FrameworkStatsLog.SYNC_EXEMPTION_OCCURRED__PROC_STATE__BOUND_TOP;
+            case ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE:
+                return FrameworkStatsLog.SYNC_EXEMPTION_OCCURRED__PROC_STATE__FOREGROUND_SERVICE;
+            case ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE:
+                return FrameworkStatsLog
+                        .SYNC_EXEMPTION_OCCURRED__PROC_STATE__BOUND_FOREGROUND_SERVICE;
+            case ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND:
+                return FrameworkStatsLog.SYNC_EXEMPTION_OCCURRED__PROC_STATE__IMPORTANT_FOREGROUND;
+            case ActivityManager.PROCESS_STATE_IMPORTANT_BACKGROUND:
+                return FrameworkStatsLog.SYNC_EXEMPTION_OCCURRED__PROC_STATE__IMPORTANT_BACKGROUND;
+            case ActivityManager.PROCESS_STATE_TRANSIENT_BACKGROUND:
+                return FrameworkStatsLog.SYNC_EXEMPTION_OCCURRED__PROC_STATE__TRANSIENT_BACKGROUND;
+            case ActivityManager.PROCESS_STATE_BACKUP:
+                return FrameworkStatsLog.SYNC_EXEMPTION_OCCURRED__PROC_STATE__BACKUP;
+            case ActivityManager.PROCESS_STATE_SERVICE:
+                return FrameworkStatsLog.SYNC_EXEMPTION_OCCURRED__PROC_STATE__SERVICE;
+            case ActivityManager.PROCESS_STATE_RECEIVER:
+                return FrameworkStatsLog.SYNC_EXEMPTION_OCCURRED__PROC_STATE__RECEIVER;
+            case ActivityManager.PROCESS_STATE_TOP_SLEEPING:
+                return FrameworkStatsLog.SYNC_EXEMPTION_OCCURRED__PROC_STATE__TOP_SLEEPING;
+            case ActivityManager.PROCESS_STATE_HEAVY_WEIGHT:
+                return FrameworkStatsLog.SYNC_EXEMPTION_OCCURRED__PROC_STATE__HEAVY_WEIGHT;
+            case ActivityManager.PROCESS_STATE_LAST_ACTIVITY:
+                return FrameworkStatsLog.SYNC_EXEMPTION_OCCURRED__PROC_STATE__LAST_ACTIVITY;
+            case ActivityManager.PROCESS_STATE_CACHED_ACTIVITY:
+                return FrameworkStatsLog.SYNC_EXEMPTION_OCCURRED__PROC_STATE__CACHED_ACTIVITY;
+            case ActivityManager.PROCESS_STATE_CACHED_ACTIVITY_CLIENT:
+                return FrameworkStatsLog
+                        .SYNC_EXEMPTION_OCCURRED__PROC_STATE__CACHED_ACTIVITY_CLIENT;
+            case ActivityManager.PROCESS_STATE_CACHED_RECENT:
+                return FrameworkStatsLog.SYNC_EXEMPTION_OCCURRED__PROC_STATE__CACHED_RECENT;
+            case ActivityManager.PROCESS_STATE_CACHED_EMPTY:
+                return FrameworkStatsLog.SYNC_EXEMPTION_OCCURRED__PROC_STATE__CACHED_EMPTY;
+            default:
+                return FrameworkStatsLog.SYNC_EXEMPTION_OCCURRED__PROC_STATE__UNKNOWN;
+        }
+    }
+
+    private int getRestrictionLevelForStatsd(@RestrictionLevel int level) {
+        switch (level) {
+            case ActivityManager.RESTRICTION_LEVEL_UNKNOWN:
+                return AppBackgroundRestrictionsInfo.LEVEL_UNKNOWN;
+            case ActivityManager.RESTRICTION_LEVEL_UNRESTRICTED:
+                return AppBackgroundRestrictionsInfo.LEVEL_UNRESTRICTED;
+            case ActivityManager.RESTRICTION_LEVEL_EXEMPTED:
+                return AppBackgroundRestrictionsInfo.LEVEL_EXEMPTED;
+            case ActivityManager.RESTRICTION_LEVEL_ADAPTIVE_BUCKET:
+                return AppBackgroundRestrictionsInfo.LEVEL_ADAPTIVE_BUCKET;
+            case ActivityManager.RESTRICTION_LEVEL_RESTRICTED_BUCKET:
+                return AppBackgroundRestrictionsInfo.LEVEL_RESTRICTED_BUCKET;
+            case ActivityManager.RESTRICTION_LEVEL_BACKGROUND_RESTRICTED:
+                return AppBackgroundRestrictionsInfo.LEVEL_BACKGROUND_RESTRICTED;
+            case ActivityManager.RESTRICTION_LEVEL_HIBERNATION:
+                return AppBackgroundRestrictionsInfo.LEVEL_HIBERNATION;
+            default:
+                return AppBackgroundRestrictionsInfo.LEVEL_UNKNOWN;
+        }
     }
 
     /** {@hide} */

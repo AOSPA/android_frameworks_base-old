@@ -33,6 +33,7 @@ import android.view.InsetsVisibilities;
 
 import com.android.internal.statusbar.IAddTileResultCallback;
 import com.android.internal.statusbar.IUndoMediaTransferCallback;
+import com.android.internal.statusbar.LetterboxDetails;
 import com.android.internal.statusbar.StatusBarIcon;
 import com.android.internal.view.AppearanceRegion;
 
@@ -202,10 +203,12 @@ oneway interface IStatusBar
      * @param behavior the behavior of the focused window.
      * @param requestedVisibilities the collection of the requested visibilities of system insets.
      * @param packageName the package name of the focused app.
+     * @param letterboxDetails a set of letterbox details of apps visible on the screen.
      */
     void onSystemBarAttributesChanged(int displayId, int appearance,
             in AppearanceRegion[] appearanceRegions, boolean navbarColorManagedByIme,
-            int behavior, in InsetsVisibilities requestedVisibilities, String packageName);
+            int behavior, in InsetsVisibilities requestedVisibilities, String packageName,
+            in LetterboxDetails[] letterboxDetails);
 
     /**
      * Notifies System UI to show transient bars. The transient bars are system bars, e.g., status
@@ -242,7 +245,8 @@ oneway interface IStatusBar
      * Displays a text toast.
      */
     void showToast(int uid, String packageName, IBinder token, CharSequence text,
-            IBinder windowToken, int duration, @nullable ITransientNotificationCallback callback);
+            IBinder windowToken, int duration, @nullable ITransientNotificationCallback callback,
+            int displayId);
 
     /**
      * Cancels toast with token {@code token} in {@code packageName}.

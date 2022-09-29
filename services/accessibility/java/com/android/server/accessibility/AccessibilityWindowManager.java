@@ -31,6 +31,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Process;
 import android.os.RemoteException;
+import android.os.SystemClock;
 import android.os.UserHandle;
 import android.text.TextUtils;
 import android.util.ArrayMap;
@@ -42,6 +43,7 @@ import android.view.WindowInfo;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityWindowAttributes;
 import android.view.accessibility.AccessibilityWindowInfo;
 import android.view.accessibility.IAccessibilityInteractionConnection;
 
@@ -117,6 +119,43 @@ public class AccessibilityWindowManager {
      * its leash token.
      */
     private final SparseArray<IBinder> mWindowIdMap = new SparseArray<>();
+
+    /**
+     * Map of window id and window attribute hierarchy.
+     * The key is the window id when the ViewRootImpl register to accessibility, and the value is
+     * its window attribute .
+     */
+    private final SparseArray<AccessibilityWindowAttributes> mWindowAttributes =
+            new SparseArray<>();
+
+    /**
+     * Sets the {@link AccessibilityWindowAttributes} to the window associated with the given
+     * window id.
+     *
+     * @param displayId The display id of the window.
+     * @param windowId The id of the window
+     * @param userId The user id.
+     * @param attributes The accessibility window attributes.
+     */
+    public void setAccessibilityWindowAttributes(int displayId, int windowId, int userId,
+            AccessibilityWindowAttributes attributes) {
+        boolean shouldComputeWindows = false;
+        synchronized (mLock) {
+            final int resolvedUserId =
+                    mSecurityPolicy.resolveCallingUserIdEnforcingPermissionsLocked(userId);
+            if (getWindowTokenForUserAndWindowIdLocked(resolvedUserId, windowId) == null) {
+                return;
+            }
+            final AccessibilityWindowAttributes currentAttrs = mWindowAttributes.get(windowId);
+            if (currentAttrs == null || !currentAttrs.equals(attributes)) {
+                mWindowAttributes.put(windowId, attributes);
+                shouldComputeWindows = findWindowInfoByIdLocked(windowId) != null;
+            }
+        }
+        if (shouldComputeWindows) {
+            mWindowManagerInternal.computeWindowsForAccessibility(displayId);
+        }
+    }
 
     /**
      * This class implements {@link WindowManagerInternal.WindowsForAccessibilityCallback} to
@@ -358,6 +397,7 @@ public class AccessibilityWindowManager {
         public void onWindowsForAccessibilityChanged(boolean forceSend, int topFocusedDisplayId,
                 IBinder topFocusedWindowToken, @NonNull List<WindowInfo> windows) {
             synchronized (mLock) {
+                updateWindowsByWindowAttributesLocked(windows);
                 if (DEBUG) {
                     Slog.i(LOG_TAG, "Display Id = " + mDisplayId);
                     Slog.i(LOG_TAG, "Windows changed: " + windows);
@@ -373,6 +413,24 @@ public class AccessibilityWindowManager {
                     mLock.notifyAll();
                 }
             }
+        }
+
+        private void updateWindowsByWindowAttributesLocked(List<WindowInfo> windows) {
+            for (int i = windows.size() - 1; i >= 0; i--) {
+                final WindowInfo windowInfo = windows.get(i);
+                final IBinder token = windowInfo.token;
+                final int windowId = findWindowIdLocked(
+                        mAccessibilityUserManager.getCurrentUserIdLocked(), token);
+                updateWindowWithWindowAttributes(windowInfo, mWindowAttributes.get(windowId));
+            }
+        }
+
+        private void updateWindowWithWindowAttributes(@NonNull WindowInfo windowInfo,
+                @Nullable AccessibilityWindowAttributes attributes) {
+            if (attributes == null) {
+                return;
+            }
+            windowInfo.title = attributes.getWindowTitle();
         }
 
         private boolean shouldUpdateWindowsLocked(boolean forceSend,
@@ -564,7 +622,7 @@ public class AccessibilityWindowManager {
                     final WindowInfo windowInfo = windows.get(i);
                     final AccessibilityWindowInfo window;
                     if (mTrackingWindows) {
-                        window = populateReportedWindowLocked(userId, windowInfo);
+                        window = populateReportedWindowLocked(userId, windowInfo, oldWindowsById);
                         if (window == null) {
                             hasWindowIgnore = true;
                         }
@@ -677,7 +735,7 @@ public class AccessibilityWindowManager {
         }
 
         private AccessibilityWindowInfo populateReportedWindowLocked(int userId,
-                WindowInfo window) {
+                WindowInfo window, SparseArray<AccessibilityWindowInfo> oldWindowsById) {
             final int windowId = findWindowIdLocked(userId, window.token);
             if (windowId < 0) {
                 return null;
@@ -716,6 +774,18 @@ public class AccessibilityWindowManager {
                 }
             }
 
+            final AccessibilityWindowInfo oldWindowInfo = oldWindowsById.get(windowId);
+            if (oldWindowInfo == null) {
+                reportedWindow.setTransitionTimeMillis(SystemClock.uptimeMillis());
+            } else {
+                final Region oldTouchRegion = new Region();
+                oldWindowInfo.getRegionInScreen(oldTouchRegion);
+                if (oldTouchRegion.equals(window.regionInScreen)) {
+                    reportedWindow.setTransitionTimeMillis(oldWindowInfo.getTransitionTimeMillis());
+                } else {
+                    reportedWindow.setTransitionTimeMillis(SystemClock.uptimeMillis());
+                }
+            }
             return reportedWindow;
         }
 
@@ -1210,6 +1280,7 @@ public class AccessibilityWindowManager {
                     binder, AccessibilityWindowInfo.UNDEFINED_WINDOW_ID);
         }
         unregisterIdLocked(windowId);
+        mWindowAttributes.remove(windowId);
     }
 
     /**
@@ -1859,5 +1930,10 @@ public class AccessibilityWindowManager {
                 observer.dumpLocked(fd, pw, args);
             }
         }
+        pw.println();
+        pw.append("Window attributes:[");
+        pw.append(mWindowAttributes.toString());
+        pw.append("]");
+        pw.println();
     }
 }

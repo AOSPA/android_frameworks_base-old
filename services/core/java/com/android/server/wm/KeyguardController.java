@@ -41,6 +41,7 @@ import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_ATM;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.ActivityTaskSupervisor.PRESERVE_WINDOWS;
 import static com.android.server.wm.KeyguardControllerProto.AOD_SHOWING;
+import static com.android.server.wm.KeyguardControllerProto.KEYGUARD_GOING_AWAY;
 import static com.android.server.wm.KeyguardControllerProto.KEYGUARD_PER_DISPLAY;
 import static com.android.server.wm.KeyguardControllerProto.KEYGUARD_SHOWING;
 
@@ -169,11 +170,12 @@ class KeyguardController {
 
         final KeyguardDisplayState state = getDisplayState(displayId);
         final boolean aodChanged = aodShowing != state.mAodShowing;
+        final boolean aodRemoved = state.mAodShowing && !aodShowing;
         // If keyguard is going away, but SystemUI aborted the transition, need to reset state.
-        // Do not reset keyguardChanged status if this is aodChanged.
+        // Do not reset keyguardChanged status when only AOD is removed.
         final boolean keyguardChanged = (keyguardShowing != state.mKeyguardShowing)
-                || (state.mKeyguardGoingAway && keyguardShowing && !aodChanged);
-        if (aodChanged && !aodShowing) {
+                || (state.mKeyguardGoingAway && keyguardShowing && !aodRemoved);
+        if (aodRemoved) {
             updateDeferWakeTransition(false /* waiting */);
         }
         if (!keyguardChanged && !aodChanged) {
@@ -621,13 +623,12 @@ class KeyguardController {
                     mTopTurnScreenOnActivity = top;
                 }
 
-                final boolean isKeyguardSecure = controller.mWindowManager.isKeyguardSecure(
-                        controller.mService.getCurrentUserId());
-                if (top.mDismissKeyguardIfInsecure && mKeyguardShowing && !isKeyguardSecure) {
+                if (top.mDismissKeyguard && mKeyguardShowing) {
                     mKeyguardGoingAway = true;
                 } else if (top.canShowWhenLocked()) {
                     mTopOccludesActivity = top;
                 }
+                top.mDismissKeyguard = false;
 
                 // Only the top activity may control occluded, as we can't occlude the Keyguard
                 // if the top app doesn't want to occlude it.
@@ -705,6 +706,7 @@ class KeyguardController {
             proto.write(KeyguardPerDisplayProto.KEYGUARD_SHOWING, mKeyguardShowing);
             proto.write(KeyguardPerDisplayProto.AOD_SHOWING, mAodShowing);
             proto.write(KeyguardPerDisplayProto.KEYGUARD_OCCLUDED, mOccluded);
+            proto.write(KeyguardPerDisplayProto.KEYGUARD_GOING_AWAY, mKeyguardGoingAway);
             proto.end(token);
         }
     }
@@ -725,6 +727,7 @@ class KeyguardController {
         final long token = proto.start(fieldId);
         proto.write(AOD_SHOWING, default_state.mAodShowing);
         proto.write(KEYGUARD_SHOWING, default_state.mKeyguardShowing);
+        proto.write(KEYGUARD_GOING_AWAY, default_state.mKeyguardGoingAway);
         writeDisplayStatesToProto(proto, KEYGUARD_PER_DISPLAY);
         proto.end(token);
     }

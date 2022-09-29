@@ -16,7 +16,7 @@
 
 package com.android.server.wm.flicker.launch
 
-import androidx.test.filters.FlakyTest
+import android.platform.test.annotations.FlakyTest
 import android.platform.test.annotations.Presubmit
 import android.platform.test.annotations.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
@@ -54,11 +54,10 @@ import org.junit.runners.Parameterized
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @Group1
-open class OpenAppColdTest(testSpec: FlickerTestParameter)
-    : OpenAppFromLauncherTransition(testSpec) {
-    /**
-     * Defines the transition used to run the test
-     */
+open class OpenAppColdTest(
+    testSpec: FlickerTestParameter
+) : OpenAppFromLauncherTransition(testSpec) {
+    /** {@inheritDoc} */
     override val transition: FlickerBuilder.() -> Unit
         get() = {
             super.transition(this)
@@ -75,47 +74,19 @@ open class OpenAppColdTest(testSpec: FlickerTestParameter)
             }
             transitions {
                 testApp.launchViaIntent(wmHelper)
-                wmHelper.waitForFullScreenApp(testApp.component)
             }
         }
 
     /** {@inheritDoc} */
     @FlakyTest(bugId = 206753786)
     @Test
-    override fun statusBarLayerRotatesScales() = super.statusBarLayerRotatesScales()
-
-    /** {@inheritDoc} */
-    @FlakyTest
-    @Test
-    override fun navBarLayerRotatesAndScales() {
-        super.navBarLayerRotatesAndScales()
-    }
+    override fun navBarLayerPositionAtStartAndEnd() =
+        super.navBarLayerPositionAtStartAndEnd()
 
     /** {@inheritDoc} */
     @Presubmit
     @Test
     override fun appLayerReplacesLauncher() = super.appLayerReplacesLauncher()
-
-    /** {@inheritDoc} */
-    @Presubmit
-    @Test
-    override fun appWindowReplacesLauncherAsTopWindow() =
-        super.appWindowReplacesLauncherAsTopWindow()
-
-    /** {@inheritDoc} */
-    @Presubmit
-    @Test
-    override fun navBarLayerIsVisible() = super.navBarLayerIsVisible()
-
-    /** {@inheritDoc} */
-    @Presubmit
-    @Test
-    override fun navBarWindowIsVisible() = super.navBarWindowIsVisible()
-
-    /** {@inheritDoc} */
-    @Presubmit
-    @Test
-    override fun entireScreenCovered() = super.entireScreenCovered()
 
     companion object {
         /**

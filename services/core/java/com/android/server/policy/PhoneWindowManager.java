@@ -27,7 +27,6 @@ import static android.content.pm.PackageManager.FEATURE_LEANBACK;
 import static android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE;
 import static android.content.pm.PackageManager.FEATURE_WATCH;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
-import static android.os.BatteryManager.BATTERY_PLUGGED_WIRELESS;
 import static android.os.Build.VERSION_CODES.M;
 import static android.os.Build.VERSION_CODES.O;
 import static android.provider.Settings.Secure.VOLUME_HUSH_OFF;
@@ -69,8 +68,6 @@ import static android.view.WindowManagerGlobal.ADD_OKAY;
 import static android.view.WindowManagerGlobal.ADD_PERMISSION_DENIED;
 
 import static com.android.internal.config.sysui.SystemUiDeviceConfigFlags.SCREENSHOT_KEYCHORD_DELAY;
-import static com.android.server.policy.SingleKeyGestureDetector.KEY_LONGPRESS;
-import static com.android.server.policy.SingleKeyGestureDetector.KEY_VERYLONGPRESS;
 import static com.android.server.policy.WindowManagerPolicy.WindowManagerFuncs.CAMERA_LENS_COVERED;
 import static com.android.server.policy.WindowManagerPolicy.WindowManagerFuncs.CAMERA_LENS_COVER_ABSENT;
 import static com.android.server.policy.WindowManagerPolicy.WindowManagerFuncs.CAMERA_LENS_UNCOVERED;
@@ -130,7 +127,6 @@ import android.media.AudioManagerInternal;
 import android.media.AudioSystem;
 import android.media.IAudioService;
 import android.media.session.MediaSessionLegacyHelper;
-import android.os.BatteryManagerInternal;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.DeviceIdleManager;
@@ -394,7 +390,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     PowerManagerInternal mPowerManagerInternal;
     IStatusBarService mStatusBarService;
     StatusBarManagerInternal mStatusBarManagerInternal;
-    BatteryManagerInternal mBatteryManagerInternal;
     AudioManagerInternal mAudioManagerInternal;
     DisplayManager mDisplayManager;
     DisplayManagerInternal mDisplayManagerInternal;
@@ -805,8 +800,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         @Override
         public void onWakeUp() {
             synchronized (mLock) {
-                if (shouldEnableWakeGestureLp()
-                        && getBatteryManagerInternal().getPlugType() != BATTERY_PLUGGED_WIRELESS) {
+                if (shouldEnableWakeGestureLp()) {
                     performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY, false,
                             "Wake Up");
                     wakeUp(SystemClock.uptimeMillis(), mAllowTheaterModeWakeFromWakeGesture,
@@ -863,15 +857,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
     }
 
-    BatteryManagerInternal getBatteryManagerInternal() {
-        synchronized (mServiceAcquireLock) {
-            if (mBatteryManagerInternal == null) {
-                mBatteryManagerInternal =
-                        LocalServices.getService(BatteryManagerInternal.class);
-            }
-            return mBatteryManagerInternal;
-        }
-    }
 
     // returns true if the key was handled and should not be passed to the user
     private boolean backKeyPress() {
@@ -978,6 +963,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     private void powerPress(long eventTime, int count, boolean beganFromNonInteractive) {
+        // SideFPS still needs to know about suppressed power buttons, in case it needs to block
+        // an auth attempt.
+        if (count == 1) {
+            mSideFpsEventHandler.notifyPowerPressed();
+        }
         if (mDefaultDisplayPolicy.isScreenOnEarly() && !mDefaultDisplayPolicy.isScreenOnFully()) {
             Slog.i(TAG, "Suppressed redundant power key press while "
                     + "already in the process of turning the screen on.");
@@ -997,7 +987,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         } else if (count > 3 && count <= getMaxMultiPressPowerCount()) {
             Slog.d(TAG, "No behavior defined for power press count " + count);
         } else if (count == 1 && interactive && !beganFromNonInteractive) {
-            if (mSideFpsEventHandler.onSinglePressDetected(eventTime)) {
+            if (mSideFpsEventHandler.shouldConsumeSinglePress(eventTime)) {
                 Slog.i(TAG, "Suppressing power key because the user is interacting with the "
                         + "fingerprint sensor");
                 return;
@@ -2275,9 +2265,20 @@ public class PhoneWindowManager implements WindowManagerPolicy {
      * Rule for single power key gesture.
      */
     private final class PowerKeyRule extends SingleKeyGestureDetector.SingleKeyRule {
-        PowerKeyRule(int gestures) {
-            super(KEYCODE_POWER, gestures);
+        PowerKeyRule() {
+            super(KEYCODE_POWER);
         }
+
+        @Override
+        boolean supportLongPress() {
+            return hasLongPressOnPowerBehavior();
+        }
+
+        @Override
+        boolean supportVeryLongPress() {
+            return hasVeryLongPressOnPowerBehavior();
+        }
+
 
         @Override
         int getMaxMultiPressCount() {
@@ -2326,8 +2327,13 @@ public class PhoneWindowManager implements WindowManagerPolicy {
      * Rule for single back key gesture.
      */
     private final class BackKeyRule extends SingleKeyGestureDetector.SingleKeyRule {
-        BackKeyRule(int gestures) {
-            super(KEYCODE_BACK, gestures);
+        BackKeyRule() {
+            super(KEYCODE_BACK);
+        }
+
+        @Override
+        boolean supportLongPress() {
+            return hasLongPressOnBackBehavior();
         }
 
         @Override
@@ -2350,8 +2356,13 @@ public class PhoneWindowManager implements WindowManagerPolicy {
      * Rule for single stem primary key gesture.
      */
     private final class StemPrimaryKeyRule extends SingleKeyGestureDetector.SingleKeyRule {
-        StemPrimaryKeyRule(int gestures) {
-            super(KeyEvent.KEYCODE_STEM_PRIMARY, gestures);
+        StemPrimaryKeyRule() {
+            super(KeyEvent.KEYCODE_STEM_PRIMARY);
+        }
+
+        @Override
+        boolean supportLongPress() {
+            return hasLongPressOnStemPrimaryBehavior();
         }
 
         @Override
@@ -2377,25 +2388,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     private void initSingleKeyGestureRules() {
         mSingleKeyGestureDetector = SingleKeyGestureDetector.get(mContext);
-
-        int powerKeyGestures = 0;
-        if (hasVeryLongPressOnPowerBehavior()) {
-            powerKeyGestures |= KEY_VERYLONGPRESS;
-        }
-        if (hasLongPressOnPowerBehavior()) {
-            powerKeyGestures |= KEY_LONGPRESS;
-        }
-        mSingleKeyGestureDetector.addRule(new PowerKeyRule(powerKeyGestures));
-
+        mSingleKeyGestureDetector.addRule(new PowerKeyRule());
         if (hasLongPressOnBackBehavior()) {
-            mSingleKeyGestureDetector.addRule(new BackKeyRule(KEY_LONGPRESS));
+            mSingleKeyGestureDetector.addRule(new BackKeyRule());
         }
         if (hasStemPrimaryBehavior()) {
-            int stemPrimaryKeyGestures = 0;
-            if (hasLongPressOnStemPrimaryBehavior()) {
-                stemPrimaryKeyGestures |= KEY_LONGPRESS;
-            }
-            mSingleKeyGestureDetector.addRule(new StemPrimaryKeyRule(stemPrimaryKeyGestures));
+            mSingleKeyGestureDetector.addRule(new StemPrimaryKeyRule());
         }
     }
 
@@ -2485,19 +2483,26 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 updateRotation = true;
             }
 
-            mLongPressOnPowerBehavior = Settings.Global.getInt(resolver,
+            final int longPressOnPowerBehavior = Settings.Global.getInt(resolver,
                     Settings.Global.POWER_BUTTON_LONG_PRESS,
                     mContext.getResources().getInteger(
                             com.android.internal.R.integer.config_longPressOnPowerBehavior));
+            final int veryLongPressOnPowerBehavior = Settings.Global.getInt(resolver,
+                    Settings.Global.POWER_BUTTON_VERY_LONG_PRESS,
+                    mContext.getResources().getInteger(
+                            com.android.internal.R.integer.config_veryLongPressOnPowerBehavior));
+            if (mLongPressOnPowerBehavior != longPressOnPowerBehavior
+                    || mVeryLongPressOnPowerBehavior != veryLongPressOnPowerBehavior) {
+                mLongPressOnPowerBehavior = longPressOnPowerBehavior;
+                mVeryLongPressOnPowerBehavior = veryLongPressOnPowerBehavior;
+            }
+
             mLongPressOnPowerAssistantTimeoutMs = Settings.Global.getLong(
                     mContext.getContentResolver(),
                     Settings.Global.POWER_BUTTON_LONG_PRESS_DURATION_MS,
                     mContext.getResources().getInteger(
                             com.android.internal.R.integer.config_longPressOnPowerDurationMs));
-            mVeryLongPressOnPowerBehavior = Settings.Global.getInt(resolver,
-                    Settings.Global.POWER_BUTTON_VERY_LONG_PRESS,
-                    mContext.getResources().getInteger(
-                            com.android.internal.R.integer.config_veryLongPressOnPowerBehavior));
+
             mPowerVolUpBehavior = Settings.Global.getInt(resolver,
                     Settings.Global.KEY_CHORD_POWER_VOLUME_UP,
                     mContext.getResources().getInteger(
@@ -4603,12 +4608,13 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             return false;
         }
 
-        final long sleepDuration = mPowerManagerInternal.getLastWakeup().sleepDuration;
+        final long sleepDurationRealtime =
+                mPowerManagerInternal.getLastWakeup().sleepDurationRealtime;
         if (DEBUG_WAKEUP) {
-            Log.i(TAG, "shouldWakeUpWithHomeIntent: sleepDuration= " + sleepDuration
+            Log.i(TAG, "shouldWakeUpWithHomeIntent: sleepDurationRealtime= " + sleepDurationRealtime
                     + " mWakeUpToLastStateTimeout= " + mWakeUpToLastStateTimeout);
         }
-        return sleepDuration > mWakeUpToLastStateTimeout;
+        return sleepDurationRealtime > mWakeUpToLastStateTimeout;
     }
 
     private void wakeUpFromPowerKey(long eventTime) {

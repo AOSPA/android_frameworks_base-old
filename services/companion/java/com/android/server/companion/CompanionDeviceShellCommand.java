@@ -16,13 +16,9 @@
 
 package com.android.server.companion;
 
-import static java.nio.charset.StandardCharsets.UTF_8;
-
 import android.companion.AssociationInfo;
+import android.os.Binder;
 import android.os.ShellCommand;
-import android.util.Base64;
-
-import com.android.server.companion.securechannel.CompanionSecureCommunicationsManager;
 
 import com.android.server.companion.presence.CompanionDevicePresenceMonitor;
 
@@ -34,16 +30,13 @@ class CompanionDeviceShellCommand extends ShellCommand {
 
     private final CompanionDeviceManagerService mService;
     private final AssociationStore mAssociationStore;
-    private final CompanionSecureCommunicationsManager mSecureCommsManager;
     private final CompanionDevicePresenceMonitor mDevicePresenceMonitor;
 
     CompanionDeviceShellCommand(CompanionDeviceManagerService service,
             AssociationStore associationStore,
-            CompanionSecureCommunicationsManager secureCommsManager,
             CompanionDevicePresenceMonitor devicePresenceMonitor) {
         mService = service;
         mAssociationStore = associationStore;
-        mSecureCommsManager = secureCommsManager;
         mDevicePresenceMonitor = devicePresenceMonitor;
     }
 
@@ -91,31 +84,6 @@ class CompanionDeviceShellCommand extends ShellCommand {
                     mService.loadAssociationsFromDisk();
                     break;
 
-                case "send-secure-message":
-                    associationId = getNextIntArgRequired();
-                    final byte[] message;
-
-                    // The message should be either a UTF-8 String or Base64-encoded data.
-                    final boolean isBase64 = "--base64".equals(getNextOption());
-                    if (isBase64) {
-                        final String base64encodedMessage = getNextArgRequired();
-                        message = Base64.decode(base64encodedMessage, 0);
-                    } else {
-                        // We treat the rest of the command as the message, which should contain at
-                        // least one word (hence getNextArg_Required() below), but there may be
-                        // more.
-                        final StringBuilder sb = new StringBuilder(getNextArgRequired());
-                        // Pick up the rest.
-                        for (String word : peekRemainingArgs()) {
-                            sb.append(" ").append(word);
-                        }
-                        // And now convert to byte[]...
-                        message = sb.toString().getBytes(UTF_8);
-                    }
-
-                    mSecureCommsManager.sendSecureMessage(associationId, message);
-                    break;
-
                 case "simulate-device-appeared":
                     associationId = getNextIntArgRequired();
                     mDevicePresenceMonitor.simulateDeviceAppeared(associationId);
@@ -125,6 +93,16 @@ class CompanionDeviceShellCommand extends ShellCommand {
                     associationId = getNextIntArgRequired();
                     mDevicePresenceMonitor.simulateDeviceDisappeared(associationId);
                     break;
+
+                case "remove-inactive-associations": {
+                    // This command should trigger the same "clean-up" job as performed by the
+                    // InactiveAssociationsRemovalService JobService. However, since the
+                    // InactiveAssociationsRemovalService run as system, we want to run this
+                    // as system (not as shell/root) as well.
+                    Binder.withCleanCallingIdentity(
+                            mService::removeInactiveSelfManagedAssociations);
+                }
+                break;
 
                 default:
                     return handleDefaultCommands(cmd);
@@ -155,8 +133,6 @@ class CompanionDeviceShellCommand extends ShellCommand {
         pw.println("      Create a new Association.");
         pw.println("  disassociate USER_ID PACKAGE MAC_ADDRESS");
         pw.println("      Remove an existing Association.");
-        pw.println("  send-secure-message ASSOCIATION_ID [--base64] MESSAGE");
-        pw.println("      Send a secure message to an associated companion device.");
         pw.println("  clear-association-memory-cache");
         pw.println("      Clear the in-memory association cache and reload all association ");
         pw.println("      information from persistent storage. USE FOR DEBUGGING PURPOSES ONLY.");
@@ -179,6 +155,12 @@ class CompanionDeviceShellCommand extends ShellCommand {
         pw.println("      NOTE: This will only have effect if 'simulate-device-appeared' was");
         pw.println("      invoked for the same device (same ASSOCIATION_ID) no longer than");
         pw.println("      60 seconds ago.");
+        pw.println("      USE FOR DEBUGGING AND/OR TESTING PURPOSES ONLY.");
+
+        pw.println("  remove-inactive-associations");
+        pw.println("      Remove self-managed associations that have not been active ");
+        pw.println("      for a long time (90 days or as configured via ");
+        pw.println("      \"debug.cdm.cdmservice.cleanup_time_window\" system property). ");
         pw.println("      USE FOR DEBUGGING AND/OR TESTING PURPOSES ONLY.");
     }
 }

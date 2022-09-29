@@ -65,6 +65,7 @@ import com.android.systemui.util.Assert
 import com.android.systemui.util.Utils
 import com.android.systemui.util.concurrency.DelayableExecutor
 import com.android.systemui.util.time.SystemClock
+import com.android.systemui.util.traceSection
 import java.io.IOException
 import java.io.PrintWriter
 import java.util.concurrent.Executor
@@ -508,6 +509,11 @@ class MediaDataManager(
      */
     private fun updateState(key: String, state: PlaybackState) {
         mediaEntries.get(key)?.let {
+            val token = it.token
+            if (token == null) {
+                if (DEBUG) Log.d(TAG, "State updated, but token was null")
+                return
+            }
             val actions = createActionsFromState(it.packageName,
                     mediaControllerFactory.create(it.token), UserHandle(it.userId))
             val data = it.copy(
@@ -680,7 +686,8 @@ class MediaDataManager(
                 val enabled = deviceIntent != null && deviceIntent.isActivity
                 val deviceDrawable = Icon.createWithResource(sbn.packageName, deviceIcon)
                         .loadDrawable(sbn.getPackageContext(context))
-                device = MediaDeviceData(enabled, deviceDrawable, deviceName, deviceIntent)
+                device = MediaDeviceData(enabled, deviceDrawable, deviceName, deviceIntent,
+                        showBroadcastButton = false)
             }
         }
 
@@ -1031,7 +1038,11 @@ class MediaDataManager(
         )
     }
 
-    fun onMediaDataLoaded(key: String, oldKey: String?, data: MediaData) {
+    fun onMediaDataLoaded(
+        key: String,
+        oldKey: String?,
+        data: MediaData
+    ) = traceSection("MediaDataManager#onMediaDataLoaded") {
         Assert.isMainThread()
         if (mediaEntries.containsKey(key)) {
             // Otherwise this was removed already
@@ -1085,7 +1096,7 @@ class MediaDataManager(
     fun onNotificationRemoved(key: String) {
         Assert.isMainThread()
         val removed = mediaEntries.remove(key)
-        if (useMediaResumption && removed?.resumeAction != null && removed?.isLocalSession()) {
+        if (useMediaResumption && removed?.resumeAction != null && removed.isLocalSession()) {
             Log.d(TAG, "Not removing $key because resumable")
             // Move to resume key (aka package name) if that key doesn't already exist.
             val resumeAction = getResumeMediaAction(removed.resumeAction!!)

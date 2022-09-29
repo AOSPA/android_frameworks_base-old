@@ -33,7 +33,14 @@ public interface TaskStackChangeListener {
 
     // Main thread callbacks
     default void onTaskStackChanged() { }
-    default void onTaskSnapshotChanged(int taskId, ThumbnailData snapshot) { }
+
+    /**
+     * @return whether the snapshot is consumed and the lifecycle of the snapshot extends beyond
+     *         the lifecycle of this callback.
+     */
+    default boolean onTaskSnapshotChanged(int taskId, ThumbnailData snapshot) {
+        return false;
+    }
     default void onActivityPinned(String packageName, int userId, int taskId, int stackId) { }
     default void onActivityUnpinned() { }
     default void onActivityRestartAttempt(RunningTaskInfo task, boolean homeTaskVisible,
@@ -61,7 +68,7 @@ public interface TaskStackChangeListener {
         onActivityLaunchOnSecondaryDisplayRerouted();
     }
 
-    default void onTaskProfileLocked(int taskId, int userId) { }
+    default void onTaskProfileLocked(RunningTaskInfo taskInfo) { }
     default void onTaskCreated(int taskId, ComponentName componentName) { }
     default void onTaskRemoved(int taskId) { }
     default void onTaskMovedToFront(int taskId) { }

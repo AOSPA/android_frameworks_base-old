@@ -21,11 +21,6 @@
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="byteShort" msgid="202579285008794431">"Б"</string>
-    <string name="kilobyteShort" msgid="2214285521564195803">"КБ"</string>
-    <string name="megabyteShort" msgid="6649361267635823443">"МБ"</string>
-    <string name="gigabyteShort" msgid="7515809460261287991">"ГБ"</string>
-    <string name="terabyteShort" msgid="1822367128583886496">"ТБ"</string>
-    <string name="petabyteShort" msgid="5651571254228534832">"Пб"</string>
     <string name="fileSizeSuffix" msgid="4233671691980131257">"<xliff:g id="NUMBER">%1$s</xliff:g> <xliff:g id="UNIT">%2$s</xliff:g>"</string>
     <string name="untitled" msgid="3381766946944136678">"&lt;Без назви&gt;"</string>
     <string name="emptyPhoneNumber" msgid="5812172618020360048">"(Немає номера тел.)"</string>
@@ -307,8 +302,8 @@
     <string name="permgroupdesc_calendar" msgid="6762751063361489379">"отримувати доступ до календаря"</string>
     <string name="permgrouplab_sms" msgid="795737735126084874">"SMS"</string>
     <string name="permgroupdesc_sms" msgid="5726462398070064542">"надсилати та переглядати SMS-повідомлення"</string>
-    <string name="permgrouplab_storage" msgid="5570124978732352858">"Файли й документи"</string>
-    <string name="permgroupdesc_storage" msgid="8352226729501080525">"отримувати доступ до файлів і документів на вашому пристрої"</string>
+    <string name="permgrouplab_storage" msgid="17339216290379241">"Файли"</string>
+    <string name="permgroupdesc_storage" msgid="5378659041354582769">"отримувати доступ до файлів на пристрої"</string>
     <string name="permgrouplab_readMediaAural" msgid="1858331312624942053">"Музика й аудіо"</string>
     <string name="permgroupdesc_readMediaAural" msgid="7565467343667089595">"отримувати доступ до музики й аудіо на пристрої"</string>
     <string name="permgrouplab_readMediaVisual" msgid="4724874717811908660">"Фото й відео"</string>
@@ -560,6 +555,8 @@
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"Дозволяє додатку визначати рівень складності способу блокування екрана (високий, середній, низький або нульовий). Враховуються кількість символів і тип блокування. Додаток також може пропонувати вибрати складніший тип блокування екрана, але це не обов’язково робити. Примітка: оскільки пароль зашифровано, додаток його не знає."</string>
     <string name="permlab_postNotification" msgid="4875401198597803658">"показувати сповіщення"</string>
     <string name="permdesc_postNotification" msgid="5974977162462877075">"Дозволяє додатку показувати сповіщення"</string>
+    <string name="permlab_turnScreenOn" msgid="219344053664171492">"вмикати екран"</string>
+    <string name="permdesc_turnScreenOn" msgid="4394606875897601559">"Дозволяє додатку вмикати екран."</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"використовувати біометричне апаратне забезпечення"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"Додаток може використовувати біометричне апаратне забезпечення для автентифікації"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"керувати сканером відбитків пальців"</string>
@@ -1688,7 +1685,7 @@
     <string name="accessibility_enable_service_title" msgid="3931558336268541484">"Надати сервісу <xliff:g id="SERVICE">%1$s</xliff:g> повний доступ до вашого пристрою?"</string>
     <string name="accessibility_service_warning_description" msgid="291674995220940133">"Повний доступ доречний для додатків, які надають спеціальні можливості, але його не варто відкривати для більшості інших додатків."</string>
     <string name="accessibility_service_screen_control_title" msgid="190017412626919776">"Перегляд і контроль екрана"</string>
-    <string name="accessibility_service_screen_control_description" msgid="6946315917771791525">"Цей сервіс може переглядати всі дані на екрані й показувати вміст над іншими додатками."</string>
+    <string name="accessibility_service_screen_control_description" msgid="6946315917771791525">"Цей сервіс може переглядати всі дані на екрані й показувати контент поверх інших додатків."</string>
     <string name="accessibility_service_action_perform_title" msgid="779670378951658160">"Перегляд і виконання дій"</string>
     <string name="accessibility_service_action_perform_description" msgid="2718852014003170558">"Цей сервіс може відстежувати вашу взаємодію з додатком чи апаратним датчиком, а також взаємодіяти з додатками від вашого імені."</string>
     <string name="accessibility_dialog_button_allow" msgid="2092558122987144530">"Дозволити"</string>
@@ -1926,6 +1923,8 @@
     <string name="country_selection_title" msgid="5221495687299014379">"Вибір регіону"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Введіть назву мови"</string>
     <string name="language_picker_section_suggested" msgid="6556199184638990447">"Рекомендовані"</string>
+    <string name="language_picker_section_suggested_bilingual" msgid="5932198319583556613">"Пропоновані мови"</string>
+    <string name="region_picker_section_suggested_bilingual" msgid="704607569328224133">"Пропоновані регіони"</string>
     <string name="language_picker_section_all" msgid="1985809075777564284">"Усі мови"</string>
     <string name="region_picker_section_all" msgid="756441309928774155">"Усі регіони"</string>
     <string name="locale_search_menu" msgid="6258090710176422934">"Пошук"</string>
@@ -2080,8 +2079,8 @@
     <string name="nas_upgrade_notification_learn_more_action" msgid="7011130656195423947">"Докладніше"</string>
     <string name="nas_upgrade_notification_learn_more_content" msgid="3735480566983530650">"В Android 12 адаптивні сповіщення замінено на покращені. Ця функція допомагає впорядковувати сповіщення й показує в них пропоновані дії та відповіді.\n\nПокращені сповіщення надають доступ до вмісту сповіщень, зокрема до такої особистої інформації, як повідомлення й імена контактів. Ця функція може автоматично закривати сповіщення чи реагувати на них, наприклад відповідати на телефонні дзвінки або керувати режимом \"Не турбувати\"."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Сповіщення про послідовнсть дій"</string>
-    <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Акумулятор може розрядитися раніше ніж зазвичай"</string>
-    <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Режим енергозбереження активовано для збільшення часу роботи акумулятора"</string>
+    <string name="dynamic_mode_notification_title" msgid="1388718452788985481">"Режим енергозбереження ввімкнено"</string>
+    <string name="dynamic_mode_notification_summary" msgid="1639031262484979689">"Заряд використовується економно, щоб подовжити час роботи акумулятора"</string>
     <string name="battery_saver_notification_channel_name" msgid="3918243458067916913">"Режим енергозбереження"</string>
     <string name="battery_saver_off_notification_title" msgid="7637255960468032515">"Режим енергозбереження вимкнено."</string>
     <string name="battery_saver_charged_notification_summary" product="default" msgid="5544457317418624367">"Телефон має достатньо заряду акумулятора. Функції вже не обмежено."</string>
@@ -2288,5 +2287,7 @@
     <string name="notification_action_check_bg_apps" msgid="4758877443365362532">"Перевірте активні додатки"</string>
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"Не вдається отримати доступ до камери телефона з пристрою <xliff:g id="DEVICE">%1$s</xliff:g>"</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"Не вдається отримати доступ до камери планшета з пристрою <xliff:g id="DEVICE">%1$s</xliff:g>"</string>
-    <string name="system_locale_title" msgid="3978041860457277638">"Мова системи"</string>
+    <string name="system_locale_title" msgid="711882686834677268">"Налаштування системи за умовчанням"</string>
+    <!-- no translation found for default_card_name (9198284935962911468) -->
+    <skip />
 </resources>

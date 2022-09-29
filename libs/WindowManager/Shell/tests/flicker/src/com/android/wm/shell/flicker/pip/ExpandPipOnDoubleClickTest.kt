@@ -16,16 +16,16 @@
 
 package com.android.wm.shell.flicker.pip
 
-import androidx.test.filters.FlakyTest
+import android.platform.test.annotations.FlakyTest
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
-import com.android.server.wm.flicker.LAUNCHER_COMPONENT
 import com.android.server.wm.flicker.annotation.Group3
 import com.android.server.wm.flicker.dsl.FlickerBuilder
+import com.android.server.wm.traces.common.ComponentMatcher
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -69,7 +69,7 @@ class ExpandPipOnDoubleClickTest(testSpec: FlickerTestParameter) : PipTransition
     @Presubmit
     @Test
     fun pipWindowRemainInsideVisibleBounds() {
-        testSpec.assertWmVisibleRegion(pipApp.component) {
+        testSpec.assertWmVisibleRegion(pipApp) {
             coversAtMost(displayBounds)
         }
     }
@@ -81,7 +81,7 @@ class ExpandPipOnDoubleClickTest(testSpec: FlickerTestParameter) : PipTransition
     @Presubmit
     @Test
     fun pipLayerRemainInsideVisibleBounds() {
-        testSpec.assertLayersVisibleRegion(pipApp.component) {
+        testSpec.assertLayersVisibleRegion(pipApp) {
             coversAtMost(displayBounds)
         }
     }
@@ -93,7 +93,7 @@ class ExpandPipOnDoubleClickTest(testSpec: FlickerTestParameter) : PipTransition
     @Test
     fun pipWindowIsAlwaysVisible() {
         testSpec.assertWm {
-            isAppWindowVisible(pipApp.component)
+            isAppWindowVisible(pipApp)
         }
     }
 
@@ -104,7 +104,7 @@ class ExpandPipOnDoubleClickTest(testSpec: FlickerTestParameter) : PipTransition
     @Test
     fun pipLayerIsAlwaysVisible() {
         testSpec.assertLayers {
-            isVisible(pipApp.component)
+            isVisible(pipApp)
         }
     }
 
@@ -114,11 +114,21 @@ class ExpandPipOnDoubleClickTest(testSpec: FlickerTestParameter) : PipTransition
     @FlakyTest(bugId = 228012337)
     @Test
     fun pipLayerExpands() {
-        val layerName = pipApp.component.toLayerName()
         testSpec.assertLayers {
-            val pipLayerList = this.layers { it.name.contains(layerName) && it.isVisible }
+            val pipLayerList = this.layers { pipApp.layerMatchesAnyOf(it) && it.isVisible }
             pipLayerList.zipWithNext { previous, current ->
                 current.visibleRegion.coversAtLeast(previous.visibleRegion.region)
+            }
+        }
+    }
+
+    @Presubmit
+    @Test
+    fun pipSameAspectRatio() {
+        testSpec.assertLayers {
+            val pipLayerList = this.layers { pipApp.layerMatchesAnyOf(it) && it.isVisible }
+            pipLayerList.zipWithNext { previous, current ->
+                current.visibleRegion.isSameAspectRatio(previous.visibleRegion)
             }
         }
     }
@@ -130,18 +140,18 @@ class ExpandPipOnDoubleClickTest(testSpec: FlickerTestParameter) : PipTransition
     @Test
     fun windowIsAlwaysPinned() {
         testSpec.assertWm {
-            this.invoke("hasPipWindow") { it.isPinned(pipApp.component) }
+            this.invoke("hasPipWindow") { it.isPinned(pipApp) }
         }
     }
 
     /**
-     * Checks [pipApp] layer remains visible throughout the animation
+     * Checks [ComponentMatcher.LAUNCHER] layer remains visible throughout the animation
      */
     @Presubmit
     @Test
     fun launcherIsAlwaysVisible() {
         testSpec.assertLayers {
-            isVisible(LAUNCHER_COMPONENT)
+            isVisible(ComponentMatcher.LAUNCHER)
         }
     }
 
@@ -156,10 +166,6 @@ class ExpandPipOnDoubleClickTest(testSpec: FlickerTestParameter) : PipTransition
         }
     }
 
-    @FlakyTest(bugId = 206753786)
-    @Test
-    override fun statusBarLayerRotatesScales() = super.statusBarLayerRotatesScales()
-
     companion object {
         /**
          * Creates the test configurations.
@@ -171,8 +177,10 @@ class ExpandPipOnDoubleClickTest(testSpec: FlickerTestParameter) : PipTransition
         @JvmStatic
         fun getParams(): List<FlickerTestParameter> {
             return FlickerTestParameterFactory.getInstance()
-                    .getConfigNonRotationTests(supportedRotations = listOf(Surface.ROTATION_0),
-                            repetitions = 3)
+                .getConfigNonRotationTests(
+                    supportedRotations = listOf(Surface.ROTATION_0),
+                    repetitions = 3
+                )
         }
     }
 }

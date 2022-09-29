@@ -178,7 +178,6 @@ import android.view.DisplayAdjustments;
 import android.view.SurfaceControl;
 import android.view.ThreadedRenderer;
 import android.view.View;
-import android.view.ViewDebug;
 import android.view.ViewManager;
 import android.view.ViewRootImpl;
 import android.view.ViewTreeObserver;
@@ -209,7 +208,6 @@ import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.FastPrintWriter;
 import com.android.internal.util.Preconditions;
 import com.android.internal.util.function.pooled.PooledLambda;
-import com.android.org.conscrypt.OpenSSLSocketImpl;
 import com.android.org.conscrypt.TrustedCertificateStore;
 import com.android.server.am.MemInfoDumpProto;
 
@@ -275,11 +273,6 @@ public final class ActivityThread extends ClientTransactionHandler
     public static final boolean DEBUG_ORDER = false;
     private static final long MIN_TIME_BETWEEN_GCS = 5*1000;
     /**
-     * If the activity doesn't become idle in time, the timeout will ensure to apply the pending top
-     * process state.
-     */
-    private static final long PENDING_TOP_PROCESS_STATE_TIMEOUT = 1000;
-    /**
      * The delay to release the provider when it has no more references. It reduces the number of
      * transactions for acquiring and releasing provider if the client accesses the provider
      * frequently in a short time.
@@ -298,6 +291,11 @@ public final class ActivityThread extends ClientTransactionHandler
     private static final int VM_PROCESS_STATE_JANK_PERCEPTIBLE = 0;
     /** Use background GC policy and default JIT threshold. */
     private static final int VM_PROCESS_STATE_JANK_IMPERCEPTIBLE = 1;
+
+    /** The delay time for retrying to request DirectActions. */
+    private static final long REQUEST_DIRECT_ACTIONS_RETRY_TIME_MS = 200;
+    /** The max count for retrying to request DirectActions. */
+    private static final int REQUEST_DIRECT_ACTIONS_RETRY_MAX_COUNT = 7;
 
     /**
      * Denotes an invalid sequence number corresponding to a process state change.
@@ -363,8 +361,6 @@ public final class ActivityThread extends ClientTransactionHandler
     private final AtomicInteger mNumLaunchingActivities = new AtomicInteger();
     @GuardedBy("mAppThread")
     private int mLastProcessState = PROCESS_STATE_UNKNOWN;
-    @GuardedBy("mAppThread")
-    private int mPendingProcessState = PROCESS_STATE_UNKNOWN;
     ArrayList<WeakReference<AssistStructure>> mLastAssistStructures = new ArrayList<>();
     private int mLastSessionId;
     final ArrayMap<IBinder, CreateServiceData> mServicesData = new ArrayMap<>();
@@ -874,6 +870,7 @@ public final class ActivityThread extends ClientTransactionHandler
         String processName;
         @UnsupportedAppUsage
         ApplicationInfo appInfo;
+        String sdkSandboxClientAppVolumeUuid;
         String sdkSandboxClientAppPackage;
         @UnsupportedAppUsage
         List<ProviderInfo> providers;
@@ -1030,7 +1027,10 @@ public final class ActivityThread extends ClientTransactionHandler
     }
 
     private class ApplicationThread extends IApplicationThread.Stub {
-        private static final String DB_INFO_FORMAT = "  %8s %8s %14s %14s  %s";
+        private static final String DB_CONNECTION_INFO_HEADER = "  %8s %8s %14s %5s %5s %5s  %s";
+        private static final String DB_CONNECTION_INFO_FORMAT = "  %8s %8s %14s %5d %5d %5d  %s";
+        private static final String DB_POOL_INFO_HEADER = "  %13s %13s %13s  %s";
+        private static final String DB_POOL_INFO_FORMAT = "  %13d %13d %13d  %s";
 
         public final void scheduleReceiver(Intent intent, ActivityInfo info,
                 CompatibilityInfo compatInfo, int resultCode, String data, Bundle extras,
@@ -1120,9 +1120,10 @@ public final class ActivityThread extends ClientTransactionHandler
 
         @Override
         public final void bindApplication(String processName, ApplicationInfo appInfo,
-                String sdkSandboxClientAppPackage, ProviderInfoList providerList,
-                ComponentName instrumentationName, ProfilerInfo profilerInfo,
-                Bundle instrumentationArgs, IInstrumentationWatcher instrumentationWatcher,
+                String sdkSandboxClientAppVolumeUuid, String sdkSandboxClientAppPackage,
+                ProviderInfoList providerList, ComponentName instrumentationName,
+                ProfilerInfo profilerInfo, Bundle instrumentationArgs,
+                IInstrumentationWatcher instrumentationWatcher,
                 IUiAutomationConnection instrumentationUiConnection, int debugMode,
                 boolean enableBinderTracking, boolean trackAllocation,
                 boolean isRestrictedBackupMode, boolean persistent, Configuration config,
@@ -1162,6 +1163,7 @@ public final class ActivityThread extends ClientTransactionHandler
             AppBindData data = new AppBindData();
             data.processName = processName;
             data.appInfo = appInfo;
+            data.sdkSandboxClientAppVolumeUuid = sdkSandboxClientAppVolumeUuid;
             data.sdkSandboxClientAppPackage = sdkSandboxClientAppPackage;
             data.providers = providerList.getList();
             data.instrumentationName = instrumentationName;
@@ -1403,16 +1405,16 @@ public final class ActivityThread extends ClientTransactionHandler
                     ContextImpl.class,
                     Activity.class,
                     WebView.class,
-                    OpenSSLSocketImpl.class
+                    View.class,
+                    ViewRootImpl.class
             };
             long[] instanceCounts = VMDebug.countInstancesOfClasses(classesToCount, true);
             long appContextInstanceCount = instanceCounts[0];
             long activityInstanceCount = instanceCounts[1];
             long webviewInstanceCount = instanceCounts[2];
-            long openSslSocketCount = instanceCounts[3];
+            long viewInstanceCount = instanceCounts[3];
+            long viewRootInstanceCount = instanceCounts[4];
 
-            long viewInstanceCount = ViewDebug.getViewInstanceCount();
-            long viewRootInstanceCount = ViewDebug.getViewRootImplCount();
             int globalAssetCount = AssetManager.getGlobalAssetCount();
             int globalAssetManagerCount = AssetManager.getGlobalAssetManagerCount();
             int binderLocalObjectCount = Debug.getBinderLocalObjectCount();
@@ -1444,7 +1446,6 @@ public final class ActivityThread extends ClientTransactionHandler
                 pw.print(binderProxyObjectCount); pw.print(',');
 
                 pw.print(binderDeathObjectCount); pw.print(',');
-                pw.print(openSslSocketCount); pw.print(',');
 
                 // SQL
                 pw.print(stats.memoryUsed / 1024); pw.print(',');
@@ -1457,8 +1458,9 @@ public final class ActivityThread extends ClientTransactionHandler
                     pw.print(','); pw.print(dbStats.pageSize);
                     pw.print(','); pw.print(dbStats.dbSize);
                     pw.print(','); pw.print(dbStats.lookaside);
-                    pw.print(','); pw.print(dbStats.cache);
-                    pw.print(','); pw.print(dbStats.cache);
+                    pw.print(','); pw.print(dbStats.cacheHits);
+                    pw.print(','); pw.print(dbStats.cacheMisses);
+                    pw.print(','); pw.print(dbStats.cacheSize);
                 }
                 pw.println();
 
@@ -1481,8 +1483,7 @@ public final class ActivityThread extends ClientTransactionHandler
             printRow(pw, TWO_COUNT_COLUMNS, "Parcel memory:", parcelSize/1024,
                     "Parcel count:", parcelCount);
             printRow(pw, TWO_COUNT_COLUMNS, "Death Recipients:", binderDeathObjectCount,
-                    "OpenSSL Sockets:", openSslSocketCount);
-            printRow(pw, ONE_COUNT_COLUMN, "WebViews:", webviewInstanceCount);
+                    "WebViews:", webviewInstanceCount);
 
             // SQLite mem info
             pw.println(" ");
@@ -1494,15 +1495,34 @@ public final class ActivityThread extends ClientTransactionHandler
             int N = stats.dbStats.size();
             if (N > 0) {
                 pw.println(" DATABASES");
-                printRow(pw, DB_INFO_FORMAT, "pgsz", "dbsz", "Lookaside(b)", "cache",
-                        "Dbname");
+                printRow(pw, DB_CONNECTION_INFO_HEADER, "pgsz", "dbsz", "Lookaside(b)",
+                        "cache hits", "cache misses", "cache size", "Dbname");
+                pw.println("PER CONNECTION STATS");
                 for (int i = 0; i < N; i++) {
                     DbStats dbStats = stats.dbStats.get(i);
-                    printRow(pw, DB_INFO_FORMAT,
+                    if (dbStats.arePoolStats) {
+                        // these will be printed after
+                        continue;
+                    }
+                    printRow(pw, DB_CONNECTION_INFO_FORMAT,
                             (dbStats.pageSize > 0) ? String.valueOf(dbStats.pageSize) : " ",
                             (dbStats.dbSize > 0) ? String.valueOf(dbStats.dbSize) : " ",
                             (dbStats.lookaside > 0) ? String.valueOf(dbStats.lookaside) : " ",
-                            dbStats.cache, dbStats.dbName);
+                            dbStats.cacheHits, dbStats.cacheMisses, dbStats.cacheSize,
+                            dbStats.dbName);
+                }
+                // Print stats accumulated through all the connections that have existed in the
+                // pool since it was opened.
+                pw.println("POOL STATS");
+                printRow(pw, DB_POOL_INFO_HEADER, "cache hits", "cache misses", "cache size",
+                        "Dbname");
+                for (int i = 0; i < N; i++) {
+                    DbStats dbStats = stats.dbStats.get(i);
+                    if (!dbStats.arePoolStats) {
+                        continue;
+                    }
+                    printRow(pw, DB_POOL_INFO_FORMAT, dbStats.cacheHits, dbStats.cacheMisses,
+                            dbStats.cacheSize, dbStats.dbName);
                 }
             }
 
@@ -1555,16 +1575,16 @@ public final class ActivityThread extends ClientTransactionHandler
                     ContextImpl.class,
                     Activity.class,
                     WebView.class,
-                    OpenSSLSocketImpl.class
+                    View.class,
+                    ViewRootImpl.class
             };
             long[] instanceCounts = VMDebug.countInstancesOfClasses(classesToCount, true);
             long appContextInstanceCount = instanceCounts[0];
             long activityInstanceCount = instanceCounts[1];
             long webviewInstanceCount = instanceCounts[2];
-            long openSslSocketCount = instanceCounts[3];
+            long viewInstanceCount = instanceCounts[3];
+            long viewRootInstanceCount = instanceCounts[4];
 
-            long viewInstanceCount = ViewDebug.getViewInstanceCount();
-            long viewRootInstanceCount = ViewDebug.getViewRootImplCount();
             int globalAssetCount = AssetManager.getGlobalAssetCount();
             int globalAssetManagerCount = AssetManager.getGlobalAssetManagerCount();
             int binderLocalObjectCount = Debug.getBinderLocalObjectCount();
@@ -1605,8 +1625,6 @@ public final class ActivityThread extends ClientTransactionHandler
             proto.write(MemInfoDumpProto.AppData.ObjectStats.PARCEL_COUNT, parcelCount);
             proto.write(MemInfoDumpProto.AppData.ObjectStats.BINDER_OBJECT_DEATH_COUNT,
                     binderDeathObjectCount);
-            proto.write(MemInfoDumpProto.AppData.ObjectStats.OPEN_SSL_SOCKET_COUNT,
-                    openSslSocketCount);
             proto.write(MemInfoDumpProto.AppData.ObjectStats.WEBVIEW_INSTANCE_COUNT,
                     webviewInstanceCount);
             proto.end(oToken);
@@ -1629,7 +1647,12 @@ public final class ActivityThread extends ClientTransactionHandler
                 proto.write(MemInfoDumpProto.AppData.SqlStats.Database.DB_SIZE, dbStats.dbSize);
                 proto.write(MemInfoDumpProto.AppData.SqlStats.Database.LOOKASIDE_B,
                         dbStats.lookaside);
-                proto.write(MemInfoDumpProto.AppData.SqlStats.Database.CACHE, dbStats.cache);
+                proto.write(
+                        MemInfoDumpProto.AppData.SqlStats.Database.CACHE_HITS, dbStats.cacheHits);
+                proto.write(MemInfoDumpProto.AppData.SqlStats.Database.CACHE_MISSES,
+                        dbStats.cacheMisses);
+                proto.write(
+                        MemInfoDumpProto.AppData.SqlStats.Database.CACHE_SIZE, dbStats.cacheSize);
                 proto.end(dToken);
             }
             proto.end(sToken);
@@ -1862,7 +1885,8 @@ public final class ActivityThread extends ClientTransactionHandler
                 cancellationCallback.sendResult(cancellationResult);
             }
             mH.sendMessage(PooledLambda.obtainMessage(ActivityThread::handleRequestDirectActions,
-                    ActivityThread.this, activityToken, interactor, cancellationSignal, callback));
+                    ActivityThread.this, activityToken, interactor, cancellationSignal, callback,
+                    REQUEST_DIRECT_ACTIONS_RETRY_MAX_COUNT));
         }
 
         @Override
@@ -2376,7 +2400,6 @@ public final class ActivityThread extends ClientTransactionHandler
             if (stopProfiling) {
                 mProfiler.stopProfiling();
             }
-            applyPendingProcessState();
             return false;
         }
     }
@@ -2562,6 +2585,11 @@ public final class ActivityThread extends ClientTransactionHandler
         return getPackageInfo(ai, compatInfo, null, false, true, false);
     }
 
+    private LoadedApk getPackageInfoNoCheck(ApplicationInfo ai, CompatibilityInfo compatInfo,
+            boolean isSdkSandbox) {
+        return getPackageInfo(ai, compatInfo, null, false, true, false, isSdkSandbox);
+    }
+
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     public final LoadedApk peekPackageInfo(String packageName, boolean includeCode) {
         synchronized (mResourcesManager) {
@@ -2578,11 +2606,18 @@ public final class ActivityThread extends ClientTransactionHandler
     private LoadedApk getPackageInfo(ApplicationInfo aInfo, CompatibilityInfo compatInfo,
             ClassLoader baseLoader, boolean securityViolation, boolean includeCode,
             boolean registerPackage) {
+        return getPackageInfo(aInfo, compatInfo, baseLoader, securityViolation, includeCode,
+                registerPackage, /*isSdkSandbox=*/false);
+    }
+
+    private LoadedApk getPackageInfo(ApplicationInfo aInfo, CompatibilityInfo compatInfo,
+            ClassLoader baseLoader, boolean securityViolation, boolean includeCode,
+            boolean registerPackage, boolean isSdkSandbox) {
         final boolean differentUser = (UserHandle.myUserId() != UserHandle.getUserId(aInfo.uid));
         synchronized (mResourcesManager) {
             WeakReference<LoadedApk> ref;
-            if (differentUser) {
-                // Caching not supported across users
+            if (differentUser || isSdkSandbox) {
+                // Caching not supported across users and for sdk sandboxes
                 ref = null;
             } else if (includeCode) {
                 ref = mPackages.get(aInfo.packageName);
@@ -2629,8 +2664,8 @@ public final class ActivityThread extends ClientTransactionHandler
                         getSystemContext().mPackageInfo.getClassLoader());
             }
 
-            if (differentUser) {
-                // Caching not supported across users
+            if (differentUser || isSdkSandbox) {
+                // Caching not supported across users and for sdk sandboxes
             } else if (includeCode) {
                 mPackages.put(aInfo.packageName,
                         new WeakReference<LoadedApk>(packageInfo));
@@ -3411,56 +3446,17 @@ public final class ActivityThread extends ClientTransactionHandler
         }
     }
 
-    /**
-     * Returns {@code true} if the {@link android.app.ActivityManager.ProcessState} of the current
-     * process is cached.
-     */
-    @Override
-    @VisibleForTesting
-    public boolean isCachedProcessState() {
-        synchronized (mAppThread) {
-            return mLastProcessState >= ActivityManager.PROCESS_STATE_CACHED_ACTIVITY;
-        }
-    }
-
     @Override
     public void updateProcessState(int processState, boolean fromIpc) {
-        final boolean wasCached;
         synchronized (mAppThread) {
             if (mLastProcessState == processState) {
                 return;
             }
-            wasCached = isCachedProcessState();
             mLastProcessState = processState;
-            // Defer the top state for VM to avoid aggressive JIT compilation affecting activity
-            // launch time.
-            if (processState == ActivityManager.PROCESS_STATE_TOP
-                    && mNumLaunchingActivities.get() > 0) {
-                mPendingProcessState = processState;
-                mH.postDelayed(this::applyPendingProcessState, PENDING_TOP_PROCESS_STATE_TIMEOUT);
-            } else {
-                mPendingProcessState = PROCESS_STATE_UNKNOWN;
-                updateVmProcessState(processState);
-            }
+            updateVmProcessState(processState);
             if (localLOGV) {
                 Slog.i(TAG, "******************* PROCESS STATE CHANGED TO: " + processState
                         + (fromIpc ? " (from ipc" : ""));
-            }
-        }
-
-        // Handle the pending configuration if the process state is changed from cached to
-        // non-cached. Except the case where there is a launching activity because the
-        // LaunchActivityItem will handle it.
-        if (wasCached && !isCachedProcessState() && mNumLaunchingActivities.get() == 0) {
-            final Configuration pendingConfig =
-                    mConfigurationController.getPendingConfiguration(false /* clearPending */);
-            if (pendingConfig == null) {
-                return;
-            }
-            if (Looper.myLooper() == mH.getLooper()) {
-                handleConfigurationChanged(pendingConfig);
-            } else {
-                sendMessage(H.CONFIGURATION_CHANGED, pendingConfig);
             }
         }
     }
@@ -3473,20 +3469,6 @@ public final class ActivityThread extends ClientTransactionHandler
                 ? VM_PROCESS_STATE_JANK_PERCEPTIBLE
                 : VM_PROCESS_STATE_JANK_IMPERCEPTIBLE;
         VMRuntime.getRuntime().updateProcessState(state);
-    }
-
-    private void applyPendingProcessState() {
-        synchronized (mAppThread) {
-            if (mPendingProcessState == PROCESS_STATE_UNKNOWN) {
-                return;
-            }
-            final int pendingState = mPendingProcessState;
-            mPendingProcessState = PROCESS_STATE_UNKNOWN;
-            // Only apply the pending state if the last state doesn't change.
-            if (pendingState == mLastProcessState) {
-                updateVmProcessState(pendingState);
-            }
-        }
     }
 
     @Override
@@ -3956,7 +3938,7 @@ public final class ActivityThread extends ClientTransactionHandler
     /** Fetches the user actions for the corresponding activity */
     private void handleRequestDirectActions(@NonNull IBinder activityToken,
             @NonNull IVoiceInteractor interactor, @NonNull CancellationSignal cancellationSignal,
-            @NonNull RemoteCallback callback) {
+            @NonNull RemoteCallback callback, int retryCount) {
         final ActivityClientRecord r = mActivities.get(activityToken);
         if (r == null) {
             Log.w(TAG, "requestDirectActions(): no activity for " + activityToken);
@@ -3964,7 +3946,20 @@ public final class ActivityThread extends ClientTransactionHandler
             return;
         }
         final int lifecycleState = r.getLifecycleState();
-        if (lifecycleState < ON_START || lifecycleState >= ON_STOP) {
+        if (lifecycleState < ON_START) {
+            // TODO(b/234173463): requestDirectActions callback should indicate errors
+            if (retryCount > 0) {
+                mH.sendMessageDelayed(
+                        PooledLambda.obtainMessage(ActivityThread::handleRequestDirectActions,
+                                ActivityThread.this, activityToken, interactor, cancellationSignal,
+                                callback, retryCount - 1), REQUEST_DIRECT_ACTIONS_RETRY_TIME_MS);
+                return;
+            }
+            Log.w(TAG, "requestDirectActions(" + r + "): wrong lifecycle: " + lifecycleState);
+            callback.sendResult(null);
+            return;
+        }
+        if (lifecycleState >= ON_STOP) {
             Log.w(TAG, "requestDirectActions(" + r + "): wrong lifecycle: " + lifecycleState);
             callback.sendResult(null);
             return;
@@ -5729,6 +5724,7 @@ public final class ActivityThread extends ClientTransactionHandler
             return;
         }
 
+        ActivityClient.getInstance().activityLocalRelaunch(r.token);
         // Initialize a relaunch request.
         final MergedConfiguration mergedConfiguration = new MergedConfiguration(
                 r.createdConfig != null
@@ -5890,20 +5886,20 @@ public final class ActivityThread extends ClientTransactionHandler
 
         final boolean movedToDifferentDisplay = isDifferentDisplay(activity.getDisplayId(),
                 displayId);
-        final Configuration currentConfig = activity.mCurrentConfig;
-        final int diff = currentConfig.diffPublicOnly(newConfig);
-        final boolean hasPublicConfigChange = diff != 0;
+        final Configuration currentResConfig = activity.getResources().getConfiguration();
+        final int diff = currentResConfig.diffPublicOnly(newConfig);
+        final boolean hasPublicResConfigChange = diff != 0;
         final ActivityClientRecord r = getActivityClient(activityToken);
         // TODO(b/173090263): Use diff instead after the improvement of AssetManager and
         // ResourcesImpl constructions.
-        final boolean shouldUpdateResources = hasPublicConfigChange
-                || shouldUpdateResources(activityToken, currentConfig, newConfig, amOverrideConfig,
-                movedToDifferentDisplay, hasPublicConfigChange);
-        final boolean shouldReportChange = shouldReportChange(diff, currentConfig, newConfig,
+        final boolean shouldUpdateResources = hasPublicResConfigChange
+                || shouldUpdateResources(activityToken, currentResConfig, newConfig,
+                amOverrideConfig, movedToDifferentDisplay, hasPublicResConfigChange);
+        final boolean shouldReportChange = shouldReportChange(activity.mCurrentConfig, newConfig,
                 r != null ? r.mSizeConfigurations : null,
                 activity.mActivityInfo.getRealConfigChanged());
         // Nothing significant, don't proceed with updating and reporting.
-        if (!shouldUpdateResources) {
+        if (!shouldUpdateResources && !shouldReportChange) {
             return null;
         }
 
@@ -5923,9 +5919,6 @@ public final class ActivityThread extends ClientTransactionHandler
                 amOverrideConfig, contextThemeWrapperOverrideConfig);
         mResourcesManager.updateResourcesForActivity(activityToken, finalOverrideConfig, displayId);
 
-        activity.mConfigChangeFlags = 0;
-        activity.mCurrentConfig = new Configuration(newConfig);
-
         // Apply the ContextThemeWrapper override if necessary.
         // NOTE: Make sure the configurations are not modified, as they are treated as immutable
         // in many places.
@@ -5936,8 +5929,10 @@ public final class ActivityThread extends ClientTransactionHandler
             activity.dispatchMovedToDisplay(displayId, configToReport);
         }
 
+        activity.mConfigChangeFlags = 0;
         if (shouldReportChange) {
             activity.mCalled = false;
+            activity.mCurrentConfig = new Configuration(newConfig);
             activity.onConfigurationChanged(configToReport);
             if (!activity.mCalled) {
                 throw new SuperNotCalledException("Activity " + activity.getLocalClassName() +
@@ -5952,8 +5947,6 @@ public final class ActivityThread extends ClientTransactionHandler
      * Returns {@code true} if {@link Activity#onConfigurationChanged(Configuration)} should be
      * dispatched.
      *
-     * @param publicDiff Usually computed by {@link Configuration#diffPublicOnly(Configuration)}.
-     *                   This parameter is to prevent we compute it again.
      * @param currentConfig The current configuration cached in {@link Activity#mCurrentConfig}.
      *                      It is {@code null} before the first config update from the server side.
      * @param newConfig The updated {@link Configuration}
@@ -5962,9 +5955,10 @@ public final class ActivityThread extends ClientTransactionHandler
      * @return {@code true} if the config change should be reported to the Activity
      */
     @VisibleForTesting
-    public static boolean shouldReportChange(int publicDiff, @Nullable Configuration currentConfig,
+    public static boolean shouldReportChange(@Nullable Configuration currentConfig,
             @NonNull Configuration newConfig, @Nullable SizeConfigurationBuckets sizeBuckets,
             int handledConfigChanges) {
+        final int publicDiff = currentConfig.diffPublicOnly(newConfig);
         // Don't report the change if there's no public diff between current and new config.
         if (publicDiff == 0) {
             return false;
@@ -6577,9 +6571,11 @@ public final class ActivityThread extends ClientTransactionHandler
             mConfigurationController.applyCompatConfiguration();
         }
 
-        data.info = getPackageInfoNoCheck(data.appInfo, data.compatInfo);
-        if (data.sdkSandboxClientAppPackage != null) {
-            data.info.setSdkSandboxStorage(data.sdkSandboxClientAppPackage);
+        final boolean isSdkSandbox = data.sdkSandboxClientAppPackage != null;
+        data.info = getPackageInfoNoCheck(data.appInfo, data.compatInfo, isSdkSandbox);
+        if (isSdkSandbox) {
+            data.info.setSdkSandboxStorage(data.sdkSandboxClientAppVolumeUuid,
+                    data.sdkSandboxClientAppPackage);
         }
 
         if (agent != null) {
@@ -6913,9 +6909,12 @@ public final class ActivityThread extends ClientTransactionHandler
     private InstrumentationInfo prepareInstrumentation(AppBindData data) {
         final InstrumentationInfo ii;
         try {
-            ii = new ApplicationPackageManager(null, getPackageManager())
-                    .getInstrumentationInfo(data.instrumentationName, 0);
-        } catch (PackageManager.NameNotFoundException e) {
+            ii = getPackageManager().getInstrumentationInfoAsUser(data.instrumentationName,
+                    0 /* flags */, UserHandle.myUserId());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+        if (ii == null) {
             throw new RuntimeException(
                     "Unable to find instrumentation info for: " + data.instrumentationName);
         }

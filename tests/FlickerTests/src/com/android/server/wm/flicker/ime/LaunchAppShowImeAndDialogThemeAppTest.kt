@@ -16,31 +16,28 @@
 
 package com.android.server.wm.flicker.ime
 
+import android.platform.test.annotations.Postsubmit
+import android.platform.test.annotations.Presubmit
+import android.view.Surface
 import android.view.WindowInsets.Type.ime
 import android.view.WindowInsets.Type.navigationBars
 import android.view.WindowInsets.Type.statusBars
-
-import android.app.Instrumentation
-import android.platform.test.annotations.Presubmit
-import android.view.Surface
 import android.view.WindowManagerPolicyConstants
-import androidx.test.filters.FlakyTest
 import androidx.test.filters.RequiresDevice
-import androidx.test.platform.app.InstrumentationRegistry
-import com.android.server.wm.flicker.FlickerBuilderProvider
+import com.android.server.wm.flicker.BaseTest
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.ImeAppAutoFocusHelper
-import com.android.server.wm.traces.common.FlickerComponentName
+import com.android.server.wm.traces.common.ComponentMatcher
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
 import org.junit.runners.Parameterized
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 
 /**
  * Test IME snapshot mechanism won't apply when transitioning from non-IME focused dialog activity.
@@ -50,61 +47,121 @@ import org.junit.Assert.assertTrue
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-class LaunchAppShowImeAndDialogThemeAppTest(private val testSpec: FlickerTestParameter) {
-    private val instrumentation: Instrumentation = InstrumentationRegistry.getInstrumentation()
+class LaunchAppShowImeAndDialogThemeAppTest(
+    testSpec: FlickerTestParameter
+) : BaseTest(testSpec) {
     private val testApp = ImeAppAutoFocusHelper(instrumentation, testSpec.startRotation)
 
-    @FlickerBuilderProvider
-    fun buildFlicker(): FlickerBuilder {
-        return FlickerBuilder(instrumentation).apply {
-            setup {
-                eachRun {
-                    testApp.launchViaIntent(wmHelper)
-                    wmHelper.waitImeShown()
-                    testApp.startDialogThemedActivity(wmHelper)
-                    // Verify IME insets isn't visible on dialog since it's non-IME focusable window
-                    assertFalse(testApp.getInsetsVisibleFromDialog(ime()))
-                    assertTrue(testApp.getInsetsVisibleFromDialog(statusBars()))
-                    assertTrue(testApp.getInsetsVisibleFromDialog(navigationBars()))
-                }
+    /** {@inheritDoc} */
+    override val transition: FlickerBuilder.() -> Unit = {
+        setup {
+            eachRun {
+                testApp.launchViaIntent(wmHelper)
+                wmHelper.StateSyncBuilder()
+                    .withImeShown()
+                    .waitForAndVerify()
+                testApp.startDialogThemedActivity(wmHelper)
+                // Verify IME insets isn't visible on dialog since it's non-IME focusable window
+                assertFalse(testApp.getInsetsVisibleFromDialog(ime()))
+                assertTrue(testApp.getInsetsVisibleFromDialog(statusBars()))
+                assertTrue(testApp.getInsetsVisibleFromDialog(navigationBars()))
             }
-            teardown {
-                eachRun {
-                    testApp.exit()
-                }
+        }
+        teardown {
+            eachRun {
+                testApp.exit(wmHelper)
             }
-            transitions {
-                testApp.dismissDialog(wmHelper)
-            }
+        }
+        transitions {
+            testApp.dismissDialog(wmHelper)
         }
     }
 
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun navBarWindowIsAlwaysVisible() = super.navBarWindowIsAlwaysVisible()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun taskBarWindowIsAlwaysVisible() = super.taskBarWindowIsAlwaysVisible()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun statusBarWindowIsAlwaysVisible() = super.statusBarWindowIsAlwaysVisible()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun navBarLayerIsVisibleAtStartAndEnd() = super.navBarLayerIsVisibleAtStartAndEnd()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun taskBarLayerIsVisibleAtStartAndEnd() = super.taskBarLayerIsVisibleAtStartAndEnd()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun statusBarLayerIsVisibleAtStartAndEnd() =
+        super.statusBarLayerIsVisibleAtStartAndEnd()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun navBarLayerPositionAtStartAndEnd() = super.navBarLayerPositionAtStartAndEnd()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun statusBarLayerPositionAtStartAndEnd() =
+        super.statusBarLayerPositionAtStartAndEnd()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun visibleWindowsShownMoreThanOneConsecutiveEntry() =
+        super.visibleWindowsShownMoreThanOneConsecutiveEntry()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
+        super.visibleLayersShownMoreThanOneConsecutiveEntry()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun entireScreenCovered() = super.entireScreenCovered()
+
     /**
-     * Checks that [FlickerComponentName.IME] layer becomes visible during the transition
+     * Checks that [ComponentMatcher.IME] layer becomes visible during the transition
      */
-    @FlakyTest(bugId = 215884488)
+    @Presubmit
     @Test
     fun imeWindowIsAlwaysVisible() = testSpec.imeWindowIsAlwaysVisible()
 
     /**
-     * Checks that [FlickerComponentName.IME] layer is visible at the end of the transition
+     * Checks that [ComponentMatcher.IME] layer is visible at the end of the transition
      */
-    @FlakyTest(bugId = 227142436)
+    @Presubmit
     @Test
     fun imeLayerExistsEnd() {
         testSpec.assertLayersEnd {
-            this.isVisible(FlickerComponentName.IME)
+            this.isVisible(ComponentMatcher.IME)
         }
     }
 
     /**
-     * Checks that [FlickerComponentName.IME_SNAPSHOT] layer is invisible always.
+     * Checks that [ComponentMatcher.IME_SNAPSHOT] layer is invisible always.
      */
     @Presubmit
     @Test
     fun imeSnapshotNotVisible() {
         testSpec.assertLayers {
-            this.isInvisible(FlickerComponentName.IME_SNAPSHOT)
+            this.isInvisible(ComponentMatcher.IME_SNAPSHOT)
         }
     }
 

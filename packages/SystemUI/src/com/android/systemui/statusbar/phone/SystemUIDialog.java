@@ -31,6 +31,7 @@ import android.os.Looper;
 import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.util.TypedValue;
+import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewRootImpl;
 import android.view.Window;
@@ -60,10 +61,10 @@ import java.util.List;
  * and dismisses itself when it receives the broadcast.
  */
 public class SystemUIDialog extends AlertDialog implements ViewRootImpl.ConfigChangedCallback {
+    protected static final int DEFAULT_THEME = R.style.Theme_SystemUI_Dialog;
     // TODO(b/203389579): Remove this once the dialog width on large screens has been agreed on.
     private static final String FLAG_TABLET_DIALOG_WIDTH =
             "persist.systemui.flag_tablet_dialog_width";
-    private static final int DEFAULT_THEME = R.style.Theme_SystemUI_Dialog;
     private static final boolean DEFAULT_DISMISS_ON_DEVICE_LOCK = true;
 
     private final Context mContext;
@@ -87,11 +88,18 @@ public class SystemUIDialog extends AlertDialog implements ViewRootImpl.ConfigCh
         this(context, theme, DEFAULT_DISMISS_ON_DEVICE_LOCK);
     }
 
-    public SystemUIDialog(Context context, boolean dismissOnDeviceLock) {
-        this(context, DEFAULT_THEME, dismissOnDeviceLock);
+    public SystemUIDialog(Context context, int theme, boolean dismissOnDeviceLock) {
+        // TODO(b/219008720): Remove those calls to Dependency.get by introducing a
+        // SystemUIDialogFactory and make all other dialogs create a SystemUIDialog to which we set
+        // the content and attach listeners.
+        this(context, theme, dismissOnDeviceLock, Dependency.get(SystemUIDialogManager.class),
+                Dependency.get(SysUiState.class), Dependency.get(BroadcastDispatcher.class),
+                Dependency.get(DialogLaunchAnimator.class));
     }
 
-    public SystemUIDialog(Context context, int theme, boolean dismissOnDeviceLock) {
+    public SystemUIDialog(Context context, int theme, boolean dismissOnDeviceLock,
+            SystemUIDialogManager dialogManager, SysUiState sysUiState,
+            BroadcastDispatcher broadcastDispatcher, DialogLaunchAnimator dialogLaunchAnimator) {
         super(context, theme);
         mContext = context;
 
@@ -100,13 +108,10 @@ public class SystemUIDialog extends AlertDialog implements ViewRootImpl.ConfigCh
         attrs.setTitle(getClass().getSimpleName());
         getWindow().setAttributes(attrs);
 
-        mDismissReceiver = dismissOnDeviceLock ? new DismissReceiver(this) : null;
-
-        // TODO(b/219008720): Remove those calls to Dependency.get by introducing a
-        // SystemUIDialogFactory and make all other dialogs create a SystemUIDialog to which we set
-        // the content and attach listeners.
-        mDialogManager = Dependency.get(SystemUIDialogManager.class);
-        mSysUiState = Dependency.get(SysUiState.class);
+        mDismissReceiver = dismissOnDeviceLock ? new DismissReceiver(this, broadcastDispatcher,
+                dialogLaunchAnimator) : null;
+        mDialogManager = dialogManager;
+        mSysUiState = sysUiState;
     }
 
     @Override
@@ -325,7 +330,10 @@ public class SystemUIDialog extends AlertDialog implements ViewRootImpl.ConfigCh
      * @param dismissAction An action to run when the dialog is dismissed.
      */
     public static void registerDismissListener(Dialog dialog, @Nullable Runnable dismissAction) {
-        DismissReceiver dismissReceiver = new DismissReceiver(dialog);
+        // TODO(b/219008720): Remove those calls to Dependency.get.
+        DismissReceiver dismissReceiver = new DismissReceiver(dialog,
+                Dependency.get(BroadcastDispatcher.class),
+                Dependency.get(DialogLaunchAnimator.class));
         dialog.setOnDismissListener(d -> {
             dismissReceiver.unregister();
             if (dismissAction != null) dismissAction.run();
@@ -376,11 +384,17 @@ public class SystemUIDialog extends AlertDialog implements ViewRootImpl.ConfigCh
     }
 
     private static int getHorizontalInsets(Dialog dialog) {
-        if (dialog.getWindow().getDecorView() == null) {
+        View decorView = dialog.getWindow().getDecorView();
+        if (decorView == null) {
             return 0;
         }
 
-        Drawable background = dialog.getWindow().getDecorView().getBackground();
+        // We first look for the background on the dialogContentWithBackground added by
+        // DialogLaunchAnimator. If it's not there, we use the background of the DecorView.
+        View viewWithBackground = decorView.findViewByPredicate(
+                view -> view.getTag(R.id.tag_dialog_background) != null);
+        Drawable background = viewWithBackground != null ? viewWithBackground.getBackground()
+                : decorView.getBackground();
         Insets insets = background != null ? background.getOpticalInsets() : Insets.NONE;
         return insets.left + insets.right;
     }
@@ -401,11 +415,11 @@ public class SystemUIDialog extends AlertDialog implements ViewRootImpl.ConfigCh
         private final BroadcastDispatcher mBroadcastDispatcher;
         private final DialogLaunchAnimator mDialogLaunchAnimator;
 
-        DismissReceiver(Dialog dialog) {
+        DismissReceiver(Dialog dialog, BroadcastDispatcher broadcastDispatcher,
+                DialogLaunchAnimator dialogLaunchAnimator) {
             mDialog = dialog;
-            // TODO(b/219008720): Remove those calls to Dependency.get.
-            mBroadcastDispatcher = Dependency.get(BroadcastDispatcher.class);
-            mDialogLaunchAnimator = Dependency.get(DialogLaunchAnimator.class);
+            mBroadcastDispatcher = broadcastDispatcher;
+            mDialogLaunchAnimator = dialogLaunchAnimator;
         }
 
         void register() {
@@ -429,4 +443,5 @@ public class SystemUIDialog extends AlertDialog implements ViewRootImpl.ConfigCh
             mDialog.dismiss();
         }
     }
+
 }

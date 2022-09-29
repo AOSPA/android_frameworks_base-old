@@ -472,8 +472,9 @@ public class DefaultTransitionHandler implements Transitions.TransitionHandler {
                 }
 
                 final Rect clipRect = Transitions.isClosingType(change.getMode())
-                        ? mRotator.getEndBoundsInStartRotation(change)
-                        : change.getEndAbsBounds();
+                        ? new Rect(mRotator.getEndBoundsInStartRotation(change))
+                        : new Rect(change.getEndAbsBounds());
+                clipRect.offsetTo(0, 0);
 
                 if (delayedEdgeExtension) {
                     // If the edge extension needs to happen after the startTransition has been
@@ -520,6 +521,18 @@ public class DefaultTransitionHandler implements Transitions.TransitionHandler {
         // run finish now in-case there are no animations
         onAnimFinish.run();
         return true;
+    }
+
+    @Override
+    public void mergeAnimation(@NonNull IBinder transition, @NonNull TransitionInfo info,
+            @NonNull SurfaceControl.Transaction t, @NonNull IBinder mergeTarget,
+            @NonNull Transitions.TransitionFinishCallback finishCallback) {
+        ArrayList<Animator> anims = mAnimations.get(mergeTarget);
+        if (anims == null) return;
+        for (int i = anims.size() - 1; i >= 0; --i) {
+            final Animator anim = anims.get(i);
+            mAnimExecutor.execute(anim::end);
+        }
     }
 
     private void edgeExtendWindow(TransitionInfo.Change change,
@@ -853,13 +866,19 @@ public class DefaultTransitionHandler implements Transitions.TransitionHandler {
             });
         };
         va.addListener(new AnimatorListenerAdapter() {
+            private boolean mFinished = false;
+
             @Override
             public void onAnimationEnd(Animator animation) {
+                if (mFinished) return;
+                mFinished = true;
                 finisher.run();
             }
 
             @Override
             public void onAnimationCancel(Animator animation) {
+                if (mFinished) return;
+                mFinished = true;
                 finisher.run();
             }
         });
@@ -973,7 +992,7 @@ public class DefaultTransitionHandler implements Transitions.TransitionHandler {
 
     private static void applyTransformation(long time, SurfaceControl.Transaction t,
             SurfaceControl leash, Animation anim, Transformation transformation, float[] matrix,
-            Point position, float cornerRadius, @Nullable Rect clipRect) {
+            Point position, float cornerRadius, @Nullable Rect immutableClipRect) {
         anim.getTransformation(time, transformation);
         if (position != null) {
             transformation.getMatrix().postTranslate(position.x, position.y);
@@ -981,6 +1000,7 @@ public class DefaultTransitionHandler implements Transitions.TransitionHandler {
         t.setMatrix(leash, transformation.getMatrix(), matrix);
         t.setAlpha(leash, transformation.getAlpha());
 
+        final Rect clipRect = immutableClipRect == null ? null : new Rect(immutableClipRect);
         Insets extensionInsets = Insets.min(transformation.getInsets(), Insets.NONE);
         if (!extensionInsets.equals(Insets.NONE) && clipRect != null && !clipRect.isEmpty()) {
             // Clip out any overflowing edge extension

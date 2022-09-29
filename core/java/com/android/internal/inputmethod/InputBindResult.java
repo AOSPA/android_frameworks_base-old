@@ -30,8 +30,6 @@ import android.os.Parcelable;
 import android.util.SparseArray;
 import android.view.InputChannel;
 
-import com.android.internal.view.IInputMethodSession;
-
 import java.lang.annotation.Retention;
 
 /**
@@ -186,7 +184,7 @@ public final class InputBindResult implements Parcelable {
     /**
      * The accessibility services.
      */
-    public SparseArray<IAccessibilityInputMethodSession> accessibilitySessions;
+    public final SparseArray<IAccessibilityInputMethodSession> accessibilitySessions;
 
     /**
      * The input channel used to send input events to this IME.

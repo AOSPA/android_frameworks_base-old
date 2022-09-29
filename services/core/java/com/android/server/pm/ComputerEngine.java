@@ -58,6 +58,7 @@ import static com.android.server.pm.PackageManagerService.EMPTY_INT_ARRAY;
 import static com.android.server.pm.PackageManagerService.HIDE_EPHEMERAL_APIS;
 import static com.android.server.pm.PackageManagerService.TAG;
 import static com.android.server.pm.PackageManagerServiceUtils.compareSignatures;
+import static com.android.server.pm.PackageManagerServiceUtils.isSystemOrRootOrShell;
 import static com.android.server.pm.resolution.ComponentResolver.RESOLVE_PRIORITY_SORTER;
 
 import android.Manifest;
@@ -367,6 +368,8 @@ public class ComputerEngine implements Computer {
         return (v1 > v2) ? -1 : ((v1 < v2) ? 1 : 0);
     };
 
+    private final int mVersion;
+
     // The administrative use counter.
     private int mUsed = 0;
 
@@ -425,7 +428,8 @@ public class ComputerEngine implements Computer {
         return mLocalAndroidApplication;
     }
 
-    ComputerEngine(PackageManagerService.Snapshot args) {
+    ComputerEngine(PackageManagerService.Snapshot args, int version) {
+        mVersion = version;
         mSettings = new Settings(args.settings);
         mIsolatedOwners = args.isolatedOwners;
         mPackages = args.packages;
@@ -466,11 +470,17 @@ public class ComputerEngine implements Computer {
         mService = args.service;
     }
 
+    @Override
+    public int getVersion() {
+        return mVersion;
+    }
+
     /**
      * Record that the snapshot was used.
      */
-    public final void use() {
+    public final Computer use() {
         mUsed++;
+        return this;
     }
 
     /**
@@ -975,9 +985,15 @@ public class ComputerEngine implements Computer {
                     TAG, "getApplicationInfo " + packageName
                             + ": " + p);
         }
+        final boolean matchApex = (flags & MATCH_APEX) != 0;
         if (p != null) {
             PackageStateInternal ps = mSettings.getPackage(packageName);
             if (ps == null) return null;
+            if (ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
+                if (!matchApex && p.isApex()) {
+                    return null;
+                }
+            }
             if (filterSharedLibPackage(ps, filterCallingUid, userId, flags)) {
                 return null;
             }
@@ -992,20 +1008,22 @@ public class ComputerEngine implements Computer {
             }
             return ai;
         }
-        if ((flags & PackageManager.MATCH_APEX) != 0) {
-            // For APKs, PackageInfo.applicationInfo is not exactly the same as ApplicationInfo
-            // returned from getApplicationInfo, but for APEX packages difference shouldn't be
-            // very big.
-            // TODO(b/155328545): generate proper application info for APEXes as well.
-            int apexFlags = ApexManager.MATCH_ACTIVE_PACKAGE;
-            if ((flags & PackageManager.MATCH_SYSTEM_ONLY) != 0) {
-                apexFlags = ApexManager.MATCH_FACTORY_PACKAGE;
+        if (!ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
+            if (matchApex) {
+                // For APKs, PackageInfo.applicationInfo is not exactly the same as ApplicationInfo
+                // returned from getApplicationInfo, but for APEX packages difference shouldn't be
+                // very big.
+                // TODO(b/155328545): generate proper application info for APEXes as well.
+                int apexFlags = ApexManager.MATCH_ACTIVE_PACKAGE;
+                if ((flags & PackageManager.MATCH_SYSTEM_ONLY) != 0) {
+                    apexFlags = ApexManager.MATCH_FACTORY_PACKAGE;
+                }
+                final PackageInfo pi = mApexPackageInfo.getPackageInfo(packageName, apexFlags);
+                if (pi == null) {
+                    return null;
+                }
+                return pi.applicationInfo;
             }
-            final PackageInfo pi = mApexPackageInfo.getPackageInfo(packageName, apexFlags);
-            if (pi == null) {
-                return null;
-            }
-            return pi.applicationInfo;
         }
         if ("android".equals(packageName) || "system".equals(packageName)) {
             return androidApplication();
@@ -1695,14 +1713,22 @@ public class ComputerEngine implements Computer {
         packageName = resolveInternalPackageName(packageName, versionCode);
 
         final boolean matchFactoryOnly = (flags & MATCH_FACTORY_ONLY) != 0;
+        final boolean matchApex = (flags & MATCH_APEX) != 0;
         if (matchFactoryOnly) {
             // Instant app filtering for APEX modules is ignored
-            if ((flags & MATCH_APEX) != 0) {
-                return mApexPackageInfo.getPackageInfo(packageName,
-                        ApexManager.MATCH_FACTORY_PACKAGE);
+            if (!ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
+                if (matchApex) {
+                    return mApexPackageInfo.getPackageInfo(packageName,
+                            ApexManager.MATCH_FACTORY_PACKAGE);
+                }
             }
             final PackageStateInternal ps = mSettings.getDisabledSystemPkg(packageName);
             if (ps != null) {
+                if (ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
+                    if (!matchApex && ps.getPkg() != null && ps.getPkg().isApex()) {
+                        return null;
+                    }
+                }
                 if (filterSharedLibPackage(ps, filterCallingUid, userId, flags)) {
                     return null;
                 }
@@ -1722,6 +1748,11 @@ public class ComputerEngine implements Computer {
         }
         if (p != null) {
             final PackageStateInternal ps = getPackageStateInternal(p.getPackageName());
+            if (ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
+                if (!matchApex && p.isApex()) {
+                    return null;
+                }
+            }
             if (filterSharedLibPackage(ps, filterCallingUid, userId, flags)) {
                 return null;
             }
@@ -1742,8 +1773,11 @@ public class ComputerEngine implements Computer {
             }
             return generatePackageInfo(ps, flags, userId);
         }
-        if ((flags & MATCH_APEX) != 0) {
-            return mApexPackageInfo.getPackageInfo(packageName, ApexManager.MATCH_ACTIVE_PACKAGE);
+        if (!ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
+            if (matchApex) {
+                return mApexPackageInfo.getPackageInfo(packageName,
+                        ApexManager.MATCH_ACTIVE_PACKAGE);
+            }
         }
         return null;
     }
@@ -1800,6 +1834,11 @@ public class ComputerEngine implements Computer {
                         ps = psDisabled;
                     }
                 }
+                if (ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
+                    if (!listApex && ps.getPkg() != null && ps.getPkg().isApex()) {
+                        continue;
+                    }
+                }
                 if (filterSharedLibPackage(ps, callingUid, userId, flags)) {
                     continue;
                 }
@@ -1825,6 +1864,11 @@ public class ComputerEngine implements Computer {
                         ps = psDisabled;
                     }
                 }
+                if (ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
+                    if (!listApex && p.isApex()) {
+                        continue;
+                    }
+                }
                 if (filterSharedLibPackage(ps, callingUid, userId, flags)) {
                     continue;
                 }
@@ -1837,11 +1881,13 @@ public class ComputerEngine implements Computer {
                 }
             }
         }
-        if (listApex) {
-            if (listFactory) {
-                list.addAll(mApexPackageInfo.getFactoryPackages());
-            } else {
-                list.addAll(mApexPackageInfo.getActivePackages());
+        if (!ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
+            if (listApex) {
+                if (listFactory) {
+                    list.addAll(mApexPackageInfo.getFactoryPackages());
+                } else {
+                    list.addAll(mApexPackageInfo.getActivePackages());
+                }
             }
         }
         return new ParceledListSlice<>(list);
@@ -2681,7 +2727,7 @@ public class ComputerEngine implements Computer {
         if (Process.isSdkSandboxUid(callingUid)) {
             int clientAppUid = Process.getAppUidForSdkSandboxUid(callingUid);
             // SDK sandbox should be able to see it's client app
-            if (clientAppUid == UserHandle.getUid(userId, ps.getAppId())) {
+            if (ps != null && clientAppUid == UserHandle.getUid(userId, ps.getAppId())) {
                 return false;
             }
         }
@@ -2692,12 +2738,16 @@ public class ComputerEngine implements Computer {
         final String instantAppPkgName = getInstantAppPackageName(callingUid);
         final boolean callerIsInstantApp = instantAppPkgName != null;
         // Don't treat hiddenUntilInstalled as an uninstalled state, phone app needs to access
-        // these hidden application details to customize carrier apps.
-        if (ps == null || (filterUninstall && !ps.isHiddenUntilInstalled()
-                && !ps.getUserStateOrDefault(userId).isInstalled())) {
-            // If caller is instant app and ps is null, pretend the application exists,
-            // but, needs to be filtered
-            return (callerIsInstantApp || filterUninstall);
+        // these hidden application details to customize carrier apps. Also, allowing the system
+        // caller accessing to application across users.
+        if (ps == null
+                || (filterUninstall
+                        && !isSystemOrRootOrShell(callingUid)
+                        && !ps.isHiddenUntilInstalled()
+                        && !ps.getUserStateOrDefault(userId).isInstalled())) {
+            // If caller is instant app or sdk sandbox and ps is null, pretend the application
+            // exists, but, needs to be filtered
+            return (callerIsInstantApp || filterUninstall || Process.isSdkSandboxUid(callingUid));
         }
         // if the target and caller are the same application, don't filter
         if (isCallerSameApp(ps.getPackageName(), callingUid)) {
@@ -2782,6 +2832,29 @@ public class ComputerEngine implements Computer {
             @Nullable PackageStateInternal ps, int callingUid, int userId) {
         return shouldFilterApplication(
                 ps, callingUid, null, TYPE_UNKNOWN, userId, true /* filterUninstall */);
+    }
+
+    /**
+     * @see #shouldFilterApplication(PackageStateInternal, int, ComponentName, int, int, boolean)
+     */
+    public final boolean shouldFilterApplicationIncludingUninstalled(
+            @NonNull SharedUserSetting sus, int callingUid, int userId) {
+        if (shouldFilterApplication(sus, callingUid, userId)) {
+            return true;
+        }
+        if (isSystemOrRootOrShell(callingUid)) {
+            return false;
+        }
+        final ArraySet<PackageStateInternal> packageStates =
+                (ArraySet<PackageStateInternal>) sus.getPackageStates();
+        for (int index = 0; index < packageStates.size(); index++) {
+            final PackageStateInternal ps = packageStates.valueAt(index);
+            if (ps.getUserStateOrDefault(userId).isInstalled() || ps.isHiddenUntilInstalled()) {
+                return false;
+            }
+        }
+        // Filter it, all packages with the same shared uid are uninstalled.
+        return true;
     }
 
     /**
@@ -3097,30 +3170,44 @@ public class ComputerEngine implements Computer {
 
     public boolean filterAppAccess(AndroidPackage pkg, int callingUid, int userId) {
         PackageStateInternal ps = getPackageStateInternal(pkg.getPackageName());
-        return shouldFilterApplication(ps, callingUid,
-                userId);
+        return shouldFilterApplicationIncludingUninstalled(ps, callingUid, userId);
     }
 
-    public boolean filterAppAccess(String packageName, int callingUid, int userId) {
+    public boolean filterAppAccess(String packageName, int callingUid, int userId,
+            boolean filterUninstalled) {
         PackageStateInternal ps = getPackageStateInternal(packageName);
-        return shouldFilterApplication(ps, callingUid,
-                userId);
+        return shouldFilterApplication(
+                ps, callingUid, null /* component */, TYPE_UNKNOWN, userId, filterUninstalled);
     }
 
     public boolean filterAppAccess(int uid, int callingUid) {
+        if (Process.isSdkSandboxUid(uid)) {
+            // Sdk sandbox instance should be able to see itself.
+            if (callingUid == uid) {
+                return false;
+            }
+            final int clientAppUid = Process.getAppUidForSdkSandboxUid(uid);
+            // Client app of this sdk sandbox process should be able to see it.
+            if (clientAppUid == uid) {
+                return false;
+            }
+            // Nobody else should be able to see the sdk sandbox process.
+            return true;
+        }
         final int userId = UserHandle.getUserId(uid);
         final int appId = UserHandle.getAppId(uid);
         final Object setting = mSettings.getSettingBase(appId);
-
+        if (setting == null) {
+            return true;
+        }
         if (setting instanceof SharedUserSetting) {
-            return shouldFilterApplication(
+            return shouldFilterApplicationIncludingUninstalled(
                     (SharedUserSetting) setting, callingUid, userId);
-        } else if (setting == null
-                || setting instanceof PackageStateInternal) {
-            return shouldFilterApplication(
+        } else if (setting instanceof PackageStateInternal) {
+            return shouldFilterApplicationIncludingUninstalled(
                     (PackageStateInternal) setting, callingUid, userId);
         }
-        return false;
+        return true;
     }
 
     public void dump(int type, FileDescriptor fd, PrintWriter pw, DumpState dumpState) {
@@ -3223,7 +3310,8 @@ public class ComputerEngine implements Computer {
 
                 for (PackageStateInternal pkgSetting : pkgSettings) {
                     final AndroidPackage pkg = pkgSetting.getPkg();
-                    if (pkg == null) {
+                    if (pkg == null || pkg.isApex()) {
+                        // Skip APEX which is not dex-optimized
                         continue;
                     }
                     final String pkgName = pkg.getPackageName();
@@ -3309,11 +3397,56 @@ public class ComputerEngine implements Computer {
             case DumpState.DUMP_APEX: {
                 if (packageName == null || isApexPackage(packageName)) {
                     mApexManager.dump(pw);
-                    mApexPackageInfo.dump(pw, packageName);
+                    dumpApex(pw, packageName);
                 }
                 break;
             }
         } // switch
+    }
+
+    private void generateApexPackageInfo(List<PackageInfo> activePackages,
+            List<PackageInfo> inactivePackages, List<PackageInfo> factoryPackages) {
+        for (AndroidPackage p : mPackages.values()) {
+            final String packageName = p.getPackageName();
+            PackageStateInternal ps = mSettings.getPackage(packageName);
+            if (!p.isApex() || ps == null) {
+                continue;
+            }
+            PackageInfo pi = generatePackageInfo(ps, 0, 0);
+            if (pi == null) {
+                continue;
+            }
+            pi.isActiveApex = true;
+            activePackages.add(pi);
+            if (!ps.isUpdatedSystemApp()) {
+                factoryPackages.add(pi);
+            } else {
+                PackageStateInternal psDisabled = mSettings.getDisabledSystemPkg(packageName);
+                pi = generatePackageInfo(psDisabled, 0, 0);
+                if (pi != null) {
+                    factoryPackages.add(pi);
+                    inactivePackages.add(pi);
+                }
+            }
+        }
+    }
+
+    private void dumpApex(PrintWriter pw, String packageName) {
+        if (ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
+            final IndentingPrintWriter ipw = new IndentingPrintWriter(pw, "  ", 120);
+            List<PackageInfo> activePackages = new ArrayList<>();
+            List<PackageInfo> inactivePackages = new ArrayList<>();
+            List<PackageInfo> factoryPackages = new ArrayList<>();
+            generateApexPackageInfo(activePackages, inactivePackages, factoryPackages);
+            ipw.println("Active APEX packages:");
+            ApexPackageInfo.dumpPackages(activePackages, packageName, ipw);
+            ipw.println("Inactive APEX packages:");
+            ApexPackageInfo.dumpPackages(inactivePackages, packageName, ipw);
+            ipw.println("Factory APEX packages:");
+            ApexPackageInfo.dumpPackages(factoryPackages, packageName, ipw);
+        } else {
+            mApexPackageInfo.dump(pw, packageName);
+        }
     }
 
     // The body of findPreferredActivity.
@@ -3692,7 +3825,12 @@ public class ComputerEngine implements Computer {
 
     @Override
     public boolean isApexPackage(String packageName) {
-        return mApexPackageInfo.isApexPackage(packageName);
+        if (!ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
+            return mApexPackageInfo.isApexPackage(packageName);
+        } else {
+            final AndroidPackage pkg = mPackages.get(packageName);
+            return pkg != null && pkg.isApex();
+        }
     }
 
     @Override
@@ -3792,14 +3930,16 @@ public class ComputerEngine implements Computer {
     }
 
     @Override
-    public boolean activitySupportsIntent(@NonNull ComponentName resolveComponentName,
-            @NonNull ComponentName component, @NonNull Intent intent, String resolvedType) {
+    public boolean activitySupportsIntentAsUser(@NonNull ComponentName resolveComponentName,
+            @NonNull ComponentName component, @NonNull Intent intent, String resolvedType,
+            int userId) {
+        final int callingUid = Binder.getCallingUid();
+        enforceCrossUserPermission(callingUid, userId, false /* requireFullPermission */,
+                false /* checkShell */, "activitySupportsIntentAsUser");
         if (component.equals(resolveComponentName)) {
             // The resolver supports EVERYTHING!
             return true;
         }
-        final int callingUid = Binder.getCallingUid();
-        final int callingUserId = UserHandle.getUserId(callingUid);
         ParsedActivity a = mComponentResolver.getActivity(component);
         if (a == null) {
             return false;
@@ -3809,7 +3949,7 @@ public class ComputerEngine implements Computer {
             return false;
         }
         if (shouldFilterApplication(
-                ps, callingUid, component, TYPE_ACTIVITY, callingUserId)) {
+                ps, callingUid, component, TYPE_ACTIVITY, userId, true /* filterUninstall */)) {
             return false;
         }
         for (int i=0; i< a.getIntents().size(); i++) {
@@ -4209,10 +4349,11 @@ public class ComputerEngine implements Computer {
     }
 
     @Override
-    public PackageStateInternal getPackageStateFiltered(@NonNull String packageName, int callingUid,
-            @UserIdInt int userId) {
+    public PackageStateInternal getPackageStateForInstalledAndFiltered(@NonNull String packageName,
+            int callingUid, @UserIdInt int userId) {
         final PackageStateInternal packageState = getPackageStateInternal(packageName);
-        if (packageState == null || shouldFilterApplication(packageState, callingUid, userId)) {
+        if (packageState == null
+                || shouldFilterApplicationIncludingUninstalled(packageState, callingUid, userId)) {
             return null;
         }
         return packageState;
@@ -4244,52 +4385,56 @@ public class ComputerEngine implements Computer {
     public int checkUidSignatures(int uid1, int uid2) {
         final int callingUid = Binder.getCallingUid();
         final int callingUserId = UserHandle.getUserId(callingUid);
-        // Map to base uids.
-        final int appId1 = UserHandle.getAppId(uid1);
-        final int appId2 = UserHandle.getAppId(uid2);
-        SigningDetails p1SigningDetails;
-        SigningDetails p2SigningDetails;
-        Object obj = mSettings.getSettingBase(appId1);
-        if (obj != null) {
-            if (obj instanceof SharedUserSetting) {
-                final SharedUserSetting sus = (SharedUserSetting) obj;
-                if (shouldFilterApplication(sus, callingUid, callingUserId)) {
-                    return PackageManager.SIGNATURE_UNKNOWN_PACKAGE;
-                }
-                p1SigningDetails = sus.signatures.mSigningDetails;
-            } else if (obj instanceof PackageSetting) {
-                final PackageSetting ps = (PackageSetting) obj;
-                if (shouldFilterApplication(ps, callingUid, callingUserId)) {
-                    return PackageManager.SIGNATURE_UNKNOWN_PACKAGE;
-                }
-                p1SigningDetails = ps.getSigningDetails();
-            } else {
-                return PackageManager.SIGNATURE_UNKNOWN_PACKAGE;
-            }
-        } else {
-            return PackageManager.SIGNATURE_UNKNOWN_PACKAGE;
-        }
-        obj = mSettings.getSettingBase(appId2);
-        if (obj != null) {
-            if (obj instanceof SharedUserSetting) {
-                final SharedUserSetting sus = (SharedUserSetting) obj;
-                if (shouldFilterApplication(sus, callingUid, callingUserId)) {
-                    return PackageManager.SIGNATURE_UNKNOWN_PACKAGE;
-                }
-                p2SigningDetails = sus.signatures.mSigningDetails;
-            } else if (obj instanceof PackageSetting) {
-                final PackageSetting ps = (PackageSetting) obj;
-                if (shouldFilterApplication(ps, callingUid, callingUserId)) {
-                    return PackageManager.SIGNATURE_UNKNOWN_PACKAGE;
-                }
-                p2SigningDetails = ps.getSigningDetails();
-            } else {
-                return PackageManager.SIGNATURE_UNKNOWN_PACKAGE;
-            }
-        } else {
+        final SigningDetails p1SigningDetails =
+                getSigningDetailsAndFilterAccess(uid1, callingUid, callingUserId);
+        final SigningDetails p2SigningDetails =
+                getSigningDetailsAndFilterAccess(uid2, callingUid, callingUserId);
+        if (p1SigningDetails == null || p2SigningDetails == null) {
             return PackageManager.SIGNATURE_UNKNOWN_PACKAGE;
         }
         return checkSignaturesInternal(p1SigningDetails, p2SigningDetails);
+    }
+
+    @Override
+    public int checkUidSignaturesForAllUsers(int uid1, int uid2) {
+        final int callingUid = Binder.getCallingUid();
+        final int userId1 = UserHandle.getUserId(uid1);
+        final int userId2 = UserHandle.getUserId(uid2);
+        enforceCrossUserPermission(callingUid, userId1, false /* requireFullPermission */,
+                false /* checkShell */, "checkUidSignaturesForAllUsers");
+        enforceCrossUserPermission(callingUid, userId2, false /* requireFullPermission */,
+                false /* checkShell */, "checkUidSignaturesForAllUsers");
+        final SigningDetails p1SigningDetails =
+                getSigningDetailsAndFilterAccess(uid1, callingUid, userId1);
+        final SigningDetails p2SigningDetails =
+                getSigningDetailsAndFilterAccess(uid2, callingUid, userId2);
+        if (p1SigningDetails == null || p2SigningDetails == null) {
+            return PackageManager.SIGNATURE_UNKNOWN_PACKAGE;
+        }
+        return checkSignaturesInternal(p1SigningDetails, p2SigningDetails);
+    }
+
+    private SigningDetails getSigningDetailsAndFilterAccess(int uid, int callingUid, int userId) {
+        // Map to base uids.
+        final int appId = UserHandle.getAppId(uid);
+        final Object obj = mSettings.getSettingBase(appId);
+        if (obj == null) {
+            return null;
+        }
+        if (obj instanceof SharedUserSetting) {
+            final SharedUserSetting sus = (SharedUserSetting) obj;
+            if (shouldFilterApplicationIncludingUninstalled(sus, callingUid, userId)) {
+                return null;
+            }
+            return sus.signatures.mSigningDetails;
+        } else if (obj instanceof PackageSetting) {
+            final PackageSetting ps = (PackageSetting) obj;
+            if (shouldFilterApplicationIncludingUninstalled(ps, callingUid, userId)) {
+                return null;
+            }
+            return ps.getSigningDetails();
+        }
+        return null;
     }
 
     private int checkSignaturesInternal(SigningDetails p1SigningDetails,
@@ -4330,13 +4475,11 @@ public class ComputerEngine implements Computer {
         if (p == null) {
             return false;
         }
-        final PackageStateInternal ps = getPackageStateInternal(p.getPackageName());
-        if (ps == null) {
-            return false;
-        }
         final int callingUid = Binder.getCallingUid();
         final int callingUserId = UserHandle.getUserId(callingUid);
-        if (shouldFilterApplication(ps, callingUid, callingUserId)) {
+        final PackageStateInternal ps = getPackageStateInternal(p.getPackageName());
+        if (ps == null
+                || shouldFilterApplicationIncludingUninstalled(ps, callingUid, callingUserId)) {
             return false;
         }
         switch (type) {
@@ -4354,27 +4497,9 @@ public class ComputerEngine implements Computer {
             @PackageManager.CertificateInputType int type) {
         final int callingUid = Binder.getCallingUid();
         final int callingUserId = UserHandle.getUserId(callingUid);
-        // Map to base uids.
-        final int appId = UserHandle.getAppId(uid);
-        final SigningDetails signingDetails;
-        final Object obj = mSettings.getSettingBase(appId);
-        if (obj != null) {
-            if (obj instanceof SharedUserSetting) {
-                final SharedUserSetting sus = (SharedUserSetting) obj;
-                if (shouldFilterApplication(sus, callingUid, callingUserId)) {
-                    return false;
-                }
-                signingDetails = sus.signatures.mSigningDetails;
-            } else if (obj instanceof PackageSetting) {
-                final PackageSetting ps = (PackageSetting) obj;
-                if (shouldFilterApplication(ps, callingUid, callingUserId)) {
-                    return false;
-                }
-                signingDetails = ps.getSigningDetails();
-            } else {
-                return false;
-            }
-        } else {
+        final SigningDetails signingDetails =
+                getSigningDetailsAndFilterAccess(uid, callingUid, callingUserId);
+        if (signingDetails == null) {
             return false;
         }
         switch (type) {
@@ -4437,13 +4562,13 @@ public class ComputerEngine implements Computer {
         final Object obj = mSettings.getSettingBase(appId);
         if (obj instanceof SharedUserSetting) {
             final SharedUserSetting sus = (SharedUserSetting) obj;
-            if (shouldFilterApplication(sus, callingUid, callingUserId)) {
+            if (shouldFilterApplicationIncludingUninstalled(sus, callingUid, callingUserId)) {
                 return null;
             }
             return sus.name + ":" + sus.mAppId;
         } else if (obj instanceof PackageSetting) {
             final PackageSetting ps = (PackageSetting) obj;
-            if (shouldFilterApplication(ps, callingUid, callingUserId)) {
+            if (shouldFilterApplicationIncludingUninstalled(ps, callingUid, callingUserId)) {
                 return null;
             }
             return ps.getPackageName();
@@ -4472,14 +4597,14 @@ public class ComputerEngine implements Computer {
             final Object obj = mSettings.getSettingBase(appId);
             if (obj instanceof SharedUserSetting) {
                 final SharedUserSetting sus = (SharedUserSetting) obj;
-                if (shouldFilterApplication(sus, callingUid, callingUserId)) {
+                if (shouldFilterApplicationIncludingUninstalled(sus, callingUid, callingUserId)) {
                     names[i] = null;
                 } else {
                     names[i] = "shared:" + sus.name;
                 }
             } else if (obj instanceof PackageSetting) {
                 final PackageSetting ps = (PackageSetting) obj;
-                if (shouldFilterApplication(ps, callingUid, callingUserId)) {
+                if (shouldFilterApplicationIncludingUninstalled(ps, callingUid, callingUserId)) {
                     names[i] = null;
                 } else {
                     names[i] = ps.getPackageName();
@@ -4501,7 +4626,7 @@ public class ComputerEngine implements Computer {
             return Process.INVALID_UID;
         }
         final SharedUserSetting suid = mSettings.getSharedUserFromId(sharedUserName);
-        if (suid != null && !shouldFilterApplication(suid, callingUid,
+        if (suid != null && !shouldFilterApplicationIncludingUninstalled(suid, callingUid,
                 UserHandle.getUserId(callingUid))) {
             return suid.mAppId;
         }
@@ -4522,13 +4647,13 @@ public class ComputerEngine implements Computer {
         final Object obj = mSettings.getSettingBase(appId);
         if (obj instanceof SharedUserSetting) {
             final SharedUserSetting sus = (SharedUserSetting) obj;
-            if (shouldFilterApplication(sus, callingUid, callingUserId)) {
+            if (shouldFilterApplicationIncludingUninstalled(sus, callingUid, callingUserId)) {
                 return 0;
             }
             return sus.getFlags();
         } else if (obj instanceof PackageSetting) {
             final PackageSetting ps = (PackageSetting) obj;
-            if (shouldFilterApplication(ps, callingUid, callingUserId)) {
+            if (shouldFilterApplicationIncludingUninstalled(ps, callingUid, callingUserId)) {
                 return 0;
             }
             return ps.getFlags();
@@ -4550,13 +4675,13 @@ public class ComputerEngine implements Computer {
         final Object obj = mSettings.getSettingBase(appId);
         if (obj instanceof SharedUserSetting) {
             final SharedUserSetting sus = (SharedUserSetting) obj;
-            if (shouldFilterApplication(sus, callingUid, callingUserId)) {
+            if (shouldFilterApplicationIncludingUninstalled(sus, callingUid, callingUserId)) {
                 return 0;
             }
             return sus.getPrivateFlags();
         } else if (obj instanceof PackageSetting) {
             final PackageSetting ps = (PackageSetting) obj;
-            if (shouldFilterApplication(ps, callingUid, callingUserId)) {
+            if (shouldFilterApplicationIncludingUninstalled(ps, callingUid, callingUserId)) {
                 return 0;
             }
             return ps.getPrivateFlags();
@@ -4595,22 +4720,21 @@ public class ComputerEngine implements Computer {
     // NOTE: Can't remove due to unsupported app usage
     @NonNull
     @Override
-    public String[] getAppOpPermissionPackages(@NonNull String permissionName) {
-        if (permissionName == null) {
-            return EmptyArray.STRING;
-        }
+    public String[] getAppOpPermissionPackages(@NonNull String permissionName, int userId) {
         final int callingUid = Binder.getCallingUid();
-        if (getInstantAppPackageName(callingUid) != null) {
+        enforceCrossUserPermission(callingUid, userId, false /* requireFullPermission */,
+                false /* checkShell */, "getAppOpPermissionPackages");
+        if (permissionName == null || getInstantAppPackageName(callingUid) != null
+                || !mUserManager.exists(userId)) {
             return EmptyArray.STRING;
         }
-        final int callingUserId = UserHandle.getUserId(callingUid);
 
         final ArraySet<String> packageNames = new ArraySet(
                 mPermissionManager.getAppOpPermissionPackages(permissionName));
         for (int i = packageNames.size() - 1; i >= 0; i--) {
             final String packageName = packageNames.valueAt(i);
-            if (!shouldFilterApplication(mSettings.getPackage(packageName), callingUid,
-                    callingUserId)) {
+            if (!shouldFilterApplicationIncludingUninstalled(
+                    mSettings.getPackage(packageName), callingUid, userId)) {
                 continue;
             }
             packageNames.removeAt(i);
@@ -4692,6 +4816,7 @@ public class ComputerEngine implements Computer {
         if (!mUserManager.exists(userId)) return Collections.emptyList();
         flags = updateFlagsForApplication(flags, userId);
         final boolean listUninstalled = (flags & MATCH_KNOWN_PACKAGES) != 0;
+        final boolean listApex = (flags & MATCH_APEX) != 0;
 
         enforceCrossUserPermission(
                 callingUid,
@@ -4712,6 +4837,11 @@ public class ComputerEngine implements Computer {
                     effectiveFlags |= PackageManager.MATCH_ANY_USER;
                 }
                 if (ps.getPkg() != null) {
+                    if (ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
+                        if (!listApex && ps.getPkg().isApex()) {
+                            continue;
+                        }
+                    }
                     if (filterSharedLibPackage(ps, callingUid, userId, flags)) {
                         continue;
                     }
@@ -4739,6 +4869,11 @@ public class ComputerEngine implements Computer {
                 final AndroidPackage pkg = packageState.getPkg();
                 if (pkg == null) {
                     continue;
+                }
+                if (ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
+                    if (!listApex && pkg.isApex()) {
+                        continue;
+                    }
                 }
                 if (filterSharedLibPackage(packageState, Binder.getCallingUid(), userId, flags)) {
                     continue;
@@ -4873,6 +5008,8 @@ public class ComputerEngine implements Computer {
         final int callingUid = Binder.getCallingUid();
         final int userId = processName != null ? UserHandle.getUserId(uid)
                 : UserHandle.getCallingUserId();
+        enforceCrossUserPermission(callingUid, userId, false /* requireFullPermission */,
+                false /* checkShell */, "queryContentProviders");
         if (!mUserManager.exists(userId)) return ParceledListSlice.emptyList();
         flags = updateFlagsForComponent(flags, userId);
         ArrayList<ProviderInfo> finalList = null;
@@ -4909,32 +5046,33 @@ public class ComputerEngine implements Computer {
 
     @Nullable
     @Override
-    public InstrumentationInfo getInstrumentationInfo(@NonNull ComponentName component, int flags) {
+    public InstrumentationInfo getInstrumentationInfoAsUser(@NonNull ComponentName component,
+            int flags, int userId) {
         final int callingUid = Binder.getCallingUid();
-        final int callingUserId = UserHandle.getUserId(callingUid);
+        enforceCrossUserPermission(callingUid, userId, false /* requireFullPermission */,
+                false /* checkShell */, "getInstrumentationInfoAsUser");
+        if (!mUserManager.exists(userId)) return null;
         String packageName = component.getPackageName();
         final PackageStateInternal ps = mSettings.getPackage(packageName);
         AndroidPackage pkg = mPackages.get(packageName);
         if (ps == null || pkg == null) return null;
         if (shouldFilterApplication(
-                ps, callingUid, component, TYPE_UNKNOWN, callingUserId)) {
+                ps, callingUid, component, TYPE_UNKNOWN, userId)) {
             return null;
         }
         final ParsedInstrumentation i = mInstrumentation.get(component);
-        return PackageInfoUtils.generateInstrumentationInfo(i, pkg, flags, callingUserId, ps);
+        final PackageUserStateInternal state = ps.getUserStateOrDefault(userId);
+        return PackageInfoUtils.generateInstrumentationInfo(i, pkg, flags, state, userId, ps);
     }
 
     @NonNull
     @Override
-    public ParceledListSlice<InstrumentationInfo> queryInstrumentation(
-            @NonNull String targetPackage, int flags) {
+    public ParceledListSlice<InstrumentationInfo> queryInstrumentationAsUser(
+            @NonNull String targetPackage, int flags, int userId) {
         final int callingUid = Binder.getCallingUid();
-        final int callingUserId = UserHandle.getUserId(callingUid);
-        final PackageStateInternal ps = mSettings.getPackage(targetPackage);
-        if (shouldFilterApplication(ps, callingUid, callingUserId)) {
-            return ParceledListSlice.emptyList();
-        }
-
+        enforceCrossUserPermission(callingUid, userId, false /* requireFullPermission */,
+                false /* checkShell */, "queryInstrumentationAsUser");
+        if (!mUserManager.exists(userId)) return ParceledListSlice.emptyList();
         ArrayList<InstrumentationInfo> finalList = new ArrayList<>();
 
         final int numInstrumentations = mInstrumentation.size();
@@ -4945,12 +5083,15 @@ public class ComputerEngine implements Computer {
                 String packageName = p.getPackageName();
                 AndroidPackage pkg = mPackages.get(packageName);
                 PackageStateInternal pkgSetting = getPackageStateInternal(packageName);
-                if (pkg != null) {
-                    InstrumentationInfo ii = PackageInfoUtils.generateInstrumentationInfo(p,
-                            pkg, flags, callingUserId, pkgSetting);
-                    if (ii != null) {
-                        finalList.add(ii);
-                    }
+                if (pkg == null || pkgSetting == null
+                        || shouldFilterApplication(pkgSetting, callingUid, userId)) {
+                    continue;
+                }
+                final PackageUserStateInternal state = pkgSetting.getUserStateOrDefault(userId);
+                InstrumentationInfo ii = PackageInfoUtils.generateInstrumentationInfo(p,
+                        pkg, flags, state, userId, pkgSetting);
+                if (ii != null) {
+                    finalList.add(ii);
                 }
             }
         }
@@ -4995,7 +5136,7 @@ public class ComputerEngine implements Computer {
             if (ps == null) {
                 return true;
             }
-            if (shouldFilterApplication(ps, callingUid, userId)) {
+            if (shouldFilterApplicationIncludingUninstalled(ps, callingUid, userId)) {
                 return true;
             }
             return ps.getUserStateOrDefault(userId).isHidden();
@@ -5059,11 +5200,12 @@ public class ComputerEngine implements Computer {
 
     @Override
     public boolean getBlockUninstallForUser(@NonNull String packageName, @UserIdInt int userId) {
-            final PackageStateInternal ps = mSettings.getPackage(packageName);
-            if (ps == null || shouldFilterApplication(ps, Binder.getCallingUid(), userId)) {
-                return false;
-            }
-            return mSettings.getBlockUninstall(userId, packageName);
+        final PackageStateInternal ps = mSettings.getPackage(packageName);
+        final int callingUid = Binder.getCallingUid();
+        if (ps == null || shouldFilterApplicationIncludingUninstalled(ps, callingUid, userId)) {
+            return false;
+        }
+        return mSettings.getBlockUninstall(userId, packageName);
     }
 
     @Nullable
@@ -5090,7 +5232,7 @@ public class ComputerEngine implements Computer {
         final PackageStateInternal ps = mSettings.getPackage(packageName);
 
         // Installer info for Apex is not stored in PackageManager
-        if (ps == null && mApexPackageInfo.isApexPackage(packageName)) {
+        if (isApexPackage(packageName)) {
             return InstallSource.EMPTY;
         }
 
@@ -5429,7 +5571,7 @@ public class ComputerEngine implements Computer {
         final PackageStateInternal packageState =
                 getPackageStateInternal(component.getPackageName());
         return packageState != null && !shouldFilterApplication(packageState, callingUid,
-                component, TYPE_UNKNOWN, userId);
+                component, TYPE_UNKNOWN, userId, true /* filterUninstall */);
     }
 
     @Override
@@ -5455,13 +5597,10 @@ public class ComputerEngine implements Computer {
         enforceCrossUserPermission(callingUid, userId, true /* requireFullPermission */,
                 false /* checkShell */, "get install reason");
         final PackageStateInternal ps = mSettings.getPackage(packageName);
-        if (shouldFilterApplication(ps, callingUid, userId)) {
+        if (ps == null || shouldFilterApplicationIncludingUninstalled(ps, callingUid, userId)) {
             return PackageManager.INSTALL_REASON_UNKNOWN;
         }
-        if (ps != null) {
-            return ps.getUserStateOrDefault(userId).getInstallReason();
-        }
-        return PackageManager.INSTALL_REASON_UNKNOWN;
+        return ps.getUserStateOrDefault(userId).getInstallReason();
     }
 
     @Override
@@ -5473,22 +5612,18 @@ public class ComputerEngine implements Computer {
                 false /*checkShell*/, "may package query");
         final PackageStateInternal sourceSetting = getPackageStateInternal(sourcePackageName);
         final PackageStateInternal targetSetting = getPackageStateInternal(targetPackageName);
-        if (sourceSetting == null || targetSetting == null) {
-            throw new ParcelableException(new PackageManager.NameNotFoundException("Package(s) "
-                    + (sourceSetting == null ? sourcePackageName + " " : "")
-                    + (targetSetting == null ? targetPackageName + " " : "")
-                    + "not found."));
+        boolean throwException = sourceSetting == null || targetSetting == null;
+        if (!throwException) {
+            final boolean filterSource =
+                    shouldFilterApplicationIncludingUninstalled(sourceSetting, callingUid, userId);
+            final boolean filterTarget =
+                    shouldFilterApplicationIncludingUninstalled(targetSetting, callingUid, userId);
+            // The caller must have visibility of the both packages
+            throwException = filterSource || filterTarget;
         }
-        final boolean filterSource =
-                shouldFilterApplication(sourceSetting, callingUid, userId);
-        final boolean filterTarget =
-                shouldFilterApplication(targetSetting, callingUid, userId);
-        // The caller must have visibility of the both packages
-        if (filterSource || filterTarget) {
+        if (throwException) {
             throw new ParcelableException(new PackageManager.NameNotFoundException("Package(s) "
-                    + (filterSource ? sourcePackageName + " " : "")
-                    + (filterTarget ? targetPackageName + " " : "")
-                    + "not found."));
+                    + sourcePackageName + " and/or " + targetPackageName + " not found."));
         }
         final int sourcePackageUid = UserHandle.getUid(userId, sourceSetting.getAppId());
         return !shouldFilterApplication(targetSetting, sourcePackageUid, userId);

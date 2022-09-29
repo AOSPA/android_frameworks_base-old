@@ -142,17 +142,12 @@ public class Fingerprint21 implements IHwBinder.DeathRecipient, ServiceProvider 
                     return; // Keyguard is always allowed
                 }
 
-                final List<ActivityManager.RunningTaskInfo> runningTasks =
-                        mActivityTaskManager.getTasks(1);
-                if (!runningTasks.isEmpty()) {
-                    final String topPackage = runningTasks.get(0).topActivity.getPackageName();
-                    if (!topPackage.contentEquals(client.getOwnerString())
-                            && !client.isAlreadyDone()) {
-                        Slog.e(TAG, "Stopping background authentication, top: "
-                                + topPackage + " currentClient: " + client);
-                        mScheduler.cancelAuthenticationOrDetection(
-                                client.getToken(), client.getRequestId());
-                    }
+                if (Utils.isBackground(client.getOwnerString())
+                        && !client.isAlreadyDone()) {
+                    Slog.e(TAG, "Stopping background authentication,"
+                            + " currentClient: " + client);
+                    mScheduler.cancelAuthenticationOrDetection(
+                            client.getToken(), client.getRequestId());
                 }
             });
         }
@@ -608,6 +603,11 @@ public class Fingerprint21 implements IHwBinder.DeathRecipient, ServiceProvider 
                 }
 
                 @Override
+                public void onBiometricAction(int action) {
+                    mBiometricStateCallback.onBiometricAction(action);
+                }
+
+                @Override
                 public void onClientFinished(@NonNull BaseClientMonitor clientMonitor,
                         boolean success) {
                     mBiometricStateCallback.onClientFinished(clientMonitor, success);
@@ -830,6 +830,11 @@ public class Fingerprint21 implements IHwBinder.DeathRecipient, ServiceProvider 
             }
             ((Udfps) client).onUiReady();
         });
+    }
+
+    @Override
+    public void onPowerPressed() {
+        Slog.e(TAG, "onPowerPressed not supported for HIDL clients");
     }
 
     @Override

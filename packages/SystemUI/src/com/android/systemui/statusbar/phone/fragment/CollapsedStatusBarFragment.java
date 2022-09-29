@@ -24,7 +24,6 @@ import static com.android.systemui.statusbar.events.SystemStatusAnimationSchedul
 import static com.android.systemui.statusbar.events.SystemStatusAnimationSchedulerKt.SHOWING_PERSISTENT_DOT;
 
 import android.animation.Animator;
-import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SuppressLint;
 import android.app.Fragment;
@@ -48,6 +47,7 @@ import com.android.systemui.animation.Interpolators;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
+import com.android.systemui.shade.NotificationPanelViewController;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.DisableFlagsLogger.DisableState;
 import com.android.systemui.statusbar.OperatorNameView;
@@ -56,7 +56,6 @@ import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.events.SystemStatusAnimationCallback;
 import com.android.systemui.statusbar.events.SystemStatusAnimationScheduler;
 import com.android.systemui.statusbar.phone.NotificationIconAreaController;
-import com.android.systemui.statusbar.phone.NotificationPanelViewController;
 import com.android.systemui.statusbar.phone.PhoneStatusBarView;
 import com.android.systemui.statusbar.phone.StatusBarHideIconsForBouncerManager;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
@@ -393,14 +392,6 @@ public class CollapsedStatusBarFragment extends Fragment implements CommandQueue
             state |= DISABLE_NOTIFICATION_ICONS;
             state |= DISABLE_SYSTEM_INFO;
             state |= DISABLE_CLOCK;
-        }
-
-
-        // The shelf will be hidden when dozing with a custom clock, we must show notification
-        // icons in this occasion.
-        if (mStatusBarStateController.isDozing()
-                && mNotificationPanelViewController.hasCustomClock()) {
-            state |= DISABLE_CLOCK | DISABLE_SYSTEM_INFO;
         }
 
         if (mOngoingCallController.hasOngoingCall()) {

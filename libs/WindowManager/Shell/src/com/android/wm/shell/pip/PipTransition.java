@@ -42,6 +42,7 @@ import static com.android.wm.shell.transition.Transitions.TRANSIT_EXIT_PIP_TO_SP
 import static com.android.wm.shell.transition.Transitions.TRANSIT_REMOVE_PIP;
 import static com.android.wm.shell.transition.Transitions.isOpeningType;
 
+import android.animation.Animator;
 import android.app.ActivityManager;
 import android.app.TaskInfo;
 import android.content.Context;
@@ -145,6 +146,11 @@ public class PipTransition extends PipTransitionController {
         if (destinationBounds != null) {
             mExitDestinationBounds.set(destinationBounds);
         }
+        final PipAnimationController.PipTransitionAnimator animator =
+                mPipAnimationController.getCurrentAnimator();
+        if (animator != null && animator.isRunning()) {
+            animator.cancel();
+        }
         mExitTransition = mTransitions.startTransition(type, out, this);
     }
 
@@ -243,6 +249,13 @@ public class PipTransition extends PipTransitionController {
         return false;
     }
 
+    @Override
+    public void mergeAnimation(@NonNull IBinder transition, @NonNull TransitionInfo info,
+            @NonNull SurfaceControl.Transaction t, @NonNull IBinder mergeTarget,
+            @NonNull Transitions.TransitionFinishCallback finishCallback) {
+        end();
+    }
+
     /** Helper to identify whether this handler is currently the one playing an animation */
     private boolean isAnimatingLocally() {
         return mFinishTransaction != null;
@@ -278,6 +291,13 @@ public class PipTransition extends PipTransitionController {
     }
 
     @Override
+    public void end() {
+        Animator animator = mPipAnimationController.getCurrentAnimator();
+        if (animator == null) return;
+        animator.end();
+    }
+
+    @Override
     public boolean handleRotateDisplay(int startRotation, int endRotation,
             WindowContainerTransaction wct) {
         if (mRequestedEnterTransition != null && mOneShotAnimationType == ANIM_TYPE_ALPHA) {
@@ -295,7 +315,7 @@ public class PipTransition extends PipTransitionController {
     }
 
     @Override
-    public void onTransitionMerged(@NonNull IBinder transition) {
+    public void onTransitionConsumed(@NonNull IBinder transition, boolean aborted) {
         if (transition != mExitTransition) {
             return;
         }
@@ -308,7 +328,7 @@ public class PipTransition extends PipTransitionController {
         }
         // Unset exitTransition AFTER cancel so that finishResize knows we are merging.
         mExitTransition = null;
-        if (!cancelled) return;
+        if (!cancelled || aborted) return;
         final ActivityManager.RunningTaskInfo taskInfo = mPipOrganizer.getTaskInfo();
         if (taskInfo != null) {
             startExpandAnimation(taskInfo, mPipOrganizer.getSurfaceControl(),
@@ -331,11 +351,27 @@ public class PipTransition extends PipTransitionController {
         // (likely a remote like launcher), so don't fire the finish-callback here -- wait until
         // the exit transition is merged.
         if ((mExitTransition == null || isAnimatingLocally()) && mFinishCallback != null) {
-            WindowContainerTransaction wct = new WindowContainerTransaction();
-            prepareFinishResizeTransaction(taskInfo, destinationBounds,
-                    direction, wct);
-            if (tx != null) {
-                wct.setBoundsChangeTransaction(taskInfo.token, tx);
+            WindowContainerTransaction wct = null;
+            if (isOutPipDirection(direction)) {
+                // Only need to reset surface properties. The server-side operations were already
+                // done at the start.
+                if (tx != null) {
+                    mFinishTransaction.merge(tx);
+                }
+            } else {
+                wct = new WindowContainerTransaction();
+                if (isInPipDirection(direction)) {
+                    // If we are animating from fullscreen using a bounds animation, then reset the
+                    // activity windowing mode, and set the task bounds to the final bounds
+                    wct.setActivityWindowingMode(taskInfo.token, WINDOWING_MODE_UNDEFINED);
+                    wct.scheduleFinishEnterPip(taskInfo.token, destinationBounds);
+                    wct.setBounds(taskInfo.token, destinationBounds);
+                } else {
+                    wct.setBounds(taskInfo.token, null /* bounds */);
+                }
+                if (tx != null) {
+                    wct.setBoundsChangeTransaction(taskInfo.token, tx);
+                }
             }
             final SurfaceControl leash = mPipOrganizer.getSurfaceControl();
             final int displayRotation = taskInfo.getConfiguration().windowConfiguration
@@ -679,7 +715,7 @@ public class PipTransition extends PipTransitionController {
         mSurfaceTransactionHelper
                 .crop(finishTransaction, leash, destinationBounds)
                 .round(finishTransaction, leash, true /* applyCornerRadius */);
-        mPipMenuController.attach(leash);
+        mTransitions.getMainExecutor().executeDelayed(() -> mPipMenuController.attach(leash), 0);
 
         if (taskInfo.pictureInPictureParams != null
                 && taskInfo.pictureInPictureParams.isAutoEnterEnabled()
@@ -732,7 +768,7 @@ public class PipTransition extends PipTransitionController {
             if (sourceHintRect == null) {
                 // We use content overlay when there is no source rect hint to enter PiP use bounds
                 // animation.
-                animator.setUseContentOverlay(mContext);
+                animator.setColorContentOverlay(mContext);
             }
         } else if (mOneShotAnimationType == ANIM_TYPE_ALPHA) {
             animator = mPipAnimationController.getAnimator(taskInfo, leash, destinationBounds,
@@ -870,28 +906,5 @@ public class PipTransition extends PipTransitionController {
     private void finishResizeForMenu(Rect destinationBounds) {
         mPipMenuController.movePipMenu(null, null, destinationBounds);
         mPipMenuController.updateMenuBounds(destinationBounds);
-    }
-
-    private void prepareFinishResizeTransaction(TaskInfo taskInfo, Rect destinationBounds,
-            @PipAnimationController.TransitionDirection int direction,
-            WindowContainerTransaction wct) {
-        Rect taskBounds = null;
-        if (isInPipDirection(direction)) {
-            // If we are animating from fullscreen using a bounds animation, then reset the
-            // activity windowing mode set by WM, and set the task bounds to the final bounds
-            taskBounds = destinationBounds;
-            wct.setActivityWindowingMode(taskInfo.token, WINDOWING_MODE_UNDEFINED);
-            wct.scheduleFinishEnterPip(taskInfo.token, destinationBounds);
-        } else if (isOutPipDirection(direction)) {
-            // If we are animating to fullscreen, then we need to reset the override bounds
-            // on the task to ensure that the task "matches" the parent's bounds.
-            taskBounds = (direction == TRANSITION_DIRECTION_LEAVE_PIP)
-                    ? null : destinationBounds;
-            wct.setWindowingMode(taskInfo.token, getOutPipWindowingMode());
-            // Simply reset the activity mode set prior to the animation running.
-            wct.setActivityWindowingMode(taskInfo.token, WINDOWING_MODE_UNDEFINED);
-        }
-
-        wct.setBounds(taskInfo.token, taskBounds);
     }
 }

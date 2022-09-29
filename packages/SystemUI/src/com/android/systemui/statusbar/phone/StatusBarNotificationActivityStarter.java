@@ -41,7 +41,6 @@ import android.text.TextUtils;
 import android.util.EventLog;
 import android.view.View;
 
-import androidx.annotation.NonNull;
 import androidx.annotation.VisibleForTesting;
 
 import com.android.internal.jank.InteractionJankMonitor;
@@ -52,23 +51,17 @@ import com.android.systemui.ActivityIntentHelper;
 import com.android.systemui.EventLogTags;
 import com.android.systemui.animation.ActivityLaunchAnimator;
 import com.android.systemui.assist.AssistManager;
-import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.plugins.ActivityStarter;
-import com.android.systemui.plugins.statusbar.StatusBarStateController;
-import com.android.systemui.statusbar.CommandQueue;
+import com.android.systemui.shade.NotificationPanelViewController;
 import com.android.systemui.statusbar.NotificationClickNotifier;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationPresenter;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
-import com.android.systemui.statusbar.notification.NotifPipelineFlags;
 import com.android.systemui.statusbar.notification.NotificationActivityStarter;
-import com.android.systemui.statusbar.notification.NotificationEntryListener;
-import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.NotificationLaunchAnimatorControllerProvider;
 import com.android.systemui.statusbar.notification.collection.NotifPipeline;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifCollectionListener;
-import com.android.systemui.statusbar.notification.collection.render.GroupMembershipManager;
 import com.android.systemui.statusbar.notification.collection.render.NotificationVisibilityProvider;
 import com.android.systemui.statusbar.notification.interruption.NotificationInterruptStateProvider;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
@@ -77,7 +70,6 @@ import com.android.systemui.statusbar.notification.row.OnUserInteractionCallback
 import com.android.systemui.statusbar.phone.dagger.CentralSurfacesComponent;
 import com.android.systemui.statusbar.policy.HeadsUpUtil;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
-import com.android.systemui.util.ListenerSet;
 import com.android.systemui.wmshell.BubblesManager;
 
 import java.util.Optional;
@@ -95,24 +87,19 @@ class StatusBarNotificationActivityStarter implements NotificationActivityStarte
 
     private final Context mContext;
 
-    private final CommandQueue mCommandQueue;
     private final Handler mMainThreadHandler;
     private final Executor mUiBgExecutor;
 
-    private final NotificationEntryManager mEntryManager;
-    private final NotifPipeline mNotifPipeline;
     private final NotificationVisibilityProvider mVisibilityProvider;
     private final HeadsUpManagerPhone mHeadsUpManager;
     private final ActivityStarter mActivityStarter;
     private final NotificationClickNotifier mClickNotifier;
-    private final StatusBarStateController mStatusBarStateController;
     private final StatusBarKeyguardViewManager mStatusBarKeyguardViewManager;
     private final KeyguardManager mKeyguardManager;
     private final IDreamManager mDreamManager;
     private final Optional<BubblesManager> mBubblesManagerOptional;
     private final Lazy<AssistManager> mAssistManagerLazy;
     private final NotificationRemoteInputManager mRemoteInputManager;
-    private final GroupMembershipManager mGroupMembershipManager;
     private final NotificationLockscreenUserManager mLockscreenUserManager;
     private final ShadeController mShadeController;
     private final KeyguardStateController mKeyguardStateController;
@@ -121,7 +108,6 @@ class StatusBarNotificationActivityStarter implements NotificationActivityStarte
     private final StatusBarRemoteInputCallback mStatusBarRemoteInputCallback;
     private final ActivityIntentHelper mActivityIntentHelper;
 
-    private final NotifPipelineFlags mNotifPipelineFlags;
     private final MetricsLogger mMetricsLogger;
     private final StatusBarNotificationActivityStarterLogger mLogger;
 
@@ -131,30 +117,25 @@ class StatusBarNotificationActivityStarter implements NotificationActivityStarte
     private final ActivityLaunchAnimator mActivityLaunchAnimator;
     private final NotificationLaunchAnimatorControllerProvider mNotificationAnimationProvider;
     private final OnUserInteractionCallback mOnUserInteractionCallback;
-    private final LaunchEventsEmitter mLaunchEventsEmitter;
 
     private boolean mIsCollapsingToShowActivityOverLockscreen;
 
     @Inject
     StatusBarNotificationActivityStarter(
             Context context,
-            CommandQueue commandQueue,
             Handler mainThreadHandler,
             Executor uiBgExecutor,
-            NotificationEntryManager entryManager,
             NotifPipeline notifPipeline,
             NotificationVisibilityProvider visibilityProvider,
             HeadsUpManagerPhone headsUpManager,
             ActivityStarter activityStarter,
             NotificationClickNotifier clickNotifier,
-            StatusBarStateController statusBarStateController,
             StatusBarKeyguardViewManager statusBarKeyguardViewManager,
             KeyguardManager keyguardManager,
             IDreamManager dreamManager,
             Optional<BubblesManager> bubblesManagerOptional,
             Lazy<AssistManager> assistManagerLazy,
             NotificationRemoteInputManager remoteInputManager,
-            GroupMembershipManager groupMembershipManager,
             NotificationLockscreenUserManager lockscreenUserManager,
             ShadeController shadeController,
             KeyguardStateController keyguardStateController,
@@ -162,7 +143,6 @@ class StatusBarNotificationActivityStarter implements NotificationActivityStarte
             LockPatternUtils lockPatternUtils,
             StatusBarRemoteInputCallback remoteInputCallback,
             ActivityIntentHelper activityIntentHelper,
-            NotifPipelineFlags notifPipelineFlags,
             MetricsLogger metricsLogger,
             StatusBarNotificationActivityStarterLogger logger,
             OnUserInteractionCallback onUserInteractionCallback,
@@ -170,26 +150,20 @@ class StatusBarNotificationActivityStarter implements NotificationActivityStarte
             NotificationPresenter presenter,
             NotificationPanelViewController panel,
             ActivityLaunchAnimator activityLaunchAnimator,
-            NotificationLaunchAnimatorControllerProvider notificationAnimationProvider,
-            LaunchEventsEmitter launchEventsEmitter) {
+            NotificationLaunchAnimatorControllerProvider notificationAnimationProvider) {
         mContext = context;
-        mCommandQueue = commandQueue;
         mMainThreadHandler = mainThreadHandler;
         mUiBgExecutor = uiBgExecutor;
-        mEntryManager = entryManager;
-        mNotifPipeline = notifPipeline;
         mVisibilityProvider = visibilityProvider;
         mHeadsUpManager = headsUpManager;
         mActivityStarter = activityStarter;
         mClickNotifier = clickNotifier;
-        mStatusBarStateController = statusBarStateController;
         mStatusBarKeyguardViewManager = statusBarKeyguardViewManager;
         mKeyguardManager = keyguardManager;
         mDreamManager = dreamManager;
         mBubblesManagerOptional = bubblesManagerOptional;
         mAssistManagerLazy = assistManagerLazy;
         mRemoteInputManager = remoteInputManager;
-        mGroupMembershipManager = groupMembershipManager;
         mLockscreenUserManager = lockscreenUserManager;
         mShadeController = shadeController;
         mKeyguardStateController = keyguardStateController;
@@ -197,7 +171,6 @@ class StatusBarNotificationActivityStarter implements NotificationActivityStarte
         mLockPatternUtils = lockPatternUtils;
         mStatusBarRemoteInputCallback = remoteInputCallback;
         mActivityIntentHelper = activityIntentHelper;
-        mNotifPipelineFlags = notifPipelineFlags;
         mMetricsLogger = metricsLogger;
         mLogger = logger;
         mOnUserInteractionCallback = onUserInteractionCallback;
@@ -207,36 +180,25 @@ class StatusBarNotificationActivityStarter implements NotificationActivityStarte
         mNotificationPanel = panel;
         mActivityLaunchAnimator = activityLaunchAnimator;
         mNotificationAnimationProvider = notificationAnimationProvider;
-        mLaunchEventsEmitter = launchEventsEmitter;
 
-        if (!mNotifPipelineFlags.isNewPipelineEnabled()) {
-            mEntryManager.addNotificationEntryListener(new NotificationEntryListener() {
-                @Override
-                public void onPendingEntryAdded(NotificationEntry entry) {
-                    handleFullScreenIntent(entry);
-                }
-            });
-        } else {
-            mNotifPipeline.addCollectionListener(new NotifCollectionListener() {
-                @Override
-                public void onEntryAdded(NotificationEntry entry) {
-                    handleFullScreenIntent(entry);
-                }
-            });
-        }
+        notifPipeline.addCollectionListener(new NotifCollectionListener() {
+            @Override
+            public void onEntryAdded(NotificationEntry entry) {
+                handleFullScreenIntent(entry);
+            }
+        });
     }
 
     /**
      * Called when a notification is clicked.
      *
-     * @param sbn notification that was clicked
+     * @param entry notification that was clicked
      * @param row row for that notification
      */
     @Override
-    public void onNotificationClicked(StatusBarNotification sbn, ExpandableNotificationRow row) {
-        mLogger.logStartingActivityFromClick(sbn.getKey());
+    public void onNotificationClicked(NotificationEntry entry, ExpandableNotificationRow row) {
+        mLogger.logStartingActivityFromClick(entry);
 
-        final NotificationEntry entry = row.getEntry();
         if (mRemoteInputManager.isRemoteInputActive(entry)
                 && !TextUtils.isEmpty(row.getActiveRemoteInputText())) {
             // We have an active remote input typed and the user clicked on the notification.
@@ -244,7 +206,7 @@ class StatusBarNotificationActivityStarter implements NotificationActivityStarte
             mRemoteInputManager.closeRemoteInputs();
             return;
         }
-        Notification notification = sbn.getNotification();
+        Notification notification = entry.getSbn().getNotification();
         final PendingIntent intent = notification.contentIntent != null
                 ? notification.contentIntent
                 : notification.fullScreenIntent;
@@ -254,11 +216,9 @@ class StatusBarNotificationActivityStarter implements NotificationActivityStarte
         // The only valid case is Bubble notifications. Guard against other cases
         // entering here.
         if (intent == null && !isBubble) {
-            mLogger.logNonClickableNotification(sbn.getKey());
+            mLogger.logNonClickableNotification(entry);
             return;
         }
-
-        mLaunchEventsEmitter.notifyStartLaunchNotifActivity(entry);
 
         boolean isActivityIntent = intent != null && intent.isActivity() && !isBubble;
         final boolean willLaunchResolverActivity = isActivityIntent
@@ -287,7 +247,7 @@ class StatusBarNotificationActivityStarter implements NotificationActivityStarte
         } else {
             mActivityStarter.dismissKeyguardThenExecute(
                     postKeyguardAction,
-                    () -> mLaunchEventsEmitter.notifyFinishLaunchNotifActivity(entry),
+                    null,
                     willLaunchResolverActivity);
         }
     }
@@ -299,7 +259,7 @@ class StatusBarNotificationActivityStarter implements NotificationActivityStarte
             boolean isActivityIntent,
             boolean animate,
             boolean showOverLockscreen) {
-        mLogger.logHandleClickAfterKeyguardDismissed(entry.getKey());
+        mLogger.logHandleClickAfterKeyguardDismissed(entry);
 
         final Runnable runnable = () -> handleNotificationClickAfterPanelCollapsed(
                 entry, row, intent, isActivityIntent, animate);
@@ -326,7 +286,7 @@ class StatusBarNotificationActivityStarter implements NotificationActivityStarte
             boolean isActivityIntent,
             boolean animate) {
         String notificationKey = entry.getKey();
-        mLogger.logHandleClickAfterPanelCollapsed(notificationKey);
+        mLogger.logHandleClickAfterPanelCollapsed(entry);
 
         try {
             // The intent we are sending is for the application, which
@@ -367,11 +327,9 @@ class StatusBarNotificationActivityStarter implements NotificationActivityStarte
         }
         final boolean canBubble = entry.canBubble();
         if (canBubble) {
-            mLogger.logExpandingBubble(notificationKey);
+            mLogger.logExpandingBubble(entry);
             removeHunAfterClick(row);
             expandBubbleStackOnMainThread(entry);
-            mMainThreadHandler.post(
-                    () -> mLaunchEventsEmitter.notifyFinishLaunchNotifActivity(entry));
         } else {
             startNotificationIntent(intent, fillInIntent, entry, row, animate, isActivityIntent);
         }
@@ -381,30 +339,13 @@ class StatusBarNotificationActivityStarter implements NotificationActivityStarte
 
         final NotificationVisibility nv = mVisibilityProvider.obtain(entry, true);
 
-        // retrieve the group summary to remove with this entry before we tell NMS the
-        // notification was clicked to avoid a race condition
-        final boolean shouldAutoCancel = shouldAutoCancel(entry.getSbn());
-        final NotificationEntry summaryToRemove = shouldAutoCancel
-                ? mOnUserInteractionCallback.getGroupSummaryToDismiss(entry) : null;
-
-        // inform NMS that the notification was clicked
-        mClickNotifier.onNotificationClick(notificationKey, nv);
-
-        if (!canBubble && (shouldAutoCancel
+        if (!canBubble && (shouldAutoCancel(entry.getSbn())
                 || mRemoteInputManager.isNotificationKeptForRemoteInputHistory(notificationKey))) {
+            final Runnable removeNotification =
+                    mOnUserInteractionCallback.registerFutureDismissal(entry, REASON_CLICK);
             // Immediately remove notification from visually showing.
             // We have to post the removal to the UI thread for synchronization.
             mMainThreadHandler.post(() -> {
-                final Runnable removeNotification = () -> {
-                    mOnUserInteractionCallback.onDismiss(entry, REASON_CLICK, summaryToRemove);
-                    if (!animate) {
-                        // If we're animating, this would be invoked after the activity launch
-                        // animation completes. Since we're not animating, the launch already
-                        // happened synchronously, so we notify the launch is complete here after
-                        // onDismiss.
-                        mLaunchEventsEmitter.notifyFinishLaunchNotifActivity(entry);
-                    }
-                };
                 if (mPresenter.isCollapsing()) {
                     // To avoid lags we're only performing the remove after the shade is collapsed
                     mShadeController.addPostCollapseAction(removeNotification);
@@ -412,11 +353,10 @@ class StatusBarNotificationActivityStarter implements NotificationActivityStarte
                     removeNotification.run();
                 }
             });
-        } else if (!canBubble && !animate) {
-            // Not animating, this is the end of the launch flow (see above comment for more info).
-            mMainThreadHandler.post(
-                    () -> mLaunchEventsEmitter.notifyFinishLaunchNotifActivity(entry));
         }
+
+        // inform NMS that the notification was clicked
+        mClickNotifier.onNotificationClick(notificationKey, nv);
 
         mIsCollapsingToShowActivityOverLockscreen = false;
     }
@@ -434,24 +374,14 @@ class StatusBarNotificationActivityStarter implements NotificationActivityStarte
         // will focus follow operation only after drag-and-drop that notification.
         final NotificationVisibility nv = mVisibilityProvider.obtain(entry, true);
 
-        // retrieve the group summary to remove with this entry before we tell NMS the
-        // notification was clicked to avoid a race condition
-        final boolean shouldAutoCancel = shouldAutoCancel(entry.getSbn());
-        final NotificationEntry summaryToRemove = shouldAutoCancel
-                ? mOnUserInteractionCallback.getGroupSummaryToDismiss(entry) : null;
-
         String notificationKey = entry.getKey();
-        // inform NMS that the notification was clicked
-        mClickNotifier.onNotificationClick(notificationKey, nv);
-
-        if (shouldAutoCancel || mRemoteInputManager.isNotificationKeptForRemoteInputHistory(
-                notificationKey)) {
+        if (shouldAutoCancel(entry.getSbn())
+                || mRemoteInputManager.isNotificationKeptForRemoteInputHistory(notificationKey)) {
+            final Runnable removeNotification =
+                    mOnUserInteractionCallback.registerFutureDismissal(entry, REASON_CLICK);
             // Immediately remove notification from visually showing.
             // We have to post the removal to the UI thread for synchronization.
             mMainThreadHandler.post(() -> {
-                final Runnable removeNotification = () ->
-                        mOnUserInteractionCallback.onDismiss(
-                                entry, REASON_CLICK, summaryToRemove);
                 if (mPresenter.isCollapsing()) {
                     // To avoid lags we're only performing the remove
                     // after the shade is collapsed
@@ -461,6 +391,9 @@ class StatusBarNotificationActivityStarter implements NotificationActivityStarte
                 }
             });
         }
+
+        // inform NMS that the notification was clicked
+        mClickNotifier.onNotificationClick(notificationKey, nv);
 
         mIsCollapsingToShowActivityOverLockscreen = false;
     }
@@ -489,15 +422,11 @@ class StatusBarNotificationActivityStarter implements NotificationActivityStarte
             ExpandableNotificationRow row,
             boolean animate,
             boolean isActivityIntent) {
-        mLogger.logStartNotificationIntent(entry.getKey());
+        mLogger.logStartNotificationIntent(entry);
         try {
-            Runnable onFinishAnimationCallback = animate
-                    ? () -> mLaunchEventsEmitter.notifyFinishLaunchNotifActivity(entry)
-                    : null;
             ActivityLaunchAnimator.Controller animationController =
                     new StatusBarLaunchAnimatorController(
-                            mNotificationAnimationProvider
-                                    .getAnimatorController(row, onFinishAnimationCallback),
+                            mNotificationAnimationProvider.getAnimatorController(row, null),
                             mCentralSurfaces,
                             isActivityIntent);
             mActivityLaunchAnimator.startPendingIntentWithAnimation(
@@ -515,7 +444,7 @@ class StatusBarNotificationActivityStarter implements NotificationActivityStarte
                                 : getActivityOptions(mCentralSurfaces.getDisplayId(), adapter);
                         int result = intent.sendAndReturnResult(mContext, 0, fillInIntent, null,
                                 null, null, options);
-                        mLogger.logSendPendingIntent(entry.getKey(), intent, result);
+                        mLogger.logSendPendingIntent(entry, intent, result);
                         return result;
                     });
         } catch (PendingIntent.CanceledException e) {
@@ -622,9 +551,9 @@ class StatusBarNotificationActivityStarter implements NotificationActivityStarte
     void handleFullScreenIntent(NotificationEntry entry) {
         if (mNotificationInterruptStateProvider.shouldLaunchFullScreenIntentWhenAdded(entry)) {
             if (shouldSuppressFullScreenIntent(entry)) {
-                mLogger.logFullScreenIntentSuppressedByDnD(entry.getKey());
+                mLogger.logFullScreenIntentSuppressedByDnD(entry);
             } else if (entry.getImportance() < NotificationManager.IMPORTANCE_HIGH) {
-                mLogger.logFullScreenIntentNotImportantEnough(entry.getKey());
+                mLogger.logFullScreenIntentNotImportantEnough(entry);
             } else {
                 // Stop screensaver if the notification has a fullscreen intent.
                 // (like an incoming phone call)
@@ -639,7 +568,7 @@ class StatusBarNotificationActivityStarter implements NotificationActivityStarte
                 // not immersive & a fullscreen alert should be shown
                 final PendingIntent fullscreenIntent =
                         entry.getSbn().getNotification().fullScreenIntent;
-                mLogger.logSendingFullScreenIntent(entry.getKey(), fullscreenIntent);
+                mLogger.logSendingFullScreenIntent(entry, fullscreenIntent);
                 try {
                     EventLog.writeEvent(EventLogTags.SYSUI_FULLSCREEN_NOTIFICATION,
                             entry.getKey());
@@ -684,36 +613,5 @@ class StatusBarNotificationActivityStarter implements NotificationActivityStarte
         }
 
         return entry.shouldSuppressFullScreenIntent();
-    }
-
-    @SysUISingleton
-    static class LaunchEventsEmitter implements NotifActivityLaunchEvents {
-
-        private final ListenerSet<Listener> mListeners = new ListenerSet<>();
-
-        @Inject
-        LaunchEventsEmitter() {}
-
-        @Override
-        public void registerListener(@NonNull Listener listener) {
-            mListeners.addIfAbsent(listener);
-        }
-
-        @Override
-        public void unregisterListener(@NonNull Listener listener) {
-            mListeners.remove(listener);
-        }
-
-        private void notifyStartLaunchNotifActivity(NotificationEntry entry) {
-            for (Listener listener : mListeners) {
-                listener.onStartLaunchNotifActivity(entry);
-            }
-        }
-
-        private void notifyFinishLaunchNotifActivity(NotificationEntry entry) {
-            for (Listener listener : mListeners) {
-                listener.onFinishLaunchNotifActivity(entry);
-            }
-        }
     }
 }

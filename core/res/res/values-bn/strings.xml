@@ -21,11 +21,6 @@
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="byteShort" msgid="202579285008794431">"বাইট"</string>
-    <string name="kilobyteShort" msgid="2214285521564195803">"kB"</string>
-    <string name="megabyteShort" msgid="6649361267635823443">"MB"</string>
-    <string name="gigabyteShort" msgid="7515809460261287991">"GB"</string>
-    <string name="terabyteShort" msgid="1822367128583886496">"TB"</string>
-    <string name="petabyteShort" msgid="5651571254228534832">"PB"</string>
     <string name="fileSizeSuffix" msgid="4233671691980131257">"<xliff:g id="NUMBER">%1$s</xliff:g> <xliff:g id="UNIT">%2$s</xliff:g>"</string>
     <string name="untitled" msgid="3381766946944136678">"&lt;শিরোনামহীন&gt;"</string>
     <string name="emptyPhoneNumber" msgid="5812172618020360048">"(কোনো ফোন নম্বর নেই)"</string>
@@ -305,8 +300,8 @@
     <string name="permgroupdesc_calendar" msgid="6762751063361489379">"আপনার ক্যালেন্ডারে অ্যাক্সেস"</string>
     <string name="permgrouplab_sms" msgid="795737735126084874">"SMS"</string>
     <string name="permgroupdesc_sms" msgid="5726462398070064542">"এসএমএসগুলি পাঠাতে এবং দেখতে"</string>
-    <string name="permgrouplab_storage" msgid="5570124978732352858">"ফাইল এবং ডকুমেন্ট"</string>
-    <string name="permgroupdesc_storage" msgid="8352226729501080525">"আপনার ডিভাইসে ফাইল ও ডকুমেন্ট অ্যাক্সেস করুন"</string>
+    <string name="permgrouplab_storage" msgid="17339216290379241">"ফাইল"</string>
+    <string name="permgroupdesc_storage" msgid="5378659041354582769">"আপনার ডিভাইসে ফাইল অ্যাক্সেস করবে"</string>
     <string name="permgrouplab_readMediaAural" msgid="1858331312624942053">"মিউজিক এবং অডিও"</string>
     <string name="permgroupdesc_readMediaAural" msgid="7565467343667089595">"আপনার ডিভাইসে মিউজিক এবং অডিও অ্যাক্সেস করুন"</string>
     <string name="permgrouplab_readMediaVisual" msgid="4724874717811908660">"ফটো এবং ভিডিও"</string>
@@ -558,6 +553,8 @@
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"এটি অ্যাপটিকে স্ক্রিন লকের জটিলতার লেভেল বুঝতে সাহায্য করে (খুব বেশি, মাঝারি, অল্প জটিল বা কোনও জটিলতা নেই), যা স্ক্রিন লকটি সম্ভবত কত দীর্ঘ ও সেটির ধরন কীরকম, তার ইঙ্গিত দেয়। এই অ্যাপটি একটি নির্দিষ্ট লেভেল পর্যন্ত স্ক্রিন লক আপডেট করার সাজেশনও দিতে পারে, তবে ব্যবহারকারী তা উপেক্ষা করে অন্য কোথাও চলে যেতে পারেন। মনে রাখবেন যে স্ক্রিন লক প্লেন টেক্সট হিসেবে সংরক্ষণ করা হয় না, তাই অ্যাপ কখনও আসল পাসওয়ার্ড জানতে পারে না।"</string>
     <string name="permlab_postNotification" msgid="4875401198597803658">"বিজ্ঞপ্তি দেখুন"</string>
     <string name="permdesc_postNotification" msgid="5974977162462877075">"অ্যাপকে বিজ্ঞপ্তি দেখানোর জন্য অনুমতি দেয়"</string>
+    <string name="permlab_turnScreenOn" msgid="219344053664171492">"স্ক্রিন চালু করতে চাই"</string>
+    <string name="permdesc_turnScreenOn" msgid="4394606875897601559">"অ্যাপকে স্ক্রিন চালু করার অনুমতি দেয়।"</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"বায়োমেট্রিক হার্ডওয়্যার ব্যবহার করুন"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"অ্যাপটিকে যাচাইকরণের জন্য বায়োমেট্রিক হার্ডওয়্যার ব্যবহার করার অনুমতি দেয়"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"আঙ্গুলের ছাপ নেওয়ার হার্ডওয়্যার পরিচালনা করুন"</string>
@@ -1924,6 +1921,8 @@
     <string name="country_selection_title" msgid="5221495687299014379">"পছন্দের অঞ্চল"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"ভাষার নাম লিখুন"</string>
     <string name="language_picker_section_suggested" msgid="6556199184638990447">"প্রস্তাবিত"</string>
+    <string name="language_picker_section_suggested_bilingual" msgid="5932198319583556613">"সাজেস্ট করা ভাষা"</string>
+    <string name="region_picker_section_suggested_bilingual" msgid="704607569328224133">"সাজেস্ট করা অঞ্চল"</string>
     <string name="language_picker_section_all" msgid="1985809075777564284">"সকল ভাষা"</string>
     <string name="region_picker_section_all" msgid="756441309928774155">"সমস্ত অঞ্চল"</string>
     <string name="locale_search_menu" msgid="6258090710176422934">"সার্চ"</string>
@@ -2078,8 +2077,8 @@
     <string name="nas_upgrade_notification_learn_more_action" msgid="7011130656195423947">"আরও জানুন"</string>
     <string name="nas_upgrade_notification_learn_more_content" msgid="3735480566983530650">"Android 12 ভার্সনে Android অ্যাডাপ্টিভ বিজ্ঞপ্তির পরিবর্তে এনহ্যান্সড বিজ্ঞপ্তি এসেছে। এই ফিচারটি সাজেস্ট করা অ্যাকশন ও উত্তর দেখায় এবং আপনার বিজ্ঞপ্তিগুলি সাজিয়ে রাখে। \n\nএনহ্যান্সড বিজ্ঞপ্তি পরিচিতির নাম এবং মেসেজের মতো ব্যক্তিগত তথ্য সমেত বিজ্ঞপ্তির কন্টেন্টে অ্যাক্সেস করতে পারে। এছাড়া, এই ফিচার বিজ্ঞপ্তি খারিজ করতে বা তার উত্তর দিতে পারে, যেমন ফোন কলের উত্তর দেওয়া এবং \'বিরক্ত করবে না\' মোড নিয়ন্ত্রণ করা।"</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"রুটিন মোডের তথ্য সংক্রান্ত বিজ্ঞপ্তি"</string>
-    <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"সাধারণত যখন চার্জ দেন, তার আগে চার্জ শেষ হয়ে যেতে পারে"</string>
-    <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"ডিভাইস বেশিক্ষণ চালু রাখতে ব্যাটারি সেভার চালু করা হয়েছে"</string>
+    <string name="dynamic_mode_notification_title" msgid="1388718452788985481">"\'ব্যাটারি সেভার\' ফিচার চালু করা হয়েছে"</string>
+    <string name="dynamic_mode_notification_summary" msgid="1639031262484979689">"ব্যাটারির আয়ু বাড়াতে ব্যাটারির ব্যবহার কমানো হচ্ছে"</string>
     <string name="battery_saver_notification_channel_name" msgid="3918243458067916913">"ব্যাটারি সেভার"</string>
     <string name="battery_saver_off_notification_title" msgid="7637255960468032515">"ব্যাটারি সেভার বন্ধ করা আছে"</string>
     <string name="battery_saver_charged_notification_summary" product="default" msgid="5544457317418624367">"ফোনের ব্যাটারিতে যথেষ্ট চার্জ আছে। ফিচারগুলির উপর আর বিধিনিষেধ নেই।"</string>
@@ -2286,5 +2285,7 @@
     <string name="notification_action_check_bg_apps" msgid="4758877443365362532">"অ্যাক্টিভ অ্যাপ চেক করুন"</string>
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"আপনার <xliff:g id="DEVICE">%1$s</xliff:g> থেকে ফোনের ক্যামেরা অ্যাক্সেস করা যাচ্ছে না"</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"আপনার <xliff:g id="DEVICE">%1$s</xliff:g> থেকে ট্যাবলেটের ক্যামেরা অ্যাক্সেস করা যাচ্ছে না"</string>
-    <string name="system_locale_title" msgid="3978041860457277638">"সিস্টেমের ভাষা"</string>
+    <string name="system_locale_title" msgid="711882686834677268">"সিস্টেম ডিফল্ট"</string>
+    <!-- no translation found for default_card_name (9198284935962911468) -->
+    <skip />
 </resources>

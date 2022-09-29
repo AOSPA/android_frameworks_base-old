@@ -81,12 +81,6 @@ public class KeyguardUpdateMonitorCallback {
      */
     public void onKeyguardVisibilityChanged(boolean showing) { }
 
-    /**
-     * Called when the keyguard occluded state changes.
-     * @param occluded Indicates if the keyguard is now occluded.
-     */
-    public void onKeyguardOccludedChanged(boolean occluded) { }
-
     public void onKeyguardVisibilityChangedRaw(boolean showing) {
         final long now = SystemClock.elapsedRealtime();
         if (showing == mShowing
@@ -110,10 +104,12 @@ public class KeyguardUpdateMonitorCallback {
     public void onKeyguardBouncerFullyShowingChanged(boolean bouncerIsFullyShowing) { }
 
     /**
-     * Called when visibility of lockscreen clock changes, such as when
-     * obscured by a widget.
+     * Called when the dismissing animation of keyguard and surfaces behind is finished.
+     * If the surface behind is the Launcher, we may still be playing in-window animations
+     * when this is called (since it's only called once we dismiss the keyguard and end the
+     * remote animation).
      */
-    public void onClockVisibilityChanged() { }
+    public void onKeyguardDismissAnimationFinished() { }
 
     /**
      * Called when the device becomes provisioned
@@ -149,11 +145,6 @@ public class KeyguardUpdateMonitorCallback {
      * @param serviceState
      */
     public void onServiceStateChanged(int subId, ServiceState state) { }
-
-    /**
-     * Called when the user's info changed.
-     */
-    public void onUserInfoChanged(int userId) { }
 
     /**
      * Called when a user got unlocked.
@@ -258,11 +249,6 @@ public class KeyguardUpdateMonitorCallback {
      */
     public void onBiometricError(int msgId, String errString,
             BiometricSourceType biometricSourceType) { }
-
-    /**
-     * Called when the state of face unlock changed.
-     */
-    public void onFaceUnlockStateChanged(boolean running, int userId) { }
 
     /**
      * Called when biometric running state changed.

@@ -30,6 +30,7 @@ import android.companion.CompanionDeviceService;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.FeatureInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.PackageInfoFlags;
@@ -38,8 +39,6 @@ import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
 import android.os.Binder;
 import android.util.Slog;
-
-import com.android.internal.util.ArrayUtils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -65,15 +64,20 @@ final class PackageUtils {
 
     static void enforceUsesCompanionDeviceFeature(@NonNull Context context,
             @UserIdInt int userId, @NonNull String packageName) {
-        final boolean requested = ArrayUtils.contains(
-                getPackageInfo(context, userId, packageName).reqFeatures,
-                FEATURE_COMPANION_DEVICE_SETUP);
+        String requiredFeature = FEATURE_COMPANION_DEVICE_SETUP;
 
-        if (requested) {
-            throw new IllegalStateException("Must declare uses-feature "
-                    + FEATURE_COMPANION_DEVICE_SETUP
-                    + " in manifest to use this API");
+        FeatureInfo[] requestedFeatures = getPackageInfo(context, userId, packageName).reqFeatures;
+        if (requestedFeatures != null) {
+            for (int i = 0; i < requestedFeatures.length; i++) {
+                if (requiredFeature.equals(requestedFeatures[i].name)) {
+                    return;
+                }
+            }
         }
+
+        throw new IllegalStateException("Must declare uses-feature "
+                + requiredFeature
+                + " in manifest to use this API");
     }
 
     /**
@@ -110,7 +114,7 @@ final class PackageUtils {
 
             final ComponentName componentName = service.getComponentName();
 
-            if (isPrimaryCompanionDeviceService(pm, componentName)) {
+            if (isPrimaryCompanionDeviceService(pm, componentName, userId)) {
                 // "Primary" service should be at the head of the list.
                 services.add(0, componentName);
             } else {
@@ -122,9 +126,10 @@ final class PackageUtils {
     }
 
     private static boolean isPrimaryCompanionDeviceService(@NonNull PackageManager pm,
-            @NonNull ComponentName componentName) {
+            @NonNull ComponentName componentName, @UserIdInt int userId) {
         try {
-            return pm.getProperty(PROPERTY_PRIMARY_TAG, componentName).getBoolean();
+            return pm.getPropertyAsUser(PROPERTY_PRIMARY_TAG, componentName.getPackageName(),
+                    componentName.getClassName(), userId).getBoolean();
         } catch (PackageManager.NameNotFoundException e) {
             return false;
         }

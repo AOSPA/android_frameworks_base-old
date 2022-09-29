@@ -326,6 +326,8 @@
     <!-- To read safety center status -->
     <uses-permission android:name="android.permission.READ_SAFETY_CENTER_STATUS" />
 
+    <uses-permission android:name="android.permission.SET_UNRESTRICTED_KEEP_CLEAR_AREAS" />
+
     <protected-broadcast android:name="com.android.settingslib.action.REGISTER_SLICE_RECEIVER" />
     <protected-broadcast android:name="com.android.settingslib.action.UNREGISTER_SLICE_RECEIVER" />
     <protected-broadcast android:name="com.android.settings.flashlight.action.FLASHLIGHT_CHANGED" />
@@ -619,6 +621,17 @@
             android:excludeFromRecents="true"
             android:visibleToInstantApps="true"/>
 
+        <activity
+            android:name=".media.MediaProjectionAppSelectorActivity"
+            android:theme="@style/Theme.SystemUI.MediaProjectionAppSelector"
+            android:finishOnCloseSystemDialogs="true"
+            android:excludeFromRecents="true"
+            android:documentLaunchMode="never"
+            android:relinquishTaskIdentity="true"
+            android:configChanges=
+                "screenSize|smallestScreenSize|screenLayout|orientation|keyboard|keyboardHidden"
+            android:visibleToInstantApps="true"/>
+
         <!-- started from TvNotificationPanel -->
         <activity
             android:name=".statusbar.tv.notifications.TvNotificationPanelActivity"
@@ -714,7 +727,7 @@
 
         <service
             android:name=".dreams.DreamOverlayService"
-            android:enabled="@bool/config_dreamOverlayServiceEnabled"
+            android:enabled="false"
             android:exported="true" />
 
         <activity android:name=".keyguard.WorkLockActivity"
@@ -789,6 +802,7 @@
                   android:theme="@style/EditTextActivity"
                   android:exported="false"
                   android:excludeFromRecents="true"
+                  android:label="@string/clipboard_editor"
                   />
 
         <activity android:name=".controls.management.ControlsProviderSelectorActivity"

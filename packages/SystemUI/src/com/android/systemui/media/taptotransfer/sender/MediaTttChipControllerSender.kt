@@ -21,12 +21,16 @@ import android.content.Context
 import android.media.MediaRoute2Info
 import android.os.PowerManager
 import android.util.Log
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.view.accessibility.AccessibilityManager
 import android.widget.TextView
 import com.android.internal.statusbar.IUndoMediaTransferCallback
 import com.android.systemui.R
+import com.android.systemui.animation.Interpolators
+import com.android.systemui.animation.ViewHierarchyAnimator
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.media.taptotransfer.common.ChipInfoCommon
@@ -51,6 +55,7 @@ class MediaTttChipControllerSender @Inject constructor(
     windowManager: WindowManager,
     viewUtil: ViewUtil,
     @Main mainExecutor: DelayableExecutor,
+    accessibilityManager: AccessibilityManager,
     tapGestureDetector: TapGestureDetector,
     powerManager: PowerManager,
     private val uiEventLogger: MediaTttSenderUiEventLogger
@@ -60,10 +65,15 @@ class MediaTttChipControllerSender @Inject constructor(
     windowManager,
     viewUtil,
     mainExecutor,
+    accessibilityManager,
     tapGestureDetector,
     powerManager,
     R.layout.media_ttt_chip
 ) {
+    override val windowLayoutParams = commonWindowLayoutParams.apply {
+        gravity = Gravity.TOP.or(Gravity.CENTER_HORIZONTAL)
+    }
+
     private var currentlyDisplayedChipState: ChipStateSender? = null
 
     private val commandQueueCallbacks = object : CommandQueue.Callbacks {
@@ -124,7 +134,6 @@ class MediaTttChipControllerSender @Inject constructor(
         currentChipView.requireViewById<View>(R.id.loading).visibility =
             chipState.isMidTransfer.visibleIfTrue()
 
-
         // Undo
         val undoView = currentChipView.requireViewById<View>(R.id.undo)
         val undoClickListener = chipState.undoClickListener(
@@ -136,6 +145,17 @@ class MediaTttChipControllerSender @Inject constructor(
         // Failure
         currentChipView.requireViewById<View>(R.id.failure_icon).visibility =
             chipState.isTransferFailure.visibleIfTrue()
+    }
+
+    override fun animateChipIn(chipView: ViewGroup) {
+        ViewHierarchyAnimator.animateAddition(
+            chipView.requireViewById<ViewGroup>(R.id.media_ttt_sender_chip_inner),
+            ViewHierarchyAnimator.Hotspot.TOP,
+            Interpolators.EMPHASIZED_DECELERATE,
+            duration = 500L,
+            includeMargins = true,
+            includeFadeIn = true,
+        )
     }
 
     override fun removeChip(removalReason: String) {

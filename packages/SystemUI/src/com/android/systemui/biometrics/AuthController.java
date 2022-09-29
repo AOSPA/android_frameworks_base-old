@@ -62,6 +62,7 @@ import android.view.WindowManager;
 
 import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.os.SomeArgs;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.systemui.CoreStartable;
@@ -75,10 +76,12 @@ import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.util.concurrency.DelayableExecutor;
 import com.android.systemui.util.concurrency.Execution;
 
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 import javax.inject.Inject;
@@ -142,6 +145,7 @@ public class AuthController extends CoreStartable implements CommandQueue.Callba
     private boolean mAllFingerprintAuthenticatorsRegistered;
     @NonNull private final UserManager mUserManager;
     @NonNull private final LockPatternUtils mLockPatternUtils;
+    @NonNull private final InteractionJankMonitor mInteractionJankMonitor;
     private final @Background DelayableExecutor mBackgroundExecutor;
 
     @VisibleForTesting
@@ -336,11 +340,17 @@ public class AuthController extends CoreStartable implements CommandQueue.Callba
     }
 
     @Override
-    public void onTryAgainPressed() {
+    public void onTryAgainPressed(long requestId) {
         if (mReceiver == null) {
             Log.e(TAG, "onTryAgainPressed: Receiver is null");
             return;
         }
+
+        if (requestId != mCurrentDialog.getRequestId()) {
+            Log.w(TAG, "requestId doesn't match, skip onTryAgainPressed");
+            return;
+        }
+
         try {
             mReceiver.onTryAgainPressed();
         } catch (RemoteException e) {
@@ -349,11 +359,17 @@ public class AuthController extends CoreStartable implements CommandQueue.Callba
     }
 
     @Override
-    public void onDeviceCredentialPressed() {
+    public void onDeviceCredentialPressed(long requestId) {
         if (mReceiver == null) {
             Log.e(TAG, "onDeviceCredentialPressed: Receiver is null");
             return;
         }
+
+        if (requestId != mCurrentDialog.getRequestId()) {
+            Log.w(TAG, "requestId doesn't match, skip onDeviceCredentialPressed");
+            return;
+        }
+
         try {
             mReceiver.onDeviceCredentialPressed();
         } catch (RemoteException e) {
@@ -362,11 +378,17 @@ public class AuthController extends CoreStartable implements CommandQueue.Callba
     }
 
     @Override
-    public void onSystemEvent(int event) {
+    public void onSystemEvent(int event, long requestId) {
         if (mReceiver == null) {
             Log.e(TAG, "onSystemEvent(" + event + "): Receiver is null");
             return;
         }
+
+        if (requestId != mCurrentDialog.getRequestId()) {
+            Log.w(TAG, "requestId doesn't match, skip onSystemEvent");
+            return;
+        }
+
         try {
             mReceiver.onSystemEvent(event);
         } catch (RemoteException e) {
@@ -375,9 +397,14 @@ public class AuthController extends CoreStartable implements CommandQueue.Callba
     }
 
     @Override
-    public void onDialogAnimatedIn() {
+    public void onDialogAnimatedIn(long requestId) {
         if (mReceiver == null) {
             Log.e(TAG, "onDialogAnimatedIn: Receiver is null");
+            return;
+        }
+
+        if (requestId != mCurrentDialog.getRequestId()) {
+            Log.w(TAG, "requestId doesn't match, skip onDialogAnimatedIn");
             return;
         }
 
@@ -389,7 +416,14 @@ public class AuthController extends CoreStartable implements CommandQueue.Callba
     }
 
     @Override
-    public void onDismissed(@DismissedReason int reason, @Nullable byte[] credentialAttestation) {
+    public void onDismissed(@DismissedReason int reason,
+                            @Nullable byte[] credentialAttestation, long requestId) {
+
+        if (mCurrentDialog != null && requestId != mCurrentDialog.getRequestId()) {
+            Log.w(TAG, "requestId doesn't match, skip onDismissed");
+            return;
+        }
+
         switch (reason) {
             case AuthDialogCallback.DISMISSED_USER_CANCELED:
                 sendResultAndCleanUp(BiometricPrompt.DISMISSED_REASON_USER_CANCEL,
@@ -446,11 +480,11 @@ public class AuthController extends CoreStartable implements CommandQueue.Callba
     /**
      * @return the radius of UDFPS on the screen in pixels
      */
-    public int getUdfpsRadius() {
+    public float getUdfpsRadius() {
         if (mUdfpsController == null || mUdfpsBounds == null) {
             return -1;
         }
-        return mUdfpsBounds.height() / 2;
+        return mUdfpsBounds.height() / 2f;
     }
 
     /**
@@ -483,7 +517,16 @@ public class AuthController extends CoreStartable implements CommandQueue.Callba
         if (mFaceProps == null || mFaceAuthSensorLocation == null) {
             return null;
         }
-        return new PointF(mFaceAuthSensorLocation.x, mFaceAuthSensorLocation.y);
+        DisplayInfo displayInfo = new DisplayInfo();
+        mContext.getDisplay().getDisplayInfo(displayInfo);
+        final float scaleFactor = android.util.DisplayUtils.getPhysicalPixelDisplaySizeRatio(
+                mStableDisplaySize.x, mStableDisplaySize.y, displayInfo.getNaturalWidth(),
+                displayInfo.getNaturalHeight());
+        if (scaleFactor == Float.POSITIVE_INFINITY) {
+            return new PointF(mFaceAuthSensorLocation.x, mFaceAuthSensorLocation.y);
+        }
+        return new PointF(mFaceAuthSensorLocation.x * scaleFactor,
+                mFaceAuthSensorLocation.y * scaleFactor);
     }
 
     /**
@@ -542,6 +585,7 @@ public class AuthController extends CoreStartable implements CommandQueue.Callba
             @NonNull UserManager userManager,
             @NonNull LockPatternUtils lockPatternUtils,
             @NonNull StatusBarStateController statusBarStateController,
+            @NonNull InteractionJankMonitor jankMonitor,
             @Main Handler handler,
             @Background DelayableExecutor bgExecutor) {
         super(context);
@@ -559,6 +603,7 @@ public class AuthController extends CoreStartable implements CommandQueue.Callba
         mSidefpsControllerFactory = sidefpsControllerFactory;
         mDisplayManager = displayManager;
         mWindowManager = windowManager;
+        mInteractionJankMonitor = jankMonitor;
         mUdfpsEnrolledForUser = new SparseBooleanArray();
 
         mOrientationListener = new BiometricDisplayListener(
@@ -634,11 +679,17 @@ public class AuthController extends CoreStartable implements CommandQueue.Callba
                     displayInfo.getNaturalHeight());
 
             final FingerprintSensorPropertiesInternal udfpsProp = mUdfpsProps.get(0);
+            final Rect previousUdfpsBounds = mUdfpsBounds;
             mUdfpsBounds = udfpsProp.getLocation().getRect();
             mUdfpsBounds.scale(scaleFactor);
             mUdfpsController.updateOverlayParams(udfpsProp.sensorId,
                     new UdfpsOverlayParams(mUdfpsBounds, displayInfo.getNaturalWidth(),
                             displayInfo.getNaturalHeight(), scaleFactor, displayInfo.rotation));
+            if (!Objects.equals(previousUdfpsBounds, mUdfpsBounds)) {
+                for (Callback cb : mCallbacks) {
+                    cb.onUdfpsLocationChanged();
+                }
+            }
         }
     }
 
@@ -1024,8 +1075,36 @@ public class AuthController extends CoreStartable implements CommandQueue.Callba
                 .setOperationId(operationId)
                 .setRequestId(requestId)
                 .setMultiSensorConfig(multiSensorConfig)
+                .setScaleFactorProvider(() -> {
+                    return getScaleFactor();
+                })
                 .build(bgExecutor, sensorIds, mFpProps, mFaceProps, wakefulnessLifecycle,
-                        userManager, lockPatternUtils);
+                        userManager, lockPatternUtils, mInteractionJankMonitor);
+    }
+
+    @Override
+    public void dump(@NonNull PrintWriter pw, @NonNull String[] args) {
+        final AuthDialog dialog = mCurrentDialog;
+        pw.println("  stableDisplaySize=" + mStableDisplaySize);
+        pw.println("  faceAuthSensorLocation=" + mFaceAuthSensorLocation);
+        pw.println("  fingerprintLocation=" + mFingerprintLocation);
+        pw.println("  udfpsBounds=" + mUdfpsBounds);
+        pw.println("  allFingerprintAuthenticatorsRegistered="
+                + mAllFingerprintAuthenticatorsRegistered);
+        pw.println("  currentDialog=" + dialog);
+        if (dialog != null) {
+            dialog.dump(pw, args);
+        }
+    }
+
+    /**
+     * Provides a float that represents the resolution scale(if the controller is for UDFPS).
+     */
+    public interface ScaleFactorProvider {
+        /**
+         * Returns a float representing the scaled resolution(if the controller if for UDFPS).
+         */
+        float provide();
     }
 
     /**
@@ -1054,5 +1133,10 @@ public class AuthController extends CoreStartable implements CommandQueue.Callba
          * Called when the biometric prompt is no longer showing.
          */
         default void onBiometricPromptDismissed() {}
+
+        /**
+         * The location in pixels can change due to resolution changes.
+         */
+        default void onUdfpsLocationChanged() {}
     }
 }

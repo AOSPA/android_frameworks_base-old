@@ -1289,8 +1289,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
                     break;
                 case MSG_L_SET_BT_ACTIVE_DEVICE:
                     synchronized (mDeviceStateLock) {
-                        mDeviceInventory.onSetBtActiveDevice((BtDeviceInfo) msg.obj,
-                                mAudioService.getBluetoothContextualVolumeStream());
+                        BtDeviceInfo btInfo = (BtDeviceInfo) msg.obj;
+                        mDeviceInventory.onSetBtActiveDevice(btInfo,
+                                (btInfo.mProfile != BluetoothProfile.LE_AUDIO || btInfo.mIsLeOutput)
+                                        ? mAudioService.getBluetoothContextualVolumeStream()
+                                        : AudioSystem.STREAM_DEFAULT);
                     }
                     break;
                 case MSG_BT_HEADSET_CNCT_FAILED:
@@ -1320,7 +1323,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
                     break;
                 case MSG_II_SET_HEARING_AID_VOLUME:
                     synchronized (mDeviceStateLock) {
-                        mBtHelper.setHearingAidVolume(msg.arg1, msg.arg2);
+                        mBtHelper.setHearingAidVolume(msg.arg1, msg.arg2,
+                                mDeviceInventory.isHearingAidConnected());
                     }
                     break;
                 case MSG_II_SET_LE_AUDIO_OUT_VOLUME: {

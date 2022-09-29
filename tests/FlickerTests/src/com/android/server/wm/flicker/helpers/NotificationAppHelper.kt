@@ -20,24 +20,23 @@ import android.app.Instrumentation
 import android.support.test.launcherhelper.ILauncherStrategy
 import android.support.test.launcherhelper.LauncherStrategyFactory
 import androidx.test.uiautomator.By
-import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import com.android.server.wm.flicker.testapp.ActivityOptions
-import com.android.server.wm.traces.common.FlickerComponentName
+import com.android.server.wm.traces.common.IComponentMatcher
 import com.android.server.wm.traces.parser.toFlickerComponent
 import com.android.server.wm.traces.parser.windowmanager.WindowManagerStateHelper
 
 class NotificationAppHelper @JvmOverloads constructor(
     instr: Instrumentation,
     launcherName: String = ActivityOptions.NOTIFICATION_ACTIVITY_LAUNCHER_NAME,
-    component: FlickerComponentName =
+    component: IComponentMatcher =
             ActivityOptions.NOTIFICATION_ACTIVITY_COMPONENT_NAME.toFlickerComponent(),
     launcherStrategy: ILauncherStrategy = LauncherStrategyFactory
             .getInstance(instr)
             .launcherStrategy
 ) : StandardAppHelper(instr, launcherName, component, launcherStrategy) {
-    fun postNotification(device: UiDevice, wmHelper: WindowManagerStateHelper) {
-        val button = device.wait(
+    fun postNotification(wmHelper: WindowManagerStateHelper) {
+        val button = uiDevice.wait(
                 Until.findObject(By.res(getPackage(), "post_notification")),
                 FIND_TIMEOUT)
 
@@ -47,7 +46,7 @@ class NotificationAppHelper @JvmOverloads constructor(
         }
         button.click()
 
-        device.wait(Until.findObject(By.text("Flicker Test Notification")), FIND_TIMEOUT)
+        uiDevice.wait(Until.findObject(By.text("Flicker Test Notification")), FIND_TIMEOUT)
                 ?: error("Flicker Notification not found")
     }
 }

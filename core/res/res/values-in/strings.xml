@@ -21,11 +21,6 @@
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="byteShort" msgid="202579285008794431">"B"</string>
-    <string name="kilobyteShort" msgid="2214285521564195803">"kB"</string>
-    <string name="megabyteShort" msgid="6649361267635823443">"MB"</string>
-    <string name="gigabyteShort" msgid="7515809460261287991">"GB"</string>
-    <string name="terabyteShort" msgid="1822367128583886496">"TB"</string>
-    <string name="petabyteShort" msgid="5651571254228534832">"PB"</string>
     <string name="fileSizeSuffix" msgid="4233671691980131257">"<xliff:g id="NUMBER">%1$s</xliff:g> <xliff:g id="UNIT">%2$s</xliff:g>"</string>
     <string name="untitled" msgid="3381766946944136678">"&lt;Tanpa judul&gt;"</string>
     <string name="emptyPhoneNumber" msgid="5812172618020360048">"(Tidak ada nomor telepon)"</string>
@@ -305,8 +300,8 @@
     <string name="permgroupdesc_calendar" msgid="6762751063361489379">"mengakses kalender"</string>
     <string name="permgrouplab_sms" msgid="795737735126084874">"SMS"</string>
     <string name="permgroupdesc_sms" msgid="5726462398070064542">"mengirim dan melihat pesan SMS"</string>
-    <string name="permgrouplab_storage" msgid="5570124978732352858">"File dan dokumen"</string>
-    <string name="permgroupdesc_storage" msgid="8352226729501080525">"mengakses file dan dokumen di perangkat Anda"</string>
+    <string name="permgrouplab_storage" msgid="17339216290379241">"File"</string>
+    <string name="permgroupdesc_storage" msgid="5378659041354582769">"mengakses file di perangkat Anda"</string>
     <string name="permgrouplab_readMediaAural" msgid="1858331312624942053">"Musik dan audio"</string>
     <string name="permgroupdesc_readMediaAural" msgid="7565467343667089595">"mengakses musik dan audio di perangkat Anda"</string>
     <string name="permgrouplab_readMediaVisual" msgid="4724874717811908660">"Foto dan video"</string>
@@ -558,6 +553,8 @@
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"Mengizinkan aplikasi mempelajari tingkat kompleksitas kunci layar (tinggi, sedang, rendah, atau tidak ada), yang menunjukkan kemungkinan rentang durasi dan jenis kunci layar. Aplikasi juga dapat menyarankan agar pengguna memperbarui kunci layar ke tingkat tertentu, namun pengguna dapat mengabaikan dan keluar dengan bebas. Perhatikan bahwa kunci layar tidak disimpan dalam teks biasa, sehingga aplikasi tidak mengetahui sandi yang sebenarnya."</string>
     <string name="permlab_postNotification" msgid="4875401198597803658">"tampilkan notifikasi"</string>
     <string name="permdesc_postNotification" msgid="5974977162462877075">"Mengizinkan aplikasi untuk menampilkan notifikasi"</string>
+    <string name="permlab_turnScreenOn" msgid="219344053664171492">"aktifkan layar"</string>
+    <string name="permdesc_turnScreenOn" msgid="4394606875897601559">"Mengizinkan aplikasi mengaktifkan layar."</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"gunakan hardware biometrik"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"Mengizinkan aplikasi menggunakan hardware biometrik untuk autentikasi"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"kelola hardware sidik jari"</string>
@@ -750,7 +747,7 @@
     <string name="permdesc_startReviewPermissionDecisions" msgid="2775556853503004236">"Mengizinkan pemegang memulai layar untuk meninjau keputusan izin. Tidak pernah dibutuhkan untuk aplikasi normal."</string>
     <string name="permlab_startViewAppFeatures" msgid="7955084203185903001">"mulai lihat fitur aplikasi"</string>
     <string name="permdesc_startViewAppFeatures" msgid="7207240860165206107">"Memungkinkan pemegang mulai melihat info fitur untuk aplikasi."</string>
-    <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"mengakses data sensor pada frekuensi pengambilan sampel yang tinggi"</string>
+    <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"mengakses data sensor pada frekuensi sampling yang tinggi"</string>
     <string name="permdesc_highSamplingRateSensors" msgid="8430061978931155995">"Mengizinkan aplikasi mengambil sampel data sensor pada frekuensi yang lebih besar dari 200 Hz"</string>
     <string name="policylab_limitPassword" msgid="4851829918814422199">"Setel aturan sandi"</string>
     <string name="policydesc_limitPassword" msgid="4105491021115793793">"Mengontrol panjang dan karakter yang diizinkan dalam sandi dan PIN kunci layar."</string>
@@ -1383,7 +1380,7 @@
     <string name="share_remote_bugreport_action" msgid="7630880678785123682">"BAGIKAN"</string>
     <string name="decline_remote_bugreport_action" msgid="4040894777519784346">"TOLAK"</string>
     <string name="select_input_method" msgid="3971267998568587025">"Pilih metode masukan"</string>
-    <string name="show_ime" msgid="6406112007347443383">"Pertahankan di layar jika keyboard fisik masih aktif"</string>
+    <string name="show_ime" msgid="6406112007347443383">"Biarkan di layar meski keyboard fisik aktif"</string>
     <string name="hardware" msgid="1800597768237606953">"Tampilkan keyboard virtual"</string>
     <string name="select_keyboard_layout_notification_title" msgid="4427643867639774118">"Mengonfigurasi keyboard fisik"</string>
     <string name="select_keyboard_layout_notification_message" msgid="8835158247369158154">"Ketuk untuk memilih bahasa dan tata letak"</string>
@@ -1924,6 +1921,8 @@
     <string name="country_selection_title" msgid="5221495687299014379">"Preferensi wilayah"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Ketik nama bahasa"</string>
     <string name="language_picker_section_suggested" msgid="6556199184638990447">"Disarankan"</string>
+    <string name="language_picker_section_suggested_bilingual" msgid="5932198319583556613">"Bahasa yang disarankan"</string>
+    <string name="region_picker_section_suggested_bilingual" msgid="704607569328224133">"Wilayah yang disarankan"</string>
     <string name="language_picker_section_all" msgid="1985809075777564284">"Semua bahasa"</string>
     <string name="region_picker_section_all" msgid="756441309928774155">"Semua wilayah"</string>
     <string name="locale_search_menu" msgid="6258090710176422934">"Telusuri"</string>
@@ -2078,8 +2077,8 @@
     <string name="nas_upgrade_notification_learn_more_action" msgid="7011130656195423947">"Pelajari lebih lanjut"</string>
     <string name="nas_upgrade_notification_learn_more_content" msgid="3735480566983530650">"Notifikasi yang ditingkatkan menggantikan Notifikasi Adaptif Android di Android 12. Fitur ini menunjukkan tindakan dan balasan yang disarankan, serta mengatur notifikasi.\n\nNotifikasi yang ditingkatkan dapat mengakses konten notifikasi, termasuk informasi pribadi seperti nama kontak dan pesan. Fitur ini juga dapat menutup atau merespons notifikasi, seperti menjawab panggilan telepon dan mengontrol fitur Jangan Ganggu."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Notifikasi info Mode Rutinitas"</string>
-    <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Baterai mungkin habis sebelum pengisian daya biasanya"</string>
-    <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Penghemat Baterai diaktifkan untuk memperpanjang masa pakai baterai"</string>
+    <string name="dynamic_mode_notification_title" msgid="1388718452788985481">"Penghemat Baterai diaktifkan"</string>
+    <string name="dynamic_mode_notification_summary" msgid="1639031262484979689">"Mengurangi penggunaan baterai untuk memperpanjang masa pakai baterai"</string>
     <string name="battery_saver_notification_channel_name" msgid="3918243458067916913">"Penghemat Baterai"</string>
     <string name="battery_saver_off_notification_title" msgid="7637255960468032515">"Penghemat Baterai dinonaktifkan"</string>
     <string name="battery_saver_charged_notification_summary" product="default" msgid="5544457317418624367">"Baterai ponsel cukup terisi. Fitur tidak lagi dibatasi."</string>
@@ -2286,5 +2285,7 @@
     <string name="notification_action_check_bg_apps" msgid="4758877443365362532">"Periksa aplikasi aktif"</string>
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"Tidak dapat mengakses kamera ponsel dari <xliff:g id="DEVICE">%1$s</xliff:g>"</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"Tidak dapat mengakses kamera tablet dari <xliff:g id="DEVICE">%1$s</xliff:g>"</string>
-    <string name="system_locale_title" msgid="3978041860457277638">"Bahasa sistem"</string>
+    <string name="system_locale_title" msgid="711882686834677268">"Default sistem"</string>
+    <!-- no translation found for default_card_name (9198284935962911468) -->
+    <skip />
 </resources>

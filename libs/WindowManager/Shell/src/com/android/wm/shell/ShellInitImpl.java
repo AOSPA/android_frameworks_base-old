@@ -17,8 +17,16 @@
 package com.android.wm.shell;
 
 import static com.android.wm.shell.ShellTaskOrganizer.TASK_LISTENER_TYPE_FULLSCREEN;
+import static com.android.wm.shell.protolog.ShellProtoLogGroup.WM_SHELL_INIT;
 
-import com.android.wm.shell.apppairs.AppPairsController;
+import android.os.Build;
+import android.os.SystemClock;
+import android.util.Pair;
+
+import androidx.annotation.VisibleForTesting;
+
+import com.android.internal.protolog.common.ProtoLog;
+import com.android.wm.shell.activityembedding.ActivityEmbeddingController;
 import com.android.wm.shell.bubbles.BubbleController;
 import com.android.wm.shell.common.DisplayController;
 import com.android.wm.shell.common.DisplayImeController;
@@ -28,7 +36,6 @@ import com.android.wm.shell.common.annotations.ExternalThread;
 import com.android.wm.shell.draganddrop.DragAndDropController;
 import com.android.wm.shell.freeform.FreeformTaskListener;
 import com.android.wm.shell.fullscreen.FullscreenTaskListener;
-import com.android.wm.shell.fullscreen.FullscreenUnfoldController;
 import com.android.wm.shell.kidsmode.KidsModeTaskOrganizer;
 import com.android.wm.shell.pip.phone.PipTouchHandler;
 import com.android.wm.shell.recents.RecentTasksController;
@@ -36,12 +43,15 @@ import com.android.wm.shell.splitscreen.SplitScreenController;
 import com.android.wm.shell.startingsurface.StartingWindowController;
 import com.android.wm.shell.transition.DefaultMixedHandler;
 import com.android.wm.shell.transition.Transitions;
+import com.android.wm.shell.unfold.UnfoldAnimationController;
 import com.android.wm.shell.unfold.UnfoldTransitionHandler;
 
+import java.util.ArrayList;
 import java.util.Optional;
 
 /**
- * The entry point implementation into the shell for initializing shell internal state.
+ * The entry point implementation into the shell for initializing shell internal state.  Classes
+ * which need to setup on start should inject an instance of this class and add an init callback.
  */
 public class ShellInitImpl {
     private static final String TAG = ShellInitImpl.class.getSimpleName();
@@ -54,18 +64,21 @@ public class ShellInitImpl {
     private final KidsModeTaskOrganizer mKidsModeTaskOrganizer;
     private final Optional<BubbleController> mBubblesOptional;
     private final Optional<SplitScreenController> mSplitScreenOptional;
-    private final Optional<AppPairsController> mAppPairsOptional;
     private final Optional<PipTouchHandler> mPipTouchHandlerOptional;
     private final FullscreenTaskListener mFullscreenTaskListener;
-    private final Optional<FullscreenUnfoldController> mFullscreenUnfoldController;
+    private final Optional<UnfoldAnimationController> mUnfoldController;
     private final Optional<UnfoldTransitionHandler> mUnfoldTransitionHandler;
-    private final Optional<FreeformTaskListener> mFreeformTaskListenerOptional;
+    private final Optional<FreeformTaskListener<?>> mFreeformTaskListenerOptional;
     private final ShellExecutor mMainExecutor;
     private final Transitions mTransitions;
     private final StartingWindowController mStartingWindow;
     private final Optional<RecentTasksController> mRecentTasks;
+    private final Optional<ActivityEmbeddingController> mActivityEmbeddingOptional;
 
     private final InitImpl mImpl = new InitImpl();
+    // An ordered list of init callbacks to be made once shell is first started
+    private final ArrayList<Pair<String, Runnable>> mInitCallbacks = new ArrayList<>();
+    private boolean mHasInitialized;
 
     public ShellInitImpl(
             DisplayController displayController,
@@ -76,13 +89,13 @@ public class ShellInitImpl {
             KidsModeTaskOrganizer kidsModeTaskOrganizer,
             Optional<BubbleController> bubblesOptional,
             Optional<SplitScreenController> splitScreenOptional,
-            Optional<AppPairsController> appPairsOptional,
             Optional<PipTouchHandler> pipTouchHandlerOptional,
             FullscreenTaskListener fullscreenTaskListener,
-            Optional<FullscreenUnfoldController> fullscreenUnfoldTransitionController,
+            Optional<UnfoldAnimationController> unfoldAnimationController,
             Optional<UnfoldTransitionHandler> unfoldTransitionHandler,
-            Optional<FreeformTaskListener> freeformTaskListenerOptional,
+            Optional<FreeformTaskListener<?>> freeformTaskListenerOptional,
             Optional<RecentTasksController> recentTasks,
+            Optional<ActivityEmbeddingController> activityEmbeddingOptional,
             Transitions transitions,
             StartingWindowController startingWindow,
             ShellExecutor mainExecutor) {
@@ -94,13 +107,13 @@ public class ShellInitImpl {
         mKidsModeTaskOrganizer = kidsModeTaskOrganizer;
         mBubblesOptional = bubblesOptional;
         mSplitScreenOptional = splitScreenOptional;
-        mAppPairsOptional = appPairsOptional;
         mFullscreenTaskListener = fullscreenTaskListener;
         mPipTouchHandlerOptional = pipTouchHandlerOptional;
-        mFullscreenUnfoldController = fullscreenUnfoldTransitionController;
+        mUnfoldController = unfoldAnimationController;
         mUnfoldTransitionHandler = unfoldTransitionHandler;
         mFreeformTaskListenerOptional = freeformTaskListenerOptional;
         mRecentTasks = recentTasks;
+        mActivityEmbeddingOptional = activityEmbeddingOptional;
         mTransitions = transitions;
         mMainExecutor = mainExecutor;
         mStartingWindow = startingWindow;
@@ -110,7 +123,7 @@ public class ShellInitImpl {
         return mImpl;
     }
 
-    private void init() {
+    private void legacyInit() {
         // Start listening for display and insets changes
         mDisplayController.initialize();
         mDisplayInsetsController.initialize();
@@ -122,7 +135,6 @@ public class ShellInitImpl {
         mShellTaskOrganizer.initStartingWindow(mStartingWindow);
         mShellTaskOrganizer.registerOrganizer();
 
-        mAppPairsOptional.ifPresent(AppPairsController::onOrganizerRegistered);
         mSplitScreenOptional.ifPresent(SplitScreenController::onOrganizerRegistered);
         mBubblesOptional.ifPresent(BubbleController::initialize);
 
@@ -131,6 +143,7 @@ public class ShellInitImpl {
 
         if (Transitions.ENABLE_SHELL_TRANSITIONS) {
             mTransitions.register(mShellTaskOrganizer);
+            mActivityEmbeddingOptional.ifPresent(ActivityEmbeddingController::init);
             mUnfoldTransitionHandler.ifPresent(UnfoldTransitionHandler::init);
             if (mSplitScreenOptional.isPresent() && mPipTouchHandlerOptional.isPresent()) {
                 final DefaultMixedHandler mixedHandler = new DefaultMixedHandler(mTransitions,
@@ -151,11 +164,51 @@ public class ShellInitImpl {
                 mShellTaskOrganizer.addListenerForType(
                         f, ShellTaskOrganizer.TASK_LISTENER_TYPE_FREEFORM));
 
-        mFullscreenUnfoldController.ifPresent(FullscreenUnfoldController::init);
+        mUnfoldController.ifPresent(UnfoldAnimationController::init);
         mRecentTasks.ifPresent(RecentTasksController::init);
 
         // Initialize kids mode task organizer
         mKidsModeTaskOrganizer.initialize(mStartingWindow);
+    }
+
+    /**
+     * Adds a callback to the ordered list of callbacks be made when Shell is first started.  This
+     * can be used in class constructors when dagger is used to ensure that the initialization order
+     * matches the dependency order.
+     */
+    public <T extends Object> void addInitCallback(Runnable r, T instance) {
+        if (mHasInitialized) {
+            if (Build.isDebuggable()) {
+                // All callbacks must be added prior to the Shell being initialized
+                throw new IllegalArgumentException("Can not add callback after init");
+            }
+            return;
+        }
+        final String className = instance.getClass().getSimpleName();
+        mInitCallbacks.add(new Pair<>(className, r));
+        ProtoLog.v(WM_SHELL_INIT, "Adding init callback for %s", className);
+    }
+
+    /**
+     * Calls all the init callbacks when the Shell is first starting.
+     */
+    @VisibleForTesting
+    public void init() {
+        ProtoLog.v(WM_SHELL_INIT, "Initializing Shell Components: %d", mInitCallbacks.size());
+        // Init in order of registration
+        for (int i = 0; i < mInitCallbacks.size(); i++) {
+            final Pair<String, Runnable> info = mInitCallbacks.get(i);
+            final long t1 = SystemClock.uptimeMillis();
+            info.second.run();
+            final long t2 = SystemClock.uptimeMillis();
+            ProtoLog.v(WM_SHELL_INIT, "\t%s took %dms", info.first, (t2 - t1));
+        }
+        mInitCallbacks.clear();
+
+        // TODO: To be removed
+        legacyInit();
+
+        mHasInitialized = true;
     }
 
     @ExternalThread
@@ -163,7 +216,7 @@ public class ShellInitImpl {
         @Override
         public void init() {
             try {
-                mMainExecutor.executeBlocking(() -> ShellInitImpl.this.init());
+                mMainExecutor.executeBlocking(ShellInitImpl.this::init);
             } catch (InterruptedException e) {
                 throw new RuntimeException("Failed to initialize the Shell in 2s", e);
             }

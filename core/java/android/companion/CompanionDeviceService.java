@@ -23,11 +23,14 @@ import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.TestApi;
 import android.app.Service;
+import android.bluetooth.BluetoothSocket;
 import android.content.Intent;
 import android.os.Handler;
 import android.os.IBinder;
 import android.util.Log;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.Objects;
 import java.util.concurrent.Executor;
 
@@ -153,9 +156,12 @@ public abstract class CompanionDeviceService extends Service {
      * @param messageId system assigned id of the message to be sent
      * @param associationId association id of the associated device
      * @param message message to be sent
+     * @hide
      */
+    @Deprecated
     public void onMessageDispatchedFromSystem(int messageId, int associationId,
             @NonNull byte[] message) {
+        Log.w(LOG_TAG, "Replaced by attachSystemDataTransport");
         // do nothing. Companion apps can override this function for system to send messages.
     }
 
@@ -182,22 +188,57 @@ public abstract class CompanionDeviceService extends Service {
      * @param messageId id of the message
      * @param associationId id of the associated device
      * @param message message received from the associated device
+     * @hide
      */
+    @Deprecated
     @RequiresPermission(android.Manifest.permission.DELIVER_COMPANION_MESSAGES)
     public final void dispatchMessageToSystem(int messageId, int associationId,
             @NonNull byte[] message)
             throws DeviceNotAssociatedException {
-        if (getBaseContext() == null) {
-            Log.e(LOG_TAG, "Dispatch failed. Start your service before calling this method.");
-            return;
-        }
-        CompanionDeviceManager companionDeviceManager =
-                getSystemService(CompanionDeviceManager.class);
-        if (companionDeviceManager != null) {
-            companionDeviceManager.dispatchMessage(messageId, associationId, message);
-        } else {
-            Log.e(LOG_TAG, "CompanionDeviceManager is null. Can't dispatch messages.");
-        }
+        Log.w(LOG_TAG, "Replaced by attachSystemDataTransport");
+    }
+
+    /**
+     * Attach the given bidirectional communication streams to be used for
+     * transporting system data between associated devices.
+     * <p>
+     * The companion service providing these streams is responsible for ensuring
+     * that all data is transported accurately and in-order between the two
+     * devices, including any fragmentation and re-assembly when carried over a
+     * size-limited transport.
+     * <p>
+     * As an example, it's valid to provide streams obtained from a
+     * {@link BluetoothSocket} to this method, since {@link BluetoothSocket}
+     * meets the API contract described above.
+     *
+     * @param associationId id of the associated device
+     * @param in already connected stream of data incoming from remote
+     *            associated device
+     * @param out already connected stream of data outgoing to remote associated
+     *            device
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.DELIVER_COMPANION_MESSAGES)
+    public final void attachSystemDataTransport(int associationId, @NonNull InputStream in,
+            @NonNull OutputStream out) throws DeviceNotAssociatedException {
+        getSystemService(CompanionDeviceManager.class)
+                .attachSystemDataTransport(associationId,
+                        Objects.requireNonNull(in),
+                        Objects.requireNonNull(out));
+    }
+
+    /**
+     * Detach any bidirectional communication streams previously configured
+     * through {@link #attachSystemDataTransport}.
+     *
+     * @param associationId id of the associated device
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.DELIVER_COMPANION_MESSAGES)
+    public final void detachSystemDataTransport(int associationId)
+            throws DeviceNotAssociatedException {
+        getSystemService(CompanionDeviceManager.class)
+                .detachSystemDataTransport(associationId);
     }
 
     /**
@@ -256,14 +297,6 @@ public abstract class CompanionDeviceService extends Service {
         @Override
         public void onDeviceDisappeared(AssociationInfo associationInfo) {
             mMainHandler.postAtFrontOfQueue(() -> mService.onDeviceDisappeared(associationInfo));
-        }
-
-        @Override
-        public void onMessageDispatchedFromSystem(int messageId, int associationId,
-                @NonNull byte[] message) {
-            mMainHandler.postAtFrontOfQueue(
-                    () -> mService.onMessageDispatchedFromSystem(messageId, associationId,
-                            message));
         }
     }
 }

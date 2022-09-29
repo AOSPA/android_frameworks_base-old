@@ -24,12 +24,13 @@ import static android.content.ComponentName.createRelative;
 
 import static com.android.server.companion.Utils.prepareForIpc;
 
-import static java.nio.charset.StandardCharsets.UTF_8;
-
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.PendingIntent;
 import android.companion.AssociationInfo;
 import android.companion.DeviceNotAssociatedException;
+import android.companion.ISystemDataTransferCallback;
 import android.companion.datatransfer.PermissionSyncRequest;
 import android.companion.datatransfer.SystemDataTransferRequest;
 import android.content.ComponentName;
@@ -38,30 +39,27 @@ import android.content.Intent;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.UserHandle;
+import android.permission.PermissionControllerManager;
 import android.util.Slog;
-import android.util.Xml;
 
 import com.android.server.companion.AssociationStore;
 import com.android.server.companion.CompanionDeviceManagerService;
 import com.android.server.companion.PermissionsUtils;
-import com.android.server.companion.datatransfer.permbackup.BackupHelper;
-import com.android.server.companion.proto.CompanionMessage;
+import com.android.server.companion.transport.CompanionTransportManager;
 
-import org.xmlpull.v1.XmlPullParser;
-import org.xmlpull.v1.XmlPullParserException;
-import org.xmlpull.v1.XmlSerializer;
-
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 /**
- * This processor builds user consent intent for a given SystemDataTransferRequest and processes the
- * request when the system is ready (a secure channel is established between the handhold and the
- * companion device).
+ * This processor builds user consent intent for a
+ * {@link SystemDataTransferRequest} and processes the request once a channel is
+ * established between the local and remote companion device.
  */
 public class SystemDataTransferProcessor {
 
@@ -81,23 +79,29 @@ public class SystemDataTransferProcessor {
     private final Context mContext;
     private final AssociationStore mAssociationStore;
     private final SystemDataTransferRequestStore mSystemDataTransferRequestStore;
-    private final CompanionMessageProcessor mCompanionMessageProcessor;
+    private final CompanionTransportManager mTransportManager;
+    private final PermissionControllerManager mPermissionControllerManager;
+    private final ExecutorService mExecutor;
 
     public SystemDataTransferProcessor(CompanionDeviceManagerService service,
             AssociationStore associationStore,
             SystemDataTransferRequestStore systemDataTransferRequestStore,
-            CompanionMessageProcessor companionMessageProcessor) {
+            CompanionTransportManager transportManager) {
         mContext = service.getContext();
         mAssociationStore = associationStore;
         mSystemDataTransferRequestStore = systemDataTransferRequestStore;
-        mCompanionMessageProcessor = companionMessageProcessor;
+        mTransportManager = transportManager;
+        mTransportManager.setListener(this::onReceivePermissionRestore);
+        mPermissionControllerManager = mContext.getSystemService(PermissionControllerManager.class);
+        mExecutor = Executors.newSingleThreadExecutor();
     }
 
     /**
-     * Build a PendingIntent of permission sync user consent dialog
+     * Resolve the requested association, throwing if the caller doesn't have
+     * adequate permissions.
      */
-    public PendingIntent buildPermissionTransferUserConsentIntent(String packageName,
-            @UserIdInt int userId, int associationId) {
+    private @NonNull AssociationInfo resolveAssociation(String packageName, int userId,
+            int associationId) {
         AssociationInfo association = mAssociationStore.getAssociationById(associationId);
         association = PermissionsUtils.sanitizeWithCallerChecks(mContext, association);
         if (association == null) {
@@ -105,6 +109,15 @@ public class SystemDataTransferProcessor {
                     + associationId + " is not associated with the app " + packageName
                     + " for user " + userId);
         }
+        return association;
+    }
+
+    /**
+     * Build a PendingIntent of permission sync user consent dialog
+     */
+    public PendingIntent buildPermissionTransferUserConsentIntent(String packageName,
+            @UserIdInt int userId, int associationId) {
+        final AssociationInfo association = resolveAssociation(packageName, userId, associationId);
 
         // Check if the request's data type has been requested before.
         List<SystemDataTransferRequest> storedRequests =
@@ -147,18 +160,15 @@ public class SystemDataTransferProcessor {
     /**
      * Start system data transfer. It should first try to establish a secure channel and then sync
      * system data.
+     *
+     * TODO: execute callback when the transfer finishes successfully or with errors.
      */
-    public void startSystemDataTransfer(String packageName, int userId, int associationId) {
+    public void startSystemDataTransfer(String packageName, int userId, int associationId,
+            ISystemDataTransferCallback callback) {
         Slog.i(LOG_TAG, "Start system data transfer for package [" + packageName
                 + "] userId [" + userId + "] associationId [" + associationId + "]");
 
-        AssociationInfo association = mAssociationStore.getAssociationById(associationId);
-        association = PermissionsUtils.sanitizeWithCallerChecks(mContext, association);
-        if (association == null) {
-            throw new DeviceNotAssociatedException("Association "
-                    + associationId + " is not associated with the app " + packageName
-                    + " for user " + userId);
-        }
+        final AssociationInfo association = resolveAssociation(packageName, userId, associationId);
 
         // Check if the request has been consented by the user.
         List<SystemDataTransferRequest> storedRequests =
@@ -172,72 +182,59 @@ public class SystemDataTransferProcessor {
             }
         }
         if (!hasConsented) {
-            Slog.e(LOG_TAG, "User " + userId + " hasn't consented permission sync.");
+            String message = "User " + userId + " hasn't consented permission sync.";
+            Slog.e(LOG_TAG, message);
+            try {
+                callback.onError(message);
+            } catch (RemoteException ignored) { }
             return;
         }
 
-        // TODO: Establish a secure channel
-
-        final long callingIdentityToken = Binder.clearCallingIdentity();
-
         // Start permission sync
+        final long callingIdentityToken = Binder.clearCallingIdentity();
         try {
-            BackupHelper backupHelper = new BackupHelper(mContext, UserHandle.of(userId));
-            XmlSerializer serializer = Xml.newSerializer();
-            ByteArrayOutputStream backup = new ByteArrayOutputStream();
-            serializer.setOutput(backup, UTF_8.name());
-
-            backupHelper.writeState(serializer);
-
-            serializer.flush();
-
-            mCompanionMessageProcessor.paginateAndDispatchMessagesToApp(backup.toByteArray(),
-                    CompanionMessage.PERMISSION_SYNC, packageName, userId, associationId);
-        } catch (IOException ioe) {
-            Slog.e(LOG_TAG, "Error while writing permission state.");
+            // TODO: refactor to work with streams of data
+            mPermissionControllerManager.getRuntimePermissionBackup(UserHandle.of(userId),
+                    mExecutor, backup -> {
+                        Future<?> future = mTransportManager
+                                .requestPermissionRestore(associationId, backup);
+                        translateFutureToCallback(future, callback);
+                    });
         } finally {
             Binder.restoreCallingIdentity(callingIdentityToken);
         }
     }
 
-    /**
-     * Process message reported by the companion app.
-     */
-    public void processMessage(String packageName, int userId, int associationId,
-            int messageId, byte[] message) {
-        Slog.i(LOG_TAG, "Start processing message [" + messageId + "] from package ["
-                + packageName + "] userId [" + userId + "] associationId [" + associationId + "]");
-
-        AssociationInfo association = mAssociationStore.getAssociationById(associationId);
-        association = PermissionsUtils.sanitizeWithCallerChecks(mContext, association);
-        if (association == null) {
-            throw new DeviceNotAssociatedException("Association "
-                    + associationId + " is not associated with the app " + packageName
-                    + " for user " + userId);
+    private void onReceivePermissionRestore(byte[] message) {
+        Slog.i(LOG_TAG, "Applying permissions.");
+        // Start applying permissions
+        UserHandle user = mContext.getUser();
+        final long callingIdentityToken = Binder.clearCallingIdentity();
+        try {
+            // TODO: refactor to work with streams of data
+            mPermissionControllerManager.stageAndApplyRuntimePermissionsBackup(
+                    message, user);
+        } finally {
+            Binder.restoreCallingIdentity(callingIdentityToken);
         }
+    }
 
-        PermissionsUtils.enforceCallerIsSystemOr(userId, packageName);
-
-        CompanionMessageInfo completeMessage = mCompanionMessageProcessor.processMessage(messageId,
-                associationId, message);
-        if (completeMessage != null) {
-            if (completeMessage.getType() == CompanionMessage.PERMISSION_SYNC) {
-                // Start applying permissions
-                BackupHelper backupHelper = new BackupHelper(mContext, UserHandle.of(userId));
-                try {
-                    XmlPullParser parser = Xml.newPullParser();
-                    ByteArrayInputStream stream = new ByteArrayInputStream(
-                            completeMessage.getData());
-                    parser.setInput(stream, UTF_8.name());
-
-                    backupHelper.restoreState(parser);
-                } catch (IOException e) {
-                    Slog.e(LOG_TAG, "IOException reading message: "
-                            + new String(completeMessage.getData()));
-                } catch (XmlPullParserException e) {
-                    Slog.e(LOG_TAG, "Error parsing message: "
-                            + new String(completeMessage.getData()));
+    private static void translateFutureToCallback(@NonNull Future<?> future,
+            @Nullable ISystemDataTransferCallback callback) {
+        try {
+            future.get(15, TimeUnit.SECONDS);
+            try {
+                if (callback != null) {
+                    callback.onResult();
                 }
+            } catch (RemoteException ignored) {
+            }
+        } catch (Exception e) {
+            try {
+                if (callback != null) {
+                    callback.onError(e.getMessage());
+                }
+            } catch (RemoteException ignored) {
             }
         }
     }

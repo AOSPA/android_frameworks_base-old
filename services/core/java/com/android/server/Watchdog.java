@@ -19,6 +19,8 @@ package com.android.server;
 import static com.android.server.Watchdog.HandlerCheckerAndTimeout.withCustomTimeout;
 import static com.android.server.Watchdog.HandlerCheckerAndTimeout.withDefaultTimeout;
 
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.app.IActivityController;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -43,6 +45,7 @@ import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.sysprop.WatchdogProperties;
+import android.util.Dumpable;
 import android.util.EventLog;
 import android.util.Log;
 import android.util.Slog;
@@ -66,6 +69,7 @@ import java.io.FileWriter;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.BufferedReader;
+import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -81,7 +85,7 @@ import java.text.SimpleDateFormat;
 /**
  * This class calls its monitor every minute. Killing this process if they don't return
  **/
-public class Watchdog {
+public class Watchdog implements Dumpable {
     static final String TAG = "Watchdog";
 
     /** Debug flag. */
@@ -162,6 +166,7 @@ public class Watchdog {
     public static final String[] AIDL_INTERFACE_PREFIXES_OF_INTEREST = new String[] {
             "android.hardware.biometrics.face.IFace/",
             "android.hardware.biometrics.fingerprint.IFingerprint/",
+            "android.hardware.input.processor.IInputProcessor/",
             "android.hardware.light.ILights/",
             "android.hardware.power.IPower/",
             "android.hardware.power.stats.IPowerStats/",
@@ -233,10 +238,10 @@ public class Watchdog {
         private final String mName;
         private final ArrayList<Monitor> mMonitors = new ArrayList<Monitor>();
         private final ArrayList<Monitor> mMonitorQueue = new ArrayList<Monitor>();
-        private long mWaitMax;
+        private long mWaitMaxMillis;
         private boolean mCompleted;
         private Monitor mCurrentMonitor;
-        private long mStartTime;
+        private long mStartTimeMillis;
         private int mPauseCount;
 
         HandlerChecker(Handler handler, String name) {
@@ -257,7 +262,7 @@ public class Watchdog {
          * @param handlerCheckerTimeoutMillis the timeout to use for this run
          */
         public void scheduleCheckLocked(long handlerCheckerTimeoutMillis) {
-            mWaitMax = handlerCheckerTimeoutMillis;
+            mWaitMaxMillis = handlerCheckerTimeoutMillis;
             if (mCompleted) {
                 // Safe to update monitors in queue, Handler is not in the middle of work
                 mMonitors.addAll(mMonitorQueue);
@@ -282,7 +287,7 @@ public class Watchdog {
 
             mCompleted = false;
             mCurrentMonitor = null;
-            mStartTime = SystemClock.uptimeMillis();
+            mStartTimeMillis = SystemClock.uptimeMillis();
             mHandler.postAtFrontOfQueue(this);
         }
 
@@ -290,10 +295,10 @@ public class Watchdog {
             if (mCompleted) {
                 return COMPLETED;
             } else {
-                long latency = SystemClock.uptimeMillis() - mStartTime;
-                if (latency < mWaitMax/2) {
+                long latency = SystemClock.uptimeMillis() - mStartTimeMillis;
+                if (latency < mWaitMaxMillis / 2) {
                     return WAITING;
-                } else if (latency < mWaitMax) {
+                } else if (latency < mWaitMaxMillis) {
                     return WAITED_HALF;
                 }
             }
@@ -309,12 +314,17 @@ public class Watchdog {
         }
 
         String describeBlockedStateLocked() {
+            final String prefix;
             if (mCurrentMonitor == null) {
-                return "Blocked in handler on " + mName + " (" + getThread().getName() + ")";
+                prefix = "Blocked in handler on ";
             } else {
-                return "Blocked in monitor " + mCurrentMonitor.getClass().getName()
-                        + " on " + mName + " (" + getThread().getName() + ")";
+                prefix =  "Blocked in monitor " + mCurrentMonitor.getClass().getName();
             }
+            Thread thread = getThread();
+            String threadIdentifier = thread.getName() + ", tid=" + thread.getId();
+            long latencySeconds = (SystemClock.uptimeMillis() - mStartTimeMillis) / 1000;
+            return prefix + " on " + mName + " (" + threadIdentifier + ")"
+                + " for " + latencySeconds + "s";
         }
 
         @Override
@@ -902,7 +912,7 @@ public class Watchdog {
 
         long anrTime = SystemClock.uptimeMillis();
         StringBuilder report = new StringBuilder();
-        report.append(MemoryPressureUtil.currentPsiState());
+        report.append(ResourcePressureUtil.currentPsiState());
         ProcessCpuTracker processCpuTracker = new ProcessCpuTracker(false);
         StringWriter tracesFileException = new StringWriter();
         final File finalStack = ActivityManagerService.dumpStackTraces(
@@ -1062,6 +1072,12 @@ public class Watchdog {
             Slog.w(TAG, "Failed to append to kmsg", e);
         }
         doSysRq('c');
+    }
+
+    @Override
+    public void dump(@NonNull PrintWriter pw, @Nullable String[] args) {
+        pw.print("WatchdogTimeoutMillis=");
+        pw.println(mWatchdogTimeoutMillis);
     }
 
     private void appendFile (File writeTo, File copyFrom) {

@@ -58,6 +58,7 @@ public class FrameworkParsingPackageUtils {
     private static final int MAX_FILE_NAME_SIZE = 223;
 
     public static final int PARSE_IGNORE_OVERLAY_REQUIRED_SYSTEM_PROPERTY = 1 << 7;
+    public static final int PARSE_APK_IN_APEX = 1 << 9;
 
     /**
      * Check if the given name is valid.
@@ -367,8 +368,13 @@ public class FrameworkParsingPackageUtils {
             return input.success(targetVers);
         }
 
-        if (allowUnknownCodenames && UnboundedSdkLevel.isAtMost(targetCode)) {
-            return input.success(Build.VERSION_CODES.CUR_DEVELOPMENT);
+        try {
+            if (allowUnknownCodenames && UnboundedSdkLevel.isAtMost(targetCode)) {
+                return input.success(Build.VERSION_CODES.CUR_DEVELOPMENT);
+            }
+        } catch (IllegalArgumentException e) {
+            // isAtMost() throws it when encountering an older SDK codename
+            return input.error(PackageManager.INSTALL_FAILED_OLDER_SDK, e.getMessage());
         }
 
         // If it's a pre-release SDK and the codename matches this platform, it

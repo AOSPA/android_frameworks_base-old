@@ -16,6 +16,8 @@
 
 package com.android.keyguard;
 
+import static com.android.systemui.util.PluralMessageFormaterKt.icuMessageFormat;
+
 import android.annotation.NonNull;
 import android.app.AlertDialog;
 import android.app.AlertDialog.Builder;
@@ -255,10 +257,9 @@ public class KeyguardSimPinViewController
                 displayMessage = mView.getContext().getResources()
                         .getQuantityString(msgId, attemptsRemaining, mSlotId, attemptsRemaining);
             }else {
-                msgId = isDefault ? R.plurals.kg_password_default_pin_message :
-                        R.plurals.kg_password_wrong_pin_code;
-                displayMessage = mView.getContext().getResources()
-                        .getQuantityString(msgId, attemptsRemaining, attemptsRemaining);
+                msgId = isDefault ? R.string.kg_password_default_pin_message :
+                        R.string.kg_password_wrong_pin_code;
+                displayMessage = icuMessageFormat(mView.getResources(), msgId, attemptsRemaining);
             }
         } else {
             msgId = isDefault ? R.string.kg_sim_pin_instructions : R.string.kg_password_pin_failed;

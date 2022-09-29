@@ -1,13 +1,16 @@
 # Preserve line number information for debugging stack traces.
 -keepattributes SourceFile,LineNumberTable
 
+# Preserve relationship information that can impact simple class naming.
+-keepattributes EnclosingMethod,InnerClasses
+
 -keep class com.android.systemui.recents.OverviewProxyRecentsImpl
 -keep class com.android.systemui.statusbar.car.CarStatusBar
 -keep class com.android.systemui.statusbar.phone.CentralSurfaces
 -keep class com.android.systemui.statusbar.tv.TvStatusBar
--keep class com.android.systemui.car.CarSystemUIFactory
--keep class com.android.systemui.SystemUIFactory
--keep class com.android.systemui.tv.TvSystemUIFactory
+-keep class ** extends com.android.systemui.SystemUIInitializer {
+    *;
+}
 -keep class * extends com.android.systemui.CoreStartable
 -keep class * implements com.android.systemui.CoreStartable$Injector
 
@@ -90,3 +93,12 @@
     # on every field access without this.
     static void throwUninitializedPropertyAccessException(java.lang.String);
 }
+# Strip verbose logs.
+-assumenosideeffects class android.util.Log {
+  static *** v(...);
+  static *** isLoggable(...);
+}
+-assumenosideeffects class android.util.Slog {
+  static *** v(...);
+}
+-maximumremovedandroidloglevel 2

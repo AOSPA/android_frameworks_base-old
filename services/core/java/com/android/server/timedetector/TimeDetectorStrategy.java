@@ -20,9 +20,7 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.UserIdInt;
 import android.app.time.ExternalTimeSuggestion;
-import android.app.timedetector.GnssTimeSuggestion;
 import android.app.timedetector.ManualTimeSuggestion;
-import android.app.timedetector.NetworkTimeSuggestion;
 import android.app.timedetector.TelephonyTimeSuggestion;
 import android.os.TimestampedValue;
 import android.util.IndentingPrintWriter;
@@ -76,7 +74,7 @@ public interface TimeDetectorStrategy extends Dumpable {
      * suggestion was accepted. A suggestion that is valid but does not change the time because it
      * matches the current device time is considered accepted.
      */
-    boolean suggestManualTime(@NonNull ManualTimeSuggestion timeSuggestion);
+    boolean suggestManualTime(@UserIdInt int userId, @NonNull ManualTimeSuggestion timeSuggestion);
 
     /** Processes the suggested time from network sources. */
     void suggestNetworkTime(@NonNull NetworkTimeSuggestion timeSuggestion);
@@ -86,9 +84,6 @@ public interface TimeDetectorStrategy extends Dumpable {
 
     /** Processes the suggested time from external sources. */
     void suggestExternalTime(@NonNull ExternalTimeSuggestion timeSuggestion);
-
-    /** Returns the configuration that controls time detector behaviour for specified user. */
-    ConfigurationInternal getConfigurationInternal(@UserIdInt int userId);
 
     // Utility methods below are to be moved to a better home when one becomes more obvious.
 

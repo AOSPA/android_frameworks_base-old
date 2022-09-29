@@ -21,11 +21,6 @@
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="byteShort" msgid="202579285008794431">"B"</string>
-    <string name="kilobyteShort" msgid="2214285521564195803">"kB"</string>
-    <string name="megabyteShort" msgid="6649361267635823443">"MB"</string>
-    <string name="gigabyteShort" msgid="7515809460261287991">"GB"</string>
-    <string name="terabyteShort" msgid="1822367128583886496">"TB"</string>
-    <string name="petabyteShort" msgid="5651571254228534832">"PB"</string>
     <string name="fileSizeSuffix" msgid="4233671691980131257">"<xliff:g id="NUMBER">%1$s</xliff:g> <xliff:g id="UNIT">%2$s</xliff:g>"</string>
     <string name="untitled" msgid="3381766946944136678">"&lt;Pealkirjata&gt;"</string>
     <string name="emptyPhoneNumber" msgid="5812172618020360048">"(Telefoninumbrit pole)"</string>
@@ -305,8 +300,8 @@
     <string name="permgroupdesc_calendar" msgid="6762751063361489379">"juurdepääs kalendrile"</string>
     <string name="permgrouplab_sms" msgid="795737735126084874">"SMS"</string>
     <string name="permgroupdesc_sms" msgid="5726462398070064542">"saata ja vaadata SMS-sõnumeid"</string>
-    <string name="permgrouplab_storage" msgid="5570124978732352858">"Failid ja dokumendid"</string>
-    <string name="permgroupdesc_storage" msgid="8352226729501080525">"juurdepääs teie seadmes olevatele failidele ja dokumentidele"</string>
+    <string name="permgrouplab_storage" msgid="17339216290379241">"Failid"</string>
+    <string name="permgroupdesc_storage" msgid="5378659041354582769">"juurdepääs teie seadmes olevatele failidele"</string>
     <string name="permgrouplab_readMediaAural" msgid="1858331312624942053">"Muusika ja heli"</string>
     <string name="permgroupdesc_readMediaAural" msgid="7565467343667089595">"teie seadmes muusikale ja helile juurdepääsemine"</string>
     <string name="permgrouplab_readMediaVisual" msgid="4724874717811908660">"Fotod ja videod"</string>
@@ -558,6 +553,8 @@
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"Lubab rakendusel vaadata ekraaniluku keerukuse taset (kõrge, keskmine, madal või puudub), mis näitab ekraaniluku võimalikku pikkust ja tüüpi. Rakendus võib kasutajatele soovitada ka ekraaniluku viimist teatud tasemele, kuid kasutajad võivad seda eirata ja kuvalt lahkuda. Pange tähele, et ekraanilukku ei salvestata lihttekstina, seega ei tea rakendus täpset parooli."</string>
     <string name="permlab_postNotification" msgid="4875401198597803658">"märguannete kuvamine"</string>
     <string name="permdesc_postNotification" msgid="5974977162462877075">"Lubab rakendusel märguandeid kuvada"</string>
+    <string name="permlab_turnScreenOn" msgid="219344053664171492">"ekraani sisselülitamine"</string>
+    <string name="permdesc_turnScreenOn" msgid="4394606875897601559">"Lubab rakendusel ekraani sisse lülitada."</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"kasutada biomeetrilist riistvara"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"Võimaldab rakendusel autentimiseks kasutada biomeetrilist riistvara"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"sõrmejälje riistvara haldamine"</string>
@@ -1924,6 +1921,8 @@
     <string name="country_selection_title" msgid="5221495687299014379">"Piirkonnaeelistus"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Sisestage keele nimi"</string>
     <string name="language_picker_section_suggested" msgid="6556199184638990447">"Soovitatud"</string>
+    <string name="language_picker_section_suggested_bilingual" msgid="5932198319583556613">"Soovitatud keeled"</string>
+    <string name="region_picker_section_suggested_bilingual" msgid="704607569328224133">"Soovitatud piirkonnad"</string>
     <string name="language_picker_section_all" msgid="1985809075777564284">"Kõik keeled"</string>
     <string name="region_picker_section_all" msgid="756441309928774155">"Kõik piirkonnad"</string>
     <string name="locale_search_menu" msgid="6258090710176422934">"Otsing"</string>
@@ -2078,8 +2077,8 @@
     <string name="nas_upgrade_notification_learn_more_action" msgid="7011130656195423947">"Lisateave"</string>
     <string name="nas_upgrade_notification_learn_more_content" msgid="3735480566983530650">"Androidi versioonis 12 asendasid täiustatud märguanded Androidi kohanduvad märguanded. See funktsioon näitab soovitatud toiminguid ja vastuseid ning korrastab teie märguandeid.\n\nTäiustatud märguanded pääsevad juurde märguande sisule, sh isiklikule teabele, nagu kontaktide nimed ja sõnumid. Samuti saab selle funktsiooni abil märguannetest loobuda või neile vastata (nt vastata telefonikõnedele ja juhtida funktsiooni Mitte segada)."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Rutiinirežiimi teabe märguanne"</string>
-    <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Aku võib enne tavapärast laadimist tühjaks saada"</string>
-    <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Akusäästja aktiveeriti aku tööea pikendamiseks"</string>
+    <string name="dynamic_mode_notification_title" msgid="1388718452788985481">"Akusäästja lülitati sisse"</string>
+    <string name="dynamic_mode_notification_summary" msgid="1639031262484979689">"Aku tööea pikendamiseks vähendatakse akukasutust"</string>
     <string name="battery_saver_notification_channel_name" msgid="3918243458067916913">"Akusäästja"</string>
     <string name="battery_saver_off_notification_title" msgid="7637255960468032515">"Akusäästja on välja lülitatud"</string>
     <string name="battery_saver_charged_notification_summary" product="default" msgid="5544457317418624367">"Telefon on piisavalt laetud. Funktsioonid ei ole enam piiratud."</string>
@@ -2286,5 +2285,7 @@
     <string name="notification_action_check_bg_apps" msgid="4758877443365362532">"Vaadake aktiivseid rakendusi"</string>
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"Teie seadmest <xliff:g id="DEVICE">%1$s</xliff:g> ei pääse telefoni kaamerale juurde"</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"Teie seadmest <xliff:g id="DEVICE">%1$s</xliff:g> ei pääse tahvelarvuti kaamerale juurde"</string>
-    <string name="system_locale_title" msgid="3978041860457277638">"Süsteemi keel"</string>
+    <string name="system_locale_title" msgid="711882686834677268">"Süsteemi vaikeseade"</string>
+    <!-- no translation found for default_card_name (9198284935962911468) -->
+    <skip />
 </resources>

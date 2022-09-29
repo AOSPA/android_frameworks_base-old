@@ -157,13 +157,14 @@ class ActiveAdmin {
     private static final String TAG_SSID_ALLOWLIST = "ssid-allowlist";
     private static final String TAG_SSID_DENYLIST = "ssid-denylist";
     private static final String TAG_SSID = "ssid";
-    private static final String ATTR_VALUE = "value";
-    private static final String ATTR_LAST_NETWORK_LOGGING_NOTIFICATION = "last-notification";
-    private static final String ATTR_NUM_NETWORK_LOGGING_NOTIFICATIONS = "num-notifications";
     private static final String TAG_PREFERENTIAL_NETWORK_SERVICE_CONFIGS =
             "preferential_network_service_configs";
     private static final String TAG_PREFERENTIAL_NETWORK_SERVICE_CONFIG =
             "preferential_network_service_config";
+    private static final String TAG_PROTECTED_PACKAGES = "protected_packages";
+    private static final String ATTR_VALUE = "value";
+    private static final String ATTR_LAST_NETWORK_LOGGING_NOTIFICATION = "last-notification";
+    private static final String ATTR_NUM_NETWORK_LOGGING_NOTIFICATIONS = "num-notifications";
 
     DeviceAdminInfo info;
 
@@ -253,6 +254,9 @@ class ActiveAdmin {
     // List of package names to keep cached.
     List<String> keepUninstalledPackages;
 
+    // List of packages for which the user cannot invoke "clear data" or "force stop".
+    List<String> protectedPackages;
+
     // Wi-Fi SSID restriction policy.
     WifiSsidPolicy mWifiSsidPolicy;
 
@@ -311,8 +315,6 @@ class ActiveAdmin {
     public String mOrganizationId;
     public String mEnrollmentSpecificId;
     public boolean mAdminCanGrantSensorsPermissions;
-    public boolean mPreferentialNetworkServiceEnabled =
-            DevicePolicyManager.PREFERENTIAL_NETWORK_SERVICE_ENABLED_DEFAULT;
     public List<PreferentialNetworkServiceConfig> mPreferentialNetworkServiceConfigs =
             List.of(PreferentialNetworkServiceConfig.DEFAULT);
 
@@ -505,6 +507,7 @@ class ActiveAdmin {
                 permittedNotificationListeners);
         writePackageListToXml(out, TAG_KEEP_UNINSTALLED_PACKAGES, keepUninstalledPackages);
         writePackageListToXml(out, TAG_METERED_DATA_DISABLED_PACKAGES, meteredDisabledPackages);
+        writePackageListToXml(out, TAG_PROTECTED_PACKAGES, protectedPackages);
         if (hasUserRestrictions()) {
             UserRestrictionsUtils.writeRestrictions(
                     out, userRestrictions, TAG_USER_RESTRICTIONS);
@@ -771,6 +774,8 @@ class ActiveAdmin {
                 keepUninstalledPackages = readPackageList(parser, tag);
             } else if (TAG_METERED_DATA_DISABLED_PACKAGES.equals(tag)) {
                 meteredDisabledPackages = readPackageList(parser, tag);
+            } else if (TAG_PROTECTED_PACKAGES.equals(tag)) {
+                protectedPackages = readPackageList(parser, tag);
             } else if (TAG_USER_RESTRICTIONS.equals(tag)) {
                 userRestrictions = UserRestrictionsUtils.readRestrictions(parser);
             } else if (TAG_DEFAULT_ENABLED_USER_RESTRICTIONS.equals(tag)) {
@@ -841,15 +846,15 @@ class ActiveAdmin {
             } else if (TAG_ALWAYS_ON_VPN_LOCKDOWN.equals(tag)) {
                 mAlwaysOnVpnLockdown = parser.getAttributeBoolean(null, ATTR_VALUE, false);
             } else if (TAG_PREFERENTIAL_NETWORK_SERVICE_ENABLED.equals(tag)) {
-                mPreferentialNetworkServiceEnabled = parser.getAttributeBoolean(null, ATTR_VALUE,
+                boolean preferentialNetworkServiceEnabled = parser.getAttributeBoolean(null,
+                        ATTR_VALUE,
                         DevicePolicyManager.PREFERENTIAL_NETWORK_SERVICE_ENABLED_DEFAULT);
-                if (mPreferentialNetworkServiceEnabled) {
+                if (preferentialNetworkServiceEnabled) {
                     PreferentialNetworkServiceConfig.Builder configBuilder =
                             new PreferentialNetworkServiceConfig.Builder();
-                    configBuilder.setEnabled(mPreferentialNetworkServiceEnabled);
+                    configBuilder.setEnabled(preferentialNetworkServiceEnabled);
                     configBuilder.setNetworkId(NET_ENTERPRISE_ID_1);
                     mPreferentialNetworkServiceConfigs = List.of(configBuilder.build());
-                    mPreferentialNetworkServiceEnabled = false;
                 }
             } else if (TAG_COMMON_CRITERIA_MODE.equals(tag)) {
                 mCommonCriteriaMode = parser.getAttributeBoolean(null, ATTR_VALUE, false);
@@ -1210,6 +1215,16 @@ class ActiveAdmin {
             pw.println(keepUninstalledPackages);
         }
 
+        if (meteredDisabledPackages != null) {
+            pw.print("meteredDisabledPackages=");
+            pw.println(meteredDisabledPackages);
+        }
+
+        if (protectedPackages != null) {
+            pw.print("protectedPackages=");
+            pw.println(protectedPackages);
+        }
+
         pw.print("organizationColor=");
         pw.println(organizationColor);
 
@@ -1256,9 +1271,6 @@ class ActiveAdmin {
 
         pw.print("mAlwaysOnVpnLockdown=");
         pw.println(mAlwaysOnVpnLockdown);
-
-        pw.print("mPreferentialNetworkServiceEnabled=");
-        pw.println(mPreferentialNetworkServiceEnabled);
 
         pw.print("mCommonCriteriaMode=");
         pw.println(mCommonCriteriaMode);

@@ -72,8 +72,11 @@ android_test {
         "libpowermanagertest_jni",
     ],
 
-    platform_apis: true,
-    test_suites: ["device-tests"],
+    sdk_version: "core_platform",
+    test_suites: [
+        "device-tests",
+        "automotive-tests",
+    ],
 
     certificate: "platform",
 

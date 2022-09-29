@@ -16,6 +16,10 @@
 
 package com.android.systemui.doze;
 
+import static com.android.systemui.doze.DozeMachine.State.DOZE_SUSPEND_TRIGGERS;
+import static com.android.systemui.doze.DozeMachine.State.FINISH;
+import static com.android.systemui.doze.DozeMachine.State.UNINITIALIZED;
+
 import android.annotation.Nullable;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -39,7 +43,6 @@ import com.android.systemui.dock.DockManager;
 import com.android.systemui.doze.DozeMachine.State;
 import com.android.systemui.doze.dagger.DozeScope;
 import com.android.systemui.statusbar.phone.DozeParameters;
-import com.android.systemui.statusbar.policy.BatteryController;
 import com.android.systemui.statusbar.policy.DevicePostureController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.Assert;
@@ -94,7 +97,6 @@ public class DozeTriggers implements DozeMachine.Part {
     private final AuthController mAuthController;
     private final DelayableExecutor mMainExecutor;
     private final KeyguardStateController mKeyguardStateController;
-    private final BatteryController mBatteryController;
     private final UiEventLogger mUiEventLogger;
     private final DevicePostureController mDevicePostureController;
 
@@ -186,8 +188,7 @@ public class DozeTriggers implements DozeMachine.Part {
             @Main DelayableExecutor mainExecutor,
             UiEventLogger uiEventLogger,
             KeyguardStateController keyguardStateController,
-            DevicePostureController devicePostureController,
-            BatteryController batteryController) {
+            DevicePostureController devicePostureController) {
         mContext = context;
         mDozeHost = dozeHost;
         mConfig = config;
@@ -208,7 +209,6 @@ public class DozeTriggers implements DozeMachine.Part {
         mMainExecutor = mainExecutor;
         mUiEventLogger = uiEventLogger;
         mKeyguardStateController = keyguardStateController;
-        mBatteryController = batteryController;
     }
     private final DevicePostureController.Callback mDevicePostureCallback =
             posture -> {
@@ -320,12 +320,7 @@ public class DozeTriggers implements DozeMachine.Part {
                     gentleWakeUp(pulseReason);
                 } else if (isPickup) {
                     if (shouldDropPickupEvent())  {
-                        mDozeLog.traceSensorEventDropped(
-                                pulseReason,
-                                "keyguardOccluded="
-                                        + mKeyguardStateController.isOccluded()
-                                        + " pluggedInWireless="
-                                        + mBatteryController.isPluggedInWireless());
+                        mDozeLog.traceSensorEventDropped(pulseReason, "keyguard occluded");
                         return;
                     }
                     gentleWakeUp(pulseReason);
@@ -356,7 +351,7 @@ public class DozeTriggers implements DozeMachine.Part {
     }
 
     private boolean shouldDropPickupEvent() {
-        return mKeyguardStateController.isOccluded() || mBatteryController.isPluggedInWireless();
+        return mKeyguardStateController.isOccluded();
     }
 
     private void gentleWakeUp(int reason) {
@@ -446,14 +441,18 @@ public class DozeTriggers implements DozeMachine.Part {
 
     @Override
     public void transitionTo(DozeMachine.State oldState, DozeMachine.State newState) {
+        if (oldState == DOZE_SUSPEND_TRIGGERS && (newState != FINISH
+                && newState != UNINITIALIZED)) {
+            // Register callbacks that were unregistered when we switched to
+            // DOZE_SUSPEND_TRIGGERS state.
+            registerCallbacks();
+        }
         switch (newState) {
             case INITIALIZED:
                 mAodInterruptRunnable = null;
                 sWakeDisplaySensorState = true;
-                mBroadcastReceiver.register(mBroadcastDispatcher);
-                mDockManager.addListener(mDockEventListener);
+                registerCallbacks();
                 mDozeSensors.requestTemporaryDisable();
-                mDozeHost.addCallback(mHostCallback);
                 break;
             case DOZE:
             case DOZE_AOD:
@@ -481,19 +480,34 @@ public class DozeTriggers implements DozeMachine.Part {
             case DOZE_PULSE_DONE:
                 mDozeSensors.requestTemporaryDisable();
                 break;
+            case DOZE_SUSPEND_TRIGGERS:
             case FINISH:
-                mBroadcastReceiver.unregister(mBroadcastDispatcher);
-                mDozeHost.removeCallback(mHostCallback);
-                mDockManager.removeListener(mDockEventListener);
-                mDozeSensors.setListening(false, false);
-                mDozeSensors.setProxListening(false);
-                mWantSensors = false;
-                mWantProxSensor = false;
-                mWantTouchScreenSensors = false;
+                stopListeningToAllTriggers();
                 break;
             default:
         }
         mDozeSensors.setListening(mWantSensors, mWantTouchScreenSensors);
+    }
+
+    private void registerCallbacks() {
+        mBroadcastReceiver.register(mBroadcastDispatcher);
+        mDockManager.addListener(mDockEventListener);
+        mDozeHost.addCallback(mHostCallback);
+    }
+
+    private void unregisterCallbacks() {
+        mBroadcastReceiver.unregister(mBroadcastDispatcher);
+        mDozeHost.removeCallback(mHostCallback);
+        mDockManager.removeListener(mDockEventListener);
+    }
+
+    private void stopListeningToAllTriggers() {
+        unregisterCallbacks();
+        mDozeSensors.setListening(false, false);
+        mDozeSensors.setProxListening(false);
+        mWantSensors = false;
+        mWantProxSensor = false;
+        mWantTouchScreenSensors = false;
     }
 
     @Override

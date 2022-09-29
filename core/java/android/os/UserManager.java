@@ -258,7 +258,8 @@ public class UserManager {
     public static final String DISALLOW_MODIFY_ACCOUNTS = "no_modify_accounts";
 
     /**
-     * Specifies if a user is disallowed from changing Wi-Fi access points via Settings.
+     * Specifies if a user is disallowed from changing Wi-Fi access points via Settings. This
+     * restriction does not affect Wi-Fi tethering settings.
      *
      * <p>A device owner and a profile owner can set this restriction, although the restriction has
      * no effect in a managed profile. When it is set by a device owner, a profile owner on the
@@ -295,6 +296,9 @@ public class UserManager {
 
     /**
      * Specifies if a user is disallowed from using Wi-Fi tethering.
+     *
+     * <p>This restriction does not limit the user's ability to modify or connect to regular
+     * Wi-Fi networks, which is separately controlled by {@link #DISALLOW_CONFIG_WIFI}.
      *
      * <p>This restriction can only be set by a device owner,
      * a profile owner of an organization-owned managed profile on the parent profile.
@@ -4857,17 +4861,14 @@ public class UserManager {
      * shares media with its parent user (the user that created this profile).
      * Returns false for any other type of user.
      *
-     * <p>Requires {@link android.Manifest.permission#MANAGE_USERS} or
-     * {@link android.Manifest.permission#INTERACT_ACROSS_USERS} permission, otherwise the
-     * caller must be in the same profile group as the user.
-     *
      * @return true if the user shares media with its parent user, false otherwise.
      * @hide
      */
     @SystemApi
-    @RequiresPermission(anyOf = {android.Manifest.permission.MANAGE_USERS,
-            Manifest.permission.INTERACT_ACROSS_USERS}, conditional = true)
-    @UserHandleAware
+    @UserHandleAware(
+            requiresAnyOfPermissionsIfNotCallerProfileGroup = {
+                    Manifest.permission.MANAGE_USERS,
+                    Manifest.permission.INTERACT_ACROSS_USERS})
     @SuppressAutoDoc
     public boolean isMediaSharedWithParent() {
         try {

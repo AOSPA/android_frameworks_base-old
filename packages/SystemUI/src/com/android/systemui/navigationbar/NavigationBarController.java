@@ -69,7 +69,6 @@ import java.util.Optional;
 
 import javax.inject.Inject;
 
-
 /** A controller to handle navigation bars. */
 @SysUISingleton
 public class NavigationBarController implements
@@ -244,9 +243,9 @@ public class NavigationBarController implements
 
     @Override
     public void setNavigationBarLumaSamplingEnabled(int displayId, boolean enable) {
-        final NavigationBarView navigationBarView = getNavigationBarView(displayId);
-        if (navigationBarView != null) {
-            navigationBarView.setNavigationBarLumaSamplingEnabled(enable);
+        final NavigationBar navigationBar = getNavigationBar(displayId);
+        if (navigationBar != null) {
+            navigationBar.setNavigationBarLumaSamplingEnabled(enable);
         }
     }
 
@@ -404,8 +403,12 @@ public class NavigationBarController implements
      *         {@code null} if no navigation bar on that display.
      */
     public @Nullable NavigationBarView getNavigationBarView(int displayId) {
-        NavigationBar navBar = mNavigationBars.get(displayId);
+        NavigationBar navBar = getNavigationBar(displayId);
         return (navBar == null) ? null : navBar.getView();
+    }
+
+    private @Nullable NavigationBar getNavigationBar(int displayId) {
+        return mNavigationBars.get(displayId);
     }
 
     public void showPinningEnterExitToast(int displayId, boolean entering) {

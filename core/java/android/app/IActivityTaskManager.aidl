@@ -263,9 +263,12 @@ interface IActivityTaskManager {
      * @param taskId the id of the task to retrieve the sAutoapshots for
      * @param isLowResolution if set, if the snapshot needs to be loaded from disk, this will load
      *                          a reduced resolution of it, which is much faster
+     * @param takeSnapshotIfNeeded if set, call {@link #takeTaskSnapshot} to trigger the snapshot
+                                   if no cache exists.
      * @return a graphic buffer representing a screenshot of a task
      */
-    android.window.TaskSnapshot getTaskSnapshot(int taskId, boolean isLowResolution);
+    android.window.TaskSnapshot getTaskSnapshot(
+            int taskId, boolean isLowResolution, boolean takeSnapshotIfNeeded);
 
     /**
      * @param taskId the id of the task to take a snapshot of
@@ -348,6 +351,7 @@ interface IActivityTaskManager {
     /**
      * Prepare the back navigation in the server. This setups the leashed for sysui to animate
      * the back gesture and returns the data needed for the animation.
+     * @param requestAnimation true if the caller wishes to animate the back navigation
      */
-    android.window.BackNavigationInfo startBackNavigation();
+    android.window.BackNavigationInfo startBackNavigation(in boolean requestAnimation);
 }

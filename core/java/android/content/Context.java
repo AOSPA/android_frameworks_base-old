@@ -2269,6 +2269,19 @@ public abstract class Context {
      */
     public void sendBroadcastMultiplePermissions(@NonNull Intent intent,
             @NonNull String[] receiverPermissions, @Nullable String[] excludedPermissions) {
+        sendBroadcastMultiplePermissions(intent, receiverPermissions, excludedPermissions, null);
+    }
+
+
+    /**
+     * Like {@link #sendBroadcastMultiplePermissions(Intent, String[], String[])}, but also allows
+     * specification of a list of excluded packages.
+     *
+     * @hide
+     */
+    public void sendBroadcastMultiplePermissions(@NonNull Intent intent,
+            @NonNull String[] receiverPermissions, @Nullable String[] excludedPermissions,
+            @Nullable String[] excludedPackages) {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
     }
 
@@ -3657,7 +3670,7 @@ public abstract class Context {
      *  <li>caller has {@code android.Manifest.permission.INTERACT_ACROSS_USERS_FULL}</li>
      *  <li>caller has {@code android.Manifest.permission.INTERACT_ACROSS_USERS} and is the same
      *      package as the {@code service} (determined by its component's package) and the Android
-     *      version is at least {@link android.os.Build.VERSION_CODES#S}</li>
+     *      version is at least {@link android.os.Build.VERSION_CODES#TIRAMISU}</li>
      *  <li>caller has {@code android.Manifest.permission.INTERACT_ACROSS_USERS} and is in same
      *      profile group as the given {@code user}</li>
      *  <li>caller has {@code android.Manifest.permission.INTERACT_ACROSS_PROFILES} and is in same
@@ -3977,7 +3990,7 @@ public abstract class Context {
      *  sockets and networks.
      *  <dt> {@link #WIFI_SERVICE} ("wifi")
      *  <dd> A {@link android.net.wifi.WifiManager WifiManager} for management of Wi-Fi
-     *  connectivity.  On releases before NYC, it should only be obtained from an application
+     *  connectivity.  On releases before Android 7, it should only be obtained from an application
      *  context, and not from any other derived context to avoid memory leaks within the calling
      *  process.
      *  <dt> {@link #WIFI_AWARE_SERVICE} ("wifiaware")

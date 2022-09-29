@@ -21,11 +21,6 @@
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="byteShort" msgid="202579285008794431">"B"</string>
-    <string name="kilobyteShort" msgid="2214285521564195803">"kB"</string>
-    <string name="megabyteShort" msgid="6649361267635823443">"MB"</string>
-    <string name="gigabyteShort" msgid="7515809460261287991">"GB"</string>
-    <string name="terabyteShort" msgid="1822367128583886496">"TB"</string>
-    <string name="petabyteShort" msgid="5651571254228534832">"PB"</string>
     <string name="fileSizeSuffix" msgid="4233671691980131257">"<xliff:g id="NUMBER">%1$s</xliff:g> <xliff:g id="UNIT">%2$s</xliff:g>"</string>
     <string name="untitled" msgid="3381766946944136678">"&lt;Bez naslova&gt;"</string>
     <string name="emptyPhoneNumber" msgid="5812172618020360048">"(Nema telefonskog broja)"</string>
@@ -306,8 +301,8 @@
     <string name="permgroupdesc_calendar" msgid="6762751063361489379">"pristupati kalendaru"</string>
     <string name="permgrouplab_sms" msgid="795737735126084874">"SMS"</string>
     <string name="permgroupdesc_sms" msgid="5726462398070064542">"slati i pregledavati SMS poruke"</string>
-    <string name="permgrouplab_storage" msgid="5570124978732352858">"Datoteke i dokumenti"</string>
-    <string name="permgroupdesc_storage" msgid="8352226729501080525">"pristup datotekama i dokumentima na vašem uređaju"</string>
+    <string name="permgrouplab_storage" msgid="17339216290379241">"Datoteke"</string>
+    <string name="permgroupdesc_storage" msgid="5378659041354582769">"pristupati datotekama na vašem uređaju"</string>
     <string name="permgrouplab_readMediaAural" msgid="1858331312624942053">"Glazba i zvuk"</string>
     <string name="permgroupdesc_readMediaAural" msgid="7565467343667089595">"pristupite glazbi i zvuku na svom uređaju"</string>
     <string name="permgrouplab_readMediaVisual" msgid="4724874717811908660">"Fotografije i videozapisi"</string>
@@ -559,6 +554,8 @@
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"Omogućuje aplikaciji da sazna razinu složenosti zaključavanja zaslona (visoka, srednja, niska ili nijedna), što upućuje na mogući raspon duljine i vrstu zaključavanja zaslona. Aplikacija također korisnicima može predložiti da ažuriraju zaključavanje zaslona na određenu razinu, no korisnici to mogu slobodno zanemariti i nastaviti dalje. Napominjemo da se zaključavanje zaslona ne pohranjuje u običnom tekstu, pa aplikacija ne zna točnu zaporku."</string>
     <string name="permlab_postNotification" msgid="4875401198597803658">"prikazati obavijesti"</string>
     <string name="permdesc_postNotification" msgid="5974977162462877075">"Aplikaciji omogućuje prikazivanje obavijesti"</string>
+    <string name="permlab_turnScreenOn" msgid="219344053664171492">"uključiti zaslon"</string>
+    <string name="permdesc_turnScreenOn" msgid="4394606875897601559">"Aplikaciji omogućuje uključivanje zaslona."</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"koristiti biometrijski hardver"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"Aplikaciji omogućuje upotrebu biometrijskog hardvera radi autentifikacije"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"upravljanje hardverom za čitanje otisaka prstiju"</string>
@@ -651,7 +648,7 @@
     <string name="face_acquired_too_different" msgid="2520389515612972889">"Prepoznavanje lica nije uspjelo. Pokušajte ponovo."</string>
     <string name="face_acquired_too_similar" msgid="8882920552674125694">"Malo pomaknite glavu"</string>
     <string name="face_acquired_pan_too_extreme" msgid="5417928604710621088">"Gledajte izravnije prema telefonu"</string>
-    <string name="face_acquired_tilt_too_extreme" msgid="5715715666540716620">"Gledajte izravnije prema telefonu"</string>
+    <string name="face_acquired_tilt_too_extreme" msgid="5715715666540716620">"Gledajte ravno u telefon"</string>
     <string name="face_acquired_roll_too_extreme" msgid="8261939882838881194">"Gledajte izravnije prema telefonu"</string>
     <string name="face_acquired_obscured" msgid="4917643294953326639">"Uklonite sve što vam zakriva lice."</string>
     <string name="face_acquired_sensor_dirty" msgid="8968391891086721678">"Očistite vrh zaslona, uključujući crnu traku"</string>
@@ -1925,6 +1922,8 @@
     <string name="country_selection_title" msgid="5221495687299014379">"Postavke regije"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Unesite naziv jezika"</string>
     <string name="language_picker_section_suggested" msgid="6556199184638990447">"Predloženo"</string>
+    <string name="language_picker_section_suggested_bilingual" msgid="5932198319583556613">"Predloženi jezici"</string>
+    <string name="region_picker_section_suggested_bilingual" msgid="704607569328224133">"Predložene regije"</string>
     <string name="language_picker_section_all" msgid="1985809075777564284">"Svi jezici"</string>
     <string name="region_picker_section_all" msgid="756441309928774155">"Sve regije"</string>
     <string name="locale_search_menu" msgid="6258090710176422934">"Pretraži"</string>
@@ -2079,8 +2078,8 @@
     <string name="nas_upgrade_notification_learn_more_action" msgid="7011130656195423947">"Saznajte više"</string>
     <string name="nas_upgrade_notification_learn_more_content" msgid="3735480566983530650">"U Androidu 12 poboljšane obavijesti zamjenjuju prilagodljive obavijesti za Android. Ta značajka prikazuje predložene radnje i odgovore te organizira vaše obavijesti.\n\nPoboljšane obavijesti mogu pristupati sadržaju obavijesti, uključujući osobne podatke kao što su imena kontakata i poruke. Ta značajka može i odbacivati obavijesti ili poduzimati radnje u vezi s njima, na primjer može odgovarati na telefonske pozive i upravljati značajkom Ne uznemiravaj."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Obavještavanje o informacijama u Rutinskom načinu rada"</string>
-    <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Baterija se može isprazniti prije uobičajenog vremena punjenja"</string>
-    <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Štednja baterije aktivirana je kako bi se produljilo trajanje baterije"</string>
+    <string name="dynamic_mode_notification_title" msgid="1388718452788985481">"Uključena je štednja baterije"</string>
+    <string name="dynamic_mode_notification_summary" msgid="1639031262484979689">"Smanjuje se potrošnja baterije radi produženja njezinog trajanja"</string>
     <string name="battery_saver_notification_channel_name" msgid="3918243458067916913">"Štednja baterije"</string>
     <string name="battery_saver_off_notification_title" msgid="7637255960468032515">"Isključena je Štednja baterije"</string>
     <string name="battery_saver_charged_notification_summary" product="default" msgid="5544457317418624367">"Baterija mobilnog telefona dovoljno je napunjena. Značajke više nisu ograničene."</string>
@@ -2287,5 +2286,7 @@
     <string name="notification_action_check_bg_apps" msgid="4758877443365362532">"Provjera aktivnih aplikacija"</string>
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"S vašeg uređaja <xliff:g id="DEVICE">%1$s</xliff:g> nije moguće pristupiti fotoaparatu telefona"</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"S vašeg uređaja <xliff:g id="DEVICE">%1$s</xliff:g> nije moguće pristupiti fotoaparatu tableta"</string>
-    <string name="system_locale_title" msgid="3978041860457277638">"Jezik sustava"</string>
+    <string name="system_locale_title" msgid="711882686834677268">"Zadane postavke sustava"</string>
+    <!-- no translation found for default_card_name (9198284935962911468) -->
+    <skip />
 </resources>

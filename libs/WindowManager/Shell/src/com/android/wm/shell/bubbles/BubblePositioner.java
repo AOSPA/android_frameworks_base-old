@@ -16,6 +16,8 @@
 
 package com.android.wm.shell.bubbles;
 
+import static android.view.View.LAYOUT_DIRECTION_RTL;
+
 import static java.lang.annotation.RetentionPolicy.SOURCE;
 
 import android.annotation.IntDef;
@@ -28,7 +30,6 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.util.Log;
 import android.view.Surface;
-import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.view.WindowMetrics;
@@ -88,6 +89,9 @@ public class BubblePositioner {
     private int mMaxBubbles;
     private int mBubbleSize;
     private int mSpacingBetweenBubbles;
+    private int mBubblePaddingTop;
+    private int mBubbleOffscreenAmount;
+    private int mStackOffset;
 
     private int mExpandedViewMinHeight;
     private int mExpandedViewLargeScreenWidth;
@@ -187,6 +191,10 @@ public class BubblePositioner {
         mSpacingBetweenBubbles = res.getDimensionPixelSize(R.dimen.bubble_spacing);
         mDefaultMaxBubbles = res.getInteger(R.integer.bubbles_max_rendered);
         mExpandedViewPadding = res.getDimensionPixelSize(R.dimen.bubble_expanded_view_padding);
+        mBubblePaddingTop = res.getDimensionPixelSize(R.dimen.bubble_padding_top);
+        mBubbleOffscreenAmount = res.getDimensionPixelSize(R.dimen.bubble_stack_offscreen);
+        mStackOffset = res.getDimensionPixelSize(R.dimen.bubble_stack_offset);
+
         if (mIsSmallTablet) {
             mExpandedViewLargeScreenWidth = (int) (bounds.width()
                     * EXPANDED_VIEW_SMALL_TABLET_WIDTH_PERCENT);
@@ -329,6 +337,21 @@ public class BubblePositioner {
                 : mBubbleSize;
     }
 
+    /** The amount of padding at the top of the screen that the bubbles avoid when being placed. */
+    public int getBubblePaddingTop() {
+        return mBubblePaddingTop;
+    }
+
+    /** The amount the stack hang off of the screen when collapsed. */
+    public int getStackOffScreenAmount() {
+        return mBubbleOffscreenAmount;
+    }
+
+    /** Offset of bubbles in the stack (i.e. how much they overlap). */
+    public int getStackOffset() {
+        return mStackOffset;
+    }
+
     /** Size of the visible (non-overlapping) part of the pointer. */
     public int getPointerSize() {
         return mPointerHeight - mPointerOverlap;
@@ -342,6 +365,14 @@ public class BubblePositioner {
     /** The height for the IME if it's visible. **/
     public int getImeHeight() {
         return mImeVisible ? mImeHeight : 0;
+    }
+
+    /** Return top position of the IME if it's visible */
+    public int getImeTop() {
+        if (mImeVisible) {
+            return getScreenRect().bottom - getImeHeight() - getInsets().bottom;
+        }
+        return 0;
     }
 
     /** Sets whether the IME is visible. **/
@@ -535,16 +566,30 @@ public class BubblePositioner {
      * @return the position of the bubble on-screen when the stack is expanded.
      */
     public PointF getExpandedBubbleXY(int index, BubbleStackView.StackViewState state) {
-        final float positionInRow = index * (mBubbleSize + mSpacingBetweenBubbles);
+        boolean showBubblesVertically = showBubblesVertically();
+        boolean isRtl = mContext.getResources().getConfiguration().getLayoutDirection()
+                == LAYOUT_DIRECTION_RTL;
+
+        int onScreenIndex;
+        if (showBubblesVertically || !isRtl) {
+            onScreenIndex = index;
+        } else {
+            // If bubbles are shown horizontally, check if RTL language is used.
+            // If RTL is active, position first bubble on the right and last on the left.
+            // Last bubble has screen index 0 and first bubble has max screen index value.
+            onScreenIndex = state.numberOfBubbles - 1 - index;
+        }
+
+        final float positionInRow = onScreenIndex * (mBubbleSize + mSpacingBetweenBubbles);
         final float expandedStackSize = getExpandedStackSize(state.numberOfBubbles);
-        final float centerPosition = showBubblesVertically()
+        final float centerPosition = showBubblesVertically
                 ? mPositionRect.centerY()
                 : mPositionRect.centerX();
         // alignment - centered on the edge
         final float rowStart = centerPosition - (expandedStackSize / 2f);
         float x;
         float y;
-        if (showBubblesVertically()) {
+        if (showBubblesVertically) {
             int inset = mExpandedViewLargeScreenInsetClosestEdge;
             y = rowStart + positionInRow;
             int left = mIsLargeScreen
@@ -561,8 +606,8 @@ public class BubblePositioner {
             x = rowStart + positionInRow;
         }
 
-        if (showBubblesVertically() && mImeVisible) {
-            return new PointF(x, getExpandedBubbleYForIme(index, state));
+        if (showBubblesVertically && mImeVisible) {
+            return new PointF(x, getExpandedBubbleYForIme(onScreenIndex, state));
         }
         return new PointF(x, y);
     }
@@ -671,14 +716,35 @@ public class BubblePositioner {
         // Start on the left if we're in LTR, right otherwise.
         final boolean startOnLeft =
                 mContext.getResources().getConfiguration().getLayoutDirection()
-                        != View.LAYOUT_DIRECTION_RTL;
+                        != LAYOUT_DIRECTION_RTL;
         final float startingVerticalOffset = mContext.getResources().getDimensionPixelOffset(
                 R.dimen.bubble_stack_starting_offset_y);
         // TODO: placement bug here because mPositionRect doesn't handle the overhanging edge
         return new BubbleStackView.RelativeStackPosition(
                 startOnLeft,
                 startingVerticalOffset / mPositionRect.height())
-                .getAbsolutePositionInRegion(new RectF(mPositionRect));
+                .getAbsolutePositionInRegion(getAllowableStackPositionRegion(
+                        1 /* default starts with 1 bubble */));
+    }
+
+
+    /**
+     * Returns the region that the stack position must stay within. This goes slightly off the left
+     * and right sides of the screen, below the status bar/cutout and above the navigation bar.
+     * While the stack position is not allowed to rest outside of these bounds, it can temporarily
+     * be animated or dragged beyond them.
+     */
+    public RectF getAllowableStackPositionRegion(int bubbleCount) {
+        final RectF allowableRegion = new RectF(getAvailableRect());
+        final int imeHeight = getImeHeight();
+        final float bottomPadding = bubbleCount > 1
+                ? mBubblePaddingTop + mStackOffset
+                : mBubblePaddingTop;
+        allowableRegion.left -= mBubbleOffscreenAmount;
+        allowableRegion.top += mBubblePaddingTop;
+        allowableRegion.right += mBubbleOffscreenAmount - mBubbleSize;
+        allowableRegion.bottom -= imeHeight + bottomPadding + mBubbleSize;
+        return allowableRegion;
     }
 
     /**
@@ -705,5 +771,22 @@ public class BubblePositioner {
      */
     public void setPinnedLocation(PointF point) {
         mPinLocation = point;
+    }
+
+    /**
+     * Navigation bar has an area where system gestures can be started from.
+     *
+     * @return {@link Rect} for system navigation bar gesture zone
+     */
+    public Rect getNavBarGestureZone() {
+        // Gesture zone height from the bottom
+        int gestureZoneHeight = mContext.getResources().getDimensionPixelSize(
+                com.android.internal.R.dimen.navigation_bar_gesture_height);
+        Rect screen = getScreenRect();
+        return new Rect(
+                screen.left,
+                screen.bottom - gestureZoneHeight,
+                screen.right,
+                screen.bottom);
     }
 }

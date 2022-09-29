@@ -32,14 +32,14 @@ import android.view.inputmethod.InputBinding;
 import android.view.inputmethod.InputMethodSubtype;
 import android.window.ImeOnBackInvokedDispatcher;
 
+import com.android.internal.inputmethod.IInlineSuggestionsRequestCallback;
+import com.android.internal.inputmethod.IInputMethod;
 import com.android.internal.inputmethod.IInputMethodPrivilegedOperations;
+import com.android.internal.inputmethod.IInputMethodSession;
+import com.android.internal.inputmethod.IInputMethodSessionCallback;
+import com.android.internal.inputmethod.IRemoteInputConnection;
+import com.android.internal.inputmethod.InlineSuggestionsRequestInfo;
 import com.android.internal.inputmethod.InputMethodNavButtonFlags;
-import com.android.internal.view.IInlineSuggestionsRequestCallback;
-import com.android.internal.view.IInputContext;
-import com.android.internal.view.IInputMethod;
-import com.android.internal.view.IInputMethodSession;
-import com.android.internal.view.IInputSessionCallback;
-import com.android.internal.view.InlineSuggestionsRequestInfo;
 
 import java.util.List;
 
@@ -108,12 +108,17 @@ final class IInputMethodInvoker {
     }
 
     @AnyThread
-    void initializeInternal(IBinder token, IInputMethodPrivilegedOperations privOps,
-            int configChanges, boolean stylusHwSupported,
-            @InputMethodNavButtonFlags int navButtonFlags) {
+    void initializeInternal(IBinder token, IInputMethodPrivilegedOperations privilegedOperations,
+            int configChanges, boolean stylusHandWritingSupported,
+            @InputMethodNavButtonFlags int navigationBarFlags) {
+        final IInputMethod.InitParams params = new IInputMethod.InitParams();
+        params.token = token;
+        params.privilegedOperations = privilegedOperations;
+        params.configChanges = configChanges;
+        params.stylusHandWritingSupported = stylusHandWritingSupported;
+        params.navigationBarFlags = navigationBarFlags;
         try {
-            mTarget.initializeInternal(token, privOps, configChanges, stylusHwSupported,
-                    navButtonFlags);
+            mTarget.initializeInternal(params);
         } catch (RemoteException e) {
             logRemoteException(e);
         }
@@ -148,12 +153,19 @@ final class IInputMethodInvoker {
     }
 
     @AnyThread
-    void startInput(IBinder startInputToken, IInputContext inputContext, EditorInfo attribute,
-            boolean restarting, @InputMethodNavButtonFlags int navButtonFlags,
+    void startInput(IBinder startInputToken, IRemoteInputConnection remoteInputConnection,
+            EditorInfo editorInfo, boolean restarting,
+            @InputMethodNavButtonFlags int navButtonFlags,
             @NonNull ImeOnBackInvokedDispatcher imeDispatcher) {
+        final IInputMethod.StartInputParams params = new IInputMethod.StartInputParams();
+        params.startInputToken = startInputToken;
+        params.remoteInputConnection = remoteInputConnection;
+        params.editorInfo = editorInfo;
+        params.restarting = restarting;
+        params.navigationBarFlags = navButtonFlags;
+        params.imeDispatcher = imeDispatcher;
         try {
-            mTarget.startInput(startInputToken, inputContext, attribute, restarting,
-                    navButtonFlags, imeDispatcher);
+            mTarget.startInput(params);
         } catch (RemoteException e) {
             logRemoteException(e);
         }
@@ -169,7 +181,7 @@ final class IInputMethodInvoker {
     }
 
     @AnyThread
-    void createSession(InputChannel channel, IInputSessionCallback callback) {
+    void createSession(InputChannel channel, IInputMethodSessionCallback callback) {
         try {
             mTarget.createSession(channel, callback);
         } catch (RemoteException e) {

@@ -42,9 +42,11 @@ import android.content.pm.IPackageManager;
 import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
 import android.content.pm.ShortcutManager;
+import android.content.res.AssetManager;
 import android.content.res.Resources;
 import android.hardware.SensorManager;
 import android.hardware.SensorPrivacyManager;
+import android.hardware.camera2.CameraManager;
 import android.hardware.devicestate.DeviceStateManager;
 import android.hardware.display.AmbientDisplayConfiguration;
 import android.hardware.display.ColorDisplayManager;
@@ -54,11 +56,13 @@ import android.hardware.fingerprint.FingerprintManager;
 import android.media.AudioManager;
 import android.media.IAudioService;
 import android.media.MediaRouter2Manager;
+import android.media.projection.MediaProjectionManager;
 import android.media.session.MediaSessionManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkScoreManager;
 import android.net.wifi.WifiManager;
 import android.os.BatteryStats;
+import android.os.PowerExemptionManager;
 import android.os.PowerManager;
 import android.os.ServiceManager;
 import android.os.UserManager;
@@ -88,6 +92,7 @@ import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.util.LatencyTracker;
 import com.android.systemui.Prefs;
+import com.android.systemui.dagger.qualifiers.Application;
 import com.android.systemui.dagger.qualifiers.DisplayId;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dagger.qualifiers.TestHarness;
@@ -321,6 +326,11 @@ public class FrameworkServicesModule {
     }
 
     @Provides
+    static MediaProjectionManager provideMediaProjectionManager(Context context) {
+        return context.getSystemService(MediaProjectionManager.class);
+    }
+
+    @Provides
     static MediaRouter2Manager provideMediaRouter2Manager(Context context) {
         return MediaRouter2Manager.getInstance(context);
     }
@@ -371,6 +381,13 @@ public class FrameworkServicesModule {
 
     /** */
     @Provides
+    @Singleton
+    static PowerExemptionManager providePowerExemptionManager(Context context) {
+        return context.getSystemService(PowerExemptionManager.class);
+    }
+
+    /** */
+    @Provides
     @Main
     public SharedPreferences provideSharePreferences(Context context) {
         return Prefs.get(context);
@@ -387,6 +404,12 @@ public class FrameworkServicesModule {
     @Main
     static Resources provideResources(Context context) {
         return context.getResources();
+    }
+
+    @Provides
+    @Application
+    static AssetManager provideAssetManager(@Application Context context) {
+        return context.getAssets();
     }
 
     @Provides
@@ -538,5 +561,11 @@ public class FrameworkServicesModule {
     @Singleton
     static SafetyCenterManager provideSafetyCenterManager(Context context) {
         return context.getSystemService(SafetyCenterManager.class);
+    }
+
+    @Provides
+    @Singleton
+    static CameraManager provideCameraManager(Context context) {
+        return context.getSystemService(CameraManager.class);
     }
 }

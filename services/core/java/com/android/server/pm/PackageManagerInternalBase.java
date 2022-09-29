@@ -122,8 +122,9 @@ abstract class PackageManagerInternalBase extends PackageManagerInternal {
 
     @Override
     @Deprecated
-    public final boolean filterAppAccess(String packageName, int callingUid, int userId) {
-        return snapshot().filterAppAccess(packageName, callingUid, userId);
+    public final boolean filterAppAccess(String packageName, int callingUid, int userId,
+            boolean filterUninstalled) {
+        return snapshot().filterAppAccess(packageName, callingUid, userId, filterUninstalled);
     }
 
     @Override
@@ -315,9 +316,9 @@ abstract class PackageManagerInternalBase extends PackageManagerInternal {
     @Deprecated
     public final List<ResolveInfo> queryIntentReceivers(Intent intent,
             String resolvedType, @PackageManager.ResolveInfoFlagsBits long flags,
-            int filterCallingUid, int userId) {
-        return getResolveIntentHelper().queryIntentReceiversInternal(
-                snapshot(), intent, resolvedType, flags, userId, filterCallingUid);
+            int filterCallingUid, int userId, boolean forSend) {
+        return getResolveIntentHelper().queryIntentReceiversInternal(snapshot(), intent,
+                resolvedType, flags, userId, filterCallingUid, forSend);
     }
 
     @Override
@@ -352,10 +353,9 @@ abstract class PackageManagerInternalBase extends PackageManagerInternal {
 
     @Override
     @Deprecated
-    public final void setDeviceOwnerProtectedPackages(
-            String deviceOwnerPackageName, List<String> packageNames) {
-        getProtectedPackages().setDeviceOwnerProtectedPackages(
-                deviceOwnerPackageName, packageNames);
+    public final void setOwnerProtectedPackages(
+            @UserIdInt int userId, @NonNull List<String> packageNames) {
+        getProtectedPackages().setOwnerProtectedPackages(userId, packageNames);
     }
 
     @Override
@@ -719,6 +719,11 @@ abstract class PackageManagerInternalBase extends PackageManagerInternal {
     @Override
     public boolean isUidPrivileged(int uid) {
         return snapshot().isUidPrivileged(uid);
+    }
+
+    @Override
+    public int checkUidSignaturesForAllUsers(int uid1, int uid2) {
+        return snapshot().checkUidSignaturesForAllUsers(uid1, uid2);
     }
 
     @NonNull

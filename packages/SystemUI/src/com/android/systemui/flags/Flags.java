@@ -16,6 +16,8 @@
 
 package com.android.systemui.flags;
 
+import static android.provider.DeviceConfig.NAMESPACE_WINDOW_MANAGER;
+
 import com.android.internal.annotations.Keep;
 import com.android.systemui.R;
 
@@ -43,9 +45,6 @@ public class Flags {
 
     /***************************************/
     // 100 - notification
-    public static final BooleanFlag NEW_NOTIFICATION_PIPELINE_RENDERING =
-            new BooleanFlag(101, true);
-
     public static final BooleanFlag NOTIFICATION_PIPELINE_DEVELOPER_LOGGING =
             new BooleanFlag(103, false);
 
@@ -60,6 +59,9 @@ public class Flags {
 
     public static final ResourceBooleanFlag NOTIFICATION_DRAG_TO_CONTENTS =
             new ResourceBooleanFlag(108, R.bool.config_notificationToContents);
+
+    public static final BooleanFlag REMOVE_UNRANKED_NOTIFICATIONS =
+            new BooleanFlag(109, false);
 
     /***************************************/
     // 200 - keyguard/lockscreen
@@ -79,6 +81,17 @@ public class Flags {
 
     public static final ResourceBooleanFlag BOUNCER_USER_SWITCHER =
             new ResourceBooleanFlag(204, R.bool.config_enableBouncerUserSwitcher);
+
+    public static final ResourceBooleanFlag FACE_SCANNING_ANIM =
+            new ResourceBooleanFlag(205, R.bool.config_enableFaceScanningAnimation);
+
+    /**
+     * Whether the KeyguardBottomArea(View|Controller) should use the modern architecture or the old
+     * one.
+     */
+    public static final BooleanFlag MODERN_BOTTOM_AREA = new BooleanFlag(206, false);
+
+    public static final BooleanFlag LOCKSCREEN_CUSTOM_CLOCKS = new BooleanFlag(207, false);
 
     /***************************************/
     // 300 - power menu
@@ -149,22 +162,39 @@ public class Flags {
             new ResourceBooleanFlag(800, R.bool.flag_monet);
 
     /***************************************/
+    // 801 - region sampling
+    public static final BooleanFlag REGION_SAMPLING =
+            new BooleanFlag(801, false);
+
+    /***************************************/
     // 900 - media
     public static final BooleanFlag MEDIA_TAP_TO_TRANSFER = new BooleanFlag(900, true);
-    public static final BooleanFlag MEDIA_SESSION_ACTIONS = new BooleanFlag(901, true);
+    public static final BooleanFlag MEDIA_SESSION_ACTIONS = new BooleanFlag(901, false);
     public static final BooleanFlag MEDIA_NEARBY_DEVICES = new BooleanFlag(903, true);
     public static final BooleanFlag MEDIA_MUTE_AWAIT = new BooleanFlag(904, true);
 
     // 1000 - dock
     public static final BooleanFlag SIMULATE_DOCK_THROUGH_CHARGING =
             new BooleanFlag(1000, true);
-    public static final BooleanFlag DOCK_SETUP_ENABLED = new BooleanFlag(1001, false);
+    public static final BooleanFlag DOCK_SETUP_ENABLED = new BooleanFlag(1001, true);
 
 
     // 1100 - windowing
     @Keep
     public static final SysPropBooleanFlag WM_ENABLE_SHELL_TRANSITIONS =
             new SysPropBooleanFlag(1100, "persist.wm.debug.shell_transit", false);
+
+    /**
+     * b/170163464: animate bubbles expanded view collapse with home gesture
+     */
+    @Keep
+    public static final SysPropBooleanFlag BUBBLES_HOME_GESTURE =
+            new SysPropBooleanFlag(1101, "persist.wm.debug.bubbles_home_gesture", true);
+
+    @Keep
+    public static final DeviceConfigBooleanFlag WM_ENABLE_PARTIAL_SCREEN_SHARING =
+            new DeviceConfigBooleanFlag(1102, "record_task_content",
+                    NAMESPACE_WINDOW_MANAGER, false, true);
 
     // 1200 - predictive back
     @Keep
@@ -176,6 +206,9 @@ public class Flags {
     @Keep
     public static final SysPropBooleanFlag WM_ALWAYS_ENFORCE_PREDICTIVE_BACK =
             new SysPropBooleanFlag(1202, "persist.wm.debug.predictive_back_always_enforce", false);
+
+    public static final BooleanFlag NEW_BACK_AFFORDANCE =
+            new BooleanFlag(1203, false /* default */, true /* teamfood */);
 
     // Pay no attention to the reflection behind the curtain.
     // ========================== Curtain ==========================

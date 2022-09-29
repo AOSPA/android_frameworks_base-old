@@ -16,9 +16,9 @@
 
 package com.android.server.wm.flicker.launch
 
+import android.platform.test.annotations.FlakyTest
 import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.RequiresDevice
-import androidx.test.filters.FlakyTest
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
@@ -26,7 +26,7 @@ import com.android.server.wm.flicker.annotation.Group1
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.ShowWhenLockedAppHelper
 import com.android.server.wm.flicker.helpers.wakeUpAndGoToHomeScreen
-import com.android.server.wm.traces.common.FlickerComponentName
+import com.android.server.wm.traces.common.ComponentMatcher
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -45,8 +45,8 @@ import org.junit.runners.Parameterized
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @Group1
 @Postsubmit
-class OpenAppFromLockNotificationWithLockOverlayApp(testSpec: FlickerTestParameter)
-    : OpenAppFromLockNotificationCold(testSpec) {
+class OpenAppFromLockNotificationWithLockOverlayApp(testSpec: FlickerTestParameter) :
+    OpenAppFromLockNotificationCold(testSpec) {
     private val showWhenLockedApp: ShowWhenLockedAppHelper =
             ShowWhenLockedAppHelper(instrumentation)
 
@@ -64,12 +64,14 @@ class OpenAppFromLockNotificationWithLockOverlayApp(testSpec: FlickerTestParamet
 
                     // Launch an activity that is shown when the device is locked
                     showWhenLockedApp.launchViaIntent(wmHelper)
-                    wmHelper.waitForFullScreenApp(showWhenLockedApp.component)
+                    wmHelper.StateSyncBuilder()
+                        .withFullScreenApp(showWhenLockedApp)
+                        .waitForAndVerify()
 
                     device.sleep()
-                    wmHelper.waitFor("noAppWindowsOnTop") {
-                        it.wmState.topVisibleAppWindow.isEmpty()
-                    }
+                    wmHelper.StateSyncBuilder()
+                        .withoutTopVisibleAppWindows()
+                        .waitForAndVerify()
                 }
             }
 
@@ -86,9 +88,9 @@ class OpenAppFromLockNotificationWithLockOverlayApp(testSpec: FlickerTestParamet
         testSpec.assertWm {
             this.hasNoVisibleAppWindow()
                     .then()
-                    .isAppWindowOnTop(FlickerComponentName.SNAPSHOT, isOptional = true)
+                    .isAppWindowOnTop(ComponentMatcher.SNAPSHOT, isOptional = true)
                     .then()
-                    .isAppWindowOnTop(showWhenLockedApp.component)
+                    .isAppWindowOnTop(showWhenLockedApp)
         }
     }
 
@@ -96,11 +98,11 @@ class OpenAppFromLockNotificationWithLockOverlayApp(testSpec: FlickerTestParamet
     @Postsubmit
     fun showWhenLockedAppLayerBecomesVisible() {
         testSpec.assertLayers {
-            this.isInvisible(showWhenLockedApp.component)
+            this.isInvisible(showWhenLockedApp)
                     .then()
-                    .isVisible(FlickerComponentName.SNAPSHOT, isOptional = true)
+                    .isVisible(ComponentMatcher.SNAPSHOT, isOptional = true)
                     .then()
-                    .isVisible(showWhenLockedApp.component)
+                    .isVisible(showWhenLockedApp)
         }
     }
 
@@ -108,6 +110,11 @@ class OpenAppFromLockNotificationWithLockOverlayApp(testSpec: FlickerTestParamet
     @FlakyTest(bugId = 229735718)
     @Test
     override fun entireScreenCovered() = super.entireScreenCovered()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun appWindowBecomesTopWindow() = super.appWindowBecomesTopWindow()
 
     companion object {
         /**

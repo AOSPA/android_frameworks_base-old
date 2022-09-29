@@ -19,6 +19,7 @@ package com.android.systemui.media.dialog;
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -51,6 +52,8 @@ public class MediaOutputAdapterTest extends SysuiTestCase {
     private static final String TEST_DEVICE_ID_1 = "test_device_id_1";
     private static final String TEST_DEVICE_ID_2 = "test_device_id_2";
     private static final String TEST_SESSION_NAME = "test_session_name";
+    private static final int TEST_MAX_VOLUME = 20;
+    private static final int TEST_CURRENT_VOLUME = 10;
 
     // Mock
     private MediaOutputController mMediaOutputController = mock(MediaOutputController.class);
@@ -64,16 +67,17 @@ public class MediaOutputAdapterTest extends SysuiTestCase {
     private MediaOutputAdapter mMediaOutputAdapter;
     private MediaOutputAdapter.MediaDeviceViewHolder mViewHolder;
     private List<MediaDevice> mMediaDevices = new ArrayList<>();
+    MediaOutputSeekbar mSpyMediaOutputSeekbar;
 
     @Before
     public void setUp() {
-        mMediaOutputAdapter = new MediaOutputAdapter(mMediaOutputController, mMediaOutputDialog);
+        mMediaOutputAdapter = new MediaOutputAdapter(mMediaOutputController);
         mViewHolder = (MediaOutputAdapter.MediaDeviceViewHolder) mMediaOutputAdapter
                 .onCreateViewHolder(new LinearLayout(mContext), 0);
+        mSpyMediaOutputSeekbar = spy(mViewHolder.mSeekBar);
 
         when(mMediaOutputController.getMediaDevices()).thenReturn(mMediaDevices);
         when(mMediaOutputController.hasAdjustVolumeUserRestriction()).thenReturn(false);
-        when(mMediaOutputController.isZeroMode()).thenReturn(false);
         when(mMediaOutputController.isTransferring()).thenReturn(false);
         when(mMediaOutputController.getDeviceIconCompat(mMediaDevice1)).thenReturn(mIconCompat);
         when(mMediaOutputController.getDeviceIconCompat(mMediaDevice2)).thenReturn(mIconCompat);
@@ -93,28 +97,12 @@ public class MediaOutputAdapterTest extends SysuiTestCase {
     }
 
     @Test
-    public void getItemCount_nonZeroMode_isDeviceSize() {
-        assertThat(mMediaOutputAdapter.getItemCount()).isEqualTo(mMediaDevices.size());
-    }
-
-    @Test
-    public void getItemCount_zeroMode_containExtraOneForPairNew() {
-        when(mMediaOutputController.isZeroMode()).thenReturn(true);
-
+    public void getItemCount_containExtraOneForPairNew() {
         assertThat(mMediaOutputAdapter.getItemCount()).isEqualTo(mMediaDevices.size() + 1);
     }
 
     @Test
-    public void getItemCount_withDynamicGroup_containExtraOneForGroup() {
-        when(mMediaOutputController.getSelectedMediaDevice()).thenReturn(mMediaDevices);
-        when(mMediaOutputController.isZeroMode()).thenReturn(false);
-
-        assertThat(mMediaOutputAdapter.getItemCount()).isEqualTo(mMediaDevices.size());
-    }
-
-    @Test
-    public void onBindViewHolder_zeroMode_bindPairNew_verifyView() {
-        when(mMediaOutputController.isZeroMode()).thenReturn(true);
+    public void onBindViewHolder_bindPairNew_verifyView() {
         mMediaOutputAdapter.onBindViewHolder(mViewHolder, 2);
 
         assertThat(mViewHolder.mTitleText.getVisibility()).isEqualTo(View.VISIBLE);
@@ -128,7 +116,6 @@ public class MediaOutputAdapterTest extends SysuiTestCase {
     @Test
     public void onBindViewHolder_bindGroup_withSessionName_verifyView() {
         when(mMediaOutputController.getSelectedMediaDevice()).thenReturn(mMediaDevices);
-        when(mMediaOutputController.isZeroMode()).thenReturn(false);
         when(mMediaOutputController.getSessionName()).thenReturn(TEST_SESSION_NAME);
         mMediaOutputAdapter.getItemCount();
         mMediaOutputAdapter.onBindViewHolder(mViewHolder, 0);
@@ -143,7 +130,6 @@ public class MediaOutputAdapterTest extends SysuiTestCase {
     @Test
     public void onBindViewHolder_bindGroup_noSessionName_verifyView() {
         when(mMediaOutputController.getSelectedMediaDevice()).thenReturn(mMediaDevices);
-        when(mMediaOutputController.isZeroMode()).thenReturn(false);
         when(mMediaOutputController.getSessionName()).thenReturn(null);
         mMediaOutputAdapter.getItemCount();
         mMediaOutputAdapter.onBindViewHolder(mViewHolder, 0);
@@ -166,6 +152,16 @@ public class MediaOutputAdapterTest extends SysuiTestCase {
         assertThat(mViewHolder.mCheckBox.getVisibility()).isEqualTo(View.GONE);
         assertThat(mViewHolder.mTwoLineLayout.getVisibility()).isEqualTo(View.GONE);
         assertThat(mViewHolder.mSeekBar.getVisibility()).isEqualTo(View.VISIBLE);
+    }
+
+    @Test
+    public void onBindViewHolder_initSeekbar_setsVolume() {
+        when(mMediaDevice1.getMaxVolume()).thenReturn(TEST_MAX_VOLUME);
+        when(mMediaDevice1.getCurrentVolume()).thenReturn(TEST_CURRENT_VOLUME);
+        mMediaOutputAdapter.onBindViewHolder(mViewHolder, 0);
+
+        assertThat(mViewHolder.mSeekBar.getVisibility()).isEqualTo(View.VISIBLE);
+        assertThat(mViewHolder.mSeekBar.getVolume()).isEqualTo(TEST_CURRENT_VOLUME);
     }
 
     @Test
@@ -242,7 +238,6 @@ public class MediaOutputAdapterTest extends SysuiTestCase {
 
     @Test
     public void onItemClick_clickPairNew_verifyLaunchBluetoothPairing() {
-        when(mMediaOutputController.isZeroMode()).thenReturn(true);
         mMediaOutputAdapter.onBindViewHolder(mViewHolder, 2);
         mViewHolder.mContainerLayout.performClick();
 

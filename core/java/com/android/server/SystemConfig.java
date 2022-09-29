@@ -113,6 +113,24 @@ public class SystemConfig {
 
     final ArrayList<SplitPermissionInfo> mSplitPermissions = new ArrayList<>();
 
+    private static boolean isAtLeastSdkLevel(String version) {
+        try {
+            return UnboundedSdkLevel.isAtLeast(version);
+        } catch (IllegalArgumentException e) {
+            // UnboundedSdkLevel throws when it sees a known old codename
+            return false;
+        }
+    }
+
+    private static boolean isAtMostSdkLevel(String version) {
+        try {
+            return UnboundedSdkLevel.isAtMost(version);
+        } catch (IllegalArgumentException e) {
+            // UnboundedSdkLevel throws when it sees a known old codename
+            return true;
+        }
+    }
+
     public static final class SharedLibraryEntry {
         public final String name;
         public final String filename;
@@ -180,9 +198,9 @@ public class SystemConfig {
             // - onBootclasspathBefore is set and we are before that SDK
             canBeSafelyIgnored =
                     (this.onBootclasspathSince != null
-                            && UnboundedSdkLevel.isAtLeast(this.onBootclasspathSince))
+                            && isAtLeastSdkLevel(this.onBootclasspathSince))
                             || (this.onBootclasspathBefore != null
-                            && !UnboundedSdkLevel.isAtLeast(this.onBootclasspathBefore));
+                            && !isAtLeastSdkLevel(this.onBootclasspathBefore));
         }
     }
 
@@ -682,7 +700,6 @@ public class SystemConfig {
             readPermissions(parser, Environment.buildPath(f, "etc", "permissions"),
                     apexPermissionFlag);
         }
-        pruneVendorApexPrivappAllowlists();
     }
 
     @VisibleForTesting
@@ -886,11 +903,9 @@ public class SystemConfig {
                                         + parser.getPositionDescription());
                             } else {
                                 boolean allowedMinSdk =
-                                        minDeviceSdk == null || UnboundedSdkLevel.isAtLeast(
-                                                minDeviceSdk);
+                                        minDeviceSdk == null || isAtLeastSdkLevel(minDeviceSdk);
                                 boolean allowedMaxSdk =
-                                        maxDeviceSdk == null || UnboundedSdkLevel.isAtMost(
-                                                maxDeviceSdk);
+                                        maxDeviceSdk == null || isAtMostSdkLevel(maxDeviceSdk);
                                 final boolean exists = new File(lfile).exists();
                                 if (allowedMinSdk && allowedMaxSdk && exists) {
                                     String bcpSince = parser.getAttributeValue(null,
@@ -1457,7 +1472,7 @@ public class SystemConfig {
 
         // Some devices can be field-converted to FBE, so offer to splice in
         // those features if not already defined by the static config
-        if (StorageManager.isFileEncryptedNativeOnly()) {
+        if (StorageManager.isFileEncrypted()) {
             addFeature(PackageManager.FEATURE_FILE_BASED_ENCRYPTION, 0);
             addFeature(PackageManager.FEATURE_SECURELY_REMOVES_USERS, 0);
         }
@@ -1595,21 +1610,6 @@ public class SystemConfig {
         grantMap.put(packageName, permissions);
         if (denyPermissions != null) {
             denyMap.put(packageName, denyPermissions);
-        }
-    }
-
-    /**
-     * Prunes out any privileged permission allowlists bundled in vendor apexes.
-     */
-    @VisibleForTesting
-    public void pruneVendorApexPrivappAllowlists() {
-        for (String moduleName: mAllowedVendorApexes.keySet()) {
-            if (mApexPrivAppPermissions.containsKey(moduleName)
-                    || mApexPrivAppDenyPermissions.containsKey(moduleName)) {
-                Slog.w(TAG, moduleName + " is a vendor apex, ignore its priv-app allowlist");
-                mApexPrivAppPermissions.remove(moduleName);
-                mApexPrivAppDenyPermissions.remove(moduleName);
-            }
         }
     }
 

@@ -543,6 +543,10 @@ public class OverScroller {
                 Math.signum(yvel) == Math.signum(dy);
     }
 
+    double getSplineFlingDistance(int velocity) {
+        return mScrollerY.getSplineFlingDistance(velocity);
+    }
+
     static class SplineOverScroller {
         // Initial position
         private Context mContext;

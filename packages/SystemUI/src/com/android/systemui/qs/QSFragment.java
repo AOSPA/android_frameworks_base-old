@@ -57,7 +57,6 @@ import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.policy.BrightnessMirrorController;
 import com.android.systemui.statusbar.policy.RemoteInputQuickSettingsDisabler;
 import com.android.systemui.util.LifecycleFragment;
-import com.android.systemui.util.Utils;
 
 import java.io.PrintWriter;
 import java.util.Arrays;
@@ -72,6 +71,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     private static final boolean DEBUG = false;
     private static final String EXTRA_EXPANDED = "expanded";
     private static final String EXTRA_LISTENING = "listening";
+    private static final String EXTRA_VISIBLE = "visible";
 
     private final Rect mQsBounds = new Rect();
     private final StatusBarStateController mStatusBarStateController;
@@ -96,7 +96,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     private float mLastPanelFraction;
     private float mSquishinessFraction = 1;
     private boolean mQsDisabled;
-    private int[] mTemp = new int[2];
+    private int[] mLocationTemp = new int[2];
 
     private final RemoteInputQuickSettingsDisabler mRemoteInputQuickSettingsDisabler;
     private final MediaHost mQsMediaHost;
@@ -147,6 +147,10 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     private float mFullShadeProgress;
 
     private boolean mOverScrolling;
+
+    // Whether QQS or QS is visible. When in lockscreen, this is true if and only if QQS or QS is
+    // visible;
+    private boolean mQsVisible;
 
     @Inject
     public QSFragment(RemoteInputQuickSettingsDisabler remoteInputQsDisabler,
@@ -224,6 +228,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
         mQSCustomizerController.init();
         mQSCustomizerController.setQs(this);
         if (savedInstanceState != null) {
+            setQsVisible(savedInstanceState.getBoolean(EXTRA_VISIBLE));
             setExpanded(savedInstanceState.getBoolean(EXTRA_EXPANDED));
             setListening(savedInstanceState.getBoolean(EXTRA_LISTENING));
             setEditLocation(view);
@@ -285,6 +290,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
         super.onSaveInstanceState(outState);
         outState.putBoolean(EXTRA_EXPANDED, mQsExpanded);
         outState.putBoolean(EXTRA_LISTENING, mListening);
+        outState.putBoolean(EXTRA_VISIBLE, mQsVisible);
         if (mQSCustomizerController != null) {
             mQSCustomizerController.saveInstanceState(outState);
         }
@@ -301,6 +307,11 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     @VisibleForTesting
     boolean isExpanded() {
         return mQsExpanded;
+    }
+
+    @VisibleForTesting
+    boolean isQsVisible() {
+        return mQsVisible;
     }
 
     @Override
@@ -458,7 +469,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     public void setExpanded(boolean expanded) {
         if (DEBUG) Log.d(TAG, "setExpanded " + expanded);
         mQsExpanded = expanded;
-        mQSPanelController.setListening(mListening, mQsExpanded);
+        updateQsPanelControllerListening();
         updateQsState();
     }
 
@@ -486,9 +497,20 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     public void setListening(boolean listening) {
         if (DEBUG) Log.d(TAG, "setListening " + listening);
         mListening = listening;
-        mQSContainerImplController.setListening(listening);
-        mQSFooterActionController.setListening(listening);
-        mQSPanelController.setListening(mListening, mQsExpanded);
+        mQSContainerImplController.setListening(listening && mQsVisible);
+        mQSFooterActionController.setListening(listening && mQsVisible);
+        updateQsPanelControllerListening();
+    }
+
+    private void updateQsPanelControllerListening() {
+        mQSPanelController.setListening(mListening && mQsVisible, mQsExpanded);
+    }
+
+    @Override
+    public void setQsVisible(boolean visible) {
+        if (DEBUG) Log.d(TAG, "setQsVisible " + visible);
+        mQsVisible = visible;
+        setListening(mListening);
     }
 
     @Override
@@ -602,7 +624,6 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
             mQSAnimator.setPosition(expansion);
         }
         mQqsMediaHost.setSquishFraction(mSquishinessFraction);
-        updateMediaPositions();
     }
 
     private void setAlphaAnimationProgress(float progress) {
@@ -622,67 +643,21 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
         if (mLastQSExpansion == 1.0f) {
             // Fully expanded, let's set the layout bounds as clip bounds. This is necessary because
             // it's a scrollview and otherwise wouldn't be clipped. However, we set the horizontal
-            // bounds so the pages go to the ends of QSContainerImpl
-            ViewGroup.MarginLayoutParams lp =
-                    (ViewGroup.MarginLayoutParams) mQSPanelScrollView.getLayoutParams();
-            mQsBounds.set(-lp.leftMargin, 0, mQSPanelScrollView.getWidth() + lp.rightMargin,
+            // bounds so the pages go to the ends of QSContainerImpl (most cases) or its parent
+            // (large screen portrait)
+            int sideMargin = getResources().getDimensionPixelSize(
+                    R.dimen.qs_tiles_page_horizontal_margin) * 2;
+            mQsBounds.set(-sideMargin, 0, mQSPanelScrollView.getWidth() + sideMargin,
                     mQSPanelScrollView.getHeight());
         }
         mQSPanelScrollView.setClipBounds(mQsBounds);
 
-        mQSPanelScrollView.getLocationOnScreen(mTemp);
-        int top = mTemp[1];
-        mQsMediaHost.getCurrentClipping().set(0, top, getView().getMeasuredWidth(),
+        mQSPanelScrollView.getLocationOnScreen(mLocationTemp);
+        int left = mLocationTemp[0];
+        int top = mLocationTemp[1];
+        mQsMediaHost.getCurrentClipping().set(left, top, left + getView().getMeasuredWidth(),
                 top + mQSPanelScrollView.getMeasuredHeight()
                         - mQSPanelScrollView.getPaddingBottom());
-    }
-
-    private void updateMediaPositions() {
-        if (Utils.useQsMediaPlayer(getContext())) {
-            mContainer.getLocationOnScreen(mTmpLocation);
-            float absoluteBottomPosition = mTmpLocation[1] + mContainer.getHeight();
-            // The Media can be scrolled off screen by default, let's offset it
-            float expandedMediaPosition = absoluteBottomPosition - mQSPanelScrollView.getScrollY()
-                    + mQSPanelScrollView.getScrollRange();
-            pinToBottom(expandedMediaPosition, mQsMediaHost, true /* expanded */);
-            // The expanded media host should never move above the laid out position
-            pinToBottom(absoluteBottomPosition, mQqsMediaHost, false /* expanded */);
-        }
-    }
-
-    private void pinToBottom(float absoluteBottomPosition, MediaHost mediaHost, boolean expanded) {
-        View hostView = mediaHost.getHostView();
-        // On keyguard we cross-fade to expanded, so no need to pin it.
-        // If the collapsed qs isn't visible, we also just keep it at the laid out position.
-        if (mLastQSExpansion > 0 && !isKeyguardState() && mQqsMediaHost.getVisible()) {
-            float targetPosition = absoluteBottomPosition - getTotalBottomMargin(hostView)
-                    - hostView.getHeight();
-            float currentPosition = mediaHost.getCurrentBounds().top
-                    - hostView.getTranslationY();
-            float translationY = targetPosition - currentPosition;
-            if (expanded) {
-                // Never go below the laid out position. This is necessary since the qs panel can
-                // change in height and we don't want to ever go below it's position
-                translationY = Math.min(translationY, 0);
-            } else {
-                translationY = Math.max(translationY, 0);
-            }
-            hostView.setTranslationY(translationY);
-        } else {
-            hostView.setTranslationY(0);
-        }
-    }
-
-    private float getTotalBottomMargin(View startView) {
-        int result = 0;
-        View child = startView;
-        View parent = (View) startView.getParent();
-        while (!(parent instanceof QSContainerImpl) && parent != null) {
-            result += parent.getHeight() - child.getBottom();
-            child = parent;
-            parent = (View) parent.getParent();
-        }
-        return result;
     }
 
     private boolean headerWillBeAnimating() {
@@ -777,8 +752,8 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
      * the QS container.
      */
     private int getQsMinExpansionHeightForSplitShade() {
-        getView().getLocationOnScreen(mTemp);
-        int top = mTemp[1];
+        getView().getLocationOnScreen(mLocationTemp);
+        int top = mLocationTemp[1];
         // We want to get the original top position, so we subtract any translation currently set.
         int originalTop = (int) (top - getView().getTranslationY());
         // On split shade the QS view doesn't start at the top of the screen, so we need to add the
@@ -836,12 +811,13 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
         indentingPw.println("mHeaderAnimating: " + mHeaderAnimating);
         indentingPw.println("mStackScrollerOverscrolling: " + mStackScrollerOverscrolling);
         indentingPw.println("mListening: " + mListening);
+        indentingPw.println("mQsVisible: " + mQsVisible);
         indentingPw.println("mLayoutDirection: " + mLayoutDirection);
         indentingPw.println("mLastQSExpansion: " + mLastQSExpansion);
         indentingPw.println("mLastPanelFraction: " + mLastPanelFraction);
         indentingPw.println("mSquishinessFraction: " + mSquishinessFraction);
         indentingPw.println("mQsDisabled: " + mQsDisabled);
-        indentingPw.println("mTemp: " + Arrays.toString(mTemp));
+        indentingPw.println("mTemp: " + Arrays.toString(mLocationTemp));
         indentingPw.println("mShowCollapsedOnKeyguard: " + mShowCollapsedOnKeyguard);
         indentingPw.println("mLastKeyguardAndExpanded: " + mLastKeyguardAndExpanded);
         indentingPw.println("mState: " + StatusBarState.toString(mState));

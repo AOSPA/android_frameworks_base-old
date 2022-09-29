@@ -19,13 +19,13 @@ package com.android.wm.shell.flicker.helpers
 import android.app.Instrumentation
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
-import android.os.SystemClock
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.Until
 import com.android.server.wm.flicker.helpers.FIND_TIMEOUT
 import com.android.server.wm.flicker.helpers.SYSTEMUI_PACKAGE
 import com.android.server.wm.traces.common.Rect
+import com.android.server.wm.traces.common.WindowManagerConditionsFactory
 import com.android.server.wm.traces.parser.toFlickerComponent
 import com.android.server.wm.traces.parser.windowmanager.WindowManagerStateHelper
 import com.android.wm.shell.flicker.pip.tv.closeTvPipWindow
@@ -39,15 +39,15 @@ class PipAppHelper(instrumentation: Instrumentation) : BaseAppHelper(
 ) {
     private val mediaSessionManager: MediaSessionManager
         get() = context.getSystemService(MediaSessionManager::class.java)
-                ?: error("Could not get MediaSessionManager")
+            ?: error("Could not get MediaSessionManager")
 
     private val mediaController: MediaController?
         get() = mediaSessionManager.getActiveSessions(null).firstOrNull {
-            it.packageName == component.packageName
+            it.packageName == `package`
         }
 
     fun clickObject(resId: String) {
-        val selector = By.res(component.packageName, resId)
+        val selector = By.res(`package`, resId)
         val obj = uiDevice.findObject(selector) ?: error("Could not find `$resId` object")
 
         if (!isTelevision) {
@@ -69,8 +69,14 @@ class PipAppHelper(instrumentation: Instrumentation) : BaseAppHelper(
         action: String? = null,
         stringExtras: Map<String, String>
     ) {
-        launchViaIntentAndWaitShown(wmHelper, expectedWindowName, action, stringExtras,
-            waitConditions = arrayOf(WindowManagerStateHelper.pipShownCondition))
+        launchViaIntentAndWaitShown(
+            wmHelper, expectedWindowName, action, stringExtras,
+            waitConditions = arrayOf(WindowManagerConditionsFactory.hasPipWindow())
+        )
+
+        wmHelper.StateSyncBuilder()
+            .withPipShown()
+            .waitForAndVerify()
     }
 
     /**
@@ -85,7 +91,7 @@ class PipAppHelper(instrumentation: Instrumentation) : BaseAppHelper(
         // from "the bottom".
         repeat(FOCUS_ATTEMPTS) {
             uiDevice.findObject(selector)?.apply { if (isFocusedOrHasFocusedChild) return true }
-                    ?: error("The object we try to focus on is gone.")
+                ?: error("The object we try to focus on is gone.")
 
             uiDevice.pressDPadDown()
             uiDevice.waitForIdle()
@@ -93,16 +99,25 @@ class PipAppHelper(instrumentation: Instrumentation) : BaseAppHelper(
         return false
     }
 
-    @JvmOverloads
-    fun clickEnterPipButton(wmHelper: WindowManagerStateHelper? = null) {
+    fun clickEnterPipButton(wmHelper: WindowManagerStateHelper) {
         clickObject(ENTER_PIP_BUTTON_ID)
 
         // Wait on WMHelper or simply wait for 3 seconds
-        wmHelper?.waitPipShown() ?: SystemClock.sleep(3_000)
+        wmHelper.StateSyncBuilder()
+            .withPipShown()
+            .waitForAndVerify()
         // when entering pip, the dismiss button is visible at the start. to ensure the pip
-        // animation is complete, wait until the pip dismiss button is no longer visible. 
+        // animation is complete, wait until the pip dismiss button is no longer visible.
         // b/176822698: dismiss-only state will be removed in the future
         uiDevice.wait(Until.gone(By.res(SYSTEMUI_PACKAGE, "dismiss")), FIND_TIMEOUT)
+    }
+
+    fun enableEnterPipOnUserLeaveHint() {
+        clickObject(ENTER_PIP_ON_USER_LEAVE_HINT)
+    }
+
+    fun enableAutoEnterForPipActivity() {
+        clickObject(ENTER_PIP_AUTOENTER)
     }
 
     fun clickStartMediaSessionButton() {
@@ -110,19 +125,21 @@ class PipAppHelper(instrumentation: Instrumentation) : BaseAppHelper(
     }
 
     fun checkWithCustomActionsCheckbox() = uiDevice
-            .findObject(By.res(component.packageName, WITH_CUSTOM_ACTIONS_BUTTON_ID))
-                ?.takeIf { it.isCheckable }
-                ?.apply { if (!isChecked) clickObject(WITH_CUSTOM_ACTIONS_BUTTON_ID) }
-                ?: error("'With custom actions' checkbox not found")
+        .findObject(By.res(`package`, WITH_CUSTOM_ACTIONS_BUTTON_ID))
+        ?.takeIf { it.isCheckable }
+        ?.apply { if (!isChecked) clickObject(WITH_CUSTOM_ACTIONS_BUTTON_ID) }
+        ?: error("'With custom actions' checkbox not found")
 
     fun pauseMedia() = mediaController?.transportControls?.pause()
-            ?: error("No active media session found")
+        ?: error("No active media session found")
 
     fun stopMedia() = mediaController?.transportControls?.stop()
-            ?: error("No active media session found")
+        ?: error("No active media session found")
 
-    @Deprecated("Use PipAppHelper.closePipWindow(wmHelper) instead",
-        ReplaceWith("closePipWindow(wmHelper)"))
+    @Deprecated(
+        "Use PipAppHelper.closePipWindow(wmHelper) instead",
+        ReplaceWith("closePipWindow(wmHelper)")
+    )
     fun closePipWindow() {
         if (isTelevision) {
             uiDevice.closeTvPipWindow()
@@ -132,7 +149,7 @@ class PipAppHelper(instrumentation: Instrumentation) : BaseAppHelper(
     }
 
     private fun getWindowRect(wmHelper: WindowManagerStateHelper): Rect {
-        val windowRegion = wmHelper.getWindowRegion(component)
+        val windowRegion = wmHelper.getWindowRegion(this)
         require(!windowRegion.isEmpty) {
             "Unable to find a PIP window in the current state"
         }
@@ -152,14 +169,16 @@ class PipAppHelper(instrumentation: Instrumentation) : BaseAppHelper(
             val dismissSelector = By.res(SYSTEMUI_PACKAGE, "dismiss")
             uiDevice.wait(Until.hasObject(dismissSelector), FIND_TIMEOUT)
             val dismissPipObject = uiDevice.findObject(dismissSelector)
-                    ?: error("PIP window dismiss button not found")
+                ?: error("PIP window dismiss button not found")
             val dismissButtonBounds = dismissPipObject.visibleBounds
             uiDevice.click(dismissButtonBounds.centerX(), dismissButtonBounds.centerY())
         }
 
         // Wait for animation to complete.
-        wmHelper.waitPipGone()
-        wmHelper.waitForHomeActivityVisible()
+        wmHelper.StateSyncBuilder()
+            .withPipGone()
+            .withHomeActivityVisible()
+            .waitForAndVerify()
     }
 
     /**
@@ -172,11 +191,13 @@ class PipAppHelper(instrumentation: Instrumentation) : BaseAppHelper(
         val expandSelector = By.res(SYSTEMUI_PACKAGE, "expand_button")
         uiDevice.wait(Until.hasObject(expandSelector), FIND_TIMEOUT)
         val expandPipObject = uiDevice.findObject(expandSelector)
-                ?: error("PIP window expand button not found")
+            ?: error("PIP window expand button not found")
         val expandButtonBounds = expandPipObject.visibleBounds
         uiDevice.click(expandButtonBounds.centerX(), expandButtonBounds.centerY())
-        wmHelper.waitPipGone()
-        wmHelper.waitForAppTransitionIdle()
+        wmHelper.StateSyncBuilder()
+            .withPipGone()
+            .withFullScreenApp(this)
+            .waitForAndVerify()
     }
 
     /**
@@ -186,7 +207,9 @@ class PipAppHelper(instrumentation: Instrumentation) : BaseAppHelper(
         val windowRect = getWindowRect(wmHelper)
         uiDevice.click(windowRect.centerX(), windowRect.centerY())
         uiDevice.click(windowRect.centerX(), windowRect.centerY())
-        wmHelper.waitForAppTransitionIdle()
+        wmHelper.StateSyncBuilder()
+            .withAppTransitionIdle()
+            .waitForAndVerify()
     }
 
     companion object {
@@ -194,5 +217,7 @@ class PipAppHelper(instrumentation: Instrumentation) : BaseAppHelper(
         private const val ENTER_PIP_BUTTON_ID = "enter_pip"
         private const val WITH_CUSTOM_ACTIONS_BUTTON_ID = "with_custom_actions"
         private const val MEDIA_SESSION_START_RADIO_BUTTON_ID = "media_session_start"
+        private const val ENTER_PIP_ON_USER_LEAVE_HINT = "enter_pip_on_leave_manual"
+        private const val ENTER_PIP_AUTOENTER = "enter_pip_on_leave_autoenter"
     }
 }

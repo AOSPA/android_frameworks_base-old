@@ -294,6 +294,10 @@ final class ResolveIntentHelper {
         // non-launchable IntentSender which contains the failed intent is created. The
         // SendIntentException is thrown if the IntentSender#sendIntent is invoked.
         if (ris != null && !ris.isEmpty()) {
+            // am#isIntentSenderTargetedToPackage returns false if both package name and component
+            // name are set in the intent. Clear the package name to have the api return true and
+            // prevent the package existence info from side channel leaks by the api.
+            intent.setPackage(null);
             intent.setClassName(ris.get(0).activityInfo.packageName,
                     ris.get(0).activityInfo.name);
         }
@@ -306,16 +310,32 @@ final class ResolveIntentHelper {
         return new IntentSender(target);
     }
 
-    // In this method, we have to know the actual calling UID, but in some cases Binder's
-    // call identity is removed, so the UID has to be passed in explicitly.
-    public @NonNull List<ResolveInfo> queryIntentReceiversInternal(Computer computer, Intent intent,
+    /**
+     * Retrieve all receivers that can handle a broadcast of the given intent.
+     * @param queryingUid the results will be filtered in the context of this UID instead.
+     */
+    @NonNull
+    public List<ResolveInfo> queryIntentReceiversInternal(Computer computer, Intent intent,
             String resolvedType, @PackageManager.ResolveInfoFlagsBits long flags, int userId,
-            int filterCallingUid) {
+            int queryingUid) {
+        return queryIntentReceiversInternal(computer, intent, resolvedType, flags, userId,
+                queryingUid, false);
+    }
+
+    /**
+     * @see PackageManagerInternal#queryIntentReceivers(Intent, String, long, int, int, boolean)
+     */
+    @NonNull
+    public List<ResolveInfo> queryIntentReceiversInternal(Computer computer, Intent intent,
+            String resolvedType, @PackageManager.ResolveInfoFlagsBits long flags, int userId,
+            int filterCallingUid, boolean forSend) {
         if (!mUserManager.exists(userId)) return Collections.emptyList();
-        computer.enforceCrossUserPermission(filterCallingUid, userId, false /*requireFullPermission*/,
-                false /*checkShell*/, "query intent receivers");
-        final String instantAppPkgName = computer.getInstantAppPackageName(filterCallingUid);
-        flags = computer.updateFlagsForResolve(flags, userId, filterCallingUid,
+        // The identity used to filter the receiver components
+        final int queryingUid = forSend ? Process.SYSTEM_UID : filterCallingUid;
+        computer.enforceCrossUserPermission(queryingUid, userId,
+                false /*requireFullPermission*/, false /*checkShell*/, "query intent receivers");
+        final String instantAppPkgName = computer.getInstantAppPackageName(queryingUid);
+        flags = computer.updateFlagsForResolve(flags, userId, queryingUid,
                 false /*includeInstantApps*/,
                 computer.isImplicitImageCaptureIntentAndNotSetByDpc(intent, userId,
                         resolvedType, flags));
@@ -397,7 +417,7 @@ final class ResolveIntentHelper {
                     list, true, originalIntent, resolvedType, filterCallingUid);
         }
 
-        return computer.applyPostResolutionFilter(list, instantAppPkgName, false, filterCallingUid,
+        return computer.applyPostResolutionFilter(list, instantAppPkgName, false, queryingUid,
                 false, userId, intent);
     }
 

@@ -21,11 +21,6 @@
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="byteShort" msgid="202579285008794431">"B"</string>
-    <string name="kilobyteShort" msgid="2214285521564195803">"KB"</string>
-    <string name="megabyteShort" msgid="6649361267635823443">"MB"</string>
-    <string name="gigabyteShort" msgid="7515809460261287991">"GB"</string>
-    <string name="terabyteShort" msgid="1822367128583886496">"TB"</string>
-    <string name="petabyteShort" msgid="5651571254228534832">"PB"</string>
     <string name="fileSizeSuffix" msgid="4233671691980131257">"<xliff:g id="NUMBER">%1$s</xliff:g> <xliff:g id="UNIT">%2$s</xliff:g>"</string>
     <string name="untitled" msgid="3381766946944136678">"&lt;Unbenannt&gt;"</string>
     <string name="emptyPhoneNumber" msgid="5812172618020360048">"(Keine Telefonnummer)"</string>
@@ -305,8 +300,8 @@
     <string name="permgroupdesc_calendar" msgid="6762751063361489379">"auf deinen Kalender zugreifen"</string>
     <string name="permgrouplab_sms" msgid="795737735126084874">"SMS"</string>
     <string name="permgroupdesc_sms" msgid="5726462398070064542">"SMS senden und abrufen"</string>
-    <string name="permgrouplab_storage" msgid="5570124978732352858">"Dateien und Dokumente"</string>
-    <string name="permgroupdesc_storage" msgid="8352226729501080525">"Auf Dateien und Dokumente auf deinem Gerät zugreifen"</string>
+    <string name="permgrouplab_storage" msgid="17339216290379241">"Dateien"</string>
+    <string name="permgroupdesc_storage" msgid="5378659041354582769">"auf Dateien auf deinem Gerät zugreifen"</string>
     <string name="permgrouplab_readMediaAural" msgid="1858331312624942053">"Musik und Audio"</string>
     <string name="permgroupdesc_readMediaAural" msgid="7565467343667089595">"Zugriff auf Musik und Audio auf deinem Gerät"</string>
     <string name="permgrouplab_readMediaVisual" msgid="4724874717811908660">"Fotos und Videos"</string>
@@ -558,6 +553,8 @@
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"Ermöglicht es der App, die Komplexitätsstufe der Displaysperre (hoch, mittel, niedrig oder keine) zu ermitteln, was auf Art und mögliche Dauer der Displaysperre hinweist. Die App kann Nutzern auch vorschlagen, die Displaysperre auf eine bestimmte Stufe zu setzen. Nutzer können diesen Vorschlag jedoch einfach ignorieren und fortfahren. Beachten Sie, dass die Displaysperre nicht im Klartext gespeichert ist, sodass die App nicht das genaue Passwort kennt."</string>
     <string name="permlab_postNotification" msgid="4875401198597803658">"Benachrichtigungen anzeigen"</string>
     <string name="permdesc_postNotification" msgid="5974977162462877075">"Ermöglicht der App, Benachrichtigungen anzuzeigen"</string>
+    <string name="permlab_turnScreenOn" msgid="219344053664171492">"das Display einschalten"</string>
+    <string name="permdesc_turnScreenOn" msgid="4394606875897601559">"Ermöglicht der App, das Display einzuschalten."</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"Biometrische Hardware verwenden"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"Erlaubt der App, biometrische Hardware zur Authentifizierung zu verwenden"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"Fingerabdruckhardware verwalten"</string>
@@ -1630,7 +1627,7 @@
     <string name="display_manager_built_in_display_name" msgid="1015775198829722440">"Integrierter Bildschirm"</string>
     <string name="display_manager_hdmi_display_name" msgid="1022758026251534975">"HDMI-Bildschirm"</string>
     <string name="display_manager_overlay_display_name" msgid="5306088205181005861">"Overlay-Nr. <xliff:g id="ID">%1$d</xliff:g>"</string>
-    <string name="display_manager_overlay_display_title" msgid="1480158037150469170">"<xliff:g id="NAME">%1$s</xliff:g>: <xliff:g id="WIDTH">%2$d</xliff:g> x <xliff:g id="HEIGHT">%3$d</xliff:g>, <xliff:g id="DPI">%4$d</xliff:g> dpi"</string>
+    <string name="display_manager_overlay_display_title" msgid="1480158037150469170">"<xliff:g id="NAME">%1$s</xliff:g>: <xliff:g id="WIDTH">%2$d</xliff:g> × <xliff:g id="HEIGHT">%3$d</xliff:g>, <xliff:g id="DPI">%4$d</xliff:g> dpi"</string>
     <string name="display_manager_overlay_display_secure_suffix" msgid="2810034719482834679">", sicher"</string>
     <string name="kg_forgot_pattern_button_text" msgid="406145459223122537">"Muster vergessen"</string>
     <string name="kg_wrong_pattern" msgid="1342812634464179931">"Falsches Muster"</string>
@@ -1695,7 +1692,7 @@
     <string name="accessibility_edit_shortcut_menu_button_title" msgid="239446795930436325">"Funktionen auswählen, die du mit der Schaltfläche \"Bedienungshilfen\" verwenden möchtest"</string>
     <string name="accessibility_edit_shortcut_menu_volume_title" msgid="1077294237378645981">"Funktionen für Verknüpfung mit Lautstärketaste auswählen"</string>
     <string name="accessibility_uncheck_legacy_item_warning" msgid="8047830891064817447">"<xliff:g id="SERVICE_NAME">%s</xliff:g> wurde deaktiviert"</string>
-    <string name="edit_accessibility_shortcut_menu_button" msgid="8885752738733772935">"Verknüpfungen bearbeiten"</string>
+    <string name="edit_accessibility_shortcut_menu_button" msgid="8885752738733772935">"Kurzbefehle bearbeiten"</string>
     <string name="done_accessibility_shortcut_menu_button" msgid="3668407723770815708">"Fertig"</string>
     <string name="disable_accessibility_shortcut" msgid="5806091378745232383">"Verknüpfung deaktivieren"</string>
     <string name="leave_accessibility_shortcut_on" msgid="6543362062336990814">"Verknüpfung verwenden"</string>
@@ -1924,6 +1921,8 @@
     <string name="country_selection_title" msgid="5221495687299014379">"Region auswählen"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Sprache eingeben"</string>
     <string name="language_picker_section_suggested" msgid="6556199184638990447">"Vorschläge"</string>
+    <string name="language_picker_section_suggested_bilingual" msgid="5932198319583556613">"Vorgeschlagene Sprachen"</string>
+    <string name="region_picker_section_suggested_bilingual" msgid="704607569328224133">"Vorgeschlagene Regionen"</string>
     <string name="language_picker_section_all" msgid="1985809075777564284">"Alle Sprachen"</string>
     <string name="region_picker_section_all" msgid="756441309928774155">"Alle Regionen"</string>
     <string name="locale_search_menu" msgid="6258090710176422934">"Suche"</string>
@@ -2078,8 +2077,8 @@
     <string name="nas_upgrade_notification_learn_more_action" msgid="7011130656195423947">"Weitere Informationen"</string>
     <string name="nas_upgrade_notification_learn_more_content" msgid="3735480566983530650">"Die adaptiven Benachrichtigungen wurden in Android 12 durch die Funktion „Erweiterte Benachrichtigungen“ ersetzt. Diese Funktion zeigt Vorschläge für Aktionen und Antworten an und sortiert Benachrichtigungen.\n\nDie Funktion hat Zugriff auf alle Benachrichtigungen, darunter auch personenbezogene Daten wie Kontaktnamen und Nachrichten. Außerdem kann sie auf Benachrichtigungen antworten oder diese schließen und so beispielsweise Anrufe entgegennehmen oder „Bitte nicht stören“ steuern."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Infomitteilung zum Ablaufmodus"</string>
-    <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Dein Akku könnte vor der gewöhnlichen Ladezeit leer sein"</string>
-    <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Energiesparmodus aktiviert, um die Akkulaufzeit zu verlängern"</string>
+    <string name="dynamic_mode_notification_title" msgid="1388718452788985481">"Energiesparmodus aktiviert"</string>
+    <string name="dynamic_mode_notification_summary" msgid="1639031262484979689">"Reduzierung der Akkunutzung, um die Akkulaufzeit zu verlängern"</string>
     <string name="battery_saver_notification_channel_name" msgid="3918243458067916913">"Energiesparmodus"</string>
     <string name="battery_saver_off_notification_title" msgid="7637255960468032515">"Energiesparmodus deaktiviert"</string>
     <string name="battery_saver_charged_notification_summary" product="default" msgid="5544457317418624367">"Das Smartphone ist ausreichend geladen. Es sind keine Funktionen mehr beschränkt."</string>
@@ -2286,5 +2285,7 @@
     <string name="notification_action_check_bg_apps" msgid="4758877443365362532">"Aktive Apps prüfen"</string>
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"Zugriff auf die Kamera des Smartphones über dein Gerät (<xliff:g id="DEVICE">%1$s</xliff:g>) nicht möglich"</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"Zugriff auf die Kamera des Tablets über dein Gerät (<xliff:g id="DEVICE">%1$s</xliff:g>) nicht möglich"</string>
-    <string name="system_locale_title" msgid="3978041860457277638">"Systemsprache"</string>
+    <string name="system_locale_title" msgid="711882686834677268">"Standardeinstellung des Systems"</string>
+    <!-- no translation found for default_card_name (9198284935962911468) -->
+    <skip />
 </resources>

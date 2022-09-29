@@ -23,6 +23,7 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 
 import static com.android.server.wm.ActivityInterceptorCallback.DREAM_MANAGER_ORDERED_ID;
 
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.TaskInfo;
@@ -45,6 +46,9 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
 import android.os.PowerManagerInternal;
+import android.os.RemoteException;
+import android.os.ResultReceiver;
+import android.os.ShellCallback;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.UserHandle;
@@ -124,8 +128,10 @@ public final class DreamManagerService extends SystemService {
                     final boolean activityAllowed = activityType == ACTIVITY_TYPE_HOME
                             || activityType == ACTIVITY_TYPE_DREAM
                             || activityType == ACTIVITY_TYPE_ASSISTANT;
-                    if (mCurrentDreamToken != null && !mCurrentDreamIsWaking && !activityAllowed) {
-                        stopDreamInternal(false, "activity starting: " + activityInfo.name);
+                    if (mCurrentDreamToken != null && !mCurrentDreamIsWaking
+                            && !mCurrentDreamIsDozing && !activityAllowed) {
+                        requestAwakenInternal(
+                                "stopping dream due to activity start: " + activityInfo.name);
                     }
                 }
             };
@@ -219,6 +225,10 @@ public final class DreamManagerService extends SystemService {
         }
     }
 
+    protected void requestStartDreamFromShell() {
+        requestDreamInternal();
+    }
+
     private void requestDreamInternal() {
         // Ask the power manager to nap.  It will eventually call back into
         // startDream() if/when it is appropriate to start dreaming.
@@ -229,13 +239,13 @@ public final class DreamManagerService extends SystemService {
         mPowerManager.nap(time);
     }
 
-    private void requestAwakenInternal() {
+    private void requestAwakenInternal(String reason) {
         // Treat an explicit request to awaken as user activity so that the
         // device doesn't immediately go to sleep if the timeout expired,
         // for example when being undocked.
         long time = SystemClock.uptimeMillis();
         mPowerManager.userActivity(time, false /*noChangeLights*/);
-        stopDreamInternal(false /*immediate*/, "request awaken");
+        stopDreamInternal(false /*immediate*/, reason);
     }
 
     private void finishSelfInternal(IBinder token, boolean immediate) {
@@ -271,6 +281,10 @@ public final class DreamManagerService extends SystemService {
                 startDreamLocked(dream, false /*isPreviewMode*/, doze, userId);
             }
         }
+    }
+
+    protected void requestStopDreamFromShell() {
+        stopDreamInternal(true, "stopping dream from shell");
     }
 
     private void stopDreamInternal(boolean immediate, String reason) {
@@ -591,6 +605,14 @@ public final class DreamManagerService extends SystemService {
             }
         }
 
+        public void onShellCommand(@Nullable FileDescriptor in, @Nullable FileDescriptor out,
+                @Nullable FileDescriptor err,
+                @NonNull String[] args, @Nullable ShellCallback callback,
+                @NonNull ResultReceiver resultReceiver) throws RemoteException {
+            new DreamShellCommand(DreamManagerService.this, mPowerManager)
+                    .exec(this, in, out, err, args, callback, resultReceiver);
+        }
+
         @Override // Binder call
         public ComponentName[] getDreamComponents() {
             return getDreamComponentsForUser(UserHandle.getCallingUserId());
@@ -715,7 +737,7 @@ public final class DreamManagerService extends SystemService {
 
             final long ident = Binder.clearCallingIdentity();
             try {
-                requestAwakenInternal();
+                requestAwakenInternal("request awaken");
             } finally {
                 Binder.restoreCallingIdentity(ident);
             }

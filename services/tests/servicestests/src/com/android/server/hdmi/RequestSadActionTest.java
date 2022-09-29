@@ -132,18 +132,17 @@ public class RequestSadActionTest {
         mHdmiControlService.allocateLogicalAddress(mLocalDevices, INITIATED_BY_ENABLE_CEC);
         mNativeWrapper.setPhysicalAddress(0x0000);
         mTestLooper.dispatchAll();
-        synchronized (mHdmiCecLocalDeviceTv.mLock) {
-            mTvLogicalAddress = mHdmiCecLocalDeviceTv.getDeviceInfo().getLogicalAddress();
-        }
+        mTvLogicalAddress = mHdmiCecLocalDeviceTv.getDeviceInfo().getLogicalAddress();
         mNativeWrapper.clearResultMessages();
     }
 
     @Test
-    public void noResponse_queryAgain_emptyResult() {
+    public void noResponse_queryAgainOnce_emptyResult() {
         RequestSadAction action = new RequestSadAction(mHdmiCecLocalDeviceTv, ADDR_AUDIO_SYSTEM,
                 mCallback);
         action.start();
         mTestLooper.dispatchAll();
+        assertThat(mSupportedSads).isNull();
 
         HdmiCecMessage expected1 = HdmiCecMessageBuilder.buildRequestShortAudioDescriptor(
                 mTvLogicalAddress, Constants.ADDR_AUDIO_SYSTEM,
@@ -153,45 +152,90 @@ public class RequestSadActionTest {
         mTestLooper.moveTimeForward(TIMEOUT_MS);
         mTestLooper.dispatchAll();
         assertThat(mNativeWrapper.getResultMessages()).contains(expected1);
-        mNativeWrapper.clearResultMessages();
         mTestLooper.moveTimeForward(TIMEOUT_MS);
         mTestLooper.dispatchAll();
+
+        assertThat(mSupportedSads).isNotNull();
+        assertThat(mSupportedSads.size()).isEqualTo(0);
 
         HdmiCecMessage expected2 = HdmiCecMessageBuilder.buildRequestShortAudioDescriptor(
                 mTvLogicalAddress, Constants.ADDR_AUDIO_SYSTEM,
                 CODECS_TO_QUERY_2.stream().mapToInt(i -> i).toArray());
-        assertThat(mNativeWrapper.getResultMessages()).contains(expected2);
-        mNativeWrapper.clearResultMessages();
-        mTestLooper.moveTimeForward(TIMEOUT_MS);
-        mTestLooper.dispatchAll();
-        assertThat(mNativeWrapper.getResultMessages()).contains(expected2);
-        mNativeWrapper.clearResultMessages();
-        mTestLooper.moveTimeForward(TIMEOUT_MS);
-        mTestLooper.dispatchAll();
-
         HdmiCecMessage expected3 = HdmiCecMessageBuilder.buildRequestShortAudioDescriptor(
                 mTvLogicalAddress, Constants.ADDR_AUDIO_SYSTEM,
                 CODECS_TO_QUERY_3.stream().mapToInt(i -> i).toArray());
-        assertThat(mNativeWrapper.getResultMessages()).contains(expected3);
-        mNativeWrapper.clearResultMessages();
-        mTestLooper.moveTimeForward(TIMEOUT_MS);
-        mTestLooper.dispatchAll();
-        assertThat(mNativeWrapper.getResultMessages()).contains(expected3);
-        mNativeWrapper.clearResultMessages();
-        mTestLooper.moveTimeForward(TIMEOUT_MS);
-        mTestLooper.dispatchAll();
-
         HdmiCecMessage expected4 = HdmiCecMessageBuilder.buildRequestShortAudioDescriptor(
                 mTvLogicalAddress, Constants.ADDR_AUDIO_SYSTEM,
                 CODECS_TO_QUERY_4.stream().mapToInt(i -> i).toArray());
-        assertThat(mNativeWrapper.getResultMessages()).contains(expected4);
-        mNativeWrapper.clearResultMessages();
+
         mTestLooper.moveTimeForward(TIMEOUT_MS);
         mTestLooper.dispatchAll();
-        assertThat(mNativeWrapper.getResultMessages()).contains(expected4);
+        mTestLooper.moveTimeForward(TIMEOUT_MS);
+        mTestLooper.dispatchAll();
+        mTestLooper.moveTimeForward(TIMEOUT_MS);
+        mTestLooper.dispatchAll();
+        mTestLooper.moveTimeForward(TIMEOUT_MS);
+        mTestLooper.dispatchAll();
+        mTestLooper.moveTimeForward(TIMEOUT_MS);
+        mTestLooper.dispatchAll();
         mTestLooper.moveTimeForward(TIMEOUT_MS);
         mTestLooper.dispatchAll();
 
+        assertThat(mNativeWrapper.getResultMessages()).doesNotContain(expected2);
+        assertThat(mNativeWrapper.getResultMessages()).doesNotContain(expected3);
+        assertThat(mNativeWrapper.getResultMessages()).doesNotContain(expected4);
+        assertThat(mSupportedSads.size()).isEqualTo(0);
+    }
+
+    @Test
+    public void unrecognizedOpcode_dontQueryAgain_emptyResult() {
+        RequestSadAction action = new RequestSadAction(mHdmiCecLocalDeviceTv, ADDR_AUDIO_SYSTEM,
+                mCallback);
+        action.start();
+        mTestLooper.dispatchAll();
+        assertThat(mSupportedSads).isNull();
+
+        HdmiCecMessage unrecognizedOpcode = HdmiCecMessageBuilder.buildFeatureAbortCommand(
+                Constants.ADDR_AUDIO_SYSTEM, mTvLogicalAddress,
+                Constants.MESSAGE_REQUEST_SHORT_AUDIO_DESCRIPTOR,
+                Constants.ABORT_UNRECOGNIZED_OPCODE);
+
+        HdmiCecMessage expected1 = HdmiCecMessageBuilder.buildRequestShortAudioDescriptor(
+                mTvLogicalAddress, Constants.ADDR_AUDIO_SYSTEM,
+                CODECS_TO_QUERY_1.stream().mapToInt(i -> i).toArray());
+        assertThat(mNativeWrapper.getResultMessages()).contains(expected1);
+        action.processCommand(unrecognizedOpcode);
+        mTestLooper.dispatchAll();
+
+        assertThat(mSupportedSads).isNotNull();
+        assertThat(mSupportedSads.size()).isEqualTo(0);
+
+        HdmiCecMessage expected2 = HdmiCecMessageBuilder.buildRequestShortAudioDescriptor(
+                mTvLogicalAddress, Constants.ADDR_AUDIO_SYSTEM,
+                CODECS_TO_QUERY_2.stream().mapToInt(i -> i).toArray());
+        HdmiCecMessage expected3 = HdmiCecMessageBuilder.buildRequestShortAudioDescriptor(
+                mTvLogicalAddress, Constants.ADDR_AUDIO_SYSTEM,
+                CODECS_TO_QUERY_3.stream().mapToInt(i -> i).toArray());
+        HdmiCecMessage expected4 = HdmiCecMessageBuilder.buildRequestShortAudioDescriptor(
+                mTvLogicalAddress, Constants.ADDR_AUDIO_SYSTEM,
+                CODECS_TO_QUERY_4.stream().mapToInt(i -> i).toArray());
+
+        mTestLooper.moveTimeForward(TIMEOUT_MS);
+        mTestLooper.dispatchAll();
+        mTestLooper.moveTimeForward(TIMEOUT_MS);
+        mTestLooper.dispatchAll();
+        mTestLooper.moveTimeForward(TIMEOUT_MS);
+        mTestLooper.dispatchAll();
+        mTestLooper.moveTimeForward(TIMEOUT_MS);
+        mTestLooper.dispatchAll();
+        mTestLooper.moveTimeForward(TIMEOUT_MS);
+        mTestLooper.dispatchAll();
+        mTestLooper.moveTimeForward(TIMEOUT_MS);
+        mTestLooper.dispatchAll();
+
+        assertThat(mNativeWrapper.getResultMessages()).doesNotContain(expected2);
+        assertThat(mNativeWrapper.getResultMessages()).doesNotContain(expected3);
+        assertThat(mNativeWrapper.getResultMessages()).doesNotContain(expected4);
         assertThat(mSupportedSads.size()).isEqualTo(0);
     }
 
@@ -251,10 +295,10 @@ public class RequestSadActionTest {
                 mTvLogicalAddress, Constants.ADDR_AUDIO_SYSTEM,
                 CODECS_TO_QUERY_1.stream().mapToInt(i -> i).toArray());
         byte[] sadsToRespond_1 = new byte[]{
-                0x01, 0x18, 0x4A,
-                0x02, 0x64, 0x5A,
-                0x03, 0x4B, 0x00,
-                0x04, 0x20, 0x0A};
+                0x0F, 0x18, 0x4A,
+                0x17, 0x64, 0x5A,
+                0x1F, 0x4B, 0x00,
+                0x27, 0x20, 0x0A};
         HdmiCecMessage response1 = HdmiCecMessageBuilder.buildReportShortAudioDescriptor(
                 Constants.ADDR_AUDIO_SYSTEM, mTvLogicalAddress, sadsToRespond_1);
         assertThat(mNativeWrapper.getResultMessages()).contains(expected1);
@@ -266,10 +310,10 @@ public class RequestSadActionTest {
                 mTvLogicalAddress, Constants.ADDR_AUDIO_SYSTEM,
                 CODECS_TO_QUERY_2.stream().mapToInt(i -> i).toArray());
         byte[] sadsToRespond_2 = new byte[]{
-                0x05, 0x18, 0x4A,
-                0x06, 0x64, 0x5A,
-                0x07, 0x4B, 0x00,
-                0x08, 0x20, 0x0A};
+                0x2F, 0x18, 0x4A,
+                0x37, 0x64, 0x5A,
+                0x3F, 0x4B, 0x00,
+                0x47, 0x20, 0x0A};
         HdmiCecMessage response2 = HdmiCecMessageBuilder.buildReportShortAudioDescriptor(
                 Constants.ADDR_AUDIO_SYSTEM, mTvLogicalAddress, sadsToRespond_2);
         assertThat(mNativeWrapper.getResultMessages()).contains(expected2);
@@ -281,10 +325,10 @@ public class RequestSadActionTest {
                 mTvLogicalAddress, Constants.ADDR_AUDIO_SYSTEM,
                 CODECS_TO_QUERY_3.stream().mapToInt(i -> i).toArray());
         byte[] sadsToRespond_3 = new byte[]{
-                0x09, 0x18, 0x4A,
-                0x0A, 0x64, 0x5A,
-                0x0B, 0x4B, 0x00,
-                0x0C, 0x20, 0x0A};
+                0x4F, 0x18, 0x4A,
+                0x57, 0x64, 0x5A,
+                0x5F, 0x4B, 0x00,
+                0x67, 0x20, 0x0A};
         HdmiCecMessage response3 = HdmiCecMessageBuilder.buildReportShortAudioDescriptor(
                 Constants.ADDR_AUDIO_SYSTEM, mTvLogicalAddress, sadsToRespond_3);
         assertThat(mNativeWrapper.getResultMessages()).contains(expected3);
@@ -296,9 +340,9 @@ public class RequestSadActionTest {
                 mTvLogicalAddress, Constants.ADDR_AUDIO_SYSTEM,
                 CODECS_TO_QUERY_4.stream().mapToInt(i -> i).toArray());
         byte[] sadsToRespond_4 = new byte[]{
-                0x0D, 0x18, 0x4A,
-                0x0E, 0x64, 0x5A,
-                0x0F, 0x4B, 0x00};
+                0x6F, 0x18, 0x4A,
+                0x77, 0x64, 0x5A,
+                0x7F, 0x4B, 0x00};
         HdmiCecMessage response4 = HdmiCecMessageBuilder.buildReportShortAudioDescriptor(
                 Constants.ADDR_AUDIO_SYSTEM, mTvLogicalAddress, sadsToRespond_4);
         assertThat(mNativeWrapper.getResultMessages()).contains(expected4);
@@ -327,9 +371,9 @@ public class RequestSadActionTest {
                 mTvLogicalAddress, Constants.ADDR_AUDIO_SYSTEM,
                 CODECS_TO_QUERY_1.stream().mapToInt(i -> i).toArray());
         byte[] sadsToRespond_1 = new byte[]{
-                0x01, 0x18, 0x4A,
-                0x03, 0x4B, 0x00,
-                0x04, 0x20, 0x0A};
+                0x0F, 0x18, 0x4A,
+                0x1F, 0x4B, 0x00,
+                0x27, 0x20, 0x0A};
         HdmiCecMessage response1 = HdmiCecMessageBuilder.buildReportShortAudioDescriptor(
                 Constants.ADDR_AUDIO_SYSTEM, mTvLogicalAddress, sadsToRespond_1);
         assertThat(mNativeWrapper.getResultMessages()).contains(expected1);
@@ -341,7 +385,7 @@ public class RequestSadActionTest {
                 mTvLogicalAddress, Constants.ADDR_AUDIO_SYSTEM,
                 CODECS_TO_QUERY_2.stream().mapToInt(i -> i).toArray());
         byte[] sadsToRespond_2 = new byte[]{
-                0x08, 0x20, 0x0A};
+                0x2F, 0x20, 0x0A};
         HdmiCecMessage response2 = HdmiCecMessageBuilder.buildReportShortAudioDescriptor(
                 Constants.ADDR_AUDIO_SYSTEM, mTvLogicalAddress, sadsToRespond_2);
         assertThat(mNativeWrapper.getResultMessages()).contains(expected2);
@@ -353,10 +397,10 @@ public class RequestSadActionTest {
                 mTvLogicalAddress, Constants.ADDR_AUDIO_SYSTEM,
                 CODECS_TO_QUERY_3.stream().mapToInt(i -> i).toArray());
         byte[] sadsToRespond_3 = new byte[]{
-                0x09, 0x18, 0x4A,
-                0x0A, 0x64, 0x5A,
-                0x0B, 0x4B, 0x00,
-                0x0C, 0x20, 0x0A};
+                0x4F, 0x18, 0x4A,
+                0x57, 0x64, 0x5A,
+                0x5F, 0x4B, 0x00,
+                0x67, 0x20, 0x0A};
         HdmiCecMessage response3 = HdmiCecMessageBuilder.buildReportShortAudioDescriptor(
                 Constants.ADDR_AUDIO_SYSTEM, mTvLogicalAddress, sadsToRespond_3);
         assertThat(mNativeWrapper.getResultMessages()).contains(expected3);
@@ -368,7 +412,7 @@ public class RequestSadActionTest {
                 mTvLogicalAddress, Constants.ADDR_AUDIO_SYSTEM,
                 CODECS_TO_QUERY_4.stream().mapToInt(i -> i).toArray());
         byte[] sadsToRespond_4 = new byte[]{
-                0x0F, 0x4B, 0x00};
+                0x7F, 0x4B, 0x00};
         HdmiCecMessage response4 = HdmiCecMessageBuilder.buildReportShortAudioDescriptor(
                 Constants.ADDR_AUDIO_SYSTEM, mTvLogicalAddress, sadsToRespond_4);
         assertThat(mNativeWrapper.getResultMessages()).contains(expected4);
@@ -396,11 +440,12 @@ public class RequestSadActionTest {
         HdmiCecMessage expected1 = HdmiCecMessageBuilder.buildRequestShortAudioDescriptor(
                 mTvLogicalAddress, Constants.ADDR_AUDIO_SYSTEM,
                 CODECS_TO_QUERY_1.stream().mapToInt(i -> i).toArray());
+        // Negative values require explicit casting
         byte[] sadsToRespond_1 = new byte[]{
-                0x20, 0x18, 0x4A,
-                0x21, 0x64, 0x5A,
-                0x22, 0x4B, 0x00,
-                0x23, 0x20, 0x0A};
+                (byte) 0x80, 0x18, 0x4A,
+                (byte) 0x82, 0x64, 0x5A,
+                (byte) 0x87, 0x4B, 0x00,
+                (byte) 0x8F, 0x20, 0x0A};
         HdmiCecMessage response1 = HdmiCecMessageBuilder.buildReportShortAudioDescriptor(
                 Constants.ADDR_AUDIO_SYSTEM, mTvLogicalAddress, sadsToRespond_1);
         assertThat(mNativeWrapper.getResultMessages()).contains(expected1);
@@ -412,10 +457,10 @@ public class RequestSadActionTest {
                 mTvLogicalAddress, Constants.ADDR_AUDIO_SYSTEM,
                 CODECS_TO_QUERY_2.stream().mapToInt(i -> i).toArray());
         byte[] sadsToRespond_2 = new byte[]{
-                0x24, 0x18, 0x4A,
-                0x25, 0x64, 0x5A,
-                0x26, 0x4B, 0x00,
-                0x27, 0x20, 0x0A};
+                (byte) 0x92, 0x18, 0x4A,
+                (byte) 0x98, 0x64, 0x5A,
+                (byte) 0xA1, 0x4B, 0x00,
+                (byte) 0xA4, 0x20, 0x0A};
         HdmiCecMessage response2 = HdmiCecMessageBuilder.buildReportShortAudioDescriptor(
                 Constants.ADDR_AUDIO_SYSTEM, mTvLogicalAddress, sadsToRespond_2);
         assertThat(mNativeWrapper.getResultMessages()).contains(expected2);
@@ -427,10 +472,10 @@ public class RequestSadActionTest {
                 mTvLogicalAddress, Constants.ADDR_AUDIO_SYSTEM,
                 CODECS_TO_QUERY_3.stream().mapToInt(i -> i).toArray());
         byte[] sadsToRespond_3 = new byte[]{
-                0x28, 0x18, 0x4A,
-                0x29, 0x64, 0x5A,
-                0x2A, 0x4B, 0x00,
-                0x2B, 0x20, 0x0A};
+                (byte) 0xB3, 0x18, 0x4A,
+                (byte) 0xBA, 0x64, 0x5A,
+                (byte) 0xCB, 0x4B, 0x00,
+                (byte) 0xCF, 0x20, 0x0A};
         HdmiCecMessage response3 = HdmiCecMessageBuilder.buildReportShortAudioDescriptor(
                 Constants.ADDR_AUDIO_SYSTEM, mTvLogicalAddress, sadsToRespond_3);
         assertThat(mNativeWrapper.getResultMessages()).contains(expected3);
@@ -442,9 +487,9 @@ public class RequestSadActionTest {
                 mTvLogicalAddress, Constants.ADDR_AUDIO_SYSTEM,
                 CODECS_TO_QUERY_4.stream().mapToInt(i -> i).toArray());
         byte[] sadsToRespond_4 = new byte[]{
-                0x2C, 0x18, 0x4A,
-                0x2D, 0x64, 0x5A,
-                0x2E, 0x4B, 0x00};
+                (byte) 0xF0, 0x18, 0x4A,
+                (byte) 0xF1, 0x64, 0x5A,
+                (byte) 0xF3, 0x4B, 0x00};
         HdmiCecMessage response4 = HdmiCecMessageBuilder.buildReportShortAudioDescriptor(
                 Constants.ADDR_AUDIO_SYSTEM, mTvLogicalAddress, sadsToRespond_4);
         assertThat(mNativeWrapper.getResultMessages()).contains(expected4);
@@ -455,20 +500,21 @@ public class RequestSadActionTest {
     }
 
     @Test
-    public void invalidMessageLength_queryAgain() {
+    public void invalidMessageLength_queryAgainOnce() {
         RequestSadAction action = new RequestSadAction(mHdmiCecLocalDeviceTv, ADDR_AUDIO_SYSTEM,
                 mCallback);
         action.start();
         mTestLooper.dispatchAll();
+        assertThat(mSupportedSads).isNull();
 
         HdmiCecMessage expected1 = HdmiCecMessageBuilder.buildRequestShortAudioDescriptor(
                 mTvLogicalAddress, Constants.ADDR_AUDIO_SYSTEM,
                 CODECS_TO_QUERY_1.stream().mapToInt(i -> i).toArray());
         byte[] sadsToRespond_1 = new byte[]{
-                0x01, 0x18,
-                0x02, 0x64, 0x5A,
-                0x03, 0x4B, 0x00,
-                0x04, 0x20, 0x0A};
+                0x0F, 0x18,
+                0x17, 0x64, 0x5A,
+                0x1F, 0x4B, 0x00,
+                0x27, 0x20, 0x0A};
         HdmiCecMessage response1 = HdmiCecMessageBuilder.buildReportShortAudioDescriptor(
                 Constants.ADDR_AUDIO_SYSTEM, mTvLogicalAddress, sadsToRespond_1);
         assertThat(mNativeWrapper.getResultMessages()).contains(expected1);
@@ -482,63 +528,35 @@ public class RequestSadActionTest {
         mTestLooper.moveTimeForward(TIMEOUT_MS);
         mTestLooper.dispatchAll();
 
+        assertThat(mSupportedSads).isNotNull();
+        assertThat(mSupportedSads.size()).isEqualTo(0);
+
         HdmiCecMessage expected2 = HdmiCecMessageBuilder.buildRequestShortAudioDescriptor(
                 mTvLogicalAddress, Constants.ADDR_AUDIO_SYSTEM,
                 CODECS_TO_QUERY_2.stream().mapToInt(i -> i).toArray());
-        byte[] sadsToRespond_2 = new byte[]{
-                0x05, 0x18, 0x4A,
-                0x06, 0x64, 0x5A,
-                0x07,
-                0x08, 0x20, 0x0A};
-        HdmiCecMessage response2 = HdmiCecMessageBuilder.buildReportShortAudioDescriptor(
-                Constants.ADDR_AUDIO_SYSTEM, mTvLogicalAddress, sadsToRespond_2);
-        assertThat(mNativeWrapper.getResultMessages()).contains(expected2);
-        mNativeWrapper.clearResultMessages();
-        action.processCommand(response2);
-        mTestLooper.dispatchAll();
-        mTestLooper.moveTimeForward(TIMEOUT_MS);
-        mTestLooper.dispatchAll();
-        assertThat(mNativeWrapper.getResultMessages()).contains(expected2);
-        mNativeWrapper.clearResultMessages();
-        mTestLooper.moveTimeForward(TIMEOUT_MS);
-        mTestLooper.dispatchAll();
-
         HdmiCecMessage expected3 = HdmiCecMessageBuilder.buildRequestShortAudioDescriptor(
                 mTvLogicalAddress, Constants.ADDR_AUDIO_SYSTEM,
                 CODECS_TO_QUERY_3.stream().mapToInt(i -> i).toArray());
-        byte[] sadsToRespond_3 = new byte[0];
-        HdmiCecMessage response3 = HdmiCecMessageBuilder.buildReportShortAudioDescriptor(
-                Constants.ADDR_AUDIO_SYSTEM, mTvLogicalAddress, sadsToRespond_3);
-        assertThat(mNativeWrapper.getResultMessages()).contains(expected3);
-        mNativeWrapper.clearResultMessages();
-        action.processCommand(response3);
-        mTestLooper.dispatchAll();
-        mTestLooper.moveTimeForward(TIMEOUT_MS);
-        mTestLooper.dispatchAll();
-        assertThat(mNativeWrapper.getResultMessages()).contains(expected3);
-        mNativeWrapper.clearResultMessages();
-        mTestLooper.moveTimeForward(TIMEOUT_MS);
-        mTestLooper.dispatchAll();
-
         HdmiCecMessage expected4 = HdmiCecMessageBuilder.buildRequestShortAudioDescriptor(
                 mTvLogicalAddress, Constants.ADDR_AUDIO_SYSTEM,
                 CODECS_TO_QUERY_4.stream().mapToInt(i -> i).toArray());
-        byte[] sadsToRespond_4 = new byte[]{
-                0x0D, 0x18, 0x4A,
-                0x0E, 0x64, 0x5A,
-                0x0F, 0x4B};
-        HdmiCecMessage response4 = HdmiCecMessageBuilder.buildReportShortAudioDescriptor(
-                Constants.ADDR_AUDIO_SYSTEM, mTvLogicalAddress, sadsToRespond_4);
-        assertThat(mNativeWrapper.getResultMessages()).contains(expected4);
-        mNativeWrapper.clearResultMessages();
-        action.processCommand(response4);
+
+        mTestLooper.moveTimeForward(TIMEOUT_MS);
         mTestLooper.dispatchAll();
         mTestLooper.moveTimeForward(TIMEOUT_MS);
         mTestLooper.dispatchAll();
-        assertThat(mNativeWrapper.getResultMessages()).contains(expected4);
+        mTestLooper.moveTimeForward(TIMEOUT_MS);
+        mTestLooper.dispatchAll();
+        mTestLooper.moveTimeForward(TIMEOUT_MS);
+        mTestLooper.dispatchAll();
+        mTestLooper.moveTimeForward(TIMEOUT_MS);
+        mTestLooper.dispatchAll();
         mTestLooper.moveTimeForward(TIMEOUT_MS);
         mTestLooper.dispatchAll();
 
+        assertThat(mNativeWrapper.getResultMessages()).doesNotContain(expected2);
+        assertThat(mNativeWrapper.getResultMessages()).doesNotContain(expected3);
+        assertThat(mNativeWrapper.getResultMessages()).doesNotContain(expected4);
         assertThat(mSupportedSads.size()).isEqualTo(0);
     }
 
@@ -563,10 +581,10 @@ public class RequestSadActionTest {
                 new int[]{Constants.AUDIO_CODEC_LPCM, Constants.AUDIO_CODEC_DD,
                         Constants.AUDIO_CODEC_MP3, Constants.AUDIO_CODEC_MPEG2});
         byte[] sadsToRespond_1 = new byte[]{
-                0x01, 0x18, 0x4A,
-                0x02, 0x64, 0x5A,
-                0x04, 0x20, 0x0A,
-                0x05, 0x18, 0x4A};
+                0x0F, 0x18, 0x4A,
+                0x17, 0x64, 0x5A,
+                0x27, 0x20, 0x0A,
+                0x2F, 0x18, 0x4A};
         HdmiCecMessage response1 = HdmiCecMessageBuilder.buildReportShortAudioDescriptor(
                 Constants.ADDR_AUDIO_SYSTEM, mTvLogicalAddress, sadsToRespond_1);
         assertThat(mNativeWrapper.getResultMessages()).contains(expected1);
@@ -579,10 +597,10 @@ public class RequestSadActionTest {
                 new int[]{Constants.AUDIO_CODEC_AAC, Constants.AUDIO_CODEC_DTS,
                         Constants.AUDIO_CODEC_ATRAC, Constants.AUDIO_CODEC_DDP});
         byte[] sadsToRespond_2 = new byte[]{
-                0x06, 0x64, 0x5A,
-                0x07, 0x4B, 0x00,
-                0x08, 0x20, 0x0A,
-                0x09, 0x18, 0x4A};
+                0x37, 0x64, 0x5A,
+                0x3F, 0x4B, 0x00,
+                0x47, 0x20, 0x0A,
+                0x4F, 0x18, 0x4A};
         HdmiCecMessage response2 = HdmiCecMessageBuilder.buildReportShortAudioDescriptor(
                 Constants.ADDR_AUDIO_SYSTEM, mTvLogicalAddress, sadsToRespond_2);
         assertThat(mNativeWrapper.getResultMessages()).contains(expected2);
@@ -595,10 +613,10 @@ public class RequestSadActionTest {
                 new int[]{Constants.AUDIO_CODEC_DTSHD, Constants.AUDIO_CODEC_TRUEHD,
                         Constants.AUDIO_CODEC_DST, Constants.AUDIO_CODEC_MAX});
         byte[] sadsToRespond_3 = new byte[]{
-                0x0B, 0x4B, 0x00,
-                0x0C, 0x20, 0x0A,
-                0x0D, 0x18, 0x4A,
-                0x0F, 0x4B, 0x00};
+                0x5F, 0x4B, 0x00,
+                0x67, 0x20, 0x0A,
+                0x6F, 0x18, 0x4A,
+                0x7F, 0x4B, 0x00};
         HdmiCecMessage response3 = HdmiCecMessageBuilder.buildReportShortAudioDescriptor(
                 Constants.ADDR_AUDIO_SYSTEM, mTvLogicalAddress, sadsToRespond_3);
         assertThat(mNativeWrapper.getResultMessages()).contains(expected3);

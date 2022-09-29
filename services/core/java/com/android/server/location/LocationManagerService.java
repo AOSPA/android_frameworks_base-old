@@ -950,10 +950,9 @@ public class LocationManagerService extends ILocationManager.Stub implements
         return mLocalService.getGnssTimeMillis();
     }
 
+    @android.annotation.EnforcePermission(allOf={android.Manifest.permission.LOCATION_HARDWARE, android.Manifest.permission.ACCESS_FINE_LOCATION})
     @Override
     public void injectLocation(Location location) {
-        mContext.enforceCallingPermission(permission.LOCATION_HARDWARE, null);
-        mContext.enforceCallingPermission(ACCESS_FINE_LOCATION, null);
 
         Preconditions.checkArgument(location.isComplete());
 
@@ -1162,10 +1161,9 @@ public class LocationManagerService extends ILocationManager.Stub implements
         return Collections.singletonList(identity.getPackageName());
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.LOCATION_HARDWARE)
     @Override
     public void setExtraLocationControllerPackage(String packageName) {
-        mContext.enforceCallingPermission(permission.LOCATION_HARDWARE,
-                permission.LOCATION_HARDWARE + " permission required");
         synchronized (mLock) {
             mExtraLocationControllerPackage = packageName;
         }
@@ -1178,10 +1176,9 @@ public class LocationManagerService extends ILocationManager.Stub implements
         }
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.LOCATION_HARDWARE)
     @Override
     public void setExtraLocationControllerPackageEnabled(boolean enabled) {
-        mContext.enforceCallingPermission(permission.LOCATION_HARDWARE,
-                permission.LOCATION_HARDWARE + " permission required");
         synchronized (mLock) {
             mExtraLocationControllerPackageEnabled = enabled;
         }
@@ -1236,10 +1233,10 @@ public class LocationManagerService extends ILocationManager.Stub implements
         return mLocalService.isProviderEnabledForUser(provider, userId);
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.CONTROL_AUTOMOTIVE_GNSS)
     @Override
     @RequiresPermission(android.Manifest.permission.CONTROL_AUTOMOTIVE_GNSS)
     public void setAutomotiveGnssSuspended(boolean suspended) {
-        mContext.enforceCallingPermission(permission.CONTROL_AUTOMOTIVE_GNSS, null);
 
         if (!mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)) {
             throw new IllegalStateException(
@@ -1249,10 +1246,10 @@ public class LocationManagerService extends ILocationManager.Stub implements
         mGnssManagerService.setAutomotiveGnssSuspended(suspended);
     }
 
+    @android.annotation.EnforcePermission(android.Manifest.permission.CONTROL_AUTOMOTIVE_GNSS)
     @Override
     @RequiresPermission(android.Manifest.permission.CONTROL_AUTOMOTIVE_GNSS)
     public boolean isAutomotiveGnssSuspended() {
-        mContext.enforceCallingPermission(permission.CONTROL_AUTOMOTIVE_GNSS, null);
 
         if (!mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)) {
             throw new IllegalStateException(

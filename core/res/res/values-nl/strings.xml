@@ -21,11 +21,6 @@
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="byteShort" msgid="202579285008794431">"B"</string>
-    <string name="kilobyteShort" msgid="2214285521564195803">" KB"</string>
-    <string name="megabyteShort" msgid="6649361267635823443">"MB"</string>
-    <string name="gigabyteShort" msgid="7515809460261287991">"GB"</string>
-    <string name="terabyteShort" msgid="1822367128583886496">"TB"</string>
-    <string name="petabyteShort" msgid="5651571254228534832">"PB"</string>
     <string name="fileSizeSuffix" msgid="4233671691980131257">"<xliff:g id="NUMBER">%1$s</xliff:g> <xliff:g id="UNIT">%2$s</xliff:g>"</string>
     <string name="untitled" msgid="3381766946944136678">"&lt;Naamloos&gt;"</string>
     <string name="emptyPhoneNumber" msgid="5812172618020360048">"(Geen telefoonnummer)"</string>
@@ -305,8 +300,8 @@
     <string name="permgroupdesc_calendar" msgid="6762751063361489379">"toegang krijgen tot je agenda"</string>
     <string name="permgrouplab_sms" msgid="795737735126084874">"Sms"</string>
     <string name="permgroupdesc_sms" msgid="5726462398070064542">"sms\'jes verzenden en bekijken"</string>
-    <string name="permgrouplab_storage" msgid="5570124978732352858">"Bestanden en documenten"</string>
-    <string name="permgroupdesc_storage" msgid="8352226729501080525">"bestanden en documenten op je apparaat openen"</string>
+    <string name="permgrouplab_storage" msgid="17339216290379241">"Bestanden"</string>
+    <string name="permgroupdesc_storage" msgid="5378659041354582769">"toegang tot bestanden op je apparaat"</string>
     <string name="permgrouplab_readMediaAural" msgid="1858331312624942053">"Muziek en audio"</string>
     <string name="permgroupdesc_readMediaAural" msgid="7565467343667089595">"muziek en audio op je apparaat openen"</string>
     <string name="permgrouplab_readMediaVisual" msgid="4724874717811908660">"Foto\'s en video\'s"</string>
@@ -558,6 +553,8 @@
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"Hiermee krijgt de app toestemming om het complexiteitsniveau van de schermvergrendeling te achterhalen (hoog, midden, laag of geen). Dat geeft een indicatie van het mogelijke lengtebereik en type van de schermvergrendeling. De app kan gebruikers ook voorstellen de schermvergrendeling naar een bepaald niveau te updaten, maar gebruikers kunnen dit altijd negeren en de app verlaten. De schermvergrendeling wordt niet opgeslagen als platte tekst, zodat de app het precieze wachtwoord niet weet."</string>
     <string name="permlab_postNotification" msgid="4875401198597803658">"meldingen laten zien"</string>
     <string name="permdesc_postNotification" msgid="5974977162462877075">"Hiermee kan de app meldingen laten zien"</string>
+    <string name="permlab_turnScreenOn" msgid="219344053664171492">"het scherm aanzetten"</string>
+    <string name="permdesc_turnScreenOn" msgid="4394606875897601559">"Hiermee kan de app het scherm aanzetten."</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"biometrische hardware gebruiken"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"Hiermee kan de app biometrische hardware gebruiken voor verificatie"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"Vingerafdrukhardware beheren"</string>
@@ -1684,9 +1681,9 @@
     <string name="accessibility_shortcut_menu_item_status_on" msgid="6608392117189732543">"AAN"</string>
     <string name="accessibility_shortcut_menu_item_status_off" msgid="5531598275559472393">"UIT"</string>
     <string name="accessibility_enable_service_title" msgid="3931558336268541484">"Toestaan dat <xliff:g id="SERVICE">%1$s</xliff:g> volledige controle over je apparaat heeft?"</string>
-    <string name="accessibility_service_warning_description" msgid="291674995220940133">"Volledige controle is gepast voor apps die je helpen met toegankelijkheid, maar voor de meeste apps is het ongepast."</string>
+    <string name="accessibility_service_warning_description" msgid="291674995220940133">"Volledige controle is gepast voor apps die je helpen met toegankelijkheid, maar niet voor de meeste apps."</string>
     <string name="accessibility_service_screen_control_title" msgid="190017412626919776">"Scherm bekijken en bedienen"</string>
-    <string name="accessibility_service_screen_control_description" msgid="6946315917771791525">"De functie kan alle content op het scherm lezen en content bovenop andere apps weergeven"</string>
+    <string name="accessibility_service_screen_control_description" msgid="6946315917771791525">"De functie kan alle content op het scherm lezen en content bovenop andere apps weergeven."</string>
     <string name="accessibility_service_action_perform_title" msgid="779670378951658160">"Acties bekijken en uitvoeren"</string>
     <string name="accessibility_service_action_perform_description" msgid="2718852014003170558">"De functie kan je interacties met een app of een hardwaresensor bijhouden en namens jou met apps communiceren."</string>
     <string name="accessibility_dialog_button_allow" msgid="2092558122987144530">"Toestaan"</string>
@@ -1924,6 +1921,8 @@
     <string name="country_selection_title" msgid="5221495687299014379">"Regiovoorkeur"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Typ de naam van een taal"</string>
     <string name="language_picker_section_suggested" msgid="6556199184638990447">"Voorgesteld"</string>
+    <string name="language_picker_section_suggested_bilingual" msgid="5932198319583556613">"Voorgestelde talen"</string>
+    <string name="region_picker_section_suggested_bilingual" msgid="704607569328224133">"Voorgestelde regio\'s"</string>
     <string name="language_picker_section_all" msgid="1985809075777564284">"Alle talen"</string>
     <string name="region_picker_section_all" msgid="756441309928774155">"Alle regio\'s"</string>
     <string name="locale_search_menu" msgid="6258090710176422934">"Zoeken"</string>
@@ -1972,7 +1971,7 @@
     <string name="demo_restarting_message" msgid="1160053183701746766">"Apparaat resetten…"</string>
     <string name="suspended_widget_accessibility" msgid="6331451091851326101">"<xliff:g id="LABEL">%1$s</xliff:g> staat uit"</string>
     <string name="conference_call" msgid="5731633152336490471">"Telefonische vergadering"</string>
-    <string name="tooltip_popup_title" msgid="7863719020269945722">"Knopinfo"</string>
+    <string name="tooltip_popup_title" msgid="7863719020269945722">"Tooltip"</string>
     <string name="app_category_game" msgid="4534216074910244790">"Games"</string>
     <string name="app_category_audio" msgid="8296029904794676222">"Muziek en audio"</string>
     <string name="app_category_video" msgid="2590183854839565814">"Films en video"</string>
@@ -2078,8 +2077,8 @@
     <string name="nas_upgrade_notification_learn_more_action" msgid="7011130656195423947">"Meer informatie"</string>
     <string name="nas_upgrade_notification_learn_more_content" msgid="3735480566983530650">"In Android 12 hebben verbeterde meldingen aanpasbare Android-meldingen vervangen. Deze functie laat voorgestelde acties en antwoorden zien en ordent je meldingen.\n\nVerbeterde meldingen hebben toegang tot meldingscontent, waaronder persoonlijke informatie zoals contactnamen en berichten. Deze functie kan ook meldingen sluiten of erop reageren, zoals telefoongesprekken aannemen, en Niet storen beheren."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Informatiemelding voor routinemodus"</string>
-    <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"De batterij raakt mogelijk leeg voordat deze normaal gesproken wordt opgeladen"</string>
-    <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Batterijbesparing is geactiveerd om de batterijduur te verlengen"</string>
+    <string name="dynamic_mode_notification_title" msgid="1388718452788985481">"Batterijbesparing staat aan"</string>
+    <string name="dynamic_mode_notification_summary" msgid="1639031262484979689">"Het batterijgebruik wordt beperkt om de batterijduur te verlengen"</string>
     <string name="battery_saver_notification_channel_name" msgid="3918243458067916913">"Batterijbesparing"</string>
     <string name="battery_saver_off_notification_title" msgid="7637255960468032515">"Batterijbesparing staat uit"</string>
     <string name="battery_saver_charged_notification_summary" product="default" msgid="5544457317418624367">"Telefoon is voldoende opgeladen. Functies worden niet meer beperkt."</string>
@@ -2286,5 +2285,7 @@
     <string name="notification_action_check_bg_apps" msgid="4758877443365362532">"Actieve apps checken"</string>
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"Kan geen toegang tot de camera van de telefoon krijgen vanaf je <xliff:g id="DEVICE">%1$s</xliff:g>"</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"Kan geen toegang tot de camera van de tablet krijgen vanaf je <xliff:g id="DEVICE">%1$s</xliff:g>"</string>
-    <string name="system_locale_title" msgid="3978041860457277638">"Systeemtaal"</string>
+    <string name="system_locale_title" msgid="711882686834677268">"Systeemstandaard"</string>
+    <!-- no translation found for default_card_name (9198284935962911468) -->
+    <skip />
 </resources>

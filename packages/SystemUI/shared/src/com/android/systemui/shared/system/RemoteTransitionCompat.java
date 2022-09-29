@@ -21,6 +21,7 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.view.WindowManager.TRANSIT_CHANGE;
 import static android.view.WindowManager.TRANSIT_CLOSE;
 import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY;
+import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_LOCKED;
 import static android.view.WindowManager.TRANSIT_OPEN;
 import static android.view.WindowManager.TRANSIT_TO_BACK;
 import static android.view.WindowManager.TRANSIT_TO_FRONT;
@@ -168,7 +169,8 @@ public class RemoteTransitionCompat implements Parcelable {
                 }
                 t.apply();
                 mRecentsSession.setup(controller, info, finishedCallback, pausingTasks, pipTask,
-                        recentsTask, leashMap, mToken);
+                        recentsTask, leashMap, mToken,
+                        (info.getFlags() & TRANSIT_FLAG_KEYGUARD_LOCKED) != 0);
                 recents.onAnimationStart(mRecentsSession, apps, wallpapers, new Rect(0, 0, 0, 0),
                         new Rect());
             }
@@ -184,6 +186,8 @@ public class RemoteTransitionCompat implements Parcelable {
                 } catch (RemoteException e) {
                     Log.e(TAG, "Error merging transition.", e);
                 }
+                // commit taskAppeared after merge transition finished.
+                mRecentsSession.commitTasksAppearedIfNeeded(recents);
             }
         };
         mTransition = new RemoteTransition(remote, appThread);
@@ -220,15 +224,18 @@ public class RemoteTransitionCompat implements Parcelable {
         private WindowContainerToken mRecentsTask = null;
         private TransitionInfo mInfo = null;
         private ArrayList<SurfaceControl> mOpeningLeashes = null;
+        private boolean mOpeningHome = false;
         private ArrayMap<SurfaceControl, SurfaceControl> mLeashMap = null;
         private PictureInPictureSurfaceTransaction mPipTransaction = null;
         private IBinder mTransition = null;
+        private boolean mKeyguardLocked = false;
+        private RemoteAnimationTargetCompat[] mAppearedTargets;
 
         void setup(RecentsAnimationControllerCompat wrapped, TransitionInfo info,
                 IRemoteTransitionFinishedCallback finishCB,
                 ArrayList<WindowContainerToken> pausingTasks, WindowContainerToken pipTask,
                 WindowContainerToken recentsTask, ArrayMap<SurfaceControl, SurfaceControl> leashMap,
-                IBinder transition) {
+                IBinder transition, boolean keyguardLocked) {
             if (mInfo != null) {
                 throw new IllegalStateException("Trying to run a new recents animation while"
                         + " recents is already active.");
@@ -241,12 +248,14 @@ public class RemoteTransitionCompat implements Parcelable {
             mRecentsTask = recentsTask;
             mLeashMap = leashMap;
             mTransition = transition;
+            mKeyguardLocked = keyguardLocked;
         }
 
         @SuppressLint("NewApi")
         boolean merge(TransitionInfo info, SurfaceControl.Transaction t,
                 RecentsAnimationListener recents) {
             SparseArray<TransitionInfo.Change> openingTasks = null;
+            mAppearedTargets = null;
             boolean cancelRecents = false;
             boolean homeGoingAway = false;
             boolean hasChangingApp = false;
@@ -313,6 +322,7 @@ public class RemoteTransitionCompat implements Parcelable {
             }
             final int layer = mInfo.getChanges().size() * 3;
             mOpeningLeashes = new ArrayList<>();
+            mOpeningHome = cancelRecents;
             final RemoteAnimationTargetCompat[] targets =
                     new RemoteAnimationTargetCompat[openingTasks.size()];
             for (int i = 0; i < openingTasks.size(); ++i) {
@@ -327,8 +337,15 @@ public class RemoteTransitionCompat implements Parcelable {
                 targets[i] = target;
             }
             t.apply();
-            recents.onTasksAppeared(targets);
+            mAppearedTargets = targets;
             return true;
+        }
+
+        private void commitTasksAppearedIfNeeded(RecentsAnimationListener recents) {
+            if (mAppearedTargets != null) {
+                recents.onTasksAppeared(mAppearedTargets);
+                mAppearedTargets = null;
+            }
         }
 
         @Override public ThumbnailData screenshotTask(int taskId) {
@@ -352,10 +369,6 @@ public class RemoteTransitionCompat implements Parcelable {
             if (mWrapped != null) mWrapped.setAnimationTargetsBehindSystemBars(behindSystemBars);
         }
 
-        @Override public void hideCurrentInputMethod() {
-            mWrapped.hideCurrentInputMethod();
-        }
-
         @Override public void setFinishTaskTransaction(int taskId,
                 PictureInPictureSurfaceTransaction finishTransaction, SurfaceControl overlay) {
             mPipTransaction = finishTransaction;
@@ -375,6 +388,10 @@ public class RemoteTransitionCompat implements Parcelable {
             final SurfaceControl.Transaction t = new SurfaceControl.Transaction();
             final WindowContainerTransaction wct = new WindowContainerTransaction();
 
+            if (mKeyguardLocked && mRecentsTask != null) {
+                if (toHome) wct.reorder(mRecentsTask, true /* toTop */);
+                else wct.restoreTransientOrder(mRecentsTask);
+            }
             if (!toHome && mPausingTasks != null && mOpeningLeashes == null) {
                 // The gesture went back to opening the app rather than continuing with
                 // recents, so end the transition by moving the app back to the top (and also
@@ -384,7 +401,27 @@ public class RemoteTransitionCompat implements Parcelable {
                     wct.reorder(mPausingTasks.get(i), true /* onTop */);
                     t.show(mInfo.getChange(mPausingTasks.get(i)).getLeash());
                 }
-                if (mRecentsTask != null) {
+                if (!mKeyguardLocked && mRecentsTask != null) {
+                    wct.restoreTransientOrder(mRecentsTask);
+                }
+            } else if (toHome && mOpeningHome && mPausingTasks != null) {
+                // Special situaition where 3p launcher was changed during recents (this happens
+                // during tapltests...). Here we get both "return to home" AND "home opening".
+                // This is basically going home, but we have to restore recents order and also
+                // treat the home "pausing" task properly.
+                for (int i = mPausingTasks.size() - 1; i >= 0; --i) {
+                    final TransitionInfo.Change change = mInfo.getChange(mPausingTasks.get(i));
+                    final ActivityManager.RunningTaskInfo taskInfo = change.getTaskInfo();
+                    if (taskInfo.topActivityType == ACTIVITY_TYPE_HOME) {
+                        // Treat as opening (see above)
+                        wct.reorder(mPausingTasks.get(i), true /* onTop */);
+                        t.show(mInfo.getChange(mPausingTasks.get(i)).getLeash());
+                    } else {
+                        // Treat as hiding (see below)
+                        t.hide(mInfo.getChange(mPausingTasks.get(i)).getLeash());
+                    }
+                }
+                if (!mKeyguardLocked && mRecentsTask != null) {
                     wct.restoreTransientOrder(mRecentsTask);
                 }
             } else {
@@ -408,18 +445,14 @@ public class RemoteTransitionCompat implements Parcelable {
                     mPipTransaction = null;
                 }
             }
-            // Release surface references now. This is apparently to free GPU
-            // memory while doing quick operations (eg. during CTS).
-            for (int i = 0; i < mLeashMap.size(); ++i) {
-                if (mLeashMap.keyAt(i) == mLeashMap.valueAt(i)) continue;
-                t.remove(mLeashMap.valueAt(i));
-            }
             try {
                 mFinishCB.onTransitionFinished(wct.isEmpty() ? null : wct, t);
             } catch (RemoteException e) {
                 Log.e("RemoteTransitionCompat", "Failed to call animation finish callback", e);
                 t.apply();
             }
+            // Only release the non-local created surface references. The animator is responsible
+            // for releasing the leashes created by local.
             for (int i = 0; i < mInfo.getChanges().size(); ++i) {
                 mInfo.getChanges().get(i).getLeash().release();
             }
@@ -429,6 +462,7 @@ public class RemoteTransitionCompat implements Parcelable {
             mPausingTasks = null;
             mInfo = null;
             mOpeningLeashes = null;
+            mOpeningHome = false;
             mLeashMap = null;
             mTransition = null;
         }

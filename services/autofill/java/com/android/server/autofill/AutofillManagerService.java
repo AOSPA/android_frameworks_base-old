@@ -69,6 +69,7 @@ import android.util.SparseBooleanArray;
 import android.util.TimeUtils;
 import android.view.autofill.AutofillId;
 import android.view.autofill.AutofillManager;
+import android.view.autofill.AutofillManager.AutofillCommitReason;
 import android.view.autofill.AutofillManager.SmartSuggestionMode;
 import android.view.autofill.AutofillManagerInternal;
 import android.view.autofill.AutofillValue;
@@ -360,7 +361,7 @@ public final class AutofillManagerService
 
     @Override // from SystemService
     public boolean isUserSupported(TargetUser user) {
-        return user.isFull() || user.isManagedProfile();
+        return user.isFull() || user.isProfile();
     }
 
     @Override // from SystemService
@@ -1657,11 +1658,12 @@ public final class AutofillManagerService
         }
 
         @Override
-        public void finishSession(int sessionId, int userId) {
+        public void finishSession(int sessionId, int userId,
+                @AutofillCommitReason int commitReason) {
             synchronized (mLock) {
                 final AutofillManagerServiceImpl service = peekServiceForUserLocked(userId);
                 if (service != null) {
-                    service.finishSessionLocked(sessionId, getCallingUid());
+                    service.finishSessionLocked(sessionId, getCallingUid(), commitReason);
                 } else if (sVerbose) {
                     Slog.v(TAG, "finishSession(): no service for " + userId);
                 }

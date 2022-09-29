@@ -21,11 +21,6 @@
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="byteShort" msgid="202579285008794431">"B"</string>
-    <string name="kilobyteShort" msgid="2214285521564195803">"KB"</string>
-    <string name="megabyteShort" msgid="6649361267635823443">"MB"</string>
-    <string name="gigabyteShort" msgid="7515809460261287991">"GB"</string>
-    <string name="terabyteShort" msgid="1822367128583886496">"TB"</string>
-    <string name="petabyteShort" msgid="5651571254228534832">"PB"</string>
     <string name="fileSizeSuffix" msgid="4233671691980131257">"<xliff:g id="NUMBER">%1$s</xliff:g> <xliff:g id="UNIT">%2$s</xliff:g>"</string>
     <string name="untitled" msgid="3381766946944136678">"&lt;Be pavadinimo&gt;"</string>
     <string name="emptyPhoneNumber" msgid="5812172618020360048">"(Nėra telefono numerio)"</string>
@@ -307,8 +302,8 @@
     <string name="permgroupdesc_calendar" msgid="6762751063361489379">"pasiekti kalendorių"</string>
     <string name="permgrouplab_sms" msgid="795737735126084874">"SMS"</string>
     <string name="permgroupdesc_sms" msgid="5726462398070064542">"siųsti ir peržiūrėti SMS pranešimus"</string>
-    <string name="permgrouplab_storage" msgid="5570124978732352858">"Failai ir dokumentai"</string>
-    <string name="permgroupdesc_storage" msgid="8352226729501080525">"pasiekti failus ir dokumentus jūsų įrenginyje"</string>
+    <string name="permgrouplab_storage" msgid="17339216290379241">"Failai"</string>
+    <string name="permgroupdesc_storage" msgid="5378659041354582769">"pasiekti failus jūsų įrenginyje"</string>
     <string name="permgrouplab_readMediaAural" msgid="1858331312624942053">"Muzika ir garso įrašai"</string>
     <string name="permgroupdesc_readMediaAural" msgid="7565467343667089595">"pasiekti muziką ir garso įrašus jūsų įrenginyje"</string>
     <string name="permgrouplab_readMediaVisual" msgid="4724874717811908660">"Nuotraukos ir vaizdo įrašai"</string>
@@ -560,6 +555,8 @@
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"Leidžiama programai sužinoti ekrano užrakto sudėtingumo lygį (aukštas, vidutinis, žemas arba nėra), nurodantį galimą ekrano užrakto trukmės diapazoną ir tipą. Be to, programa gali pasiūlyti naudotojams atnaujinti ekrano užraktą į tam tikrą lygį, bet naudotojai gali laisvai nepaisyti ir išeiti. Atminkite, kad ekrano užraktas nesaugomas kaip grynasis tekstas, todėl programa nežino tikslaus slaptažodžio."</string>
     <string name="permlab_postNotification" msgid="4875401198597803658">"rodyti pranešimus"</string>
     <string name="permdesc_postNotification" msgid="5974977162462877075">"Programai leidžiama rodyti pranešimus"</string>
+    <string name="permlab_turnScreenOn" msgid="219344053664171492">"įjungti ekraną"</string>
+    <string name="permdesc_turnScreenOn" msgid="4394606875897601559">"Programai leidžiama įjungti ekraną."</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"naudoti biometrinę aparatinę įrangą"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"Leidžiama programai naudoti biometrinę aparatinę įrangą tapatybei nustatyti"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"tvarkyti piršto antspaudo aparatinę įrangą"</string>
@@ -1702,7 +1699,7 @@
     <string name="disable_accessibility_shortcut" msgid="5806091378745232383">"Išjungti spartųjį klavišą"</string>
     <string name="leave_accessibility_shortcut_on" msgid="6543362062336990814">"Naudoti spartųjį klavišą"</string>
     <string name="color_inversion_feature_name" msgid="326050048927789012">"Spalvų inversija"</string>
-    <string name="color_correction_feature_name" msgid="3655077237805422597">"Spalvų taisymas"</string>
+    <string name="color_correction_feature_name" msgid="3655077237805422597">"Spalvų koregavimas"</string>
     <string name="one_handed_mode_feature_name" msgid="2334330034828094891">"Vienos rankos režimas"</string>
     <string name="reduce_bright_colors_feature_name" msgid="3222994553174604132">"Itin blanku"</string>
     <string name="accessibility_shortcut_enabling_service" msgid="5473495203759847687">"Laikomi garsumo klavišai. „<xliff:g id="SERVICE_NAME">%1$s</xliff:g>“ įjungta."</string>
@@ -1926,6 +1923,8 @@
     <string name="country_selection_title" msgid="5221495687299014379">"Regiono nuostata"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Įveskite kalbos pav."</string>
     <string name="language_picker_section_suggested" msgid="6556199184638990447">"Siūloma"</string>
+    <string name="language_picker_section_suggested_bilingual" msgid="5932198319583556613">"Siūlomos kalbos"</string>
+    <string name="region_picker_section_suggested_bilingual" msgid="704607569328224133">"Siūlomi regionai"</string>
     <string name="language_picker_section_all" msgid="1985809075777564284">"Visos kalbos"</string>
     <string name="region_picker_section_all" msgid="756441309928774155">"Visi regionai"</string>
     <string name="locale_search_menu" msgid="6258090710176422934">"Paieška"</string>
@@ -2080,8 +2079,8 @@
     <string name="nas_upgrade_notification_learn_more_action" msgid="7011130656195423947">"Sužinokite daugiau"</string>
     <string name="nas_upgrade_notification_learn_more_content" msgid="3735480566983530650">"12 versijos „Android“ patobulinti pranešimai pakeitė „Android“ prisitaikančius pranešimus. Ši funkcija rodo siūlomus veiksmus bei atsakymus ir tvarko jūsų pranešimus.\n\nPatobulintų pranešimų funkcija gali pasiekti pranešimų turinį, įskaitant asmens informaciją (pvz., kontaktų vardus ir pranešimus). Ši funkcija taip pat gali atsisakyti pranešimų arba į juos atsakyti, pvz., atsakyti į telefono skambučius ir valdyti netrukdymo režimą."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Veiksmų sekos režimo informacijos pranešimas"</string>
-    <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Akumuliatoriaus energija gali išsekti prieš įprastą įkrovimą"</string>
-    <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Akumuliatoriaus tausojimo priemonė suaktyvinta, kad akumuliatorius veiktų ilgiau"</string>
+    <string name="dynamic_mode_notification_title" msgid="1388718452788985481">"Įjungta akumuliatoriaus tausojimo priemonė"</string>
+    <string name="dynamic_mode_notification_summary" msgid="1639031262484979689">"Sumažinamas akumuliatoriaus energijos vartojimas, kad akumuliatorius veiktų ilgiau"</string>
     <string name="battery_saver_notification_channel_name" msgid="3918243458067916913">"Akumuliatoriaus tausojimo priemonė"</string>
     <string name="battery_saver_off_notification_title" msgid="7637255960468032515">"Akumuliatoriaus tausojimo priemonė išjungta"</string>
     <string name="battery_saver_charged_notification_summary" product="default" msgid="5544457317418624367">"Telefonas pakankamai įkrautas. Funkcijos neberibojamos."</string>
@@ -2288,5 +2287,7 @@
     <string name="notification_action_check_bg_apps" msgid="4758877443365362532">"Peržiūrėkite aktyvias programas"</string>
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"Nepavyko pasiekti telefono fotoaparato iš „<xliff:g id="DEVICE">%1$s</xliff:g>“"</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"Nepavyko pasiekti planšetinio kompiuterio fotoaparato iš „<xliff:g id="DEVICE">%1$s</xliff:g>“"</string>
-    <string name="system_locale_title" msgid="3978041860457277638">"Sistemos kalba"</string>
+    <string name="system_locale_title" msgid="711882686834677268">"Numatytoji sistemos vertė"</string>
+    <!-- no translation found for default_card_name (9198284935962911468) -->
+    <skip />
 </resources>

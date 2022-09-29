@@ -118,16 +118,16 @@ public class SplitTransitionTests extends ShellTestCase {
         mSplitLayout = SplitTestUtils.createMockSplitLayout();
         mMainStage = new MainStage(mContext, mTaskOrganizer, DEFAULT_DISPLAY, mock(
                 StageTaskListener.StageListenerCallbacks.class), mSyncQueue, mSurfaceSession,
-                mIconProvider, null);
+                mIconProvider);
         mMainStage.onTaskAppeared(new TestRunningTaskInfoBuilder().build(), createMockSurface());
         mSideStage = new SideStage(mContext, mTaskOrganizer, DEFAULT_DISPLAY, mock(
                 StageTaskListener.StageListenerCallbacks.class), mSyncQueue, mSurfaceSession,
-                mIconProvider, null);
+                mIconProvider);
         mSideStage.onTaskAppeared(new TestRunningTaskInfoBuilder().build(), createMockSurface());
         mStageCoordinator = new SplitTestUtils.TestStageCoordinator(mContext, DEFAULT_DISPLAY,
                 mSyncQueue, mTaskOrganizer, mMainStage, mSideStage, mDisplayController,
                 mDisplayImeController, mDisplayInsetsController, mSplitLayout, mTransitions,
-                mTransactionPool, mLogger, mMainExecutor, Optional.empty(), Optional::empty);
+                mTransactionPool, mLogger, mMainExecutor, Optional.empty());
         mSplitScreenTransitions = mStageCoordinator.getSplitTransitions();
         doAnswer((Answer<IBinder>) invocation -> mock(IBinder.class))
                 .when(mTransitions).startTransition(anyInt(), any(), any());
@@ -139,6 +139,7 @@ public class SplitTransitionTests extends ShellTestCase {
     }
 
     @Test
+    @UiThreadTest
     public void testLaunchToSide() {
         ActivityManager.RunningTaskInfo newTask = new TestRunningTaskInfoBuilder()
                 .setParentTaskId(mSideStage.mRootTaskInfo.taskId).build();
@@ -173,6 +174,7 @@ public class SplitTransitionTests extends ShellTestCase {
     }
 
     @Test
+    @UiThreadTest
     public void testLaunchPair() {
         TransitionInfo info = createEnterPairInfo();
 
@@ -195,6 +197,7 @@ public class SplitTransitionTests extends ShellTestCase {
     }
 
     @Test
+    @UiThreadTest
     public void testMonitorInSplit() {
         enterSplit();
 
@@ -251,6 +254,7 @@ public class SplitTransitionTests extends ShellTestCase {
     }
 
     @Test
+    @UiThreadTest
     public void testEnterRecents() {
         enterSplit();
 
@@ -288,6 +292,7 @@ public class SplitTransitionTests extends ShellTestCase {
     }
 
     @Test
+    @UiThreadTest
     public void testDismissFromBeingOccluded() {
         enterSplit();
 
@@ -325,6 +330,7 @@ public class SplitTransitionTests extends ShellTestCase {
     }
 
     @Test
+    @UiThreadTest
     public void testDismissFromMultiWindowSupport() {
         enterSplit();
 
@@ -346,6 +352,7 @@ public class SplitTransitionTests extends ShellTestCase {
     }
 
     @Test
+    @UiThreadTest
     public void testDismissSnap() {
         enterSplit();
 
@@ -370,6 +377,7 @@ public class SplitTransitionTests extends ShellTestCase {
     }
 
     @Test
+    @UiThreadTest
     public void testDismissFromAppFinish() {
         enterSplit();
 

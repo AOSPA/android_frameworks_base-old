@@ -17,6 +17,8 @@
 package com.android.systemui.doze;
 
 import static com.android.systemui.doze.DozeMachine.State.DOZE_AOD;
+import static com.android.systemui.doze.DozeMachine.State.INITIALIZED;
+import static com.android.systemui.doze.DozeMachine.State.UNINITIALIZED;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyFloat;
@@ -45,7 +47,6 @@ import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.doze.DozeTriggers.DozingUpdateUiEvent;
 import com.android.systemui.statusbar.phone.DozeParameters;
-import com.android.systemui.statusbar.policy.BatteryController;
 import com.android.systemui.statusbar.policy.DevicePostureController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.concurrency.FakeExecutor;
@@ -91,8 +92,6 @@ public class DozeTriggersTest extends SysuiTestCase {
     private KeyguardStateController mKeyguardStateController;
     @Mock
     private DevicePostureController mDevicePostureController;
-    @Mock
-    private BatteryController mBatteryController;
 
     private DozeTriggers mTriggers;
     private FakeSensorManager mSensors;
@@ -125,7 +124,7 @@ public class DozeTriggersTest extends SysuiTestCase {
                 asyncSensorManager, wakeLock, mDockManager, mProximitySensor,
                 mProximityCheck, mock(DozeLog.class), mBroadcastDispatcher, new FakeSettings(),
                 mAuthController, mExecutor, mUiEventLogger, mKeyguardStateController,
-                mDevicePostureController, mBatteryController);
+                mDevicePostureController);
         mTriggers.setDozeMachine(mMachine);
         waitForSensorManager();
     }
@@ -136,7 +135,7 @@ public class DozeTriggersTest extends SysuiTestCase {
         ArgumentCaptor<DozeHost.Callback> captor = ArgumentCaptor.forClass(DozeHost.Callback.class);
         doAnswer(invocation -> null).when(mHost).addCallback(captor.capture());
 
-        mTriggers.transitionTo(DozeMachine.State.UNINITIALIZED, DozeMachine.State.INITIALIZED);
+        mTriggers.transitionTo(UNINITIALIZED, DozeMachine.State.INITIALIZED);
         mTriggers.transitionTo(DozeMachine.State.INITIALIZED, DozeMachine.State.DOZE);
         clearInvocations(mMachine);
 
@@ -195,8 +194,21 @@ public class DozeTriggersTest extends SysuiTestCase {
     }
 
     @Test
+    public void transitionToDozeSuspendTriggers_disablesAllCallbacks() {
+        mTriggers.transitionTo(UNINITIALIZED, INITIALIZED);
+        when(mMachine.getState()).thenReturn(DozeMachine.State.DOZE_SUSPEND_TRIGGERS);
+
+        mTriggers.transitionTo(DozeMachine.State.INITIALIZED,
+                DozeMachine.State.DOZE_SUSPEND_TRIGGERS);
+
+        verify(mDockManager).removeListener(any());
+        verify(mBroadcastDispatcher).unregisterReceiver(any());
+        verify(mHost).removeCallback(any());
+    }
+
+    @Test
     public void testDockEventListener_registerAndUnregister() {
-        mTriggers.transitionTo(DozeMachine.State.UNINITIALIZED, DozeMachine.State.INITIALIZED);
+        mTriggers.transitionTo(UNINITIALIZED, DozeMachine.State.INITIALIZED);
         verify(mDockManager).addListener(any());
 
         mTriggers.transitionTo(DozeMachine.State.DOZE, DozeMachine.State.FINISH);
@@ -233,9 +245,7 @@ public class DozeTriggersTest extends SysuiTestCase {
         when(mMachine.getState()).thenReturn(DozeMachine.State.DOZE);
 
         // WHEN the pick up gesture is triggered and keyguard isn't occluded
-        // and device isn't on a wireless charger
         when(mKeyguardStateController.isOccluded()).thenReturn(false);
-        when(mBatteryController.isPluggedInWireless()).thenReturn(false);
         mTriggers.onSensor(DozeLog.REASON_SENSOR_PICKUP, 100, 100, null);
 
         // THEN wakeup
@@ -249,22 +259,6 @@ public class DozeTriggersTest extends SysuiTestCase {
 
         // WHEN the pick up gesture is triggered and keyguard IS occluded
         when(mKeyguardStateController.isOccluded()).thenReturn(true);
-        when(mBatteryController.isPluggedInWireless()).thenReturn(false);
-        mTriggers.onSensor(DozeLog.REASON_SENSOR_PICKUP, 100, 100, null);
-
-        // THEN never wakeup
-        verify(mMachine, never()).wakeUp();
-    }
-
-    @Test
-    public void testPickupGestureWirelessCharger() {
-        // GIVEN device is in doze (screen blank, but running doze sensors)
-        when(mMachine.getState()).thenReturn(DozeMachine.State.DOZE);
-
-        // WHEN the pick up gesture is triggered
-        // and device IS on a wireless charger
-        when(mKeyguardStateController.isOccluded()).thenReturn(false);
-        when(mBatteryController.isPluggedInWireless()).thenReturn(true);
         mTriggers.onSensor(DozeLog.REASON_SENSOR_PICKUP, 100, 100, null);
 
         // THEN never wakeup

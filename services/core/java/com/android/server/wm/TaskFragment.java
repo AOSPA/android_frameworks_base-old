@@ -98,6 +98,7 @@ import com.android.internal.app.ActivityTrigger;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.internal.util.function.pooled.PooledPredicate;
+import com.android.server.am.HostingRecord;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
 
 import java.io.FileDescriptor;
@@ -105,7 +106,6 @@ import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -142,6 +142,45 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     static final boolean SHOW_APP_STARTING_PREVIEW = true;
 
     /**
+     * An embedding check result of {@link #isAllowedToEmbedActivity(ActivityRecord)} or
+     * {@link ActivityStarter#canEmbedActivity(TaskFragment, ActivityRecord, Task)}:
+     * indicate that an Activity can be embedded successfully.
+     */
+    static final int EMBEDDING_ALLOWED = 0;
+    /**
+     * An embedding check result of {@link #isAllowedToEmbedActivity(ActivityRecord)} or
+     * {@link ActivityStarter#canEmbedActivity(TaskFragment, ActivityRecord, Task)}:
+     * indicate that an Activity can't be embedded because either the Activity does not allow
+     * untrusted embedding, and the embedding host app is not trusted.
+     */
+    static final int EMBEDDING_DISALLOWED_UNTRUSTED_HOST = 1;
+    /**
+     * An embedding check result of {@link #isAllowedToEmbedActivity(ActivityRecord)} or
+     * {@link ActivityStarter#canEmbedActivity(TaskFragment, ActivityRecord, Task)}:
+     * indicate that an Activity can't be embedded because this taskFragment's bounds are
+     * {@link #smallerThanMinDimension(ActivityRecord)}.
+     */
+    static final int EMBEDDING_DISALLOWED_MIN_DIMENSION_VIOLATION = 2;
+    /**
+     * An embedding check result of
+     * {@link ActivityStarter#canEmbedActivity(TaskFragment, ActivityRecord, Task)}:
+     * indicate that an Activity can't be embedded because the Activity is started on a new task.
+     */
+    static final int EMBEDDING_DISALLOWED_NEW_TASK = 3;
+
+    /**
+     * Embedding check results of {@link #isAllowedToEmbedActivity(ActivityRecord)} or
+     * {@link ActivityStarter#canEmbedActivity(TaskFragment, ActivityRecord, Task)}.
+     */
+    @IntDef(prefix = {"EMBEDDING_"}, value = {
+            EMBEDDING_ALLOWED,
+            EMBEDDING_DISALLOWED_UNTRUSTED_HOST,
+            EMBEDDING_DISALLOWED_MIN_DIMENSION_VIOLATION,
+            EMBEDDING_DISALLOWED_NEW_TASK,
+    })
+    @interface EmbeddingCheckResult {}
+
+    /**
      * Indicate that the minimal width/height should use the default value.
      *
      * @see #mMinWidth
@@ -158,6 +197,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     //ActivityTrigger
     static final ActivityTrigger mActivityTrigger = new ActivityTrigger();
 
+    // TODO(b/233177466): Move mMinWidth and mMinHeight to Task and remove usages in TaskFragment
     /**
      * Minimal width of this task fragment when it's resizeable. {@link #INVALID_MIN_SIZE} means it
      * should use the default minimal width.
@@ -178,14 +218,6 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     /** The TaskFragment that is adjacent to this one. */
     @Nullable
     private TaskFragment mAdjacentTaskFragment;
-
-    /**
-     * Whether to move adjacent task fragment together when re-positioning.
-     *
-     * @see #mAdjacentTaskFragment
-     */
-    // TODO(b/207185041): Remove this once having a single-top root for split screen.
-    boolean mMoveAdjacentTogether;
 
     /**
      * Prevents duplicate calls to onTaskAppeared.
@@ -339,15 +371,14 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         return service.mWindowOrganizerController.getTaskFragment(token);
     }
 
-    void setAdjacentTaskFragment(@Nullable TaskFragment taskFragment, boolean moveTogether) {
+    void setAdjacentTaskFragment(@Nullable TaskFragment taskFragment) {
         if (mAdjacentTaskFragment == taskFragment) {
             return;
         }
         resetAdjacentTaskFragment();
         if (taskFragment != null) {
             mAdjacentTaskFragment = taskFragment;
-            mMoveAdjacentTogether = moveTogether;
-            taskFragment.setAdjacentTaskFragment(this, moveTogether);
+            taskFragment.setAdjacentTaskFragment(this);
         }
     }
 
@@ -356,11 +387,9 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         if (mAdjacentTaskFragment != null && mAdjacentTaskFragment.mAdjacentTaskFragment == this) {
             mAdjacentTaskFragment.mAdjacentTaskFragment = null;
             mAdjacentTaskFragment.mDelayLastActivityRemoval = false;
-            mAdjacentTaskFragment.mMoveAdjacentTogether = false;
         }
         mAdjacentTaskFragment = null;
         mDelayLastActivityRemoval = false;
-        mMoveAdjacentTogether = false;
     }
 
     void setTaskFragmentOrganizer(@NonNull TaskFragmentOrganizerToken organizer, int uid,
@@ -525,20 +554,47 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         return false;
     }
 
-    boolean isAllowedToEmbedActivity(@NonNull ActivityRecord a) {
+    @EmbeddingCheckResult
+    int isAllowedToEmbedActivity(@NonNull ActivityRecord a) {
         return isAllowedToEmbedActivity(a, mTaskFragmentOrganizerUid);
     }
 
     /**
      * Checks if the organized task fragment is allowed to have the specified activity, which is
-     * allowed if an activity allows embedding in untrusted mode, or if the trusted mode can be
-     * enabled.
-     * @see #isAllowedToEmbedActivityInTrustedMode(ActivityRecord)
+     * allowed if an activity allows embedding in untrusted mode, if the trusted mode can be
+     * enabled, or if the organized task fragment bounds are not
+     * {@link #smallerThanMinDimension(ActivityRecord)}.
+     *
      * @param uid   uid of the TaskFragment organizer.
+     * @see #isAllowedToEmbedActivityInTrustedMode(ActivityRecord)
      */
-    boolean isAllowedToEmbedActivity(@NonNull ActivityRecord a, int uid) {
-        return isAllowedToEmbedActivityInUntrustedMode(a)
-                || isAllowedToEmbedActivityInTrustedMode(a, uid);
+    @EmbeddingCheckResult
+    int isAllowedToEmbedActivity(@NonNull ActivityRecord a, int uid) {
+        if (!isAllowedToEmbedActivityInUntrustedMode(a)
+                && !isAllowedToEmbedActivityInTrustedMode(a, uid)) {
+            return EMBEDDING_DISALLOWED_UNTRUSTED_HOST;
+        } else if (smallerThanMinDimension(a)) {
+            return EMBEDDING_DISALLOWED_MIN_DIMENSION_VIOLATION;
+        }
+        return EMBEDDING_ALLOWED;
+    }
+
+    boolean smallerThanMinDimension(@NonNull ActivityRecord activity) {
+        final Rect taskFragBounds = getBounds();
+        final Task task = getTask();
+        // Don't need to check if the bounds match parent Task bounds because the fallback mechanism
+        // is to reparent the Activity to parent if minimum dimensions are not satisfied.
+        if (task == null || taskFragBounds.equals(task.getBounds())) {
+            return false;
+        }
+        final Point minDimensions = activity.getMinDimensions();
+        if (minDimensions == null) {
+            return false;
+        }
+        final int minWidth = minDimensions.x;
+        final int minHeight = minDimensions.y;
+        return taskFragBounds.width() < minWidth
+                || taskFragBounds.height() < minHeight;
     }
 
     /**
@@ -568,13 +624,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
      * @param uid   uid of the TaskFragment organizer.
      */
     boolean isAllowedToEmbedActivityInTrustedMode(@NonNull ActivityRecord a, int uid) {
-        if (UserHandle.getAppId(uid) == SYSTEM_UID) {
-            // The system is trusted to embed other apps securely and for all users.
-            return true;
-        }
-
-        if (uid == a.getUid()) {
-            // Activities from the same UID can be embedded freely by the host.
+        if (isFullyTrustedEmbedding(a, uid)) {
             return true;
         }
 
@@ -593,13 +643,34 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     }
 
     /**
+     * It is fully trusted for embedding in the system app or embedding in the same app. This is
+     * different from {@link #isAllowedToBeEmbeddedInTrustedMode()} since there may be a small
+     * chance for a previous trusted app to start doing something bad.
+     */
+    private static boolean isFullyTrustedEmbedding(@NonNull ActivityRecord a, int uid) {
+        // The system is trusted to embed other apps securely and for all users.
+        return UserHandle.getAppId(uid) == SYSTEM_UID
+                // Activities from the same UID can be embedded freely by the host.
+                || a.isUid(uid);
+    }
+
+    /**
+     * Checks if all activities in the task fragment are embedded as fully trusted.
+     * @see #isFullyTrustedEmbedding(ActivityRecord, int)
+     * @param uid   uid of the TaskFragment organizer.
+     */
+    boolean isFullyTrustedEmbedding(int uid) {
+        // Traverse all activities to see if any of them are not fully trusted embedding.
+        return !forAllActivities(r -> !isFullyTrustedEmbedding(r, uid));
+    }
+
+    /**
      * Checks if all activities in the task fragment are allowed to be embedded in trusted mode.
      * @see #isAllowedToEmbedActivityInTrustedMode(ActivityRecord)
      */
     boolean isAllowedToBeEmbeddedInTrustedMode() {
         // Traverse all activities to see if any of them are not in the trusted mode.
-        final Predicate<ActivityRecord> callback = r -> !isAllowedToEmbedActivityInTrustedMode(r);
-        return !forAllActivities(callback);
+        return !forAllActivities(r -> !isAllowedToEmbedActivityInTrustedMode(r));
     }
 
     /**
@@ -1146,7 +1217,8 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                 // for the current activity to be paused.
                 final boolean isTop = this == taskDisplayArea.getFocusedRootTask();
                 mAtmService.startProcessAsync(next, false /* knownToBeDead */, isTop,
-                        isTop ? "pre-top-activity" : "pre-activity");
+                        isTop ? HostingRecord.HOSTING_TYPE_NEXT_TOP_ACTIVITY
+                                : HostingRecord.HOSTING_TYPE_NEXT_ACTIVITY);
             }
             if (lastResumed != null) {
                 lastResumed.setWillCloseOrEnterPip(true);
@@ -1550,7 +1622,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         if (prev.attachedToProcess()) {
             if (shouldAutoPip) {
                 boolean didAutoPip = mAtmService.enterPictureInPictureMode(
-                        prev, prev.pictureInPictureArgs);
+                        prev, prev.pictureInPictureArgs, false /* fromClient */);
                 ProtoLog.d(WM_DEBUG_STATES, "Auto-PIP allowed, entering PIP mode "
                         + "directly: %s, didAutoPip: %b", prev, didAutoPip);
             } else {
@@ -1588,8 +1660,11 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
             } else {
                 prev.schedulePauseTimeout();
-                // Unset readiness since we now need to wait until this pause is complete.
-                mTransitionController.setReady(this, false /* ready */);
+                // All activities will be stopped when sleeping, don't need to wait for pause.
+                if (!uiSleeping) {
+                    // Unset readiness since we now need to wait until this pause is complete.
+                    mTransitionController.setReady(this, false /* ready */);
+                }
                 return true;
             }
 
@@ -1771,11 +1846,12 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         mClearedTaskForReuse = false;
         mClearedTaskFragmentForPip = false;
 
-        boolean isAddingActivity = child.asActivityRecord() != null;
+        final ActivityRecord addingActivity = child.asActivityRecord();
+        final boolean isAddingActivity = addingActivity != null;
         final Task task = isAddingActivity ? getTask() : null;
 
         // If this task had any activity before we added this one.
-        boolean taskHadActivity = task != null && task.getActivity(Objects::nonNull) != null;
+        boolean taskHadActivity = task != null && task.getTopMostActivity() != null;
         // getActivityType() looks at the top child, so we need to read the type before adding
         // a new child in case the new child is on top and UNDEFINED.
         final int activityType = task != null ? task.getActivityType() : ACTIVITY_TYPE_UNDEFINED;
@@ -1796,7 +1872,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                 mBackScreenshots.put(r.mActivityComponent.flattenToString(), backBuffer);
             }
             child.asActivityRecord().inHistory = true;
-            task.onDescendantActivityAdded(taskHadActivity, activityType, child.asActivityRecord());
+            task.onDescendantActivityAdded(taskHadActivity, activityType, addingActivity);
         }
     }
 
@@ -2056,13 +2132,14 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             }
 
             if (inOutConfig.screenWidthDp == Configuration.SCREEN_WIDTH_DP_UNDEFINED) {
-                final int overrideScreenWidthDp = (int) (mTmpStableBounds.width() / density);
+                final int overrideScreenWidthDp = (int) (mTmpStableBounds.width() / density + 0.5f);
                 inOutConfig.screenWidthDp = (insideParentBounds && !customContainerPolicy)
                         ? Math.min(overrideScreenWidthDp, parentConfig.screenWidthDp)
                         : overrideScreenWidthDp;
             }
             if (inOutConfig.screenHeightDp == Configuration.SCREEN_HEIGHT_DP_UNDEFINED) {
-                final int overrideScreenHeightDp = (int) (mTmpStableBounds.height() / density);
+                final int overrideScreenHeightDp =
+                        (int) (mTmpStableBounds.height() / density + 0.5f);
                 inOutConfig.screenHeightDp = (insideParentBounds && !customContainerPolicy)
                         ? Math.min(overrideScreenHeightDp, parentConfig.screenHeightDp)
                         : overrideScreenHeightDp;
@@ -2079,9 +2156,15 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                 final boolean inPipTransition = windowingMode == WINDOWING_MODE_PINNED
                         && !mTmpFullBounds.isEmpty() && mTmpFullBounds.equals(parentBounds);
                 if (WindowConfiguration.isFloating(windowingMode) && !inPipTransition) {
-                    // For floating tasks, calculate the smallest width from the bounds of the task
-                    inOutConfig.smallestScreenWidthDp = (int) (
-                            Math.min(mTmpFullBounds.width(), mTmpFullBounds.height()) / density);
+                    // For floating tasks, calculate the smallest width from the bounds of the
+                    // task, because they should not be affected by insets.
+                    inOutConfig.smallestScreenWidthDp = (int) (0.5f
+                            + Math.min(mTmpFullBounds.width(), mTmpFullBounds.height()) / density);
+                } else if (isEmbedded()) {
+                    // For embedded TFs, the smallest width should be updated. Otherwise, inherit
+                    // from the parent task would result in applications loaded wrong resource.
+                    inOutConfig.smallestScreenWidthDp =
+                            Math.min(inOutConfig.screenWidthDp, inOutConfig.screenHeightDp);
                 }
                 // otherwise, it will just inherit
             }
@@ -2095,8 +2178,8 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             // For calculating screen layout, we need to use the non-decor inset screen area for the
             // calculation for compatibility reasons, i.e. screen area without system bars that
             // could never go away in Honeycomb.
-            int compatScreenWidthDp = (int) (mTmpNonDecorBounds.width() / density);
-            int compatScreenHeightDp = (int) (mTmpNonDecorBounds.height() / density);
+            int compatScreenWidthDp = (int) (mTmpNonDecorBounds.width() / density + 0.5f);
+            int compatScreenHeightDp = (int) (mTmpNonDecorBounds.height() / density + 0.5f);
             // Use overrides if provided. If both overrides are provided, mTmpNonDecorBounds is
             // undefined so it can't be used.
             if (inOutConfig.screenWidthDp != Configuration.SCREEN_WIDTH_DP_UNDEFINED) {
@@ -2188,7 +2271,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         if (applicationType != ACTIVITY_TYPE_UNDEFINED || !hasChild()) {
             return applicationType;
         }
-        final ActivityRecord activity = getTopNonFinishingActivity();
+        final ActivityRecord activity = getTopMostActivity();
         return activity != null ? activity.getActivityType() : getTopChild().getActivityType();
     }
 
@@ -2304,7 +2387,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     TaskFragmentInfo getTaskFragmentInfo() {
         List<IBinder> childActivities = new ArrayList<>();
         for (int i = 0; i < getChildCount(); i++) {
-            final WindowContainer wc = getChildAt(i);
+            final WindowContainer<?> wc = getChildAt(i);
             final ActivityRecord ar = wc.asActivityRecord();
             if (mTaskFragmentOrganizerUid != INVALID_UID && ar != null
                     && ar.info.processName.equals(mTaskFragmentOrganizerProcessName)
@@ -2324,7 +2407,31 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                 childActivities,
                 positionInParent,
                 mClearedTaskForReuse,
-                mClearedTaskFragmentForPip);
+                mClearedTaskFragmentForPip,
+                calculateMinDimension());
+    }
+
+    /**
+     * Calculates the minimum dimensions that this TaskFragment can be resized.
+     * @see TaskFragmentInfo#getMinimumWidth()
+     * @see TaskFragmentInfo#getMinimumHeight()
+     */
+    Point calculateMinDimension() {
+        final int[] maxMinWidth = new int[1];
+        final int[] maxMinHeight = new int[1];
+
+        forAllActivities(a -> {
+            if (a.finishing) {
+                return;
+            }
+            final Point minDimensions = a.getMinDimensions();
+            if (minDimensions == null) {
+                return;
+            }
+            maxMinWidth[0] = Math.max(maxMinWidth[0], minDimensions.x);
+            maxMinHeight[0] = Math.max(maxMinHeight[0], minDimensions.y);
+        });
+        return new Point(maxMinWidth[0], maxMinHeight[0]);
     }
 
     @Nullable
@@ -2468,7 +2575,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         if (!hasChild()) {
             return false;
         }
-        return isExitAnimationRunningSelfOrChild() || inTransition();
+        return isExitAnimationRunningSelfOrChild();
     }
 
     @Override
@@ -2541,16 +2648,37 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     }
 
     @Override
-    boolean canBeAnimationTarget() {
-        return true;
-    }
-
-    @Override
     boolean fillsParent() {
         // From the perspective of policy, we still want to report that this task fills parent
         // in fullscreen windowing mode even it doesn't match parent bounds because there will be
         // letterbox around its real content.
         return getWindowingMode() == WINDOWING_MODE_FULLSCREEN || matchParentBounds();
+    }
+
+    String toFullString() {
+        final StringBuilder sb = new StringBuilder(128);
+        sb.append(this);
+        sb.setLength(sb.length() - 1); // Remove tail '}'.
+        if (mTaskFragmentOrganizerUid != INVALID_UID) {
+            sb.append(" organizerUid=");
+            sb.append(mTaskFragmentOrganizerUid);
+        }
+        if (mTaskFragmentOrganizerProcessName != null) {
+            sb.append(" organizerProc=");
+            sb.append(mTaskFragmentOrganizerProcessName);
+        }
+        if (mAdjacentTaskFragment != null) {
+            sb.append(" adjacent=");
+            sb.append(mAdjacentTaskFragment);
+        }
+        sb.append('}');
+        return sb.toString();
+    }
+
+    @Override
+    public String toString() {
+        return "TaskFragment{" + Integer.toHexString(System.identityHashCode(this))
+                + " mode=" + WindowConfiguration.windowingModeToString(getWindowingMode()) + "}";
     }
 
     boolean dump(String prefix, FileDescriptor fd, PrintWriter pw, boolean dumpAll,
@@ -2591,7 +2719,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     }
 
     void dumpInner(String prefix, PrintWriter pw, boolean dumpAll, String dumpPackage) {
-        pw.print(prefix); pw.print("* "); pw.println(this);
+        pw.print(prefix); pw.print("* "); pw.println(toFullString());
         final Rect bounds = getRequestedOverrideBounds();
         if (!bounds.isEmpty()) {
             pw.println(prefix + "  mBounds=" + bounds);
@@ -2612,10 +2740,11 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         final String doublePrefix = prefix + "  ";
         for (int i = mChildren.size() - 1; i >= 0; i--) {
             final WindowContainer<?> child = mChildren.get(i);
-            pw.println(prefix + "* " + child);
+            final TaskFragment tf = child.asTaskFragment();
+            pw.println(prefix + "* " + (tf != null ? tf.toFullString() : child));
             // Only dump non-activity because full activity info is already printed by
             // RootWindowContainer#dumpActivities.
-            if (child.asActivityRecord() == null) {
+            if (tf != null) {
                 child.dump(pw, doublePrefix, dumpAll);
             }
         }

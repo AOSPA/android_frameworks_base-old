@@ -27,6 +27,8 @@ import com.android.systemui.log.LogBufferFactory;
 import com.android.systemui.log.LogcatEchoTracker;
 import com.android.systemui.log.LogcatEchoTrackerDebug;
 import com.android.systemui.log.LogcatEchoTrackerProd;
+import com.android.systemui.statusbar.notification.NotifPipelineFlags;
+import com.android.systemui.util.Compile;
 
 import dagger.Module;
 import dagger.Provides;
@@ -48,17 +50,30 @@ public class LogModule {
     @Provides
     @SysUISingleton
     @NotificationLog
-    public static LogBuffer provideNotificationsLogBuffer(LogBufferFactory factory) {
-        return factory.create("NotifLog", 1000 /* maxPoolSize */,
-                10 /* flexSize */, false /* systrace */);
+    public static LogBuffer provideNotificationsLogBuffer(
+            LogBufferFactory factory,
+            NotifPipelineFlags notifPipelineFlags) {
+        int maxSize = 1000;
+        if (Compile.IS_DEBUG && notifPipelineFlags.isDevLoggingEnabled()) {
+            maxSize *= 10;
+        }
+        return factory.create("NotifLog", maxSize, false /* systrace */);
     }
 
-    /** Provides a logging buffer for all logs related to the data layer of notifications. */
+    /** Provides a logging buffer for logs related to heads up presentation of notifications. */
     @Provides
     @SysUISingleton
     @NotificationHeadsUpLog
     public static LogBuffer provideNotificationHeadsUpLogBuffer(LogBufferFactory factory) {
         return factory.create("NotifHeadsUpLog", 1000);
+    }
+
+    /** Provides a logging buffer for notification interruption calculations. */
+    @Provides
+    @SysUISingleton
+    @NotificationInterruptLog
+    public static LogBuffer provideNotificationInterruptLogBuffer(LogBufferFactory factory) {
+        return factory.create("NotifInterruptLog", 100);
     }
 
     /** Provides a logging buffer for all logs for lockscreen to shade transition events. */
@@ -74,8 +89,7 @@ public class LogModule {
     @SysUISingleton
     @NotificationSectionLog
     public static LogBuffer provideNotificationSectionLogBuffer(LogBufferFactory factory) {
-        return factory.create("NotifSectionLog", 1000 /* maxPoolSize */,
-                10 /* flexSize */, false /* systrace */);
+        return factory.create("NotifSectionLog", 1000 /* maxSize */, false /* systrace */);
     }
 
     /** Provides a logging buffer for all logs related to the data layer of notifications. */
@@ -91,8 +105,7 @@ public class LogModule {
     @SysUISingleton
     @QSLog
     public static LogBuffer provideQuickSettingsLogBuffer(LogBufferFactory factory) {
-        return factory.create("QSLog", 500 /* maxPoolSize */,
-                10 /* flexSize */, false /* systrace */);
+        return factory.create("QSLog", 500 /* maxSize */, false /* systrace */);
     }
 
     /** Provides a logging buffer for {@link com.android.systemui.broadcast.BroadcastDispatcher} */
@@ -100,8 +113,8 @@ public class LogModule {
     @SysUISingleton
     @BroadcastDispatcherLog
     public static LogBuffer provideBroadcastDispatcherLogBuffer(LogBufferFactory factory) {
-        return factory.create("BroadcastDispatcherLog", 500 /* maxPoolSize */,
-                10 /* flexSize */, false /* systrace */);
+        return factory.create("BroadcastDispatcherLog", 500 /* maxSize */,
+                false /* systrace */);
     }
 
     /** Provides a logging buffer for all logs related to Toasts shown by SystemUI. */
@@ -139,8 +152,8 @@ public class LogModule {
     @SysUISingleton
     @QSFragmentDisableLog
     public static LogBuffer provideQSFragmentDisableLogBuffer(LogBufferFactory factory) {
-        return factory.create("QSFragmentDisableFlagsLog", 10 /* maxPoolSize */,
-                10 /* flexSize */, false /* systrace */);
+        return factory.create("QSFragmentDisableFlagsLog", 10 /* maxSize */,
+                false /* systrace */);
     }
 
     /**
@@ -230,6 +243,18 @@ public class LogModule {
         return factory.create("MediaBrowser", 100);
     }
 
+    /**
+     * Provides a buffer for updates to the media carousel.
+     *
+     * See {@link com.android.systemui.media.MediaCarouselController}.
+     */
+    @Provides
+    @SysUISingleton
+    @MediaCarouselControllerLog
+    public static LogBuffer provideMediaCarouselControllerBuffer(LogBufferFactory factory) {
+        return factory.create("MediaCarouselCtlrLog", 20);
+    }
+
     /** Allows logging buffers to be tweaked via adb on debug builds but not on prod builds. */
     @Provides
     @SysUISingleton
@@ -241,5 +266,15 @@ public class LogModule {
         } else {
             return new LogcatEchoTrackerProd();
         }
+    }
+
+    /**
+     * Provides a {@link LogBuffer} for use by the status bar network controller.
+     */
+    @Provides
+    @SysUISingleton
+    @StatusBarNetworkControllerLog
+    public static LogBuffer provideStatusBarNetworkControllerBuffer(LogBufferFactory factory) {
+        return factory.create("StatusBarNetworkControllerLog", 20);
     }
 }

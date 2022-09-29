@@ -25,6 +25,7 @@ import static android.app.AppOpsManager.MODE_IGNORED;
 import static android.app.AppOpsManager.OP_CAMERA;
 import static android.app.AppOpsManager.OP_PHONE_CALL_CAMERA;
 import static android.app.AppOpsManager.OP_PHONE_CALL_MICROPHONE;
+import static android.app.AppOpsManager.OP_RECEIVE_AMBIENT_TRIGGER_AUDIO;
 import static android.app.AppOpsManager.OP_RECORD_AUDIO;
 import static android.content.Intent.EXTRA_PACKAGE_NAME;
 import static android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
@@ -281,7 +282,7 @@ public final class SensorPrivacyService extends SystemService {
                 public void onReceive(Context context, Intent intent) {
                     setToggleSensorPrivacy(
                             ((UserHandle) intent.getParcelableExtra(
-                                    Intent.EXTRA_USER)).getIdentifier(), OTHER,
+                                    Intent.EXTRA_USER, android.os.UserHandle.class)).getIdentifier(), OTHER,
                             intent.getIntExtra(EXTRA_SENSOR, UNKNOWN), false);
                 }
             }, new IntentFilter(ACTION_DISABLE_TOGGLE_SENSOR_PRIVACY),
@@ -1067,6 +1068,10 @@ public final class SensorPrivacyService extends SystemService {
                             mAppOpsRestrictionToken);
                     mAppOpsManagerInternal.setGlobalRestriction(OP_PHONE_CALL_MICROPHONE, enabled,
                             mAppOpsRestrictionToken);
+                    // We don't show the dialog for RECEIVE_SOUNDTRIGGER_AUDIO, but still want to
+                    // restrict it when the microphone is disabled
+                    mAppOpsManagerInternal.setGlobalRestriction(OP_RECEIVE_AMBIENT_TRIGGER_AUDIO,
+                            enabled, mAppOpsRestrictionToken);
                     break;
                 case CAMERA:
                     mAppOpsManagerInternal.setGlobalRestriction(OP_CAMERA, enabled,

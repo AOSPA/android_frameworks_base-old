@@ -382,6 +382,7 @@ java_defaults {
         "contacts-provider-platform-compat-config",
     ],
     libs: [
+        "androidx.annotation_annotation",
         "app-compat-annotations",
         "ext",
         "framework-updatable-stubs-module_libs_api",
@@ -402,6 +403,7 @@ java_defaults {
         "soundtrigger_middleware-aidl-java",
         "modules-utils-build",
         "modules-utils-preconditions",
+        "modules-utils-statemachine",
         "modules-utils-synchronous-result-receiver",
         "modules-utils-os",
         "modules-utils-uieventlogger-interface",
@@ -429,10 +431,18 @@ java_library {
     lint: {
         extra_check_modules: ["AndroidFrameworkLintChecker"],
         disabled_checks: ["ApiMightLeakAppVisibility"],
+        error_checks: [
+            "ClearIdentityCallNotFollowedByTryFinally",
+            "NestedClearCallingIdentityCalls",
+            "NonFinalTokenOfOriginalCallingIdentity",
+            "RestoreIdentityCallNotInFinallyBlock",
+            "ResultOfClearIdentityCallNotStoredInVariable",
+            "UnusedTokenOfOriginalCallingIdentity",
+            "UseOfCallerAwareMethodsWithClearedIdentity",
+        ],
     },
     errorprone: {
         javacflags: [
-            "-Xep:AndroidFrameworkBinderIdentity:ERROR",
             "-Xep:AndroidFrameworkCompatChange:ERROR",
             "-Xep:AndroidFrameworkUid:ERROR",
         ],

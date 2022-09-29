@@ -193,14 +193,14 @@ public class TvPipMenuController implements PipMenuController, TvPipMenuView.Lis
     }
 
     private void addPipMenuViewToSystemWindows(View v, String title) {
-        mSystemWindows.addView(v, getPipMenuLayoutParams(title, 0 /* width */, 0 /* height */),
-                0 /* displayId */, SHELL_ROOT_LAYER_PIP);
+        mSystemWindows.addView(v, getPipMenuLayoutParams(mContext, title, 0 /* width */,
+                0 /* height */), 0 /* displayId */, SHELL_ROOT_LAYER_PIP);
     }
 
     void notifyPipAnimating(boolean animating) {
         mPipMenuView.setEduTextActive(!animating);
         if (!animating) {
-            mPipMenuView.onPipTransitionFinished();
+            mPipMenuView.onPipTransitionFinished(mTvPipBoundsState.isTvPipExpanded());
         }
     }
 
@@ -209,7 +209,7 @@ public class TvPipMenuController implements PipMenuController, TvPipMenuView.Lis
             ProtoLog.d(ShellProtoLogGroup.WM_SHELL_PICTURE_IN_PICTURE,
                     "%s: showMovementMenuOnly()", TAG);
         }
-        mInMoveMode = true;
+        setInMoveMode(true);
         mCloseAfterExitMoveMenu = true;
         showMenuInternal();
     }
@@ -219,7 +219,7 @@ public class TvPipMenuController implements PipMenuController, TvPipMenuView.Lis
         if (DEBUG) {
             ProtoLog.d(ShellProtoLogGroup.WM_SHELL_PICTURE_IN_PICTURE, "%s: showMenu()", TAG);
         }
-        mInMoveMode = false;
+        setInMoveMode(false);
         mCloseAfterExitMoveMenu = false;
         showMenuInternal();
     }
@@ -267,7 +267,6 @@ public class TvPipMenuController implements PipMenuController, TvPipMenuView.Lis
     void updateExpansionState() {
         mPipMenuView.setExpandedModeEnabled(mTvPipBoundsState.isTvExpandedPipSupported()
                 && mTvPipBoundsState.getDesiredTvExpandedAspectRatio() != 0);
-        mPipMenuView.setIsExpanded(mTvPipBoundsState.isTvPipExpanded());
     }
 
     private Rect calculateMenuSurfaceBounds(Rect pipBounds) {
@@ -293,6 +292,17 @@ public class TvPipMenuController implements PipMenuController, TvPipMenuView.Lis
         return mInMoveMode;
     }
 
+    private void setInMoveMode(boolean moveMode) {
+        if (mInMoveMode == moveMode) {
+            return;
+        }
+
+        mInMoveMode = moveMode;
+        if (mDelegate != null) {
+            mDelegate.onInMoveModeChanged();
+        }
+    }
+
     @Override
     public void onEnterMoveMode() {
         if (DEBUG) {
@@ -300,7 +310,7 @@ public class TvPipMenuController implements PipMenuController, TvPipMenuView.Lis
                     "%s: onEnterMoveMode - %b, close when exiting move menu: %b", TAG, mInMoveMode,
                     mCloseAfterExitMoveMenu);
         }
-        mInMoveMode = true;
+        setInMoveMode(true);
         mPipMenuView.showMoveMenu(mDelegate.getPipGravity());
     }
 
@@ -312,13 +322,13 @@ public class TvPipMenuController implements PipMenuController, TvPipMenuView.Lis
                     mCloseAfterExitMoveMenu);
         }
         if (mCloseAfterExitMoveMenu) {
-            mInMoveMode = false;
+            setInMoveMode(false);
             mCloseAfterExitMoveMenu = false;
             closeMenu();
             return true;
         }
         if (mInMoveMode) {
-            mInMoveMode = false;
+            setInMoveMode(false);
             mPipMenuView.showButtonsMenu();
             return true;
         }
@@ -562,10 +572,10 @@ public class TvPipMenuController implements PipMenuController, TvPipMenuView.Lis
                     "%s: updateMenuBounds: %s", TAG, menuBounds.toShortString());
         }
         mSystemWindows.updateViewLayout(mPipBackgroundView,
-                getPipMenuLayoutParams(BACKGROUND_WINDOW_TITLE, menuBounds.width(),
+                getPipMenuLayoutParams(mContext, BACKGROUND_WINDOW_TITLE, menuBounds.width(),
                         menuBounds.height()));
         mSystemWindows.updateViewLayout(mPipMenuView,
-                getPipMenuLayoutParams(MENU_WINDOW_TITLE, menuBounds.width(),
+                getPipMenuLayoutParams(mContext, MENU_WINDOW_TITLE, menuBounds.width(),
                         menuBounds.height()));
 
         if (mPipMenuView != null) {

@@ -257,7 +257,7 @@ class PackageManagerShellCommand extends ShellCommand {
                 case "force-dex-opt":
                     return runForceDexOpt();
                 case "bg-dexopt-job":
-                    return runDexoptJob();
+                    return runBgDexOpt();
                 case "cancel-bg-dexopt-job":
                     return cancelBgDexOptJob();
                 case "delete-dexopt":
@@ -352,12 +352,7 @@ class PackageManagerShellCommand extends ShellCommand {
                 case "set-silent-updates-policy":
                     return runSetSilentUpdatesPolicy();
                 case "art":
-                    // Remove the first arg "art" and forward to ART module.
-                    String[] args = getAllArgs();
-                    args = Arrays.copyOfRange(args, 1, args.length);
-                    return LocalManagerRegistry.getManagerOrThrow(ArtManagerLocal.class)
-                            .handleShellCommand(getTarget(), getInFileDescriptor(),
-                                    getOutFileDescriptor(), getErrFileDescriptor(), args);
+                    return runArtSubCommand();
                 default: {
                     Boolean domainVerificationResult =
                             mDomainVerificationShell.runCommand(this, cmd);
@@ -793,7 +788,9 @@ class PackageManagerShellCommand extends ShellCommand {
         }
 
         final List<InstrumentationInfo> list =
-                mInterface.queryInstrumentation(targetPackage, 0 /*flags*/).getList();
+                mInterface.queryInstrumentationAsUser(
+                        targetPackage, PackageManager.MATCH_KNOWN_PACKAGES, UserHandle.USER_SYSTEM)
+                        .getList();
 
         // sort by target package
         Collections.sort(list, new Comparator<InstrumentationInfo>() {
@@ -1974,16 +1971,47 @@ class PackageManagerShellCommand extends ShellCommand {
         return 0;
     }
 
-    private int runDexoptJob() throws RemoteException {
-        String arg;
-        List<String> packageNames = new ArrayList<>();
-        while ((arg = getNextArg()) != null) {
-            packageNames.add(arg);
+    private int runBgDexOpt() throws RemoteException {
+        String opt = getNextOption();
+
+        if (opt == null) {
+            List<String> packageNames = new ArrayList<>();
+            String arg;
+            while ((arg = getNextArg()) != null) {
+                packageNames.add(arg);
+            }
+            if (!BackgroundDexOptService.getService().runBackgroundDexoptJob(
+                    packageNames.isEmpty() ? null : packageNames)) {
+                getOutPrintWriter().println("Failure");
+                return -1;
+            }
+        } else {
+            String extraArg = getNextArg();
+            if (extraArg != null) {
+                getErrPrintWriter().println("Invalid argument: " + extraArg);
+                return -1;
+            }
+
+            switch (opt) {
+                case "--cancel":
+                    return cancelBgDexOptJob();
+
+                case "--disable":
+                    BackgroundDexOptService.getService().setDisableJobSchedulerJobs(true);
+                    break;
+
+                case "--enable":
+                    BackgroundDexOptService.getService().setDisableJobSchedulerJobs(false);
+                    break;
+
+                default:
+                    getErrPrintWriter().println("Unknown option: " + opt);
+                    return -1;
+            }
         }
-        boolean result = BackgroundDexOptService.getService().runBackgroundDexoptJob(
-                packageNames.isEmpty() ? null : packageNames);
-        getOutPrintWriter().println(result ? "Success" : "Failure");
-        return result ? 0 : -1;
+
+        getOutPrintWriter().println("Success");
+        return 0;
     }
 
     private int cancelBgDexOptJob() throws RemoteException {
@@ -2285,10 +2313,23 @@ class PackageManagerShellCommand extends ShellCommand {
     }
 
     private int runClear() throws RemoteException {
+        final PrintWriter pw = getOutPrintWriter();
         int userId = UserHandle.USER_SYSTEM;
-        String option = getNextOption();
-        if (option != null && option.equals("--user")) {
-            userId = UserHandle.parseUserArg(getNextArgRequired());
+        boolean cacheOnly = false;
+
+        String opt;
+        while ((opt = getNextOption()) != null) {
+            switch (opt) {
+                case "--user":
+                    userId = UserHandle.parseUserArg(getNextArgRequired());
+                    break;
+                case "--cache-only":
+                    cacheOnly = true;
+                    break;
+                default:
+                    pw.println("Error: Unknown option: " + opt);
+                    return 1;
+            }
         }
 
         String pkg = getNextArg();
@@ -2300,7 +2341,12 @@ class PackageManagerShellCommand extends ShellCommand {
         final int translatedUserId =
                 translateUserId(userId, UserHandle.USER_NULL, "runClear");
         final ClearDataObserver obs = new ClearDataObserver();
-        ActivityManager.getService().clearApplicationUserData(pkg, false, obs, translatedUserId);
+        if (!cacheOnly) {
+            ActivityManager.getService()
+                    .clearApplicationUserData(pkg, false, obs, translatedUserId);
+        } else {
+            mInterface.deleteApplicationCacheFilesAsUser(pkg, translatedUserId, obs);
+        }
         synchronized (obs) {
             while (!obs.finished) {
                 try {
@@ -3395,6 +3441,20 @@ class PackageManagerShellCommand extends ShellCommand {
         return 1;
     }
 
+    private int runArtSubCommand() throws ManagerNotFoundException {
+        // Remove the first arg "art" and forward to ART module.
+        String[] args = getAllArgs();
+        args = Arrays.copyOfRange(args, 1, args.length);
+        try (var in = ParcelFileDescriptor.dup(getInFileDescriptor());
+                var out = ParcelFileDescriptor.dup(getOutFileDescriptor());
+                var err = ParcelFileDescriptor.dup(getErrFileDescriptor())) {
+            return LocalManagerRegistry.getManagerOrThrow(ArtManagerLocal.class)
+                    .handleShellCommand(getTarget(), in, out, err, args);
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     private static String checkAbiArgument(String abi) {
         if (TextUtils.isEmpty(abi)) {
             throw new IllegalArgumentException("Missing ABI argument");
@@ -4060,8 +4120,10 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("      --user: remove the app from the given user.");
         pw.println("      --versionCode: only uninstall if the app has the given version code.");
         pw.println("");
-        pw.println("  clear [--user USER_ID] PACKAGE");
-        pw.println("    Deletes all data associated with a package.");
+        pw.println("  clear [--user USER_ID] [--cache-only] PACKAGE");
+        pw.println("    Deletes data associated with a package. Options are:");
+        pw.println("    --user: specifies the user for which we need to clear data");
+        pw.println("    --cache-only: a flag which tells if we only need to clear cache data");
         pw.println("");
         pw.println("  enable [--user USER_ID] PACKAGE_OR_COMPONENT");
         pw.println("  disable [--user USER_ID] PACKAGE_OR_COMPONENT");
@@ -4183,17 +4245,28 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("  delete-dexopt PACKAGE");
         pw.println("    Delete dex optimization results for the given PACKAGE.");
         pw.println("");
-        pw.println("  bg-dexopt-job");
-        pw.println("    Execute the background optimizations immediately.");
-        pw.println("    Note that the command only runs the background optimizer logic. It may");
-        pw.println("    overlap with the actual job but the job scheduler will not be able to");
-        pw.println("    cancel it. It will also run even if the device is not in the idle");
-        pw.println("    maintenance mode.");
+        pw.println("  bg-dexopt-job [PACKAGE... | --cancel | --disable | --enable]");
+        pw.println("    Controls the background job that optimizes dex files:");
+        pw.println("    Without flags, run background optimization immediately on the given");
+        pw.println("    PACKAGEs, or all packages if none is specified, and wait until the job");
+        pw.println("    finishes. Note that the command only runs the background optimizer logic.");
+        pw.println("    It will run even if the device is not in the idle maintenance mode. If a");
+        pw.println("    job is already running (including one started automatically by the");
+        pw.println("    system) it will wait for it to finish before starting. A background job");
+        pw.println("    will not be started automatically while one started this way is running.");
+        pw.println("      --cancel: Cancels any currently running background optimization job");
+        pw.println("        immediately. This cancels jobs started either automatically by the");
+        pw.println("        system or through this command. Note that cancelling a currently");
+        pw.println("        running bg-dexopt-job command requires running this command from a");
+        pw.println("        separate adb shell.");
+        pw.println("      --disable: Disables background jobs from being started by the job");
+        pw.println("        scheduler. Does not affect bg-dexopt-job invocations from the shell.");
+        pw.println("        Does not imply --cancel. This state will be lost when the");
+        pw.println("        system_server process exits.");
+        pw.println("      --enable: Enables background jobs to be started by the job scheduler");
+        pw.println("        again, if previously disabled by --disable.");
         pw.println("  cancel-bg-dexopt-job");
-        pw.println("    Cancels currently running background optimizations immediately.");
-        pw.println("    This cancels optimizations run from bg-dexopt-job or from JobScjeduler.");
-        pw.println("    Note that cancelling currently running bg-dexopt-job command requires");
-        pw.println("    running this command from separate adb shell.");
+        pw.println("    Same as bg-dexopt-job --cancel.");
         pw.println("");
         pw.println("  reconcile-secondary-dex-files TARGET-PACKAGE");
         pw.println("    Reconciles the package secondary dex files with the generated oat files.");

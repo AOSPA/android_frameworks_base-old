@@ -28,9 +28,7 @@ import android.app.TaskInfo;
 import android.content.ComponentName;
 import android.content.pm.ActivityInfo;
 import android.graphics.Rect;
-import android.os.Handler;
 import android.os.IBinder;
-import android.os.Looper;
 import android.view.SurfaceControl;
 import android.view.WindowManager;
 import android.window.TransitionInfo;
@@ -56,7 +54,6 @@ public abstract class PipTransitionController implements Transitions.TransitionH
     protected final ShellTaskOrganizer mShellTaskOrganizer;
     protected final PipMenuController mPipMenuController;
     protected final Transitions mTransitions;
-    private final Handler mMainHandler;
     private final List<PipTransitionCallback> mPipTransitionCallbacks = new ArrayList<>();
     protected PipTaskOrganizer mPipOrganizer;
 
@@ -77,8 +74,8 @@ public abstract class PipTransitionController implements Transitions.TransitionH
                     if (direction == TRANSITION_DIRECTION_REMOVE_STACK) {
                         return;
                     }
-                    if (isInPipDirection(direction) && animator.getContentOverlay() != null) {
-                        mPipOrganizer.fadeOutAndRemoveOverlay(animator.getContentOverlay(),
+                    if (isInPipDirection(direction) && animator.getContentOverlayLeash() != null) {
+                        mPipOrganizer.fadeOutAndRemoveOverlay(animator.getContentOverlayLeash(),
                                 animator::clearContentOverlay, true /* withStartDelay*/);
                     }
                     onFinishResize(taskInfo, animator.getDestinationBounds(), direction, tx);
@@ -89,8 +86,8 @@ public abstract class PipTransitionController implements Transitions.TransitionH
                 public void onPipAnimationCancel(TaskInfo taskInfo,
                         PipAnimationController.PipTransitionAnimator animator) {
                     final int direction = animator.getTransitionDirection();
-                    if (isInPipDirection(direction) && animator.getContentOverlay() != null) {
-                        mPipOrganizer.fadeOutAndRemoveOverlay(animator.getContentOverlay(),
+                    if (isInPipDirection(direction) && animator.getContentOverlayLeash() != null) {
+                        mPipOrganizer.fadeOutAndRemoveOverlay(animator.getContentOverlayLeash(),
                                 animator::clearContentOverlay, true /* withStartDelay */);
                     }
                     sendOnPipTransitionCancelled(animator.getTransitionDirection());
@@ -144,7 +141,6 @@ public abstract class PipTransitionController implements Transitions.TransitionH
         mPipBoundsAlgorithm = pipBoundsAlgorithm;
         mPipAnimationController = pipAnimationController;
         mTransitions = transitions;
-        mMainHandler = new Handler(Looper.getMainLooper());
         if (Transitions.ENABLE_SHELL_TRANSITIONS) {
             transitions.addHandler(this);
         }
@@ -235,6 +231,10 @@ public abstract class PipTransitionController implements Transitions.TransitionH
             @NonNull final SurfaceControl.Transaction startTransaction,
             @NonNull final SurfaceControl.Transaction finishTransaction,
             @NonNull final Transitions.TransitionFinishCallback finishCallback) {
+    }
+
+    /** End the currently-playing PiP animation. */
+    public void end() {
     }
 
     /**

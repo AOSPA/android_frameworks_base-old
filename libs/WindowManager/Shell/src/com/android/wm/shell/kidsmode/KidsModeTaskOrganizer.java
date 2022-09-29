@@ -23,7 +23,10 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.view.Display.DEFAULT_DISPLAY;
 
 import android.app.ActivityManager;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.os.Binder;
@@ -48,6 +51,7 @@ import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.common.SyncTransactionQueue;
 import com.android.wm.shell.recents.RecentTasksController;
 import com.android.wm.shell.startingsurface.StartingWindowController;
+import com.android.wm.shell.unfold.UnfoldAnimationController;
 
 import java.io.PrintWriter;
 import java.util.List;
@@ -86,6 +90,13 @@ public class KidsModeTaskOrganizer extends ShellTaskOrganizer {
 
     private KidsModeSettingsObserver mKidsModeSettingsObserver;
     private boolean mEnabled;
+
+    private final BroadcastReceiver mUserSwitchIntentReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            updateKidsModeState();
+        }
+    };
 
     DisplayController.OnDisplaysChangedListener mOnDisplaysChangedListener =
             new DisplayController.OnDisplaysChangedListener() {
@@ -136,9 +147,11 @@ public class KidsModeTaskOrganizer extends ShellTaskOrganizer {
             SyncTransactionQueue syncTransactionQueue,
             DisplayController displayController,
             DisplayInsetsController displayInsetsController,
+            Optional<UnfoldAnimationController> unfoldAnimationController,
             Optional<RecentTasksController> recentTasks,
             KidsModeSettingsObserver kidsModeSettingsObserver) {
-        super(taskOrganizerController, mainExecutor, context, /* compatUI= */ null, recentTasks);
+        super(taskOrganizerController, mainExecutor, context, /* compatUI= */ null,
+                unfoldAnimationController, recentTasks);
         mContext = context;
         mMainHandler = mainHandler;
         mSyncQueue = syncTransactionQueue;
@@ -154,8 +167,9 @@ public class KidsModeTaskOrganizer extends ShellTaskOrganizer {
             SyncTransactionQueue syncTransactionQueue,
             DisplayController displayController,
             DisplayInsetsController displayInsetsController,
+            Optional<UnfoldAnimationController> unfoldAnimationController,
             Optional<RecentTasksController> recentTasks) {
-        super(mainExecutor, context, /* compatUI= */ null, recentTasks);
+        super(mainExecutor, context, /* compatUI= */ null, unfoldAnimationController, recentTasks);
         mContext = context;
         mMainHandler = mainHandler;
         mSyncQueue = syncTransactionQueue;
@@ -169,12 +183,15 @@ public class KidsModeTaskOrganizer extends ShellTaskOrganizer {
     public void initialize(StartingWindowController startingWindowController) {
         initStartingWindow(startingWindowController);
         if (mKidsModeSettingsObserver == null) {
-            mKidsModeSettingsObserver = new KidsModeSettingsObserver(
-                    mMainHandler, mContext);
+            mKidsModeSettingsObserver = new KidsModeSettingsObserver(mMainHandler, mContext);
         }
         mKidsModeSettingsObserver.setOnChangeRunnable(() -> updateKidsModeState());
         updateKidsModeState();
         mKidsModeSettingsObserver.register();
+
+        final IntentFilter filter = new IntentFilter();
+        filter.addAction(Intent.ACTION_USER_SWITCHED);
+        mContext.registerReceiverForAllUsers(mUserSwitchIntentReceiver, filter, null, mMainHandler);
     }
 
     @Override

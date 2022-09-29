@@ -21,11 +21,6 @@
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="byteShort" msgid="202579285008794431">"بایت"</string>
-    <string name="kilobyteShort" msgid="2214285521564195803">"کیلوبایت"</string>
-    <string name="megabyteShort" msgid="6649361267635823443">"مگابایت"</string>
-    <string name="gigabyteShort" msgid="7515809460261287991">"گیگابایت"</string>
-    <string name="terabyteShort" msgid="1822367128583886496">"ترابایت"</string>
-    <string name="petabyteShort" msgid="5651571254228534832">"پتابایت"</string>
     <string name="fileSizeSuffix" msgid="4233671691980131257">"<xliff:g id="NUMBER">%1$s</xliff:g> ‏<xliff:g id="UNIT">%2$s</xliff:g>"</string>
     <string name="untitled" msgid="3381766946944136678">"‏&lt;بدون عنوان&gt;"</string>
     <string name="emptyPhoneNumber" msgid="5812172618020360048">"(بدون شماره تلفن)"</string>
@@ -305,8 +300,8 @@
     <string name="permgroupdesc_calendar" msgid="6762751063361489379">"دسترسی به تقویم شما"</string>
     <string name="permgrouplab_sms" msgid="795737735126084874">"پیامک"</string>
     <string name="permgroupdesc_sms" msgid="5726462398070064542">"ارسال و مشاهده پیامک‌ها"</string>
-    <string name="permgrouplab_storage" msgid="5570124978732352858">"فایل‌ها و سندها"</string>
-    <string name="permgroupdesc_storage" msgid="8352226729501080525">"دسترسی به فایل‌ها و اسناد موجود در دستگاه"</string>
+    <string name="permgrouplab_storage" msgid="17339216290379241">"فایل‌ها"</string>
+    <string name="permgroupdesc_storage" msgid="5378659041354582769">"دسترسی به فایل‌های دستگاه"</string>
     <string name="permgrouplab_readMediaAural" msgid="1858331312624942053">"موسیقی و صدا"</string>
     <string name="permgroupdesc_readMediaAural" msgid="7565467343667089595">"دسترسی به موسیقی و صدا در دستگاه شما"</string>
     <string name="permgrouplab_readMediaVisual" msgid="4724874717811908660">"عکس‌ها و ویدیوها"</string>
@@ -558,6 +553,8 @@
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"به برنامه اجازه می‌دهد سطح پیچیدگی قفل صفحه (بالا، متوسط، پایین، یا هیچ‌کدام) را بیاموزد که نشان‌دهنده بازه ممکن طول و نوع قفل صفحه است. همچنین برنامه می‌تواند به کاربران پیشنهاد دهد قفل صفحه را به سطح خاصی به‌روزرسانی کنند، اما کاربران می‌توانند آزادانه این پیشنهاد را نادیده بگیرند و به سطح دیگری بروند. توجه داشته باشید که قفل صفحه در قالب نوشتار ساده ذخیره نمی‌شود، بنابراین برنامه گذرواژه دقیق را نمی‌داند."</string>
     <string name="permlab_postNotification" msgid="4875401198597803658">"نمایش اعلان"</string>
     <string name="permdesc_postNotification" msgid="5974977162462877075">"به این برنامه اجازه می‌دهد اعلان نمایش دهد"</string>
+    <string name="permlab_turnScreenOn" msgid="219344053664171492">"روشن کردن صفحه‌نمایش"</string>
+    <string name="permdesc_turnScreenOn" msgid="4394606875897601559">"به برنامه اجازه می‌دهد صفحه‌نمایش را روشن کند."</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"استفاده از سخت‌افزار بیومتریک"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"به برنامه امکان می‌دهد از سخت‌افزار بیومتریک برای اصالت‌سنجی استفاده کند"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"مدیریت سخت‌افزار اثر انگشت"</string>
@@ -628,7 +625,7 @@
     <string name="face_recalibrate_notification_content" msgid="3064513770251355594">"برای حذف مدل چهره‌تان ضربه بزنید، سپس چهره‌تان را دوباره اضافه کنید"</string>
     <string name="face_setup_notification_title" msgid="8843461561970741790">"راه‌اندازی «قفل‌گشایی با چهره»"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"برای باز کردن قفل تلفن خود به آن نگاه کنید"</string>
-    <string name="face_sensor_privacy_enabled" msgid="7407126963510598508">"‏برای استفاده از «قفل‌گشایی با چهره»، "<b>"دسترسی به دوربین"</b>" را در «تنظیمات &gt; حریم‌خصوصی» روشن کنید"</string>
+    <string name="face_sensor_privacy_enabled" msgid="7407126963510598508">"‏برای استفاده از «قفل‌گشایی با چهره»، "<b>"دسترسی به دوربین"</b>" را در «تنظیمات &gt; حریم خصوصی» روشن کنید"</string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"راه‌اندازی روش‌های بیشتر برای باز کردن قفل"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"برای افزودن اثر انگشت، ضربه بزنید"</string>
     <string name="fingerprint_recalibrate_notification_name" msgid="1414578431898579354">"قفل‌گشایی با اثر انگشت"</string>
@@ -644,7 +641,7 @@
     <string name="face_acquired_too_right" msgid="6245286514593540859">"تلفن را به‌سمت چپ ببرید"</string>
     <string name="face_acquired_too_left" msgid="9201762240918405486">"تلفن را به‌سمت راست ببرید"</string>
     <string name="face_acquired_poor_gaze" msgid="4427153558773628020">"لطفاً مستقیم به دستگاه نگه کنید."</string>
-    <string name="face_acquired_not_detected" msgid="1057966913397548150">"چهره‌تان دیده نمی‌شود. تلفن را هم‌سطح چشمانتان نگه دارید."</string>
+    <string name="face_acquired_not_detected" msgid="1057966913397548150">"چهره دیده نمی‌شود. تلفن را هم‌سطح چشمانتان نگه دارید."</string>
     <string name="face_acquired_too_much_motion" msgid="8199691445085189528">"حرکت خیلی زیاد است. تلفن را ثابت نگه‌دارید."</string>
     <string name="face_acquired_recalibrate" msgid="8724013080976469746">"لطفاً چهره‌تان را مجدداً ثبت کنید."</string>
     <string name="face_acquired_too_different" msgid="2520389515612972889">"چهره شناسایی نشد. دوباره امتحان کنید."</string>
@@ -1051,7 +1048,7 @@
     <string name="permlab_writeGeolocationPermissions" msgid="8605631647492879449">"تغییر مجوزهای مکان جغرافیایی مرورگر"</string>
     <string name="permdesc_writeGeolocationPermissions" msgid="5817346421222227772">"‏به برنامه اجازه می‎دهد تا مجوزهای جغرافیایی مرورگر را تغییر دهد. برنامه‌های مخرب می‎توانند از آن استفاده کنند تا اطلاعات موقعیت مکانی را به سایت‌های وب کتابخانه بفرستند."</string>
     <string name="save_password_message" msgid="2146409467245462965">"می‌خواهید مرورگر این گذرواژه را به خاطر داشته باشد؟"</string>
-    <string name="save_password_notnow" msgid="2878327088951240061">"اکنون نه"</string>
+    <string name="save_password_notnow" msgid="2878327088951240061">"حالا نه"</string>
     <string name="save_password_remember" msgid="6490888932657708341">"به خاطر سپردن"</string>
     <string name="save_password_never" msgid="6776808375903410659">"هیچ‌وقت"</string>
     <string name="open_permission_deny" msgid="5136793905306987251">"شما اجازه بازکردن این صفحه را ندارید."</string>
@@ -1246,7 +1243,7 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"آماده‌سازی <xliff:g id="APPNAME">%1$s</xliff:g>."</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"درحال آغاز کردن برنامه‌ها."</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"درحال اتمام راه‌اندازی."</string>
-    <string name="fp_power_button_enrollment_title" msgid="3574363228413259548">"راه‌اندازی ادامه یابد؟"</string>
+    <string name="fp_power_button_enrollment_title" msgid="3574363228413259548">"ادامه راه‌اندازی؟"</string>
     <string name="fp_power_button_enrollment_message" msgid="5648173517663246140">"دکمه روشن/ خاموش را فشار دادید — این کار معمولاً صفحه‌نمایش را خاموش می‌کند.\n\nهنگام راه‌اندازی اثر انگشت، آرام ضربه بزنید."</string>
     <string name="fp_power_button_enrollment_positive_button" msgid="2095415838459356833">"خاموش کردن صفحه"</string>
     <string name="fp_power_button_enrollment_negative_button" msgid="6558436406362486747">"ادامه راه‌اندازی"</string>
@@ -1317,7 +1314,7 @@
     <string name="select_character" msgid="3352797107930786979">"درج نویسه"</string>
     <string name="sms_control_title" msgid="4748684259903148341">"درحال ارسال پیامک‌ها"</string>
     <string name="sms_control_message" msgid="6574313876316388239">"‏&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; درحال ارسال تعداد زیادی پیامک است. آیا اجازه می‌دهید این برنامه همچنان پیامک ارسال کند؟"</string>
-    <string name="sms_control_yes" msgid="4858845109269524622">"مجاز است"</string>
+    <string name="sms_control_yes" msgid="4858845109269524622">"اجازه دادن"</string>
     <string name="sms_control_no" msgid="4845717880040355570">"مجاز نبودن"</string>
     <string name="sms_short_code_confirm_message" msgid="1385416688897538724">"‏&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; مایل است پیامی به &lt;b&gt;<xliff:g id="DEST_ADDRESS">%2$s</xliff:g>&lt;/b&gt; ارسال کند."</string>
     <string name="sms_short_code_details" msgid="2723725738333388351">"این مورد "<b>"شاید هزینه‌ای"</b>" را به حساب دستگاه همراهتان بگذارد."</string>
@@ -1616,7 +1613,7 @@
     <string name="default_audio_route_category_name" msgid="5241740395748134483">"سیستم"</string>
     <string name="bluetooth_a2dp_audio_route_name" msgid="4214648773120426288">"بلوتوث‌های صوتی"</string>
     <string name="wireless_display_route_description" msgid="8297563323032966831">"صفحه نمایش بی‌سیم"</string>
-    <string name="media_route_button_content_description" msgid="2299223698196869956">"ارسال محتوا"</string>
+    <string name="media_route_button_content_description" msgid="2299223698196869956">"پخش محتوا"</string>
     <string name="media_route_chooser_title" msgid="6646594924991269208">"برقراری ارتباط با دستگاه"</string>
     <string name="media_route_chooser_title_for_remote_display" msgid="3105906508794326446">"فرستادن محتوای صفحه به دستگاه"</string>
     <string name="media_route_chooser_searching" msgid="6119673534251329535">"درحال جستجوی دستگاه‌ها…"</string>
@@ -1689,7 +1686,7 @@
     <string name="accessibility_service_screen_control_description" msgid="6946315917771791525">"می‌تواند همه محتوای صفحه را بخواند و آن را روی بقیه برنامه‌ها نمایش دهد."</string>
     <string name="accessibility_service_action_perform_title" msgid="779670378951658160">"مشاهده و انجام کنش‌ها"</string>
     <string name="accessibility_service_action_perform_description" msgid="2718852014003170558">"این عملکرد می‌تواند با برنامه یا حسگری سخت‌افزاری تعاملاتتان را ردیابی کند و ازطرف شما با برنامه‌ها تعامل داشته باشد."</string>
-    <string name="accessibility_dialog_button_allow" msgid="2092558122987144530">"مجاز"</string>
+    <string name="accessibility_dialog_button_allow" msgid="2092558122987144530">"اجازه دادن"</string>
     <string name="accessibility_dialog_button_deny" msgid="4129575637812472671">"مجاز نبودن"</string>
     <string name="accessibility_select_shortcut_menu_title" msgid="6002726538854613272">"برای استفاده از ویژگی، روی آن ضربه بزنید:"</string>
     <string name="accessibility_edit_shortcut_menu_button_title" msgid="239446795930436325">"انتخاب ویژگی‌های موردنظر برای استفاده با دکمه دسترس‌پذیری"</string>
@@ -1924,6 +1921,8 @@
     <string name="country_selection_title" msgid="5221495687299014379">"اولویت‌های منطقه"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"نام زبان را تایپ کنید"</string>
     <string name="language_picker_section_suggested" msgid="6556199184638990447">"پیشنهادی"</string>
+    <string name="language_picker_section_suggested_bilingual" msgid="5932198319583556613">"زبان‌های پیشنهادی"</string>
+    <string name="region_picker_section_suggested_bilingual" msgid="704607569328224133">"مناطق پیشنهادی"</string>
     <string name="language_picker_section_all" msgid="1985809075777564284">"همه زبان‌ها"</string>
     <string name="region_picker_section_all" msgid="756441309928774155">"همه منطقه‌ها"</string>
     <string name="locale_search_menu" msgid="6258090710176422934">"جستجو"</string>
@@ -2044,7 +2043,7 @@
     <string name="harmful_app_warning_title" msgid="8794823880881113856">"برنامه مضر شناسایی شد"</string>
     <string name="log_access_confirmation_title" msgid="2343578467290592708">"به <xliff:g id="LOG_ACCESS_APP_NAME">%s</xliff:g> اجازه می‌دهید به همه گزارش‌های دستگاه دسترسی داشته باشد؟"</string>
     <string name="log_access_confirmation_allow" msgid="5302517782599389507">"مجاز کردن دسترسی یک‌باره"</string>
-    <string name="log_access_confirmation_deny" msgid="7685790957455099845">"مجاز نیست"</string>
+    <string name="log_access_confirmation_deny" msgid="7685790957455099845">"اجازه ندادن"</string>
     <string name="log_access_confirmation_body" msgid="6581985716241928135">"گزارش‌های دستگاه آنچه را در دستگاهتان رخ می‌دهد ثبت می‌کند. برنامه‌ها می‌توانند از این گزارش‌ها برای پیدا کردن مشکلات و رفع آن‌ها استفاده کنند.\n\nبرخی‌از گزارش‌ها ممکن است حاوی اطلاعات حساس باشند، بنابراین فقط به برنامه‌های مورداعتمادتان اجازه دسترسی به همه گزارش‌های دستگاه را بدهید. \n\nاگر به این برنامه اجازه ندهید به همه گزارش‌های دستگاه دسترسی داشته باشد، همچنان می‌تواند به گزارش‌های خودش دسترسی داشته باشد. سازنده دستگاه نیز ممکن است همچنان بتواند به برخی‌از گزارش‌ها یا اطلاعات دستگاهتان دسترسی داشته باشد. بیشتر بدانید"</string>
     <string name="log_access_do_not_show_again" msgid="1058690599083091552">"دوباره نشان داده نشود"</string>
     <string name="slices_permission_request" msgid="3677129866636153406">"<xliff:g id="APP_0">%1$s</xliff:g> می‌خواهد تکه‌های <xliff:g id="APP_2">%2$s</xliff:g> را نشان دهد"</string>
@@ -2078,8 +2077,8 @@
     <string name="nas_upgrade_notification_learn_more_action" msgid="7011130656195423947">"بیشتر بدانید"</string>
     <string name="nas_upgrade_notification_learn_more_content" msgid="3735480566983530650">"‏در Android نسخه ۱۲، اعلان‌های بهبودیافته جایگزین «اعلان‌های تطبیقی» شده است. این ویژگی پاسخ‌ها و کنش‌های پیشنهادی را نمایش می‌دهد و اعلان‌هایتان را سازمان‌دهی می‌کند.\n\nاعلان‌های بهبودیافته می‌توانند به محتوای اعلان، ازجمله اطلاعات شخصی مثل نام‌ها و پیام‌های مخاطبین دسترسی داشته باشند. این ویژگی همچنین می‌تواند اعلان‌ها را رد کند یا به آن‌ها پاسخ دهد؛ مثلاً پاسخ به تماس‌های تلفنی و کنترل کردن «مزاحم نشوید»."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"اعلان اطلاعات حالت روال معمول"</string>
-    <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"ممکن است شارژ باتری قبل از شارژ معمول تمام شود"</string>
-    <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"جهت افزایش عمر باتری، «بهینه‌سازی باتری» فعال شد"</string>
+    <string name="dynamic_mode_notification_title" msgid="1388718452788985481">"«بهینه‌سازی باتری» روشن شد"</string>
+    <string name="dynamic_mode_notification_summary" msgid="1639031262484979689">"برای افزایش عمر باتری، مصرف باتری کاهش می‌یابد"</string>
     <string name="battery_saver_notification_channel_name" msgid="3918243458067916913">"بهینه‌سازی باتری"</string>
     <string name="battery_saver_off_notification_title" msgid="7637255960468032515">"«بهینه‌سازی باتری» خاموش شد"</string>
     <string name="battery_saver_charged_notification_summary" product="default" msgid="5544457317418624367">"تلفن به‌اندازه کافی شارژ دارد. ویژگی‌ها دیگر محدود نمی‌شوند."</string>
@@ -2138,7 +2137,7 @@
     <string name="resolver_work_tab" msgid="2690019516263167035">"کاری"</string>
     <string name="resolver_personal_tab_accessibility" msgid="5739524949153091224">"نمای شخصی"</string>
     <string name="resolver_work_tab_accessibility" msgid="4753168230363802734">"نمای کاری"</string>
-    <string name="resolver_cross_profile_blocked" msgid="3014597376026044840">"سرپرست سیستم آن را مسدود کرده است"</string>
+    <string name="resolver_cross_profile_blocked" msgid="3014597376026044840">"سرپرست فناوری اطلاعات آن را مسدود کرده است"</string>
     <string name="resolver_cant_share_with_work_apps_explanation" msgid="9071442683080586643">"نمی‌توان این محتوا را با برنامه‌های کاری هم‌رسانی کرد"</string>
     <string name="resolver_cant_access_work_apps_explanation" msgid="1129960195389373279">"نمی‌توان این محتوا را با برنامه‌های کاری باز کرد"</string>
     <string name="resolver_cant_share_with_personal_apps_explanation" msgid="6349766201904601544">"نمی‌توان این محتوا را با برنامه‌های شخصی هم‌رسانی کرد"</string>
@@ -2271,7 +2270,7 @@
     <string name="sensor_privacy_start_use_camera_notification_content_title" msgid="7287720213963466672">"لغو انسداد دوربین دستگاه"</string>
     <string name="sensor_privacy_start_use_notification_content_text" msgid="7595608891015777346">"‏برای &lt;b&gt;<xliff:g id="APP">%s</xliff:g>&lt;/b&gt; و همه برنامه‌ها و سرویس‌ها"</string>
     <string name="sensor_privacy_start_use_dialog_turn_on_button" msgid="7089318886628390827">"لغو انسداد"</string>
-    <string name="sensor_privacy_notification_channel_label" msgid="936036783155261349">"حریم‌خصوصی حسگر"</string>
+    <string name="sensor_privacy_notification_channel_label" msgid="936036783155261349">"حریم خصوصی حسگر"</string>
     <string name="splash_screen_view_icon_description" msgid="180638751260598187">"نماد برنامه"</string>
     <string name="splash_screen_view_branding_description" msgid="7911129347402728216">"تصویر نمانام‌سازی برنامه"</string>
     <string name="view_and_control_notification_title" msgid="4300765399209912240">"بررسی تنظیمات دسترسی"</string>
@@ -2286,5 +2285,7 @@
     <string name="notification_action_check_bg_apps" msgid="4758877443365362532">"بررسی برنامه‌های فعال"</string>
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"نمی‌توان از <xliff:g id="DEVICE">%1$s</xliff:g> شما به دوربین تلفن دسترسی داشت"</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"نمی‌توان از <xliff:g id="DEVICE">%1$s</xliff:g> شما به دوربین رایانه لوحی دسترسی داشت"</string>
-    <string name="system_locale_title" msgid="3978041860457277638">"زبان سیستم"</string>
+    <string name="system_locale_title" msgid="711882686834677268">"پیش‌فرض سیستم"</string>
+    <!-- no translation found for default_card_name (9198284935962911468) -->
+    <skip />
 </resources>

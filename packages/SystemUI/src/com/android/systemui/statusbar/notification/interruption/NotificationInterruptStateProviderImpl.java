@@ -147,14 +147,14 @@ public class NotificationInterruptStateProviderImpl implements NotificationInter
         }
 
         if (!entry.canBubble()) {
-            mLogger.logNoBubbleNotAllowed(sbn);
+            mLogger.logNoBubbleNotAllowed(entry);
             return false;
         }
 
         if (entry.getBubbleMetadata() == null
                 || (entry.getBubbleMetadata().getShortcutId() == null
                     && entry.getBubbleMetadata().getIntent() == null)) {
-            mLogger.logNoBubbleNoMetadata(sbn);
+            mLogger.logNoBubbleNoMetadata(entry);
             return false;
         }
 
@@ -177,9 +177,69 @@ public class NotificationInterruptStateProviderImpl implements NotificationInter
      */
     @Override
     public boolean shouldLaunchFullScreenIntentWhenAdded(NotificationEntry entry) {
-        return entry.getSbn().getNotification().fullScreenIntent != null
-                && (!shouldHeadsUp(entry)
-                || mStatusBarStateController.getState() == StatusBarState.KEYGUARD);
+        if (entry.getSbn().getNotification().fullScreenIntent == null) {
+            return false;
+        }
+
+        // Never show FSI when suppressed by DND
+        if (entry.shouldSuppressFullScreenIntent()) {
+            mLogger.logNoFullscreen(entry, "Suppressed by DND");
+            return false;
+        }
+
+        // Never show FSI if importance is not HIGH
+        if (entry.getImportance() < NotificationManager.IMPORTANCE_HIGH) {
+            mLogger.logNoFullscreen(entry, "Not important enough");
+            return false;
+        }
+
+        // If the notification has suppressive GroupAlertBehavior, block FSI and warn.
+        StatusBarNotification sbn = entry.getSbn();
+        if (sbn.isGroup() && sbn.getNotification().suppressAlertingDueToGrouping()) {
+            // b/231322873: Detect and report an event when a notification has both an FSI and a
+            // suppressive groupAlertBehavior, and now correctly block the FSI from firing.
+            final int uid = entry.getSbn().getUid();
+            android.util.EventLog.writeEvent(0x534e4554, "231322873", uid, "groupAlertBehavior");
+            mLogger.logNoFullscreenWarning(entry, "GroupAlertBehavior will prevent HUN");
+            return false;
+        }
+
+        // If the screen is off, then launch the FullScreenIntent
+        if (!mPowerManager.isInteractive()) {
+            mLogger.logFullscreen(entry, "Device is not interactive");
+            return true;
+        }
+
+        // If the device is currently dreaming, then launch the FullScreenIntent
+        if (isDreaming()) {
+            mLogger.logFullscreen(entry, "Device is dreaming");
+            return true;
+        }
+
+        // If the keyguard is showing, then launch the FullScreenIntent
+        if (mStatusBarStateController.getState() == StatusBarState.KEYGUARD) {
+            mLogger.logFullscreen(entry, "Keyguard is showing");
+            return true;
+        }
+
+        // If the notification should HUN, then we don't need FSI
+        if (shouldHeadsUp(entry)) {
+            mLogger.logNoFullscreen(entry, "Expected to HUN");
+            return false;
+        }
+
+        // If the notification won't HUN for some other reason (DND/snooze/etc), launch FSI.
+        mLogger.logFullscreen(entry, "Expected not to HUN");
+        return true;
+    }
+
+    private boolean isDreaming() {
+        try {
+            return mDreamManager.isDreaming();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Failed to query dream manager.", e);
+            return false;
+        }
     }
 
     private boolean shouldHeadsUpWhenAwake(NotificationEntry entry) {
@@ -194,51 +254,49 @@ public class NotificationInterruptStateProviderImpl implements NotificationInter
             return false;
         }
 
+        if (!canAlertHeadsUpCommon(entry)) {
+            return false;
+        }
+
         if (!canAlertAwakeCommon(entry)) {
             return false;
         }
 
         if (isSnoozedPackage(sbn)) {
-            mLogger.logNoHeadsUpPackageSnoozed(sbn);
+            mLogger.logNoHeadsUpPackageSnoozed(entry);
             return false;
         }
 
         boolean inShade = mStatusBarStateController.getState() == SHADE;
         if (entry.isBubble() && inShade) {
-            mLogger.logNoHeadsUpAlreadyBubbled(sbn);
+            mLogger.logNoHeadsUpAlreadyBubbled(entry);
             return false;
         }
 
         if (entry.shouldSuppressPeek()) {
-            mLogger.logNoHeadsUpSuppressedByDnd(sbn);
+            mLogger.logNoHeadsUpSuppressedByDnd(entry);
             return false;
         }
 
         if (entry.getImportance() < NotificationManager.IMPORTANCE_HIGH) {
-            mLogger.logNoHeadsUpNotImportant(sbn);
+            mLogger.logNoHeadsUpNotImportant(entry);
             return false;
         }
 
-        boolean isDreaming = false;
-        try {
-            isDreaming = mDreamManager.isDreaming();
-        } catch (RemoteException e) {
-            Log.e(TAG, "Failed to query dream manager.", e);
-        }
-        boolean inUse = mPowerManager.isScreenOn() && !isDreaming;
+        boolean inUse = mPowerManager.isScreenOn() && !isDreaming();
 
         if (!inUse) {
-            mLogger.logNoHeadsUpNotInUse(sbn);
+            mLogger.logNoHeadsUpNotInUse(entry);
             return false;
         }
 
         for (int i = 0; i < mSuppressors.size(); i++) {
             if (mSuppressors.get(i).suppressAwakeHeadsUp(entry)) {
-                mLogger.logNoHeadsUpSuppressedBy(sbn, mSuppressors.get(i));
+                mLogger.logNoHeadsUpSuppressedBy(entry, mSuppressors.get(i));
                 return false;
             }
         }
-        mLogger.logHeadsUp(sbn);
+        mLogger.logHeadsUp(entry);
         return true;
     }
 
@@ -250,33 +308,36 @@ public class NotificationInterruptStateProviderImpl implements NotificationInter
      * @return true if the entry should ambient pulse, false otherwise
      */
     private boolean shouldHeadsUpWhenDozing(NotificationEntry entry) {
-        StatusBarNotification sbn = entry.getSbn();
-
         if (!mAmbientDisplayConfiguration.pulseOnNotificationEnabled(UserHandle.USER_CURRENT)) {
-            mLogger.logNoPulsingSettingDisabled(sbn);
+            mLogger.logNoPulsingSettingDisabled(entry);
             return false;
         }
 
         if (mBatteryController.isAodPowerSave()) {
-            mLogger.logNoPulsingBatteryDisabled(sbn);
+            mLogger.logNoPulsingBatteryDisabled(entry);
             return false;
         }
 
         if (!canAlertCommon(entry)) {
-            mLogger.logNoPulsingNoAlert(sbn);
+            mLogger.logNoPulsingNoAlert(entry);
+            return false;
+        }
+
+        if (!canAlertHeadsUpCommon(entry)) {
+            mLogger.logNoPulsingNoAlert(entry);
             return false;
         }
 
         if (entry.shouldSuppressAmbient()) {
-            mLogger.logNoPulsingNoAmbientEffect(sbn);
+            mLogger.logNoPulsingNoAmbientEffect(entry);
             return false;
         }
 
         if (entry.getImportance() < NotificationManager.IMPORTANCE_DEFAULT) {
-            mLogger.logNoPulsingNotImportant(sbn);
+            mLogger.logNoPulsingNotImportant(entry);
             return false;
         }
-        mLogger.logPulsing(sbn);
+        mLogger.logPulsing(entry);
         return true;
     }
 
@@ -287,33 +348,38 @@ public class NotificationInterruptStateProviderImpl implements NotificationInter
      * @return true if these checks pass, false if the notification should not alert
      */
     private boolean canAlertCommon(NotificationEntry entry) {
-        StatusBarNotification sbn = entry.getSbn();
-
-        if (!mFlags.isNewPipelineEnabled() && mNotificationFilter.shouldFilterOut(entry)) {
-            mLogger.logNoAlertingFilteredOut(sbn);
-            return false;
-        }
-
-        // Don't alert notifications that are suppressed due to group alert behavior
-        if (sbn.isGroup() && sbn.getNotification().suppressAlertingDueToGrouping()) {
-            mLogger.logNoAlertingGroupAlertBehavior(sbn);
-            return false;
-        }
-
         for (int i = 0; i < mSuppressors.size(); i++) {
             if (mSuppressors.get(i).suppressInterruptions(entry)) {
-                mLogger.logNoAlertingSuppressedBy(sbn, mSuppressors.get(i), /* awake */ false);
+                mLogger.logNoAlertingSuppressedBy(entry, mSuppressors.get(i), /* awake */ false);
                 return false;
             }
         }
 
-        if (entry.hasJustLaunchedFullScreenIntent()) {
-            mLogger.logNoAlertingRecentFullscreen(sbn);
+        if (mKeyguardNotificationVisibilityProvider.shouldHideNotification(entry)) {
+            mLogger.keyguardHideNotification(entry);
             return false;
         }
 
-        if (mKeyguardNotificationVisibilityProvider.shouldHideNotification(entry)) {
-            mLogger.keyguardHideNotification(entry.getKey());
+        return true;
+    }
+
+    /**
+     * Common checks for heads up notifications on regular and AOD displays.
+     *
+     * @param entry the entry to check
+     * @return true if these checks pass, false if the notification should not alert
+     */
+    private boolean canAlertHeadsUpCommon(NotificationEntry entry) {
+        StatusBarNotification sbn = entry.getSbn();
+
+        // Don't alert notifications that are suppressed due to group alert behavior
+        if (sbn.isGroup() && sbn.getNotification().suppressAlertingDueToGrouping()) {
+            mLogger.logNoAlertingGroupAlertBehavior(entry);
+            return false;
+        }
+
+        if (entry.hasJustLaunchedFullScreenIntent()) {
+            mLogger.logNoAlertingRecentFullscreen(entry);
             return false;
         }
 
@@ -331,7 +397,7 @@ public class NotificationInterruptStateProviderImpl implements NotificationInter
 
         for (int i = 0; i < mSuppressors.size(); i++) {
             if (mSuppressors.get(i).suppressAwakeInterruptions(entry)) {
-                mLogger.logNoAlertingSuppressedBy(sbn, mSuppressors.get(i), /* awake */ true);
+                mLogger.logNoAlertingSuppressedBy(entry, mSuppressors.get(i), /* awake */ true);
                 return false;
             }
         }

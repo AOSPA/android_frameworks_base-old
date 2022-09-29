@@ -21,11 +21,6 @@
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="byteShort" msgid="202579285008794431">"B"</string>
-    <string name="kilobyteShort" msgid="2214285521564195803">"kB"</string>
-    <string name="megabyteShort" msgid="6649361267635823443">"MB"</string>
-    <string name="gigabyteShort" msgid="7515809460261287991">"GB"</string>
-    <string name="terabyteShort" msgid="1822367128583886496">"TB"</string>
-    <string name="petabyteShort" msgid="5651571254228534832">"PB"</string>
     <string name="fileSizeSuffix" msgid="4233671691980131257">"<xliff:g id="NUMBER">%1$s</xliff:g> <xliff:g id="UNIT">%2$s</xliff:g>"</string>
     <string name="untitled" msgid="3381766946944136678">"Başlıqsız"</string>
     <string name="emptyPhoneNumber" msgid="5812172618020360048">"(Telefon nömrəsi yoxdur)"</string>
@@ -305,8 +300,8 @@
     <string name="permgroupdesc_calendar" msgid="6762751063361489379">"təqvimə daxil olun"</string>
     <string name="permgrouplab_sms" msgid="795737735126084874">"SMS"</string>
     <string name="permgroupdesc_sms" msgid="5726462398070064542">"göndərin və SMS mesajlarına baxın"</string>
-    <string name="permgrouplab_storage" msgid="5570124978732352858">"Fayllar və sənədlər"</string>
-    <string name="permgroupdesc_storage" msgid="8352226729501080525">"cihazınızda fayllara və sənədlərə giriş"</string>
+    <string name="permgrouplab_storage" msgid="17339216290379241">"Fayllar"</string>
+    <string name="permgroupdesc_storage" msgid="5378659041354582769">"cihazınızda fayllara giriş"</string>
     <string name="permgrouplab_readMediaAural" msgid="1858331312624942053">"Musiqi və audio"</string>
     <string name="permgroupdesc_readMediaAural" msgid="7565467343667089595">"cihazınızdakı musiqi və audioya giriş"</string>
     <string name="permgrouplab_readMediaVisual" msgid="4724874717811908660">"Foto və videolar"</string>
@@ -558,6 +553,8 @@
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"Tətbiqin ekran kilidinin uzunluğunu və növünü göstərən mürəkəblilik dərəcəsini (yüksək, orta, aşağı və ya heç biri) öyrənməsinə icazə verir. Tətbiq ekran kilidinin müəyyən səviyyəyə yenilənməsini təklif edə bilər. İstifadəçilər bu təklifdən imtina edə və davam edə bilər. Yadda saxlayın ekran kilidi açıq mətn formatında saxlanılmır, buna görə də tətbiq dəqiq parolu bilməyəcək."</string>
     <string name="permlab_postNotification" msgid="4875401198597803658">"bildirişləri göstərmək"</string>
     <string name="permdesc_postNotification" msgid="5974977162462877075">"Tətbiqə bildirişləri göstərmək icazəsi verir"</string>
+    <string name="permlab_turnScreenOn" msgid="219344053664171492">"ekranı aktiv etmək"</string>
+    <string name="permdesc_turnScreenOn" msgid="4394606875897601559">"Tətbiqə ekranı aktiv etməyə icazə verir."</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"biometrik proqramdan istifadə edin"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"Doğrulama üçün biometrik proqramdan istifadə etməyə imkan verir"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"barmaq izi avadanlığını idarə edin"</string>
@@ -1924,6 +1921,8 @@
     <string name="country_selection_title" msgid="5221495687299014379">"Region seçimi"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Dil adını daxil edin"</string>
     <string name="language_picker_section_suggested" msgid="6556199184638990447">"Təklif edilmiş"</string>
+    <string name="language_picker_section_suggested_bilingual" msgid="5932198319583556613">"Təklif edilən dillər"</string>
+    <string name="region_picker_section_suggested_bilingual" msgid="704607569328224133">"Təklif edilən regionlar"</string>
     <string name="language_picker_section_all" msgid="1985809075777564284">"Bütün dillər"</string>
     <string name="region_picker_section_all" msgid="756441309928774155">"Bütün bölgələr"</string>
     <string name="locale_search_menu" msgid="6258090710176422934">"Axtarın"</string>
@@ -2078,8 +2077,8 @@
     <string name="nas_upgrade_notification_learn_more_action" msgid="7011130656195423947">"Ətraflı məlumat"</string>
     <string name="nas_upgrade_notification_learn_more_content" msgid="3735480566983530650">"Android 12-də qabaqcıl bildirişlər var. Bu funksiya bütün bildirişləri qaydaya salır, cavab və əməliyyatlara dair tövsiyə verir.\n\nFunksiyanın kontaktlar, mesajlar və şəxsi məlumatlar daxil olmaqla bütün bildirişlərə girişi var. Zənglərə cavab verə, \"Narahat etməyin\" rejimini idarə edə, bildirişləri qapada və cavablaya bilər."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Rejim üçün məlumat bildirişi"</string>
-    <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Batareya həmişəki vaxtdan əvvəl bitə bilər"</string>
-    <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Enerjiyə Qənaət rejimi batareya istifadəsinin müddətini artırmaq üçün aktiv edilir"</string>
+    <string name="dynamic_mode_notification_title" msgid="1388718452788985481">"Enerjiyə Qənaət aktivdir"</string>
+    <string name="dynamic_mode_notification_summary" msgid="1639031262484979689">"Batareyanın ömrünü uzatmaq üçün batareyadan istifadəni azaldın"</string>
     <string name="battery_saver_notification_channel_name" msgid="3918243458067916913">"Enerjiyə qənaət"</string>
     <string name="battery_saver_off_notification_title" msgid="7637255960468032515">"Enerjiyə qənaət deaktivdir"</string>
     <string name="battery_saver_charged_notification_summary" product="default" msgid="5544457317418624367">"Telefonun kifayət qədər enerjisi var. Funksiyalar artıq məhdud deyil."</string>
@@ -2286,5 +2285,7 @@
     <string name="notification_action_check_bg_apps" msgid="4758877443365362532">"Aktiv tətbiqləri yoxlayın"</string>
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"<xliff:g id="DEVICE">%1$s</xliff:g> cihazınızdan telefonun kamerasına giriş etmək olmur"</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"<xliff:g id="DEVICE">%1$s</xliff:g> cihazınızdan planşetin kamerasına giriş etmək olmur"</string>
-    <string name="system_locale_title" msgid="3978041860457277638">"Sistem dili"</string>
+    <string name="system_locale_title" msgid="711882686834677268">"Sistem defoltu"</string>
+    <!-- no translation found for default_card_name (9198284935962911468) -->
+    <skip />
 </resources>

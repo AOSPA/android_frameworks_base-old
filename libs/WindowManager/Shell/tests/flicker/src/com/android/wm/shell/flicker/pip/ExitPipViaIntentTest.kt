@@ -16,9 +16,9 @@
 
 package com.android.wm.shell.flicker.pip
 
+import android.platform.test.annotations.FlakyTest
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
-import androidx.test.filters.FlakyTest
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
@@ -73,23 +73,25 @@ class ExitPipViaIntentTest(testSpec: FlickerTestParameter) : ExitPipToAppTransit
                 // This will bring PipApp to fullscreen
                 pipApp.exitPipToFullScreenViaIntent(wmHelper)
                 // Wait until the other app is no longer visible
-                wmHelper.waitForWindowSurfaceDisappeared(testApp.component)
+                wmHelper.StateSyncBuilder()
+                    .withWindowSurfaceDisappeared(testApp)
+                    .waitForAndVerify()
             }
         }
 
     /** {@inheritDoc}  */
     @FlakyTest(bugId = 206753786)
     @Test
-    override fun statusBarLayerRotatesScales() {
+    override fun statusBarLayerPositionAtStartAndEnd() {
         Assume.assumeFalse(isShellTransitionsEnabled)
-        super.statusBarLayerRotatesScales()
+        super.statusBarLayerPositionAtStartAndEnd()
     }
 
     @Presubmit
     @Test
     fun statusBarLayerRotatesScales_ShellTransit() {
         Assume.assumeTrue(isShellTransitionsEnabled)
-        super.statusBarLayerRotatesScales()
+        super.statusBarLayerPositionAtStartAndEnd()
     }
 
     /** {@inheritDoc}  */
@@ -106,6 +108,11 @@ class ExitPipViaIntentTest(testSpec: FlickerTestParameter) : ExitPipToAppTransit
         Assume.assumeTrue(isShellTransitionsEnabled)
         super.pipLayerExpands()
     }
+
+    /** {@inheritDoc}  */
+    @FlakyTest(bugId = 227313015)
+    @Test
+    override fun entireScreenCovered() = super.entireScreenCovered()
 
     companion object {
         /**

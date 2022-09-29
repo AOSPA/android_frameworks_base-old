@@ -91,6 +91,7 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.storage.IStorageManager;
 import android.os.storage.StorageManager;
+import android.text.TextUtils;
 import android.text.format.DateUtils;
 import android.util.ArraySet;
 import android.util.EventLog;
@@ -145,7 +146,7 @@ class UserController implements Handler.Callback {
 
     // Amount of time we wait for observers to handle a user switch before
     // giving up on them and unfreezing the screen.
-    static final int USER_SWITCH_TIMEOUT_MS = 3 * 1000;
+    static final int DEFAULT_USER_SWITCH_TIMEOUT_MS = 3 * 1000;
 
     /**
      * Amount of time we wait for an observer to handle a user switch before we log a warning. This
@@ -182,9 +183,11 @@ class UserController implements Handler.Callback {
     // UI thread message constants
     static final int START_USER_SWITCH_UI_MSG = 1000;
 
-    // If a callback wasn't called within USER_SWITCH_CALLBACKS_TIMEOUT_MS after
-    // USER_SWITCH_TIMEOUT_MS, an error is reported. Usually it indicates a problem in the observer
-    // when it never calls back.
+    /**
+     * If a callback wasn't called within USER_SWITCH_CALLBACKS_TIMEOUT_MS after
+     * {@link #getUserSwitchTimeoutMs}, an error is reported. Usually it indicates a problem in the
+     * observer when it never calls back.
+     */
     private static final int USER_SWITCH_CALLBACKS_TIMEOUT_MS = 5 * 1000;
 
     /**
@@ -348,7 +351,7 @@ class UserController implements Handler.Callback {
     private String mSwitchingToSystemUserMessage;
 
     /**
-     * Callbacks that are still active after {@link #USER_SWITCH_TIMEOUT_MS}
+     * Callbacks that are still active after {@link #getUserSwitchTimeoutMs}
      */
     @GuardedBy("mLock")
     private ArraySet<String> mTimeoutUserSwitchCallbacks;
@@ -1642,7 +1645,7 @@ class UserController implements Handler.Callback {
                 mHandler.sendMessage(mHandler.obtainMessage(REPORT_USER_SWITCH_MSG,
                         oldUserId, userId, uss));
                 mHandler.sendMessageDelayed(mHandler.obtainMessage(USER_SWITCH_TIMEOUT_MSG,
-                        oldUserId, userId, uss), USER_SWITCH_TIMEOUT_MS);
+                        oldUserId, userId, uss), getUserSwitchTimeoutMs());
             }
 
             if (userInfo.preCreated) {
@@ -1955,6 +1958,7 @@ class UserController implements Handler.Callback {
                 mCurWaitingUserSwitchCallbacks = curWaitingUserSwitchCallbacks;
             }
             final AtomicInteger waitingCallbacksCount = new AtomicInteger(observerCount);
+            final long userSwitchTimeoutMs = getUserSwitchTimeoutMs();
             final long dispatchStartedTime = SystemClock.elapsedRealtime();
             for (int i = 0; i < observerCount; i++) {
                 final long dispatchStartedTimeForObserver = SystemClock.elapsedRealtime();
@@ -1978,7 +1982,7 @@ class UserController implements Handler.Callback {
 
                                 long totalDelay = SystemClock.elapsedRealtime()
                                         - dispatchStartedTime;
-                                if (totalDelay > USER_SWITCH_TIMEOUT_MS) {
+                                if (totalDelay > userSwitchTimeoutMs) {
                                     Slogf.e(TAG, "User switch timeout: observer " + name
                                             + "'s result was received " + totalDelay
                                             + " ms after dispatchUserSwitch.");
@@ -3109,6 +3113,19 @@ class UserController implements Handler.Callback {
         return bOptions;
     }
 
+    private static int getUserSwitchTimeoutMs() {
+        final String userSwitchTimeoutMs = SystemProperties.get(
+                "debug.usercontroller.user_switch_timeout_ms");
+        if (!TextUtils.isEmpty(userSwitchTimeoutMs)) {
+            try {
+                return Integer.parseInt(userSwitchTimeoutMs);
+            } catch (NumberFormatException ignored) {
+                // Ignored.
+            }
+        }
+        return DEFAULT_USER_SWITCH_TIMEOUT_MS;
+    }
+
     /**
      * Uptime when any user was being unlocked most recently. 0 if no users have been unlocked
      * yet. To avoid lock contention (since it's used by OomAdjuster), it's volatile internally.
@@ -3203,8 +3220,8 @@ class UserController implements Handler.Callback {
             synchronized (mService) {
                 return mService.broadcastIntentLocked(null, null, null, intent, resolvedType,
                         resultTo, resultCode, resultData, resultExtras, requiredPermissions, null,
-                        appOp, bOptions, ordered, sticky, callingPid, callingUid, realCallingUid,
-                        realCallingPid, userId);
+                        null, appOp, bOptions, ordered, sticky, callingPid, callingUid,
+                        realCallingUid, realCallingPid, userId);
             }
         }
 

@@ -130,7 +130,6 @@ import static com.android.server.wm.DisplayContentProto.RESUMED_ACTIVITY;
 import static com.android.server.wm.DisplayContentProto.ROOT_DISPLAY_AREA;
 import static com.android.server.wm.DisplayContentProto.SCREEN_ROTATION_ANIMATION;
 import static com.android.server.wm.DisplayContentProto.SLEEP_TOKENS;
-import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_APP_TRANSITION;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_WINDOW_ANIMATION;
 import static com.android.server.wm.WindowContainer.AnimationFlags.PARENTS;
 import static com.android.server.wm.WindowContainer.AnimationFlags.TRANSITION;
@@ -162,6 +161,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ActivityInfo.ScreenOrientation;
@@ -190,6 +190,7 @@ import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.ArraySet;
 import android.util.DisplayMetrics;
+import android.util.DisplayUtils;
 import android.util.IntArray;
 import android.util.RotationUtils;
 import android.util.Size;
@@ -224,6 +225,7 @@ import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.view.WindowManager.DisplayImePolicy;
 import android.view.WindowManagerPolicyConstants.PointerEventListener;
+import android.window.DisplayWindowPolicyController;
 import android.window.IDisplayAreaOrganizer;
 import android.window.TransitionRequestInfo;
 
@@ -238,6 +240,7 @@ import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.internal.util.function.pooled.PooledPredicate;
 import com.android.server.inputmethod.InputMethodManagerInternal;
 import com.android.server.policy.WindowManagerPolicy;
+import com.android.server.wm.utils.RegionUtils;
 import com.android.server.wm.utils.RotationCache;
 import com.android.server.wm.utils.WmDisplayCutout;
 
@@ -359,7 +362,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     float mInitialPhysicalXDpi = 0.0f;
     float mInitialPhysicalYDpi = 0.0f;
 
-    private Point mStableDisplaySize;
+    private Point mPhysicalDisplaySize;
 
     DisplayCutout mInitialDisplayCutout;
     private final RotationCache<DisplayCutout, WmDisplayCutout> mDisplayCutoutCache
@@ -556,7 +559,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     final FixedRotationTransitionListener mFixedRotationTransitionListener =
             new FixedRotationTransitionListener();
 
-    private PhysicalDisplaySwitchTransitionLauncher mDisplaySwitchTransitionLauncher;
+    private final PhysicalDisplaySwitchTransitionLauncher mDisplaySwitchTransitionLauncher;
+    final RemoteDisplayChangeController mRemoteDisplayChangeController;
 
     /** Windows added since {@link #mCurrentFocus} was set to null. Used for ANR blaming. */
     final ArrayList<WindowState> mWinAddedSinceNullFocus = new ArrayList<>();
@@ -754,8 +758,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
         if (w.mAttrs.type == TYPE_INPUT_METHOD_DIALOG && mImeLayeringTarget != null
                 && !mImeLayeringTarget.getRequestedVisibility(ITYPE_IME)
-                && mImeLayeringTarget.isAnimating(PARENTS | TRANSITION,
-                ANIMATION_TYPE_APP_TRANSITION)) {
+                && !mImeLayeringTarget.isVisibleRequested()) {
             return false;
         }
 
@@ -1052,6 +1055,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         mUnknownAppVisibilityController = new UnknownAppVisibilityController(mWmService, this);
         mDisplaySwitchTransitionLauncher = new PhysicalDisplaySwitchTransitionLauncher(this,
                 mTransitionController);
+        mRemoteDisplayChangeController = new RemoteDisplayChangeController(mWmService, mDisplayId);
 
         final InputChannel inputChannel = mWmService.mInputManager.monitorInput(
                 "PointerEventDispatcher" + mDisplayId, mDisplayId);
@@ -1360,7 +1364,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
     void setInsetProvider(@InternalInsetsType int type, WindowContainer win,
             @Nullable TriConsumer<DisplayFrames, WindowContainer, Rect> frameProvider) {
-        setInsetProvider(type, win, frameProvider, null /* imeFrameProvider */);
+        setInsetProvider(type, win, frameProvider, null /* overrideFrameProviders */);
     }
 
     /**
@@ -1369,15 +1373,18 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      * @param type The type of inset this window provides.
      * @param win The window.
      * @param frameProvider Function to compute the frame, or {@code null} if the just the frame of
-     *                      the window should be taken.
-     * @param imeFrameProvider Function to compute the frame when dispatching insets to the IME, or
-     *                         {@code null} if the normal frame should be taken.
+     *                      the window should be taken. Only for non-WindowState providers, nav bar
+     *                      and status bar.
+     * @param overrideFrameProviders Functions to compute the frame when dispatching insets to the
+     *                               given window types, or {@code null} if the normal frame should
+     *                               be taken.
      */
     void setInsetProvider(@InternalInsetsType int type, WindowContainer win,
             @Nullable TriConsumer<DisplayFrames, WindowContainer, Rect> frameProvider,
-            @Nullable TriConsumer<DisplayFrames, WindowContainer, Rect> imeFrameProvider) {
+            @Nullable SparseArray<TriConsumer<DisplayFrames, WindowContainer, Rect>>
+                    overrideFrameProviders) {
         mInsetsStateController.getSourceProvider(type).setWindowContainer(win, frameProvider,
-                imeFrameProvider);
+                overrideFrameProviders);
     }
 
     InsetsStateController getInsetsStateController() {
@@ -1433,7 +1440,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         if (!isReady()) {
             return;
         }
-        if (mDisplayRotation.isWaitingForRemoteRotation()) {
+        if (mRemoteDisplayChangeController.isWaitingForRemoteDisplayChange()) {
             return;
         }
 
@@ -1533,8 +1540,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             config = new Configuration();
             computeScreenConfiguration(config);
         } else if (!(mTransitionController.isCollecting(this)
-                // If waiting for a remote rotation, don't prematurely update configuration.
-                || mDisplayRotation.isWaitingForRemoteRotation())) {
+                // If waiting for a remote display change, don't prematurely update configuration.
+                || mRemoteDisplayChangeController.isWaitingForRemoteDisplayChange())) {
             // No obvious action we need to take, but if our current state mismatches the
             // activity manager's, update it, disregarding font scale, which should remain set
             // to the value of the previous configuration.
@@ -1596,7 +1603,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     boolean isSyncFinished() {
         // Do not consider children because if they are requested to be synced, they should be
         // added to sync group explicitly.
-        return !mDisplayRotation.isWaitingForRemoteRotation();
+        return !mRemoteDisplayChangeController.isWaitingForRemoteDisplayChange();
     }
 
     /**
@@ -1608,7 +1615,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         if (mTransitionController.useShellTransitionsRotation()) {
             return ROTATION_UNDEFINED;
         }
-        if (!WindowManagerService.ENABLE_FIXED_ROTATION_TRANSFORM) {
+        if (!WindowManagerService.ENABLE_FIXED_ROTATION_TRANSFORM
+                || getIgnoreOrientationRequest()) {
             return ROTATION_UNDEFINED;
         }
         if (r.mOrientation == ActivityInfo.SCREEN_ORIENTATION_BEHIND) {
@@ -1681,7 +1689,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                     return false;
                 }
             }
-            if (r.isState(RESUMED) && !r.getRootTask().mInResumeTopActivity) {
+            if (r.isState(RESUMED) && !r.getTask().mInResumeTopActivity) {
                 // If the activity is executing or has done the lifecycle callback, use normal
                 // rotation animation so the display info can be updated immediately (see
                 // updateDisplayAndOrientation). This prevents a compatibility issue such as
@@ -1778,7 +1786,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      * rotation transform to it and indicate that the display may be rotated after it is launched.
      */
     void setFixedRotationLaunchingApp(@NonNull ActivityRecord r, @Rotation int rotation) {
-        final WindowToken prevRotatedLaunchingApp = mFixedRotationLaunchingApp;
+        final ActivityRecord prevRotatedLaunchingApp = mFixedRotationLaunchingApp;
         if (prevRotatedLaunchingApp == r
                 && r.getWindowConfiguration().getRotation() == rotation) {
             // The given launching app and target rotation are the same as the existing ones.
@@ -1787,8 +1795,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         if (prevRotatedLaunchingApp != null
                 && prevRotatedLaunchingApp.getWindowConfiguration().getRotation() == rotation
                 // It is animating so we can expect there will have a transition callback.
-                && (prevRotatedLaunchingApp.isAnimating(TRANSITION | PARENTS)
-                        || mTransitionController.inTransition(prevRotatedLaunchingApp))) {
+                && (prevRotatedLaunchingApp.isInTransition())) {
             // It may be the case that multiple activities launch consecutively. Because their
             // rotation are the same, the transformed state can be shared to avoid duplicating
             // the heavy operations. This also benefits that the states of multiple activities
@@ -1829,8 +1836,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             sendNewConfiguration();
             return;
         }
-        if (mDisplayRotation.isWaitingForRemoteRotation()) {
-            // There is pending rotation change to apply.
+        if (mRemoteDisplayChangeController.isWaitingForRemoteDisplayChange()) {
+            // There is pending display change to apply.
             return;
         }
         // The orientation of display is not changed.
@@ -1878,7 +1885,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     }
 
     /** Returns {@code true} if the decided new rotation has not applied to configuration yet. */
-    private boolean isRotationChanging() {
+    boolean isRotationChanging() {
         return mDisplayRotation.getRotation() != getWindowConfiguration().getRotation();
     }
 
@@ -1974,6 +1981,16 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      */
     boolean updateRotationUnchecked() {
         return mDisplayRotation.updateRotationUnchecked(false /* forceUpdate */);
+    }
+
+    /**
+     * @see DisplayWindowPolicyController#canShowTasksInRecents()
+     */
+    boolean canShowTasksInRecents() {
+        if (mDwpcHelper == null) {
+            return true;
+        }
+        return mDwpcHelper.canShowTasksInRecents();
     }
 
     /**
@@ -2210,9 +2227,9 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
         final float density = mDisplayMetrics.density;
         outConfig.screenWidthDp = (int) (mDisplayPolicy.getConfigDisplayWidth(dw, dh, rotation,
-                uiMode, displayCutout) / density);
+                uiMode, displayCutout) / density + 0.5f);
         outConfig.screenHeightDp = (int) (mDisplayPolicy.getConfigDisplayHeight(dw, dh, rotation,
-                uiMode, displayCutout) / density);
+                uiMode, displayCutout) / density + 0.5f);
         outConfig.compatScreenWidthDp = (int) (outConfig.screenWidthDp / mCompatibleScreenScale);
         outConfig.compatScreenHeightDp = (int) (outConfig.screenHeightDp / mCompatibleScreenScale);
 
@@ -2395,7 +2412,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         sl = reduceConfigLayout(sl, Surface.ROTATION_90, density, unrotDh, unrotDw, uiMode);
         sl = reduceConfigLayout(sl, Surface.ROTATION_180, density, unrotDw, unrotDh, uiMode);
         sl = reduceConfigLayout(sl, Surface.ROTATION_270, density, unrotDh, unrotDw, uiMode);
-        outConfig.smallestScreenWidthDp = (int)(displayInfo.smallestNominalAppWidth / density);
+        outConfig.smallestScreenWidthDp =
+                (int) (displayInfo.smallestNominalAppWidth / density + 0.5f);
         outConfig.screenLayout = sl;
     }
 
@@ -2417,8 +2435,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             longSize = shortSize;
             shortSize = tmp;
         }
-        longSize = (int)(longSize/density);
-        shortSize = (int)(shortSize/density);
+        longSize = (int) (longSize / density + 0.5f);
+        shortSize = (int) (shortSize / density + 0.5f);
         return Configuration.reduceScreenLayout(curLayout, longSize, shortSize);
     }
 
@@ -2748,7 +2766,12 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         mInitialRoundedCorners = mDisplayInfo.roundedCorners;
         mCurrentPrivacyIndicatorBounds = new PrivacyIndicatorBounds(new Rect[4],
                 mDisplayInfo.rotation);
-        mStableDisplaySize = mWmService.mDisplayManager.getStableDisplaySize();
+        final Display.Mode maxDisplayMode =
+                DisplayUtils.getMaximumResolutionDisplayMode(mDisplayInfo.supportedModes);
+        mPhysicalDisplaySize = new Point(
+                maxDisplayMode == null ? mInitialDisplayWidth : maxDisplayMode.getPhysicalWidth(),
+                maxDisplayMode == null ? mInitialDisplayHeight : maxDisplayMode.getPhysicalHeight()
+        );
     }
 
     /**
@@ -2758,6 +2781,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     private void updateBaseDisplayMetricsIfNeeded() {
         // Get real display metrics without overrides from WM.
         mWmService.mDisplayManagerInternal.getNonOverrideDisplayInfo(mDisplayId, mDisplayInfo);
+        final int currentRotation = getRotation();
         final int orientation = mDisplayInfo.rotation;
         final boolean rotated = (orientation == ROTATION_90 || orientation == ROTATION_270);
         final int newWidth = rotated ? mDisplayInfo.logicalHeight : mDisplayInfo.logicalWidth;
@@ -2818,7 +2842,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             reconfigureDisplayLocked();
 
             if (physicalDisplayChanged) {
-                mDisplaySwitchTransitionLauncher.onDisplayUpdated();
+                mDisplaySwitchTransitionLauncher.onDisplayUpdated(currentRotation, getRotation(),
+                        getDisplayAreaInfo());
             }
         }
     }
@@ -2922,9 +2947,10 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             // Set some sort of reasonable bounds on the size of the display that we will try
             // to emulate.
             final int minSize = 200;
-            final int maxScale = 2;
-            width = Math.min(Math.max(width, minSize), mInitialDisplayWidth * maxScale);
-            height = Math.min(Math.max(height, minSize), mInitialDisplayHeight * maxScale);
+            final int maxScale = 3;
+            final int maxSize = Math.max(mInitialDisplayWidth, mInitialDisplayHeight) * maxScale;
+            width = Math.min(Math.max(width, minSize), maxSize);
+            height = Math.min(Math.max(height, minSize), maxSize);
         }
 
         Slog.i(TAG_WM, "Using new display size: " + width + "x" + height);
@@ -2944,7 +2970,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
         return DisplayCutout.fromResourcesRectApproximation(
                 mDisplayPolicy.getSystemUiContext().getResources(), mDisplayInfo.uniqueId,
-                mStableDisplaySize.x, mStableDisplaySize.y, displayWidth, displayHeight);
+                mPhysicalDisplaySize.x, mPhysicalDisplaySize.y, displayWidth, displayHeight);
     }
 
     RoundedCorners loadRoundedCorners(int displayWidth, int displayHeight) {
@@ -2953,7 +2979,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
         return RoundedCorners.fromResources(
                 mDisplayPolicy.getSystemUiContext().getResources(),  mDisplayInfo.uniqueId,
-                mStableDisplaySize.x, mStableDisplaySize.y, displayWidth, displayHeight);
+                mPhysicalDisplaySize.x, mPhysicalDisplaySize.y, displayWidth, displayHeight);
     }
 
     @Override
@@ -3844,7 +3870,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             mAtmService.onImeWindowSetOnDisplayArea(imePid, mImeWindowsContainer);
         }
         mInsetsStateController.getSourceProvider(ITYPE_IME).setWindowContainer(win,
-                mDisplayPolicy.getImeSourceFrameProvider(), null /* imeFrameProvider */);
+                mDisplayPolicy.getImeSourceFrameProvider(), null);
         computeImeTarget(true /* updateImeTarget */);
         updateImeControlTarget();
     }
@@ -4384,8 +4410,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             boolean imeLayeringTargetMayUseIme =
                     LayoutParams.mayUseInputMethod(mImeLayeringTarget.mAttrs.flags)
                     || mImeLayeringTarget.mAttrs.type == TYPE_APPLICATION_STARTING;
-            if (imeLayeringTargetMayUseIme && mImeInputTarget != null
-                    && mImeLayeringTarget.mActivityRecord != mImeInputTarget.getActivityRecord()) {
+            if (imeLayeringTargetMayUseIme && (mImeInputTarget == null
+                    || mImeLayeringTarget.mActivityRecord != mImeInputTarget.getActivityRecord())) {
                 // Do not change parent if the window hasn't requested IME.
                 return null;
             }
@@ -4788,16 +4814,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         final Bitmap bitmap = screenshotBuffer == null ? null : screenshotBuffer.asBitmap();
         if (bitmap == null) {
             Slog.w(TAG_WM, "Failed to take screenshot");
-            return null;
         }
-
-        // Create a copy of the screenshot that is immutable and backed in ashmem.
-        // This greatly reduces the overhead of passing the bitmap between processes.
-        final Bitmap ret = bitmap.asShared();
-        if (ret != bitmap) {
-            bitmap.recycle();
-        }
-        return ret;
+        return bitmap;
     }
 
     @Override
@@ -4856,9 +4874,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 return true;
             }
 
-            // TODO(b/165794880): Freeform task organizer doesn't support drag-resize yet. Remove
-            // the special case when it does.
-            if (task.isOrganized() && task.getWindowingMode() != WINDOWING_MODE_FREEFORM) {
+            if (task.isOrganized()) {
                 return true;
             }
 
@@ -5280,7 +5296,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     void prepareAppTransition(@WindowManager.TransitionType int transit,
             @WindowManager.TransitionFlags int flags) {
         final boolean prepared = mAppTransition.prepareAppTransition(transit, flags);
-        if (prepared && okToAnimate()) {
+        if (prepared && okToAnimate() && transit != TRANSIT_NONE) {
             mSkipAppTransitionAnimation = false;
         }
     }
@@ -5385,6 +5401,16 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         return mOverlayLayer;
     }
 
+    SurfaceControl[] findRoundedCornerOverlays() {
+        List<SurfaceControl> roundedCornerOverlays = new ArrayList<>();
+        for (WindowToken token : mTokenMap.values()) {
+            if (token.mRoundedCornerOverlay && token.isVisible()) {
+                roundedCornerOverlays.add(token.mSurfaceControl);
+            }
+        }
+        return roundedCornerOverlays.toArray(new SurfaceControl[0]);
+    }
+
     /**
      * Updates the display's system gesture exclusion.
      *
@@ -5450,13 +5476,18 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         final Region local = Region.obtain();
         final int[] remainingLeftRight =
                 {mSystemGestureExclusionLimit, mSystemGestureExclusionLimit};
+        final RecentsAnimationController recentsAnimationController =
+                mWmService.getRecentsAnimationController();
 
         // Traverse all windows top down to assemble the gesture exclusion rects.
         // For each window, we only take the rects that fall within its touchable region.
         forAllWindows(w -> {
+            final boolean ignoreRecentsAnimationTarget = recentsAnimationController != null
+                    && recentsAnimationController.shouldApplyInputConsumer(w.getActivityRecord());
             if (!w.canReceiveTouchInput() || !w.isVisible()
                     || (w.getAttrs().flags & FLAG_NOT_TOUCHABLE) != 0
-                    || unhandled.isEmpty()) {
+                    || unhandled.isEmpty()
+                    || ignoreRecentsAnimationTarget) {
                 return;
             }
 
@@ -5645,9 +5676,24 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     void getKeepClearAreas(Set<Rect> outRestricted, Set<Rect> outUnrestricted) {
         final Matrix tmpMatrix = new Matrix();
         final float[] tmpFloat9 = new float[9];
+        final RecentsAnimationController recentsAnimationController =
+                mWmService.getRecentsAnimationController();
         forAllWindows(w -> {
+            // Skip the window if it is part of Recents animation
+            final boolean ignoreRecentsAnimationTarget = recentsAnimationController != null
+                    && recentsAnimationController.shouldApplyInputConsumer(w.getActivityRecord());
+            if (ignoreRecentsAnimationTarget) {
+                return false;  // continue traversal
+            }
+
             if (w.isVisible() && !w.inPinnedWindowingMode()) {
                 w.getKeepClearAreas(outRestricted, outUnrestricted, tmpMatrix, tmpFloat9);
+
+                if (w.mIsImWindow) {
+                    Region touchableRegion = Region.obtain();
+                    w.getEffectiveTouchableRegion(touchableRegion);
+                    RegionUtils.forEachRect(touchableRegion, rect -> outUnrestricted.add(rect));
+                }
             }
 
             // We stop traversing when we reach the base of a fullscreen app.
@@ -6069,7 +6115,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 rootTask.ensureActivitiesVisible(starting, configChanges, preserveWindows,
                         notifyClients);
             });
-            if (mTransitionController.isCollecting()
+            if (mTransitionController.useShellTransitionsRotation()
+                    && mTransitionController.isCollecting()
                     && mWallpaperController.getWallpaperTarget() != null) {
                 // Also update wallpapers so that their requestedVisibility immediately reflects
                 // the changes to activity visibility.
@@ -6151,6 +6198,14 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     boolean isAodShowing() {
         return mRootWindowContainer.mTaskSupervisor
                 .getKeyguardController().isAodShowing(mDisplayId);
+    }
+
+    /**
+     * @return whether the keyguard is occluded on this display
+     */
+    boolean isKeyguardOccluded() {
+        return mRootWindowContainer.mTaskSupervisor
+                .getKeyguardController().isDisplayOccluded(mDisplayId);
     }
 
     @VisibleForTesting
@@ -6425,7 +6480,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                     // Different tasks won't be in one activity transition animation.
                     return;
                 }
-                if (task.isAppTransitioning()) {
+                if (task.getActivity(ActivityRecord::isInTransition) != null) {
                     return;
                     // Continue to update orientation because the transition of the top rotated
                     // launching activity is done.
@@ -6458,12 +6513,13 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         /**
          * Notifies the remote insets controller that the top focused window has changed.
          *
-         * @param packageName The name of the package that is open in the top focused window.
+         * @param component The application component that is open in the top focussed window.
          * @param requestedVisibilities The insets visibilities requested by the focussed window.
          */
-        void topFocusedWindowChanged(String packageName, InsetsVisibilities requestedVisibilities) {
+        void topFocusedWindowChanged(ComponentName component,
+                InsetsVisibilities requestedVisibilities) {
             try {
-                mRemoteInsetsController.topFocusedWindowChanged(packageName, requestedVisibilities);
+                mRemoteInsetsController.topFocusedWindowChanged(component, requestedVisibilities);
             } catch (RemoteException e) {
                 Slog.w(TAG, "Failed to deliver package in top focused window change", e);
             }

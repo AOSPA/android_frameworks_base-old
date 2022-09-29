@@ -152,6 +152,9 @@ import javax.xml.datatype.DatatypeConfigurationException;
  *      <screenBrightnessRampSlowDecrease>0.03</screenBrightnessRampSlowDecrease>
  *      <screenBrightnessRampSlowIncrease>0.04</screenBrightnessRampSlowIncrease>
  *
+ *      <screenBrightnessRampIncreaseMaxMillis>2000</screenBrightnessRampIncreaseMaxMillis>
+ *      <screenBrightnessRampDecreaseMaxMillis>3000</screenBrightnessRampDecreaseMaxMillis>
+ *
  *      <lightSensor>
  *        <type>android.sensor.light</type>
  *        <name>1234 Ambient Light Sensor</name>
@@ -259,6 +262,8 @@ public class DisplayDeviceConfig {
     private float mBrightnessRampFastIncrease = Float.NaN;
     private float mBrightnessRampSlowDecrease = Float.NaN;
     private float mBrightnessRampSlowIncrease = Float.NaN;
+    private long mBrightnessRampDecreaseMaxMillis = 0;
+    private long mBrightnessRampIncreaseMaxMillis = 0;
     private int mAmbientHorizonLong = AMBIENT_LIGHT_LONG_HORIZON_MILLIS;
     private int mAmbientHorizonShort = AMBIENT_LIGHT_SHORT_HORIZON_MILLIS;
     private float mScreenBrighteningMinThreshold = 0.0f;     // Retain behaviour as though there is
@@ -274,9 +279,13 @@ public class DisplayDeviceConfig {
     private HighBrightnessModeData mHbmData;
     private DensityMapping mDensityMapping;
     private String mLoadedFrom = null;
-
-    private BrightnessThrottlingData mBrightnessThrottlingData;
     private Spline mSdrToHdrRatioSpline;
+
+    // Brightness Throttling data may be updated via the DeviceConfig. Here we store the original
+    // data, which comes from the ddc, and the current one, which may be the DeviceConfig
+    // overwritten value.
+    private BrightnessThrottlingData mBrightnessThrottlingData;
+    private BrightnessThrottlingData mOriginalBrightnessThrottlingData;
 
     private DisplayDeviceConfig(Context context) {
         mContext = context;
@@ -417,6 +426,10 @@ public class DisplayDeviceConfig {
         return config;
     }
 
+    void setBrightnessThrottlingData(BrightnessThrottlingData brightnessThrottlingData) {
+        mBrightnessThrottlingData = brightnessThrottlingData;
+    }
+
     /**
      * Return the brightness mapping nits array.
      *
@@ -534,6 +547,14 @@ public class DisplayDeviceConfig {
         return mBrightnessRampSlowIncrease;
     }
 
+    public long getBrightnessRampDecreaseMaxMillis() {
+        return mBrightnessRampDecreaseMaxMillis;
+    }
+
+    public long getBrightnessRampIncreaseMaxMillis() {
+        return mBrightnessRampIncreaseMaxMillis;
+    }
+
     public int getAmbientHorizonLong() {
         return mAmbientHorizonLong;
     }
@@ -624,10 +645,13 @@ public class DisplayDeviceConfig {
                 + ", mHbmData=" + mHbmData
                 + ", mSdrToHdrRatioSpline=" + mSdrToHdrRatioSpline
                 + ", mBrightnessThrottlingData=" + mBrightnessThrottlingData
+                + ", mOriginalBrightnessThrottlingData=" + mOriginalBrightnessThrottlingData
                 + ", mBrightnessRampFastDecrease=" + mBrightnessRampFastDecrease
                 + ", mBrightnessRampFastIncrease=" + mBrightnessRampFastIncrease
                 + ", mBrightnessRampSlowDecrease=" + mBrightnessRampSlowDecrease
                 + ", mBrightnessRampSlowIncrease=" + mBrightnessRampSlowIncrease
+                + ", mBrightnessRampDecreaseMaxMillis=" + mBrightnessRampDecreaseMaxMillis
+                + ", mBrightnessRampIncreaseMaxMillis=" + mBrightnessRampIncreaseMaxMillis
                 + ", mAmbientHorizonLong=" + mAmbientHorizonLong
                 + ", mAmbientHorizonShort=" + mAmbientHorizonShort
                 + ", mScreenDarkeningMinThreshold=" + mScreenDarkeningMinThreshold
@@ -725,6 +749,8 @@ public class DisplayDeviceConfig {
         mBrightnessRampFastIncrease = PowerManager.BRIGHTNESS_MAX;
         mBrightnessRampSlowDecrease = PowerManager.BRIGHTNESS_MAX;
         mBrightnessRampSlowIncrease = PowerManager.BRIGHTNESS_MAX;
+        mBrightnessRampDecreaseMaxMillis = 0;
+        mBrightnessRampIncreaseMaxMillis = 0;
         setSimpleMappingStrategyValues();
         loadAmbientLightSensorFromConfigXml();
         setProxSensorUnspecified();
@@ -915,6 +941,7 @@ public class DisplayDeviceConfig {
 
         if (!badConfig) {
             mBrightnessThrottlingData = BrightnessThrottlingData.create(throttlingLevels);
+            mOriginalBrightnessThrottlingData = mBrightnessThrottlingData;
         }
     }
 
@@ -1114,6 +1141,15 @@ public class DisplayDeviceConfig {
                         + "values are present in display device config");
             }
             loadBrightnessRampsFromConfigXml();
+        }
+
+        final BigInteger increaseMax = config.getScreenBrightnessRampIncreaseMaxMillis();
+        if (increaseMax != null) {
+            mBrightnessRampIncreaseMaxMillis = increaseMax.intValue();
+        }
+        final BigInteger decreaseMax = config.getScreenBrightnessRampDecreaseMaxMillis();
+        if (decreaseMax != null) {
+            mBrightnessRampDecreaseMaxMillis = decreaseMax.intValue();
         }
     }
 
@@ -1381,7 +1417,9 @@ public class DisplayDeviceConfig {
     /**
      * Container for brightness throttling data.
      */
-    static class BrightnessThrottlingData {
+    public static class BrightnessThrottlingData {
+        public List<ThrottlingLevel> throttlingLevels;
+
         static class ThrottlingLevel {
             public @PowerManager.ThermalStatus int thermalStatus;
             public float brightness;
@@ -1395,9 +1433,25 @@ public class DisplayDeviceConfig {
             public String toString() {
                 return "[" + thermalStatus + "," + brightness + "]";
             }
-        }
 
-        public List<ThrottlingLevel> throttlingLevels;
+            @Override
+            public boolean equals(Object obj) {
+                if (!(obj instanceof ThrottlingLevel)) {
+                    return false;
+                }
+                ThrottlingLevel otherThrottlingLevel = (ThrottlingLevel) obj;
+
+                return otherThrottlingLevel.thermalStatus == this.thermalStatus
+                        && otherThrottlingLevel.brightness == this.brightness;
+            }
+            @Override
+            public int hashCode() {
+                int result = 1;
+                result = 31 * result + thermalStatus;
+                result = 31 * result + Float.hashCode(brightness);
+                return result;
+            }
+        }
 
         static public BrightnessThrottlingData create(List<ThrottlingLevel> throttlingLevels)
         {
@@ -1456,12 +1510,30 @@ public class DisplayDeviceConfig {
                 + "} ";
         }
 
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+
+            if (!(obj instanceof BrightnessThrottlingData)) {
+                return false;
+            }
+
+            BrightnessThrottlingData otherBrightnessThrottlingData = (BrightnessThrottlingData) obj;
+            return throttlingLevels.equals(otherBrightnessThrottlingData.throttlingLevels);
+        }
+
+        @Override
+        public int hashCode() {
+            return throttlingLevels.hashCode();
+        }
+
         private BrightnessThrottlingData(List<ThrottlingLevel> inLevels) {
             throttlingLevels = new ArrayList<>(inLevels.size());
             for (ThrottlingLevel level : inLevels) {
                 throttlingLevels.add(new ThrottlingLevel(level.thermalStatus, level.brightness));
             }
         }
-
     }
 }

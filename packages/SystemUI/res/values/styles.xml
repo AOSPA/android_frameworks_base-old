@@ -17,30 +17,6 @@
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
            xmlns:androidprv="http://schemas.android.com/apk/prv/res/android">
 
-    <!-- HybridNotification themes and styles -->
-
-    <style name="HybridNotification">
-        <item name="hybridNotificationStyle">@style/hybrid_notification</item>
-        <item name="hybridNotificationTitleStyle">@style/hybrid_notification_title</item>
-        <item name="hybridNotificationTextStyle">@style/hybrid_notification_text</item>
-    </style>
-
-    <style name="hybrid_notification">
-        <item name="android:paddingStart">@*android:dimen/notification_content_margin_start</item>
-        <item name="android:paddingEnd">12dp</item>
-    </style>
-
-    <style name="hybrid_notification_title">
-        <item name="android:paddingEnd">4dp</item>
-        <item name="android:textAppearance">@*android:style/TextAppearance.DeviceDefault.Notification.Title</item>
-    </style>
-
-    <style name="hybrid_notification_text"
-           parent="@*android:style/Widget.DeviceDefault.Notification.Text">
-        <item name="android:paddingEnd">4dp</item>
-    </style>
-
-
     <style name="TextAppearance.StatusBar.Clock" parent="@*android:style/TextAppearance.StatusBar.Icon">
         <item name="android:textSize">@dimen/status_bar_clock_size</item>
         <item name="android:fontFamily">@*android:string/config_headlineFontFamilyMedium</item>
@@ -287,6 +263,10 @@
     </style>
 
     <style name="Animation.ShutdownUi" parent="@android:style/Animation.Toast">
+    </style>
+
+    <style name="Theme.SystemUI.MediaProjectionAppSelector"
+        parent="@*android:style/Theme.DeviceDefault.Chooser">
     </style>
 
     <!-- Standard animations for hiding and showing the status bar. -->
@@ -1195,5 +1175,49 @@
         <item name="android:ellipsize">none</item>
         <item name="android:shadowColor">@color/keyguard_shadow_color</item>
         <item name="android:shadowRadius">?attr/shadowRadius</item>
+    </style>
+
+    <style name="BroadcastDialogTitleStyle">
+        <item name="android:textAppearance">@style/TextAppearanceBroadcastDialogTitle</item>
+        <item name="android:layout_marginStart">@dimen/broadcast_dialog_title_text_margin</item>
+        <item name="android:layout_marginEnd">@dimen/broadcast_dialog_title_text_margin</item>
+        <item name="android:layout_marginTop">@dimen/broadcast_dialog_title_text_margin_top</item>
+        <item name="android:layout_marginBottom">18dp</item>
+    </style>
+
+    <style name="TextAppearanceBroadcastDialogTitle" parent="@android:style/TextAppearance.DeviceDefault.Headline">
+        <item name="android:textSize">@dimen/broadcast_dialog_title_text_size</item>
+        <item name="android:textColor">?android:attr/textColorPrimary</item>
+        <item name="android:textDirection">locale</item>
+        <item name="android:ellipsize">end</item>
+    </style>
+
+    <style name="BroadcastDialogBodyStyle">
+        <item name="android:textAppearance">@style/TextAppearanceBroadcastDialogSubTitle</item>
+        <item name="android:layout_margin">@dimen/broadcast_dialog_title_text_margin</item>
+    </style>
+
+    <style name="TextAppearanceBroadcastDialogSubTitle" parent="@android:style/TextAppearance.DeviceDefault.Headline">
+        <item name="android:textSize">@dimen/broadcast_dialog_subtitle_text_size</item>
+        <item name="android:textColor">?android:attr/textColorSecondary</item>
+        <item name="android:textDirection">locale</item>
+        <item name="android:ellipsize">end</item>
+    </style>
+
+    <style name="BroadcastDialogButtonStyle">
+        <item name="android:textAppearance">@style/TextAppearanceBroadcastDialogButton</item>
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_gravity">center</item>
+        <item name="android:gravity">center</item>
+        <item name="android:stateListAnimator">@null</item>
+        <item name="android:elevation">0dp</item>
+        <item name="android:minHeight">@dimen/broadcast_dialog_btn_minHeight</item>
+        <item name="android:background">@drawable/broadcast_dialog_btn_bg</item>
+    </style>
+
+    <style name="TextAppearanceBroadcastDialogButton" parent="@android:style/TextAppearance.DeviceDefault.Headline">
+        <item name="android:textColor">?androidprv:attr/textColorOnAccent</item>
+        <item name="android:textSize">@dimen/broadcast_dialog_btn_text_size</item>
     </style>
 </resources>

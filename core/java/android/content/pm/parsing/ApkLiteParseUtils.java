@@ -542,14 +542,17 @@ public class ApkLiteParseUtils {
 
                 int minVer = DEFAULT_MIN_SDK_VERSION;
                 String minCode = null;
+                boolean minAssigned = false;
                 int targetVer = DEFAULT_TARGET_SDK_VERSION;
                 String targetCode = null;
 
                 if (!TextUtils.isEmpty(minSdkVersionString)) {
                     try {
                         minVer = Integer.parseInt(minSdkVersionString);
+                        minAssigned = true;
                     } catch (NumberFormatException ignored) {
                         minCode = minSdkVersionString;
+                        minAssigned = !TextUtils.isEmpty(minCode);
                     }
                 }
 
@@ -558,7 +561,7 @@ public class ApkLiteParseUtils {
                         targetVer = Integer.parseInt(targetSdkVersionString);
                     } catch (NumberFormatException ignored) {
                         targetCode = targetSdkVersionString;
-                        if (minCode == null) {
+                        if (!minAssigned) {
                             minCode = targetCode;
                         }
                     }
@@ -567,9 +570,14 @@ public class ApkLiteParseUtils {
                     targetCode = minCode;
                 }
 
+                boolean allowUnknownCodenames = false;
+                if ((flags & FrameworkParsingPackageUtils.PARSE_APK_IN_APEX) != 0) {
+                    allowUnknownCodenames = true;
+                }
+
                 ParseResult<Integer> targetResult = FrameworkParsingPackageUtils.computeTargetSdkVersion(
                         targetVer, targetCode, SDK_CODENAMES, input,
-                        /* allowUnknownCodenames= */ false);
+                        allowUnknownCodenames);
                 if (targetResult.isError()) {
                     return input.error(targetResult);
                 }

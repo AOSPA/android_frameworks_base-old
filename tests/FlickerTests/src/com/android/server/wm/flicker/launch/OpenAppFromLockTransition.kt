@@ -16,44 +16,45 @@
 
 package com.android.server.wm.flicker.launch
 
+import android.platform.test.annotations.FlakyTest
 import android.platform.test.annotations.Presubmit
-import androidx.test.filters.FlakyTest
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.dsl.FlickerBuilder
-import com.android.server.wm.flicker.navBarLayerPositionEnd
-import com.android.server.wm.traces.common.FlickerComponentName
+import com.android.server.wm.flicker.navBarLayerPositionAtEnd
+import com.android.server.wm.flicker.statusBarLayerPositionAtEnd
+import com.android.server.wm.traces.common.ComponentMatcher
+import org.junit.Assume
+import org.junit.Ignore
 import org.junit.Test
 
 /**
  * Base class for app launch tests from lock screen
  */
-abstract class OpenAppFromLockTransition(testSpec: FlickerTestParameter)
-    : OpenAppTransition(testSpec) {
+abstract class OpenAppFromLockTransition(testSpec: FlickerTestParameter) :
+    OpenAppTransition(testSpec) {
 
     /**
      * Defines the transition used to run the test
      */
-    override val transition: FlickerBuilder.() -> Unit
-        get() = {
-            super.transition(this)
-            setup {
-                eachRun {
-                    device.sleep()
-                    wmHelper.waitFor("noAppWindowsOnTop") {
-                        it.wmState.topVisibleAppWindow.isEmpty()
-                    }
-                }
-            }
-            teardown {
-                eachRun {
-                    testApp.exit(wmHelper)
-                }
-            }
-            transitions {
-                testApp.launchViaIntent(wmHelper)
-                wmHelper.waitForFullScreenApp(testApp.component)
+    override val transition: FlickerBuilder.() -> Unit = {
+        super.transition(this)
+        setup {
+            eachRun {
+                device.sleep()
+                wmHelper.StateSyncBuilder()
+                    .withoutTopVisibleAppWindows()
+                    .waitForAndVerify()
             }
         }
+        teardown {
+            eachRun {
+                testApp.exit(wmHelper)
+            }
+        }
+        transitions {
+            testApp.launchViaIntent(wmHelper)
+        }
+    }
 
     /**
      * Check that we go from no focus to focus on the [testApp]
@@ -76,17 +77,16 @@ abstract class OpenAppFromLockTransition(testSpec: FlickerTestParameter)
         testSpec.assertWm {
             this.hasNoVisibleAppWindow()
                     .then()
-                    .isAppWindowOnTop(FlickerComponentName.SNAPSHOT, isOptional = true)
+                    .isAppWindowOnTop(ComponentMatcher.SNAPSHOT, isOptional = true)
                     .then()
-                    .isAppWindowOnTop(FlickerComponentName.SPLASH_SCREEN, isOptional = true)
+                    .isAppWindowOnTop(ComponentMatcher.SPLASH_SCREEN, isOptional = true)
                     .then()
-                    .isAppWindowOnTop(testApp.component)
+                    .isAppWindowOnTop(testApp)
         }
     }
 
     /**
-     * Checks that the screen is locked at the start of the transition ([colorFadComponent])
-     * layer is visible
+     * Checks that the screen is locked at the start of the transition
      */
     @Presubmit
     @Test
@@ -101,26 +101,53 @@ abstract class OpenAppFromLockTransition(testSpec: FlickerTestParameter)
     @Test
     override fun appWindowBecomesVisible() = super.appWindowBecomesVisible()
 
+    /** {@inheritDoc} */
+    @Ignore("Not applicable to this CUJ. Display starts off and app is full screen at the end")
+    override fun navBarLayerPositionAtStartAndEnd() { }
+
+    /** {@inheritDoc} */
+    @Ignore("Not applicable to this CUJ. Display starts off and app is full screen at the end")
+    override fun statusBarLayerPositionAtStartAndEnd() { }
+
+    /** {@inheritDoc} */
+    @Ignore("Not applicable to this CUJ. Display starts off and app is full screen at the end")
+    override fun taskBarLayerIsVisibleAtStartAndEnd() { }
+
+    /** {@inheritDoc} */
+    @Ignore("Not applicable to this CUJ. Display starts off and app is full screen at the end")
+    override fun taskBarWindowIsAlwaysVisible() { }
+
     /**
-     * Checks the position of the navigation bar at the start and end of the transition
-     *
-     * Differently from the normal usage of this assertion, check only the final state of the
-     * transition because the display is off at the start and the NavBar is never visible
+     * Checks the position of the [ComponentMatcher.NAV_BAR] at the end of the transition
      */
     @Presubmit
     @Test
-    override fun navBarLayerRotatesAndScales() = testSpec.navBarLayerPositionEnd()
+    open fun navBarLayerPositionAtEnd() {
+        Assume.assumeFalse(testSpec.isTablet)
+        testSpec.navBarLayerPositionAtEnd()
+    }
 
     /**
-     * Checks that the status bar layer is visible at the end of the trace
+     * Checks the position of the [ComponentMatcher.STATUS_BAR] at the end of the transition
+     */
+    @Presubmit
+    @Test
+    fun statusBarLayerPositionAtEnd() = testSpec.statusBarLayerPositionAtEnd()
+
+    /** {@inheritDoc} */
+    @Ignore("Not applicable to this CUJ. Display starts off and app is full screen at the end")
+    override fun statusBarLayerIsVisibleAtStartAndEnd() { }
+
+    /**
+     * Checks that the [ComponentMatcher.STATUS_BAR] layer is visible at the end of the trace
      *
      * It is not possible to check at the start because the screen is off
      */
     @Presubmit
     @Test
-    override fun statusBarLayerIsVisible() {
+    fun statusBarLayerIsVisibleAtEnd() {
         testSpec.assertLayersEnd {
-            this.isVisible(FlickerComponentName.STATUS_BAR)
+            this.isVisible(ComponentMatcher.STATUS_BAR)
         }
     }
 }

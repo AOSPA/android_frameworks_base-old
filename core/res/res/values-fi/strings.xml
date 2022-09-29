@@ -21,11 +21,6 @@
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="byteShort" msgid="202579285008794431">"t"</string>
-    <string name="kilobyteShort" msgid="2214285521564195803">"kt"</string>
-    <string name="megabyteShort" msgid="6649361267635823443">"Mt"</string>
-    <string name="gigabyteShort" msgid="7515809460261287991">"Gt"</string>
-    <string name="terabyteShort" msgid="1822367128583886496">"Tt"</string>
-    <string name="petabyteShort" msgid="5651571254228534832">"Pt"</string>
     <string name="fileSizeSuffix" msgid="4233671691980131257">"<xliff:g id="NUMBER">%1$s</xliff:g> <xliff:g id="UNIT">%2$s</xliff:g>"</string>
     <string name="untitled" msgid="3381766946944136678">"&lt;Nimetön&gt;"</string>
     <string name="emptyPhoneNumber" msgid="5812172618020360048">"(Ei puhelinnumeroa)"</string>
@@ -305,8 +300,8 @@
     <string name="permgroupdesc_calendar" msgid="6762751063361489379">"käyttää kalenteria"</string>
     <string name="permgrouplab_sms" msgid="795737735126084874">"Tekstiviestit"</string>
     <string name="permgroupdesc_sms" msgid="5726462398070064542">"lähettää ja tarkastella tekstiviestejä"</string>
-    <string name="permgrouplab_storage" msgid="5570124978732352858">"Tiedostot ja dokumentit"</string>
-    <string name="permgroupdesc_storage" msgid="8352226729501080525">"pääsyn laitteesi tiedostoihin ja dokumentteihin"</string>
+    <string name="permgrouplab_storage" msgid="17339216290379241">"Tiedostot"</string>
+    <string name="permgroupdesc_storage" msgid="5378659041354582769">"pääsy laitteen tiedostoihin"</string>
     <string name="permgrouplab_readMediaAural" msgid="1858331312624942053">"Musiikki ja audio"</string>
     <string name="permgroupdesc_readMediaAural" msgid="7565467343667089595">"pääsy laitteen musiikkiin ja audioon"</string>
     <string name="permgrouplab_readMediaVisual" msgid="4724874717811908660">"Valokuvat ja videot"</string>
@@ -558,6 +553,8 @@
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"Sovellus saa luvan selvittää näytön lukituksen monimutkaisuuden (korkea, keskitaso tai matala) eli sen pituusluokan ja tyypin. Sovellus voi myös ehdottaa käyttäjille näytön lukituksen vaihtamista tietylle tasolle, mutta he voivat ohittaa tämän ja poistua. Itse näytön lukitusta ei säilytetä tekstimuodossa, joten sovellus ei tiedä sitä tarkalleen."</string>
     <string name="permlab_postNotification" msgid="4875401198597803658">"näyttää ilmoituksia"</string>
     <string name="permdesc_postNotification" msgid="5974977162462877075">"Antaa sovelluksen näyttää ilmoituksia"</string>
+    <string name="permlab_turnScreenOn" msgid="219344053664171492">"laita näyttö päälle"</string>
+    <string name="permdesc_turnScreenOn" msgid="4394606875897601559">"Salli sovelluksen laittaa näyttö päälle."</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"käytä biometristä laitteistoa"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"Sallii sovelluksen käyttää biometristä laitteistoa todennukseen"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"sormenjälkilaitteiston hallinnointi"</string>
@@ -1924,6 +1921,8 @@
     <string name="country_selection_title" msgid="5221495687299014379">"Alueasetus"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Anna kielen nimi"</string>
     <string name="language_picker_section_suggested" msgid="6556199184638990447">"Ehdotukset"</string>
+    <string name="language_picker_section_suggested_bilingual" msgid="5932198319583556613">"Kieliehdotukset"</string>
+    <string name="region_picker_section_suggested_bilingual" msgid="704607569328224133">"Alue-ehdotukset"</string>
     <string name="language_picker_section_all" msgid="1985809075777564284">"Kaikki kielet"</string>
     <string name="region_picker_section_all" msgid="756441309928774155">"Kaikki alueet"</string>
     <string name="locale_search_menu" msgid="6258090710176422934">"Haku"</string>
@@ -2078,8 +2077,8 @@
     <string name="nas_upgrade_notification_learn_more_action" msgid="7011130656195423947">"Lue lisää"</string>
     <string name="nas_upgrade_notification_learn_more_content" msgid="3735480566983530650">"Parannetut ilmoitukset korvasivat Androidin mukautuvat ilmoitukset Android 12:ssa. Tämä ominaisuus näyttää toiminto- ja vastausehdotuksia ja järjestää ilmoituksesi.\n\nParannetuilla ilmoituksilla on pääsy kaikkeen ilmoitussisältöön, myös henkilökohtaisiin tietoihin (esim. kontaktien nimet ja viestit). Ominaisuus voi myös ohittaa ilmoituksia tai vastata niihin, esim. vastata puheluihin ja ohjata Älä häiritse ‑tilaa."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Ohjelmatilan tietoilmoitus"</string>
-    <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Akku saattaa loppua ennen normaalia latausaikaa"</string>
-    <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Virransäästö otettu käyttöön akunkeston pidentämiseksi"</string>
+    <string name="dynamic_mode_notification_title" msgid="1388718452788985481">"Virransäästö päällä"</string>
+    <string name="dynamic_mode_notification_summary" msgid="1639031262484979689">"Akun käyttöä rajoitetaan akunkeston pidentämiseksi"</string>
     <string name="battery_saver_notification_channel_name" msgid="3918243458067916913">"Virransäästö"</string>
     <string name="battery_saver_off_notification_title" msgid="7637255960468032515">"Virransäästö laitettiin pois päältä"</string>
     <string name="battery_saver_charged_notification_summary" product="default" msgid="5544457317418624367">"Puhelimessa on tarpeeksi virtaa. Ominaisuuksia ei enää rajoiteta."</string>
@@ -2286,5 +2285,7 @@
     <string name="notification_action_check_bg_apps" msgid="4758877443365362532">"Tarkista aktiiviset sovellukset"</string>
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"<xliff:g id="DEVICE">%1$s</xliff:g> ei pääse puhelimen kameraan"</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"<xliff:g id="DEVICE">%1$s</xliff:g> ei pääse tabletin kameraan"</string>
-    <string name="system_locale_title" msgid="3978041860457277638">"Järjestelmän kieli"</string>
+    <string name="system_locale_title" msgid="711882686834677268">"Järjestelmän oletusarvo"</string>
+    <!-- no translation found for default_card_name (9198284935962911468) -->
+    <skip />
 </resources>

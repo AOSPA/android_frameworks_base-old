@@ -101,6 +101,7 @@ public class SettingsToPropertiesMapper {
         DeviceConfig.NAMESPACE_VENDOR_SYSTEM_NATIVE,
         DeviceConfig.NAMESPACE_VIRTUALIZATION_FRAMEWORK_NATIVE,
         DeviceConfig.NAMESPACE_WINDOW_MANAGER_NATIVE_BOOT,
+        DeviceConfig.NAMESPACE_MEMORY_SAFETY_NATIVE,
     };
 
     private final String[] mGlobalSettings;
@@ -241,7 +242,7 @@ public class SettingsToPropertiesMapper {
             }
             value = "";
         } else if (value.length() > SYSTEM_PROPERTY_MAX_LENGTH) {
-            log(value + " exceeds system property max length.");
+            log("key=" + key + " value=" + value + " exceeds system property max length.");
             return;
         }
 

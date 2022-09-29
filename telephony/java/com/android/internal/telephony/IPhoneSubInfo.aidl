@@ -218,4 +218,40 @@ interface IPhoneSubInfo {
      */
     String getIccSimChallengeResponse(int subId, int appType, int authType, String data,
             String callingPackage, String callingFeatureId);
+
+    /**
+     * Fetches the EFPSISMSC value from the SIM that contains the Public Service Identity
+     * of the SM-SC (either a SIP URI or tel URI), the value is common for both appType
+     * {@link #APPTYPE_ISIM} and {@link #APPTYPE_SIM}.
+     * The EFPSISMSC value is used by the ME to submit SMS over IP as defined in 24.341 [55].
+     *
+     * @param appType ICC Application type {@link #APPTYPE_ISIM} or {@link #APPTYPE_USIM}
+     * @return SIP URI or tel URI of the Public Service Identity of the SM-SC
+     * @throws SecurityException if the caller does not have the required permission/privileges
+     * @hide
+     */
+    @JavaPassthrough(annotation="@android.annotation.RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)")
+    String getSmscIdentity(int subId, int appType);
+
+    /**
+     * Fetches the sim service table from the EFUST/EFIST based on the application type
+     * {@link #APPTYPE_USIM} or {@link #APPTYPE_ISIM}. The return value is hexaString format
+     * representing X bytes (x >= 1). Each bit of every byte indicates which optional services
+     * are available for the given application type.
+     * The USIM service table EF is described in as per Section 4.2.8 of 3GPP TS 31.102.
+     * The ISIM service table EF is described in as per Section 4.2.7 of 3GPP TS 31.103.
+     * The list of services mapped to the exact nth byte of response as mentioned in Section 4.2
+     * .7 of 3GPP TS 31.103. Eg. Service n°1: Local Phone Book, Service n°2: Fixed Dialling
+     * Numbers (FDN) - Bit 1 and 2 of the 1st Byte represent service Local Phone Book and Fixed
+     * Dialling Numbers (FDN)respectively. The coding format for each service type  should be
+     * interpreted as bit = 1: service available;bit = 0:service not available.
+     *
+     * @param appType of type int of either {@link #APPTYPE_USIM} or {@link #APPTYPE_ISIM}.
+     * @return HexString represents sim service table else null.
+     * @throws SecurityException if the caller does not have the required permission/privileges
+     * @hide
+     */
+
+    @JavaPassthrough(annotation="@android.annotation.RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)")
+    String getSimServiceTable(int subId, int appType);
 }

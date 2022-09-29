@@ -23,7 +23,12 @@ import static android.app.ActivityTaskManager.RESIZE_MODE_USER;
 import static android.app.WaitResult.launchStateToString;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
+import static android.app.usage.UsageStatsManager.REASON_MAIN_FORCED_BY_USER;
+import static android.app.usage.UsageStatsManager.REASON_SUB_FORCED_SYSTEM_FLAG_UNDEFINED;
+import static android.content.pm.PackageManager.MATCH_ANY_USER;
+import static android.os.Process.INVALID_UID;
 import static android.view.Display.INVALID_DISPLAY;
+import static android.window.DisplayAreaOrganizer.FEATURE_UNDEFINED;
 
 import static com.android.internal.app.procstats.ProcessStats.ADJ_MEM_FACTOR_CRITICAL;
 import static com.android.internal.app.procstats.ProcessStats.ADJ_MEM_FACTOR_LOW;
@@ -175,6 +180,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
     private String mAgent;  // Agent to attach on startup.
     private boolean mAttachAgentDuringBind;  // Whether agent should be attached late.
     private int mDisplayId;
+    private int mTaskDisplayAreaFeatureId;
     private int mWindowingMode;
     private int mActivityType;
     private int mTaskId;
@@ -183,7 +189,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
     private boolean mAsync;
     private BroadcastOptions mBroadcastOptions;
     private boolean mShowSplashScreen;
-    private boolean mDismissKeyguardIfInsecure;
+    private boolean mDismissKeyguard;
 
     final boolean mDumping;
 
@@ -348,6 +354,10 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     return runSetBgAbusiveUids(pw);
                 case "list-bg-exemptions-config":
                     return runListBgExemptionsConfig(pw);
+                case "set-bg-restriction-level":
+                    return runSetBgRestrictionLevel(pw);
+                case "get-bg-restriction-level":
+                    return runGetBgRestrictionLevel(pw);
                 default:
                     return handleDefaultCommands(cmd);
             }
@@ -368,6 +378,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
         mStreaming = false;
         mUserId = defUser;
         mDisplayId = INVALID_DISPLAY;
+        mTaskDisplayAreaFeatureId = FEATURE_UNDEFINED;
         mWindowingMode = WINDOWING_MODE_UNDEFINED;
         mActivityType = ACTIVITY_TYPE_UNDEFINED;
         mTaskId = INVALID_TASK_ID;
@@ -423,6 +434,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     mReceiverPermission = getNextArgRequired();
                 } else if (opt.equals("--display")) {
                     mDisplayId = Integer.parseInt(getNextArgRequired());
+                } else if (opt.equals("--task-display-area-feature-id")) {
+                    mTaskDisplayAreaFeatureId = Integer.parseInt(getNextArgRequired());
                 } else if (opt.equals("--windowingMode")) {
                     mWindowingMode = Integer.parseInt(getNextArgRequired());
                 } else if (opt.equals("--activityType")) {
@@ -442,8 +455,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     mAsync = true;
                 } else if (opt.equals("--splashscreen-show-icon")) {
                     mShowSplashScreen = true;
-                } else if (opt.equals("--dismiss-keyguard-if-insecure")) {
-                    mDismissKeyguardIfInsecure = true;
+                } else if (opt.equals("--dismiss-keyguard")) {
+                    mDismissKeyguard = true;
                 } else {
                     return false;
                 }
@@ -554,6 +567,12 @@ final class ActivityManagerShellCommand extends ShellCommand {
                 options = ActivityOptions.makeBasic();
                 options.setLaunchDisplayId(mDisplayId);
             }
+            if (mTaskDisplayAreaFeatureId != FEATURE_UNDEFINED) {
+                if (options == null) {
+                    options = ActivityOptions.makeBasic();
+                }
+                options.setLaunchTaskDisplayAreaFeatureId(mTaskDisplayAreaFeatureId);
+            }
             if (mWindowingMode != WINDOWING_MODE_UNDEFINED) {
                 if (options == null) {
                     options = ActivityOptions.makeBasic();
@@ -588,11 +607,11 @@ final class ActivityManagerShellCommand extends ShellCommand {
                 }
                 options.setSplashScreenStyle(SplashScreen.SPLASH_SCREEN_STYLE_ICON);
             }
-            if (mDismissKeyguardIfInsecure) {
+            if (mDismissKeyguard) {
                 if (options == null) {
                     options = ActivityOptions.makeBasic();
                 }
-                options.setDismissKeyguardIfInsecure();
+                options.setDismissKeyguard();
             }
             if (mWaitOption) {
                 result = mInternal.startActivityAndWait(null, SHELL_PACKAGE_NAME, null, intent,
@@ -804,8 +823,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
         pw.flush();
         Bundle bundle = mBroadcastOptions == null ? null : mBroadcastOptions.toBundle();
         mInterface.broadcastIntentWithFeature(null, null, intent, null, receiver, 0, null, null,
-                requiredPermissions, null, android.app.AppOpsManager.OP_NONE, bundle, true, false,
-                mUserId);
+                requiredPermissions, null, null, android.app.AppOpsManager.OP_NONE, bundle, true,
+                false, mUserId);
         if (!mAsync) {
             receiver.waitForFinish();
         }
@@ -3363,6 +3382,79 @@ final class ActivityManagerShellCommand extends ShellCommand {
         return 0;
     }
 
+    private @ActivityManager.RestrictionLevel int restrictionNameToLevel(String name) {
+        String lower = name.toLowerCase();
+        switch (lower) {
+            case "unrestricted":
+                return ActivityManager.RESTRICTION_LEVEL_UNRESTRICTED;
+            case "exempted":
+                return ActivityManager.RESTRICTION_LEVEL_EXEMPTED;
+            case "adaptive_bucket":
+                return ActivityManager.RESTRICTION_LEVEL_ADAPTIVE_BUCKET;
+            case "restricted_bucket":
+                return ActivityManager.RESTRICTION_LEVEL_RESTRICTED_BUCKET;
+            case "background_restricted":
+                return ActivityManager.RESTRICTION_LEVEL_BACKGROUND_RESTRICTED;
+            case "hibernation":
+                return ActivityManager.RESTRICTION_LEVEL_HIBERNATION;
+            default:
+                return ActivityManager.RESTRICTION_LEVEL_UNKNOWN;
+        }
+    }
+
+    int runSetBgRestrictionLevel(PrintWriter pw) throws RemoteException {
+        int userId = UserHandle.USER_CURRENT;
+
+        String opt;
+        while ((opt = getNextOption()) != null) {
+            if (opt.equals("--user")) {
+                userId = UserHandle.parseUserArg(getNextArgRequired());
+            } else {
+                getErrPrintWriter().println("Error: Unknown option: " + opt);
+                return -1;
+            }
+        }
+        String packageName = getNextArgRequired();
+        final String value = getNextArgRequired();
+        final int level = restrictionNameToLevel(value);
+        if (level == ActivityManager.RESTRICTION_LEVEL_UNKNOWN) {
+            pw.println("Error: invalid restriction level");
+            return -1;
+        }
+
+        int uid = INVALID_UID;
+        try {
+            final PackageManager pm = mInternal.mContext.getPackageManager();
+            uid = pm.getPackageUidAsUser(packageName,
+                    PackageManager.PackageInfoFlags.of(MATCH_ANY_USER), userId);
+        } catch (PackageManager.NameNotFoundException e) {
+            pw.println("Error: userId:" + userId + " package:" + packageName + " is not found");
+            return -1;
+        }
+        mInternal.setBackgroundRestrictionLevel(packageName, uid, userId, level,
+                REASON_MAIN_FORCED_BY_USER, REASON_SUB_FORCED_SYSTEM_FLAG_UNDEFINED);
+        return 0;
+    }
+
+    int runGetBgRestrictionLevel(PrintWriter pw) throws RemoteException {
+        int userId = UserHandle.USER_CURRENT;
+
+        String opt;
+        while ((opt = getNextOption()) != null) {
+            if (opt.equals("--user")) {
+                userId = UserHandle.parseUserArg(getNextArgRequired());
+            } else {
+                getErrPrintWriter().println("Error: Unknown option: " + opt);
+                return -1;
+            }
+        }
+        final String packageName = getNextArgRequired();
+        final @ActivityManager.RestrictionLevel int level =
+                mInternal.getBackgroundRestrictionLevel(packageName, userId);
+        pw.println(ActivityManager.restrictionLevelToName(level));
+        return 0;
+    }
+
     private Resources getResources(PrintWriter pw) throws RemoteException {
         // system resources does not contain all the device configuration, construct it manually.
         Configuration config = mInterface.getConfiguration();
@@ -3561,6 +3653,9 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("     Enable/disable rate limit on FGS notification deferral policy.");
             pw.println("  force-stop [--user <USER_ID> | all | current] <PACKAGE>");
             pw.println("      Completely stop the given application package.");
+            pw.println("  stop-app [--user <USER_ID> | all | current] <PACKAGE>");
+            pw.println("      Stop an app and all of its services.  Unlike `force-stop` this does");
+            pw.println("      not cancel the app's scheduled alarms and jobs.");
             pw.println("  crash [--user <USER_ID>] <PACKAGE|PID>");
             pw.println("      Induce a VM crash in the specified package or process");
             pw.println("  kill [--user <USER_ID> | all | current] <PACKAGE>");
@@ -3712,6 +3807,10 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("         Without arguments, it resets to the value defined by platform.");
             pw.println("  set-bg-abusive-uids [uid=percentage][,uid=percentage...]");
             pw.println("         Force setting the battery usage of the given UID.");
+            pw.println("  set-bg-restriction-level [--user <USER_ID>] <PACKAGE> unrestricted|exempted|adaptive_bucket|restricted_bucket|background_restricted|hibernation");
+            pw.println("         Set an app's background restriction level which in turn map to a app standby bucket.");
+            pw.println("  get-bg-restriction-level [--user <USER_ID>] <PACKAGE>");
+            pw.println("         Get an app's background restriction level.");
             pw.println();
             Intent.printIntentArgsHelp(pw, "");
         }

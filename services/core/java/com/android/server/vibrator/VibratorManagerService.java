@@ -47,6 +47,7 @@ import android.os.ResultReceiver;
 import android.os.ServiceManager;
 import android.os.ShellCallback;
 import android.os.ShellCommand;
+import android.os.SystemClock;
 import android.os.Trace;
 import android.os.VibrationAttributes;
 import android.os.VibrationEffect;
@@ -405,7 +406,7 @@ public class VibratorManagerService extends IVibratorManagerService.Stub {
             if (attrs.isFlagSet(VibrationAttributes.FLAG_INVALIDATE_SETTINGS_CACHE)) {
                 // Force update of user settings before checking if this vibration effect should
                 // be ignored or scaled.
-                mVibrationSettings.update();
+                mVibrationSettings.mSettingObserver.onChange(false);
             }
 
             synchronized (mLock) {
@@ -712,14 +713,15 @@ public class VibratorManagerService extends IVibratorManagerService.Stub {
             case IGNORED_ERROR_APP_OPS:
                 Slog.w(TAG, "Would be an error: vibrate from uid " + uid);
                 break;
-            case IGNORED_FOR_ALARM:
-                if (DEBUG) {
-                    Slog.d(TAG, "Ignoring incoming vibration in favor of alarm vibration");
-                }
-                break;
             case IGNORED_FOR_EXTERNAL:
                 if (DEBUG) {
                     Slog.d(TAG, "Ignoring incoming vibration for current external vibration");
+                }
+                break;
+            case IGNORED_FOR_HIGHER_IMPORTANCE:
+                if (DEBUG) {
+                    Slog.d(TAG, "Ignoring incoming vibration in favor of ongoing vibration"
+                            + " with higher importance");
                 }
                 break;
             case IGNORED_FOR_ONGOING:
@@ -733,12 +735,6 @@ public class VibratorManagerService extends IVibratorManagerService.Stub {
                             + attrs);
                 }
                 break;
-            case IGNORED_FOR_RINGTONE:
-                if (DEBUG) {
-                    Slog.d(TAG, "Ignoring incoming vibration in favor of ringtone vibration");
-                }
-                break;
-
             default:
                 if (DEBUG) {
                     Slog.d(TAG, "Vibration for uid=" + uid + " and with attrs=" + attrs
@@ -811,18 +807,41 @@ public class VibratorManagerService extends IVibratorManagerService.Stub {
             return null;
         }
 
-        if (currentVibration.attrs.getUsage() == VibrationAttributes.USAGE_ALARM) {
-            return Vibration.Status.IGNORED_FOR_ALARM;
-        }
-
-        if (currentVibration.attrs.getUsage() == VibrationAttributes.USAGE_RINGTONE) {
-            return Vibration.Status.IGNORED_FOR_RINGTONE;
+        int currentUsage = currentVibration.attrs.getUsage();
+        int newUsage = vib.attrs.getUsage();
+        if (getVibrationImportance(currentUsage) > getVibrationImportance(newUsage)) {
+            // Current vibration has higher importance than this one and should not be cancelled.
+            return Vibration.Status.IGNORED_FOR_HIGHER_IMPORTANCE;
         }
 
         if (currentVibration.isRepeating()) {
+            // Current vibration is repeating, assume it's more important.
             return Vibration.Status.IGNORED_FOR_ONGOING;
         }
+
         return null;
+    }
+
+    private static int getVibrationImportance(@VibrationAttributes.Usage int usage) {
+        switch (usage) {
+            case VibrationAttributes.USAGE_RINGTONE:
+                return 5;
+            case VibrationAttributes.USAGE_ALARM:
+                return 4;
+            case VibrationAttributes.USAGE_NOTIFICATION:
+                return 3;
+            case VibrationAttributes.USAGE_COMMUNICATION_REQUEST:
+            case VibrationAttributes.USAGE_ACCESSIBILITY:
+                return 2;
+            case VibrationAttributes.USAGE_HARDWARE_FEEDBACK:
+            case VibrationAttributes.USAGE_PHYSICAL_EMULATION:
+                return 1;
+            case VibrationAttributes.USAGE_MEDIA:
+            case VibrationAttributes.USAGE_TOUCH:
+            case VibrationAttributes.USAGE_UNKNOWN:
+            default:
+                return 0;
+        }
     }
 
     /**
@@ -1103,7 +1122,7 @@ public class VibratorManagerService extends IVibratorManagerService.Stub {
         }
         Vibration vib = conductor.getVibration();
         return mVibrationSettings.shouldCancelVibrationOnScreenOff(
-                vib.uid, vib.opPkg, vib.attrs.getUsage());
+                vib.uid, vib.opPkg, vib.attrs.getUsage(), vib.startUptimeMillis);
     }
 
     @GuardedBy("mLock")
@@ -1308,13 +1327,17 @@ public class VibratorManagerService extends IVibratorManagerService.Stub {
         public final ExternalVibration externalVibration;
         public int scale;
 
+        private final long mStartUptimeMillis;
         private final long mStartTimeDebug;
+
+        private long mEndUptimeMillis;
         private long mEndTimeDebug;
         private Vibration.Status mStatus;
 
         private ExternalVibrationHolder(ExternalVibration externalVibration) {
             this.externalVibration = externalVibration;
             this.scale = IExternalVibratorService.SCALE_NONE;
+            mStartUptimeMillis = SystemClock.uptimeMillis();
             mStartTimeDebug = System.currentTimeMillis();
             mStatus = Vibration.Status.RUNNING;
         }
@@ -1325,6 +1348,7 @@ public class VibratorManagerService extends IVibratorManagerService.Stub {
                 return;
             }
             mStatus = status;
+            mEndUptimeMillis = SystemClock.uptimeMillis();
             mEndTimeDebug = System.currentTimeMillis();
         }
 
@@ -1341,11 +1365,12 @@ public class VibratorManagerService extends IVibratorManagerService.Stub {
         }
 
         public Vibration.DebugInfo getDebugInfo() {
+            long durationMs = mEndUptimeMillis == 0 ? -1 : mEndUptimeMillis - mStartUptimeMillis;
             return new Vibration.DebugInfo(
-                    mStartTimeDebug, mEndTimeDebug, /* effect= */ null, /* originalEffect= */ null,
-                    scale, externalVibration.getVibrationAttributes(),
-                    externalVibration.getUid(), externalVibration.getPackage(),
-                    /* reason= */ null, mStatus);
+                    mStartTimeDebug, mEndTimeDebug, durationMs,
+                    /* effect= */ null, /* originalEffect= */ null, scale,
+                    externalVibration.getVibrationAttributes(), externalVibration.getUid(),
+                    externalVibration.getPackage(), /* reason= */ null, mStatus);
         }
     }
 

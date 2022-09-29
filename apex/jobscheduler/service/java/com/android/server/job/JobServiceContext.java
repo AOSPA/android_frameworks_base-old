@@ -43,6 +43,7 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.PowerManager;
 import android.os.RemoteException;
+import android.os.Trace;
 import android.os.UserHandle;
 import android.util.EventLog;
 import android.util.IndentingPrintWriter;
@@ -302,7 +303,9 @@ public final class JobServiceContext implements ServiceConnection {
                     getStartActionId(job), String.valueOf(job.getJobId()));
             mVerb = VERB_BINDING;
             scheduleOpTimeOutLocked();
-            final Intent intent = new Intent().setComponent(job.getServiceComponent());
+            // Use FLAG_FROM_BACKGROUND to avoid resetting the bad-app tracking.
+            final Intent intent = new Intent().setComponent(job.getServiceComponent())
+                    .setFlags(Intent.FLAG_FROM_BACKGROUND);
             boolean binding = false;
             try {
                 final int bindFlags;
@@ -361,6 +364,9 @@ public final class JobServiceContext implements ServiceConnection {
                     job.getJob().getPriority(),
                     job.getEffectivePriority(),
                     job.getNumFailures());
+            // Use the context's ID to distinguish traces since there'll only be one job running
+            // per context.
+            Trace.asyncTraceBegin(Trace.TRACE_TAG_SYSTEM_SERVER, job.getBatteryName(), getId());
             try {
                 mBatteryStats.noteJobStart(job.getBatteryName(), job.getSourceUid());
             } catch (RemoteException e) {
@@ -1024,6 +1030,7 @@ public final class JobServiceContext implements ServiceConnection {
                 completedJob.getJob().getPriority(),
                 completedJob.getEffectivePriority(),
                 completedJob.getNumFailures());
+        Trace.asyncTraceEnd(Trace.TRACE_TAG_SYSTEM_SERVER, completedJob.getBatteryName(), getId());
         try {
             mBatteryStats.noteJobFinish(mRunningJob.getBatteryName(), mRunningJob.getSourceUid(),
                     internalStopReason);

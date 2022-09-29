@@ -1299,7 +1299,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
             // on background handler thread, and verified MANAGE_NETWORK_POLICY
             // permission above.
 
-            final NetworkTemplate template = intent.getParcelableExtra(EXTRA_NETWORK_TEMPLATE);
+            final NetworkTemplate template = intent.getParcelableExtra(EXTRA_NETWORK_TEMPLATE, android.net.NetworkTemplate.class);
             if (ACTION_SNOOZE_WARNING.equals(intent.getAction())) {
                 performSnooze(template, TYPE_WARNING);
             } else if (ACTION_SNOOZE_RAPID.equals(intent.getAction())) {
@@ -4032,6 +4032,14 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
                 for (int i = 0; i < size; ++i) {
                     fout.print("u" + mMeteredRestrictedUids.keyAt(i) + ": ");
                     fout.println(mMeteredRestrictedUids.valueAt(i));
+                }
+                fout.decreaseIndent();
+
+                fout.println("Network to interfaces:");
+                fout.increaseIndent();
+                for (int i = 0; i < mNetworkToIfaces.size(); ++i) {
+                    final int key = mNetworkToIfaces.keyAt(i);
+                    fout.println(key + ": " + mNetworkToIfaces.get(key));
                 }
                 fout.decreaseIndent();
 

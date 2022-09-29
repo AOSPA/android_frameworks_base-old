@@ -21,6 +21,7 @@ import android.content.Context;
 import android.os.Handler;
 import android.service.dreams.IDreamManager;
 
+import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.animation.ActivityLaunchAnimator;
@@ -67,6 +68,7 @@ import com.android.systemui.statusbar.phone.ManagedProfileController;
 import com.android.systemui.statusbar.phone.ManagedProfileControllerImpl;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
 import com.android.systemui.statusbar.phone.StatusBarIconControllerImpl;
+import com.android.systemui.statusbar.phone.StatusBarIconList;
 import com.android.systemui.statusbar.phone.StatusBarRemoteInputCallback;
 import com.android.systemui.statusbar.phone.ongoingcall.OngoingCallController;
 import com.android.systemui.statusbar.phone.ongoingcall.OngoingCallFlags;
@@ -138,12 +140,10 @@ public interface CentralSurfacesDependenciesModule {
             Lazy<Optional<CentralSurfaces>> centralSurfacesOptionalLazy,
             Lazy<NotificationShadeWindowController> notificationShadeWindowController,
             NotificationVisibilityProvider visibilityProvider,
-            NotificationEntryManager notificationEntryManager,
             MediaArtworkProcessor mediaArtworkProcessor,
             KeyguardBypassController keyguardBypassController,
             NotifPipeline notifPipeline,
             NotifCollection notifCollection,
-            NotifPipelineFlags notifPipelineFlags,
             @Main DelayableExecutor mainExecutor,
             MediaDataManager mediaDataManager,
             DumpManager dumpManager) {
@@ -152,12 +152,10 @@ public interface CentralSurfacesDependenciesModule {
                 centralSurfacesOptionalLazy,
                 notificationShadeWindowController,
                 visibilityProvider,
-                notificationEntryManager,
                 mediaArtworkProcessor,
                 keyguardBypassController,
                 notifPipeline,
                 notifCollection,
-                notifPipelineFlags,
                 mainExecutor,
                 mediaDataManager,
                 dumpManager);
@@ -259,6 +257,16 @@ public interface CentralSurfacesDependenciesModule {
      */
     @Provides
     @SysUISingleton
+    static StatusBarIconList provideStatusBarIconList(Context context) {
+        return new StatusBarIconList(
+                context.getResources().getStringArray(
+                        com.android.internal.R.array.config_statusBarIcons));
+    }
+
+    /**
+     */
+    @Provides
+    @SysUISingleton
     static OngoingCallController provideOngoingCallController(
             Context context,
             CommonNotifCollection notifCollection,
@@ -317,7 +325,8 @@ public interface CentralSurfacesDependenciesModule {
      */
     @Provides
     @SysUISingleton
-    static DialogLaunchAnimator provideDialogLaunchAnimator(IDreamManager dreamManager) {
-        return new DialogLaunchAnimator(dreamManager);
+    static DialogLaunchAnimator provideDialogLaunchAnimator(IDreamManager dreamManager,
+            InteractionJankMonitor interactionJankMonitor) {
+        return new DialogLaunchAnimator(dreamManager, interactionJankMonitor);
     }
 }

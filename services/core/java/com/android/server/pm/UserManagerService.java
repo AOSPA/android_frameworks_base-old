@@ -453,9 +453,12 @@ public class UserManagerService extends IUserManager.Stub {
     private final Bundle mGuestRestrictions = new Bundle();
 
     /**
-     * Set of user IDs being actively removed. Removed IDs linger in this set
-     * for several seconds to work around a VFS caching issue.
-     * Use {@link #addRemovingUserIdLocked(int)} to add elements to this array
+     * Set of user IDs that are being removed or were removed during the current boot.  User IDs in
+     * this set aren't reused until the device is rebooted, unless MAX_USER_ID is reached.  Some
+     * services don't fully clear out in-memory user state upon user removal; this behavior is
+     * intended to mitigate such issues by limiting user ID reuse.  This array applies to any type
+     * of user (including pre-created users) when they are removed.  Use {@link
+     * #addRemovingUserIdLocked(int)} to add elements to this array.
      */
     @GuardedBy("mUsersLock")
     private final SparseBooleanArray mRemovingUserIds = new SparseBooleanArray();
@@ -505,7 +508,7 @@ public class UserManagerService extends IUserManager.Stub {
             if (!ACTION_DISABLE_QUIET_MODE_AFTER_UNLOCK.equals(intent.getAction())) {
                 return;
             }
-            final IntentSender target = intent.getParcelableExtra(Intent.EXTRA_INTENT);
+            final IntentSender target = intent.getParcelableExtra(Intent.EXTRA_INTENT, android.content.IntentSender.class);
             final int userId = intent.getIntExtra(Intent.EXTRA_USER_ID, UserHandle.USER_NULL);
             // Call setQuietModeEnabled on bg thread to avoid ANR
             BackgroundThread.getHandler().post(() ->
@@ -2037,6 +2040,12 @@ public class UserManagerService extends IUserManager.Stub {
         synchronized (mGuestRestrictions) {
             mGuestRestrictions.clear();
             mGuestRestrictions.putAll(restrictions);
+            UserInfo guest = findCurrentGuestUser();
+            if (guest != null) {
+                synchronized (mRestrictionsLock) {
+                    updateUserRestrictionsInternalLR(mGuestRestrictions, guest.id);
+                }
+            }
         }
         synchronized (mPackagesLock) {
             writeUserListLP();
@@ -4354,8 +4363,10 @@ public class UserManagerService extends IUserManager.Stub {
             writeUserListLP();
         }
         updateUserIds();
-        mPm.onNewUserCreated(preCreatedUser.id, /* convertedFromPreCreated= */ true);
-        dispatchUserAdded(preCreatedUser, token);
+        Binder.withCleanCallingIdentity(() -> {
+            mPm.onNewUserCreated(preCreatedUser.id, /* convertedFromPreCreated= */ true);
+            dispatchUserAdded(preCreatedUser, token);
+        });
         return preCreatedUser;
     }
 

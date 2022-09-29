@@ -37,12 +37,6 @@
         <item>400</item>
     </integer-array>
 
-    <!-- Show mic or phone affordance on Keyguard -->
-    <bool name="config_keyguardShowLeftAffordance">false</bool>
-
-    <!-- Show camera affordance on Keyguard -->
-    <bool name="config_keyguardShowCameraAffordance">false</bool>
-
     <!-- decay duration (from size_max -> size), in ms -->
     <integer name="navigation_bar_deadzone_hold">333</integer>
     <integer name="navigation_bar_deadzone_decay">333</integer>
@@ -77,9 +71,9 @@
         internet,bt,flashlight,dnd,alarm,airplane,controls,wallet,rotation,battery,cast,screenrecord,mictoggle,cameratoggle,custom(com.android.permissioncontroller/.permission.service.SafetyCenterQsTileService)
     </string>
 
-    <!-- The component name of the Safety Quick Settings Tile -->
-    <string name="safety_quick_settings_tile" translatable="false">
-        custom(com.android.permissioncontroller/.permission.service.SafetyCenterQsTileService)
+    <!-- The class path of the Safety Quick Settings Tile -->
+    <string name="safety_quick_settings_tile_class" translatable="false">
+        com.android.permissioncontroller.permission.service.v33.SafetyCenterQsTileService
     </string>
 
     <!-- The minimum number of tiles to display in QuickSettings -->
@@ -292,7 +286,7 @@
     <bool name="config_enableFullscreenUserSwitcher">false</bool>
 
     <!-- SystemUIFactory component -->
-    <string name="config_systemUIFactoryComponent" translatable="false">com.android.systemui.SystemUIFactory</string>
+    <string name="config_systemUIFactoryComponent" translatable="false">com.android.systemui.SystemUIInitializerImpl</string>
 
     <!-- QS tile shape store width. negative implies fill configuration instead of stroke-->
     <dimen name="config_qsTileStrokeWidthActive">-1dp</dimen>
@@ -587,6 +581,9 @@
         280
     </integer>
 
+    <!-- The time (in ms) needed to trigger the lock icon view's long-press affordance -->
+    <integer name="config_lockIconLongPress" translatable="false">200</integer>
+
     <!-- package name of a built-in camera app to use to restrict implicit intent resolution
          when the double-press power gesture is used. Ignored if empty. -->
     <string translatable="false" name="config_cameraGesturePackage"></string>
@@ -617,6 +614,13 @@
          1 - Override the setting to always bypass keyguard
          2 - Override the setting to never bypass keyguard -->
     <integer name="config_face_unlock_bypass_override">0</integer>
+
+    <!-- Which face help messages to surface when fingerprint is also enrolled.
+         Message ids correspond with the acquired ids in BiometricFaceConstants -->
+    <integer-array name="config_face_help_msgs_when_fingerprint_enrolled">
+        <item>25</item>
+        <item>26</item>
+    </integer-array>
 
     <!-- Whether the communal service should be enabled -->
     <bool name="config_communalServiceEnabled">false</bool>
@@ -661,7 +665,7 @@
     <integer name="config_connectionMinDuration">1000</integer>
 
     <!-- Flag to activate notification to contents feature -->
-    <bool name="config_notificationToContents">true</bool>
+    <bool name="config_notificationToContents">false</bool>
 
     <!-- The rounded corner drawable for each display in a multi-display device.
          {@see com.android.internal.R.array#config_displayUniqueIdArray} -->
@@ -687,14 +691,11 @@
     <!-- Flag to enable privacy dot views, it shall be true for normal case -->
     <bool name="config_enablePrivacyDot">true</bool>
 
-    <!-- Flag to enable dream overlay service and its registration -->
-    <bool name="config_dreamOverlayServiceEnabled">false</bool>
-
     <!-- Class for the communal source connector to be used -->
     <string name="config_communalSourceConnector" translatable="false"></string>
 
     <!-- How often in milliseconds to jitter the dream overlay in order to avoid burn-in. -->
-    <integer name="config_dreamOverlayBurnInProtectionUpdateIntervalMillis">500</integer>
+    <integer name="config_dreamOverlayBurnInProtectionUpdateIntervalMillis">1000</integer>
 
     <!-- How long in milliseconds before full burn-in protection is achieved. -->
     <integer name="config_dreamOverlayMillisUntilFullJitter">240000</integer>
@@ -724,4 +725,25 @@
         <item>com.android.keyguard</item>
         <item>com.android.systemui</item>
     </string-array>
+
+    <!-- The thresholds which determine the color used by the AQI dream overlay.
+         NOTE: This must always be kept sorted from low to high -->
+    <integer-array name="config_dreamAqiThresholds">
+        <item>-1</item>
+        <item>50</item>
+        <item>100</item>
+        <item>150</item>
+        <item>200</item>
+        <item>300</item>
+    </integer-array>
+
+    <!-- The color values which correspond to the thresholds above -->
+    <integer-array name="config_dreamAqiColorValues">
+        <item>@color/dream_overlay_aqi_good</item>
+        <item>@color/dream_overlay_aqi_moderate</item>
+        <item>@color/dream_overlay_aqi_unhealthy_sensitive</item>
+        <item>@color/dream_overlay_aqi_unhealthy</item>
+        <item>@color/dream_overlay_aqi_very_unhealthy</item>
+        <item>@color/dream_overlay_aqi_hazardous</item>
+    </integer-array>
 </resources>

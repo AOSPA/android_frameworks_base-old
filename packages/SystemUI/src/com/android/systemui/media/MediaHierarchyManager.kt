@@ -23,6 +23,7 @@ import android.annotation.IntDef
 import android.content.Context
 import android.content.res.Configuration
 import android.graphics.Rect
+import android.util.Log
 import android.util.MathUtils
 import android.view.View
 import android.view.ViewGroup
@@ -45,7 +46,10 @@ import com.android.systemui.statusbar.policy.ConfigurationController
 import com.android.systemui.statusbar.policy.KeyguardStateController
 import com.android.systemui.util.LargeScreenUtils
 import com.android.systemui.util.animation.UniqueObjectHostView
+import com.android.systemui.util.traceSection
 import javax.inject.Inject
+
+private val TAG: String = MediaHierarchyManager::class.java.simpleName
 
 /**
  * Similarly to isShown but also excludes views that have 0 alpha
@@ -140,8 +144,7 @@ class MediaHierarchyManager @Inject constructor(
                     animatedFraction)
                 // When crossfading, let's keep the bounds at the right location during fading
                 boundsProgress = if (animationCrossFadeProgress < 0.5f) 0.0f else 1.0f
-                currentAlpha = calculateAlphaFromCrossFade(animationCrossFadeProgress,
-                    instantlyShowAtEnd = false)
+                currentAlpha = calculateAlphaFromCrossFade(animationCrossFadeProgress)
             } else {
                 // If we're not crossfading, let's interpolate from the start alpha to 1.0f
                 currentAlpha = MathUtils.lerp(animationStartAlpha, 1.0f, animatedFraction)
@@ -272,7 +275,7 @@ class MediaHierarchyManager @Inject constructor(
             if (value >= 0) {
                 updateTargetState()
                 // Setting the alpha directly, as the below call will use it to update the alpha
-                carouselAlpha = calculateAlphaFromCrossFade(field, instantlyShowAtEnd = true)
+                carouselAlpha = calculateAlphaFromCrossFade(field)
                 applyTargetStateIfNotAnimating()
             }
         }
@@ -410,18 +413,10 @@ class MediaHierarchyManager @Inject constructor(
      * @param crossFadeProgress The current cross fade progress. 0.5f means it's just switching
      * between the start and the end location and the content is fully faded, while 0.75f means
      * that we're halfway faded in again in the target state.
-     *
-     * @param instantlyShowAtEnd should the view be instantly shown at the end. This is needed
-     * to avoid fadinging in when the target was hidden anyway.
      */
-    private fun calculateAlphaFromCrossFade(
-        crossFadeProgress: Float,
-        instantlyShowAtEnd: Boolean
-    ): Float {
+    private fun calculateAlphaFromCrossFade(crossFadeProgress: Float): Float {
         if (crossFadeProgress <= 0.5f) {
             return 1.0f - crossFadeProgress / 0.5f
-        } else if (instantlyShowAtEnd) {
-            return 1.0f
         } else {
             return (crossFadeProgress - 0.5f) / 0.5f
         }
@@ -582,7 +577,7 @@ class MediaHierarchyManager @Inject constructor(
     private fun updateDesiredLocation(
         forceNoAnimation: Boolean = false,
         forceStateUpdate: Boolean = false
-    ) {
+    ) = traceSection("MediaHierarchyManager#updateDesiredLocation") {
         val desiredLocation = calculateLocation()
         if (desiredLocation != this.desiredLocation || forceStateUpdate) {
             if (this.desiredLocation >= 0 && desiredLocation != this.desiredLocation) {
@@ -616,7 +611,10 @@ class MediaHierarchyManager @Inject constructor(
         }
     }
 
-    private fun performTransitionToNewLocation(isNewView: Boolean, animate: Boolean) {
+    private fun performTransitionToNewLocation(
+        isNewView: Boolean,
+        animate: Boolean
+    ) = traceSection("MediaHierarchyManager#performTransitionToNewLocation") {
         if (previousLocation < 0 || isNewView) {
             cancelAnimationAndApplyDesiredState()
             return
@@ -899,7 +897,7 @@ class MediaHierarchyManager @Inject constructor(
         alpha: Float,
         immediately: Boolean = false,
         clipBounds: Rect = EMPTY_RECT
-    ) {
+    ) = traceSection("MediaHierarchyManager#applyState") {
         currentBounds.set(bounds)
         currentClipping = clipBounds
         carouselAlpha = if (isCurrentlyFading()) alpha else 1.0f
@@ -922,7 +920,9 @@ class MediaHierarchyManager @Inject constructor(
         }
     }
 
-    private fun updateHostAttachment() {
+    private fun updateHostAttachment() = traceSection(
+        "MediaHierarchyManager#updateHostAttachment"
+    ) {
         var newLocation = resolveLocationForFading()
         var canUseOverlay = !isCurrentlyFading()
         if (isCrossFadeAnimatorRunning) {
@@ -958,6 +958,14 @@ class MediaHierarchyManager @Inject constructor(
                         top,
                         left + currentBounds.width(),
                         top + currentBounds.height())
+
+                if (mediaFrame.childCount > 0) {
+                    val child = mediaFrame.getChildAt(0)
+                    if (mediaFrame.height < child.height) {
+                        Log.wtf(TAG, "mediaFrame height is too small for child: " +
+                            "${mediaFrame.height} vs ${child.height}")
+                    }
+                }
             }
             if (isCrossFadeAnimatorRunning) {
                 // When cross-fading with an animation, we only notify the media carousel of the

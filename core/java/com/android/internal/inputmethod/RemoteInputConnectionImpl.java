@@ -49,7 +49,6 @@ import android.view.inputmethod.TextSnapshot;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.infra.AndroidFuture;
-import com.android.internal.view.IInputContext;
 
 import java.lang.annotation.Retention;
 import java.lang.ref.WeakReference;
@@ -62,10 +61,10 @@ import java.util.function.Supplier;
  * Takes care of remote method invocations of {@link InputConnection} in the IME client side.
  *
  * <p>{@link android.inputmethodservice.RemoteInputConnection} code is executed in the IME process.
- * It makes IInputContext binder calls under the hood. {@link RemoteInputConnectionImpl} receives
- * {@link IInputContext} binder calls in the IME client (editor app) process, and forwards them to
- * {@link InputConnection} that the IME client provided, on the {@link Looper} associated to the
- * {@link InputConnection}.</p>
+ * It makes {@link IRemoteInputConnection} binder calls under the hood.
+ * {@link RemoteInputConnectionImpl} receives {@link IRemoteInputConnection} binder calls in the IME
+ * client (editor app) process, and forwards them to {@link InputConnection} that the IME client
+ * provided, on the {@link Looper} associated to the {@link InputConnection}.</p>
  *
  * <p>{@link com.android.internal.inputmethod.RemoteAccessibilityInputConnection} code is executed
  * in the {@link android.accessibilityservice.AccessibilityService} process. It makes
@@ -74,7 +73,7 @@ import java.util.function.Supplier;
  * (editor app) process, and forwards them to {@link InputConnection} that the IME client provided,
  * on the {@link Looper} associated to the {@link InputConnection}.</p>
  */
-public final class RemoteInputConnectionImpl extends IInputContext.Stub {
+public final class RemoteInputConnectionImpl extends IRemoteInputConnection.Stub {
     private static final String TAG = "RemoteInputConnectionImpl";
     private static final boolean DEBUG = false;
 
@@ -177,6 +176,10 @@ public final class RemoteInputConnectionImpl extends IInputContext.Stub {
     private final AtomicInteger mCurrentSessionId = new AtomicInteger(0);
     private final AtomicBoolean mHasPendingInvalidation = new AtomicBoolean();
 
+    private final AtomicBoolean mIsCursorAnchorInfoMonitoring = new AtomicBoolean(false);
+    private final AtomicBoolean mHasPendingImmediateCursorAnchorInfoUpdate =
+            new AtomicBoolean(false);
+
     public RemoteInputConnectionImpl(@NonNull Looper looper,
             @NonNull InputConnection inputConnection,
             @NonNull InputMethodManager inputMethodManager, @Nullable View servedView) {
@@ -221,6 +224,33 @@ public final class RemoteInputConnectionImpl extends IInputContext.Stub {
 
     public View getServedView() {
         return mServedView.get();
+    }
+
+    /**
+     * Gets and resets {@link #mHasPendingImmediateCursorAnchorInfoUpdate}.
+     *
+     * <p>Calling this method resets {@link #mHasPendingImmediateCursorAnchorInfoUpdate}. This
+     * means that the second call of this method returns {@code false} unless the IME requests
+     * {@link android.view.inputmethod.CursorAnchorInfo} again with
+     * {@link InputConnection#CURSOR_UPDATE_IMMEDIATE} flag.</p>
+     *
+     * @return {@code true} if there is any pending request for
+     *         {@link android.view.inputmethod.CursorAnchorInfo} with
+     *         {@link InputConnection#CURSOR_UPDATE_IMMEDIATE} flag.
+     */
+    @AnyThread
+    public boolean resetHasPendingImmediateCursorAnchorInfoUpdate() {
+        return mHasPendingImmediateCursorAnchorInfoUpdate.getAndSet(false);
+    }
+
+    /**
+     * @return {@code true} if there is any active request for
+     *         {@link android.view.inputmethod.CursorAnchorInfo} with
+     *         {@link InputConnection#CURSOR_UPDATE_MONITOR} flag.
+     */
+    @AnyThread
+    public boolean isCursorAnchorInfoMonitoring() {
+        return mIsCursorAnchorInfoMonitoring.get();
     }
 
     /**
@@ -999,11 +1029,20 @@ public final class RemoteInputConnectionImpl extends IInputContext.Stub {
             // requestCursorUpdates() is not currently supported across displays.
             return false;
         }
+        final boolean hasImmediate =
+                (cursorUpdateMode & InputConnection.CURSOR_UPDATE_IMMEDIATE) != 0;
+        final boolean hasMonitoring =
+                (cursorUpdateMode & InputConnection.CURSOR_UPDATE_MONITOR) != 0;
+        boolean result = false;
         try {
-            return ic.requestCursorUpdates(cursorUpdateMode, cursorUpdateFilter);
+            result = ic.requestCursorUpdates(cursorUpdateMode, cursorUpdateFilter);
+            return result;
         } catch (AbstractMethodError ignored) {
             // TODO(b/199934664): See if we can remove this by providing a default impl.
             return false;
+        } finally {
+            mHasPendingImmediateCursorAnchorInfoUpdate.set(result && hasImmediate);
+            mIsCursorAnchorInfoMonitoring.set(result && hasMonitoring);
         }
     }
 

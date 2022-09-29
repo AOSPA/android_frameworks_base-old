@@ -223,7 +223,7 @@ public class WindowOrganizerTests extends WindowTestsBase {
         mWm.mAtmService.mTaskOrganizerController.unregisterTaskOrganizer(organizer);
         // Ensure events dispatch to organizer.
         mWm.mAtmService.mTaskOrganizerController.dispatchPendingEvents();
-        assertTaskVanished(organizer, false /* expectVanished */, rootTask);
+        verify(organizer, times(0)).onTaskVanished(any());
         assertFalse(rootTask.isOrganized());
     }
 
@@ -297,7 +297,7 @@ public class WindowOrganizerTests extends WindowTestsBase {
         // Ensure events dispatch to organizer.
         mWm.mAtmService.mTaskOrganizerController.dispatchPendingEvents();
 
-        assertTaskVanished(organizer, true /* expectVanished */, rootTask);
+        verify(organizer, times(0)).onTaskVanished(any());
         assertFalse(rootTask.isOrganized());
     }
 
@@ -341,7 +341,7 @@ public class WindowOrganizerTests extends WindowTestsBase {
         mWm.mAtmService.mTaskOrganizerController.dispatchPendingEvents();
         verify(organizer, times(3))
                 .onTaskAppeared(any(RunningTaskInfo.class), any(SurfaceControl.class));
-        assertTaskVanished(organizer2, true /* expectVanished */, rootTask, rootTask2, rootTask3);
+        verify(organizer2, times(0)).onTaskVanished(any());
     }
 
     @Test
@@ -395,6 +395,7 @@ public class WindowOrganizerTests extends WindowTestsBase {
         assertFalse(task2.isAttached());
         // Normal task should keep.
         assertTrue(task.isAttached());
+        verify(organizer2, times(0)).onTaskVanished(any());
     }
 
     @Test
@@ -439,7 +440,7 @@ public class WindowOrganizerTests extends WindowTestsBase {
         mWm.mAtmService.mTaskOrganizerController.dispatchPendingEvents();
         verify(organizer, times(3))
                 .onTaskAppeared(any(RunningTaskInfo.class), any(SurfaceControl.class));
-        assertTaskVanished(organizer2, true /* expectVanished */, rootTask, rootTask2, rootTask3);
+        verify(organizer2, times(0)).onTaskVanished(any());
     }
 
     @Test
@@ -451,6 +452,23 @@ public class WindowOrganizerTests extends WindowTestsBase {
         ArrayList<TaskAppearedInfo> existingTasks = new ArrayList<>();
         final ITaskOrganizer organizer = registerMockOrganizer(existingTasks);
         assertContainsTasks(existingTasks, rootTask, rootTask2);
+
+        // Verify we don't get onTaskAppeared if we are returned the tasks
+        verify(organizer, never())
+                .onTaskAppeared(any(RunningTaskInfo.class), any(SurfaceControl.class));
+    }
+
+    @Test
+    public void testRegisterTaskOrganizerWithExistingTasks_noSurfaceControl()
+            throws RemoteException {
+        final Task rootTask = createRootTask();
+        final Task task = createTask(rootTask);
+        final Task rootTask2 = createRootTask();
+        final Task task2 = createTask(rootTask2);
+        rootTask2.setSurfaceControl(null);
+        ArrayList<TaskAppearedInfo> existingTasks = new ArrayList<>();
+        final ITaskOrganizer organizer = registerMockOrganizer(existingTasks);
+        assertContainsTasks(existingTasks, rootTask);
 
         // Verify we don't get onTaskAppeared if we are returned the tasks
         verify(organizer, never())
@@ -522,7 +540,10 @@ public class WindowOrganizerTests extends WindowTestsBase {
         mWm.mAtmService.mWindowOrganizerController.applyTransaction(t);
 
         assertEquals(WINDOWING_MODE_FULLSCREEN, record.getWindowingMode());
-        assertEquals(WINDOWING_MODE_PINNED, rootTask.getWindowingMode());
+        // Get the root task from the PIP activity record again, since the PIP root task may have
+        // changed when the activity entered PIP mode.
+        final Task pipRootTask = record.getRootTask();
+        assertEquals(WINDOWING_MODE_PINNED, pipRootTask.getWindowingMode());
     }
 
     @Test
@@ -687,7 +708,7 @@ public class WindowOrganizerTests extends WindowTestsBase {
         final RunningTaskInfo info2 = task2.getTaskInfo();
 
         WindowContainerTransaction wct = new WindowContainerTransaction();
-        wct.setAdjacentRoots(info1.token, info2.token, false /* moveTogether */);
+        wct.setAdjacentRoots(info1.token, info2.token);
         mWm.mAtmService.mWindowOrganizerController.applyTransaction(wct);
         assertEquals(task1.getAdjacentTaskFragment(), task2);
         assertEquals(task2.getAdjacentTaskFragment(), task1);
@@ -697,8 +718,8 @@ public class WindowOrganizerTests extends WindowTestsBase {
         mWm.mAtmService.mWindowOrganizerController.applyTransaction(wct);
         assertEquals(dc.getDefaultTaskDisplayArea().mLaunchAdjacentFlagRootTask, task1);
 
-        task1.setAdjacentTaskFragment(null, false /* moveTogether */);
-        task2.setAdjacentTaskFragment(null, false /* moveTogether */);
+        task1.setAdjacentTaskFragment(null);
+        task2.setAdjacentTaskFragment(null);
         wct = new WindowContainerTransaction();
         wct.clearLaunchAdjacentFlagRoot(info1.token);
         mWm.mAtmService.mWindowOrganizerController.applyTransaction(wct);
@@ -1015,6 +1036,8 @@ public class WindowOrganizerTests extends WindowTestsBase {
         final ActivityRecord record = createActivityRecordWithParentTask(mDisplayContent,
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD);
         record.info.flags |= ActivityInfo.FLAG_SUPPORTS_PICTURE_IN_PICTURE;
+        record.setPictureInPictureParams(new PictureInPictureParams.Builder()
+                .setAutoEnterEnabled(true).build());
         spyOn(record);
         doReturn(true).when(record).checkEnterPictureInPictureState(any(), anyBoolean());
 
@@ -1259,7 +1282,7 @@ public class WindowOrganizerTests extends WindowTestsBase {
         record.setTaskDescription(new ActivityManager.TaskDescription("TestDescription"));
         waitUntilHandlersIdle();
 
-        ArrayList<PendingTaskEvent> pendingEvents = getTaskPendingEvent(rootTask);
+        ArrayList<PendingTaskEvent> pendingEvents = getTaskPendingEvent(organizer, rootTask);
         assertEquals(1, pendingEvents.size());
         assertEquals(PendingTaskEvent.EVENT_APPEARED, pendingEvents.get(0).mEventType);
         assertEquals("TestDescription",
@@ -1279,7 +1302,7 @@ public class WindowOrganizerTests extends WindowTestsBase {
         rootTask.removeImmediately();
         waitUntilHandlersIdle();
 
-        ArrayList<PendingTaskEvent> pendingEvents = getTaskPendingEvent(rootTask);
+        ArrayList<PendingTaskEvent> pendingEvents = getTaskPendingEvent(organizer, rootTask);
         assertEquals(0, pendingEvents.size());
     }
 
@@ -1297,7 +1320,7 @@ public class WindowOrganizerTests extends WindowTestsBase {
         record.setTaskDescription(new ActivityManager.TaskDescription("TestDescription"));
         waitUntilHandlersIdle();
 
-        ArrayList<PendingTaskEvent> pendingEvents = getTaskPendingEvent(rootTask);
+        ArrayList<PendingTaskEvent> pendingEvents = getTaskPendingEvent(organizer, rootTask);
         assertEquals(1, pendingEvents.size());
         assertEquals(PendingTaskEvent.EVENT_INFO_CHANGED, pendingEvents.get(0).mEventType);
         assertEquals("TestDescription",
@@ -1306,7 +1329,7 @@ public class WindowOrganizerTests extends WindowTestsBase {
         record.setTaskDescription(new ActivityManager.TaskDescription("TestDescription2"));
         waitUntilHandlersIdle();
 
-        pendingEvents = getTaskPendingEvent(rootTask);
+        pendingEvents = getTaskPendingEvent(organizer, rootTask);
         assertEquals(1, pendingEvents.size());
         assertEquals(PendingTaskEvent.EVENT_INFO_CHANGED, pendingEvents.get(0).mEventType);
         assertEquals("TestDescription2",
@@ -1329,7 +1352,7 @@ public class WindowOrganizerTests extends WindowTestsBase {
         rootTask.removeImmediately();
         waitUntilHandlersIdle();
 
-        ArrayList<PendingTaskEvent> pendingEvents = getTaskPendingEvent(rootTask);
+        ArrayList<PendingTaskEvent> pendingEvents = getTaskPendingEvent(organizer, rootTask);
         assertEquals(1, pendingEvents.size());
         assertEquals(PendingTaskEvent.EVENT_VANISHED, pendingEvents.get(0).mEventType);
         assertEquals("TestDescription",
@@ -1350,7 +1373,7 @@ public class WindowOrganizerTests extends WindowTestsBase {
         rootTask.setWindowingMode(WINDOWING_MODE_MULTI_WINDOW);
         waitUntilHandlersIdle();
 
-        ArrayList<PendingTaskEvent> pendingEvents = getTaskPendingEvent(rootTask);
+        ArrayList<PendingTaskEvent> pendingEvents = getTaskPendingEvent(organizer, rootTask);
         assertEquals(1, pendingEvents.size());
         assertEquals(PendingTaskEvent.EVENT_VANISHED, pendingEvents.get(0).mEventType);
     }
@@ -1370,14 +1393,16 @@ public class WindowOrganizerTests extends WindowTestsBase {
                 new IRequestFinishCallback.Default());
         waitUntilHandlersIdle();
 
-        ArrayList<PendingTaskEvent> pendingEvents = getTaskPendingEvent(rootTask);
+        ArrayList<PendingTaskEvent> pendingEvents = getTaskPendingEvent(organizer, rootTask);
         assertEquals(1, pendingEvents.size());
         assertEquals(PendingTaskEvent.EVENT_VANISHED, pendingEvents.get(0).mEventType);
     }
 
-    private ArrayList<PendingTaskEvent> getTaskPendingEvent(Task task) {
+    private ArrayList<PendingTaskEvent> getTaskPendingEvent(ITaskOrganizer organizer, Task task) {
         ArrayList<PendingTaskEvent> total =
-                mWm.mAtmService.mTaskOrganizerController.getPendingEventList();
+                mWm.mAtmService.mTaskOrganizerController
+                        .getTaskOrganizerPendingEvents(organizer.asBinder())
+                        .getPendingEventList();
         ArrayList<PendingTaskEvent> result = new ArrayList();
 
         for (int i = 0; i < total.size(); i++) {
@@ -1499,7 +1524,11 @@ public class WindowOrganizerTests extends WindowTestsBase {
         verify(mWm.mAtmService.mRootWindowContainer).resumeFocusedTasksTopActivities();
 
         clearInvocations(mWm.mAtmService.mRootWindowContainer);
-        t.setWindowingMode(wct, WINDOWING_MODE_FULLSCREEN);
+        // The token for the PIP root task may have changed when the task entered PIP mode, so do
+        // not reuse the one from above.
+        final WindowContainerToken newToken =
+                record.getRootTask().mRemoteToken.toWindowContainerToken();
+        t.setWindowingMode(newToken, WINDOWING_MODE_FULLSCREEN);
         mWm.mAtmService.mWindowOrganizerController.applyTransaction(t);
         verify(mWm.mAtmService.mRootWindowContainer).resumeFocusedTasksTopActivities();
     }

@@ -16,9 +16,9 @@
 
 package com.android.server.wm.flicker.launch
 
+import android.platform.test.annotations.FlakyTest
 import android.platform.test.annotations.Presubmit
 import android.platform.test.annotations.RequiresDevice
-import androidx.test.filters.FlakyTest
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
@@ -54,8 +54,8 @@ import org.junit.runners.Parameterized
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @Group1
-open class OpenAppWarmTest(testSpec: FlickerTestParameter)
-    : OpenAppFromLauncherTransition(testSpec) {
+open class OpenAppWarmTest(testSpec: FlickerTestParameter) :
+    OpenAppFromLauncherTransition(testSpec) {
     /**
      * Defines the transition used to run the test
      */
@@ -68,57 +68,31 @@ open class OpenAppWarmTest(testSpec: FlickerTestParameter)
                 }
                 eachRun {
                     device.pressHome()
-                    wmHelper.waitForHomeActivityVisible()
+                    wmHelper.StateSyncBuilder()
+                        .withHomeActivityVisible()
+                        .waitForAndVerify()
                     this.setRotation(testSpec.startRotation)
                 }
             }
             teardown {
-                eachRun {
+                test {
                     testApp.exit(wmHelper)
                 }
             }
             transitions {
                 testApp.launchViaIntent(wmHelper)
-                wmHelper.waitForFullScreenApp(testApp.component)
             }
         }
 
     /** {@inheritDoc} */
     @FlakyTest(bugId = 206753786)
     @Test
-    override fun statusBarLayerRotatesScales() = super.statusBarLayerRotatesScales()
-
-    /** {@inheritDoc} */
-    @Presubmit
-    @Test
-    override fun appWindowReplacesLauncherAsTopWindow() =
-            super.appWindowReplacesLauncherAsTopWindow()
-
-    /** {@inheritDoc} */
-    @Presubmit
-    @Test
-    override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
-            super.visibleLayersShownMoreThanOneConsecutiveEntry()
-
-    /** {@inheritDoc} */
-    @FlakyTest
-    @Test
-    override fun navBarLayerRotatesAndScales() = super.navBarLayerRotatesAndScales()
+    override fun navBarLayerPositionAtStartAndEnd() = super.navBarLayerPositionAtStartAndEnd()
 
     /** {@inheritDoc} */
     @Presubmit
     @Test
     override fun appLayerReplacesLauncher() = super.appLayerReplacesLauncher()
-
-    /** {@inheritDoc} */
-    @Presubmit
-    @Test
-    override fun navBarLayerIsVisible() = super.navBarLayerIsVisible()
-
-    /** {@inheritDoc} */
-    @Presubmit
-    @Test
-    override fun navBarWindowIsVisible() = super.navBarWindowIsVisible()
 
     /** {@inheritDoc} */
     @Presubmit
@@ -129,10 +103,6 @@ open class OpenAppWarmTest(testSpec: FlickerTestParameter)
     @Presubmit
     @Test
     override fun appWindowBecomesVisible() = super.appWindowBecomesVisible_warmStart()
-
-    @FlakyTest(bugId = 229735718)
-    @Test
-    override fun entireScreenCovered() = super.entireScreenCovered()
 
     companion object {
         /**

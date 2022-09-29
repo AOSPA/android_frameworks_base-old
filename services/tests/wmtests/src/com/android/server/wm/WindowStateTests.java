@@ -74,6 +74,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atMost;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.when;
 
@@ -472,6 +473,44 @@ public class WindowStateTests extends WindowTestsBase {
     }
 
     @Test
+    public void testOnExitAnimationDone() {
+        final WindowState parent = createWindow(null, TYPE_APPLICATION, "parent");
+        final WindowState child = createWindow(parent, TYPE_APPLICATION_PANEL, "child");
+        final SurfaceControl.Transaction t = parent.getPendingTransaction();
+        child.startAnimation(t, mock(AnimationAdapter.class), false /* hidden */,
+                SurfaceAnimator.ANIMATION_TYPE_WINDOW_ANIMATION);
+        parent.mAnimatingExit = parent.mRemoveOnExit = parent.mWindowRemovalAllowed = true;
+        child.mAnimatingExit = child.mRemoveOnExit = child.mWindowRemovalAllowed = true;
+        final int[] numRemovals = new int[2];
+        parent.registerWindowContainerListener(new WindowContainerListener() {
+            @Override
+            public void onRemoved() {
+                numRemovals[0]++;
+            }
+        });
+        child.registerWindowContainerListener(new WindowContainerListener() {
+            @Override
+            public void onRemoved() {
+                numRemovals[1]++;
+            }
+        });
+        spyOn(parent);
+        // parent onExitAnimationDone
+        //   -> child onExitAnimationDone() -> no-op because isAnimating()
+        //   -> parent destroySurface()
+        //     -> parent removeImmediately() because mDestroying+mRemoveOnExit
+        //       -> child removeImmediately() -> cancelAnimation()
+        //       -> child onExitAnimationDone()
+        //         -> child destroySurface() because animation is canceled
+        //           -> child removeImmediately() -> no-op because mRemoved
+        parent.onExitAnimationDone();
+        // There must be no additional destroySurface() of parent from its child.
+        verify(parent, atMost(1)).destroySurface(anyBoolean(), anyBoolean());
+        assertEquals(1, numRemovals[0]);
+        assertEquals(1, numRemovals[1]);
+    }
+
+    @Test
     public void testLayoutSeqResetOnReparent() {
         final WindowState app = createWindow(null, TYPE_APPLICATION, "app");
         app.mLayoutSeq = 1;
@@ -625,12 +664,11 @@ public class WindowStateTests extends WindowTestsBase {
         assertEquals(expectedChildPos, childPos);
 
         // Surface should apply the scale.
+        final SurfaceControl.Transaction t = w.getPendingTransaction();
         w.prepareSurfaces();
-        verify(w.getPendingTransaction()).setMatrix(w.getSurfaceControl(),
-                overrideScale, 0, 0, overrideScale);
+        verify(t).setMatrix(w.mSurfaceControl, overrideScale, 0, 0, overrideScale);
         // Child surface inherits parent's scale, so it doesn't need to scale.
-        verify(child.getPendingTransaction(), never()).setMatrix(any(), anyInt(), anyInt(),
-                anyInt(), anyInt());
+        verify(t, never()).setMatrix(any(), anyInt(), anyInt(), anyInt(), anyInt());
 
         // According to "dp * density / 160 = px", density is scaled and the size in dp is the same.
         final CompatibilityInfo compatInfo = cmp.compatibilityInfoForPackageLocked(
@@ -647,6 +685,13 @@ public class WindowStateTests extends WindowTestsBase {
         final Rect unscaledClientBounds = new Rect(clientConfig.windowConfiguration.getBounds());
         unscaledClientBounds.scale(overrideScale);
         assertEquals(w.getWindowConfiguration().getBounds(), unscaledClientBounds);
+
+        // Child window without scale (e.g. different app) should apply inverse scale of parent.
+        doReturn(1f).when(cmp).getCompatScale(anyString(), anyInt());
+        final WindowState child2 = createWindow(w, TYPE_APPLICATION_SUB_PANEL, "child2");
+        clearInvocations(t);
+        child2.prepareSurfaces();
+        verify(t).setMatrix(child2.mSurfaceControl, w.mInvGlobalScale, 0, 0, w.mInvGlobalScale);
     }
 
     @UseTestDisplay(addWindows = {W_ABOVE_ACTIVITY, W_NOTIFICATION_SHADE})
@@ -673,6 +718,25 @@ public class WindowStateTests extends WindowTestsBase {
         // Keyguard host window should be always contained. The drawn app or app with starting
         // window are unnecessary to draw.
         assertEquals(Arrays.asList(keyguardHostWindow, startingWindow), outWaitingForDrawn);
+
+        // No need to wait for a window of invisible activity even if the window has surface.
+        final WindowState invisibleApp = mAppWindow;
+        invisibleApp.mActivityRecord.mVisibleRequested = false;
+        invisibleApp.mActivityRecord.allDrawn = false;
+        outWaitingForDrawn.clear();
+        invisibleApp.requestDrawIfNeeded(outWaitingForDrawn);
+        assertTrue(outWaitingForDrawn.isEmpty());
+
+        // Drawn state should not be changed for insets change when screen is off.
+        spyOn(mWm.mPolicy);
+        doReturn(false).when(mWm.mPolicy).isScreenOn();
+        makeWindowVisibleAndDrawn(startingApp);
+        startingApp.getConfiguration().orientation = 0; // Reset to be the same as last reported.
+        startingApp.getWindowFrames().setInsetsChanged(true);
+        startingApp.updateResizingWindowIfNeeded();
+        assertTrue(mWm.mResizingWindows.contains(startingApp));
+        assertTrue(startingApp.isDrawn());
+        assertFalse(startingApp.getOrientationChanging());
     }
 
     @UseTestDisplay(addWindows = W_ABOVE_ACTIVITY)
@@ -728,17 +792,6 @@ public class WindowStateTests extends WindowTestsBase {
         mWm.mResizingWindows.remove(win);
         win.updateResizingWindowIfNeeded();
         assertThat(mWm.mResizingWindows).doesNotContain(win);
-    }
-
-    @Test
-    public void testCantReceiveTouchDuringRecentsAnimation() {
-        final WindowState win0 = createWindow(null, TYPE_APPLICATION, "win0");
-
-        // Mock active recents animation
-        RecentsAnimationController recentsController = mock(RecentsAnimationController.class);
-        when(recentsController.shouldApplyInputConsumer(win0.mActivityRecord)).thenReturn(true);
-        mWm.setRecentsAnimationController(recentsController);
-        assertFalse(win0.canReceiveTouchInput());
     }
 
     @Test
@@ -899,6 +952,15 @@ public class WindowStateTests extends WindowTestsBase {
         assertTrue(app.isReadyToDispatchInsetsState());
         mDisplayContent.getInsetsStateController().notifyInsetsChanged();
         verify(app).notifyInsetsChanged();
+
+        // Verify that invisible non-activity window won't dispatch insets changed.
+        final WindowState overlay = createWindow(null, TYPE_APPLICATION_OVERLAY, "overlay");
+        makeWindowVisible(overlay);
+        assertTrue(overlay.isReadyToDispatchInsetsState());
+        overlay.mHasSurface = false;
+        assertFalse(overlay.isReadyToDispatchInsetsState());
+        mDisplayContent.getInsetsStateController().notifyInsetsChanged();
+        assertFalse(overlay.getWindowFrames().hasInsetsChanged());
     }
 
     @UseTestDisplay(addWindows = {W_INPUT_METHOD, W_ACTIVITY})
@@ -947,6 +1009,7 @@ public class WindowStateTests extends WindowTestsBase {
         assertTrue(app.mActivityRecord.mImeInsetsFrozenUntilStartInput);
 
         // Verify the IME insets is visible on app, but not for app2 during app task switching.
+        mDisplayContent.computeImeTargetIfNeeded(app.mActivityRecord);
         assertTrue(app.getInsetsState().getSource(ITYPE_IME).isVisible());
         assertFalse(app2.getInsetsState().getSource(ITYPE_IME).isVisible());
     }

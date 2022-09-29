@@ -122,14 +122,14 @@ public class SyntheticPasswordManager {
     // 256-bit synthetic password
     private static final byte SYNTHETIC_PASSWORD_LENGTH = 256 / 8;
 
-    private static final int PASSWORD_SCRYPT_N = 11;
-    private static final int PASSWORD_SCRYPT_R = 3;
-    private static final int PASSWORD_SCRYPT_P = 1;
+    private static final int PASSWORD_SCRYPT_LOG_N = 11;
+    private static final int PASSWORD_SCRYPT_LOG_R = 3;
+    private static final int PASSWORD_SCRYPT_LOG_P = 1;
     private static final int PASSWORD_SALT_LENGTH = 16;
     private static final int PASSWORD_TOKEN_LENGTH = 32;
     private static final String TAG = "SyntheticPasswordManager";
 
-    private static final byte[] PERSONALISATION_SECDISCARDABLE = "secdiscardable-transform".getBytes();
+    private static final byte[] PERSONALIZATION_SECDISCARDABLE = "secdiscardable-transform".getBytes();
     private static final byte[] PERSONALIZATION_KEY_STORE_PASSWORD = "keystore-password".getBytes();
     private static final byte[] PERSONALIZATION_USER_GK_AUTH = "user-gk-authentication".getBytes();
     private static final byte[] PERSONALIZATION_SP_GK_AUTH = "sp-gk-authentication".getBytes();
@@ -138,11 +138,11 @@ public class SyntheticPasswordManager {
     private static final byte[] PERSONALIZATION_SP_SPLIT = "sp-split".getBytes();
     private static final byte[] PERSONALIZATION_PASSWORD_HASH = "pw-hash".getBytes();
     private static final byte[] PERSONALIZATION_E0 = "e0-encryption".getBytes();
-    private static final byte[] PERSONALISATION_WEAVER_PASSWORD = "weaver-pwd".getBytes();
-    private static final byte[] PERSONALISATION_WEAVER_KEY = "weaver-key".getBytes();
-    private static final byte[] PERSONALISATION_WEAVER_TOKEN = "weaver-token".getBytes();
+    private static final byte[] PERSONALIZATION_WEAVER_PASSWORD = "weaver-pwd".getBytes();
+    private static final byte[] PERSONALIZATION_WEAVER_KEY = "weaver-key".getBytes();
+    private static final byte[] PERSONALIZATION_WEAVER_TOKEN = "weaver-token".getBytes();
     private static final byte[] PERSONALIZATION_PASSWORD_METRICS = "password-metrics".getBytes();
-    private static final byte[] PERSONALISATION_CONTEXT =
+    private static final byte[] PERSONALIZATION_CONTEXT =
         "android-synthetic-password-personalization-context".getBytes();
 
     static class AuthenticationResult {
@@ -192,39 +192,43 @@ public class SyntheticPasswordManager {
             mVersion = version;
         }
 
-        private byte[] derivePassword(byte[] personalization) {
+        /**
+         * Derives a subkey from the synthetic password. For v3 and later synthetic passwords the
+         * subkeys are 256-bit; for v1 and v2 they are 512-bit.
+         */
+        private byte[] deriveSubkey(byte[] personalization) {
             if (mVersion == SYNTHETIC_PASSWORD_VERSION_V3) {
                 return (new SP800Derive(mSyntheticPassword))
-                    .withContext(personalization, PERSONALISATION_CONTEXT);
+                    .withContext(personalization, PERSONALIZATION_CONTEXT);
             } else {
-                return SyntheticPasswordCrypto.personalisedHash(personalization,
+                return SyntheticPasswordCrypto.personalizedHash(personalization,
                         mSyntheticPassword);
             }
         }
 
         public byte[] deriveKeyStorePassword() {
-            return bytesToHex(derivePassword(PERSONALIZATION_KEY_STORE_PASSWORD));
+            return bytesToHex(deriveSubkey(PERSONALIZATION_KEY_STORE_PASSWORD));
         }
 
         public byte[] deriveGkPassword() {
-            return derivePassword(PERSONALIZATION_SP_GK_AUTH);
+            return deriveSubkey(PERSONALIZATION_SP_GK_AUTH);
         }
 
         public byte[] deriveDiskEncryptionKey() {
-            return derivePassword(PERSONALIZATION_FBE_KEY);
+            return deriveSubkey(PERSONALIZATION_FBE_KEY);
         }
 
         public byte[] deriveVendorAuthSecret() {
-            return derivePassword(PERSONALIZATION_AUTHSECRET_KEY);
+            return deriveSubkey(PERSONALIZATION_AUTHSECRET_KEY);
         }
 
         public byte[] derivePasswordHashFactor() {
-            return derivePassword(PERSONALIZATION_PASSWORD_HASH);
+            return deriveSubkey(PERSONALIZATION_PASSWORD_HASH);
         }
 
         /** Derives key used to encrypt password metrics */
         public byte[] deriveMetricsKey() {
-            return derivePassword(PERSONALIZATION_PASSWORD_METRICS);
+            return deriveSubkey(PERSONALIZATION_PASSWORD_METRICS);
         }
 
         /**
@@ -274,9 +278,8 @@ public class SyntheticPasswordManager {
          * AuthenticationToken.mSyntheticPassword for details on what each block means.
          */
         private void recreate(byte[] escrowSplit0, byte[] escrowSplit1) {
-            mSyntheticPassword = String.valueOf(HexEncoding.encode(
-                    SyntheticPasswordCrypto.personalisedHash(
-                            PERSONALIZATION_SP_SPLIT, escrowSplit0, escrowSplit1))).getBytes();
+            mSyntheticPassword = bytesToHex(SyntheticPasswordCrypto.personalizedHash(
+                    PERSONALIZATION_SP_SPLIT, escrowSplit0, escrowSplit1));
         }
 
         /**
@@ -310,9 +313,9 @@ public class SyntheticPasswordManager {
     }
 
     static class PasswordData {
-        byte scryptN;
-        byte scryptR;
-        byte scryptP;
+        byte scryptLogN;
+        byte scryptLogR;
+        byte scryptLogP;
         public int credentialType;
         byte[] salt;
         // For GateKeeper-based credential, this is the password handle returned by GK,
@@ -321,9 +324,9 @@ public class SyntheticPasswordManager {
 
         public static PasswordData create(int passwordType) {
             PasswordData result = new PasswordData();
-            result.scryptN = PASSWORD_SCRYPT_N;
-            result.scryptR = PASSWORD_SCRYPT_R;
-            result.scryptP = PASSWORD_SCRYPT_P;
+            result.scryptLogN = PASSWORD_SCRYPT_LOG_N;
+            result.scryptLogR = PASSWORD_SCRYPT_LOG_R;
+            result.scryptLogP = PASSWORD_SCRYPT_LOG_P;
             result.credentialType = passwordType;
             result.salt = secureRandom(PASSWORD_SALT_LENGTH);
             return result;
@@ -335,9 +338,9 @@ public class SyntheticPasswordManager {
             buffer.put(data, 0, data.length);
             buffer.flip();
             result.credentialType = buffer.getInt();
-            result.scryptN = buffer.get();
-            result.scryptR = buffer.get();
-            result.scryptP = buffer.get();
+            result.scryptLogN = buffer.get();
+            result.scryptLogR = buffer.get();
+            result.scryptLogP = buffer.get();
             int saltLen = buffer.getInt();
             result.salt = new byte[saltLen];
             buffer.get(result.salt);
@@ -357,9 +360,9 @@ public class SyntheticPasswordManager {
                     + Integer.BYTES + salt.length + Integer.BYTES +
                     (passwordHandle != null ? passwordHandle.length : 0));
             buffer.putInt(credentialType);
-            buffer.put(scryptN);
-            buffer.put(scryptR);
-            buffer.put(scryptP);
+            buffer.put(scryptLogN);
+            buffer.put(scryptLogR);
+            buffer.put(scryptLogP);
             buffer.putInt(salt.length);
             buffer.put(salt);
             if (passwordHandle != null && passwordHandle.length > 0) {
@@ -596,47 +599,19 @@ public class SyntheticPasswordManager {
     }
 
     /**
-     * Initializing a new Authentication token, possibly from an existing credential and hash.
+     * Initializes a new Authentication token for the given user.
      *
-     * The authentication token would bear a randomly-generated synthetic password.
+     * The authentication token will bear a randomly-generated synthetic password.
      *
-     * This method has the side effect of rebinding the SID of the given user to the
-     * newly-generated SP.
-     *
-     * If the existing credential hash is non-null, the existing SID mill be migrated so
-     * the synthetic password in the authentication token will produce the same SID
-     * (the corresponding synthetic password handle is persisted by SyntheticPasswordManager
-     * in a per-user data storage.)
-     *
-     * If the existing credential hash is null, it means the given user should have no SID so
-     * SyntheticPasswordManager will nuke any SP handle previously persisted. In this case,
-     * the supplied credential parameter is also ignored.
+     * Any existing SID for the user is cleared.
      *
      * Also saves the escrow information necessary to re-generate the synthetic password under
      * an escrow scheme. This information can be removed with {@link #destroyEscrowData} if
      * password escrow should be disabled completely on the given user.
-     *
      */
-    public AuthenticationToken newSyntheticPasswordAndSid(IGateKeeperService gatekeeper,
-            byte[] hash, LockscreenCredential credential, int userId) {
+    AuthenticationToken newSyntheticPassword(int userId) {
+        clearSidForUser(userId);
         AuthenticationToken result = AuthenticationToken.create();
-        GateKeeperResponse response;
-        if (hash != null) {
-            try {
-                response = gatekeeper.enroll(userId, hash, credential.getCredential(),
-                        result.deriveGkPassword());
-            } catch (RemoteException e) {
-                throw new IllegalStateException("Failed to enroll credential duing SP init", e);
-            }
-            if (response.getResponseCode() != GateKeeperResponse.RESPONSE_OK) {
-                Slog.w(TAG, "Fail to migrate SID, assuming no SID, user " + userId);
-                clearSidForUser(userId);
-            } else {
-                saveSyntheticPasswordHandle(response.getPayload(), userId);
-            }
-        } else {
-            clearSidForUser(userId);
-        }
         saveEscrowData(result, userId);
         return result;
     }
@@ -930,26 +905,6 @@ public class SyntheticPasswordManager {
     private ArrayMap<Integer, ArrayMap<Long, TokenData>> tokenMap = new ArrayMap<>();
 
     /**
-     * Create a token based Synthetic password for the given user.
-     * @return the handle of the token
-     */
-    public long createStrongTokenBasedSyntheticPassword(byte[] token, int userId,
-            @Nullable EscrowTokenStateChangeCallback changeCallback) {
-        return createTokenBasedSyntheticPassword(token, TOKEN_TYPE_STRONG, userId,
-                changeCallback);
-    }
-
-    /**
-     * Create a weak token based Synthetic password for the given user.
-     * @return the handle of the weak token
-     */
-    public long createWeakTokenBasedSyntheticPassword(byte[] token, int userId,
-            @Nullable EscrowTokenStateChangeCallback changeCallback) {
-        return createTokenBasedSyntheticPassword(token, TOKEN_TYPE_WEAK, userId,
-                changeCallback);
-    }
-
-    /**
      * Create a token based Synthetic password of the given type for the given user.
      * @return the handle of the token
      */
@@ -965,7 +920,7 @@ public class SyntheticPasswordManager {
         if (isWeaverAvailable()) {
             tokenData.weaverSecret = secureRandom(mWeaverConfig.valueSize);
             tokenData.secdiscardableOnDisk = SyntheticPasswordCrypto.encrypt(tokenData.weaverSecret,
-                            PERSONALISATION_WEAVER_TOKEN, secdiscardable);
+                            PERSONALIZATION_WEAVER_TOKEN, secdiscardable);
         } else {
             tokenData.secdiscardableOnDisk = secdiscardable;
             tokenData.weaverSecret = null;
@@ -1208,7 +1163,7 @@ public class SyntheticPasswordManager {
                 return result;
             }
             secdiscardable = SyntheticPasswordCrypto.decrypt(response.getGatekeeperHAT(),
-                    PERSONALISATION_WEAVER_TOKEN, secdiscardable);
+                    PERSONALIZATION_WEAVER_TOKEN, secdiscardable);
         }
         byte[] applicationId = transformUnderSecdiscardable(token, secdiscardable);
         result.authToken = unwrapSyntheticPasswordBlob(handle, type, applicationId, 0L, userId);
@@ -1374,8 +1329,8 @@ public class SyntheticPasswordManager {
     }
 
     private byte[] transformUnderWeaverSecret(byte[] data, byte[] secret) {
-        byte[] weaverSecret = SyntheticPasswordCrypto.personalisedHash(
-                PERSONALISATION_WEAVER_PASSWORD, secret);
+        byte[] weaverSecret = SyntheticPasswordCrypto.personalizedHash(
+                PERSONALIZATION_WEAVER_PASSWORD, secret);
         byte[] result = new byte[data.length + weaverSecret.length];
         System.arraycopy(data, 0, result, 0, data.length);
         System.arraycopy(weaverSecret, 0, result, data.length, weaverSecret.length);
@@ -1383,8 +1338,8 @@ public class SyntheticPasswordManager {
     }
 
     private byte[] transformUnderSecdiscardable(byte[] data, byte[] rawSecdiscardable) {
-        byte[] secdiscardable = SyntheticPasswordCrypto.personalisedHash(
-                PERSONALISATION_SECDISCARDABLE, rawSecdiscardable);
+        byte[] secdiscardable = SyntheticPasswordCrypto.personalizedHash(
+                PERSONALIZATION_SECDISCARDABLE, rawSecdiscardable);
         byte[] result = new byte[data.length + secdiscardable.length];
         System.arraycopy(data, 0, result, 0, data.length);
         System.arraycopy(secdiscardable, 0, result, data.length, secdiscardable.length);
@@ -1499,16 +1454,16 @@ public class SyntheticPasswordManager {
 
     private byte[] computePasswordToken(LockscreenCredential credential, PasswordData data) {
         final byte[] password = credential.isNone() ? DEFAULT_PASSWORD : credential.getCredential();
-        return scrypt(password, data.salt, 1 << data.scryptN, 1 << data.scryptR, 1 << data.scryptP,
-                PASSWORD_TOKEN_LENGTH);
+        return scrypt(password, data.salt, 1 << data.scryptLogN, 1 << data.scryptLogR,
+                1 << data.scryptLogP, PASSWORD_TOKEN_LENGTH);
     }
 
     private byte[] passwordTokenToGkInput(byte[] token) {
-        return SyntheticPasswordCrypto.personalisedHash(PERSONALIZATION_USER_GK_AUTH, token);
+        return SyntheticPasswordCrypto.personalizedHash(PERSONALIZATION_USER_GK_AUTH, token);
     }
 
     private byte[] passwordTokenToWeaverKey(byte[] token) {
-        byte[] key = SyntheticPasswordCrypto.personalisedHash(PERSONALISATION_WEAVER_KEY, token);
+        byte[] key = SyntheticPasswordCrypto.personalizedHash(PERSONALIZATION_WEAVER_KEY, token);
         if (key.length < mWeaverConfig.keySize) {
             throw new IllegalArgumentException("weaver key length too small");
         }
@@ -1541,18 +1496,9 @@ public class SyntheticPasswordManager {
         return result;
     }
 
-    protected static final byte[] HEX_ARRAY = "0123456789ABCDEF".getBytes();
-    private static byte[] bytesToHex(byte[] bytes) {
-        if (bytes == null) {
-            return "null".getBytes();
-        }
-        byte[] hexBytes = new byte[bytes.length * 2];
-        for ( int j = 0; j < bytes.length; j++ ) {
-            int v = bytes[j] & 0xFF;
-            hexBytes[j * 2] = HEX_ARRAY[v >>> 4];
-            hexBytes[j * 2 + 1] = HEX_ARRAY[v & 0x0F];
-        }
-        return hexBytes;
+    @VisibleForTesting
+    static byte[] bytesToHex(byte[] bytes) {
+        return HexEncoding.encodeToString(bytes).getBytes();
     }
 
     /**

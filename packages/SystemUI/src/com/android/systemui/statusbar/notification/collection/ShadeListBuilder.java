@@ -87,12 +87,13 @@ import javax.inject.Inject;
  */
 @MainThread
 @SysUISingleton
-public class ShadeListBuilder implements Dumpable {
+public class ShadeListBuilder implements Dumpable, PipelineDumpable {
     private final SystemClock mSystemClock;
     private final ShadeListBuilderLogger mLogger;
     private final NotificationInteractionTracker mInteractionTracker;
     private final DumpManager mDumpManager;
     // used exclusivly by ShadeListBuilder#notifySectionEntriesUpdated
+    // TODO replace temp with collection pool for readability
     private final ArrayList<ListEntry> mTempSectionMembers = new ArrayList<>();
     private final boolean mAlwaysLogList;
 
@@ -230,13 +231,7 @@ public class ShadeListBuilder implements Dumpable {
         mPipelineState.requireState(STATE_IDLE);
 
         mNotifSections.clear();
-        NotifSectioner lastSection = null;
         for (NotifSectioner sectioner : sectioners) {
-            if (lastSection != null && lastSection.getBucket() > sectioner.getBucket()) {
-                throw new IllegalArgumentException("setSectioners with non contiguous sections "
-                        + lastSection.getName() + " - " + lastSection.getBucket() + " & "
-                        + sectioner.getName() + " - " + sectioner.getBucket());
-            }
             final NotifSection section = new NotifSection(sectioner, mNotifSections.size());
             final NotifComparator sectionComparator = section.getComparator();
             mNotifSections.add(section);
@@ -244,10 +239,23 @@ public class ShadeListBuilder implements Dumpable {
             if (sectionComparator != null) {
                 sectionComparator.setInvalidationListener(this::onNotifComparatorInvalidated);
             }
-            lastSection = sectioner;
         }
 
         mNotifSections.add(new NotifSection(DEFAULT_SECTIONER, mNotifSections.size()));
+
+        // validate sections
+        final ArraySet<Integer> seenBuckets = new ArraySet<>();
+        int lastBucket = mNotifSections.size() > 0
+                ? mNotifSections.get(0).getBucket()
+                : 0;
+        for (NotifSection section : mNotifSections) {
+            if (lastBucket != section.getBucket() && seenBuckets.contains(section.getBucket())) {
+                throw new IllegalStateException("setSectioners with non contiguous sections "
+                        + section.getLabel() + " has an already seen bucket");
+            }
+            lastBucket = section.getBucket();
+            seenBuckets.add(lastBucket);
+        }
     }
 
     void setNotifStabilityManager(@NonNull NotifStabilityManager notifStabilityManager) {
@@ -296,70 +304,72 @@ public class ShadeListBuilder implements Dumpable {
     private final CollectionReadyForBuildListener mReadyForBuildListener =
             new CollectionReadyForBuildListener() {
                 @Override
-                public void onBuildList(Collection<NotificationEntry> entries) {
+                public void onBuildList(Collection<NotificationEntry> entries, String reason) {
                     Assert.isMainThread();
                     mPipelineState.requireIsBefore(STATE_BUILD_STARTED);
 
-                    mLogger.logOnBuildList();
+                    mLogger.logOnBuildList(reason);
                     mAllEntries = entries;
                     mChoreographer.schedule();
                 }
             };
 
-    private void onPreRenderInvalidated(Invalidator invalidator) {
+    private void onPreRenderInvalidated(Invalidator invalidator, @Nullable String reason) {
         Assert.isMainThread();
 
-        mLogger.logPreRenderInvalidated(invalidator.getName(), mPipelineState.getState());
+        mLogger.logPreRenderInvalidated(invalidator, mPipelineState.getState(), reason);
 
         rebuildListIfBefore(STATE_FINALIZING);
     }
 
-    private void onPreGroupFilterInvalidated(NotifFilter filter) {
+    private void onPreGroupFilterInvalidated(NotifFilter filter, @Nullable String reason) {
         Assert.isMainThread();
 
-        mLogger.logPreGroupFilterInvalidated(filter.getName(), mPipelineState.getState());
+        mLogger.logPreGroupFilterInvalidated(filter, mPipelineState.getState(), reason);
 
         rebuildListIfBefore(STATE_PRE_GROUP_FILTERING);
     }
 
-    private void onReorderingAllowedInvalidated(NotifStabilityManager stabilityManager) {
+    private void onReorderingAllowedInvalidated(NotifStabilityManager stabilityManager,
+            @Nullable String reason) {
         Assert.isMainThread();
 
         mLogger.logReorderingAllowedInvalidated(
-                stabilityManager.getName(),
-                mPipelineState.getState());
+                stabilityManager,
+                mPipelineState.getState(),
+                reason);
 
         rebuildListIfBefore(STATE_GROUPING);
     }
 
-    private void onPromoterInvalidated(NotifPromoter promoter) {
+    private void onPromoterInvalidated(NotifPromoter promoter, @Nullable String reason) {
         Assert.isMainThread();
 
-        mLogger.logPromoterInvalidated(promoter.getName(), mPipelineState.getState());
+        mLogger.logPromoterInvalidated(promoter, mPipelineState.getState(), reason);
 
         rebuildListIfBefore(STATE_TRANSFORMING);
     }
 
-    private void onNotifSectionInvalidated(NotifSectioner section) {
+    private void onNotifSectionInvalidated(NotifSectioner section, @Nullable String reason) {
         Assert.isMainThread();
 
-        mLogger.logNotifSectionInvalidated(section.getName(), mPipelineState.getState());
+        mLogger.logNotifSectionInvalidated(section, mPipelineState.getState(), reason);
 
         rebuildListIfBefore(STATE_SORTING);
     }
 
-    private void onFinalizeFilterInvalidated(NotifFilter filter) {
+    private void onFinalizeFilterInvalidated(NotifFilter filter, @Nullable String reason) {
         Assert.isMainThread();
 
-        mLogger.logFinalizeFilterInvalidated(filter.getName(), mPipelineState.getState());
+        mLogger.logFinalizeFilterInvalidated(filter, mPipelineState.getState(), reason);
 
         rebuildListIfBefore(STATE_FINALIZE_FILTERING);
     }
 
-    private void onNotifComparatorInvalidated(NotifComparator comparator) {
+    private void onNotifComparatorInvalidated(NotifComparator comparator, @Nullable String reason) {
         Assert.isMainThread();
 
-        mLogger.logNotifComparatorInvalidated(comparator.getName(), mPipelineState.getState());
+        mLogger.logNotifComparatorInvalidated(comparator, mPipelineState.getState(), reason);
 
         rebuildListIfBefore(STATE_SORTING);
     }
@@ -448,7 +458,8 @@ public class ShadeListBuilder implements Dumpable {
         mLogger.logEndBuildList(
                 mIterationCount,
                 mReadOnlyNotifList.size(),
-                countChildren(mReadOnlyNotifList));
+                countChildren(mReadOnlyNotifList),
+                /* enforcedVisualStability */ !mNotifStabilityManager.isEveryChangeAllowed());
         if (mAlwaysLogList || mIterationCount % 10 == 0) {
             Trace.beginSection("ShadeListBuilder.logFinalList");
             mLogger.logFinalList(mNotifList);
@@ -571,11 +582,7 @@ public class ShadeListBuilder implements Dumpable {
                     if (existingSummary == null) {
                         group.setSummary(entry);
                     } else {
-                        mLogger.logDuplicateSummary(
-                                mIterationCount,
-                                group.getKey(),
-                                existingSummary.getKey(),
-                                entry.getKey());
+                        mLogger.logDuplicateSummary(mIterationCount, group, existingSummary, entry);
 
                         // Use whichever one was posted most recently
                         if (entry.getSbn().getPostTime()
@@ -982,7 +989,7 @@ public class ShadeListBuilder implements Dumpable {
         // Check for suppressed order changes
         if (!getStabilityManager().isEveryChangeAllowed()) {
             mForceReorderable = true;
-            boolean isSorted = isSorted(mNotifList, mTopLevelComparator);
+            boolean isSorted = isShadeSorted();
             mForceReorderable = false;
             if (!isSorted) {
                 getStabilityManager().onEntryReorderSuppressed();
@@ -991,9 +998,23 @@ public class ShadeListBuilder implements Dumpable {
         Trace.endSection();
     }
 
+    private boolean isShadeSorted() {
+        if (!isSorted(mNotifList, mTopLevelComparator)) {
+            return false;
+        }
+        for (ListEntry entry : mNotifList) {
+            if (entry instanceof GroupEntry) {
+                if (!isSorted(((GroupEntry) entry).getChildren(), mGroupChildrenComparator)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     /** Determine whether the items in the list are sorted according to the comparator */
     @VisibleForTesting
-    public static <T> boolean isSorted(List<T> items, Comparator<T> comparator) {
+    public static <T> boolean isSorted(List<T> items, Comparator<? super T> comparator) {
         if (items.size() <= 1) {
             return true;
         }
@@ -1062,7 +1083,7 @@ public class ShadeListBuilder implements Dumpable {
         if (!Objects.equals(curr, prev)) {
             mLogger.logEntryAttachStateChanged(
                     mIterationCount,
-                    entry.getKey(),
+                    entry,
                     prev.getParent(),
                     curr.getParent());
 
@@ -1201,7 +1222,7 @@ public class ShadeListBuilder implements Dumpable {
     };
 
 
-    private final Comparator<ListEntry> mGroupChildrenComparator = (o1, o2) -> {
+    private final Comparator<NotificationEntry> mGroupChildrenComparator = (o1, o2) -> {
         int index1 = canReorder(o1) ? -1 : o1.getPreviousAttachState().getStableIndex();
         int index2 = canReorder(o2) ? -1 : o2.getPreviousAttachState().getStableIndex();
         int cmp = Integer.compare(index1, index2);
@@ -1373,6 +1394,21 @@ public class ShadeListBuilder implements Dumpable {
                 mInteractionTracker,
                 true,
                 "\t\t"));
+    }
+
+    @Override
+    public void dumpPipeline(@NonNull PipelineDumper d) {
+        d.dump("choreographer", mChoreographer);
+        d.dump("notifPreGroupFilters", mNotifPreGroupFilters);
+        d.dump("onBeforeTransformGroupsListeners", mOnBeforeTransformGroupsListeners);
+        d.dump("notifPromoters", mNotifPromoters);
+        d.dump("onBeforeSortListeners", mOnBeforeSortListeners);
+        d.dump("notifSections", mNotifSections);
+        d.dump("notifComparators", mNotifComparators);
+        d.dump("onBeforeFinalizeFilterListeners", mOnBeforeFinalizeFilterListeners);
+        d.dump("notifFinalizeFilters", mNotifFinalizeFilters);
+        d.dump("onBeforeRenderListListeners", mOnBeforeRenderListListeners);
+        d.dump("onRenderListListener", mOnRenderListListener);
     }
 
     /** See {@link #setOnRenderListListener(OnRenderListListener)} */

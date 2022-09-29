@@ -23,6 +23,7 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 
 import static com.android.wm.shell.protolog.ShellProtoLogGroup.WM_SHELL_TASK_ORG;
+import static com.android.wm.shell.transition.Transitions.ENABLE_SHELL_TRANSITIONS;
 
 import android.annotation.IntDef;
 import android.annotation.NonNull;
@@ -55,6 +56,7 @@ import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.compatui.CompatUIController;
 import com.android.wm.shell.recents.RecentTasksController;
 import com.android.wm.shell.startingsurface.StartingWindowController;
+import com.android.wm.shell.unfold.UnfoldAnimationController;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -179,33 +181,41 @@ public class ShellTaskOrganizer extends TaskOrganizer implements
     private final Optional<RecentTasksController> mRecentTasks;
 
     @Nullable
+    private final UnfoldAnimationController mUnfoldAnimationController;
+
+    @Nullable
     private RunningTaskInfo mLastFocusedTaskInfo;
 
     public ShellTaskOrganizer(ShellExecutor mainExecutor, Context context) {
         this(null /* taskOrganizerController */, mainExecutor, context, null /* compatUI */,
+                Optional.empty() /* unfoldAnimationController */,
                 Optional.empty() /* recentTasksController */);
     }
 
     public ShellTaskOrganizer(ShellExecutor mainExecutor, Context context, @Nullable
             CompatUIController compatUI) {
         this(null /* taskOrganizerController */, mainExecutor, context, compatUI,
+                Optional.empty() /* unfoldAnimationController */,
                 Optional.empty() /* recentTasksController */);
     }
 
     public ShellTaskOrganizer(ShellExecutor mainExecutor, Context context, @Nullable
             CompatUIController compatUI,
+            Optional<UnfoldAnimationController> unfoldAnimationController,
             Optional<RecentTasksController> recentTasks) {
         this(null /* taskOrganizerController */, mainExecutor, context, compatUI,
-                recentTasks);
+                unfoldAnimationController, recentTasks);
     }
 
     @VisibleForTesting
     protected ShellTaskOrganizer(ITaskOrganizerController taskOrganizerController,
             ShellExecutor mainExecutor, Context context, @Nullable CompatUIController compatUI,
+            Optional<UnfoldAnimationController> unfoldAnimationController,
             Optional<RecentTasksController> recentTasks) {
         super(taskOrganizerController, mainExecutor);
         mCompatUI = compatUI;
         mRecentTasks = recentTasks;
+        mUnfoldAnimationController = unfoldAnimationController.orElse(null);
         if (compatUI != null) {
             compatUI.setCompatUICallback(this);
         }
@@ -437,6 +447,9 @@ public class ShellTaskOrganizer extends TaskOrganizer implements
         if (listener != null) {
             listener.onTaskAppeared(info.getTaskInfo(), info.getLeash());
         }
+        if (mUnfoldAnimationController != null) {
+            mUnfoldAnimationController.onTaskAppeared(info.getTaskInfo(), info.getLeash());
+        }
         notifyLocusVisibilityIfNeeded(info.getTaskInfo());
         notifyCompatUI(info.getTaskInfo(), listener);
         mRecentTasks.ifPresent(recentTasks -> recentTasks.onTaskAdded(info.getTaskInfo()));
@@ -459,6 +472,11 @@ public class ShellTaskOrganizer extends TaskOrganizer implements
     public void onTaskInfoChanged(RunningTaskInfo taskInfo) {
         synchronized (mLock) {
             ProtoLog.v(WM_SHELL_TASK_ORG, "Task info changed taskId=%d", taskInfo.taskId);
+
+            if (mUnfoldAnimationController != null) {
+                mUnfoldAnimationController.onTaskInfoChanged(taskInfo);
+            }
+
             final TaskAppearedInfo data = mTasks.get(taskInfo.taskId);
             final TaskListener oldListener = getTaskListener(data.getTaskInfo());
             final TaskListener newListener = getTaskListener(taskInfo);
@@ -483,7 +501,9 @@ public class ShellTaskOrganizer extends TaskOrganizer implements
                     || (taskInfo.topActivityType == WindowConfiguration.ACTIVITY_TYPE_HOME
                     && taskInfo.isVisible);
             final boolean focusTaskChanged = (mLastFocusedTaskInfo == null
-                    || mLastFocusedTaskInfo.taskId != taskInfo.taskId) && isFocusedOrHome;
+                    || mLastFocusedTaskInfo.taskId != taskInfo.taskId
+                    || mLastFocusedTaskInfo.getWindowingMode() != taskInfo.getWindowingMode())
+                    && isFocusedOrHome;
             if (focusTaskChanged) {
                 for (int i = 0; i < mFocusListeners.size(); i++) {
                     mFocusListeners.valueAt(i).onFocusTaskChanged(taskInfo);
@@ -508,8 +528,13 @@ public class ShellTaskOrganizer extends TaskOrganizer implements
     public void onTaskVanished(RunningTaskInfo taskInfo) {
         synchronized (mLock) {
             ProtoLog.v(WM_SHELL_TASK_ORG, "Task vanished taskId=%d", taskInfo.taskId);
+            if (mUnfoldAnimationController != null) {
+                mUnfoldAnimationController.onTaskVanished(taskInfo);
+            }
+
             final int taskId = taskInfo.taskId;
-            final TaskListener listener = getTaskListener(mTasks.get(taskId).getTaskInfo());
+            final TaskAppearedInfo appearedInfo = mTasks.get(taskId);
+            final TaskListener listener = getTaskListener(appearedInfo.getTaskInfo());
             mTasks.remove(taskId);
             if (listener != null) {
                 listener.onTaskVanished(taskInfo);
@@ -519,6 +544,11 @@ public class ShellTaskOrganizer extends TaskOrganizer implements
             notifyCompatUI(taskInfo, null /* taskListener */);
             // Notify the recent tasks that a task has been removed
             mRecentTasks.ifPresent(recentTasks -> recentTasks.onTaskRemoved(taskInfo));
+
+            if (!ENABLE_SHELL_TRANSITIONS && (appearedInfo.getLeash() != null)) {
+                // Preemptively clean up the leash only if shell transitions are not enabled
+                appearedInfo.getLeash().release();
+            }
         }
     }
 

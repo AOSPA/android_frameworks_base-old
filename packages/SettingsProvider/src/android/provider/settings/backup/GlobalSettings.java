@@ -78,6 +78,7 @@ public class GlobalSettings {
         Settings.Global.POWER_BUTTON_LONG_PRESS,
         Settings.Global.AUTOMATIC_POWER_SAVE_MODE,
         Settings.Global.ADVANCED_BATTERY_USAGE_AMOUNT,
+        Settings.Global.ADAPTIVE_BATTERY_MANAGEMENT_ENABLED,
         Settings.Global.POWER_BUTTON_LONG_PRESS_DURATION_MS,
         Settings.Global.USER_PREFERRED_REFRESH_RATE,
         Settings.Global.USER_PREFERRED_RESOLUTION_HEIGHT,
@@ -91,8 +92,9 @@ public class GlobalSettings {
         Settings.Global.Wearable.AMBIENT_ENABLED,
         Settings.Global.Wearable.AMBIENT_TILT_TO_WAKE,
         Settings.Global.Wearable.AMBIENT_TOUCH_TO_WAKE,
-        Settings.Global.Wearable.TOUCH_AND_HOLD_WATCH_FACE,
+        Settings.Global.Wearable.GESTURE_TOUCH_AND_HOLD_WATCH_FACE_ENABLED,
         Settings.Global.Wearable.BATTERY_SAVER_MODE,
-        Settings.Global.Wearable.WEAR_ACTIVITY_AUTO_RESUME_TIMEOUT_MS
+        Settings.Global.Wearable.WEAR_ACTIVITY_AUTO_RESUME_TIMEOUT_MS,
+        Settings.Global.Wearable.WEAR_ACTIVITY_AUTO_RESUME_TIMEOUT_SET_BY_USER
     };
 }

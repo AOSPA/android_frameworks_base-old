@@ -77,6 +77,7 @@ interface INotificationManager
     boolean areNotificationsEnabledForPackage(String pkg, int uid);
     boolean areNotificationsEnabled(String pkg);
     int getPackageImportance(String pkg);
+    boolean isImportanceLocked(String pkg, int uid);
 
     List<String> getAllowedAssistantAdjustments(String pkg);
     void allowAssistantAdjustment(String adjustmentType);
@@ -234,5 +235,6 @@ interface INotificationManager
     void setListenerFilter(in ComponentName cn, int userId, in NotificationListenerFilter nlf);
     void migrateNotificationFilter(in INotificationListener token, int defaultTypes, in List<String> disallowedPkgs);
 
+    @EnforcePermission("MANAGE_TOAST_RATE_LIMITING")
     void setToastRateLimitingEnabled(boolean enable);
 }

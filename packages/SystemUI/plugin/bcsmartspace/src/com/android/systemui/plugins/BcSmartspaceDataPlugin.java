@@ -105,6 +105,11 @@ public interface BcSmartspaceDataPlugin extends Plugin {
         void setDozeAmount(float amount);
 
         /**
+         * Set the current keyguard bypass enabled status.
+         */
+        default void setKeyguardBypassEnabled(boolean enabled) {}
+
+        /**
          * Overrides how Intents/PendingIntents gets launched. Mostly to support auth from
          * the lockscreen.
          */
@@ -134,6 +139,12 @@ public interface BcSmartspaceDataPlugin extends Plugin {
          * Get the index of the currently selected page.
          */
         int getSelectedPage();
+
+        /**
+         * Return the top padding value from the currently visible card, or 0 if there is no current
+         * card.
+         */
+        int getCurrentCardTopPadding();
     }
 
     /** Interface for launching Intents, which can differ on the lockscreen */

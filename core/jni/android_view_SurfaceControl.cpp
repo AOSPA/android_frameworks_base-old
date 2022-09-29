@@ -580,6 +580,11 @@ static void nativeSetEarlyWakeupEnd(JNIEnv* env, jclass clazz, jlong transaction
     transaction->setEarlyWakeupEnd();
 }
 
+static jlong nativeGetTransactionId(JNIEnv* env, jclass clazz, jlong transactionObj) {
+    auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
+    return transaction->getId();
+}
+
 static void nativeSetLayer(JNIEnv* env, jclass clazz, jlong transactionObj,
         jlong nativeObject, jint zorder) {
     auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
@@ -688,8 +693,11 @@ static void nativeSetBuffer(JNIEnv* env, jclass clazz, jlong transactionObj, jlo
                             jobject bufferObject, jlong fencePtr, jobject releaseCallback) {
     auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
     SurfaceControl* const ctrl = reinterpret_cast<SurfaceControl*>(nativeObject);
-    sp<GraphicBuffer> graphicBuffer(GraphicBuffer::fromAHardwareBuffer(
-            android_hardware_HardwareBuffer_getNativeHardwareBuffer(env, bufferObject)));
+    sp<GraphicBuffer> graphicBuffer;
+    if (bufferObject != nullptr) {
+        graphicBuffer = GraphicBuffer::fromAHardwareBuffer(
+                android_hardware_HardwareBuffer_getNativeHardwareBuffer(env, bufferObject));
+    }
     std::optional<sp<Fence>> optFence = std::nullopt;
     if (fencePtr != 0) {
         optFence = sp<Fence>{reinterpret_cast<Fence*>(fencePtr)};
@@ -1008,6 +1016,15 @@ static void nativeSetFrameRate(JNIEnv* env, jclass clazz, jlong transactionObj, 
     // values are identical though, so no need to convert anything.
     transaction->setFrameRate(ctrl, frameRate, static_cast<int8_t>(compatibility),
                               static_cast<int8_t>(changeFrameRateStrategy));
+}
+
+static void nativeSetDefaultFrameRateCompatibility(JNIEnv* env, jclass clazz, jlong transactionObj,
+                                                   jlong nativeObject, jint compatibility) {
+    auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
+
+    const auto ctrl = reinterpret_cast<SurfaceControl*>(nativeObject);
+
+    transaction->setDefaultFrameRateCompatibility(ctrl, static_cast<int8_t>(compatibility));
 }
 
 static void nativeSetFixedTransformHint(JNIEnv* env, jclass clazz, jlong transactionObj,
@@ -1921,6 +1938,7 @@ static void nativeRemoveCurrentInputFocus(JNIEnv* env, jclass clazz, jlong trans
     FocusRequest request;
     request.timestamp = systemTime(SYSTEM_TIME_MONOTONIC);
     request.displayId = displayId;
+    request.windowName = "<null>";
     transaction->setFocusedWindow(request);
 }
 
@@ -2101,6 +2119,8 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeSetEarlyWakeupStart },
     {"nativeSetEarlyWakeupEnd", "(J)V",
             (void*)nativeSetEarlyWakeupEnd },
+    {"nativeGetTransactionId", "(J)J",
+                (void*)nativeGetTransactionId },
     {"nativeSetLayer", "(JJI)V",
             (void*)nativeSetLayer },
     {"nativeSetRelativeLayer", "(JJJI)V",
@@ -2146,6 +2166,8 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeSetShadowRadius },
     {"nativeSetFrameRate", "(JJFII)V",
             (void*)nativeSetFrameRate },
+    {"nativeSetDefaultFrameRateCompatibility", "(JJI)V",
+            (void*)nativeSetDefaultFrameRateCompatibility},
     {"nativeGetPhysicalDisplayIds", "()[J",
             (void*)nativeGetPhysicalDisplayIds },
     {"nativeGetPrimaryPhysicalDisplayId", "()J",

@@ -16,7 +16,9 @@
 
 package com.android.wm.shell.splitscreen;
 
-import android.annotation.Nullable;
+import static com.android.wm.shell.common.split.SplitScreenConstants.CONTROLLED_ACTIVITY_TYPES;
+import static com.android.wm.shell.common.split.SplitScreenConstants.CONTROLLED_WINDOWING_MODES;
+
 import android.content.Context;
 import android.view.SurfaceSession;
 import android.window.WindowContainerToken;
@@ -38,10 +40,14 @@ class MainStage extends StageTaskListener {
 
     MainStage(Context context, ShellTaskOrganizer taskOrganizer, int displayId,
             StageListenerCallbacks callbacks, SyncTransactionQueue syncQueue,
-            SurfaceSession surfaceSession, IconProvider iconProvider,
-            @Nullable StageTaskUnfoldController stageTaskUnfoldController) {
-        super(context, taskOrganizer, displayId, callbacks, syncQueue, surfaceSession, iconProvider,
-                stageTaskUnfoldController);
+            SurfaceSession surfaceSession, IconProvider iconProvider) {
+        super(context, taskOrganizer, displayId, callbacks, syncQueue, surfaceSession,
+                iconProvider);
+    }
+
+    @Override
+    void dismiss(WindowContainerTransaction wct, boolean toTop) {
+        deactivate(wct, toTop);
     }
 
     boolean isActive() {
@@ -76,10 +82,10 @@ class MainStage extends StageTaskListener {
         if (mRootTaskInfo == null) return;
         final WindowContainerToken rootToken = mRootTaskInfo.token;
         wct.reparentTasks(
-                        rootToken,
-                        null /* newParent */,
-                        CONTROLLED_WINDOWING_MODES_WHEN_ACTIVE,
-                        CONTROLLED_ACTIVITY_TYPES,
-                        toTop);
+                rootToken,
+                null /* newParent */,
+                null /* windowingModes */,
+                null /* activityTypes */,
+                toTop);
     }
 }

@@ -37,7 +37,15 @@ cc_test {
         "libbase",
         "libutils",
     ],
-    compile_multilib: "first",
+    compile_multilib: "both",
+    multilib: {
+        lib32: {
+            suffix: "32",
+        },
+        lib64: {
+            suffix: "64",
+        },
+    },
 
     auto_gen_config: false,
     test_suites: [

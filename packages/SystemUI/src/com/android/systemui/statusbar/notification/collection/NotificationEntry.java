@@ -158,13 +158,6 @@ public final class NotificationEntry extends ListEntry {
     private long initializationTime = -1;
 
     /**
-     * Whether or not this row represents a system notification. Note that if this is
-     * {@code null}, that means we were either unable to retrieve the info or have yet to
-     * retrieve the info.
-     */
-    public Boolean mIsSystemNotification;
-
-    /**
      * Has the user sent a reply through this Notification.
      */
     private boolean hasSentReply;
@@ -182,6 +175,10 @@ public final class NotificationEntry extends ListEntry {
     public boolean mRemoteEditImeAnimatingAway;
     public boolean mRemoteEditImeVisible;
     private boolean mExpandAnimationRunning;
+    /**
+     * Flag to determine if the entry is blockable by DnD filters
+     */
+    private boolean mBlockable;
 
     /**
      * @param sbn the StatusBarNotification from system server
@@ -260,6 +257,7 @@ public final class NotificationEntry extends ListEntry {
         }
 
         mRanking = ranking.withAudiblyAlertedInfo(mRanking);
+        updateIsBlockable();
     }
 
     /*
@@ -478,11 +476,13 @@ public final class NotificationEntry extends ListEntry {
     /**
      * Abort all existing inflation tasks
      */
-    public void abortTask() {
+    public boolean abortTask() {
         if (mRunningTask != null) {
             mRunningTask.abort();
             mRunningTask = null;
+            return true;
         }
+        return false;
     }
 
     public void setInflationTask(InflationTask abortableTask) {
@@ -777,10 +777,31 @@ public final class NotificationEntry extends ListEntry {
         if (mSbn.getNotification().isMediaNotification()) {
             return true;
         }
-        if (mIsSystemNotification != null && mIsSystemNotification) {
+        if (!isBlockable()) {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Returns whether this row is considered blockable (i.e. it's not a system notif
+     * or is not in an allowList).
+     */
+    public boolean isBlockable() {
+        return mBlockable;
+    }
+
+    private void updateIsBlockable() {
+        if (getChannel() == null) {
+            mBlockable = false;
+            return;
+        }
+        if (getChannel().isImportanceLockedByCriticalDeviceFunction()
+                && !getChannel().isBlockable()) {
+            mBlockable = false;
+            return;
+        }
+        mBlockable = true;
     }
 
     private boolean shouldSuppressVisualEffect(int effect) {
@@ -855,15 +876,6 @@ public final class NotificationEntry extends ListEntry {
 
     private static boolean isCategory(String category, Notification n) {
         return Objects.equals(n.category, category);
-    }
-
-    /**
-     * Whether or not this row represents a system notification. Note that if this is
-     * {@code null}, that means we were either unable to retrieve the info or have yet to
-     * retrieve the info.
-     */
-    public Boolean isSystemNotification() {
-        return mIsSystemNotification;
     }
 
     /**

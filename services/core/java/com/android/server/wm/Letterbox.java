@@ -25,7 +25,6 @@ import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.IBinder;
 import android.os.InputConfig;
-import android.os.Process;
 import android.view.GestureDetector;
 import android.view.InputChannel;
 import android.view.InputEvent;
@@ -72,7 +71,8 @@ public class Letterbox {
     private final LetterboxSurface mFullWindowSurface = new LetterboxSurface("fullWindow");
     private final LetterboxSurface[] mSurfaces = { mLeft, mTop, mRight, mBottom };
     // Reachability gestures.
-    private final IntConsumer mDoubleTapCallback;
+    private final IntConsumer mDoubleTapCallbackX;
+    private final IntConsumer mDoubleTapCallbackY;
 
     /**
      * Constructs a Letterbox.
@@ -86,7 +86,8 @@ public class Letterbox {
             Supplier<Boolean> hasWallpaperBackgroundSupplier,
             Supplier<Integer> blurRadiusSupplier,
             Supplier<Float> darkScrimAlphaSupplier,
-            IntConsumer doubleTapCallback) {
+            IntConsumer doubleTapCallbackX,
+            IntConsumer doubleTapCallbackY) {
         mSurfaceControlFactory = surfaceControlFactory;
         mTransactionFactory = transactionFactory;
         mAreCornersRounded = areCornersRounded;
@@ -94,7 +95,8 @@ public class Letterbox {
         mHasWallpaperBackgroundSupplier = hasWallpaperBackgroundSupplier;
         mBlurRadiusSupplier = blurRadiusSupplier;
         mDarkScrimAlphaSupplier = darkScrimAlphaSupplier;
-        mDoubleTapCallback = doubleTapCallback;
+        mDoubleTapCallbackX = doubleTapCallbackX;
+        mDoubleTapCallbackY = doubleTapCallbackY;
     }
 
     /**
@@ -264,7 +266,8 @@ public class Letterbox {
         @Override
         public boolean onDoubleTapEvent(MotionEvent e) {
             if (e.getAction() == MotionEvent.ACTION_UP) {
-                mDoubleTapCallback.accept((int) e.getX());
+                mDoubleTapCallbackX.accept((int) e.getX());
+                mDoubleTapCallbackY.accept((int) e.getY());
                 return true;
             }
             return false;
@@ -293,8 +296,8 @@ public class Letterbox {
             mWindowHandle.token = mToken;
             mWindowHandle.layoutParamsType = WindowManager.LayoutParams.TYPE_INPUT_CONSUMER;
             mWindowHandle.dispatchingTimeoutMillis = DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
-            mWindowHandle.ownerPid = Process.myPid();
-            mWindowHandle.ownerUid = Process.myUid();
+            mWindowHandle.ownerPid = WindowManagerService.MY_PID;
+            mWindowHandle.ownerUid = WindowManagerService.MY_UID;
             mWindowHandle.scaleFactor = 1.0f;
             mWindowHandle.inputConfig = InputConfig.NOT_FOCUSABLE | InputConfig.SLIPPERY;
         }

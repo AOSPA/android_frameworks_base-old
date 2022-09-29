@@ -388,6 +388,9 @@ public class ParsingPackageUtils {
         if ((flags & PARSE_FRAMEWORK_RES_SPLITS) != 0) {
             liteParseFlags = flags;
         }
+        if ((flags & PARSE_APK_IN_APEX) != 0) {
+            liteParseFlags |= PARSE_APK_IN_APEX;
+        }
         final ParseResult<PackageLite> liteResult =
                 ApkLiteParseUtils.parseClusterPackageLite(input, packageDir, frameworkSplits,
                         liteParseFlags);
@@ -951,7 +954,7 @@ public class ParsingPackageUtils {
         if (ParsedPermissionUtils.declareDuplicatePermission(pkg)) {
             return input.error(
                     INSTALL_PARSE_FAILED_MANIFEST_MALFORMED,
-                    "Declare duplicate permissions with different protection levels."
+                    "Found duplicate permission with a different attribute value."
             );
         }
 
@@ -1527,6 +1530,7 @@ public class ParsingPackageUtils {
             try {
                 int minVers = ParsingUtils.DEFAULT_MIN_SDK_VERSION;
                 String minCode = null;
+                boolean minAssigned = false;
                 int targetVers = ParsingUtils.DEFAULT_TARGET_SDK_VERSION;
                 String targetCode = null;
                 int maxVers = Integer.MAX_VALUE;
@@ -1535,9 +1539,11 @@ public class ParsingPackageUtils {
                 if (val != null) {
                     if (val.type == TypedValue.TYPE_STRING && val.string != null) {
                         minCode = val.string.toString();
+                        minAssigned = !TextUtils.isEmpty(minCode);
                     } else {
                         // If it's not a string, it's an integer.
                         minVers = val.data;
+                        minAssigned = true;
                     }
                 }
 
@@ -1545,7 +1551,7 @@ public class ParsingPackageUtils {
                 if (val != null) {
                     if (val.type == TypedValue.TYPE_STRING && val.string != null) {
                         targetCode = val.string.toString();
-                        if (minCode == null) {
+                        if (!minAssigned) {
                             minCode = targetCode;
                         }
                     } else {
@@ -3095,11 +3101,9 @@ public class ParsingPackageUtils {
         }
         final ParseResult<SigningDetails> verified;
         if (skipVerify) {
-            // systemDir APKs are already trusted, save time by not verifying; since the
-            // signature is not verified and some system apps can have their V2+ signatures
-            // stripped allow pulling the certs from the jar signature.
+            // systemDir APKs are already trusted, save time by not verifying
             verified = ApkSignatureVerifier.unsafeGetCertsWithoutVerification(input, baseCodePath,
-                    SigningDetails.SignatureSchemeVersion.JAR);
+                    minSignatureScheme);
         } else {
             verified = ApkSignatureVerifier.verify(input, baseCodePath, minSignatureScheme);
         }
@@ -3276,7 +3280,7 @@ public class ParsingPackageUtils {
 
             ArraySet<PublicKey> keys = new ArraySet<>(M);
             for (int j = 0; j < M; ++j) {
-                PublicKey pk = (PublicKey) in.readSerializable();
+                PublicKey pk = (PublicKey) in.readSerializable(java.security.PublicKey.class.getClassLoader(), java.security.PublicKey.class);
                 keys.add(pk);
             }
 

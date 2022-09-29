@@ -1137,10 +1137,7 @@ public class ApnSetting implements Parcelable {
             return false;
         }
         // DEFAULT can handle HIPRI.
-        if (hasApnType(type)) {
-            return true;
-        }
-        return false;
+        return hasApnType(type);
     }
 
     // Check whether the types of two APN same (even only one type of each APN is same).
@@ -2193,11 +2190,10 @@ public class ApnSetting implements Parcelable {
             }
             if ((mApnTypeBitmask & TYPE_MMS) != 0 && !TextUtils.isEmpty(mMmsProxyAddress)
                     && mMmsProxyAddress.startsWith("http")) {
-                if (Build.IS_DEBUGGABLE) {
-                    throw new IllegalArgumentException("mms proxy(" +  mMmsProxyAddress
-                            + ") should be a hostname, not a url");
-                }
-                return null;
+                Log.wtf(LOG_TAG,"mms proxy(" + mMmsProxyAddress
+                        + ") should be a hostname, not a url");
+                Uri mMmsProxyAddressUri = Uri.parse(mMmsProxyAddress);
+                mMmsProxyAddress = mMmsProxyAddressUri.getHost();
             }
             return new ApnSetting(this);
         }

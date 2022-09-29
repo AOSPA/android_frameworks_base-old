@@ -18,6 +18,7 @@ package com.android.wm.shell.dagger;
 
 import android.content.Context;
 import android.os.Handler;
+import android.os.SystemClock;
 
 import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.WindowManagerShellWrapper;
@@ -39,6 +40,7 @@ import com.android.wm.shell.pip.PipTransitionController;
 import com.android.wm.shell.pip.PipTransitionState;
 import com.android.wm.shell.pip.PipUiEventLogger;
 import com.android.wm.shell.pip.tv.TvPipBoundsAlgorithm;
+import com.android.wm.shell.pip.tv.TvPipBoundsController;
 import com.android.wm.shell.pip.tv.TvPipBoundsState;
 import com.android.wm.shell.pip.tv.TvPipController;
 import com.android.wm.shell.pip.tv.TvPipMenuController;
@@ -46,6 +48,7 @@ import com.android.wm.shell.pip.tv.TvPipNotificationController;
 import com.android.wm.shell.pip.tv.TvPipTaskOrganizer;
 import com.android.wm.shell.pip.tv.TvPipTransition;
 import com.android.wm.shell.splitscreen.SplitScreenController;
+import com.android.wm.shell.sysui.ShellController;
 import com.android.wm.shell.transition.Transitions;
 
 import java.util.Optional;
@@ -62,8 +65,10 @@ public abstract class TvPipModule {
     @Provides
     static Optional<Pip> providePip(
             Context context,
+            ShellController shellController,
             TvPipBoundsState tvPipBoundsState,
             TvPipBoundsAlgorithm tvPipBoundsAlgorithm,
+            TvPipBoundsController tvPipBoundsController,
             PipAppOpsListener pipAppOpsListener,
             PipTaskOrganizer pipTaskOrganizer,
             TvPipMenuController tvPipMenuController,
@@ -74,13 +79,14 @@ public abstract class TvPipModule {
             PipParamsChangedForwarder pipParamsChangedForwarder,
             DisplayController displayController,
             WindowManagerShellWrapper windowManagerShellWrapper,
-            @ShellMainThread ShellExecutor mainExecutor,
-            @ShellMainThread Handler mainHandler) {
+            @ShellMainThread ShellExecutor mainExecutor) {
         return Optional.of(
                 TvPipController.create(
                         context,
+                        shellController,
                         tvPipBoundsState,
                         tvPipBoundsAlgorithm,
+                        tvPipBoundsController,
                         pipAppOpsListener,
                         pipTaskOrganizer,
                         pipTransitionController,
@@ -91,8 +97,22 @@ public abstract class TvPipModule {
                         pipParamsChangedForwarder,
                         displayController,
                         windowManagerShellWrapper,
-                        mainExecutor,
-                        mainHandler));
+                        mainExecutor));
+    }
+
+    @WMSingleton
+    @Provides
+    static TvPipBoundsController provideTvPipBoundsController(
+            Context context,
+            @ShellMainThread Handler mainHandler,
+            TvPipBoundsState tvPipBoundsState,
+            TvPipBoundsAlgorithm tvPipBoundsAlgorithm) {
+        return new TvPipBoundsController(
+                context,
+                SystemClock::uptimeMillis,
+                mainHandler,
+                tvPipBoundsState,
+                tvPipBoundsAlgorithm);
     }
 
     @WMSingleton

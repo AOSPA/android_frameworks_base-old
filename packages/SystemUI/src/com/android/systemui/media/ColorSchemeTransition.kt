@@ -17,18 +17,17 @@
 package com.android.systemui.media
 
 import android.animation.ArgbEvaluator
-import android.animation.ValueAnimator.AnimatorUpdateListener
 import android.animation.ValueAnimator
+import android.animation.ValueAnimator.AnimatorUpdateListener
 import android.content.Context
 import android.content.res.ColorStateList
-import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
+import android.content.res.Configuration
+import android.content.res.Configuration.UI_MODE_NIGHT_YES
 import android.graphics.drawable.RippleDrawable
 import com.android.internal.R
 import com.android.internal.annotations.VisibleForTesting
 import com.android.settingslib.Utils
 import com.android.systemui.monet.ColorScheme
-import com.android.systemui.util.getColorWithAlpha
 
 /**
  * A [ColorTransition] is an object that updates the colors of views each time [updateColorScheme]
@@ -104,7 +103,6 @@ class ColorSchemeTransition internal constructor(
     constructor(context: Context, mediaViewHolder: MediaViewHolder) :
         this(context, mediaViewHolder, ::AnimatingColorTransition)
 
-    private var isGradientEnabled = true
     val bgColor = context.getColor(com.android.systemui.R.color.material_dynamic_secondary95)
     val surfaceColor = animatingColorTransitionFactory(
         bgColor,
@@ -124,7 +122,6 @@ class ColorSchemeTransition internal constructor(
         val accentColorList = ColorStateList.valueOf(accentPrimary)
         mediaViewHolder.actionPlayPause.backgroundTintList = accentColorList
         mediaViewHolder.gutsViewHolder.setAccentPrimaryColor(accentPrimary)
-        mediaViewHolder.seamlessButton.backgroundTintList = accentColorList
     }
 
     val accentSecondary = animatingColorTransitionFactory(
@@ -137,6 +134,19 @@ class ColorSchemeTransition internal constructor(
             it.effectColor = colorList
         }
     }
+
+    val colorSeamless = animatingColorTransitionFactory(
+        loadDefaultColor(R.attr.textColorPrimary),
+        { colorScheme: ColorScheme ->
+            // A1-100 dark in dark theme, A1-200 in light theme
+            if (context.resources.configuration.uiMode and
+                    Configuration.UI_MODE_NIGHT_MASK == UI_MODE_NIGHT_YES)
+                        colorScheme.accent1[2]
+                        else colorScheme.accent1[3]
+        }, { seamlessColor: Int ->
+            val accentColorList = ColorStateList.valueOf(seamlessColor)
+            mediaViewHolder.seamlessButton.backgroundTintList = accentColorList
+    })
 
     val textPrimary = animatingColorTransitionFactory(
         loadDefaultColor(R.attr.textColorPrimary),
@@ -173,55 +183,23 @@ class ColorSchemeTransition internal constructor(
         mediaViewHolder.seekBar.progressBackgroundTintList = ColorStateList.valueOf(textTertiary)
     }
 
-    val bgGradientStart = animatingColorTransitionFactory(
-        bgColor,
-        albumGradientPicker(::backgroundStartFromScheme, 0.25f)
-    ) { _ -> updateAlbumGradient() }
-
-    val bgGradientEnd = animatingColorTransitionFactory(
-        bgColor,
-        albumGradientPicker(::backgroundEndFromScheme, 0.9f)
-    ) { _ -> updateAlbumGradient() }
-
     val colorTransitions = arrayOf(
         surfaceColor,
+        colorSeamless,
         accentPrimary,
         accentSecondary,
         textPrimary,
         textPrimaryInverse,
         textSecondary,
         textTertiary,
-        bgGradientStart,
-        bgGradientEnd
     )
-
-    private fun updateAlbumGradient() {
-        val gradient = mediaViewHolder.albumView.foreground?.mutate()
-        if (gradient is GradientDrawable) {
-            gradient.colors = intArrayOf(
-                bgGradientStart?.currentColor ?: 0,
-                bgGradientEnd?.currentColor ?: 0)
-        }
-    }
-
-    private fun albumGradientPicker(
-        inner: (ColorScheme) -> Int,
-        targetAlpha: Float
-    ): (ColorScheme) -> Int {
-        return { scheme ->
-            if (isGradientEnabled)
-                getColorWithAlpha(inner(scheme), targetAlpha)
-            else
-                Color.TRANSPARENT
-        }
-    }
 
     private fun loadDefaultColor(id: Int): Int {
         return Utils.getColorAttr(context, id).defaultColor
     }
 
-    fun updateColorScheme(colorScheme: ColorScheme?, enableGradient: Boolean) {
-        isGradientEnabled = enableGradient
+    fun updateColorScheme(colorScheme: ColorScheme?) {
         colorTransitions.forEach { it.updateColorScheme(colorScheme) }
+        colorScheme?.let { mediaViewHolder.gutsViewHolder.colorScheme = colorScheme }
     }
 }

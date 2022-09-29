@@ -24,8 +24,8 @@ import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.annotation.Group4
 import com.android.server.wm.flicker.dsl.FlickerBuilder
-import org.junit.runner.RunWith
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 
 /**
@@ -44,6 +44,7 @@ import org.junit.runners.Parameterized
 @Group4
 open class ExpandBubbleScreen(testSpec: FlickerTestParameter) : BaseBubbleScreen(testSpec) {
 
+    /** {@inheritDoc} */
     override val transition: FlickerBuilder.() -> Unit
         get() = buildTransition {
             setup {
@@ -53,8 +54,11 @@ open class ExpandBubbleScreen(testSpec: FlickerTestParameter) : BaseBubbleScreen
                 }
             }
             transitions {
-                val showBubble = device.wait(Until.findObject(
-                        By.res("com.android.systemui", "bubble_view")), FIND_OBJECT_TIMEOUT)
+                val showBubble = device.wait(
+                    Until.findObject(
+                        By.res("com.android.systemui", "bubble_view")
+                    ), FIND_OBJECT_TIMEOUT
+                )
                 showBubble?.run { showBubble.click() } ?: error("Bubble notify not found")
             }
         }
@@ -63,7 +67,7 @@ open class ExpandBubbleScreen(testSpec: FlickerTestParameter) : BaseBubbleScreen
     @Test
     open fun testAppIsAlwaysVisible() {
         testSpec.assertLayers {
-            this.isVisible(testApp.component)
+            this.isVisible(testApp)
         }
     }
 }

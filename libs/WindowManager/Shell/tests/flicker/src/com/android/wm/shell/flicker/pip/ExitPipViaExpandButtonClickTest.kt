@@ -16,8 +16,8 @@
 
 package com.android.wm.shell.flicker.pip
 
+import android.platform.test.annotations.FlakyTest
 import android.view.Surface
-import androidx.test.filters.FlakyTest
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
@@ -54,7 +54,6 @@ import org.junit.runners.Parameterized
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @Group3
-@FlakyTest(bugId = 219750830)
 class ExitPipViaExpandButtonClickTest(
     testSpec: FlickerTestParameter
 ) : ExitPipToAppTransition(testSpec) {
@@ -74,19 +73,16 @@ class ExitPipViaExpandButtonClickTest(
                 // This will bring PipApp to fullscreen
                 pipApp.expandPipWindowToApp(wmHelper)
                 // Wait until the other app is no longer visible
-                wmHelper.waitForWindowSurfaceDisappeared(testApp.component)
+                wmHelper.StateSyncBuilder()
+                    .withWindowSurfaceDisappeared(testApp)
+                    .waitForAndVerify()
             }
         }
 
     /** {@inheritDoc}  */
-    @FlakyTest(bugId = 206753786)
+    @FlakyTest(bugId = 227313015)
     @Test
-    override fun statusBarLayerRotatesScales() = super.statusBarLayerRotatesScales()
-
-    /** {@inheritDoc}  */
-    @FlakyTest(bugId = 197726610)
-    @Test
-    override fun pipLayerExpands() = super.pipLayerExpands()
+    override fun entireScreenCovered() = super.entireScreenCovered()
 
     companion object {
         /**

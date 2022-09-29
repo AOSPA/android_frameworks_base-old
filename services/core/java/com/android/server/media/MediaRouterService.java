@@ -566,7 +566,9 @@ public final class MediaRouterService extends IMediaRouterService.Stub
         boolean setDeviceRouteSelected = false;
         synchronized (mLock) {
             UserRecord userRecord = mUserRecords.get(userId);
-            for (ClientRecord clientRecord : userRecord.mClientRecords) {
+            List<ClientRecord> userClientRecords =
+                    userRecord != null ? userRecord.mClientRecords : Collections.emptyList();
+            for (ClientRecord clientRecord : userClientRecords) {
                 if (TextUtils.equals(clientRecord.mPackageName, packageName)) {
                     if (mDefaultAudioRouteId.equals(clientRecord.mSelectedRouteId)) {
                         setDeviceRouteSelected = true;
@@ -954,7 +956,7 @@ public final class MediaRouterService extends IMediaRouterService.Stub
         @Override
         public void onReceive(Context context, Intent intent) {
             if (intent.getAction().equals(BluetoothA2dp.ACTION_ACTIVE_DEVICE_CHANGED)) {
-                BluetoothDevice btDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+                BluetoothDevice btDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, android.bluetooth.BluetoothDevice.class);
                 synchronized (mLock) {
                     mActiveBluetoothDevice = btDevice;
                     mGlobalBluetoothA2dpOn = btDevice != null;

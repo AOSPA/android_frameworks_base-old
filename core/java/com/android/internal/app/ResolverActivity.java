@@ -61,6 +61,7 @@ import android.os.Bundle;
 import android.os.PatternMatcher;
 import android.os.RemoteException;
 import android.os.StrictMode;
+import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.MediaStore;
@@ -98,6 +99,7 @@ import com.android.internal.app.chooser.TargetInfo;
 import com.android.internal.content.PackageMonitor;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto;
+import com.android.internal.util.LatencyTracker;
 import com.android.internal.widget.ResolverDrawerLayout;
 import com.android.internal.widget.ViewPager;
 
@@ -119,6 +121,11 @@ public class ResolverActivity extends Activity implements
 
     @UnsupportedAppUsage
     public ResolverActivity() {
+        mIsIntentPicker = getClass().equals(ResolverActivity.class);
+    }
+
+    protected ResolverActivity(boolean isIntentPicker) {
+        mIsIntentPicker = isIntentPicker;
     }
 
     private boolean mSafeForwardingMode;
@@ -135,6 +142,8 @@ public class ResolverActivity extends Activity implements
     private String mReferrerPackage;
     private CharSequence mTitle;
     private int mDefaultTitleResId;
+    // Expected to be true if this object is ResolverActivity or is ResolverWrapperActivity.
+    private final boolean mIsIntentPicker;
 
     // Whether or not this activity supports choosing a default handler for the intent.
     @VisibleForTesting
@@ -207,7 +216,11 @@ public class ResolverActivity extends Activity implements
 
     private UserHandle mWorkProfileUserHandle;
 
+    protected final LatencyTracker mLatencyTracker = getLatencyTracker();
 
+    private LatencyTracker getLatencyTracker() {
+        return LatencyTracker.getInstance(this);
+    }
 
     /**
      * Get the string resource to be used as a label for the link to the resolver activity for an
@@ -445,10 +458,6 @@ public class ResolverActivity extends Activity implements
                         + (categories != null ? Arrays.toString(categories.toArray()) : ""));
     }
 
-    private boolean isIntentPicker() {
-        return getClass().equals(ResolverActivity.class);
-    }
-
     protected AbstractMultiProfilePagerAdapter createMultiProfilePagerAdapter(
             Intent[] initialIntents,
             List<ResolveInfo> rList,
@@ -491,7 +500,7 @@ public class ResolverActivity extends Activity implements
         // this happens, we check for it here and set the current profile's tab.
         int selectedProfile = getCurrentProfile();
         UserHandle intentUser = getIntent().hasExtra(EXTRA_CALLING_USER)
-                ? getIntent().getParcelableExtra(EXTRA_CALLING_USER)
+                ? getIntent().getParcelableExtra(EXTRA_CALLING_USER, android.os.UserHandle.class)
                 : getUser();
         if (!getUser().equals(intentUser)) {
             if (getPersonalProfileUserHandle().equals(intentUser)) {
@@ -637,6 +646,12 @@ public class ResolverActivity extends Activity implements
 
         resetButtonBar();
 
+        if (shouldUseMiniResolver()) {
+            View buttonContainer = findViewById(R.id.button_bar_container);
+            buttonContainer.setPadding(0, 0, 0, mSystemWindowInsets.bottom
+                    + getResources().getDimensionPixelOffset(R.dimen.resolver_button_bar_spacing));
+        }
+
         // Need extra padding so the list can fully scroll up
         if (shouldAddFooterView()) {
             applyFooterView(mSystemWindowInsets.bottom);
@@ -649,7 +664,8 @@ public class ResolverActivity extends Activity implements
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
         mMultiProfilePagerAdapter.getActiveListAdapter().handlePackagesChanged();
-        if (isIntentPicker() && shouldShowTabs() && !useLayoutWithDefault()) {
+        if (mIsIntentPicker && shouldShowTabs() && !useLayoutWithDefault()
+                && !shouldUseMiniResolver()) {
             updateIntentPickerPaddings();
         }
 
@@ -1084,7 +1100,7 @@ public class ResolverActivity extends Activity implements
         if (isAutolaunching()) {
             return;
         }
-        if (isIntentPicker()) {
+        if (mIsIntentPicker) {
             ((ResolverMultiProfilePagerAdapter) mMultiProfilePagerAdapter)
                     .setUseLayoutWithDefault(useLayoutWithDefault());
         }
@@ -1108,7 +1124,7 @@ public class ResolverActivity extends Activity implements
     protected void onListRebuilt(ResolverListAdapter listAdapter, boolean rebuildCompleted) {
         final ItemClickListener listener = new ItemClickListener();
         setupAdapterListView((ListView) mMultiProfilePagerAdapter.getActiveAdapterView(), listener);
-        if (shouldShowTabs() && isIntentPicker()) {
+        if (shouldShowTabs() && mIsIntentPicker) {
             final ResolverDrawerLayout rdl = findViewById(R.id.contentPanel);
             if (rdl != null) {
                 rdl.setMaxCollapsedHeight(getResources()
@@ -1298,7 +1314,7 @@ public class ResolverActivity extends Activity implements
         StrictMode.disableDeathOnFileUriExposure();
         try {
             UserHandle currentUserHandle = mMultiProfilePagerAdapter.getCurrentUserHandle();
-            safelyStartActivityInternal(cti, currentUserHandle);
+            safelyStartActivityInternal(cti, currentUserHandle, null);
         } finally {
             StrictMode.enableDeathOnFileUriExposure();
         }
@@ -1311,18 +1327,23 @@ public class ResolverActivity extends Activity implements
      */
     @VisibleForTesting
     public void safelyStartActivityAsUser(TargetInfo cti, UserHandle user) {
+        safelyStartActivityAsUser(cti, user, null);
+    }
+
+    protected void safelyStartActivityAsUser(
+            TargetInfo cti, UserHandle user, @Nullable Bundle options) {
         // We're dispatching intents that might be coming from legacy apps, so
         // don't kill ourselves.
         StrictMode.disableDeathOnFileUriExposure();
         try {
-            safelyStartActivityInternal(cti, user);
+            safelyStartActivityInternal(cti, user, options);
         } finally {
             StrictMode.enableDeathOnFileUriExposure();
         }
     }
 
-
-    private void safelyStartActivityInternal(TargetInfo cti, UserHandle user) {
+    private void safelyStartActivityInternal(
+            TargetInfo cti, UserHandle user, @Nullable Bundle options) {
         // If the target is suspended, the activity will not be successfully launched.
         // Do not unregister from package manager updates in this case
         if (!cti.isSuspended() && mRegistered) {
@@ -1340,14 +1361,14 @@ public class ResolverActivity extends Activity implements
             Toast.makeText(this, mProfileSwitchMessage, Toast.LENGTH_LONG).show();
         }
         if (!mSafeForwardingMode) {
-            if (cti.startAsUser(this, null, user)) {
+            if (cti.startAsUser(this, options, user)) {
                 onActivityStarted(cti);
                 maybeLogCrossProfileTargetLaunch(cti, user);
             }
             return;
         }
         try {
-            if (cti.startAsCaller(this, null, user.getIdentifier())) {
+            if (cti.startAsCaller(this, options, user.getIdentifier())) {
                 onActivityStarted(cti);
                 maybeLogCrossProfileTargetLaunch(cti, user);
             }
@@ -1423,6 +1444,7 @@ public class ResolverActivity extends Activity implements
             throw new IllegalStateException("mMultiProfilePagerAdapter.getCurrentListAdapter() "
                     + "cannot be null.");
         }
+        Trace.beginSection("configureContentView");
         // We partially rebuild the inactive adapter to determine if we should auto launch
         // isTabLoaded will be true here if the empty state screen is shown instead of the list.
         boolean rebuildCompleted = mMultiProfilePagerAdapter.rebuildActiveTab(true)
@@ -1435,6 +1457,7 @@ public class ResolverActivity extends Activity implements
 
         if (shouldUseMiniResolver()) {
             configureMiniResolverContent();
+            Trace.endSection();
             return false;
         }
 
@@ -1445,9 +1468,17 @@ public class ResolverActivity extends Activity implements
         }
         setContentView(mLayoutId);
         mMultiProfilePagerAdapter.setupViewPager(findViewById(R.id.profile_pager));
-        return postRebuildList(rebuildCompleted);
+        boolean result = postRebuildList(rebuildCompleted);
+        Trace.endSection();
+        return result;
     }
 
+    /**
+     * Mini resolver is shown when the user is choosing between browser[s] in this profile and a
+     * single app in the other profile (see shouldUseMiniResolver()). It shows the single app icon
+     * and asks the user if they'd like to open that cross-profile app or use the in-profile
+     * browser.
+     */
     private void configureMiniResolverContent() {
         mLayoutId = R.layout.miniresolver;
         setContentView(mLayoutId);
@@ -1456,10 +1487,14 @@ public class ResolverActivity extends Activity implements
                 mMultiProfilePagerAdapter.getActiveListAdapter().mDisplayList.get(0);
         boolean inWorkProfile = getCurrentProfile() == PROFILE_WORK;
 
-        DisplayResolveInfo otherProfileResolveInfo =
-                mMultiProfilePagerAdapter.getInactiveListAdapter().mDisplayList.get(0);
+        ResolverListAdapter inactiveAdapter = mMultiProfilePagerAdapter.getInactiveListAdapter();
+        DisplayResolveInfo otherProfileResolveInfo = inactiveAdapter.mDisplayList.get(0);
+
+        // Load the icon asynchronously
         ImageView icon = findViewById(R.id.icon);
-        // TODO: Set icon drawable to app icon.
+        ResolverListAdapter.LoadIconTask iconTask = inactiveAdapter.new LoadIconTask(
+                        otherProfileResolveInfo, new ResolverListAdapter.ViewHolder(icon));
+        iconTask.execute();
 
         ((TextView) findViewById(R.id.open_cross_profile)).setText(
                 getResources().getString(
@@ -1471,7 +1506,10 @@ public class ResolverActivity extends Activity implements
                         : R.string.miniresolver_use_personal_browser);
 
         findViewById(R.id.use_same_profile_browser).setOnClickListener(
-                v -> safelyStartActivity(sameProfileResolveInfo));
+                v -> {
+                    safelyStartActivity(sameProfileResolveInfo);
+                    finish();
+                });
 
         findViewById(R.id.button_open).setOnClickListener(v -> {
             Intent intent = otherProfileResolveInfo.getResolvedIntent();
@@ -1479,12 +1517,21 @@ public class ResolverActivity extends Activity implements
                 prepareIntentForCrossProfileLaunch(intent);
             }
             safelyStartActivityAsUser(otherProfileResolveInfo,
-                    mMultiProfilePagerAdapter.getInactiveListAdapter().mResolverListController
-                            .getUserHandle());
+                    inactiveAdapter.mResolverListController.getUserHandle());
+            finish();
         });
     }
 
+    /**
+     * Mini resolver should be used when all of the following are true:
+     * 1. This is the intent picker (ResolverActivity).
+     * 2. This profile only has web browser matches.
+     * 3. The other profile has a single non-browser match.
+     */
     private boolean shouldUseMiniResolver() {
+        if (!mIsIntentPicker) {
+            return false;
+        }
         if (mMultiProfilePagerAdapter.getActiveListAdapter() == null
                 || mMultiProfilePagerAdapter.getInactiveListAdapter() == null) {
             return false;
@@ -1790,7 +1837,7 @@ public class ResolverActivity extends Activity implements
     void onHorizontalSwipeStateChanged(int state) {}
 
     private void maybeHideDivider() {
-        if (!isIntentPicker()) {
+        if (!mIsIntentPicker) {
             return;
         }
         final View divider = findViewById(R.id.divider);
@@ -1807,7 +1854,7 @@ public class ResolverActivity extends Activity implements
     protected void onProfileTabSelected() { }
 
     private void resetCheckedItem() {
-        if (!isIntentPicker()) {
+        if (!mIsIntentPicker) {
             return;
         }
         mLastSelected = ListView.INVALID_POSITION;

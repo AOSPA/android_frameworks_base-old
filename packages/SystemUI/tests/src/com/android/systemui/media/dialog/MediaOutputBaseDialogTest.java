@@ -27,10 +27,12 @@ import static org.mockito.Mockito.when;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
+import android.media.AudioManager;
 import android.media.session.MediaController;
 import android.media.session.MediaSessionManager;
 import android.media.session.PlaybackState;
 import android.os.Bundle;
+import android.os.PowerExemptionManager;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
 import android.view.View;
@@ -41,6 +43,8 @@ import android.widget.TextView;
 import androidx.core.graphics.drawable.IconCompat;
 import androidx.test.filters.SmallTest;
 
+import com.android.settingslib.bluetooth.CachedBluetoothDevice;
+import com.android.settingslib.bluetooth.CachedBluetoothDeviceManager;
 import com.android.settingslib.bluetooth.LocalBluetoothLeBroadcast;
 import com.android.settingslib.bluetooth.LocalBluetoothManager;
 import com.android.settingslib.bluetooth.LocalBluetoothProfileManager;
@@ -84,6 +88,8 @@ public class MediaOutputBaseDialogTest extends SysuiTestCase {
     private NearbyMediaDevicesManager mNearbyMediaDevicesManager = mock(
             NearbyMediaDevicesManager.class);
     private final DialogLaunchAnimator mDialogLaunchAnimator = mock(DialogLaunchAnimator.class);
+    private final AudioManager mAudioManager = mock(AudioManager.class);
+    private PowerExemptionManager mPowerExemptionManager = mock(PowerExemptionManager.class);
 
     private List<MediaController> mMediaControllers = new ArrayList<>();
     private MediaOutputBaseDialogImpl mMediaOutputBaseDialogImpl;
@@ -94,10 +100,17 @@ public class MediaOutputBaseDialogTest extends SysuiTestCase {
     private CharSequence mHeaderSubtitle;
     private String mStopText;
     private boolean mIsBroadcasting;
+    private boolean mIsBroadcastIconVisibility;
+
 
     @Before
     public void setUp() {
         when(mLocalBluetoothManager.getProfileManager()).thenReturn(mLocalBluetoothProfileManager);
+        final CachedBluetoothDeviceManager cachedBluetoothDeviceManager = mock(
+                CachedBluetoothDeviceManager.class);
+        when(mLocalBluetoothManager.getCachedDeviceManager()).thenReturn(
+                cachedBluetoothDeviceManager);
+        when(cachedBluetoothDeviceManager.findDevice(any())).thenReturn(null);
         when(mLocalBluetoothProfileManager.getLeAudioBroadcastProfile()).thenReturn(null);
         when(mMediaController.getPlaybackState()).thenReturn(mPlaybackState);
         when(mPlaybackState.getState()).thenReturn(PlaybackState.STATE_NONE);
@@ -108,7 +121,7 @@ public class MediaOutputBaseDialogTest extends SysuiTestCase {
         mMediaOutputController = new MediaOutputController(mContext, TEST_PACKAGE,
                 mMediaSessionManager, mLocalBluetoothManager, mStarter,
                 mNotificationEntryManager, mDialogLaunchAnimator,
-                Optional.of(mNearbyMediaDevicesManager));
+                Optional.of(mNearbyMediaDevicesManager), mAudioManager, mPowerExemptionManager);
         mMediaOutputBaseDialogImpl = new MediaOutputBaseDialogImpl(mContext, mBroadcastSender,
                 mMediaOutputController);
         mMediaOutputBaseDialogImpl.onCreate(new Bundle());
@@ -146,6 +159,27 @@ public class MediaOutputBaseDialogTest extends SysuiTestCase {
                 R.id.header_icon);
 
         assertThat(view.getVisibility()).isEqualTo(View.GONE);
+    }
+
+    @Test
+    public void refresh_broadcastIconVisibilityOff_broadcastIconLayoutNotVisible() {
+        mIsBroadcastIconVisibility = false;
+
+        mMediaOutputBaseDialogImpl.refresh();
+        final ImageView view = mMediaOutputBaseDialogImpl.mDialogView.requireViewById(
+                R.id.broadcast_icon);
+
+        assertThat(view.getVisibility()).isEqualTo(View.GONE);
+    }
+    @Test
+    public void refresh_broadcastIconVisibilityOn_broadcastIconLayoutVisible() {
+        mIsBroadcastIconVisibility = true;
+
+        mMediaOutputBaseDialogImpl.refresh();
+        final ImageView view = mMediaOutputBaseDialogImpl.mDialogView.requireViewById(
+                R.id.broadcast_icon);
+
+        assertThat(view.getVisibility()).isEqualTo(View.VISIBLE);
     }
 
     @Test
@@ -303,6 +337,11 @@ public class MediaOutputBaseDialogTest extends SysuiTestCase {
         @Override
         public CharSequence getStopButtonText() {
             return mStopText;
+        }
+
+        @Override
+        public int getBroadcastIconVisibility() {
+            return mIsBroadcastIconVisibility ? View.VISIBLE : View.GONE;
         }
     }
 }

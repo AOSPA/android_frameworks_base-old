@@ -166,7 +166,16 @@ public final class OutputConfiguration implements Parcelable {
      * {@link #TIMESTAMP_BASE_MONOTONIC}, which is roughly the same time base as
      * {@link android.os.SystemClock#uptimeMillis}.</li>
      * <li> For all other cases, the timestamp base is {@link #TIMESTAMP_BASE_SENSOR}, the same
-     * as what's specified by {@link CameraCharacteristics#SENSOR_INFO_TIMESTAMP_SOURCE}.</li>
+     * as what's specified by {@link CameraCharacteristics#SENSOR_INFO_TIMESTAMP_SOURCE}.
+     * <ul><li> For a SurfaceTexture output surface, the camera system re-spaces the delivery
+     * of output frames based on image readout intervals, reducing viewfinder jitter. The timestamps
+     * of images remain to be {@link #TIMESTAMP_BASE_SENSOR}.</li></ul></li>
+     *
+     * <p>Note that the reduction of frame jitter for SurfaceView and SurfaceTexture comes with
+     * slight increase in photon-to-photon latency, which is the time from when photons hit the
+     * scene to when the corresponding pixels show up on the screen. If the photon-to-photon latency
+     * is more important than the smoothness of viewfinder, {@link #TIMESTAMP_BASE_SENSOR} should be
+     * used instead.</p>
      *
      * @see #TIMESTAMP_BASE_CHOREOGRAPHER_SYNCED
      * @see #TIMESTAMP_BASE_MONOTONIC
@@ -236,6 +245,26 @@ public final class OutputConfiguration implements Parcelable {
      */
     public static final int TIMESTAMP_BASE_CHOREOGRAPHER_SYNCED = 4;
 
+    /**
+     * Timestamp is the start of readout in the same time domain as TIMESTAMP_BASE_SENSOR.
+     *
+     * <p>The start of the camera sensor readout after exposure. For a rolling shutter camera
+     * sensor, the timestamp is typically equal to the start of exposure time +
+     * exposure time + certain fixed offset. The fixed offset could be due to camera sensor
+     * level crop. The benefit of using readout time is that when camera runs in a fixed
+     * frame rate, the timestamp intervals between frames are constant.</p>
+     *
+     * <p>This timestamp is in the same time domain as in TIMESTAMP_BASE_SENSOR, with the exception
+     * that one is start of exposure, and the other is start of readout.</p>
+     *
+     * <p>This timestamp base is supported only if {@link
+     * CameraCharacteristics#SENSOR_READOUT_TIMESTAMP} is
+     * {@link CameraMetadata#SENSOR_READOUT_TIMESTAMP_HARDWARE}.</p>
+     *
+     * @hide
+     */
+    public static final int TIMESTAMP_BASE_READOUT_SENSOR = 5;
+
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
     @IntDef(prefix = {"TIMESTAMP_BASE_"}, value =
@@ -243,7 +272,8 @@ public final class OutputConfiguration implements Parcelable {
          TIMESTAMP_BASE_SENSOR,
          TIMESTAMP_BASE_MONOTONIC,
          TIMESTAMP_BASE_REALTIME,
-         TIMESTAMP_BASE_CHOREOGRAPHER_SYNCED})
+         TIMESTAMP_BASE_CHOREOGRAPHER_SYNCED,
+         TIMESTAMP_BASE_READOUT_SENSOR})
     public @interface TimestampBase {};
 
     /** @hide */
@@ -965,7 +995,7 @@ public final class OutputConfiguration implements Parcelable {
     public void setTimestampBase(@TimestampBase int timestampBase) {
         // Verify that the value is in range
         if (timestampBase < TIMESTAMP_BASE_DEFAULT ||
-                timestampBase > TIMESTAMP_BASE_CHOREOGRAPHER_SYNCED) {
+                timestampBase > TIMESTAMP_BASE_READOUT_SENSOR) {
             throw new IllegalArgumentException("Not a valid timestamp base value " +
                     timestampBase);
         }

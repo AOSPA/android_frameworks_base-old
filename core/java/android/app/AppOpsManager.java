@@ -1335,9 +1335,17 @@ public class AppOpsManager {
     public static final int OP_ACCESS_RESTRICTED_SETTINGS =
             AppProtoEnums.APP_OP_ACCESS_RESTRICTED_SETTINGS;
 
+    /**
+     * Receive microphone audio from an ambient sound detection event
+     *
+     * @hide
+     */
+    public static final int OP_RECEIVE_AMBIENT_TRIGGER_AUDIO =
+            AppProtoEnums.APP_OP_RECEIVE_AMBIENT_TRIGGER_AUDIO;
+
     /** @hide */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-    public static final int _NUM_OP = 120;
+    public static final int _NUM_OP = 121;
 
     /** Access to coarse location information. */
     public static final String OPSTR_COARSE_LOCATION = "android:coarse_location";
@@ -1800,6 +1808,14 @@ public class AppOpsManager {
     public static final String OPSTR_ACCESS_RESTRICTED_SETTINGS =
             "android:access_restricted_settings";
 
+    /**
+     * Receive microphone audio from an ambient sound detection event
+     *
+     * @hide
+     */
+    public static final String OPSTR_RECEIVE_AMBIENT_TRIGGER_AUDIO =
+            "android:receive_ambient_trigger_audio";
+
     /** {@link #sAppOpsToNote} not initialized yet for this op */
     private static final byte SHOULD_COLLECT_NOTE_OP_NOT_INITIALIZED = 0;
     /** Should not collect noting of this app-op in {@link #sAppOpsToNote} */
@@ -1890,6 +1906,7 @@ public class AppOpsManager {
             OP_USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER,
             OP_SCHEDULE_EXACT_ALARM,
             OP_MANAGE_MEDIA,
+            OP_TURN_SCREEN_ON,
     };
 
     /**
@@ -2021,6 +2038,7 @@ public class AppOpsManager {
             OP_ESTABLISH_VPN_SERVICE,           // OP_ESTABLISH_VPN_SERVICE
             OP_ESTABLISH_VPN_MANAGER,           // OP_ESTABLISH_VPN_MANAGER
             OP_ACCESS_RESTRICTED_SETTINGS,      // OP_ACCESS_RESTRICTED_SETTINGS
+            OP_RECEIVE_AMBIENT_TRIGGER_AUDIO,      // RECEIVE_SOUNDTRIGGER_AUDIO
     };
 
     /**
@@ -2147,6 +2165,7 @@ public class AppOpsManager {
             OPSTR_ESTABLISH_VPN_SERVICE,
             OPSTR_ESTABLISH_VPN_MANAGER,
             OPSTR_ACCESS_RESTRICTED_SETTINGS,
+            OPSTR_RECEIVE_AMBIENT_TRIGGER_AUDIO,
     };
 
     /**
@@ -2274,6 +2293,7 @@ public class AppOpsManager {
             "ESTABLISH_VPN_SERVICE",
             "ESTABLISH_VPN_MANAGER",
             "ACCESS_RESTRICTED_SETTINGS",
+            "RECEIVE_SOUNDTRIGGER_AUDIO",
     };
 
     /**
@@ -2343,7 +2363,7 @@ public class AppOpsManager {
             null,
             Manifest.permission.READ_EXTERNAL_STORAGE,
             Manifest.permission.WRITE_EXTERNAL_STORAGE,
-            null, // no permission for turning the screen on
+            Manifest.permission.TURN_SCREEN_ON,
             Manifest.permission.GET_ACCOUNTS,
             null, // no permission for running in background
             null, // no permission for changing accessibility volume
@@ -2402,6 +2422,7 @@ public class AppOpsManager {
             null, // no permission for OP_ESTABLISH_VPN_SERVICE
             null, // no permission for OP_ESTABLISH_VPN_MANAGER
             null, // no permission for OP_ACCESS_RESTRICTED_SETTINGS,
+            null, // no permission for OP_RECEIVE_SOUNDTRIGGER_AUDIO
     };
 
     /**
@@ -2471,7 +2492,7 @@ public class AppOpsManager {
             null, // MOCK_LOCATION
             null, // READ_EXTERNAL_STORAGE
             null, // WRITE_EXTERNAL_STORAGE
-            null, // TURN_ON_SCREEN
+            null, // TURN_SCREEN_ON
             null, // GET_ACCOUNTS
             null, // RUN_IN_BACKGROUND
             UserManager.DISALLOW_ADJUST_VOLUME, //AUDIO_ACCESSIBILITY_VOLUME
@@ -2529,7 +2550,8 @@ public class AppOpsManager {
             null, // NEARBY_WIFI_DEVICES
             null, // ESTABLISH_VPN_SERVICE
             null, // ESTABLISH_VPN_MANAGER
-            null, // ACCESS_RESTRICTED_SETTINGS,
+            null, // ACCESS_RESTRICTED_SETTINGS
+            null, // RECEIVE_SOUNDTRIGGER_AUDIO
     };
 
     /**
@@ -2598,7 +2620,7 @@ public class AppOpsManager {
             null, // MOCK_LOCATION
             null, // READ_EXTERNAL_STORAGE
             null, // WRITE_EXTERNAL_STORAGE
-            null, // TURN_ON_SCREEN
+            null, // TURN_SCREEN_ON
             null, // GET_ACCOUNTS
             null, // RUN_IN_BACKGROUND
             null, // AUDIO_ACCESSIBILITY_VOLUME
@@ -2656,7 +2678,8 @@ public class AppOpsManager {
             null, // NEARBY_WIFI_DEVICES
             null, // ESTABLISH_VPN_SERVICE
             null, // ESTABLISH_VPN_MANAGER
-            null, // ACCESS_RESTRICTED_SETTINGS,
+            null, // ACCESS_RESTRICTED_SETTINGS
+            null, // RECEIVE_SOUNDTRIGGER_AUDIO
     };
 
     /**
@@ -2687,7 +2710,7 @@ public class AppOpsManager {
             AppOpsManager.MODE_ALLOWED, // READ_ICC_SMS
             AppOpsManager.MODE_ALLOWED, // WRITE_ICC_SMS
             AppOpsManager.MODE_DEFAULT, // WRITE_SETTINGS
-            AppOpsManager.MODE_DEFAULT, // SYSTEM_ALERT_WINDOW /*Overridden in opToDefaultMode()*/
+            getSystemAlertWindowDefault(), // SYSTEM_ALERT_WINDOW
             AppOpsManager.MODE_ALLOWED, // ACCESS_NOTIFICATIONS
             AppOpsManager.MODE_ALLOWED, // CAMERA
             AppOpsManager.MODE_ALLOWED, // RECORD_AUDIO
@@ -2724,7 +2747,7 @@ public class AppOpsManager {
             AppOpsManager.MODE_ERRORED, // MOCK_LOCATION
             AppOpsManager.MODE_ALLOWED, // READ_EXTERNAL_STORAGE
             AppOpsManager.MODE_ALLOWED, // WRITE_EXTERNAL_STORAGE
-            AppOpsManager.MODE_ALLOWED, // TURN_SCREEN_ON
+            AppOpsManager.MODE_ERRORED, // TURN_SCREEN_ON
             AppOpsManager.MODE_ALLOWED, // GET_ACCOUNTS
             AppOpsManager.MODE_ALLOWED, // RUN_IN_BACKGROUND
             AppOpsManager.MODE_ALLOWED, // AUDIO_ACCESSIBILITY_VOLUME
@@ -2765,7 +2788,7 @@ public class AppOpsManager {
             AppOpsManager.MODE_ERRORED, // OP_NO_ISOLATED_STORAGE
             AppOpsManager.MODE_ALLOWED, // PHONE_CALL_MICROPHONE
             AppOpsManager.MODE_ALLOWED, // PHONE_CALL_CAMERA
-            AppOpsManager.MODE_ALLOWED, // OP_RECORD_AUDIO_HOTWORD
+            AppOpsManager.MODE_ALLOWED, // RECORD_AUDIO_HOTWORD
             AppOpsManager.MODE_DEFAULT, // MANAGE_ONGOING_CALLS
             AppOpsManager.MODE_DEFAULT, // MANAGE_CREDENTIALS
             AppOpsManager.MODE_DEFAULT, // USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER
@@ -2783,6 +2806,7 @@ public class AppOpsManager {
             AppOpsManager.MODE_ALLOWED, // ESTABLISH_VPN_SERVICE
             AppOpsManager.MODE_ALLOWED, // ESTABLISH_VPN_MANAGER
             AppOpsManager.MODE_ALLOWED, // ACCESS_RESTRICTED_SETTINGS,
+            AppOpsManager.MODE_ALLOWED, // RECEIVE_SOUNDTRIGGER_AUDIO
     };
 
     /**
@@ -2913,6 +2937,7 @@ public class AppOpsManager {
             false, // OP_ESTABLISH_VPN_SERVICE
             false, // OP_ESTABLISH_VPN_MANAGER
             true, // ACCESS_RESTRICTED_SETTINGS
+            false, // RECEIVE_SOUNDTRIGGER_AUDIO
     };
 
     /**
@@ -3040,6 +3065,7 @@ public class AppOpsManager {
             false, // OP_ESTABLISH_VPN_SERVICE
             false, // OP_ESTABLISH_VPN_MANAGER
             true, // ACCESS_RESTRICTED_SETTINGS
+            false, // RECEIVE_SOUNDTRIGGER_AUDIO
     };
 
     /**
@@ -3137,8 +3163,6 @@ public class AppOpsManager {
     private static final String DEBUG_LOGGING_PACKAGES_PROP = "appops.logging_packages";
     private static final String DEBUG_LOGGING_OPS_PROP = "appops.logging_ops";
     private static final String DEBUG_LOGGING_TAG = "AppOpsManager";
-
-    private static volatile Integer sOpSystemAlertWindowDefaultMode;
 
     /**
      * Retrieve the op switch that controls the given operation.
@@ -3238,9 +3262,6 @@ public class AppOpsManager {
      * @hide
      */
     public static @Mode int opToDefaultMode(int op) {
-        if (op == OP_SYSTEM_ALERT_WINDOW) {
-            return getSystemAlertWindowDefault();
-        }
         return sOpDefaultMode[op];
     }
 
@@ -7543,10 +7564,15 @@ public class AppOpsManager {
     @SystemApi
     @RequiresPermission(android.Manifest.permission.GET_APP_OPS_STATS)
     public @NonNull List<AppOpsManager.PackageOps> getPackagesForOps(@Nullable String[] ops) {
-        final int opCount = ops.length;
-        final int[] opCodes = new int[opCount];
-        for (int i = 0; i < opCount; i++) {
-            opCodes[i] = sOpStrToOp.get(ops[i]);
+        final int[] opCodes;
+        if (ops != null) {
+            final int opCount = ops.length;
+            opCodes = new int[opCount];
+            for (int i = 0; i < opCount; i++) {
+                opCodes[i] = sOpStrToOp.get(ops[i]);
+            }
+        } else {
+            opCodes = null;
         }
         final List<AppOpsManager.PackageOps> result = getPackagesForOps(opCodes);
         return (result != null) ? result : Collections.emptyList();
@@ -7667,7 +7693,7 @@ public class AppOpsManager {
                     request.mOpNames, request.mHistoryFlags, request.mFilter,
                     request.mBeginTimeMillis, request.mEndTimeMillis, request.mFlags,
                     new RemoteCallback((result) -> {
-                final HistoricalOps ops = result.getParcelable(KEY_HISTORICAL_OPS);
+                final HistoricalOps ops = result.getParcelable(KEY_HISTORICAL_OPS, android.app.AppOpsManager.HistoricalOps.class);
                 final long identity = Binder.clearCallingIdentity();
                 try {
                     executor.execute(() -> callback.accept(ops));
@@ -7707,7 +7733,7 @@ public class AppOpsManager {
                     request.mAttributionTag, request.mOpNames, request.mHistoryFlags,
                     request.mFilter, request.mBeginTimeMillis, request.mEndTimeMillis,
                     request.mFlags, new RemoteCallback((result) -> {
-                final HistoricalOps ops = result.getParcelable(KEY_HISTORICAL_OPS);
+                final HistoricalOps ops = result.getParcelable(KEY_HISTORICAL_OPS, android.app.AppOpsManager.HistoricalOps.class);
                 final long identity = Binder.clearCallingIdentity();
                 try {
                     executor.execute(() -> callback.accept(ops));
@@ -10258,11 +10284,6 @@ public class AppOpsManager {
     }
 
     private static int getSystemAlertWindowDefault() {
-        // This is indeed racy but we aren't expecting the result to change so it's not worth
-        // the synchronization.
-        if (sOpSystemAlertWindowDefaultMode != null) {
-            return sOpSystemAlertWindowDefaultMode;
-        }
         final Context context = ActivityThread.currentApplication();
         if (context == null) {
             return AppOpsManager.MODE_DEFAULT;
@@ -10270,14 +10291,16 @@ public class AppOpsManager {
 
         // system alert window is disable on low ram phones starting from Q
         final PackageManager pm = context.getPackageManager();
+        if (null == pm) {
+            return AppOpsManager.MODE_DEFAULT;
+        }
         // TVs are constantly plugged in and has less concern for memory/power
         if (ActivityManager.isLowRamDeviceStatic()
                 && !pm.hasSystemFeature(PackageManager.FEATURE_LEANBACK, 0)) {
-            sOpSystemAlertWindowDefaultMode = AppOpsManager.MODE_IGNORED;
-        } else {
-            sOpSystemAlertWindowDefaultMode = AppOpsManager.MODE_DEFAULT;
+            return AppOpsManager.MODE_IGNORED;
         }
-        return sOpSystemAlertWindowDefaultMode;
+
+        return AppOpsManager.MODE_DEFAULT;
     }
 
     /**

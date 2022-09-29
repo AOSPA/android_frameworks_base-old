@@ -379,9 +379,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         // Clean up orphaned staging directories
         for (File stage : stagingDirsToRemove) {
             Slog.w(TAG, "Deleting orphan stage " + stage);
-            synchronized (mPm.mInstallLock) {
-                removePackageHelper.removeCodePathLI(stage);
-            }
+            removePackageHelper.removeCodePath(stage);
         }
     }
 
@@ -1347,7 +1345,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         private String getDeviceOwnerDeletedPackageMsg() {
             DevicePolicyManager dpm = mContext.getSystemService(DevicePolicyManager.class);
             return dpm.getResources().getString(PACKAGE_DELETED_BY_DO,
-                    () -> mContext.getString(R.string.package_updated_device_owner));
+                    () -> mContext.getString(R.string.package_deleted_device_owner));
         }
 
         @Override

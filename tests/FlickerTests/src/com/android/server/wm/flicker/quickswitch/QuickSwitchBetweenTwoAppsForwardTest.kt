@@ -16,29 +16,22 @@
 
 package com.android.server.wm.flicker.quickswitch
 
-import android.app.Instrumentation
+import android.platform.test.annotations.FlakyTest
+import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
 import android.platform.test.annotations.RequiresDevice
 import android.view.Surface
 import android.view.WindowManagerPolicyConstants
-import androidx.test.platform.app.InstrumentationRegistry
-import com.android.launcher3.tapl.LauncherInstrumentation
-import com.android.server.wm.flicker.FlickerBuilderProvider
+import com.android.server.wm.flicker.BaseTest
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
-import com.android.server.wm.flicker.LAUNCHER_COMPONENT
 import com.android.server.wm.flicker.annotation.Group1
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.NonResizeableAppHelper
 import com.android.server.wm.flicker.helpers.SimpleAppHelper
 import com.android.server.wm.flicker.helpers.isShellTransitionsEnabled
-import com.android.server.wm.flicker.navBarLayerIsVisible
-import com.android.server.wm.flicker.navBarLayerRotatesAndScales
-import com.android.server.wm.flicker.navBarWindowIsVisible
-import com.android.server.wm.flicker.statusBarLayerIsVisible
-import com.android.server.wm.flicker.statusBarWindowIsVisible
-import com.android.server.wm.traces.common.FlickerComponentName
+import com.android.server.wm.traces.common.ComponentMatcher
 import com.android.server.wm.traces.common.Rect
 import org.junit.Assume
 import org.junit.Before
@@ -64,10 +57,9 @@ import org.junit.runners.Parameterized
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @Group1
-open class QuickSwitchBetweenTwoAppsForwardTest(private val testSpec: FlickerTestParameter) {
-    private val instrumentation: Instrumentation = InstrumentationRegistry.getInstrumentation()
-    private val taplInstrumentation = LauncherInstrumentation()
-
+open class QuickSwitchBetweenTwoAppsForwardTest(
+    testSpec: FlickerTestParameter
+) : BaseTest(testSpec) {
     private val testApp1 = SimpleAppHelper(instrumentation)
     private val testApp2 = NonResizeableAppHelper(instrumentation)
 
@@ -76,45 +68,36 @@ open class QuickSwitchBetweenTwoAppsForwardTest(private val testSpec: FlickerTes
         Assume.assumeFalse(isShellTransitionsEnabled)
     }
 
-    @FlickerBuilderProvider
-    fun buildFlicker(): FlickerBuilder {
-        return FlickerBuilder(instrumentation).apply {
-            setup {
-                test {
-                    taplInstrumentation.setExpectedRotation(testSpec.startRotation)
-                }
-
-                eachRun {
-                    testApp1.launchViaIntent(wmHelper)
-                    wmHelper.waitForFullScreenApp(testApp1.component)
-
-                    testApp2.launchViaIntent(wmHelper)
-                    wmHelper.waitForFullScreenApp(testApp2.component)
-
-                    startDisplayBounds = wmHelper.currentState.layerState
-                        .displays.firstOrNull { !it.isVirtual }
-                        ?.layerStackSpace
-                        ?: error("Display not found")
-
-                    taplInstrumentation.launchedAppState.quickSwitchToPreviousApp()
-
-                    wmHelper.waitForFullScreenApp(testApp1.component)
-                    wmHelper.waitForAppTransitionIdle()
-                }
+    /** {@inheritDoc} */
+    override val transition: FlickerBuilder.() -> Unit = {
+        setup {
+            test {
+                tapl.setExpectedRotation(testSpec.startRotation)
             }
-            transitions {
-                taplInstrumentation.launchedAppState.quickSwitchToPreviousAppSwipeLeft()
-
-                wmHelper.waitForFullScreenApp(testApp2.component)
-                wmHelper.waitForAppTransitionIdle()
-                wmHelper.waitForNavBarStatusBarVisible()
+            eachRun {
+                testApp1.launchViaIntent(wmHelper)
+                testApp2.launchViaIntent(wmHelper)
+                tapl.launchedAppState.quickSwitchToPreviousApp()
+                wmHelper.StateSyncBuilder()
+                    .withNavOrTaskBarVisible()
+                    .withStatusBarVisible()
+                    .waitForAndVerify()
+                startDisplayBounds = wmHelper.currentState.layerState
+                    .physicalDisplayBounds ?: error("Display not found")
             }
+        }
+        transitions {
+            tapl.launchedAppState.quickSwitchToPreviousAppSwipeLeft()
+            wmHelper.StateSyncBuilder()
+                .withNavOrTaskBarVisible()
+                .withStatusBarVisible()
+                .waitForAndVerify()
+        }
 
-            teardown {
-                test {
-                    testApp1.exit(wmHelper)
-                    testApp2.exit(wmHelper)
-                }
+        teardown {
+            test {
+                testApp1.exit(wmHelper)
+                testApp2.exit(wmHelper)
             }
         }
     }
@@ -127,7 +110,7 @@ open class QuickSwitchBetweenTwoAppsForwardTest(private val testSpec: FlickerTes
     @Test
     open fun startsWithApp1WindowsCoverFullScreen() {
         testSpec.assertWmStart {
-            this.frameRegion(testApp1.component, FlickerComponentName.LETTERBOX)
+            this.visibleRegion(testApp1.or(ComponentMatcher.LETTERBOX))
                 .coversExactly(startDisplayBounds)
         }
     }
@@ -140,7 +123,7 @@ open class QuickSwitchBetweenTwoAppsForwardTest(private val testSpec: FlickerTes
     @Test
     open fun startsWithApp1LayersCoverFullScreen() {
         testSpec.assertLayersStart {
-            this.visibleRegion(testApp1.component).coversExactly(startDisplayBounds)
+            this.visibleRegion(testApp1).coversExactly(startDisplayBounds)
         }
     }
 
@@ -151,7 +134,7 @@ open class QuickSwitchBetweenTwoAppsForwardTest(private val testSpec: FlickerTes
     @Test
     open fun startsWithApp1WindowBeingOnTop() {
         testSpec.assertWmStart {
-            this.isAppWindowOnTop(testApp1.component)
+            this.isAppWindowOnTop(testApp1)
         }
     }
 
@@ -163,7 +146,7 @@ open class QuickSwitchBetweenTwoAppsForwardTest(private val testSpec: FlickerTes
     @Test
     open fun endsWithApp2WindowsCoveringFullScreen() {
         testSpec.assertWmEnd {
-            this.frameRegion(testApp2.component).coversExactly(startDisplayBounds)
+            this.visibleRegion(testApp2).coversExactly(startDisplayBounds)
         }
     }
 
@@ -175,7 +158,7 @@ open class QuickSwitchBetweenTwoAppsForwardTest(private val testSpec: FlickerTes
     @Test
     open fun endsWithApp2LayersCoveringFullScreen() {
         testSpec.assertLayersEnd {
-            this.visibleRegion(testApp2.component, FlickerComponentName.LETTERBOX)
+            this.visibleRegion(testApp2.or(ComponentMatcher.LETTERBOX))
                 .coversExactly(startDisplayBounds)
         }
     }
@@ -188,7 +171,7 @@ open class QuickSwitchBetweenTwoAppsForwardTest(private val testSpec: FlickerTes
     @Test
     open fun endsWithApp2BeingOnTop() {
         testSpec.assertWmEnd {
-            this.isAppWindowOnTop(testApp2.component)
+            this.isAppWindowOnTop(testApp2)
         }
     }
 
@@ -200,11 +183,11 @@ open class QuickSwitchBetweenTwoAppsForwardTest(private val testSpec: FlickerTes
     @Test
     open fun app2WindowBecomesAndStaysVisible() {
         testSpec.assertWm {
-            this.isAppWindowInvisible(testApp2.component)
+            this.isAppWindowInvisible(testApp2)
                     .then()
-                    .isAppWindowVisible(FlickerComponentName.SNAPSHOT, isOptional = true)
+                    .isAppWindowVisible(ComponentMatcher.SNAPSHOT, isOptional = true)
                     .then()
-                    .isAppWindowVisible(testApp2.component)
+                    .isAppWindowVisible(testApp2)
         }
     }
 
@@ -216,9 +199,9 @@ open class QuickSwitchBetweenTwoAppsForwardTest(private val testSpec: FlickerTes
     @Test
     open fun app2LayerBecomesAndStaysVisible() {
         testSpec.assertLayers {
-            this.isInvisible(testApp2.component)
+            this.isInvisible(testApp2)
                     .then()
-                    .isVisible(testApp2.component)
+                    .isVisible(testApp2)
         }
     }
 
@@ -230,9 +213,9 @@ open class QuickSwitchBetweenTwoAppsForwardTest(private val testSpec: FlickerTes
     @Test
     open fun app1WindowBecomesAndStaysInvisible() {
         testSpec.assertWm {
-            this.isAppWindowVisible(testApp1.component)
+            this.isAppWindowVisible(testApp1)
                     .then()
-                    .isAppWindowInvisible(testApp1.component)
+                    .isAppWindowInvisible(testApp1)
         }
     }
 
@@ -244,9 +227,9 @@ open class QuickSwitchBetweenTwoAppsForwardTest(private val testSpec: FlickerTes
     @Test
     open fun app1LayerBecomesAndStaysInvisible() {
         testSpec.assertLayers {
-            this.isVisible(testApp1.component)
+            this.isVisible(testApp1)
                     .then()
-                    .isInvisible(testApp1.component)
+                    .isInvisible(testApp1)
         }
     }
 
@@ -259,13 +242,13 @@ open class QuickSwitchBetweenTwoAppsForwardTest(private val testSpec: FlickerTes
     @Test
     open fun app2WindowIsVisibleOnceApp1WindowIsInvisible() {
         testSpec.assertWm {
-            this.isAppWindowVisible(testApp1.component)
+            this.isAppWindowVisible(testApp1)
                     .then()
-                    .isAppWindowVisible(LAUNCHER_COMPONENT, isOptional = true)
+                    .isAppWindowVisible(ComponentMatcher.LAUNCHER, isOptional = true)
                     .then()
-                    .isAppWindowVisible(FlickerComponentName.SNAPSHOT, isOptional = true)
+                    .isAppWindowVisible(ComponentMatcher.SNAPSHOT, isOptional = true)
                     .then()
-                    .isAppWindowVisible(testApp2.component)
+                    .isAppWindowVisible(testApp2)
         }
     }
 
@@ -278,62 +261,38 @@ open class QuickSwitchBetweenTwoAppsForwardTest(private val testSpec: FlickerTes
     @Test
     open fun app2LayerIsVisibleOnceApp1LayerIsInvisible() {
         testSpec.assertLayers {
-            this.isVisible(testApp1.component)
+            this.isVisible(testApp1)
                     .then()
-                    .isVisible(LAUNCHER_COMPONENT, isOptional = true)
+                    .isVisible(ComponentMatcher.LAUNCHER, isOptional = true)
                     .then()
-                    .isVisible(FlickerComponentName.SNAPSHOT, isOptional = true)
+                    .isVisible(ComponentMatcher.SNAPSHOT, isOptional = true)
                     .then()
-                    .isVisible(testApp2.component)
+                    .isVisible(testApp2)
         }
     }
 
-    /**
-     * Checks that the navbar window is visible throughout the entire transition.
-     */
-    @Presubmit
+    /** {@inheritDoc} */
+    @Postsubmit
     @Test
-    open fun navBarWindowIsAlwaysVisible() {
-        testSpec.navBarWindowIsVisible()
-    }
+    override fun taskBarLayerIsVisibleAtStartAndEnd() = super.taskBarLayerIsVisibleAtStartAndEnd()
 
-    /**
-     * Checks that the navbar layer is visible throughout the entire transition.
-     */
-    @Presubmit
+    /** {@inheritDoc} */
+    @FlakyTest(bugId = 239148258)
     @Test
-    open fun navBarLayerAlwaysIsVisible() {
-        testSpec.navBarLayerIsVisible()
-    }
+    override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
+        super.visibleLayersShownMoreThanOneConsecutiveEntry()
 
-    /**
-     * Checks that the navbar is always in the right position and covers the expected region.
-     *
-     * NOTE: This doesn't check that the navbar is visible or not.
-     */
-    @Presubmit
+    /** {@inheritDoc} */
+    @Postsubmit
     @Test
-    open fun navbarIsAlwaysInRightPosition() {
-        testSpec.navBarLayerRotatesAndScales()
-    }
+    override fun statusBarLayerPositionAtStartAndEnd() =
+        super.statusBarLayerPositionAtStartAndEnd()
 
-    /**
-     * Checks that the status bar window is visible throughout the entire transition.
-     */
-    @Presubmit
+    /** {@inheritDoc} */
+    @FlakyTest(bugId = 239148258)
     @Test
-    open fun statusBarWindowIsAlwaysVisible() {
-        testSpec.statusBarWindowIsVisible()
-    }
-
-    /**
-     * Checks that the status bar layer is visible throughout the entire transition.
-     */
-    @Presubmit
-    @Test
-    open fun statusBarLayerIsAlwaysVisible() {
-        testSpec.statusBarLayerIsVisible()
-    }
+    override fun visibleWindowsShownMoreThanOneConsecutiveEntry() =
+        super.visibleWindowsShownMoreThanOneConsecutiveEntry()
 
     companion object {
         private var startDisplayBounds = Rect.EMPTY

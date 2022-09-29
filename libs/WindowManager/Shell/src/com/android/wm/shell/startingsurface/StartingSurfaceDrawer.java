@@ -153,8 +153,7 @@ public class StartingSurfaceDrawer {
         mContext = context;
         mDisplayManager = mContext.getSystemService(DisplayManager.class);
         mSplashScreenExecutor = splashScreenExecutor;
-        mSplashscreenContentDrawer = new SplashscreenContentDrawer(mContext, iconProvider, pool,
-                mSplashScreenExecutor);
+        mSplashscreenContentDrawer = new SplashscreenContentDrawer(mContext, iconProvider, pool);
         mSplashScreenExecutor.execute(() -> mChoreographer = Choreographer.getInstance());
         mWindowManagerGlobal = WindowManagerGlobal.getInstance();
         mDisplayManager.getDisplay(DEFAULT_DISPLAY);
@@ -262,7 +261,8 @@ public class StartingSurfaceDrawer {
                 WindowManager.LayoutParams.TYPE_APPLICATION_STARTING);
         params.setFitInsetsSides(0);
         params.setFitInsetsTypes(0);
-        params.format = PixelFormat.TRANSLUCENT;
+        params.format = suggestType == STARTING_WINDOW_TYPE_LEGACY_SPLASH_SCREEN
+                ? PixelFormat.OPAQUE : PixelFormat.TRANSLUCENT;
         int windowFlags = WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
                 | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                 | WindowManager.LayoutParams.FLAG_LAYOUT_INSET_DECOR;

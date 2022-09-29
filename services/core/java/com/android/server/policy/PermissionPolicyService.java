@@ -92,6 +92,7 @@ import com.android.internal.util.IntPair;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.FgThread;
 import com.android.server.LocalServices;
+import com.android.server.PermissionThread;
 import com.android.server.SystemService;
 import com.android.server.notification.NotificationManagerInternal;
 import com.android.server.pm.UserManagerInternal;
@@ -335,7 +336,7 @@ public final class PermissionPolicyService extends SystemService {
                 PermissionControllerManager manager = mPermControllerManagers.get(user);
                 if (manager == null) {
                     manager = new PermissionControllerManager(
-                            getUserContext(getContext(), user), FgThread.getHandler());
+                            getUserContext(getContext(), user), PermissionThread.getHandler());
                     mPermControllerManagers.put(user, manager);
                 }
                 manager.updateUserSensitiveForApp(uid);
@@ -343,8 +344,9 @@ public final class PermissionPolicyService extends SystemService {
         }, UserHandle.ALL, intentFilter, null, null);
 
         PermissionControllerManager manager = new PermissionControllerManager(
-                getUserContext(getContext(), Process.myUserHandle()), FgThread.getHandler());
-        FgThread.getHandler().postDelayed(manager::updateUserSensitive,
+                getUserContext(getContext(), Process.myUserHandle()),
+                PermissionThread.getHandler());
+        PermissionThread.getHandler().postDelayed(manager::updateUserSensitive,
                 USER_SENSITIVE_UPDATE_DELAY_MS);
     }
 
@@ -371,6 +373,11 @@ public final class PermissionPolicyService extends SystemService {
         if (isStarted(changedUserId)) {
             synchronized (mLock) {
                 if (mIsPackageSyncsScheduled.add(new Pair<>(packageName, changedUserId))) {
+                    // TODO(b/165030092): migrate this to PermissionThread.getHandler().
+                    // synchronizePackagePermissionsAndAppOpsForUser is a heavy operation.
+                    // Dispatched on a PermissionThread, it interferes with user switch.
+                    // FgThread is busy and schedules it after most of the switch is done.
+                    // A possible solution is to delay the callback.
                     FgThread.getHandler().sendMessage(PooledLambda.obtainMessage(
                             PermissionPolicyService
                                     ::synchronizePackagePermissionsAndAppOpsForUser,
@@ -584,9 +591,9 @@ public final class PermissionPolicyService extends SystemService {
             final PermissionControllerManager permissionControllerManager =
                     new PermissionControllerManager(
                             getUserContext(getContext(), UserHandle.of(userId)),
-                            FgThread.getHandler());
+                            PermissionThread.getHandler());
             permissionControllerManager.grantOrUpgradeDefaultRuntimePermissions(
-                    FgThread.getExecutor(), successful -> {
+                    PermissionThread.getExecutor(), successful -> {
                         if (successful) {
                             future.complete(null);
                         } else {
@@ -690,7 +697,7 @@ public final class PermissionPolicyService extends SystemService {
             synchronized (mLock) {
                 if (!mIsUidSyncScheduled.get(uid)) {
                     mIsUidSyncScheduled.put(uid, true);
-                    FgThread.getHandler().sendMessage(PooledLambda.obtainMessage(
+                    PermissionThread.getHandler().sendMessage(PooledLambda.obtainMessage(
                             PermissionPolicyService::resetAppOpPermissionsIfNotRequestedForUid,
                             this, uid));
                 }
@@ -915,8 +922,7 @@ public final class PermissionPolicyService extends SystemService {
             int permissionFlags = mPackageManager.getPermissionFlags(permissionName,
                     packageName, mContext.getUser());
             boolean isReviewRequired = (permissionFlags & FLAG_PERMISSION_REVIEW_REQUIRED) != 0;
-            if (isReviewRequired && !CompatChanges.isChangeEnabled(
-                    NOTIFICATION_PERM_CHANGE_ID, packageName, user)) {
+            if (isReviewRequired) {
                 return;
             }
 
@@ -1118,48 +1124,13 @@ public final class PermissionPolicyService extends SystemService {
 
     private class Internal extends PermissionPolicyInternal {
 
-        // UIDs that, if a grant dialog is shown for POST_NOTIFICATIONS before next reboot,
-        // should display a "continue allowing" message, rather than an "allow" message
-        private final ArraySet<Integer> mContinueNotifGrantMessageUids = new ArraySet<>();
-
         private final ActivityInterceptorCallback mActivityInterceptorCallback =
                 new ActivityInterceptorCallback() {
                     @Nullable
                     @Override
                     public ActivityInterceptorCallback.ActivityInterceptResult intercept(
                             ActivityInterceptorInfo info) {
-                        String action = info.intent.getAction();
-                        ActivityInterceptResult result = null;
-                        if (!ACTION_REQUEST_PERMISSIONS_FOR_OTHER.equals(action)
-                                && !PackageManager.ACTION_REQUEST_PERMISSIONS.equals(action)) {
-                            return null;
-                        }
-                        // Only this interceptor can add LEGACY_ACCESS_PERMISSION_NAMES
-                        if (info.intent.getStringArrayExtra(PackageManager
-                                .EXTRA_REQUEST_PERMISSIONS_LEGACY_ACCESS_PERMISSION_NAMES)
-                                != null) {
-                            result = new ActivityInterceptResult(
-                                    new Intent(info.intent), info.checkedOptions);
-                            result.intent.removeExtra(PackageManager
-                                    .EXTRA_REQUEST_PERMISSIONS_LEGACY_ACCESS_PERMISSION_NAMES);
-                        }
-                        if (PackageManager.ACTION_REQUEST_PERMISSIONS.equals(action)
-                                && !mContinueNotifGrantMessageUids.contains(info.realCallingUid)) {
-                            return result;
-                        }
-                        if (ACTION_REQUEST_PERMISSIONS_FOR_OTHER.equals(action)) {
-                            String otherPkg = info.intent.getStringExtra(Intent.EXTRA_PACKAGE_NAME);
-                            if (otherPkg == null || (mPackageManager.getPermissionFlags(
-                                    POST_NOTIFICATIONS, otherPkg, UserHandle.of(info.userId))
-                                    & FLAG_PERMISSION_REVIEW_REQUIRED) == 0) {
-                                return result;
-                            }
-                        }
-
-                        mContinueNotifGrantMessageUids.remove(info.realCallingUid);
-                        return new ActivityInterceptResult(info.intent.putExtra(PackageManager
-                                        .EXTRA_REQUEST_PERMISSIONS_LEGACY_ACCESS_PERMISSION_NAMES,
-                                new String[] { POST_NOTIFICATIONS }), info.checkedOptions);
+                        return null;
                     }
 
                     @Override
@@ -1173,10 +1144,8 @@ public final class PermissionPolicyService extends SystemService {
                             return;
                         }
                         UserHandle user = UserHandle.of(taskInfo.userId);
-                        if (CompatChanges.isChangeEnabled(NOTIFICATION_PERM_CHANGE_ID,
+                        if (!CompatChanges.isChangeEnabled(NOTIFICATION_PERM_CHANGE_ID,
                                 activityInfo.packageName, user)) {
-                            clearNotificationReviewFlagsIfNeeded(activityInfo.packageName, user);
-                        } else {
                             // Post the activity start checks to ensure the notification channel
                             // checks happen outside the WindowManager global lock.
                             mHandler.post(() -> showNotificationPromptIfNeeded(
@@ -1337,22 +1306,6 @@ public final class PermissionPolicyService extends SystemService {
                     && isLauncherIntent(taskInfo.baseIntent);
         }
 
-        private void clearNotificationReviewFlagsIfNeeded(String packageName, UserHandle user) {
-            if ((mPackageManager.getPermissionFlags(POST_NOTIFICATIONS, packageName, user)
-                    & FLAG_PERMISSION_REVIEW_REQUIRED) == 0) {
-                return;
-            }
-            try {
-                int uid = mPackageManager.getPackageUidAsUser(packageName, 0,
-                        user.getIdentifier());
-                mContinueNotifGrantMessageUids.add(uid);
-                mPackageManager.updatePermissionFlags(POST_NOTIFICATIONS, packageName,
-                        FLAG_PERMISSION_REVIEW_REQUIRED, 0, user);
-            } catch (PackageManager.NameNotFoundException e) {
-                // Do nothing
-            }
-        }
-
         private void launchNotificationPermissionRequestDialog(String pkgName, UserHandle user,
                 int taskId, @Nullable ActivityInterceptorInfo info) {
             Intent grantPermission = mPackageManager
@@ -1453,16 +1406,6 @@ public final class PermissionPolicyService extends SystemService {
                 }
             }
 
-            try {
-                if (Settings.Secure.getIntForUser(mContext.getContentResolver(),
-                        Settings.Secure.NOTIFICATION_PERMISSION_ENABLED, UserHandle.USER_SYSTEM)
-                        == 0) {
-                    return false;
-                }
-            } catch (Settings.SettingNotFoundException e) {
-                return false;
-            }
-
             if (!pkg.getRequestedPermissions().contains(POST_NOTIFICATIONS)
                     || CompatChanges.isChangeEnabled(NOTIFICATION_PERM_CHANGE_ID, pkgName, user)
                     || mKeyguardManager.isKeyguardLocked()) {
@@ -1479,8 +1422,7 @@ public final class PermissionPolicyService extends SystemService {
                     == PackageManager.PERMISSION_GRANTED;
             int flags = mPackageManager.getPermissionFlags(POST_NOTIFICATIONS, pkgName, user);
             boolean explicitlySet = (flags & PermissionManager.EXPLICIT_SET_FLAGS) != 0;
-            boolean needsReview = (flags & FLAG_PERMISSION_REVIEW_REQUIRED) != 0;
-            return !granted && hasCreatedNotificationChannels && (needsReview || !explicitlySet);
+            return !granted && hasCreatedNotificationChannels && !explicitlySet;
         }
     }
 }

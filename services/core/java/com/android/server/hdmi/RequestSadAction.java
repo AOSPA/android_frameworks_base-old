@@ -181,20 +181,33 @@ final class RequestSadAction extends HdmiCecFeatureAction {
             return true;
         }
         if (cmd.getOpcode() == Constants.MESSAGE_FEATURE_ABORT
-                && (cmd.getParams()[0] & 0xFF) == Constants.MESSAGE_REQUEST_SHORT_AUDIO_DESCRIPTOR
-                && (cmd.getParams()[1] & 0xFF) == Constants.ABORT_INVALID_OPERAND) {
-            // Queried SADs are not supported
-            mQueriedSadCount += MAX_SAD_PER_REQUEST;
-            mTimeoutRetry = 0;
-            querySad();
-            return true;
+                && (cmd.getParams()[0] & 0xFF)
+                == Constants.MESSAGE_REQUEST_SHORT_AUDIO_DESCRIPTOR) {
+            if ((cmd.getParams()[1] & 0xFF) == Constants.ABORT_UNRECOGNIZED_OPCODE) {
+                // SAD feature is not supported
+                wrapUpAndFinish();
+                return true;
+            }
+            if ((cmd.getParams()[1] & 0xFF) == Constants.ABORT_INVALID_OPERAND) {
+                // Queried SADs are not supported
+                mQueriedSadCount += MAX_SAD_PER_REQUEST;
+                mTimeoutRetry = 0;
+                querySad();
+                return true;
+            }
         }
         return false;
     }
 
     private boolean isValidCodec(byte codec) {
-        return Constants.AUDIO_CODEC_NONE < (codec & 0xFF)
-                && (codec & 0xFF) <= Constants.AUDIO_CODEC_MAX;
+        // Bit 7 needs to be 0.
+        if ((codec & (1 << 7)) != 0) {
+            return false;
+        }
+        // Bit [6, 3] is the audio format code.
+        int audioFormatCode = (codec & Constants.AUDIO_FORMAT_MASK) >> 3;
+        return Constants.AUDIO_CODEC_NONE < audioFormatCode
+                && audioFormatCode <= Constants.AUDIO_CODEC_MAX;
     }
 
     private void updateResult(byte[] sad) {
@@ -211,9 +224,9 @@ final class RequestSadAction extends HdmiCecFeatureAction {
                 querySad();
                 return;
             }
-            mQueriedSadCount += MAX_SAD_PER_REQUEST;
-            mTimeoutRetry = 0;
-            querySad();
+            // Don't query any other SADs if one of the SAD queries ran into the maximum amount of
+            // retries.
+            wrapUpAndFinish();
         }
     }
 

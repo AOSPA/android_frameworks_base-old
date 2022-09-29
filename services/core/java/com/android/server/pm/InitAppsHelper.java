@@ -25,6 +25,7 @@ import static com.android.server.pm.PackageManagerService.SCAN_AS_FACTORY;
 import static com.android.server.pm.PackageManagerService.SCAN_AS_PRIVILEGED;
 import static com.android.server.pm.PackageManagerService.SCAN_AS_SYSTEM;
 import static com.android.server.pm.PackageManagerService.SCAN_BOOTING;
+import static com.android.server.pm.PackageManagerService.SCAN_DROP_CACHE;
 import static com.android.server.pm.PackageManagerService.SCAN_FIRST_BOOT_OR_UPGRADE;
 import static com.android.server.pm.PackageManagerService.SCAN_INITIAL;
 import static com.android.server.pm.PackageManagerService.SCAN_NO_DEX;
@@ -174,6 +175,9 @@ final class InitAppsHelper {
                 if (apexInfo.isFactory) {
                     additionalScanFlag |= SCAN_AS_FACTORY;
                 }
+                if (apexInfo.activeApexChanged) {
+                    additionalScanFlag |= SCAN_DROP_CACHE;
+                }
                 return new ScanPartition(apexInfo.apexDirectory, sp, additionalScanFlag);
             }
         }
@@ -190,7 +194,6 @@ final class InitAppsHelper {
                 apexScanResults = mInstallPackageHelper.scanApexPackages(
                         mApexManager.getAllApexInfos(), mSystemParseFlags, mSystemScanFlags,
                         packageParser, mExecutorService);
-                mApexPackageInfo.notifyScanResult(apexScanResults);
             } else {
                 apexScanResults = mApexPackageInfo.scanApexPackages(
                         mApexManager.getAllApexInfos(), packageParser, mExecutorService);

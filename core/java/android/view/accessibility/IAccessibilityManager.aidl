@@ -25,6 +25,7 @@ import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.IAccessibilityInteractionConnection;
 import android.view.accessibility.IAccessibilityManagerClient;
+import android.view.accessibility.AccessibilityWindowAttributes;
 import android.view.accessibility.IWindowMagnificationConnection;
 import android.view.IWindow;
 
@@ -62,9 +63,6 @@ interface IAccessibilityManager {
         in AccessibilityServiceInfo info, int flags);
 
     void unregisterUiTestAutomationService(IAccessibilityServiceClient client);
-
-    void temporaryEnableAccessibilityStateUntilKeyguardRemoved(in ComponentName service,
-            boolean touchExplorationEnabled);
 
     // Used by UiAutomation
     IBinder getWindowToken(int windowId, int userId);
@@ -108,4 +106,6 @@ interface IAccessibilityManager {
 
     @JavaPassthrough(annotation="@android.annotation.RequiresPermission(android.Manifest.permission.SET_SYSTEM_AUDIO_CAPTION)")
     void setSystemAudioCaptioningUiEnabled(boolean isEnabled, int userId);
+
+    oneway void setAccessibilityWindowAttributes(int displayId, int windowId, int userId, in AccessibilityWindowAttributes attributes);
 }

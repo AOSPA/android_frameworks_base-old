@@ -3168,7 +3168,7 @@ public final class Settings {
                             synchronized (NameValueCache.this) {
                                 if (needsGenerationTracker) {
                                     MemoryIntArray array = b.getParcelable(
-                                            CALL_METHOD_TRACK_GENERATION_KEY);
+                                            CALL_METHOD_TRACK_GENERATION_KEY, android.util.MemoryIntArray.class);
                                     final int index = b.getInt(
                                             CALL_METHOD_GENERATION_INDEX_KEY, -1);
                                     if (array != null && index >= 0) {
@@ -3354,7 +3354,7 @@ public final class Settings {
 
                 // All flags for the namespace
                 Map<String, String> flagsToValues =
-                        (HashMap) b.getSerializable(Settings.NameValueTable.VALUE);
+                        (HashMap) b.getSerializable(Settings.NameValueTable.VALUE, java.util.HashMap.class);
                 // Only the flags requested by the caller
                 if (!names.isEmpty()) {
                     for (Map.Entry<String, String> flag : flagsToValues.entrySet()) {
@@ -3369,7 +3369,7 @@ public final class Settings {
                 synchronized (NameValueCache.this) {
                     if (needsGenerationTracker) {
                         MemoryIntArray array = b.getParcelable(
-                                CALL_METHOD_TRACK_GENERATION_KEY);
+                                CALL_METHOD_TRACK_GENERATION_KEY, android.util.MemoryIntArray.class);
                         final int index = b.getInt(
                                 CALL_METHOD_GENERATION_INDEX_KEY, -1);
                         if (array != null && index >= 0) {
@@ -9750,6 +9750,43 @@ public final class Settings {
         public static final String FACE_UNLOCK_RE_ENROLL = "face_unlock_re_enroll";
 
         /**
+         * The time (in millis) to wait for a power button before sending a
+         * successful auth in to keyguard(for side fingerprint)
+         * @hide
+         */
+        @Readable
+        public static final String FINGERPRINT_SIDE_FPS_KG_POWER_WINDOW =
+                "fingerprint_side_fps_kg_power_window";
+
+        /**
+         * The time (in millis) to wait for a power button before sending
+         * a successful auth in biometric prompt(for side fingerprint)
+         * @hide
+         */
+        @Readable
+        public static final String FINGERPRINT_SIDE_FPS_BP_POWER_WINDOW =
+                "fingerprint_side_fps_bp_power_window";
+
+        /**
+         * The time (in millis) that a finger tap will wait for a power button
+         * before dismissing the power dialog during enrollment(for side
+         * fingerprint)
+         * @hide
+         */
+        @Readable
+        public static final String FINGERPRINT_SIDE_FPS_ENROLL_TAP_WINDOW =
+                "fingerprint_side_fps_enroll_tap_window";
+
+        /**
+         * The time (in millis) that a power event will ignore future authentications
+         * (for side fingerprint)
+         * @hide
+         */
+        @Readable
+        public static final String FINGERPRINT_SIDE_FPS_AUTH_DOWNTIME =
+                "fingerprint_side_fps_auth_downtime";
+
+        /**
          * Whether or not debugging is enabled.
          * @hide
          */
@@ -9797,6 +9834,40 @@ public final class Settings {
          */
         public static final String ACTIVE_UNLOCK_ON_BIOMETRIC_FAIL =
                 "active_unlock_on_biometric_fail";
+
+        /**
+         * If active unlock triggers on biometric failures, include the following error codes
+         * as a biometric failure. See {@link android.hardware.biometrics.BiometricFaceConstants}.
+         * Error codes should be separated by a pipe. For example: "1|4|5". If active unlock
+         * should never trigger on any face errors, this should be set to an empty string.
+         * A null value will use the system default value (TIMEOUT).
+         * @hide
+         */
+        public static final String ACTIVE_UNLOCK_ON_FACE_ERRORS =
+                "active_unlock_on_face_errors";
+
+        /**
+         * If active unlock triggers on biometric failures, include the following acquired info
+         * as a "biometric failure". See {@link android.hardware.biometrics.BiometricFaceConstants}.
+         * Acquired codes should be separated by a pipe. For example: "1|4|5". If active unlock
+         * should never on trigger on any acquired info messages, this should be
+         * set to an empty string. A null value will use the system default value (none).
+         * @hide
+         */
+        public static final String ACTIVE_UNLOCK_ON_FACE_ACQUIRE_INFO =
+                "active_unlock_on_face_acquire_info";
+
+        /**
+         * If active unlock triggers on biometric failures, then also request active unlock on
+         * unlock intent when each setting (BiometricType) is the only biometric type enrolled.
+         * Biometric types should be separated by a pipe. For example: "0|3" or "0". If this
+         * setting should be disabled, then this should be set to an empty string. A null value
+         * will use the system default value (0 / None).
+         *   0 = None, 1 = Any face, 2 = Any fingerprint, 3 = Under display fingerprint
+         * @hide
+         */
+        public static final String ACTIVE_UNLOCK_ON_UNLOCK_INTENT_WHEN_BIOMETRIC_ENROLLED =
+                "active_unlock_on_unlock_intent_when_biometric_enrolled";
 
         /**
          * Whether the assist gesture should be enabled.
@@ -10068,7 +10139,7 @@ public final class Settings {
          *
          * @hide
          */
-        @Readable
+        @Readable(maxTargetSdk = VERSION_CODES.TIRAMISU)
         public static final String QS_TILES = "sysui_qs_tiles";
 
         /**
@@ -10225,15 +10296,6 @@ public final class Settings {
         public static final String NOTIFICATION_DISMISS_RTL = "notification_dismiss_rtl";
 
         /**
-         * Whether the app-level notification setting is represented by a manifest permission.
-         *
-         * @hide
-         */
-        @Readable
-        public static final String NOTIFICATION_PERMISSION_ENABLED =
-                "notification_permission_enabled";
-
-        /**
          * Comma separated list of QS tiles that have been auto-added already.
          * @hide
          */
@@ -10361,8 +10423,17 @@ public final class Settings {
         /**
          * How often to check for location access.
          * @hide
+         *
+         * @deprecated This has been moved to DeviceConfig property
+         * {@link LocationAccessCheck#PROPERTY_LOCATION_ACCESS_PERIODIC_INTERVAL_MILLIS} in a T
+         * module update
+         *
+         * Before Android T set this property to control the interval for the check
+         * On Android T set this and the DeviceConfig property
+         * After Android T set the DeviceConfig property
          */
         @SystemApi
+        @Deprecated
         @Readable
         public static final String LOCATION_ACCESS_CHECK_INTERVAL_MILLIS =
                 "location_access_check_interval_millis";
@@ -10370,8 +10441,17 @@ public final class Settings {
         /**
          * Delay between granting location access and checking it.
          * @hide
+         *
+         * @deprecated This has been moved to DeviceConfig property
+         * {@link LocationAccessCheck#PROPERTY_LOCATION_ACCESS_CHECK_DELAY_MILLIS} in a T module
+         * update
+         *
+         * Before Android T set this property to control the delay for the check
+         * On Android T set this and the DeviceConfig property
+         * After Android T set the DeviceConfig property
          */
         @SystemApi
+        @Deprecated
         @Readable
         public static final String LOCATION_ACCESS_CHECK_DELAY_MILLIS =
                 "location_access_check_delay_millis";
@@ -10909,6 +10989,15 @@ public final class Settings {
                 "launcher_taskbar_education_showing";
 
         /**
+         * Whether or not adaptive charging feature is enabled by user.
+         * Type: int (0 for false, 1 for true)
+         * Default: 1
+         *
+         * @hide
+         */
+        public static final String ADAPTIVE_CHARGING_ENABLED = "adaptive_charging_enabled";
+
+        /**
          * These entries are considered common between the personal and the managed profile,
          * since the managed profile doesn't get to change them.
          */
@@ -11330,6 +11419,7 @@ public final class Settings {
          * <li>{@link BatteryManager#BATTERY_PLUGGED_AC} to stay on for AC charger</li>
          * <li>{@link BatteryManager#BATTERY_PLUGGED_USB} to stay on for USB charger</li>
          * <li>{@link BatteryManager#BATTERY_PLUGGED_WIRELESS} to stay on for wireless charger</li>
+         * <li>{@link BatteryManager#BATTERY_PLUGGED_DOCK} to stay on for dock charger</li>
          * </ul>
          * These values can be OR-ed together.
          */
@@ -11471,7 +11561,7 @@ public final class Settings {
          * Whether or not data roaming is enabled. (0 = false, 1 = true)
          * Use {@link TelephonyManager#isDataRoamingEnabled} instead of calling via settings.
          */
-        @Readable(maxTargetSdk = Build.VERSION_CODES.S)
+        @Readable(maxTargetSdk = Build.VERSION_CODES.S_V2)
         public static final String DATA_ROAMING = "data_roaming";
 
         /**
@@ -11966,10 +12056,41 @@ public final class Settings {
         public static final String NITZ_NETWORK_DISCONNECT_RETENTION =
                 "nitz_network_disconnect_retention";
 
-        /** Preferred NTP server. {@hide} */
+        /**
+         * SNTP client config: The preferred NTP server. This setting overrides the static
+         * config.xml configuration when present and valid.
+         *
+         * <p>The legacy form is the NTP server name as a string.
+         * <p>Newer code should use the form: ntp://{server name}[:port] (the standard NTP port,
+         * 123, is used if not specified).
+         *
+         * <p>The settings value can consist of a pipe ("|") delimited list of server names or
+         * ntp:// URIs. When present, all server name / ntp:// URIs must be valid or the entire
+         * setting value will be ignored and Android's xml config will be used.
+         *
+         * <p>For example, the following examples are valid:
+         * <ul>
+         *     <li>"time.android.com"</li>
+         *     <li>"ntp://time.android.com"</li>
+         *     <li>"ntp://time.android.com:123"</li>
+         *     <li>"time.android.com|time.other"</li>
+         *     <li>"ntp://time.android.com:123|ntp://time.other:123"</li>
+         *     <li>"time.android.com|ntp://time.other:123"</li>
+         * </ul>
+         *
+         * @hide
+         */
         @Readable
         public static final String NTP_SERVER = "ntp_server";
-        /** Timeout in milliseconds to wait for NTP server. {@hide} */
+
+        /**
+         * SNTP client config: Timeout to wait for an NTP server response. This setting overrides
+         * the static config.xml configuration when present and valid.
+         *
+         * <p>The value is the timeout in milliseconds. It must be > 0.
+         *
+         * @hide
+         */
         @Readable
         public static final String NTP_TIMEOUT = "ntp_timeout";
         /** Secondary NTP server. {@hide} */
@@ -14519,6 +14640,18 @@ public final class Settings {
         public static final String ANGLE_EGL_FEATURES = "angle_egl_features";
 
         /**
+         * Comma-separated list of package names that ANGLE may have issues with
+         * @hide
+         */
+        public static final String ANGLE_DEFERLIST = "angle_deferlist";
+
+        /**
+         * Integer mode of the logic for applying `angle_deferlist`
+         * @hide
+         */
+        public static final String ANGLE_DEFERLIST_MODE = "angle_deferlist_mode";
+
+        /**
          * Show the "ANGLE In Use" dialog box to the user when ANGLE is the OpenGL driver.
          * The value is a boolean (1 or 0).
          * @hide
@@ -15166,6 +15299,14 @@ public final class Settings {
          * @hide
          */
         public static final String DEVICE_CONFIG_SYNC_DISABLED = "device_config_sync_disabled";
+
+
+        /**
+         * Whether back preview animations are played when user does a back gesture or presses
+         * the back button.
+         * @hide
+         */
+        public static final String ENABLE_BACK_ANIMATION = "enable_back_animation";
 
         /** @hide */ public static String zenModeToString(int mode) {
             if (mode == ZEN_MODE_IMPORTANT_INTERRUPTIONS) return "ZEN_MODE_IMPORTANT_INTERRUPTIONS";
@@ -17148,18 +17289,6 @@ public final class Settings {
                     "obtain_paired_device_location";
 
             /**
-             * Whether the device is in retail mode.
-             * @hide
-             */
-            public static final String RETAIL_MODE = "retail_mode";
-
-            // Possible retail mode states
-            /** @hide */
-            public static final int RETAIL_MODE_CONSUMER = 0;
-            /** @hide */
-            public static final int RETAIL_MODE_RETAIL = 1;
-
-            /**
              * The play store availability on companion phone.
              * @hide
              */
@@ -17402,7 +17531,14 @@ public final class Settings {
              * Whether touch and hold to edit WF is enabled
              * @hide
              */
-            public static final String TOUCH_AND_HOLD_WATCH_FACE = "touch_and_hold_watchface";
+            public static final String GESTURE_TOUCH_AND_HOLD_WATCH_FACE_ENABLED =
+                    "gesture_touch_and_hold_watchface_enabled";
+
+            /**
+             * Whether bedtime mode is enabled.
+             * @hide
+             */
+            public static final String BEDTIME_MODE = "bedtime_mode";
 
             /**
              * Whether the current watchface is decomposable.
@@ -17568,6 +17704,14 @@ public final class Settings {
                     "wear_activity_auto_resume_timeout_set_by_user";
 
             /**
+             * The maximum times that we are allowed to reset the activity auto-resume timeout
+             * timer.
+             * @hide
+             */
+            public static final String WEAR_ACTIVITY_AUTO_RESUME_TIMEOUT_MAX_RESET_COUNT =
+                    "wear_activity_auto_resume_timeout_max_reset_count";
+
+            /**
              * If burn in protection is enabled.
              * @hide
              */
@@ -17658,7 +17802,7 @@ public final class Settings {
         public @interface SyncDisabledMode {}
 
         /**
-         * Sync is not not disabled.
+         * Sync is not disabled.
          *
          * @hide
          */

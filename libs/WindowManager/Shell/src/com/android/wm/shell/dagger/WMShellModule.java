@@ -16,10 +16,10 @@
 
 package com.android.wm.shell.dagger;
 
-import android.animation.AnimationHandler;
 import android.content.Context;
 import android.content.pm.LauncherApps;
 import android.os.Handler;
+import android.os.UserManager;
 import android.view.WindowManager;
 
 import com.android.internal.jank.InteractionJankMonitor;
@@ -30,8 +30,11 @@ import com.android.wm.shell.RootTaskDisplayAreaOrganizer;
 import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.TaskViewTransitions;
 import com.android.wm.shell.WindowManagerShellWrapper;
-import com.android.wm.shell.apppairs.AppPairsController;
 import com.android.wm.shell.bubbles.BubbleController;
+import com.android.wm.shell.bubbles.BubbleData;
+import com.android.wm.shell.bubbles.BubbleDataRepository;
+import com.android.wm.shell.bubbles.BubbleLogger;
+import com.android.wm.shell.bubbles.BubblePositioner;
 import com.android.wm.shell.common.DisplayController;
 import com.android.wm.shell.common.DisplayImeController;
 import com.android.wm.shell.common.DisplayInsetsController;
@@ -42,12 +45,10 @@ import com.android.wm.shell.common.SyncTransactionQueue;
 import com.android.wm.shell.common.SystemWindows;
 import com.android.wm.shell.common.TaskStackListenerImpl;
 import com.android.wm.shell.common.TransactionPool;
-import com.android.wm.shell.common.annotations.ChoreographerSfVsync;
+import com.android.wm.shell.common.annotations.ShellBackgroundThread;
 import com.android.wm.shell.common.annotations.ShellMainThread;
 import com.android.wm.shell.draganddrop.DragAndDropController;
 import com.android.wm.shell.freeform.FreeformTaskListener;
-import com.android.wm.shell.fullscreen.FullscreenUnfoldController;
-import com.android.wm.shell.legacysplitscreen.LegacySplitScreenController;
 import com.android.wm.shell.onehanded.OneHandedController;
 import com.android.wm.shell.pip.Pip;
 import com.android.wm.shell.pip.PipAnimationController;
@@ -65,21 +66,30 @@ import com.android.wm.shell.pip.PipTransitionState;
 import com.android.wm.shell.pip.PipUiEventLogger;
 import com.android.wm.shell.pip.phone.PhonePipMenuController;
 import com.android.wm.shell.pip.phone.PipController;
+import com.android.wm.shell.pip.phone.PipKeepClearAlgorithm;
 import com.android.wm.shell.pip.phone.PipMotionHelper;
 import com.android.wm.shell.pip.phone.PipTouchHandler;
 import com.android.wm.shell.recents.RecentTasksController;
 import com.android.wm.shell.splitscreen.SplitScreenController;
-import com.android.wm.shell.splitscreen.StageTaskUnfoldController;
+import com.android.wm.shell.sysui.ShellController;
 import com.android.wm.shell.transition.Transitions;
 import com.android.wm.shell.unfold.ShellUnfoldProgressProvider;
+import com.android.wm.shell.unfold.UnfoldAnimationController;
 import com.android.wm.shell.unfold.UnfoldBackgroundController;
 import com.android.wm.shell.unfold.UnfoldTransitionHandler;
 import com.android.wm.shell.unfold.animation.FullscreenUnfoldTaskAnimator;
+import com.android.wm.shell.unfold.animation.SplitTaskUnfoldAnimator;
+import com.android.wm.shell.unfold.animation.UnfoldTaskAnimator;
+import com.android.wm.shell.unfold.qualifier.UnfoldShellTransition;
+import com.android.wm.shell.unfold.qualifier.UnfoldTransition;
+import com.android.wm.shell.windowdecor.CaptionWindowDecorViewModel;
+import com.android.wm.shell.windowdecor.WindowDecorViewModel;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
-import javax.inject.Provider;
-
+import dagger.Binds;
 import dagger.Lazy;
 import dagger.Module;
 import dagger.Provides;
@@ -93,36 +103,85 @@ import dagger.Provides;
  * dependencies should go into {@link WMShellBaseModule}.
  */
 @Module(includes = WMShellBaseModule.class)
-public class WMShellModule {
+public abstract class WMShellModule {
 
     //
     // Bubbles
     //
 
+    @WMSingleton
+    @Provides
+    static BubbleLogger provideBubbleLogger(UiEventLogger uiEventLogger) {
+        return new BubbleLogger(uiEventLogger);
+    }
+
+    @WMSingleton
+    @Provides
+    static BubblePositioner provideBubblePositioner(Context context,
+            WindowManager windowManager) {
+        return new BubblePositioner(context, windowManager);
+    }
+
+    @WMSingleton
+    @Provides
+    static BubbleData provideBubbleData(Context context,
+            BubbleLogger logger,
+            BubblePositioner positioner,
+            @ShellMainThread ShellExecutor mainExecutor) {
+        return new BubbleData(context, logger, positioner, mainExecutor);
+    }
+
     // Note: Handler needed for LauncherApps.register
     @WMSingleton
     @Provides
     static BubbleController provideBubbleController(Context context,
+            ShellController shellController,
+            BubbleData data,
             FloatingContentCoordinator floatingContentCoordinator,
             IStatusBarService statusBarService,
             WindowManager windowManager,
             WindowManagerShellWrapper windowManagerShellWrapper,
+            UserManager userManager,
             LauncherApps launcherApps,
             TaskStackListenerImpl taskStackListener,
-            UiEventLogger uiEventLogger,
+            BubbleLogger logger,
             ShellTaskOrganizer organizer,
+            BubblePositioner positioner,
             DisplayController displayController,
             @DynamicOverride Optional<OneHandedController> oneHandedOptional,
             DragAndDropController dragAndDropController,
             @ShellMainThread ShellExecutor mainExecutor,
             @ShellMainThread Handler mainHandler,
+            @ShellBackgroundThread ShellExecutor bgExecutor,
             TaskViewTransitions taskViewTransitions,
             SyncTransactionQueue syncQueue) {
-        return BubbleController.create(context, null /* synchronizer */,
-                floatingContentCoordinator, statusBarService, windowManager,
-                windowManagerShellWrapper, launcherApps, taskStackListener,
-                uiEventLogger, organizer, displayController, oneHandedOptional,
-                dragAndDropController, mainExecutor, mainHandler, taskViewTransitions, syncQueue);
+        return new BubbleController(context, shellController, data, null /* synchronizer */,
+                floatingContentCoordinator,
+                new BubbleDataRepository(context, launcherApps, mainExecutor),
+                statusBarService, windowManager, windowManagerShellWrapper, userManager,
+                launcherApps, logger, taskStackListener, organizer, positioner, displayController,
+                oneHandedOptional, dragAndDropController, mainExecutor, mainHandler, bgExecutor,
+                taskViewTransitions, syncQueue);
+    }
+
+    //
+    // Window decoration
+    //
+
+    @WMSingleton
+    @Provides
+    static WindowDecorViewModel<?> provideWindowDecorViewModel(
+            Context context,
+            @ShellMainThread Handler mainHandler,
+            ShellTaskOrganizer taskOrganizer,
+            DisplayController displayController,
+            SyncTransactionQueue syncQueue) {
+        return new CaptionWindowDecorViewModel(
+                        context,
+                        mainHandler,
+                        taskOrganizer,
+                        displayController,
+                        syncQueue);
     }
 
     //
@@ -132,9 +191,10 @@ public class WMShellModule {
     @WMSingleton
     @Provides
     @DynamicOverride
-    static FreeformTaskListener provideFreeformTaskListener(
+    static FreeformTaskListener<?> provideFreeformTaskListener(
+            WindowDecorViewModel<?> windowDecorViewModel,
             SyncTransactionQueue syncQueue) {
-        return new FreeformTaskListener(syncQueue);
+        return new FreeformTaskListener<>(windowDecorViewModel, syncQueue);
     }
 
     //
@@ -147,12 +207,14 @@ public class WMShellModule {
     @Provides
     @DynamicOverride
     static OneHandedController provideOneHandedController(Context context,
+            ShellController shellController,
             WindowManager windowManager, DisplayController displayController,
             DisplayLayout displayLayout, TaskStackListenerImpl taskStackListener,
             UiEventLogger uiEventLogger, InteractionJankMonitor jankMonitor,
             @ShellMainThread ShellExecutor mainExecutor, @ShellMainThread Handler mainHandler) {
-        return OneHandedController.create(context, windowManager, displayController, displayLayout,
-                taskStackListener, jankMonitor, uiEventLogger, mainExecutor, mainHandler);
+        return OneHandedController.create(context, shellController, windowManager,
+                displayController, displayLayout, taskStackListener, jankMonitor, uiEventLogger,
+                mainExecutor, mainHandler);
     }
 
     //
@@ -163,6 +225,7 @@ public class WMShellModule {
     @Provides
     @DynamicOverride
     static SplitScreenController provideSplitScreenController(
+            ShellController shellController,
             ShellTaskOrganizer shellTaskOrganizer,
             SyncTransactionQueue syncQueue, Context context,
             RootTaskDisplayAreaOrganizer rootTaskDisplayAreaOrganizer,
@@ -171,37 +234,11 @@ public class WMShellModule {
             DisplayImeController displayImeController,
             DisplayInsetsController displayInsetsController, Transitions transitions,
             TransactionPool transactionPool, IconProvider iconProvider,
-            Optional<RecentTasksController> recentTasks,
-            Provider<Optional<StageTaskUnfoldController>> stageTaskUnfoldControllerProvider) {
-        return new SplitScreenController(shellTaskOrganizer, syncQueue, context,
+            Optional<RecentTasksController> recentTasks) {
+        return new SplitScreenController(shellController, shellTaskOrganizer, syncQueue, context,
                 rootTaskDisplayAreaOrganizer, mainExecutor, displayController, displayImeController,
                 displayInsetsController, transitions, transactionPool, iconProvider,
-                recentTasks, stageTaskUnfoldControllerProvider);
-    }
-
-    @WMSingleton
-    @Provides
-    static LegacySplitScreenController provideLegacySplitScreen(Context context,
-            DisplayController displayController, SystemWindows systemWindows,
-            DisplayImeController displayImeController, TransactionPool transactionPool,
-            ShellTaskOrganizer shellTaskOrganizer, SyncTransactionQueue syncQueue,
-            TaskStackListenerImpl taskStackListener, Transitions transitions,
-            @ShellMainThread ShellExecutor mainExecutor,
-            @ChoreographerSfVsync AnimationHandler sfVsyncAnimationHandler) {
-        return new LegacySplitScreenController(context, displayController, systemWindows,
-                displayImeController, transactionPool, shellTaskOrganizer, syncQueue,
-                taskStackListener, transitions, mainExecutor, sfVsyncAnimationHandler);
-    }
-
-    @WMSingleton
-    @Provides
-    static AppPairsController provideAppPairs(ShellTaskOrganizer shellTaskOrganizer,
-            SyncTransactionQueue syncQueue, DisplayController displayController,
-            @ShellMainThread ShellExecutor mainExecutor,
-            DisplayImeController displayImeController,
-            DisplayInsetsController displayInsetsController) {
-        return new AppPairsController(shellTaskOrganizer, syncQueue, displayController,
-                mainExecutor, displayImeController, displayInsetsController);
+                recentTasks);
     }
 
     //
@@ -210,19 +247,23 @@ public class WMShellModule {
 
     @WMSingleton
     @Provides
-    static Optional<Pip> providePip(Context context, DisplayController displayController,
+    static Optional<Pip> providePip(Context context,
+            ShellController shellController, DisplayController displayController,
             PipAppOpsListener pipAppOpsListener, PipBoundsAlgorithm pipBoundsAlgorithm,
-            PipBoundsState pipBoundsState, PipMediaController pipMediaController,
+            PipKeepClearAlgorithm pipKeepClearAlgorithm, PipBoundsState pipBoundsState,
+            PipMotionHelper pipMotionHelper, PipMediaController pipMediaController,
             PhonePipMenuController phonePipMenuController, PipTaskOrganizer pipTaskOrganizer,
+            PipTransitionState pipTransitionState,
             PipTouchHandler pipTouchHandler, PipTransitionController pipTransitionController,
             WindowManagerShellWrapper windowManagerShellWrapper,
             TaskStackListenerImpl taskStackListener,
             PipParamsChangedForwarder pipParamsChangedForwarder,
             Optional<OneHandedController> oneHandedController,
             @ShellMainThread ShellExecutor mainExecutor) {
-        return Optional.ofNullable(PipController.create(context, displayController,
-                pipAppOpsListener, pipBoundsAlgorithm, pipBoundsState,
-                pipMediaController, phonePipMenuController, pipTaskOrganizer,
+        return Optional.ofNullable(PipController.create(context, shellController, displayController,
+                pipAppOpsListener, pipBoundsAlgorithm, pipKeepClearAlgorithm, pipBoundsState,
+                pipMotionHelper,
+                pipMediaController, phonePipMenuController, pipTaskOrganizer, pipTransitionState,
                 pipTouchHandler, pipTransitionController, windowManagerShellWrapper,
                 taskStackListener, pipParamsChangedForwarder, oneHandedController, mainExecutor));
     }
@@ -237,6 +278,12 @@ public class WMShellModule {
     @Provides
     static PipSnapAlgorithm providePipSnapAlgorithm() {
         return new PipSnapAlgorithm();
+    }
+
+    @WMSingleton
+    @Provides
+    static PipKeepClearAlgorithm providePipKeepClearAlgorithm() {
+        return new PipKeepClearAlgorithm();
     }
 
     @WMSingleton
@@ -348,29 +395,64 @@ public class WMShellModule {
     //
     // Unfold transition
     //
-
     @WMSingleton
     @Provides
     @DynamicOverride
-    static FullscreenUnfoldController provideFullscreenUnfoldController(
+    static UnfoldAnimationController provideUnfoldAnimationController(
             Optional<ShellUnfoldProgressProvider> progressProvider,
-            Optional<UnfoldTransitionHandler> unfoldTransitionHandler,
-            FullscreenUnfoldTaskAnimator fullscreenUnfoldTaskAnimator,
-            UnfoldBackgroundController unfoldBackgroundController,
+            TransactionPool transactionPool,
+            @UnfoldTransition SplitTaskUnfoldAnimator splitAnimator,
+            FullscreenUnfoldTaskAnimator fullscreenAnimator,
+            Lazy<Optional<UnfoldTransitionHandler>> unfoldTransitionHandler,
             @ShellMainThread ShellExecutor mainExecutor
     ) {
-        return new FullscreenUnfoldController(mainExecutor,
-                unfoldBackgroundController, progressProvider.get(),
-                unfoldTransitionHandler.get(), fullscreenUnfoldTaskAnimator);
+        final List<UnfoldTaskAnimator> animators = new ArrayList<>();
+        animators.add(splitAnimator);
+        animators.add(fullscreenAnimator);
+
+        return new UnfoldAnimationController(
+                        transactionPool,
+                        progressProvider.get(),
+                        animators,
+                        unfoldTransitionHandler,
+                        mainExecutor
+                );
     }
+
 
     @Provides
     static FullscreenUnfoldTaskAnimator provideFullscreenUnfoldTaskAnimator(
             Context context,
+            UnfoldBackgroundController unfoldBackgroundController,
             DisplayInsetsController displayInsetsController
     ) {
-        return new FullscreenUnfoldTaskAnimator(context, displayInsetsController);
+        return new FullscreenUnfoldTaskAnimator(context, unfoldBackgroundController,
+                displayInsetsController);
     }
+
+    @Provides
+    static SplitTaskUnfoldAnimator provideSplitTaskUnfoldAnimatorBase(
+            Context context,
+            UnfoldBackgroundController backgroundController,
+            @ShellMainThread ShellExecutor executor,
+            Lazy<Optional<SplitScreenController>> splitScreenOptional,
+            DisplayInsetsController displayInsetsController
+    ) {
+        return new SplitTaskUnfoldAnimator(context, executor, splitScreenOptional,
+                backgroundController, displayInsetsController);
+    }
+
+    @WMSingleton
+    @UnfoldShellTransition
+    @Binds
+    abstract SplitTaskUnfoldAnimator provideShellSplitTaskUnfoldAnimator(
+            SplitTaskUnfoldAnimator splitTaskUnfoldAnimator);
+
+    @WMSingleton
+    @UnfoldTransition
+    @Binds
+    abstract SplitTaskUnfoldAnimator provideSplitTaskUnfoldAnimator(
+            SplitTaskUnfoldAnimator splitTaskUnfoldAnimator);
 
     @WMSingleton
     @Provides
@@ -378,32 +460,12 @@ public class WMShellModule {
     static UnfoldTransitionHandler provideUnfoldTransitionHandler(
             Optional<ShellUnfoldProgressProvider> progressProvider,
             FullscreenUnfoldTaskAnimator animator,
-            UnfoldBackgroundController backgroundController,
+            @UnfoldShellTransition SplitTaskUnfoldAnimator unfoldAnimator,
             TransactionPool transactionPool,
             Transitions transitions,
             @ShellMainThread ShellExecutor executor) {
         return new UnfoldTransitionHandler(progressProvider.get(), animator,
-                transactionPool, backgroundController, executor, transitions);
-    }
-
-    @Provides
-    static Optional<StageTaskUnfoldController> provideStageTaskUnfoldController(
-            Optional<ShellUnfoldProgressProvider> progressProvider,
-            Context context,
-            TransactionPool transactionPool,
-            Lazy<UnfoldBackgroundController> unfoldBackgroundController,
-            DisplayInsetsController displayInsetsController,
-            @ShellMainThread ShellExecutor mainExecutor
-    ) {
-        return progressProvider.map(shellUnfoldTransitionProgressProvider ->
-                new StageTaskUnfoldController(
-                        context,
-                        transactionPool,
-                        shellUnfoldTransitionProgressProvider,
-                        displayInsetsController,
-                        unfoldBackgroundController.get(),
-                        mainExecutor
-                ));
+                unfoldAnimator, transactionPool, executor, transitions);
     }
 
     @WMSingleton

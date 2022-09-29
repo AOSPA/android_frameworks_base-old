@@ -57,6 +57,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import java.util.Optional;
 import java.util.concurrent.Executor;
 
 @SmallTest
@@ -115,7 +116,7 @@ public class DreamOverlayStatusBarViewControllerTest extends SysuiTestCase {
                 mNextAlarmController,
                 mDateFormatUtil,
                 mSensorPrivacyController,
-                mDreamOverlayNotificationCountProvider,
+                Optional.of(mDreamOverlayNotificationCountProvider),
                 mZenModeController,
                 mStatusBarWindowStateController);
     }
@@ -183,6 +184,28 @@ public class DreamOverlayStatusBarViewControllerTest extends SysuiTestCase {
     }
 
     @Test
+    public void testOnViewAttachedShowsMicIconWhenDisabled() {
+        when(mSensorPrivacyController.isSensorBlocked(SensorPrivacyManager.Sensors.MICROPHONE))
+                .thenReturn(true);
+        when(mSensorPrivacyController.isSensorBlocked(SensorPrivacyManager.Sensors.CAMERA))
+                .thenReturn(false);
+        mController.onViewAttached();
+        verify(mView).showIcon(
+                DreamOverlayStatusBarView.STATUS_ICON_MIC_DISABLED, true, null);
+    }
+
+    @Test
+    public void testOnViewAttachedShowsCameraIconWhenDisabled() {
+        when(mSensorPrivacyController.isSensorBlocked(SensorPrivacyManager.Sensors.MICROPHONE))
+                .thenReturn(false);
+        when(mSensorPrivacyController.isSensorBlocked(SensorPrivacyManager.Sensors.CAMERA))
+                .thenReturn(true);
+        mController.onViewAttached();
+        verify(mView).showIcon(
+                DreamOverlayStatusBarView.STATUS_ICON_CAMERA_DISABLED, true, null);
+    }
+
+    @Test
     public void testOnViewAttachedShowsMicCameraIconWhenDisabled() {
         when(mSensorPrivacyController.isSensorBlocked(SensorPrivacyManager.Sensors.MICROPHONE))
                 .thenReturn(true);
@@ -191,17 +214,6 @@ public class DreamOverlayStatusBarViewControllerTest extends SysuiTestCase {
         mController.onViewAttached();
         verify(mView).showIcon(
                 DreamOverlayStatusBarView.STATUS_ICON_MIC_CAMERA_DISABLED, true, null);
-    }
-
-    @Test
-    public void testOnViewAttachedHidesMicCameraIconWhenEnabled() {
-        when(mSensorPrivacyController.isSensorBlocked(SensorPrivacyManager.Sensors.MICROPHONE))
-                .thenReturn(false);
-        when(mSensorPrivacyController.isSensorBlocked(SensorPrivacyManager.Sensors.CAMERA))
-                .thenReturn(false);
-        mController.onViewAttached();
-        verify(mView).showIcon(
-                DreamOverlayStatusBarView.STATUS_ICON_MIC_CAMERA_DISABLED, false, null);
     }
 
     @Test
@@ -228,6 +240,26 @@ public class DreamOverlayStatusBarViewControllerTest extends SysuiTestCase {
 
         verify(mView).showIcon(
                 eq(DreamOverlayStatusBarView.STATUS_ICON_NOTIFICATIONS), eq(false), isNull());
+    }
+
+    @Test
+    public void testNotificationsIconNotShownWhenCountProviderAbsent() {
+        DreamOverlayStatusBarViewController controller = new DreamOverlayStatusBarViewController(
+                mView,
+                mResources,
+                mMainExecutor,
+                mConnectivityManager,
+                mTouchSession,
+                mAlarmManager,
+                mNextAlarmController,
+                mDateFormatUtil,
+                mSensorPrivacyController,
+                Optional.empty(),
+                mZenModeController,
+                mStatusBarWindowStateController);
+        controller.onViewAttached();
+        verify(mView, never()).showIcon(
+                eq(DreamOverlayStatusBarView.STATUS_ICON_NOTIFICATIONS), eq(true), any());
     }
 
     @Test
@@ -362,24 +394,6 @@ public class DreamOverlayStatusBarViewControllerTest extends SysuiTestCase {
 
         verify(mView).showIcon(
                 DreamOverlayStatusBarView.STATUS_ICON_MIC_CAMERA_DISABLED, true, null);
-    }
-
-    @Test
-    public void testMicCameraIconHiddenWhenSensorsNotBlocked() {
-        when(mSensorPrivacyController.isSensorBlocked(SensorPrivacyManager.Sensors.MICROPHONE))
-                .thenReturn(true).thenReturn(false);
-        when(mSensorPrivacyController.isSensorBlocked(SensorPrivacyManager.Sensors.CAMERA))
-                .thenReturn(true).thenReturn(false);
-        mController.onViewAttached();
-
-        final ArgumentCaptor<IndividualSensorPrivacyController.Callback> callbackCapture =
-                ArgumentCaptor.forClass(IndividualSensorPrivacyController.Callback.class);
-        verify(mSensorPrivacyController).addCallback(callbackCapture.capture());
-        callbackCapture.getValue().onSensorBlockedChanged(
-                SensorPrivacyManager.Sensors.MICROPHONE, false);
-
-        verify(mView).showIcon(
-                DreamOverlayStatusBarView.STATUS_ICON_MIC_CAMERA_DISABLED, false, null);
     }
 
     @Test

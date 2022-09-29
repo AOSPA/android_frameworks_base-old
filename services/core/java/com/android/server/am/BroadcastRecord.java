@@ -70,11 +70,13 @@ final class BroadcastRecord extends Binder {
     final boolean callerInstantApp; // caller is an Instant App?
     final boolean ordered;  // serialize the send to receivers?
     final boolean sticky;   // originated from existing sticky data?
+    final boolean alarm;    // originated from an alarm triggering?
     final boolean initialSticky; // initial broadcast from register to sticky?
     final int userId;       // user id this broadcast was for
     final String resolvedType; // the resolved data type
     final String[] requiredPermissions; // permissions the caller has required
     final String[] excludedPermissions; // permissions to exclude
+    final String[] excludedPackages; // packages to exclude
     final int appOp;        // an app op that is associated with this broadcast
     final BroadcastOptions options; // BroadcastOptions supplied by caller
     final List receivers;   // contains BroadcastFilter and ResolveInfo
@@ -161,6 +163,10 @@ final class BroadcastRecord extends Binder {
         if (excludedPermissions != null && excludedPermissions.length > 0) {
             pw.print(prefix); pw.print("excludedPermissions=");
             pw.print(Arrays.toString(excludedPermissions));
+        }
+        if (excludedPackages != null && excludedPackages.length > 0) {
+            pw.print(prefix); pw.print("excludedPackages=");
+            pw.print(Arrays.toString(excludedPackages));
         }
         if (options != null) {
             pw.print(prefix); pw.print("options="); pw.println(options.toBundle());
@@ -260,7 +266,8 @@ final class BroadcastRecord extends Binder {
             Intent _intent, ProcessRecord _callerApp, String _callerPackage,
             @Nullable String _callerFeatureId, int _callingPid, int _callingUid,
             boolean _callerInstantApp, String _resolvedType,
-            String[] _requiredPermissions, String[] _excludedPermissions, int _appOp,
+            String[] _requiredPermissions, String[] _excludedPermissions,
+            String[] _excludedPackages, int _appOp,
             BroadcastOptions _options, List _receivers, IIntentReceiver _resultTo, int _resultCode,
             String _resultData, Bundle _resultExtras, boolean _serialized, boolean _sticky,
             boolean _initialSticky, int _userId, boolean allowBackgroundActivityStarts,
@@ -280,6 +287,7 @@ final class BroadcastRecord extends Binder {
         resolvedType = _resolvedType;
         requiredPermissions = _requiredPermissions;
         excludedPermissions = _excludedPermissions;
+        excludedPackages = _excludedPackages;
         appOp = _appOp;
         options = _options;
         receivers = _receivers;
@@ -298,6 +306,7 @@ final class BroadcastRecord extends Binder {
         this.allowBackgroundActivityStarts = allowBackgroundActivityStarts;
         mBackgroundActivityStartsToken = backgroundActivityStartsToken;
         this.timeoutExempt = timeoutExempt;
+        alarm = options != null && options.isAlarmBroadcast();
     }
 
     /**
@@ -321,6 +330,7 @@ final class BroadcastRecord extends Binder {
         resolvedType = from.resolvedType;
         requiredPermissions = from.requiredPermissions;
         excludedPermissions = from.excludedPermissions;
+        excludedPackages = from.excludedPackages;
         appOp = from.appOp;
         options = from.options;
         receivers = from.receivers;
@@ -349,6 +359,7 @@ final class BroadcastRecord extends Binder {
         allowBackgroundActivityStarts = from.allowBackgroundActivityStarts;
         mBackgroundActivityStartsToken = from.mBackgroundActivityStartsToken;
         timeoutExempt = from.timeoutExempt;
+        alarm = from.alarm;
     }
 
     /**
@@ -381,9 +392,10 @@ final class BroadcastRecord extends Binder {
         // build a new BroadcastRecord around that single-target list
         BroadcastRecord split = new BroadcastRecord(queue, intent, callerApp, callerPackage,
                 callerFeatureId, callingPid, callingUid, callerInstantApp, resolvedType,
-                requiredPermissions, excludedPermissions, appOp, options, splitReceivers, resultTo,
-                resultCode, resultData, resultExtras, ordered, sticky, initialSticky, userId,
-                allowBackgroundActivityStarts, mBackgroundActivityStartsToken, timeoutExempt);
+                requiredPermissions, excludedPermissions, excludedPackages, appOp, options,
+                splitReceivers, resultTo, resultCode, resultData, resultExtras, ordered, sticky,
+                initialSticky, userId, allowBackgroundActivityStarts,
+                mBackgroundActivityStartsToken, timeoutExempt);
         split.enqueueTime = this.enqueueTime;
         split.enqueueRealTime = this.enqueueRealTime;
         split.enqueueClockTime = this.enqueueClockTime;
@@ -459,7 +471,7 @@ final class BroadcastRecord extends Binder {
         for (int i = 0; i < uidSize; i++) {
             final BroadcastRecord br = new BroadcastRecord(queue, intent, callerApp, callerPackage,
                     callerFeatureId, callingPid, callingUid, callerInstantApp, resolvedType,
-                    requiredPermissions, excludedPermissions, appOp, options,
+                    requiredPermissions, excludedPermissions, excludedPackages, appOp, options,
                     uid2receiverList.valueAt(i), null /* _resultTo */,
                     resultCode, resultData, resultExtras, ordered, sticky, initialSticky, userId,
                     allowBackgroundActivityStarts, mBackgroundActivityStartsToken, timeoutExempt);

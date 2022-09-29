@@ -23,6 +23,7 @@ import static android.app.usage.UsageStatsManager.REASON_MAIN_MASK;
 import static android.app.usage.UsageStatsManager.REASON_MAIN_PREDICTED;
 import static android.app.usage.UsageStatsManager.REASON_MAIN_TIMEOUT;
 import static android.app.usage.UsageStatsManager.REASON_MAIN_USAGE;
+import static android.app.usage.UsageStatsManager.REASON_SUB_DEFAULT_APP_RESTORED;
 import static android.app.usage.UsageStatsManager.REASON_SUB_DEFAULT_APP_UPDATE;
 import static android.app.usage.UsageStatsManager.REASON_SUB_FORCED_SYSTEM_FLAG_BUGGY;
 import static android.app.usage.UsageStatsManager.REASON_SUB_FORCED_USER_FLAG_INTERACTION;
@@ -100,6 +101,7 @@ import android.os.UserHandle;
 import android.provider.DeviceConfig;
 import android.provider.Settings.Global;
 import android.telephony.TelephonyManager;
+import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.IndentingPrintWriter;
@@ -225,6 +227,11 @@ public class AppStandbyController
                     | PackageManager.MATCH_DISABLED_COMPONENTS
                     | PackageManager.MATCH_SYSTEM_ONLY;
 
+    private static final int NOTIFICATION_SEEN_PROMOTED_BUCKET_FOR_PRE_T_APPS =
+            STANDBY_BUCKET_WORKING_SET;
+    private static final long NOTIFICATION_SEEN_HOLD_DURATION_FOR_PRE_T_APPS =
+            COMPRESS_TIME ? 12 * ONE_MINUTE : 12 * ONE_HOUR;
+
     // To name the lock for stack traces
     static class Lock {}
 
@@ -289,6 +296,7 @@ public class AppStandbyController
     static final int MSG_INFORM_LISTENERS = 3;
     static final int MSG_FORCE_IDLE_STATE = 4;
     static final int MSG_CHECK_IDLE_STATES = 5;
+    static final int MSG_TRIGGER_LISTENER_QUOTA_BUMP = 7;
     static final int MSG_REPORT_CONTENT_PROVIDER_USAGE = 8;
     static final int MSG_PAROLE_STATE_CHANGED = 9;
     static final int MSG_ONE_TIME_CHECK_IDLE_STATES = 10;
@@ -318,6 +326,18 @@ public class AppStandbyController
     /** The standby bucket that an app will be promoted on a notification-seen event */
     int mNotificationSeenPromotedBucket =
             ConstantsObserver.DEFAULT_NOTIFICATION_SEEN_PROMOTED_BUCKET;
+    /**
+     * If {@code true}, tell each {@link AppIdleStateChangeListener} to give quota bump for each
+     * notification seen event.
+     */
+    private boolean mTriggerQuotaBumpOnNotificationSeen =
+            ConstantsObserver.DEFAULT_TRIGGER_QUOTA_BUMP_ON_NOTIFICATION_SEEN;
+    /**
+     * If {@code true}, we will retain the pre-T impact of notification signal on apps targeting
+     * pre-T sdk levels regardless of other flag changes.
+     */
+    boolean mRetainNotificationSeenImpactForPreTApps =
+            ConstantsObserver.DEFAULT_RETAIN_NOTIFICATION_SEEN_IMPACT_FOR_PRE_T_APPS;
     /** Minimum time a system update event should keep the buckets elevated. */
     long mSystemUpdateUsageTimeoutMillis = ConstantsObserver.DEFAULT_SYSTEM_UPDATE_TIMEOUT;
     /** Maximum time to wait for a prediction before using simple timeouts to downgrade buckets. */
@@ -375,6 +395,52 @@ public class AppStandbyController
      */
     volatile int mBroadcastResponseFgThresholdState =
             ConstantsObserver.DEFAULT_BROADCAST_RESPONSE_FG_THRESHOLD_STATE;
+
+    /**
+     * Duration (in millis) for the window within which any broadcasts occurred will be
+     * treated as one broadcast session.
+     */
+    volatile long mBroadcastSessionsDurationMs =
+            ConstantsObserver.DEFAULT_BROADCAST_SESSIONS_DURATION_MS;
+
+    /**
+     * Duration (in millis) for the window within which any broadcasts occurred ((with a
+     * corresponding response event) will be treated as one broadcast session. This similar to
+     * {@link #mBroadcastSessionsDurationMs}, except that this duration will be used to group only
+     * broadcasts that have a corresponding response event into sessions.
+     */
+    volatile long mBroadcastSessionsWithResponseDurationMs =
+            ConstantsObserver.DEFAULT_BROADCAST_SESSIONS_WITH_RESPONSE_DURATION_MS;
+
+    /**
+     * Denotes whether the response event should be attributed to all broadcast sessions or not.
+     * If this is {@code true}, then the response event should be attributed to all the broadcast
+     * sessions that occurred within the broadcast response window. Otherwise, the
+     * response event should be attributed to only the earliest broadcast session within the
+     * broadcast response window.
+     */
+    volatile boolean mNoteResponseEventForAllBroadcastSessions =
+            ConstantsObserver.DEFAULT_NOTE_RESPONSE_EVENT_FOR_ALL_BROADCAST_SESSIONS;
+
+    /**
+     * List of roles whose holders are exempted from the requirement of starting
+     * a response event after receiving a broadcast.
+     *
+     * The list of roles will be separated by '|' in the string.
+     */
+    volatile String mBroadcastResponseExemptedRoles =
+            ConstantsObserver.DEFAULT_BROADCAST_RESPONSE_EXEMPTED_ROLES;
+    volatile List<String> mBroadcastResponseExemptedRolesList = Collections.EMPTY_LIST;
+
+    /**
+     * List of permissions whose holders are exempted from the requirement of starting
+     * a response event after receiving a broadcast.
+     *
+     * The list of permissions will be separated by '|' in the string.
+     */
+    volatile String mBroadcastResponseExemptedPermissions =
+            ConstantsObserver.DEFAULT_BROADCAST_RESPONSE_EXEMPTED_PERMISSIONS;
+    volatile List<String> mBroadcastResponseExemptedPermissionsList = Collections.EMPTY_LIST;
 
     /**
      * Map of last known values of keys in {@link DeviceConfig#NAMESPACE_APP_STANDBY}.
@@ -741,6 +807,17 @@ public class AppStandbyController
                 appUsage.bucketingReason, false);
     }
 
+    /** Trigger a quota bump in the listeners. */
+    private void triggerListenerQuotaBump(String packageName, int userId) {
+        if (!mAppIdleEnabled) return;
+
+        synchronized (mPackageAccessListeners) {
+            for (AppIdleStateChangeListener listener : mPackageAccessListeners) {
+                listener.triggerTemporaryQuotaBump(packageName, userId);
+            }
+        }
+    }
+
     @VisibleForTesting
     void setChargingState(boolean isCharging) {
         if (mIsCharging != isCharging) {
@@ -1054,13 +1131,29 @@ public class AppStandbyController
         final int subReason = usageEventToSubReason(eventType);
         final int reason = REASON_MAIN_USAGE | subReason;
         if (eventType == UsageEvents.Event.NOTIFICATION_SEEN) {
+            final int notificationSeenPromotedBucket;
+            final long notificationSeenTimeoutMillis;
+            if (mRetainNotificationSeenImpactForPreTApps
+                    && getTargetSdkVersion(pkg) < Build.VERSION_CODES.TIRAMISU) {
+                notificationSeenPromotedBucket =
+                        NOTIFICATION_SEEN_PROMOTED_BUCKET_FOR_PRE_T_APPS;
+                notificationSeenTimeoutMillis =
+                        NOTIFICATION_SEEN_HOLD_DURATION_FOR_PRE_T_APPS;
+            } else {
+                if (mTriggerQuotaBumpOnNotificationSeen) {
+                    mHandler.obtainMessage(MSG_TRIGGER_LISTENER_QUOTA_BUMP, userId, -1, pkg)
+                            .sendToTarget();
+                }
+                notificationSeenPromotedBucket = mNotificationSeenPromotedBucket;
+                notificationSeenTimeoutMillis = mNotificationSeenTimeoutMillis;
+            }
             // Notification-seen elevates to a higher bucket (depending on
             // {@link ConstantsObserver#KEY_NOTIFICATION_SEEN_PROMOTED_BUCKET}) but doesn't
             // change usage time.
             mAppIdleHistory.reportUsage(appHistory, pkg, userId,
-                    mNotificationSeenPromotedBucket, subReason,
-                    0, elapsedRealtime + mNotificationSeenTimeoutMillis);
-            nextCheckDelay = mNotificationSeenTimeoutMillis;
+                    notificationSeenPromotedBucket, subReason,
+                    0, elapsedRealtime + notificationSeenTimeoutMillis);
+            nextCheckDelay = notificationSeenTimeoutMillis;
         } else if (eventType == UsageEvents.Event.SLICE_PINNED) {
             // Mild usage elevates to WORKING_SET but doesn't change usage time.
             mAppIdleHistory.reportUsage(appHistory, pkg, userId,
@@ -1099,6 +1192,10 @@ public class AppStandbyController
         if (previouslyIdle) {
             notifyBatteryStats(pkg, userId, false);
         }
+    }
+
+    private int getTargetSdkVersion(String packageName) {
+        return mInjector.getPackageManagerInternal().getPackageTargetSdkVersion(packageName);
     }
 
     /**
@@ -1509,6 +1606,26 @@ public class AppStandbyController
     }
 
     @Override
+    public void restoreAppsToRare(Set<String> restoredApps, int userId) {
+        final int reason = REASON_MAIN_DEFAULT | REASON_SUB_DEFAULT_APP_RESTORED;
+        final long nowElapsed = mInjector.elapsedRealtime();
+        for (String packageName : restoredApps) {
+            // If the package is not installed, don't allow the bucket to be set.
+            if (!mInjector.isPackageInstalled(packageName, 0, userId)) {
+                Slog.e(TAG, "Tried to restore bucket for uninstalled app: " + packageName);
+                continue;
+            }
+
+            final int standbyBucket = getAppStandbyBucket(packageName, userId, nowElapsed, false);
+            // Only update the standby bucket to RARE if the app is still in the NEVER bucket.
+            if (standbyBucket == STANDBY_BUCKET_NEVER) {
+                setAppStandbyBucket(packageName, userId, STANDBY_BUCKET_RARE, reason,
+                        nowElapsed, false);
+            }
+        }
+    }
+
+    @Override
     public void setAppStandbyBucket(@NonNull String packageName, int bucket, int userId,
             int callingUid, int callingPid) {
         setAppStandbyBuckets(
@@ -1724,7 +1841,8 @@ public class AppStandbyController
     }
 
     @VisibleForTesting
-    boolean isActiveDeviceAdmin(String packageName, int userId) {
+    @Override
+    public boolean isActiveDeviceAdmin(String packageName, int userId) {
         synchronized (mActiveAdminApps) {
             final Set<String> adminPkgs = mActiveAdminApps.get(userId);
             return adminPkgs != null && adminPkgs.contains(packageName);
@@ -1866,6 +1984,33 @@ public class AppStandbyController
     @Override
     public int getBroadcastResponseFgThresholdState() {
         return mBroadcastResponseFgThresholdState;
+    }
+
+    @Override
+    public long getBroadcastSessionsDurationMs() {
+        return mBroadcastSessionsDurationMs;
+    }
+
+    @Override
+    public long getBroadcastSessionsWithResponseDurationMs() {
+        return mBroadcastSessionsWithResponseDurationMs;
+    }
+
+    @Override
+    public boolean shouldNoteResponseEventForAllBroadcastSessions() {
+        return mNoteResponseEventForAllBroadcastSessions;
+    }
+
+    @Override
+    @NonNull
+    public List<String> getBroadcastResponseExemptedRoles() {
+        return mBroadcastResponseExemptedRolesList;
+    }
+
+    @Override
+    @NonNull
+    public List<String> getBroadcastResponseExemptedPermissions() {
+        return mBroadcastResponseExemptedPermissionsList;
     }
 
     @Override
@@ -2160,6 +2305,12 @@ public class AppStandbyController
         pw.print("  mNotificationSeenPromotedBucket=");
         pw.print(standbyBucketToString(mNotificationSeenPromotedBucket));
         pw.println();
+        pw.print("  mTriggerQuotaBumpOnNotificationSeen=");
+        pw.print(mTriggerQuotaBumpOnNotificationSeen);
+        pw.println();
+        pw.print("  mRetainNotificationSeenImpactForPreTApps=");
+        pw.print(mRetainNotificationSeenImpactForPreTApps);
+        pw.println();
         pw.print("  mSlicePinnedTimeoutMillis=");
         TimeUtils.formatDuration(mSlicePinnedTimeoutMillis, pw);
         pw.println();
@@ -2200,6 +2351,26 @@ public class AppStandbyController
 
         pw.print("  mBroadcastResponseFgThresholdState=");
         pw.print(ActivityManager.procStateToString(mBroadcastResponseFgThresholdState));
+        pw.println();
+
+        pw.print("  mBroadcastSessionsDurationMs=");
+        TimeUtils.formatDuration(mBroadcastSessionsDurationMs, pw);
+        pw.println();
+
+        pw.print("  mBroadcastSessionsWithResponseDurationMs=");
+        TimeUtils.formatDuration(mBroadcastSessionsWithResponseDurationMs, pw);
+        pw.println();
+
+        pw.print("  mNoteResponseEventForAllBroadcastSessions=");
+        pw.print(mNoteResponseEventForAllBroadcastSessions);
+        pw.println();
+
+        pw.print("  mBroadcastResponseExemptedRoles");
+        pw.print(mBroadcastResponseExemptedRoles);
+        pw.println();
+
+        pw.print("  mBroadcastResponseExemptedPermissions");
+        pw.print(mBroadcastResponseExemptedPermissions);
         pw.println();
 
         pw.println();
@@ -2544,6 +2715,10 @@ public class AppStandbyController
                     checkIdleStates(UserHandle.USER_ALL);
                     break;
 
+                case MSG_TRIGGER_LISTENER_QUOTA_BUMP:
+                    triggerListenerQuotaBump((String) msg.obj, msg.arg1);
+                    break;
+
                 case MSG_REPORT_CONTENT_PROVIDER_USAGE:
                     ContentProviderUsageRecord record = (ContentProviderUsageRecord) msg.obj;
                     reportContentProviderUsage(record.name, record.packageName, record.userId);
@@ -2630,6 +2805,10 @@ public class AppStandbyController
                 "notification_seen_duration";
         private static final String KEY_NOTIFICATION_SEEN_PROMOTED_BUCKET =
                 "notification_seen_promoted_bucket";
+        private static final String KEY_RETAIN_NOTIFICATION_SEEN_IMPACT_FOR_PRE_T_APPS =
+                "retain_notification_seen_impact_for_pre_t_apps";
+        private static final String KEY_TRIGGER_QUOTA_BUMP_ON_NOTIFICATION_SEEN =
+                "trigger_quota_bump_on_notification_seen";
         private static final String KEY_SLICE_PINNED_HOLD_DURATION =
                 "slice_pinned_duration";
         private static final String KEY_SYSTEM_UPDATE_HOLD_DURATION =
@@ -2672,6 +2851,17 @@ public class AppStandbyController
                 "broadcast_response_window_timeout_ms";
         private static final String KEY_BROADCAST_RESPONSE_FG_THRESHOLD_STATE =
                 "broadcast_response_fg_threshold_state";
+        private static final String KEY_BROADCAST_SESSIONS_DURATION_MS =
+                "broadcast_sessions_duration_ms";
+        private static final String KEY_BROADCAST_SESSIONS_WITH_RESPONSE_DURATION_MS =
+                "broadcast_sessions_with_response_duration_ms";
+        private static final String KEY_NOTE_RESPONSE_EVENT_FOR_ALL_BROADCAST_SESSIONS =
+                "note_response_event_for_all_broadcast_sessions";
+        private static final String KEY_BROADCAST_RESPONSE_EXEMPTED_ROLES =
+                "brodacast_response_exempted_roles";
+        private static final String KEY_BROADCAST_RESPONSE_EXEMPTED_PERMISSIONS =
+                "brodacast_response_exempted_permissions";
+
         public static final long DEFAULT_CHECK_IDLE_INTERVAL_MS =
                 COMPRESS_TIME ? ONE_MINUTE : 4 * ONE_HOUR;
         public static final long DEFAULT_STRONG_USAGE_TIMEOUT =
@@ -2682,6 +2872,8 @@ public class AppStandbyController
                 COMPRESS_TIME ? 12 * ONE_MINUTE : 12 * ONE_HOUR;
         public static final int DEFAULT_NOTIFICATION_SEEN_PROMOTED_BUCKET =
                 STANDBY_BUCKET_WORKING_SET;
+        public static final boolean DEFAULT_RETAIN_NOTIFICATION_SEEN_IMPACT_FOR_PRE_T_APPS = false;
+        public static final boolean DEFAULT_TRIGGER_QUOTA_BUMP_ON_NOTIFICATION_SEEN = false;
         public static final long DEFAULT_SYSTEM_UPDATE_TIMEOUT =
                 COMPRESS_TIME ? 2 * ONE_MINUTE : 2 * ONE_HOUR;
         public static final long DEFAULT_SYSTEM_INTERACTION_TIMEOUT =
@@ -2705,6 +2897,17 @@ public class AppStandbyController
                 2 * ONE_MINUTE;
         public static final int DEFAULT_BROADCAST_RESPONSE_FG_THRESHOLD_STATE =
                 ActivityManager.PROCESS_STATE_TOP;
+        public static final long DEFAULT_BROADCAST_SESSIONS_DURATION_MS =
+                2 * ONE_MINUTE;
+        public static final long DEFAULT_BROADCAST_SESSIONS_WITH_RESPONSE_DURATION_MS =
+                2 * ONE_MINUTE;
+        public static final boolean DEFAULT_NOTE_RESPONSE_EVENT_FOR_ALL_BROADCAST_SESSIONS =
+                true;
+        private static final String DEFAULT_BROADCAST_RESPONSE_EXEMPTED_ROLES = "";
+        private static final String DEFAULT_BROADCAST_RESPONSE_EXEMPTED_PERMISSIONS = "";
+
+        private final TextUtils.SimpleStringSplitter mStringPipeSplitter =
+                new TextUtils.SimpleStringSplitter('|');
 
         ConstantsObserver(Handler handler) {
             super(handler);
@@ -2776,6 +2979,16 @@ public class AppStandbyController
                                     KEY_NOTIFICATION_SEEN_PROMOTED_BUCKET,
                                     DEFAULT_NOTIFICATION_SEEN_PROMOTED_BUCKET);
                             break;
+                        case KEY_RETAIN_NOTIFICATION_SEEN_IMPACT_FOR_PRE_T_APPS:
+                            mRetainNotificationSeenImpactForPreTApps = properties.getBoolean(
+                                    KEY_RETAIN_NOTIFICATION_SEEN_IMPACT_FOR_PRE_T_APPS,
+                                    DEFAULT_RETAIN_NOTIFICATION_SEEN_IMPACT_FOR_PRE_T_APPS);
+                            break;
+                        case KEY_TRIGGER_QUOTA_BUMP_ON_NOTIFICATION_SEEN:
+                            mTriggerQuotaBumpOnNotificationSeen = properties.getBoolean(
+                                    KEY_TRIGGER_QUOTA_BUMP_ON_NOTIFICATION_SEEN,
+                                    DEFAULT_TRIGGER_QUOTA_BUMP_ON_NOTIFICATION_SEEN);
+                            break;
                         case KEY_SLICE_PINNED_HOLD_DURATION:
                             mSlicePinnedTimeoutMillis = properties.getLong(
                                     KEY_SLICE_PINNED_HOLD_DURATION,
@@ -2832,6 +3045,35 @@ public class AppStandbyController
                                     KEY_BROADCAST_RESPONSE_FG_THRESHOLD_STATE,
                                     DEFAULT_BROADCAST_RESPONSE_FG_THRESHOLD_STATE);
                             break;
+                        case KEY_BROADCAST_SESSIONS_DURATION_MS:
+                            mBroadcastSessionsDurationMs = properties.getLong(
+                                    KEY_BROADCAST_SESSIONS_DURATION_MS,
+                                    DEFAULT_BROADCAST_SESSIONS_DURATION_MS);
+                            break;
+                        case KEY_BROADCAST_SESSIONS_WITH_RESPONSE_DURATION_MS:
+                            mBroadcastSessionsWithResponseDurationMs = properties.getLong(
+                                    KEY_BROADCAST_SESSIONS_WITH_RESPONSE_DURATION_MS,
+                                    DEFAULT_BROADCAST_SESSIONS_WITH_RESPONSE_DURATION_MS);
+                            break;
+                        case KEY_NOTE_RESPONSE_EVENT_FOR_ALL_BROADCAST_SESSIONS:
+                            mNoteResponseEventForAllBroadcastSessions = properties.getBoolean(
+                                    KEY_NOTE_RESPONSE_EVENT_FOR_ALL_BROADCAST_SESSIONS,
+                                    DEFAULT_NOTE_RESPONSE_EVENT_FOR_ALL_BROADCAST_SESSIONS);
+                            break;
+                        case KEY_BROADCAST_RESPONSE_EXEMPTED_ROLES:
+                            mBroadcastResponseExemptedRoles = properties.getString(
+                                    KEY_BROADCAST_RESPONSE_EXEMPTED_ROLES,
+                                    DEFAULT_BROADCAST_RESPONSE_EXEMPTED_ROLES);
+                            mBroadcastResponseExemptedRolesList = splitPipeSeparatedString(
+                                    mBroadcastResponseExemptedRoles);
+                            break;
+                        case KEY_BROADCAST_RESPONSE_EXEMPTED_PERMISSIONS:
+                            mBroadcastResponseExemptedPermissions = properties.getString(
+                                    KEY_BROADCAST_RESPONSE_EXEMPTED_PERMISSIONS,
+                                    DEFAULT_BROADCAST_RESPONSE_EXEMPTED_PERMISSIONS);
+                            mBroadcastResponseExemptedPermissionsList = splitPipeSeparatedString(
+                                    mBroadcastResponseExemptedPermissions);
+                            break;
                         default:
                             if (!timeThresholdsUpdated
                                     && (name.startsWith(KEY_PREFIX_SCREEN_TIME_THRESHOLD)
@@ -2844,6 +3086,15 @@ public class AppStandbyController
                     mAppStandbyProperties.put(name, properties.getString(name, null));
                 }
             }
+        }
+
+        private List<String> splitPipeSeparatedString(String string) {
+            final List<String> values = new ArrayList<>();
+            mStringPipeSplitter.setString(string);
+            while (mStringPipeSplitter.hasNext()) {
+                values.add(mStringPipeSplitter.next());
+            }
+            return values;
         }
 
         private void updateTimeThresholds() {

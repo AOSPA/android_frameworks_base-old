@@ -121,6 +121,7 @@ public final class SurfaceControl implements Parcelable {
     private static native void nativeSetAnimationTransaction(long transactionObj);
     private static native void nativeSetEarlyWakeupStart(long transactionObj);
     private static native void nativeSetEarlyWakeupEnd(long transactionObj);
+    private static native long nativeGetTransactionId(long transactionObj);
 
     private static native void nativeSetLayer(long transactionObj, long nativeObject, int zorder);
     private static native void nativeSetRelativeLayer(long transactionObj, long nativeObject,
@@ -248,6 +249,8 @@ public final class SurfaceControl implements Parcelable {
 
     private static native void nativeSetFrameRate(long transactionObj, long nativeObject,
             float frameRate, int compatibility, int changeFrameRateStrategy);
+    private static native void nativeSetDefaultFrameRateCompatibility(long transactionObj,
+            long nativeObject, int compatibility);
     private static native long nativeGetHandle(long nativeObject);
 
     private static native void nativeSetFixedTransformHint(long transactionObj, long nativeObject,
@@ -939,10 +942,14 @@ public final class SurfaceControl implements Parcelable {
 
             /**
              * The portion of the screen to capture into the buffer. Caller may pass  in
-             * 'new Rect()' if no cropping is desired.
+             * 'new Rect()' or null if no cropping is desired.
              */
-            public T setSourceCrop(Rect sourceCrop) {
-                mSourceCrop.set(sourceCrop);
+            public T setSourceCrop(@Nullable Rect sourceCrop) {
+                if (sourceCrop == null) {
+                    mSourceCrop.setEmpty();
+                } else {
+                    mSourceCrop.set(sourceCrop);
+                }
                 return getThis();
             }
 
@@ -2349,47 +2356,6 @@ public final class SurfaceControl implements Parcelable {
     }
 
     /**
-     * @hide
-     */
-    @UnsupportedAppUsage
-    public static void setDisplayProjection(IBinder displayToken,
-            int orientation, Rect layerStackRect, Rect displayRect) {
-        synchronized (SurfaceControl.class) {
-            sGlobalTransaction.setDisplayProjection(displayToken, orientation,
-                    layerStackRect, displayRect);
-        }
-    }
-
-    /**
-     * @hide
-     */
-    @UnsupportedAppUsage
-    public static void setDisplayLayerStack(IBinder displayToken, int layerStack) {
-        synchronized (SurfaceControl.class) {
-            sGlobalTransaction.setDisplayLayerStack(displayToken, layerStack);
-        }
-    }
-
-    /**
-     * @hide
-     */
-    @UnsupportedAppUsage
-    public static void setDisplaySurface(IBinder displayToken, Surface surface) {
-        synchronized (SurfaceControl.class) {
-            sGlobalTransaction.setDisplaySurface(displayToken, surface);
-        }
-    }
-
-    /**
-     * @hide
-     */
-    public static void setDisplaySize(IBinder displayToken, int width, int height) {
-        synchronized (SurfaceControl.class) {
-            sGlobalTransaction.setDisplaySize(displayToken, width, height);
-        }
-    }
-
-    /**
      * Overrides HDR modes for a display device.
      *
      * If the caller does not have ACCESS_SURFACE_FLINGER permission, this will throw a Security
@@ -2522,8 +2488,8 @@ public final class SurfaceControl implements Parcelable {
      * @return Returns a HardwareBuffer that contains the layer capture.
      * @hide
      */
-    public static ScreenshotHardwareBuffer captureLayers(SurfaceControl layer, Rect sourceCrop,
-            float frameScale, int format) {
+    public static ScreenshotHardwareBuffer captureLayers(@NonNull SurfaceControl layer,
+            @Nullable Rect sourceCrop, float frameScale, int format) {
         LayerCaptureArgs captureArgs = new LayerCaptureArgs.Builder(layer)
                 .setSourceCrop(sourceCrop)
                 .setFrameScale(frameScale)
@@ -3540,6 +3506,15 @@ public final class SurfaceControl implements Parcelable {
         }
 
         /**
+         * @hide
+         * @return The transaction's current id.
+         *         The id changed every time the transaction is applied.
+         */
+        public long getId() {
+            return nativeGetTransactionId(mNativeObject);
+        }
+
+        /**
          * Sets an arbitrary piece of metadata on the surface. This is a helper for int data.
          * @hide
          */
@@ -3640,6 +3615,25 @@ public final class SurfaceControl implements Parcelable {
             checkPreconditions(sc);
             nativeSetFrameRate(mNativeObject, sc.mNativeObject, frameRate, compatibility,
                     changeFrameRateStrategy);
+            return this;
+        }
+
+        /**
+         * Sets the default frame rate compatibility for the surface {@link SurfaceControl}
+         *
+         * @param sc The SurfaceControl to specify the frame rate of.
+         * @param compatibility The frame rate compatibility of this surface. The compatibility
+         *               value may influence the system's choice of display frame rate.
+         *
+         * @return This transaction object.
+         *
+         * @hide
+         */
+        @NonNull
+        public Transaction setDefaultFrameRateCompatibility(@NonNull SurfaceControl sc,
+                @Surface.FrameRateCompatibility int compatibility) {
+            checkPreconditions(sc);
+            nativeSetDefaultFrameRateCompatibility(mNativeObject, sc.mNativeObject, compatibility);
             return this;
         }
 

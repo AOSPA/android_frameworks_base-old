@@ -47,6 +47,7 @@ import static org.mockito.Mockito.when;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.IntentFilter;
+import android.content.res.Resources;
 import android.hardware.display.DisplayManagerGlobal;
 import android.os.Handler;
 import android.os.SystemClock;
@@ -88,6 +89,7 @@ import com.android.systemui.recents.OverviewProxyService;
 import com.android.systemui.recents.Recents;
 import com.android.systemui.settings.UserContextProvider;
 import com.android.systemui.settings.UserTracker;
+import com.android.systemui.shade.NotificationShadeWindowView;
 import com.android.systemui.shared.rotation.RotationButtonController;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
@@ -96,12 +98,13 @@ import com.android.systemui.statusbar.phone.AutoHideController;
 import com.android.systemui.statusbar.phone.CentralSurfaces;
 import com.android.systemui.statusbar.phone.LightBarController;
 import com.android.systemui.statusbar.phone.LightBarTransitionsController;
-import com.android.systemui.statusbar.phone.NotificationShadeWindowView;
 import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.DeviceConfigProxyFake;
+import com.android.systemui.util.concurrency.FakeExecutor;
+import com.android.systemui.util.time.FakeSystemClock;
 import com.android.systemui.utils.leaks.LeakCheckedTest;
 import com.android.wm.shell.back.BackAnimation;
 import com.android.wm.shell.pip.Pip;
@@ -126,9 +129,9 @@ public class NavigationBarTest extends SysuiTestCase {
 
     private SysuiTestableContext mSysuiTestableContextExternal;
     @Mock
-    NavigationBarFrame mNavigationBarFrame;
-    @Mock
     NavigationBarView mNavigationBarView;
+    @Mock
+    NavigationBarFrame mNavigationBarFrame;
     @Mock
     ButtonDispatcher mHomeButton;
     @Mock
@@ -191,6 +194,9 @@ public class NavigationBarTest extends SysuiTestCase {
     private CentralSurfaces mCentralSurfaces;
     @Mock
     private UserContextProvider mUserContextProvider;
+    @Mock
+    private Resources mResources;
+    private FakeExecutor mFakeExecutor = new FakeExecutor(new FakeSystemClock());
     private DeviceConfigProxyFake mDeviceConfigProxyFake = new DeviceConfigProxyFake();
 
     @Rule
@@ -215,6 +221,7 @@ public class NavigationBarTest extends SysuiTestCase {
         when(mNavigationBarView.getViewTreeObserver()).thenReturn(mViewTreeObserver);
         when(mUserContextProvider.createCurrentUserContext(any(Context.class)))
                 .thenReturn(mContext);
+        when(mNavigationBarView.getResources()).thenReturn(mResources);
         setupSysuiDependency();
         // This class inflates views that call Dependency.get, thus these injections are still
         // necessary.
@@ -450,6 +457,8 @@ public class NavigationBarTest extends SysuiTestCase {
                 mock(NotificationRemoteInputManager.class),
                 mock(NotificationShadeDepthController.class),
                 mHandler,
+                mFakeExecutor,
+                mFakeExecutor,
                 mUiEventLogger,
                 mNavBarHelper,
                 mLightBarController,

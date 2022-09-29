@@ -16,24 +16,19 @@
 
 package com.android.server.wm.flicker.launch
 
-import android.app.Instrumentation
+import android.platform.test.annotations.FlakyTest
 import android.platform.test.annotations.Presubmit
-import android.view.Display
 import androidx.test.filters.RequiresDevice
-import androidx.test.platform.app.InstrumentationRegistry
-import com.android.server.wm.flicker.entireScreenCovered
-import com.android.server.wm.flicker.FlickerBuilderProvider
+import com.android.server.wm.flicker.BaseTest
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
-import com.android.server.wm.flicker.LAUNCHER_COMPONENT
 import com.android.server.wm.flicker.annotation.Group4
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.TwoActivitiesAppHelper
 import com.android.server.wm.flicker.testapp.ActivityOptions
-import com.android.server.wm.traces.common.WindowManagerConditionsFactory
+import com.android.server.wm.traces.common.ComponentMatcher
 import com.android.server.wm.traces.parser.toFlickerComponent
-import com.android.server.wm.traces.parser.windowmanager.WindowManagerStateHelper
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -61,38 +56,35 @@ import org.junit.runners.Parameterized
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @Group4
-class ActivitiesTransitionTest(val testSpec: FlickerTestParameter) {
-    private val instrumentation: Instrumentation = InstrumentationRegistry.getInstrumentation()
+class ActivitiesTransitionTest(testSpec: FlickerTestParameter) : BaseTest(testSpec) {
     private val testApp: TwoActivitiesAppHelper = TwoActivitiesAppHelper(instrumentation)
 
-    /**
-     * Entry point for the test runner. It will use this method to initialize and cache
-     * flicker executions
-     */
-    @FlickerBuilderProvider
-    fun buildFlicker(): FlickerBuilder {
-        return FlickerBuilder(instrumentation).apply {
-            setup {
-                test {
-                    testApp.launchViaIntent(wmHelper)
-                    wmHelper.waitForFullScreenApp(testApp.component)
-                }
-            }
-            teardown {
-                test {
-                    testApp.exit(wmHelper)
-                }
-            }
-            transitions {
-                testApp.openSecondActivity(device, wmHelper)
-                device.pressBack()
-                val firstActivityVisible = wmHelper.waitFor(
-                    WindowManagerConditionsFactory.isAppTransitionIdle(Display.DEFAULT_DISPLAY),
-                    WindowManagerStateHelper.isAppFullScreen(testApp.component))
-                require(firstActivityVisible) { "Expected ${testApp.component} to be visible" }
+    /** {@inheritDoc} */
+    override val transition: FlickerBuilder.() -> Unit = {
+        setup {
+            test {
+                tapl.setExpectedRotation(testSpec.startRotation)
+                testApp.launchViaIntent(wmHelper)
             }
         }
+        teardown {
+            test {
+                testApp.exit(wmHelper)
+            }
+        }
+        transitions {
+            testApp.openSecondActivity(device, wmHelper)
+            tapl.pressBack()
+            wmHelper.StateSyncBuilder()
+                .withFullScreenApp(testApp)
+                .waitForAndVerify()
+        }
     }
+
+    /** {@inheritDoc} */
+    @FlakyTest(bugId = 206753786)
+    @Test
+    override fun navBarLayerPositionAtStartAndEnd() = super.navBarLayerPositionAtStartAndEnd()
 
     /**
      * Checks that the [ActivityOptions.BUTTON_ACTIVITY_COMPONENT_NAME] activity is visible at
@@ -118,14 +110,7 @@ class ActivitiesTransitionTest(val testSpec: FlickerTestParameter) {
     }
 
     /**
-     * Checks that all parts of the screen are covered during the transition
-     */
-    @Presubmit
-    @Test
-    fun entireScreenCovered() = testSpec.entireScreenCovered()
-
-    /**
-     * Checks that the [LAUNCHER_COMPONENT] window is not on top. The launcher cannot be
+     * Checks that the [ComponentMatcher.LAUNCHER] window is not on top. The launcher cannot be
      * asserted with `isAppWindowVisible` because it contains 2 windows with the exact same name,
      * and both are never simultaneously visible
      */
@@ -133,17 +118,17 @@ class ActivitiesTransitionTest(val testSpec: FlickerTestParameter) {
     @Test
     fun launcherWindowNotOnTop() {
         testSpec.assertWm {
-            this.isAppWindowNotOnTop(LAUNCHER_COMPONENT)
+            this.isAppWindowNotOnTop(ComponentMatcher.LAUNCHER)
         }
     }
 
     /**
-     * Checks that the [LAUNCHER_COMPONENT] layer is never visible during the transition
+     * Checks that the [ComponentMatcher.LAUNCHER] layer is never visible during the transition
      */
     @Presubmit
     @Test
     fun launcherLayerNotVisible() {
-        testSpec.assertLayers { this.isInvisible(LAUNCHER_COMPONENT) }
+        testSpec.assertLayers { this.isInvisible(ComponentMatcher.LAUNCHER) }
     }
 
     companion object {
@@ -157,7 +142,7 @@ class ActivitiesTransitionTest(val testSpec: FlickerTestParameter) {
         @JvmStatic
         fun getParams(): Collection<FlickerTestParameter> {
             return FlickerTestParameterFactory.getInstance()
-                    .getConfigNonRotationTests(repetitions = 3)
+                .getConfigNonRotationTests(repetitions = 3)
         }
     }
 }

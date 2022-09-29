@@ -21,11 +21,6 @@
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="byteShort" msgid="202579285008794431">"பை."</string>
-    <string name="kilobyteShort" msgid="2214285521564195803">"கி.பை."</string>
-    <string name="megabyteShort" msgid="6649361267635823443">"மெ.பை."</string>
-    <string name="gigabyteShort" msgid="7515809460261287991">"ஜி.பை."</string>
-    <string name="terabyteShort" msgid="1822367128583886496">"டெ.பை."</string>
-    <string name="petabyteShort" msgid="5651571254228534832">"பெ.பை."</string>
     <string name="fileSizeSuffix" msgid="4233671691980131257">"<xliff:g id="NUMBER">%1$s</xliff:g> <xliff:g id="UNIT">%2$s</xliff:g>"</string>
     <string name="untitled" msgid="3381766946944136678">"&lt;பெயரிடப்படாதது&gt;"</string>
     <string name="emptyPhoneNumber" msgid="5812172618020360048">"(தொலைபேசி எண் இல்லை)"</string>
@@ -305,8 +300,8 @@
     <string name="permgroupdesc_calendar" msgid="6762751063361489379">"கேலெண்டரை அணுகலாம்"</string>
     <string name="permgrouplab_sms" msgid="795737735126084874">"SMS"</string>
     <string name="permgroupdesc_sms" msgid="5726462398070064542">"SMS அனுப்பலாம், வந்த SMSகளைப் பார்க்கலாம்"</string>
-    <string name="permgrouplab_storage" msgid="5570124978732352858">"ஃபைல்களும் ஆவணங்களும்"</string>
-    <string name="permgroupdesc_storage" msgid="8352226729501080525">"சாதனத்திலுள்ள ஃபைல்களையும் ஆவணங்களையும் அணுகும்"</string>
+    <string name="permgrouplab_storage" msgid="17339216290379241">"ஃபைல்கள்"</string>
+    <string name="permgroupdesc_storage" msgid="5378659041354582769">"உங்கள் சாதனத்திலுள்ள ஃபைல்களை அணுகும்"</string>
     <string name="permgrouplab_readMediaAural" msgid="1858331312624942053">"இசையும் ஆடியோவும்"</string>
     <string name="permgroupdesc_readMediaAural" msgid="7565467343667089595">"உங்கள் சாதனத்திலுள்ள இசையையும் ஆடியோவையும் அணுகும்"</string>
     <string name="permgrouplab_readMediaVisual" msgid="4724874717811908660">"படங்களும் வீடியோக்களும்"</string>
@@ -558,6 +553,8 @@
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"திரைப் பூட்டு தொடர்பான சிக்கலின் தன்மையை (அதிகம், நடுத்தரம், குறைவு அல்லது ஏதுமில்லை) அறிந்துகொள்ள ஆப்ஸை அனுமதிக்கிறது. இதன் மூலம் திரைப் பூட்டின் அளவு வரம்பையும் வகையையும் தெரிந்துகொள்ளலாம். மேலும் திரைப் பூட்டைக் குறிப்பிட்ட நிலைக்கு மாற்றிக் கொள்ளலாம் என்பதையும் பயனர்களுக்கு ஆப்ஸ் பரிந்துரைக்க முடியும். ஆனால் தங்கள் விருப்பப்படி அவற்றைப் பயனர்கள் நிராகரிக்கவோ ஏற்கவோ இயலும். கவனத்திற்கு: திரைப் பூட்டு எளிய உரையிலானதாக சேமிக்கப்படுவதில்லை என்பதால் சரியான கடவுச்சொல்லை ஆப்ஸால் அறிய இயலாது."</string>
     <string name="permlab_postNotification" msgid="4875401198597803658">"அறிவிப்புகளைக் காட்டுதல்"</string>
     <string name="permdesc_postNotification" msgid="5974977162462877075">"அறிவிப்புகளைக் காட்ட ஆப்ஸை அனுமதிக்கும்"</string>
+    <string name="permlab_turnScreenOn" msgid="219344053664171492">"திரையைக் காட்டுதல்"</string>
+    <string name="permdesc_turnScreenOn" msgid="4394606875897601559">"திரையைக் காட்ட ஆப்ஸை அனுமதிக்கும்."</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"பயோமெட்ரிக் வன்பொருளைப் பயன்படுத்து"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"பயோமெட்ரிக் வன்பொருளைப் பயன்படுத்தி அங்கீகரிப்பதற்கு, ஆப்ஸை அனுமதிக்கும்"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"கைரேகை வன்பொருளை நிர்வகி"</string>
@@ -1924,6 +1921,8 @@
     <string name="country_selection_title" msgid="5221495687299014379">"மண்டல விருப்பம்"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"மொழி பெயரை உள்ளிடுக"</string>
     <string name="language_picker_section_suggested" msgid="6556199184638990447">"பரிந்துரைகள்"</string>
+    <string name="language_picker_section_suggested_bilingual" msgid="5932198319583556613">"பரிந்துரைக்கப்படும் மொழிகள்"</string>
+    <string name="region_picker_section_suggested_bilingual" msgid="704607569328224133">"பரிந்துரைக்கப்படும் பகுதிகள்"</string>
     <string name="language_picker_section_all" msgid="1985809075777564284">"எல்லா மொழிகளும்"</string>
     <string name="region_picker_section_all" msgid="756441309928774155">"எல்லா மண்டலங்களும்"</string>
     <string name="locale_search_menu" msgid="6258090710176422934">"தேடு"</string>
@@ -2078,8 +2077,8 @@
     <string name="nas_upgrade_notification_learn_more_action" msgid="7011130656195423947">"மேலும் அறிக"</string>
     <string name="nas_upgrade_notification_learn_more_content" msgid="3735480566983530650">"Android 12 பதிப்பில் \'Android சூழலுக்கேற்ற அறிவிப்புகள்\' அம்சத்திற்குப் பதிலாக \'மேம்பட்ட அறிவிப்புகள்\' மாற்றப்பட்டுள்ளது. இந்த அம்சம், பரிந்துரைக்கப்படும் செயல்களையும் பதில்களையும் காட்டுவதுடன் உங்கள் அறிவிப்புகளையும் ஒழுங்கமைக்கும்.\n\nதொடர்புகளின் பெயர்கள், மெசேஜ்கள் போன்ற தனிப்பட்ட தகவல்கள் உட்பட அனைத்து அறிவிப்பு உள்ளடக்கத்தையும் \'மேம்பட்ட அறிவிப்புகள்\' அணுக முடியும். மேலும் இந்த அம்சத்தால் அறிவிப்புகளை நிராகரிக்கவும் அவற்றுக்குப் பதிலளிக்கவும் முடியும் (அழைப்புகளுக்குப் பதிலளிப்பது, \'தொந்தரவு செய்ய வேண்டாம்\' அம்சத்தைக் கட்டுப்படுத்துவது போன்றவை)."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"வழக்கமான பேட்டரி சேமிப்பானுக்கான விவர அறிவிப்பு"</string>
-    <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"வழக்கமாகச் சார்ஜ் செய்வதற்கு முன்பே பேட்டரி தீர்ந்துபோகக்கூடும்"</string>
-    <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"பேட்டரி ஆயுளை நீட்டிக்க பேட்டரி சேமிப்பான் இயக்கப்பட்டுள்ளது"</string>
+    <string name="dynamic_mode_notification_title" msgid="1388718452788985481">"பேட்டரி சேமிப்பு இயக்கப்பட்டுள்ளது"</string>
+    <string name="dynamic_mode_notification_summary" msgid="1639031262484979689">"பேட்டரி ஆயுளை நீட்டிக்க, பேட்டரி உபயோகத்தைக் குறைக்கிறது"</string>
     <string name="battery_saver_notification_channel_name" msgid="3918243458067916913">"பேட்டரி சேமிப்பு"</string>
     <string name="battery_saver_off_notification_title" msgid="7637255960468032515">"பேட்டரி சேமிப்பான் ஆஃப் செய்யப்பட்டுள்ளது"</string>
     <string name="battery_saver_charged_notification_summary" product="default" msgid="5544457317418624367">"மொபைலில் போதுமான சார்ஜ் உள்ளது. அம்சங்கள் இனி தடையின்றி இயங்கும்."</string>
@@ -2286,5 +2285,7 @@
     <string name="notification_action_check_bg_apps" msgid="4758877443365362532">"செயலிலுள்ள ஆப்ஸைப் பாருங்கள்"</string>
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"உங்கள் <xliff:g id="DEVICE">%1$s</xliff:g> சாதனத்திலிருந்து மொபைலின் கேமராவை அணுக முடியாது"</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"உங்கள் <xliff:g id="DEVICE">%1$s</xliff:g> சாதனத்திலிருந்து டேப்லெட்டின் கேமராவை அணுக முடியாது"</string>
-    <string name="system_locale_title" msgid="3978041860457277638">"சிஸ்டம் மொழி"</string>
+    <string name="system_locale_title" msgid="711882686834677268">"சிஸ்டத்தின் இயல்பு"</string>
+    <!-- no translation found for default_card_name (9198284935962911468) -->
+    <skip />
 </resources>

@@ -68,6 +68,7 @@ import com.android.systemui.statusbar.phone.CentralSurfaces;
 import com.android.systemui.statusbar.policy.RemoteInputUriController;
 import com.android.systemui.statusbar.policy.RemoteInputView;
 import com.android.systemui.util.DumpUtilsKt;
+import com.android.systemui.util.ListenerSet;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -75,6 +76,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
 
 import dagger.Lazy;
 
@@ -118,6 +120,8 @@ public class NotificationRemoteInputManager implements Dumpable {
     protected Callback mCallback;
 
     private final List<RemoteInputController.Callback> mControllerCallbacks = new ArrayList<>();
+    private final ListenerSet<Consumer<NotificationEntry>> mActionPressListeners =
+            new ListenerSet<>();
 
     private final InteractionHandler mInteractionHandler = new InteractionHandler() {
 
@@ -282,10 +286,6 @@ public class NotificationRemoteInputManager implements Dumpable {
                 ServiceManager.getService(Context.STATUS_BAR_SERVICE));
         mUserManager = (UserManager) mContext.getSystemService(Context.USER_SERVICE);
         mRebuilder = rebuilder;
-        if (!mNotifPipelineFlags.isNewPipelineEnabled()) {
-            mRemoteInputListener = createLegacyRemoteInputLifetimeExtender(mainHandler,
-                    notificationEntryManager, smartReplyController);
-        }
         mKeyguardManager = context.getSystemService(KeyguardManager.class);
         mStatusBarStateController = statusBarStateController;
         mRemoteInputUriController = remoteInputUriController;
@@ -309,34 +309,19 @@ public class NotificationRemoteInputManager implements Dumpable {
                     int reason) {
                 // We're removing the notification, the smart controller can forget about it.
                 mSmartReplyController.stopSending(entry);
-
-                if (removedByUser && entry != null) {
-                    onPerformRemoveNotification(entry, entry.getKey());
-                }
             }
         });
     }
 
     /** Add a listener for various remote input events.  Works with NEW pipeline only. */
     public void setRemoteInputListener(@NonNull RemoteInputListener remoteInputListener) {
-        if (mNotifPipelineFlags.isNewPipelineEnabled()) {
-            if (mRemoteInputListener != null) {
-                throw new IllegalStateException("mRemoteInputListener is already set");
-            }
-            mRemoteInputListener = remoteInputListener;
-            if (mRemoteInputController != null) {
-                mRemoteInputListener.setRemoteInputController(mRemoteInputController);
-            }
+        if (mRemoteInputListener != null) {
+            throw new IllegalStateException("mRemoteInputListener is already set");
         }
-    }
-
-    @NonNull
-    @VisibleForTesting
-    protected LegacyRemoteInputLifetimeExtender createLegacyRemoteInputLifetimeExtender(
-            Handler mainHandler,
-            NotificationEntryManager notificationEntryManager,
-            SmartReplyController smartReplyController) {
-        return new LegacyRemoteInputLifetimeExtender();
+        mRemoteInputListener = remoteInputListener;
+        if (mRemoteInputController != null) {
+            mRemoteInputListener.setRemoteInputController(mRemoteInputController);
+        }
     }
 
     /** Initializes this component with the provided dependencies. */
@@ -377,12 +362,6 @@ public class NotificationRemoteInputManager implements Dumpable {
                 }
             }
         });
-        if (!mNotifPipelineFlags.isNewPipelineEnabled()) {
-            mSmartReplyController.setCallback((entry, reply) -> {
-                StatusBarNotification newSbn = mRebuilder.rebuildForSendingSmartReply(entry, reply);
-                mEntryManager.updateNotification(newSbn, null /* ranking */);
-            });
-        }
     }
 
     public void addControllerCallback(RemoteInputController.Callback callback) {
@@ -399,6 +378,14 @@ public class NotificationRemoteInputManager implements Dumpable {
         } else {
             mControllerCallbacks.remove(callback);
         }
+    }
+
+    public void addActionPressListener(Consumer<NotificationEntry> listener) {
+        mActionPressListeners.addIfAbsent(listener);
+    }
+
+    public void removeActionPressListener(Consumer<NotificationEntry> listener) {
+        mActionPressListeners.remove(listener);
     }
 
     /**
@@ -576,19 +563,6 @@ public class NotificationRemoteInputManager implements Dumpable {
         return v.findViewWithTag(RemoteInputView.VIEW_TAG);
     }
 
-    public ArrayList<NotificationLifetimeExtender> getLifetimeExtenders() {
-        // OLD pipeline code ONLY; can assume implementation
-        return ((LegacyRemoteInputLifetimeExtender) mRemoteInputListener).mLifetimeExtenders;
-    }
-
-    @VisibleForTesting
-    void onPerformRemoveNotification(NotificationEntry entry, final String key) {
-        // OLD pipeline code ONLY; can assume implementation
-        ((LegacyRemoteInputLifetimeExtender) mRemoteInputListener)
-                .mKeysKeptForRemoteInputHistory.remove(key);
-        cleanUpRemoteInputForUserRemoval(entry);
-    }
-
     /**
      * Disable remote input on the entry and remove the remote input view.
      * This should be called when a user dismisses a notification that won't be lifetime extended.
@@ -633,6 +607,9 @@ public class NotificationRemoteInputManager implements Dumpable {
         }
         if (mRemoteInputListener != null) {
             mRemoteInputListener.releaseNotificationIfKeptForRemoteInputHistory(entry);
+        }
+        for (Consumer<NotificationEntry> listener : mActionPressListeners) {
+            listener.accept(entry);
         }
     }
 

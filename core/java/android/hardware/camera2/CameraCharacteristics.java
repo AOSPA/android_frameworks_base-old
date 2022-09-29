@@ -2356,10 +2356,11 @@ public final class CameraCharacteristics extends CameraMetadata<CameraCharacteri
      * <p>A subset of the available request keys that can be overridden for
      * physical devices backing a logical multi-camera.</p>
      * <p>This is a subset of android.request.availableRequestKeys which contains a list
-     * of keys that can be overridden using {@link CaptureRequest.Builder#setPhysicalCameraKey }.
+     * of keys that can be overridden using
+     * {@link android.hardware.camera2.CaptureRequest.Builder#setPhysicalCameraKey }.
      * The respective value of such request key can be obtained by calling
-     * {@link CaptureRequest.Builder#getPhysicalCameraKey }. Capture requests that contain
-     * individual physical device requests must be built via
+     * {@link android.hardware.camera2.CaptureRequest.Builder#getPhysicalCameraKey }.
+     * Capture requests that contain individual physical device requests must be built via
      * {@link android.hardware.camera2.CameraDevice#createCaptureRequest(int, Set)}.</p>
      * <p><b>Optional</b> - The value for this key may be {@code null} on some devices.</p>
      * <p><b>Limited capability</b> -
@@ -2759,7 +2760,7 @@ public final class CameraCharacteristics extends CameraMetadata<CameraCharacteri
      * </table>
      * <p>For applications targeting SDK version 31 or newer, if the mobile device declares to be
      * media performance class 12 or higher by setting
-     * {@link android.os.Build.VERSION_CODES.MEDIA_PERFORMANCE_CLASS } to be 31 or larger,
+     * {@link android.os.Build.VERSION#MEDIA_PERFORMANCE_CLASS } to be 31 or larger,
      * the primary camera devices (first rear/front camera in the camera ID list) will not
      * support JPEG sizes smaller than 1080p. If the application configures a JPEG stream
      * smaller than 1080p, the camera device will round up the JPEG image size to at least
@@ -2833,7 +2834,7 @@ public final class CameraCharacteristics extends CameraMetadata<CameraCharacteri
      * </table>
      * <p>For applications targeting SDK version 31 or newer, if the mobile device doesn't declare
      * to be media performance class 12 or better by setting
-     * {@link android.os.Build.VERSION_CODES.MEDIA_PERFORMANCE_CLASS } to be 31 or larger,
+     * {@link android.os.Build.VERSION#MEDIA_PERFORMANCE_CLASS } to be 31 or larger,
      * or if the camera device isn't a primary rear/front camera, the minimum required output
      * stream configurations are the same as for applications targeting SDK version older than
      * 31.</p>
@@ -2958,9 +2959,27 @@ public final class CameraCharacteristics extends CameraMetadata<CameraCharacteri
      * can provide.</p>
      * <p>Please reference the documentation for the image data destination to
      * check if it limits the maximum size for image data.</p>
-     * <p>The following table describes the minimum required output stream
-     * configurations based on the hardware level
-     * ({@link CameraCharacteristics#INFO_SUPPORTED_HARDWARE_LEVEL android.info.supportedHardwareLevel}):</p>
+     * <p>For applications targeting SDK version older than 31, the following table
+     * describes the minimum required output stream configurations based on the
+     * hardware level ({@link CameraCharacteristics#INFO_SUPPORTED_HARDWARE_LEVEL android.info.supportedHardwareLevel}):
+     * Format                                             | Size                                         | Hardware Level | Notes
+     * :-------------------------------------------------:|:--------------------------------------------:|:--------------:|:--------------:
+     * {@link android.graphics.ImageFormat#JPEG }          | {@link CameraCharacteristics#SENSOR_INFO_ACTIVE_ARRAY_SIZE android.sensor.info.activeArraySize} (*1)     | Any            |
+     * {@link android.graphics.ImageFormat#JPEG }          | 1920x1080 (1080p)                            | Any            | if 1080p &lt;= activeArraySize
+     * {@link android.graphics.ImageFormat#JPEG }          | 1280x720 (720p)                               | Any            | if 720p &lt;= activeArraySize
+     * {@link android.graphics.ImageFormat#JPEG }          | 640x480 (480p)                               | Any            | if 480p &lt;= activeArraySize
+     * {@link android.graphics.ImageFormat#JPEG }          | 320x240 (240p)                               | Any            | if 240p &lt;= activeArraySize
+     * {@link android.graphics.ImageFormat#YUV_420_888 }   | all output sizes available for JPEG          | FULL           |
+     * {@link android.graphics.ImageFormat#YUV_420_888 }   | all output sizes available for JPEG, up to the maximum video size | LIMITED        |
+     * {@link android.graphics.ImageFormat#PRIVATE }       | same as YUV_420_888                          | Any            |</p>
+     * <p>For applications targeting SDK version 31 or newer, if the mobile device declares to be
+     * media performance class 12 or higher by setting
+     * {@link android.os.Build.VERSION#MEDIA_PERFORMANCE_CLASS } to be 31 or larger,
+     * the primary camera devices (first rear/front camera in the camera ID list) will not
+     * support JPEG sizes smaller than 1080p. If the application configures a JPEG stream
+     * smaller than 1080p, the camera device will round up the JPEG image size to at least
+     * 1080p. The requirements for IMPLEMENTATION_DEFINED and YUV_420_888 stay the same.
+     * This new minimum required output stream configurations are illustrated by the table below:</p>
      * <table>
      * <thead>
      * <tr>
@@ -2984,32 +3003,38 @@ public final class CameraCharacteristics extends CameraMetadata<CameraCharacteri
      * <td align="center">if 1080p &lt;= activeArraySize</td>
      * </tr>
      * <tr>
-     * <td align="center">{@link android.graphics.ImageFormat#JPEG }</td>
-     * <td align="center">1280x720 (720p)</td>
-     * <td align="center">Any</td>
-     * <td align="center">if 720p &lt;= activeArraySize</td>
-     * </tr>
-     * <tr>
-     * <td align="center">{@link android.graphics.ImageFormat#JPEG }</td>
-     * <td align="center">640x480 (480p)</td>
-     * <td align="center">Any</td>
-     * <td align="center">if 480p &lt;= activeArraySize</td>
-     * </tr>
-     * <tr>
-     * <td align="center">{@link android.graphics.ImageFormat#JPEG }</td>
-     * <td align="center">320x240 (240p)</td>
-     * <td align="center">Any</td>
-     * <td align="center">if 240p &lt;= activeArraySize</td>
-     * </tr>
-     * <tr>
      * <td align="center">{@link android.graphics.ImageFormat#YUV_420_888 }</td>
-     * <td align="center">all output sizes available for JPEG</td>
+     * <td align="center">{@link CameraCharacteristics#SENSOR_INFO_ACTIVE_ARRAY_SIZE android.sensor.info.activeArraySize}</td>
      * <td align="center">FULL</td>
      * <td align="center"></td>
      * </tr>
      * <tr>
      * <td align="center">{@link android.graphics.ImageFormat#YUV_420_888 }</td>
-     * <td align="center">all output sizes available for JPEG, up to the maximum video size</td>
+     * <td align="center">1920x1080 (1080p)</td>
+     * <td align="center">FULL</td>
+     * <td align="center">if 1080p &lt;= activeArraySize</td>
+     * </tr>
+     * <tr>
+     * <td align="center">{@link android.graphics.ImageFormat#YUV_420_888 }</td>
+     * <td align="center">1280x720 (720)</td>
+     * <td align="center">FULL</td>
+     * <td align="center">if 720p &lt;= activeArraySize</td>
+     * </tr>
+     * <tr>
+     * <td align="center">{@link android.graphics.ImageFormat#YUV_420_888 }</td>
+     * <td align="center">640x480 (480p)</td>
+     * <td align="center">FULL</td>
+     * <td align="center">if 480p &lt;= activeArraySize</td>
+     * </tr>
+     * <tr>
+     * <td align="center">{@link android.graphics.ImageFormat#YUV_420_888 }</td>
+     * <td align="center">320x240 (240p)</td>
+     * <td align="center">FULL</td>
+     * <td align="center">if 240p &lt;= activeArraySize</td>
+     * </tr>
+     * <tr>
+     * <td align="center">{@link android.graphics.ImageFormat#YUV_420_888 }</td>
+     * <td align="center">all output sizes available for FULL hardware level, up to the maximum video size</td>
      * <td align="center">LIMITED</td>
      * <td align="center"></td>
      * </tr>
@@ -3021,6 +3046,12 @@ public final class CameraCharacteristics extends CameraMetadata<CameraCharacteri
      * </tr>
      * </tbody>
      * </table>
+     * <p>For applications targeting SDK version 31 or newer, if the mobile device doesn't declare
+     * to be media performance class 12 or better by setting
+     * {@link android.os.Build.VERSION#MEDIA_PERFORMANCE_CLASS } to be 31 or larger,
+     * or if the camera device isn't a primary rear/front camera, the minimum required output
+     * stream configurations are the same as for applications targeting SDK version older than
+     * 31.</p>
      * <p>Refer to {@link CameraCharacteristics#REQUEST_AVAILABLE_CAPABILITIES android.request.availableCapabilities} and {@link android.hardware.camera2.CameraDevice#createCaptureSession } for additional mandatory
      * stream configurations on a per-capability basis.</p>
      * <p>*1: For JPEG format, the sizes may be restricted by below conditions:</p>
@@ -4382,6 +4413,40 @@ public final class CameraCharacteristics extends CameraMetadata<CameraCharacteri
     @NonNull
     public static final Key<android.graphics.Rect[]> SENSOR_OPTICAL_BLACK_REGIONS =
             new Key<android.graphics.Rect[]>("android.sensor.opticalBlackRegions", android.graphics.Rect[].class);
+
+    /**
+     * <p>Whether or not the camera device supports readout timestamp and
+     * onReadoutStarted callback.</p>
+     * <p>If this tag is HARDWARE, the camera device calls onReadoutStarted in addition to the
+     * onCaptureStarted callback for each capture. The timestamp passed into the callback
+     * is the start of camera image readout rather than the start of the exposure. In
+     * addition, the application can configure an
+     * {@link android.hardware.camera2.params.OutputConfiguration } with
+     * TIMESTAMP_BASE_READOUT_SENSOR timestamp base, in which case, the timestamp of the
+     * output surface matches the timestamp from the corresponding onReadoutStarted callback.</p>
+     * <p>The readout timestamp is beneficial for video recording, because the encoder favors
+     * uniform timestamps, and the readout timestamps better reflect the cadence camera sensors
+     * output data.</p>
+     * <p>If this tag is HARDWARE, the camera device produces the start-of-exposure and
+     * start-of-readout together. As a result, the onReadoutStarted is called right after
+     * onCaptureStarted. The difference in start-of-readout and start-of-exposure is the sensor
+     * exposure time, plus certain constant offset. The offset is usually due to camera sensor
+     * level crop, and it remains constant for a given camera sensor mode.</p>
+     * <p><b>Possible values:</b></p>
+     * <ul>
+     *   <li>{@link #SENSOR_READOUT_TIMESTAMP_NOT_SUPPORTED NOT_SUPPORTED}</li>
+     *   <li>{@link #SENSOR_READOUT_TIMESTAMP_HARDWARE HARDWARE}</li>
+     * </ul>
+     *
+     * <p>This key is available on all devices.</p>
+     * @see #SENSOR_READOUT_TIMESTAMP_NOT_SUPPORTED
+     * @see #SENSOR_READOUT_TIMESTAMP_HARDWARE
+     * @hide
+     */
+    @PublicKey
+    @NonNull
+    public static final Key<Integer> SENSOR_READOUT_TIMESTAMP =
+            new Key<Integer>("android.sensor.readoutTimestamp", int.class);
 
     /**
      * <p>List of lens shading modes for {@link CaptureRequest#SHADING_MODE android.shading.mode} that are supported by this camera device.</p>

@@ -86,7 +86,15 @@ public class ChooserMultiProfilePagerAdapter extends AbstractMultiProfilePagerAd
         final LayoutInflater inflater = LayoutInflater.from(getContext());
         final ViewGroup rootView =
                 (ViewGroup) inflater.inflate(R.layout.chooser_list_per_profile, null, false);
-        return new ChooserProfileDescriptor(rootView, adapter);
+        ChooserProfileDescriptor profileDescriptor =
+                new ChooserProfileDescriptor(rootView, adapter);
+        profileDescriptor.recyclerView.setAccessibilityDelegateCompat(
+                new ChooserRecyclerViewAccessibilityDelegate(profileDescriptor.recyclerView));
+        return profileDescriptor;
+    }
+
+    public void setMaxTargetsPerRow(int maxTargetsPerRow) {
+        mMaxTargetsPerRow = maxTargetsPerRow;
     }
 
     RecyclerView getListViewForIndex(int index) {

@@ -51,7 +51,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
-import android.graphics.Bitmap;
 import android.graphics.Insets;
 import android.graphics.Rect;
 import android.graphics.Region;
@@ -97,6 +96,7 @@ import com.android.systemui.navigationbar.NavigationModeController;
 import com.android.systemui.navigationbar.buttons.KeyButtonView;
 import com.android.systemui.recents.OverviewProxyService.OverviewProxyListener;
 import com.android.systemui.settings.CurrentUserTracker;
+import com.android.systemui.shade.NotificationPanelViewController;
 import com.android.systemui.shared.recents.IOverviewProxy;
 import com.android.systemui.shared.recents.ISystemUiProxy;
 import com.android.systemui.shared.recents.model.Task;
@@ -105,7 +105,6 @@ import com.android.systemui.shared.system.QuickStepContract;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.phone.CentralSurfaces;
-import com.android.systemui.statusbar.phone.NotificationPanelViewController;
 import com.android.systemui.statusbar.phone.StatusBarWindowCallback;
 import com.android.systemui.statusbar.policy.CallbackController;
 import com.android.wm.shell.back.BackAnimation;
@@ -297,12 +296,6 @@ public class OverviewProxyService extends CurrentUserTracker implements
         }
 
         @Override
-        public Rect getNonMinimizedSplitScreenSecondaryBounds() {
-            // Deprecated
-            return null;
-        }
-
-        @Override
         public void setNavBarButtonAlpha(float alpha, boolean animate) {
             verifyCallerAndClearCallingIdentityPostMain("setNavBarButtonAlpha", () ->
                     notifyNavBarButtonAlphaChanged(alpha, animate));
@@ -346,17 +339,6 @@ public class OverviewProxyService extends CurrentUserTracker implements
                                 Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
                         mContext.startActivityAsUser(intent, UserHandle.CURRENT);
                     });
-        }
-
-        @Override
-        public void handleImageAsScreenshot(Bitmap screenImage, Rect locationInScreen,
-                                            Insets visibleInsets, int taskId) {
-            // Deprecated
-        }
-
-        @Override
-        public void setSplitScreenMinimized(boolean minimized) {
-            // Deprecated
         }
 
         @Override
@@ -736,7 +718,7 @@ public class OverviewProxyService extends CurrentUserTracker implements
     }
 
     private void onStatusBarStateChanged(boolean keyguardShowing, boolean keyguardOccluded,
-            boolean bouncerShowing, boolean isDozing) {
+            boolean bouncerShowing, boolean isDozing, boolean panelExpanded) {
         mSysUiState.setFlag(SYSUI_STATE_STATUS_BAR_KEYGUARD_SHOWING,
                         keyguardShowing && !keyguardOccluded)
                 .setFlag(SYSUI_STATE_STATUS_BAR_KEYGUARD_SHOWING_OCCLUDED,

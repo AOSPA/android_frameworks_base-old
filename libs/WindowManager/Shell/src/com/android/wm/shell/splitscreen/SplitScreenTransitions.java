@@ -68,6 +68,7 @@ class SplitScreenTransitions {
     private IBinder mAnimatingTransition = null;
     OneShotRemoteHandler mPendingRemoteHandler = null;
     private OneShotRemoteHandler mActiveRemoteHandler = null;
+    private boolean mEnterTransitionMerged;
 
     private final Transitions.TransitionFinishCallback mRemoteFinishCB = this::onFinish;
 
@@ -224,8 +225,38 @@ class SplitScreenTransitions {
 
     void mergeAnimation(IBinder transition, TransitionInfo info, SurfaceControl.Transaction t,
             IBinder mergeTarget, Transitions.TransitionFinishCallback finishCallback) {
-        if (mergeTarget == mAnimatingTransition && mActiveRemoteHandler != null) {
+        if (mergeTarget != mAnimatingTransition) return;
+        if (mActiveRemoteHandler != null) {
             mActiveRemoteHandler.mergeAnimation(transition, info, t, mergeTarget, finishCallback);
+        } else {
+            for (int i = mAnimations.size() - 1; i >= 0; --i) {
+                final Animator anim = mAnimations.get(i);
+                mTransitions.getAnimExecutor().execute(anim::end);
+            }
+        }
+    }
+
+    boolean end() {
+        // If its remote, there's nothing we can do right now.
+        if (mActiveRemoteHandler != null) return false;
+        for (int i = mAnimations.size() - 1; i >= 0; --i) {
+            final Animator anim = mAnimations.get(i);
+            mTransitions.getAnimExecutor().execute(anim::end);
+        }
+        return true;
+    }
+
+    void onTransitionConsumed(@NonNull IBinder transition, boolean aborted) {
+        if (aborted) return;
+
+        // Once a pending enter transition got merged, make sure to append the reset of finishing
+        // operations to the finish transition.
+        if (transition == mPendingEnter) {
+            mFinishTransaction = mTransactionPool.acquire();
+            mStageCoordinator.finishEnterSplitScreen(mFinishTransaction);
+            mPendingEnter = null;
+            mPendingRemoteHandler = null;
+            mEnterTransitionMerged = true;
         }
     }
 
@@ -238,18 +269,16 @@ class SplitScreenTransitions {
             mPendingDismiss = null;
         }
         if (mAnimatingTransition == mPendingRecent) {
-            // If the clean-up wct is null when finishing recent transition, it indicates it's
-            // returning to home and thus no need to reorder tasks.
-            final boolean returnToHome = wct == null;
-            if (returnToHome) {
-                wct = new WindowContainerTransaction();
+            if (!mEnterTransitionMerged) {
+                if (wct == null) wct = new WindowContainerTransaction();
+                mStageCoordinator.onRecentTransitionFinished(wct, mFinishTransaction);
             }
-            mStageCoordinator.onRecentTransitionFinished(returnToHome, wct, mFinishTransaction);
             mPendingRecent = null;
         }
         mPendingRemoteHandler = null;
         mActiveRemoteHandler = null;
         mAnimatingTransition = null;
+        mEnterTransitionMerged = false;
 
         mOnFinish.run();
         if (mFinishTransaction != null) {

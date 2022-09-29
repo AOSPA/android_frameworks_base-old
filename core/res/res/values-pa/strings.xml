@@ -21,11 +21,6 @@
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="byteShort" msgid="202579285008794431">"B"</string>
-    <string name="kilobyteShort" msgid="2214285521564195803">"kB"</string>
-    <string name="megabyteShort" msgid="6649361267635823443">"MB"</string>
-    <string name="gigabyteShort" msgid="7515809460261287991">"GB"</string>
-    <string name="terabyteShort" msgid="1822367128583886496">"TB"</string>
-    <string name="petabyteShort" msgid="5651571254228534832">"PB"</string>
     <string name="fileSizeSuffix" msgid="4233671691980131257">"<xliff:g id="NUMBER">%1$s</xliff:g> <xliff:g id="UNIT">%2$s</xliff:g>"</string>
     <string name="untitled" msgid="3381766946944136678">"&lt;ਬਿਨਾਂ ਸਿਰਲੇਖ&gt;"</string>
     <string name="emptyPhoneNumber" msgid="5812172618020360048">"(ਕੋਈ ਫ਼ੋਨ ਨੰਬਰ ਨਹੀਂ)"</string>
@@ -305,8 +300,8 @@
     <string name="permgroupdesc_calendar" msgid="6762751063361489379">"ਤੁਹਾਡੇ ਕੈਲੰਡਰ ਤੱਕ ਪਹੁੰਚ ਕਰਨ"</string>
     <string name="permgrouplab_sms" msgid="795737735126084874">"SMS"</string>
     <string name="permgroupdesc_sms" msgid="5726462398070064542">"SMS ਸੁਨੇਹੇ ਭੇਜੋ ਅਤੇ ਦੇਖੋ"</string>
-    <string name="permgrouplab_storage" msgid="5570124978732352858">"ਫ਼ਾਈਲਾਂ ਅਤੇ ਦਸਤਾਵੇਜ਼"</string>
-    <string name="permgroupdesc_storage" msgid="8352226729501080525">"ਆਪਣੇ ਡੀਵਾਈਸ \'ਤੇ ਫ਼ਾਈਲਾਂ ਅਤੇ ਦਸਤਾਵੇਜ਼ਾਂ ਤੱਕ ਪਹੁੰਚ ਕਰੋ"</string>
+    <string name="permgrouplab_storage" msgid="17339216290379241">"ਫ਼ਾਈਲਾਂ"</string>
+    <string name="permgroupdesc_storage" msgid="5378659041354582769">"ਤੁਹਾਡੇ ਡੀਵਾਈਸ \'ਤੇ ਫ਼ਾਈਲਾਂ ਤੱਕ ਪਹੁੰਚ"</string>
     <string name="permgrouplab_readMediaAural" msgid="1858331312624942053">"ਸੰਗੀਤ ਅਤੇ ਆਡੀਓ"</string>
     <string name="permgroupdesc_readMediaAural" msgid="7565467343667089595">"ਆਪਣੇ ਡੀਵਾਈਸ \'ਤੇ ਸੰਗੀਤ ਅਤੇ ਆਡੀਓ ਤੱਕ ਪਹੁੰਚ ਕਰੋ"</string>
     <string name="permgrouplab_readMediaVisual" msgid="4724874717811908660">"ਫ਼ੋਟੋਆਂ ਅਤੇ ਵੀਡੀਓ"</string>
@@ -558,6 +553,8 @@
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"ਐਪ ਨੂੰ ਸਕ੍ਰੀਨ ਲਾਕ ਦੀ ਜਟਿਲਤਾ ਦੇ ਪੱਧਰ ਬਾਰੇ ਜਾਣਨ ਦਿਓ (ਉੱਚ, ਮੱਧਮ, ਘੱਟ ਜਾਂ ਕੋਈ ਨਹੀਂ), ਜੋ ਲੰਬਾਈ ਦੀ ਸੰਭਵ ਰੇਂਜ ਅਤੇ ਸਕ੍ਰੀਨ ਲਾਕ ਦੀ ਕਿਸਮ ਦਾ ਸੰਕੇਤ ਦਿੰਦਾ ਹੈ। ਐਪ ਵਰਤੋਂਕਾਰਾਂ ਨੂੰ ਇੱਕ ਖਾਸ ਪੱਧਰ ਤੱਕ ਸਕ੍ਰੀਨ ਲਾਕ ਅੱਪਡੇਟ ਕਰਨ ਲਈ ਸੁਝਾਅ ਵੀ ਦੇ ਸਕਦੀ ਹੈ ਪਰ ਵਰਤੋਂਕਾਰ ਇਸਨੂੰ ਅਣਡਿੱਠ ਕਰ ਸਕਦੇ ਹਨ। ਨੋਟ ਕਰੋ ਕਿ ਸਕ੍ਰੀਨ ਲਾਕ ਸਧਾਰਨ ਲਿਖਤ ਵਿੱਚ ਸਟੋਰ ਨਹੀਂ ਕੀਤਾ ਜਾਂਦਾ ਹੈ ਇਸ ਲਈ ਐਪ ਸਹੀ ਪਾਸਵਰਡ ਬਾਰੇ ਨਹੀਂ ਜਾਣਦੀ ਹੈ।"</string>
     <string name="permlab_postNotification" msgid="4875401198597803658">"ਸੂਚਨਾਵਾਂ ਦਿਖਾਓ"</string>
     <string name="permdesc_postNotification" msgid="5974977162462877075">"ਇਸ ਨਾਲ ਐਪ ਨੂੰ ਸੂਚਨਾਵਾਂ ਦਿਖਾਉਣ ਦੀ ਆਗਿਆ ਮਿਲਦੀ ਹੈ"</string>
+    <string name="permlab_turnScreenOn" msgid="219344053664171492">"ਸਕ੍ਰੀਨ ਚਾਲੂ ਕਰੋ"</string>
+    <string name="permdesc_turnScreenOn" msgid="4394606875897601559">"ਐਪ ਨੂੰ ਸਕ੍ਰੀਨ ਚਾਲੂ ਕਰਨ ਦੀ ਆਗਿਆ ਦਿਓ।"</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"ਬਾਇਓਮੈਟ੍ਰਿਕ ਹਾਰਡਵੇਅਰ ਵਰਤੋ"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"ਐਪ ਨੂੰ ਪ੍ਰਮਾਣੀਕਰਨ ਲਈ ਬਾਇਓਮੈਟ੍ਰਿਕ ਹਾਰਡਵੇਅਰ ਵਰਤਣ ਦਿੰਦਾ ਹੈ"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"ਫਿੰਗਰਪ੍ਰਿੰਟ ਹਾਰਡਵੇਅਰ ਵਿਵਸਥਿਤ ਕਰੋ"</string>
@@ -1272,7 +1269,7 @@
     <string name="volume_ringtone" msgid="134784084629229029">"ਰਿੰਗਰ ਵੌਲਿਊਮ"</string>
     <string name="volume_music" msgid="7727274216734955095">"ਮੀਡੀਆ ਦੀ ਅਵਾਜ਼"</string>
     <string name="volume_music_hint_playing_through_bluetooth" msgid="2614142915948898228">"Bluetooth ਰਾਹੀਂ ਪਲੇ ਕਰ ਰਿਹਾ ਹੈ"</string>
-    <string name="volume_music_hint_silent_ringtone_selected" msgid="1514829655029062233">"ਖਾਮੋਸ਼ ਰਿੰਗਟੋਨ ਸੈੱਟ ਕੀਤੀ"</string>
+    <string name="volume_music_hint_silent_ringtone_selected" msgid="1514829655029062233">"ਸ਼ਾਂਤ ਰਿੰਗਟੋਨ ਸੈੱਟ ਕੀਤੀ"</string>
     <string name="volume_call" msgid="7625321655265747433">"ਇਨ-ਕਾਲ ਅਵਾਜ਼"</string>
     <string name="volume_bluetooth_call" msgid="2930204618610115061">"ਬਲੂਟੁੱਥ ਇਨ-ਕਾਲ ਅਵਾਜ਼"</string>
     <string name="volume_alarm" msgid="4486241060751798448">"ਅਲਾਰਮ ਦੀ ਅਵਾਜ਼"</string>
@@ -1385,7 +1382,7 @@
     <string name="select_input_method" msgid="3971267998568587025">"ਇਨਪੁਟ ਵਿਧੀ ਚੁਣੋ"</string>
     <string name="show_ime" msgid="6406112007347443383">"ਭੌਤਿਕ ਕੀ-ਬੋਰਡ ਸਰਗਰਮ ਹੋਣ ਦੌਰਾਨ ਇਸ ਨੂੰ ਸਕ੍ਰੀਨ \'ਤੇ ਬਣਾਈ ਰੱਖੋ"</string>
     <string name="hardware" msgid="1800597768237606953">"ਆਭਾਸੀ ਕੀ-ਬੋਰਡ ਦਿਖਾਓ"</string>
-    <string name="select_keyboard_layout_notification_title" msgid="4427643867639774118">"ਭੌਤਿਕ ਕੀ-ਬੋਰਡ ਦੀ ਰੂਪ-ਰੇਖਾ ਬਦਲੋ"</string>
+    <string name="select_keyboard_layout_notification_title" msgid="4427643867639774118">"ਭੌਤਿਕ ਕੀ-ਬੋਰਡ ਦਾ ਸੰਰੂਪਣ ਕਰੋ"</string>
     <string name="select_keyboard_layout_notification_message" msgid="8835158247369158154">"ਭਾਸ਼ਾ ਅਤੇ ਖਾਕਾ ਚੁਣਨ ਲਈ ਟੈਪ ਕਰੋ"</string>
     <string name="fast_scroll_alphabet" msgid="8854435958703888376">" ABCDEFGHIJKLMNOPQRSTUVWXYZ"</string>
     <string name="fast_scroll_numeric_alphabet" msgid="2529539945421557329">" 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"</string>
@@ -1924,6 +1921,8 @@
     <string name="country_selection_title" msgid="5221495687299014379">"ਖੇਤਰ ਤਰਜੀਹ"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"ਭਾਸ਼ਾ ਦਾ ਨਾਮ ਟਾਈਪ ਕਰੋ"</string>
     <string name="language_picker_section_suggested" msgid="6556199184638990447">"ਸੁਝਾਈਆਂ ਗਈਆਂ"</string>
+    <string name="language_picker_section_suggested_bilingual" msgid="5932198319583556613">"ਸੁਝਾਈਆਂ ਗਈਆਂ ਭਾਸ਼ਾਵਾਂ"</string>
+    <string name="region_picker_section_suggested_bilingual" msgid="704607569328224133">"ਸੁਝਾਏ ਗਏ ਖੇਤਰ"</string>
     <string name="language_picker_section_all" msgid="1985809075777564284">"ਸਾਰੀਆਂ ਭਾਸ਼ਾਵਾਂ"</string>
     <string name="region_picker_section_all" msgid="756441309928774155">"ਸਾਰੇ ਖੇਤਰ"</string>
     <string name="locale_search_menu" msgid="6258090710176422934">"ਖੋਜੋ"</string>
@@ -2078,8 +2077,8 @@
     <string name="nas_upgrade_notification_learn_more_action" msgid="7011130656195423947">"ਹੋਰ ਜਾਣੋ"</string>
     <string name="nas_upgrade_notification_learn_more_content" msgid="3735480566983530650">"Android 12 ਵਿੱਚ ਵਿਸਤ੍ਰਿਤ ਸੂਚਨਾਵਾਂ ਨੇ Android ਅਡੈਪਟਿਵ ਸੂਚਨਾਵਾਂ ਦੀ ਜਗ੍ਹਾ ਲੈ ਲਈ ਹੈ। ਇਹ ਵਿਸ਼ੇਸ਼ਤਾ ਕਾਰਵਾਈਆਂ ਅਤੇ ਜਵਾਬਾਂ ਵਾਲੇ ਸੁਝਾਅ ਦਿਖਾਉਂਦੀ ਹੈ ਅਤੇ ਤੁਹਾਡੀਆਂ ਸੂਚਨਾਵਾਂ ਨੂੰ ਵਿਵਸਥਿਤ ਕਰਦੀ ਹੈ।\n\nਵਿਸਤ੍ਰਿਤ ਸੂਚਨਾਵਾਂ ਸੂਚਨਾ ਸਮੱਗਰੀ ਤੱਕ ਪਹੁੰਚ ਕਰ ਸਕਦੀਆਂ ਹਨ, ਜਿਸ ਵਿੱਚ ਸੰਪਰਕ ਦੇ ਨਾਮ ਅਤੇ ਸੁਨੇਹੇ ਵਰਗੀ ਨਿੱਜੀ ਜਾਣਕਾਰੀ ਵੀ ਸ਼ਾਮਲ ਹੈ। ਇਹ ਵਿਸ਼ੇਸ਼ਤਾ ਸੂਚਨਾਵਾਂ ਨੂੰ ਖਾਰਜ ਵੀ ਕਰ ਸਕਦੀ ਹੈ ਜਾਂ ਸੂਚਨਾਵਾਂ ਦਾ ਜਵਾਬ ਵੀ ਦੇ ਸਕਦੀ ਹੈ, ਜਿਵੇਂ ਕਿ ਫ਼ੋਨ ਕਾਲਾਂ ਦਾ ਜਵਾਬ ਦੇਣਾ ਅਤੇ \'ਪਰੇਸ਼ਾਨ ਨਾ ਕਰੋ\' ਨੂੰ ਕੰਟਰੋਲ ਕਰਨਾ।"</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"ਨਿਯਮਬੱਧ ਮੋਡ ਦੀ ਜਾਣਕਾਰੀ ਵਾਲੀ ਸੂਚਨਾ"</string>
-    <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"ਬੈਟਰੀ ਚਾਰਜ ਕਰਨ ਦੇ ਮਿੱਥੇ ਸਮੇਂ ਤੋਂ ਪਹਿਲਾਂ ਸ਼ਾਇਦ ਬੈਟਰੀ ਖਤਮ ਹੋ ਜਾਵੇ"</string>
-    <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"ਬੈਟਰੀ ਲਾਈਫ਼ ਵਧਾਉਣ ਲਈ ਬੈਟਰੀ ਸੇਵਰ ਚਾਲੂ ਕੀਤਾ ਗਿਆ"</string>
+    <string name="dynamic_mode_notification_title" msgid="1388718452788985481">"ਬੈਟਰੀ ਸੇਵਰ ਚਾਲੂ ਹੈ"</string>
+    <string name="dynamic_mode_notification_summary" msgid="1639031262484979689">"ਬੈਟਰੀ ਲਾਈਫ਼ ਵਧਾਉਣ ਲਈ ਬੈਟਰੀ ਵਰਤੋਂ ਨੂੰ ਘਟਾਉਣਾ"</string>
     <string name="battery_saver_notification_channel_name" msgid="3918243458067916913">"ਬੈਟਰੀ ਸੇਵਰ"</string>
     <string name="battery_saver_off_notification_title" msgid="7637255960468032515">"ਬੈਟਰੀ ਸੇਵਰ ਬੰਦ ਕੀਤਾ ਗਿਆ"</string>
     <string name="battery_saver_charged_notification_summary" product="default" msgid="5544457317418624367">"ਫ਼ੋਨ ਲੋੜੀਂਦਾ ਚਾਰਜ ਹੈ। ਵਿਸ਼ੇਸ਼ਤਾਵਾਂ ਹੁਣ ਪ੍ਰਤਿਬੰਧਿਤ ਨਹੀਂ ਹਨ।"</string>
@@ -2286,5 +2285,7 @@
     <string name="notification_action_check_bg_apps" msgid="4758877443365362532">"ਕਿਰਿਆਸ਼ੀਲ ਐਪਾਂ ਦੀ ਜਾਂਚ ਕਰੋ"</string>
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"ਤੁਹਾਡੇ <xliff:g id="DEVICE">%1$s</xliff:g> ਤੋਂ ਫ਼ੋਨ ਦੇ ਕੈਮਰੇ ਤੱਕ ਪਹੁੰਚ ਨਹੀਂ ਕੀਤੀ ਜਾ ਸਕਦੀ"</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"ਤੁਹਾਡੇ <xliff:g id="DEVICE">%1$s</xliff:g> ਤੋਂ ਟੈਬਲੈੱਟ ਦੇ ਕੈਮਰੇ ਤੱਕ ਪਹੁੰਚ ਨਹੀਂ ਕੀਤੀ ਜਾ ਸਕਦੀ"</string>
-    <string name="system_locale_title" msgid="3978041860457277638">"ਸਿਸਟਮ ਦੀ ਭਾਸ਼ਾ"</string>
+    <string name="system_locale_title" msgid="711882686834677268">"ਸਿਸਟਮ ਪੂਰਵ-ਨਿਰਧਾਰਿਤ"</string>
+    <!-- no translation found for default_card_name (9198284935962911468) -->
+    <skip />
 </resources>

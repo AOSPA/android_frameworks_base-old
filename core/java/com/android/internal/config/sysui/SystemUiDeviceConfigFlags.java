@@ -158,6 +158,12 @@ public final class SystemUiDeviceConfigFlags {
     public static final String PROPERTY_LOCATION_INDICATORS_ENABLED = "location_indicators_enabled";
 
     /**
+     * Whether to show privacy chip for media projection.
+     */
+    public static final String PROPERTY_MEDIA_PROJECTION_INDICATORS_ENABLED =
+            "media_projection_indicators_enabled";
+
+    /**
      * Whether to show old location indicator on all location accesses.
      */
     public static final String PROPERTY_LOCATION_INDICATORS_SMALL_ENABLED =
@@ -537,6 +543,17 @@ public final class SystemUiDeviceConfigFlags {
      */
     public static final String TASK_MANAGER_ENABLED = "task_manager_enabled";
 
+    /**
+     * (boolean) Whether the task manager should show an attention grabbing dot when tasks changed.
+     */
+    public static final String TASK_MANAGER_SHOW_FOOTER_DOT = "task_manager_show_footer_dot";
+
+    /**
+     * (boolean) Whether the task manager should show a stop button if the app is allowlisted
+     * by the user.
+     */
+    public static final String TASK_MANAGER_SHOW_STOP_BUTTON_FOR_USER_ALLOWLISTED_APPS =
+            "show_stop_button_for_user_allowlisted_apps";
 
     /**
      * (boolean) Whether the clipboard overlay is enabled.
@@ -548,6 +565,23 @@ public final class SystemUiDeviceConfigFlags {
      * layer as opposed to individual manifests in respective apps.
      */
     public static final String PERSISTS_WIDGET_PROVIDER_INFO = "persists_widget_provider_info";
+
+    /**
+     * (boolean) Whether the clipboard overlay shows an edit button (as opposed to requiring tapping
+     * the preview to send an edit intent).
+     */
+    public static final String CLIPBOARD_OVERLAY_SHOW_EDIT_BUTTON =
+            "clipboard_overlay_show_edit_button";
+
+    /**
+     * (boolean) Whether to show smart chips (based on TextClassifier) in the clipboard overlay.
+     */
+    public static final String CLIPBOARD_OVERLAY_SHOW_ACTIONS = "clipboard_overlay_show_actions";
+
+    /**
+     * (boolean) Whether to combine the broadcasts APPWIDGET_ENABLED and APPWIDGET_UPDATE
+     */
+    public static final String COMBINED_BROADCAST_ENABLED = "combined_broadcast_enabled";
 
     private SystemUiDeviceConfigFlags() {
     }

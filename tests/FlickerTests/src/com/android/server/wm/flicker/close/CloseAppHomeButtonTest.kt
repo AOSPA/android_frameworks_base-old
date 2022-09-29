@@ -16,8 +16,7 @@
 
 package com.android.server.wm.flicker.close
 
-import android.platform.test.annotations.Presubmit
-import androidx.test.filters.FlakyTest
+import android.platform.test.annotations.FlakyTest
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
@@ -65,46 +64,26 @@ import org.junit.runners.Parameterized
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @Group4
 class CloseAppHomeButtonTest(testSpec: FlickerTestParameter) : CloseAppTransition(testSpec) {
+    /** {@inheritDoc} */
     override val transition: FlickerBuilder.() -> Unit
         get() = {
             super.transition(this)
             transitions {
+                // Can't use TAPL at the moment because of rotation test issues
+                // When pressing home, TAPL expects the orientation to remain constant
+                // However, when closing a landscape app back to a portrait-only launcher
+                // this causes an error in verifyActiveContainer();
                 device.pressHome()
-                wmHelper.waitForHomeActivityVisible()
+                wmHelper.StateSyncBuilder()
+                    .withHomeActivityVisible()
+                    .waitForAndVerify()
             }
         }
 
     /** {@inheritDoc} */
-    @FlakyTest
+    @FlakyTest(bugId = 206753786)
     @Test
-    override fun navBarLayerRotatesAndScales() = super.navBarLayerRotatesAndScales()
-
-    /** {@inheritDoc} */
-    @FlakyTest(bugId = 227430489)
-    @Test
-    override fun statusBarLayerRotatesScales() {
-        super.statusBarLayerRotatesScales()
-    }
-
-    /** {@inheritDoc} */
-    @Presubmit
-    @Test
-    override fun launcherLayerReplacesApp() {
-        super.launcherLayerReplacesApp()
-    }
-
-    /** {@inheritDoc} */
-    @Presubmit
-    @Test
-    override fun entireScreenCovered() {
-        super.entireScreenCovered()
-    }
-
-    /** {@inheritDoc} */
-    @FlakyTest(bugId = 229762973)
-    @Test
-    override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
-        super.visibleLayersShownMoreThanOneConsecutiveEntry()
+    override fun navBarLayerPositionAtStartAndEnd() = super.navBarLayerPositionAtStartAndEnd()
 
     companion object {
         /**

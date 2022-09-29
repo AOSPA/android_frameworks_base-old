@@ -25,14 +25,13 @@ import android.hardware.display.DisplayManager;
 import android.hardware.display.VirtualDisplay;
 import android.hardware.display.VirtualDisplayConfig;
 import android.os.Handler;
+import android.os.IBinder;
 import android.os.RemoteException;
+import android.os.ServiceManager;
 import android.util.ArrayMap;
 import android.util.Log;
 import android.view.ContentRecordingSession;
-import android.view.IWindowManager;
 import android.view.Surface;
-import android.view.WindowManagerGlobal;
-import android.window.WindowContainerToken;
 
 import java.util.Map;
 
@@ -53,6 +52,7 @@ public final class MediaProjection {
     private final IMediaProjection mImpl;
     private final Context mContext;
     private final Map<Callback, CallbackRecord> mCallbacks;
+    @Nullable private IMediaProjectionManager mProjectionService = null;
 
     /** @hide */
     public MediaProjection(Context context, IMediaProjection impl) {
@@ -172,19 +172,16 @@ public final class MediaProjection {
             @NonNull VirtualDisplayConfig.Builder virtualDisplayConfig,
             @Nullable VirtualDisplay.Callback callback, @Nullable Handler handler) {
         try {
-            final IWindowManager wmService = WindowManagerGlobal.getWindowManagerService();
-            final WindowContainerToken taskWindowContainerToken =
-                    mImpl.getTaskRecordingWindowContainerToken();
+            final IBinder launchCookie = mImpl.getLaunchCookie();
             Context windowContext = null;
             ContentRecordingSession session;
-            if (taskWindowContainerToken == null) {
+            if (launchCookie == null) {
                 windowContext = mContext.createWindowContext(mContext.getDisplayNoVerify(),
                         TYPE_APPLICATION, null /* options */);
                 session = ContentRecordingSession.createDisplaySession(
                         windowContext.getWindowContextToken());
             } else {
-                session = ContentRecordingSession.createTaskSession(
-                        taskWindowContainerToken.asBinder());
+                session = ContentRecordingSession.createTaskSession(launchCookie);
             }
             virtualDisplayConfig.setWindowManagerMirroring(true);
             final DisplayManager dm = mContext.getSystemService(DisplayManager.class);
@@ -199,12 +196,20 @@ public final class MediaProjection {
             }
             session.setDisplayId(virtualDisplay.getDisplay().getDisplayId());
             // Successfully set up, so save the current session details.
-            wmService.setContentRecordingSession(session);
+            getProjectionService().setContentRecordingSession(session, mImpl);
             return virtualDisplay;
         } catch (RemoteException e) {
             // Can not capture if WMS is not accessible, so bail out.
             throw e.rethrowFromSystemServer();
         }
+    }
+
+    private IMediaProjectionManager getProjectionService() {
+        if (mProjectionService == null) {
+            mProjectionService = IMediaProjectionManager.Stub.asInterface(
+                    ServiceManager.getService(Context.MEDIA_PROJECTION_SERVICE));
+        }
+        return mProjectionService;
     }
 
     /**

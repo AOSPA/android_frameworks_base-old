@@ -77,6 +77,7 @@ import android.testing.TestableLooper;
 import android.util.ArraySet;
 import android.view.DisplayInfo;
 import android.view.KeyEvent;
+import android.view.WindowManager;
 
 import androidx.test.InstrumentationRegistry;
 
@@ -208,10 +209,11 @@ public class VirtualDeviceManagerServiceTest {
         // Allow virtual devices to be created on the looper thread for testing.
         final InputController.DeviceCreationThreadVerifier threadVerifier = () -> true;
         mInputController = new InputController(new Object(), mNativeWrapperMock,
-                new Handler(TestableLooper.get(this).getLooper()), threadVerifier);
+                new Handler(TestableLooper.get(this).getLooper()),
+                mContext.getSystemService(WindowManager.class), threadVerifier);
 
         mAssociationInfo = new AssociationInfo(1, 0, null,
-                MacAddress.BROADCAST_ADDRESS, "", null, true, false, 0, 0);
+                MacAddress.BROADCAST_ADDRESS, "", null, true, false, false, 0, 0);
 
         VirtualDeviceParams params = new VirtualDeviceParams
                 .Builder()
@@ -226,36 +228,36 @@ public class VirtualDeviceManagerServiceTest {
 
     @Test
     public void onVirtualDisplayRemovedLocked_doesNotThrowException() {
-        final int displayId = 2;
-        mDeviceImpl.onVirtualDisplayCreatedLocked(displayId);
+        mDeviceImpl.onVirtualDisplayCreatedLocked(
+                mDeviceImpl.createWindowPolicyController(), DISPLAY_ID);
         // This call should not throw any exceptions.
-        mDeviceImpl.onVirtualDisplayRemovedLocked(displayId);
+        mDeviceImpl.onVirtualDisplayRemovedLocked(DISPLAY_ID);
     }
 
     @Test
     public void onVirtualDisplayCreatedLocked_wakeLockIsAcquired() throws RemoteException {
-        final int displayId = 2;
-        mDeviceImpl.onVirtualDisplayCreatedLocked(displayId);
         verify(mIPowerManagerMock, never()).acquireWakeLock(any(Binder.class), anyInt(),
                 nullable(String.class), nullable(String.class), nullable(WorkSource.class),
                 nullable(String.class), anyInt(), eq(null));
-        TestableLooper.get(this).processAllMessages();
+        mDeviceImpl.onVirtualDisplayCreatedLocked(
+                mDeviceImpl.createWindowPolicyController(), DISPLAY_ID);
         verify(mIPowerManagerMock, Mockito.times(1)).acquireWakeLock(any(Binder.class), anyInt(),
                 nullable(String.class), nullable(String.class), nullable(WorkSource.class),
-                nullable(String.class), eq(displayId), eq(null));
+                nullable(String.class), eq(DISPLAY_ID), eq(null));
     }
 
     @Test
     public void onVirtualDisplayCreatedLocked_duplicateCalls_onlyOneWakeLockIsAcquired()
             throws RemoteException {
-        final int displayId = 2;
-        mDeviceImpl.onVirtualDisplayCreatedLocked(displayId);
+        GenericWindowPolicyController gwpc = mDeviceImpl.createWindowPolicyController();
+        mDeviceImpl.onVirtualDisplayCreatedLocked(
+                mDeviceImpl.createWindowPolicyController(), DISPLAY_ID);
         assertThrows(IllegalStateException.class,
-                () -> mDeviceImpl.onVirtualDisplayCreatedLocked(displayId));
+                () -> mDeviceImpl.onVirtualDisplayCreatedLocked(gwpc, DISPLAY_ID));
         TestableLooper.get(this).processAllMessages();
         verify(mIPowerManagerMock, Mockito.times(1)).acquireWakeLock(any(Binder.class), anyInt(),
                 nullable(String.class), nullable(String.class), nullable(WorkSource.class),
-                nullable(String.class), eq(displayId), eq(null));
+                nullable(String.class), eq(DISPLAY_ID), eq(null));
     }
 
     @Test
@@ -267,30 +269,30 @@ public class VirtualDeviceManagerServiceTest {
 
     @Test
     public void onVirtualDisplayRemovedLocked_wakeLockIsReleased() throws RemoteException {
-        final int displayId = 2;
-        mDeviceImpl.onVirtualDisplayCreatedLocked(displayId);
+        mDeviceImpl.onVirtualDisplayCreatedLocked(
+                mDeviceImpl.createWindowPolicyController(), DISPLAY_ID);
         ArgumentCaptor<IBinder> wakeLockCaptor = ArgumentCaptor.forClass(IBinder.class);
         TestableLooper.get(this).processAllMessages();
         verify(mIPowerManagerMock, Mockito.times(1)).acquireWakeLock(wakeLockCaptor.capture(),
                 anyInt(),
                 nullable(String.class), nullable(String.class), nullable(WorkSource.class),
-                nullable(String.class), eq(displayId), eq(null));
+                nullable(String.class), eq(DISPLAY_ID), eq(null));
 
         IBinder wakeLock = wakeLockCaptor.getValue();
-        mDeviceImpl.onVirtualDisplayRemovedLocked(displayId);
+        mDeviceImpl.onVirtualDisplayRemovedLocked(DISPLAY_ID);
         verify(mIPowerManagerMock, Mockito.times(1)).releaseWakeLock(eq(wakeLock), anyInt());
     }
 
     @Test
     public void addVirtualDisplay_displayNotReleased_wakeLockIsReleased() throws RemoteException {
-        final int displayId = 2;
-        mDeviceImpl.onVirtualDisplayCreatedLocked(displayId);
+        mDeviceImpl.onVirtualDisplayCreatedLocked(
+                mDeviceImpl.createWindowPolicyController(), DISPLAY_ID);
         ArgumentCaptor<IBinder> wakeLockCaptor = ArgumentCaptor.forClass(IBinder.class);
         TestableLooper.get(this).processAllMessages();
         verify(mIPowerManagerMock, Mockito.times(1)).acquireWakeLock(wakeLockCaptor.capture(),
                 anyInt(),
                 nullable(String.class), nullable(String.class), nullable(WorkSource.class),
-                nullable(String.class), eq(displayId), eq(null));
+                nullable(String.class), eq(DISPLAY_ID), eq(null));
         IBinder wakeLock = wakeLockCaptor.getValue();
 
         // Close the VirtualDevice without first notifying it of the VirtualDisplay removal.
@@ -414,7 +416,8 @@ public class VirtualDeviceManagerServiceTest {
 
     @Test
     public void onAudioSessionStarting_hasVirtualAudioController() {
-        mDeviceImpl.onVirtualDisplayCreatedLocked(DISPLAY_ID);
+        mDeviceImpl.onVirtualDisplayCreatedLocked(
+                mDeviceImpl.createWindowPolicyController(), DISPLAY_ID);
 
         mDeviceImpl.onAudioSessionStarting(DISPLAY_ID, mRoutingCallback, mConfigChangedCallback);
 
@@ -423,7 +426,8 @@ public class VirtualDeviceManagerServiceTest {
 
     @Test
     public void onAudioSessionEnded_noVirtualAudioController() {
-        mDeviceImpl.onVirtualDisplayCreatedLocked(DISPLAY_ID);
+        mDeviceImpl.onVirtualDisplayCreatedLocked(
+                mDeviceImpl.createWindowPolicyController(), DISPLAY_ID);
         mDeviceImpl.onAudioSessionStarting(DISPLAY_ID, mRoutingCallback, mConfigChangedCallback);
 
         mDeviceImpl.onAudioSessionEnded();
@@ -433,7 +437,8 @@ public class VirtualDeviceManagerServiceTest {
 
     @Test
     public void close_cleanVirtualAudioController() {
-        mDeviceImpl.onVirtualDisplayCreatedLocked(DISPLAY_ID);
+        mDeviceImpl.onVirtualDisplayCreatedLocked(
+                mDeviceImpl.createWindowPolicyController(), DISPLAY_ID);
         mDeviceImpl.onAudioSessionStarting(DISPLAY_ID, mRoutingCallback, mConfigChangedCallback);
 
         mDeviceImpl.close();
@@ -657,7 +662,8 @@ public class VirtualDeviceManagerServiceTest {
 
     @Test
     public void openNonBlockedAppOnVirtualDisplay_doesNotStartBlockedAlertActivity() {
-        mDeviceImpl.onVirtualDisplayCreatedLocked(DISPLAY_ID);
+        mDeviceImpl.onVirtualDisplayCreatedLocked(
+                mDeviceImpl.createWindowPolicyController(), DISPLAY_ID);
         GenericWindowPolicyController gwpc = mDeviceImpl.getWindowPolicyControllersForTesting().get(
                 DISPLAY_ID);
         doNothing().when(mContext).startActivityAsUser(any(), any(), any());
@@ -675,7 +681,8 @@ public class VirtualDeviceManagerServiceTest {
 
     @Test
     public void openPermissionControllerOnVirtualDisplay_startBlockedAlertActivity() {
-        mDeviceImpl.onVirtualDisplayCreatedLocked(DISPLAY_ID);
+        mDeviceImpl.onVirtualDisplayCreatedLocked(
+                mDeviceImpl.createWindowPolicyController(), DISPLAY_ID);
         GenericWindowPolicyController gwpc = mDeviceImpl.getWindowPolicyControllersForTesting().get(
                 DISPLAY_ID);
         doNothing().when(mContext).startActivityAsUser(any(), any(), any());
@@ -693,7 +700,8 @@ public class VirtualDeviceManagerServiceTest {
 
     @Test
     public void openSettingsOnVirtualDisplay_startBlockedAlertActivity() {
-        mDeviceImpl.onVirtualDisplayCreatedLocked(DISPLAY_ID);
+        mDeviceImpl.onVirtualDisplayCreatedLocked(
+                mDeviceImpl.createWindowPolicyController(), DISPLAY_ID);
         GenericWindowPolicyController gwpc = mDeviceImpl.getWindowPolicyControllersForTesting().get(
                 DISPLAY_ID);
         doNothing().when(mContext).startActivityAsUser(any(), any(), any());
@@ -711,7 +719,8 @@ public class VirtualDeviceManagerServiceTest {
 
     @Test
     public void openVendingOnVirtualDisplay_startBlockedAlertActivity() {
-        mDeviceImpl.onVirtualDisplayCreatedLocked(DISPLAY_ID);
+        mDeviceImpl.onVirtualDisplayCreatedLocked(
+                mDeviceImpl.createWindowPolicyController(), DISPLAY_ID);
         GenericWindowPolicyController gwpc = mDeviceImpl.getWindowPolicyControllersForTesting().get(
                 DISPLAY_ID);
         doNothing().when(mContext).startActivityAsUser(any(), any(), any());
@@ -729,7 +738,8 @@ public class VirtualDeviceManagerServiceTest {
 
     @Test
     public void openGoogleDialerOnVirtualDisplay_startBlockedAlertActivity() {
-        mDeviceImpl.onVirtualDisplayCreatedLocked(DISPLAY_ID);
+        mDeviceImpl.onVirtualDisplayCreatedLocked(
+                mDeviceImpl.createWindowPolicyController(), DISPLAY_ID);
         GenericWindowPolicyController gwpc = mDeviceImpl.getWindowPolicyControllersForTesting().get(
                 DISPLAY_ID);
         doNothing().when(mContext).startActivityAsUser(any(), any(), any());
@@ -747,7 +757,8 @@ public class VirtualDeviceManagerServiceTest {
 
     @Test
     public void openGoogleMapsOnVirtualDisplay_startBlockedAlertActivity() {
-        mDeviceImpl.onVirtualDisplayCreatedLocked(DISPLAY_ID);
+        mDeviceImpl.onVirtualDisplayCreatedLocked(
+                mDeviceImpl.createWindowPolicyController(), DISPLAY_ID);
         GenericWindowPolicyController gwpc = mDeviceImpl.getWindowPolicyControllersForTesting().get(
                 DISPLAY_ID);
         doNothing().when(mContext).startActivityAsUser(any(), any(), any());

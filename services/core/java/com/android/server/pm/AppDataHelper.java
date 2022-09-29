@@ -88,6 +88,7 @@ final class AppDataHelper {
      * <p>
      * <em>Note: To avoid a deadlock, do not call this method with {@code mLock} lock held</em>
      */
+    @GuardedBy("mPm.mInstallLock")
     public void prepareAppDataAfterInstallLIF(AndroidPackage pkg) {
         prepareAppDataPostCommitLIF(pkg, 0 /* previousAppId */);
     }
@@ -97,6 +98,7 @@ final class AppDataHelper {
      * {@link #prepareAppData(Installer.Batch, AndroidPackage, int, int, int)}
      * @see #prepareAppDataAfterInstallLIF(AndroidPackage)
      */
+    @GuardedBy("mPm.mInstallLock")
     public void prepareAppDataPostCommitLIF(AndroidPackage pkg, int previousAppId) {
         final PackageSetting ps;
         synchronized (mPm.mLock) {
@@ -318,7 +320,7 @@ final class AppDataHelper {
      * requested by the app.
      */
     private boolean maybeMigrateAppDataLIF(AndroidPackage pkg, int userId) {
-        if (pkg.isSystem() && !StorageManager.isFileEncryptedNativeOrEmulated()
+        if (pkg.isSystem() && !StorageManager.isFileEncrypted()
                 && PackageManager.APPLY_DEFAULT_TO_DEVICE_PROTECTED_STORAGE) {
             final int storageTarget = pkg.isDefaultToDeviceProtectedStorage()
                     ? StorageManager.FLAG_STORAGE_DE : StorageManager.FLAG_STORAGE_CE;
@@ -390,8 +392,7 @@ final class AppDataHelper {
         // First look for stale data that doesn't belong, and check if things
         // have changed since we did our last restorecon
         if ((flags & StorageManager.FLAG_STORAGE_CE) != 0) {
-            if (StorageManager.isFileEncryptedNativeOrEmulated()
-                    && !StorageManager.isUserKeyUnlocked(userId)) {
+            if (StorageManager.isFileEncrypted() && !StorageManager.isUserKeyUnlocked(userId)) {
                 throw new RuntimeException(
                         "Yikes, someone asked us to reconcile CE storage while " + userId
                                 + " was still locked; this would have caused massive data loss!");
@@ -493,7 +494,7 @@ final class AppDataHelper {
      */
     public Future<?> fixAppsDataOnBoot() {
         final @StorageManager.StorageFlags int storageFlags;
-        if (StorageManager.isFileEncryptedNativeOrEmulated()) {
+        if (StorageManager.isFileEncrypted()) {
             storageFlags = StorageManager.FLAG_STORAGE_DE;
         } else {
             storageFlags = StorageManager.FLAG_STORAGE_DE | StorageManager.FLAG_STORAGE_CE;
@@ -520,14 +521,13 @@ final class AppDataHelper {
             int count = 0;
             final Installer.Batch batch = new Installer.Batch();
             for (String pkgName : deferPackages) {
-                AndroidPackage pkg = null;
-                synchronized (mPm.mLock) {
-                    PackageSetting ps = mPm.mSettings.getPackageLPr(pkgName);
-                    if (ps != null && ps.getInstalled(UserHandle.USER_SYSTEM)) {
-                        pkg = ps.getPkg();
-                    }
-                }
-                if (pkg != null) {
+                final Computer snapshot = mPm.snapshotComputer();
+                final PackageStateInternal packageStateInternal = snapshot.getPackageStateInternal(
+                        pkgName);
+                if (packageStateInternal != null
+                        && packageStateInternal.getUserStateOrDefault(
+                                UserHandle.USER_SYSTEM).isInstalled()) {
+                    AndroidPackage pkg = packageStateInternal.getPkg();
                     prepareAppDataAndMigrate(batch, pkg, UserHandle.USER_SYSTEM, storageFlags,
                             true /* maybeMigrateAppData */);
                     count++;
@@ -554,12 +554,12 @@ final class AppDataHelper {
     }
 
     private void clearAppDataLeafLIF(AndroidPackage pkg, int userId, int flags) {
-        final PackageSetting ps;
-        synchronized (mPm.mLock) {
-            ps = mPm.mSettings.getPackageLPr(pkg.getPackageName());
-        }
+        final Computer snapshot = mPm.snapshotComputer();
+        final PackageStateInternal packageStateInternal =
+                snapshot.getPackageStateInternal(pkg.getPackageName());
         for (int realUserId : mPm.resolveUserIds(userId)) {
-            final long ceDataInode = (ps != null) ? ps.getCeDataInode(realUserId) : 0;
+            final long ceDataInode = (packageStateInternal != null)
+                    ? packageStateInternal.getUserStateOrDefault(realUserId).getCeDataInode() : 0;
             try {
                 mInstaller.clearAppData(pkg.getVolumeUuid(), pkg.getPackageName(), realUserId,
                         flags, ceDataInode);
@@ -586,12 +586,12 @@ final class AppDataHelper {
     }
 
     public void destroyAppDataLeafLIF(AndroidPackage pkg, int userId, int flags) {
-        final PackageSetting ps;
-        synchronized (mPm.mLock) {
-            ps = mPm.mSettings.getPackageLPr(pkg.getPackageName());
-        }
+        final Computer snapshot = mPm.snapshotComputer();
+        final PackageStateInternal packageStateInternal =
+                snapshot.getPackageStateInternal(pkg.getPackageName());
         for (int realUserId : mPm.resolveUserIds(userId)) {
-            final long ceDataInode = (ps != null) ? ps.getCeDataInode(realUserId) : 0;
+            final long ceDataInode = (packageStateInternal != null)
+                    ? packageStateInternal.getUserStateOrDefault(realUserId).getCeDataInode() : 0;
             try {
                 mInstaller.destroyAppData(pkg.getVolumeUuid(), pkg.getPackageName(), realUserId,
                         flags, ceDataInode);
@@ -624,7 +624,7 @@ final class AppDataHelper {
     private boolean shouldHaveAppStorage(AndroidPackage pkg) {
         PackageManager.Property noAppDataProp =
                 pkg.getProperties().get(PackageManager.PROPERTY_NO_APP_DATA_STORAGE);
-        return noAppDataProp == null || !noAppDataProp.getBoolean();
+        return (noAppDataProp == null || !noAppDataProp.getBoolean()) && pkg.getUid() >= 0;
     }
 
     /**

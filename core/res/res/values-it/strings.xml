@@ -21,11 +21,6 @@
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="byteShort" msgid="202579285008794431">"B"</string>
-    <string name="kilobyteShort" msgid="2214285521564195803">"kB"</string>
-    <string name="megabyteShort" msgid="6649361267635823443">"MB"</string>
-    <string name="gigabyteShort" msgid="7515809460261287991">"GB"</string>
-    <string name="terabyteShort" msgid="1822367128583886496">"TB"</string>
-    <string name="petabyteShort" msgid="5651571254228534832">"PB"</string>
     <string name="fileSizeSuffix" msgid="4233671691980131257">"<xliff:g id="NUMBER">%1$s</xliff:g> <xliff:g id="UNIT">%2$s</xliff:g>"</string>
     <string name="untitled" msgid="3381766946944136678">"&lt;Senza nome&gt;"</string>
     <string name="emptyPhoneNumber" msgid="5812172618020360048">"(Nessun numero di telefono)"</string>
@@ -305,8 +300,8 @@
     <string name="permgroupdesc_calendar" msgid="6762751063361489379">"Possono accedere al calendario"</string>
     <string name="permgrouplab_sms" msgid="795737735126084874">"SMS"</string>
     <string name="permgroupdesc_sms" msgid="5726462398070064542">"Possono inviare e visualizzare SMS"</string>
-    <string name="permgrouplab_storage" msgid="5570124978732352858">"File e documenti"</string>
-    <string name="permgroupdesc_storage" msgid="8352226729501080525">"Consente di accedere a file e documenti sul tuo dispositivo"</string>
+    <string name="permgrouplab_storage" msgid="17339216290379241">"File"</string>
+    <string name="permgroupdesc_storage" msgid="5378659041354582769">"Consente di accedere ai file sul tuo dispositivo"</string>
     <string name="permgrouplab_readMediaAural" msgid="1858331312624942053">"Musica e audio"</string>
     <string name="permgroupdesc_readMediaAural" msgid="7565467343667089595">"accesso a musica e audio sul tuo dispositivo"</string>
     <string name="permgrouplab_readMediaVisual" msgid="4724874717811908660">"Foto e video"</string>
@@ -558,6 +553,8 @@
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"Consente all\'app di conoscere il livello di complessità del blocco schermo (alto, medio, basso o nessuno), che indica l\'intervallo di caratteri possibile e il tipo di blocco schermo. L\'app può inoltre suggerire agli utenti di aggiornare il blocco schermo a un livello specifico di complessità, ma gli utenti possono ignorare liberamente il suggerimento e uscire. Tieni presente che il blocco schermo non viene memorizzato come testo non crittografato, quindi l\'app non conosce la password esatta."</string>
     <string name="permlab_postNotification" msgid="4875401198597803658">"Visualizzazione di notifiche"</string>
     <string name="permdesc_postNotification" msgid="5974977162462877075">"Consente all\'app di mostrare notifiche"</string>
+    <string name="permlab_turnScreenOn" msgid="219344053664171492">"attiva lo schermo"</string>
+    <string name="permdesc_turnScreenOn" msgid="4394606875897601559">"Consente all\'app di attivare lo schermo."</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"utilizzo di hardware biometrico"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"Consente all\'app di utilizzare hardware biometrico per eseguire l\'autenticazione"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"gestione di hardware per il riconoscimento delle impronte"</string>
@@ -649,9 +646,9 @@
     <string name="face_acquired_recalibrate" msgid="8724013080976469746">"Ripeti l\'acquisizione del volto."</string>
     <string name="face_acquired_too_different" msgid="2520389515612972889">"Impossibile riconoscere il volto. Riprova."</string>
     <string name="face_acquired_too_similar" msgid="8882920552674125694">"Cambia leggermente la posizione della testa"</string>
-    <string name="face_acquired_pan_too_extreme" msgid="5417928604710621088">"Guarda più direttamente verso il telefono"</string>
-    <string name="face_acquired_tilt_too_extreme" msgid="5715715666540716620">"Guarda più direttamente verso il telefono"</string>
-    <string name="face_acquired_roll_too_extreme" msgid="8261939882838881194">"Guarda più direttamente verso il telefono"</string>
+    <string name="face_acquired_pan_too_extreme" msgid="5417928604710621088">"Guarda dritto nel telefono"</string>
+    <string name="face_acquired_tilt_too_extreme" msgid="5715715666540716620">"Guarda dritto nel telefono"</string>
+    <string name="face_acquired_roll_too_extreme" msgid="8261939882838881194">"Guarda dritto nel telefono"</string>
     <string name="face_acquired_obscured" msgid="4917643294953326639">"Rimuovi tutto ciò che ti nasconde il viso."</string>
     <string name="face_acquired_sensor_dirty" msgid="8968391891086721678">"Pulisci la parte superiore dello schermo, inclusa la barra nera"</string>
     <string name="face_acquired_dark_glasses_detected" msgid="7263638432128692048">"Il tuo volto deve essere visibile per intero"</string>
@@ -1921,11 +1918,13 @@
     <string name="user_creation_adding" msgid="7305185499667958364">"Consentire a <xliff:g id="APP">%1$s</xliff:g> di creare un nuovo utente con l\'account <xliff:g id="ACCOUNT">%2$s</xliff:g>?"</string>
     <string name="supervised_user_creation_label" msgid="6884904353827427515">"Aggiungi utente supervisionato"</string>
     <string name="language_selection_title" msgid="52674936078683285">"Aggiungi una lingua"</string>
-    <string name="country_selection_title" msgid="5221495687299014379">"Area geografica preferita"</string>
+    <string name="country_selection_title" msgid="5221495687299014379">"Regione preferita"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Digita nome lingua"</string>
     <string name="language_picker_section_suggested" msgid="6556199184638990447">"Suggerite"</string>
+    <string name="language_picker_section_suggested_bilingual" msgid="5932198319583556613">"Lingue suggerite"</string>
+    <string name="region_picker_section_suggested_bilingual" msgid="704607569328224133">"Regioni consigliate"</string>
     <string name="language_picker_section_all" msgid="1985809075777564284">"Tutte le lingue"</string>
-    <string name="region_picker_section_all" msgid="756441309928774155">"Tutte le aree geografiche"</string>
+    <string name="region_picker_section_all" msgid="756441309928774155">"Tutte le regioni"</string>
     <string name="locale_search_menu" msgid="6258090710176422934">"Cerca"</string>
     <string name="app_suspended_title" msgid="888873445010322650">"App non disponibile"</string>
     <string name="app_suspended_default_message" msgid="6451215678552004172">"<xliff:g id="APP_NAME_0">%1$s</xliff:g> non è al momento disponibile. Viene gestita tramite <xliff:g id="APP_NAME_1">%2$s</xliff:g>."</string>
@@ -2078,8 +2077,8 @@
     <string name="nas_upgrade_notification_learn_more_action" msgid="7011130656195423947">"Scopri di più"</string>
     <string name="nas_upgrade_notification_learn_more_content" msgid="3735480566983530650">"Le notifiche adattive Android sono state sostituite dalle notifiche avanzate in Android 12. Questa funzionalità mostra risposte e azioni suggerite e organizza le tue notifiche.\n\nLe notifiche avanzate possono accedere ai contenuti di una notifica, incluse le informazioni personali, come i nomi dei contatti e i messaggi. Questa funzionalità può anche ignorare le notifiche o rispondervi, ad esempio accettando le telefonate, e controllare la modalità Non disturbare."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Notifica di informazioni sulla modalità Routine"</string>
-    <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"La batteria potrebbe esaurirsi prima della ricarica abituale"</string>
-    <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Risparmio energetico attivo per far durare di più la batteria"</string>
+    <string name="dynamic_mode_notification_title" msgid="1388718452788985481">"Risparmio energetico attivato"</string>
+    <string name="dynamic_mode_notification_summary" msgid="1639031262484979689">"Riduzione dell\'utilizzo di batteria per estenderne la durata"</string>
     <string name="battery_saver_notification_channel_name" msgid="3918243458067916913">"Risparmio energetico"</string>
     <string name="battery_saver_off_notification_title" msgid="7637255960468032515">"Risparmio energetico disattivato"</string>
     <string name="battery_saver_charged_notification_summary" product="default" msgid="5544457317418624367">"Il telefono ha carica sufficiente. Funzionalità non più limitate."</string>
@@ -2286,5 +2285,7 @@
     <string name="notification_action_check_bg_apps" msgid="4758877443365362532">"Verifica le app attive"</string>
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"Impossibile accedere alla fotocamera del telefono dal tuo <xliff:g id="DEVICE">%1$s</xliff:g>"</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"Impossibile accedere alla fotocamera del tablet dal tuo <xliff:g id="DEVICE">%1$s</xliff:g>"</string>
-    <string name="system_locale_title" msgid="3978041860457277638">"Lingua di sistema"</string>
+    <string name="system_locale_title" msgid="711882686834677268">"Predefinita di sistema"</string>
+    <!-- no translation found for default_card_name (9198284935962911468) -->
+    <skip />
 </resources>

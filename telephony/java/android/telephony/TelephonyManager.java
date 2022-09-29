@@ -4901,7 +4901,7 @@ public class TelephonyManager {
                                 return;
                             }
                             ParcelUuid resultUuid =
-                                    result.getParcelable(KEY_CALL_COMPOSER_PICTURE_HANDLE);
+                                    result.getParcelable(KEY_CALL_COMPOSER_PICTURE_HANDLE, android.os.ParcelUuid.class);
                             if (resultUuid == null) {
                                 Log.e(TAG, "Got null uuid without an error"
                                         + " while uploading call composer pic");
@@ -8279,6 +8279,30 @@ public class TelephonyManager {
     public static final int AUTHTYPE_EAP_SIM = PhoneConstants.AUTH_CONTEXT_EAP_SIM;
     /** Authentication type for UICC challenge is EAP AKA. See RFC 4187 for details. */
     public static final int AUTHTYPE_EAP_AKA = PhoneConstants.AUTH_CONTEXT_EAP_AKA;
+    /**
+     * Authentication type for GBA Bootstrap Challenge is GBA_BOOTSTRAP.
+     * See 3GPP 33.220 Section 5.3.2.
+     * @hide
+     */
+    public static final int AUTHTYPE_GBA_BOOTSTRAP = PhoneConstants.AUTH_CONTEXT_GBA_BOOTSTRAP;
+    /**
+     * Authentication type for GBA Network Application Functions (NAF) key
+     * External Challenge is AUTHTYPE_GBA_NAF_KEY_EXTERNAL.
+     * See 3GPP 33.220 Section 5.3.2.
+     * @hide
+     */
+    public static final int AUTHTYPE_GBA_NAF_KEY_EXTERNAL =
+            PhoneConstants.AUTHTYPE_GBA_NAF_KEY_EXTERNAL;
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef({
+            AUTHTYPE_EAP_SIM,
+            AUTHTYPE_EAP_AKA,
+            AUTHTYPE_GBA_BOOTSTRAP,
+            AUTHTYPE_GBA_NAF_KEY_EXTERNAL
+    })
+    public @interface AuthType {}
 
     /**
      * Returns the response of authentication for the default subscription.
@@ -8293,7 +8317,7 @@ public class TelephonyManager {
      * </ul>
      *
      * @param appType the icc application type, like {@link #APPTYPE_USIM}
-     * @param authType the authentication type, {@link #AUTHTYPE_EAP_AKA} or
+     * @param authType the authentication type, any one of {@link #AUTHTYPE_EAP_AKA} or
      * {@link #AUTHTYPE_EAP_SIM}
      * @param data authentication challenge data, base64 encoded.
      * See 3GPP TS 31.102 7.1.2 for more details.
@@ -8308,7 +8332,7 @@ public class TelephonyManager {
     // READ_PRIVILEGED_PHONE_STATE. It certainly shouldn't reference the permission in Javadoc since
     // it's not public API.
     @RequiresFeature(PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION)
-    public String getIccAuthentication(int appType, int authType, String data) {
+    public String getIccAuthentication(int appType,@AuthType int authType, String data) {
         return getIccAuthentication(getSubId(), appType, authType, data);
     }
 
@@ -8321,7 +8345,7 @@ public class TelephonyManager {
      *
      * @param subId subscription ID used for authentication
      * @param appType the icc application type, like {@link #APPTYPE_USIM}
-     * @param authType the authentication type, {@link #AUTHTYPE_EAP_AKA} or
+     * @param authType the authentication type, any one of {@link #AUTHTYPE_EAP_AKA} or
      * {@link #AUTHTYPE_EAP_SIM}
      * @param data authentication challenge data, base64 encoded.
      * See 3GPP TS 31.102 7.1.2 for more details.
@@ -8335,7 +8359,7 @@ public class TelephonyManager {
      * @hide
      */
     @UnsupportedAppUsage
-    public String getIccAuthentication(int subId, int appType, int authType, String data) {
+    public String getIccAuthentication(int subId, int appType,@AuthType int authType, String data) {
         try {
             IPhoneSubInfo info = getSubscriberInfoService();
             if (info == null)
@@ -8425,6 +8449,51 @@ public class TelephonyManager {
             Rlog.e(TAG, "setForbiddenPlmns NullPointerException: " + ex.getMessage());
         }
         return -1;
+    }
+
+    /**
+     * Fetches the sim service table from the EFUST/EFIST based on the application type
+     * {@link #APPTYPE_USIM} or {@link #APPTYPE_ISIM}. The return value is hexaString format
+     * representing X bytes (x >= 1). Each bit of every byte indicates which optional services
+     * are available for the given application type.
+     * The USIM service table EF is described in as per Section 4.2.8 of 3GPP TS 31.102.
+     * The ISIM service table EF is described in as per Section 4.2.7 of 3GPP TS 31.103.
+     * The list of services mapped to the exact nth byte of response as mentioned in Section 4.2
+     * .7 of 3GPP TS 31.103. Eg. Service n°1: Local Phone Book, Service n°2: Fixed Dialling
+     * Numbers (FDN) - Bit 1 and 2 of the 1st Byte represent service Local Phone Book and Fixed
+     * Dialling Numbers (FDN)respectively. The coding format for each service type  should be
+     * interpreted as bit = 1: service available;bit = 0:service not available.
+     *
+     * @param appType of type int of either {@link #APPTYPE_USIM} or {@link #APPTYPE_ISIM}.
+     * @return HexString represents sim service table else null.
+     * @throws SecurityException if the caller does not have the required permission/privileges
+     * @hide
+     */
+
+    @Nullable
+    @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+    @RequiresFeature(PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION)
+    public String getSimServiceTable(int appType) {
+        try {
+            IPhoneSubInfo info = getSubscriberInfoService();
+            if (info == null) {
+                Rlog.e(TAG, "getSimServiceTable(): IPhoneSubInfo is null");
+                return null;
+            }
+            //Fetches the sim service table based on subId and appType
+            if (appType == APPTYPE_ISIM) {
+                return info.getIsimIst(getSubId());
+            } else if ((appType == APPTYPE_USIM)) {
+                return info.getSimServiceTable(getSubId(), APPTYPE_USIM);
+            } else {
+                return null;
+            }
+        } catch (RemoteException ex) {
+            Rlog.e(TAG, "getSimServiceTable(): RemoteException=" + ex.getMessage());
+        } catch (NullPointerException ex) {
+            Rlog.e(TAG, "getSimServiceTable(): NullPointerException=" + ex.getMessage());
+        }
+        return null;
     }
 
     /**
@@ -10386,7 +10455,7 @@ public class TelephonyManager {
             protected void onReceiveResult(int resultCode, Bundle ussdResponse) {
                 Rlog.d(TAG, "USSD:" + resultCode);
                 checkNotNull(ussdResponse, "ussdResponse cannot be null.");
-                UssdResponse response = ussdResponse.getParcelable(USSD_RESPONSE);
+                UssdResponse response = ussdResponse.getParcelable(USSD_RESPONSE, android.telephony.UssdResponse.class);
 
                 if (resultCode == USSD_RETURN_SUCCESS) {
                     callback.onReceiveUssdResponse(telephonyManager, response.getUssdRequest(),
@@ -15932,6 +16001,17 @@ public class TelephonyManager {
     }
 
     /**
+     * Setup sIPhoneSubInfo for testing.
+     * @hide
+     */
+    @VisibleForTesting
+    public static void setupIPhoneSubInfoForTest(IPhoneSubInfo iPhoneSubInfo) {
+        synchronized (sCacheLock) {
+            sIPhoneSubInfo = iPhoneSubInfo;
+        }
+    }
+
+    /**
      * Whether device can connect to 5G network when two SIMs are active.
      * @hide
      * TODO b/153669716: remove or make system API.
@@ -16878,7 +16958,7 @@ public class TelephonyManager {
                         }
 
                         NetworkSlicingConfig slicingConfig =
-                                result.getParcelable(KEY_SLICING_CONFIG_HANDLE);
+                                result.getParcelable(KEY_SLICING_CONFIG_HANDLE, android.telephony.data.NetworkSlicingConfig.class);
                         executor.execute(() -> callback.onResult(slicingConfig));
                     }
             });
@@ -17042,5 +17122,73 @@ public class TelephonyManager {
             throw new IllegalStateException("Telephony registry service is null");
         }
         mTelephonyRegistryMgr.removeCarrierPrivilegesCallback(callback);
+    }
+
+    /**
+     * set removable eSIM as default eUICC.
+     *
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.MODIFY_PHONE_STATE)
+    @RequiresFeature(PackageManager.FEATURE_TELEPHONY_EUICC)
+    public void setRemovableEsimAsDefaultEuicc(boolean isDefault) {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                telephony.setRemovableEsimAsDefaultEuicc(isDefault, getOpPackageName());
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error in setRemovableEsimAsDefault: " + e);
+        }
+    }
+
+    /**
+     * Returns whether the removable eSIM is default eUICC or not.
+     *
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+    @RequiresFeature(PackageManager.FEATURE_TELEPHONY_EUICC)
+    public boolean isRemovableEsimDefaultEuicc() {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                return telephony.isRemovableEsimDefaultEuicc(getOpPackageName());
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error in isRemovableEsimDefaultEuicc: " + e);
+        }
+        return false;
+    }
+
+    /**
+     * Fetches the EFPSISMSC value from the SIM that contains the Public Service Identity
+     * of the SM-SC (either a SIP URI or tel URI), the value is common for both appType
+     * {@link #APPTYPE_ISIM} and {@link #APPTYPE_SIM}.
+     * The EFPSISMSC value is used by the ME to submit SMS over IP as defined in 24.341 [55].
+     *
+     * @param appType ICC Application type {@link #APPTYPE_ISIM} or {@link #APPTYPE_USIM}
+     * @return SIP URI or tel URI of the Public Service Identity of the SM-SC
+     * @throws SecurityException if the caller does not have the required permission/privileges
+     * @hide
+     */
+    @NonNull
+    @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+    @RequiresFeature(PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION)
+    public String getSmscIdentity(int appType) {
+        try {
+            IPhoneSubInfo info = getSubscriberInfoService();
+            if (info == null) {
+                Rlog.e(TAG, "getSmscIdentity(): IPhoneSubInfo instance is NULL");
+                return null;
+            }
+            /** Fetches the SIM PSISMSC params based on subId and appType */
+            return info.getSmscIdentity(getSubId(), appType);
+        } catch (RemoteException ex) {
+            Rlog.e(TAG, "getSmscIdentity(): RemoteException: " + ex.getMessage());
+        } catch (NullPointerException ex) {
+            Rlog.e(TAG, "getSmscIdentity(): NullPointerException: " + ex.getMessage());
+        }
+        return null;
     }
 }

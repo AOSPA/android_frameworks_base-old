@@ -28,7 +28,6 @@ import android.app.WallpaperColors;
 import android.app.smartspace.SmartspaceAction;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
@@ -39,12 +38,15 @@ import android.graphics.Rect;
 import android.graphics.drawable.Animatable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.Icon;
+import android.graphics.drawable.LayerDrawable;
 import android.graphics.drawable.TransitionDrawable;
 import android.media.session.MediaController;
 import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
 import android.os.Process;
+import android.os.Trace;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.Pair;
@@ -70,16 +72,19 @@ import com.android.systemui.R;
 import com.android.systemui.animation.ActivityLaunchAnimator;
 import com.android.systemui.animation.GhostedViewLaunchAnimatorController;
 import com.android.systemui.animation.Interpolators;
+import com.android.systemui.bluetooth.BroadcastDialogController;
 import com.android.systemui.broadcast.BroadcastSender;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.media.dialog.MediaOutputDialogFactory;
 import com.android.systemui.monet.ColorScheme;
+import com.android.systemui.monet.Style;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.shared.system.SysUiStatsLog;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
+import com.android.systemui.util.ColorUtilKt;
 import com.android.systemui.util.animation.TransitionLayout;
 import com.android.systemui.util.time.SystemClock;
 
@@ -97,7 +102,7 @@ import kotlin.Unit;
  * A view controller used for Media Playback.
  */
 public class MediaControlPanel {
-    private static final String TAG = "MediaControlPanel";
+    protected static final String TAG = "MediaControlPanel";
 
     private static final float DISABLED_ALPHA = 0.38f;
     private static final String EXPORTED_SMARTSPACE_TRAMPOLINE_ACTIVITY_NAME = "com.google"
@@ -106,7 +111,7 @@ public class MediaControlPanel {
             "com.google.android.apps.gsa.smartspace.extra.SMARTSPACE_INTENT";
     private static final String KEY_SMARTSPACE_ARTIST_NAME = "artist_name";
     private static final String KEY_SMARTSPACE_OPEN_IN_FOREGROUND = "KEY_OPEN_IN_FOREGROUND";
-    private static final String KEY_SMARTSPACE_APP_NAME = "KEY_SMARTSPACE_APP_NAME";
+    protected static final String KEY_SMARTSPACE_APP_NAME = "KEY_SMARTSPACE_APP_NAME";
 
     // Event types logged by smartspace
     private static final int SMARTSPACE_CARD_CLICK_EVENT = 760;
@@ -149,6 +154,7 @@ public class MediaControlPanel {
     private RecommendationViewHolder mRecommendationViewHolder;
     private String mKey;
     private MediaData mMediaData;
+    private SmartspaceMediaData mRecommendationData;
     private MediaViewController mMediaViewController;
     private MediaSession.Token mToken;
     private MediaController mController;
@@ -186,6 +192,11 @@ public class MediaControlPanel {
     private final SeekBarViewModel.EnabledChangeListener mEnabledChangeListener =
             this::setIsSeekBarEnabled;
 
+    private final BroadcastDialogController mBroadcastDialogController;
+    private boolean mIsCurrentBroadcastedApp = false;
+    private boolean mShowBroadcastDialogButton = false;
+    private String mSwitchBroadcastApp;
+
     /**
      * Initialize a new control panel
      *
@@ -211,7 +222,8 @@ public class MediaControlPanel {
             MediaUiEventLogger logger,
             KeyguardStateController keyguardStateController,
             ActivityIntentHelper activityIntentHelper,
-            NotificationLockscreenUserManager lockscreenUserManager) {
+            NotificationLockscreenUserManager lockscreenUserManager,
+            BroadcastDialogController broadcastDialogController) {
         mContext = context;
         mBackgroundExecutor = backgroundExecutor;
         mMainExecutor = mainExecutor;
@@ -228,6 +240,7 @@ public class MediaControlPanel {
         mKeyguardStateController = keyguardStateController;
         mActivityIntentHelper = activityIntentHelper;
         mLockscreenUserManager = lockscreenUserManager;
+        mBroadcastDialogController = broadcastDialogController;
 
         mSeekBarViewModel.setLogSeek(() -> {
             if (mPackageName != null && mInstanceId != null) {
@@ -395,6 +408,7 @@ public class MediaControlPanel {
         if (mMediaViewHolder == null) {
             return;
         }
+        Trace.beginSection("MediaControlPanel#bindPlayer<" + key + ">");
         mKey = key;
         mMediaData = data;
         MediaSession.Token token = data.getToken();
@@ -446,13 +460,17 @@ public class MediaControlPanel {
         final MediaController controller = getController();
         mBackgroundExecutor.execute(() -> mSeekBarViewModel.updateController(controller));
 
-        bindOutputSwitcherChip(data);
+        // Show the broadcast dialog button only when the le audio is enabled.
+        mShowBroadcastDialogButton =
+                data.getDevice() != null && data.getDevice().getShowBroadcastButton();
+        bindOutputSwitcherAndBroadcastButton(mShowBroadcastDialogButton, data);
         bindGutsMenuForPlayer(data);
+        bindPlayerContentDescription(data);
         bindScrubbingTime(data);
         bindActionButtons(data);
 
         boolean isSongUpdated = bindSongMetadata(data);
-        bindArtworkAndColors(data, isSongUpdated);
+        bindArtworkAndColors(data, key, isSongUpdated);
 
         // TODO: We don't need to refresh this state constantly, only if the state actually changed
         // to something which might impact the measurement
@@ -460,23 +478,43 @@ public class MediaControlPanel {
         if (!mMetadataAnimationHandler.isRunning()) {
             mMediaViewController.refreshState();
         }
+        Trace.endSection();
     }
 
-    private void bindOutputSwitcherChip(MediaData data) {
-        // Output switcher chip
+    private void bindOutputSwitcherAndBroadcastButton(boolean showBroadcastButton, MediaData data) {
         ViewGroup seamlessView = mMediaViewHolder.getSeamless();
         seamlessView.setVisibility(View.VISIBLE);
         ImageView iconView = mMediaViewHolder.getSeamlessIcon();
         TextView deviceName = mMediaViewHolder.getSeamlessText();
         final MediaDeviceData device = data.getDevice();
 
-        // Disable clicking on output switcher for invalid devices and resumption controls
-        final boolean seamlessDisabled = (device != null && !device.getEnabled())
-                || data.getResumption();
-        final float seamlessAlpha = seamlessDisabled ? DISABLED_ALPHA : 1.0f;
-        mMediaViewHolder.getSeamlessButton().setAlpha(seamlessAlpha);
-        seamlessView.setEnabled(!seamlessDisabled);
-        CharSequence deviceString = mContext.getString(R.string.media_seamless_other_device);
+        final boolean enabled;
+        final boolean seamlessDisabled;
+        final int iconResource;
+        CharSequence deviceString;
+        if (showBroadcastButton) {
+            // TODO(b/233698402): Use the package name instead of app label to avoid the
+            // unexpected result.
+            mIsCurrentBroadcastedApp = device != null
+                    && TextUtils.equals(device.getName(),
+                    MediaDataUtils.getAppLabel(mContext, mPackageName, mContext.getString(
+                            R.string.bt_le_audio_broadcast_dialog_unknown_name)));
+            seamlessDisabled = !mIsCurrentBroadcastedApp;
+            // Always be enabled if the broadcast button is shown
+            enabled = true;
+            deviceString = mContext.getString(R.string.bt_le_audio_broadcast_dialog_unknown_name);
+            iconResource = R.drawable.settings_input_antenna;
+        } else {
+            // Disable clicking on output switcher for invalid devices and resumption controls
+            seamlessDisabled = (device != null && !device.getEnabled()) || data.getResumption();
+            enabled = !seamlessDisabled;
+            deviceString = mContext.getString(R.string.media_seamless_other_device);
+            iconResource = R.drawable.ic_media_home_devices;
+        }
+
+        mMediaViewHolder.getSeamlessButton().setAlpha(seamlessDisabled ? DISABLED_ALPHA : 1.0f);
+        seamlessView.setEnabled(enabled);
+
         if (device != null) {
             Drawable icon = device.getIcon();
             if (icon instanceof AdaptiveIcon) {
@@ -489,7 +527,7 @@ public class MediaControlPanel {
             deviceString = device.getName();
         } else {
             // Set to default icon
-            iconView.setImageResource(R.drawable.ic_media_home_devices);
+            iconView.setImageResource(iconResource);
         }
         deviceName.setText(deviceString);
         seamlessView.setContentDescription(deviceString);
@@ -498,21 +536,39 @@ public class MediaControlPanel {
                     if (mFalsingManager.isFalseTap(FalsingManager.LOW_PENALTY)) {
                         return;
                     }
-                    mLogger.logOpenOutputSwitcher(mUid, mPackageName, mInstanceId);
-                    if (device.getIntent() != null) {
-                        if (device.getIntent().isActivity()) {
-                            mActivityStarter.startActivity(
-                                    device.getIntent().getIntent(), true);
+
+                    if (showBroadcastButton) {
+                        // If the current media app is not broadcasted and users press the outputer
+                        // button, we should pop up the broadcast dialog to check do they want to
+                        // switch broadcast to the other media app, otherwise we still pop up the
+                        // media output dialog.
+                        if (!mIsCurrentBroadcastedApp) {
+                            mLogger.logOpenBroadcastDialog(mUid, mPackageName, mInstanceId);
+                            mSwitchBroadcastApp = device.getName().toString();
+                            mBroadcastDialogController.createBroadcastDialog(mSwitchBroadcastApp,
+                                    mPackageName, true, mMediaViewHolder.getSeamlessButton());
                         } else {
-                            try {
-                                device.getIntent().send();
-                            } catch (PendingIntent.CanceledException e) {
-                                Log.e(TAG, "Device pending intent was canceled");
-                            }
+                            mLogger.logOpenOutputSwitcher(mUid, mPackageName, mInstanceId);
+                            mMediaOutputDialogFactory.create(mPackageName, true,
+                                    mMediaViewHolder.getSeamlessButton());
                         }
                     } else {
-                        mMediaOutputDialogFactory.create(mPackageName, true,
-                                mMediaViewHolder.getSeamlessButton());
+                        mLogger.logOpenOutputSwitcher(mUid, mPackageName, mInstanceId);
+                        if (device.getIntent() != null) {
+                            if (device.getIntent().isActivity()) {
+                                mActivityStarter.startActivity(
+                                        device.getIntent().getIntent(), true);
+                            } else {
+                                try {
+                                    device.getIntent().send();
+                                } catch (PendingIntent.CanceledException e) {
+                                    Log.e(TAG, "Device pending intent was canceled");
+                                }
+                            }
+                        } else {
+                            mMediaOutputDialogFactory.create(mPackageName, true,
+                                    mMediaViewHolder.getSeamlessButton());
+                        }
                     }
                 });
     }
@@ -541,12 +597,6 @@ public class MediaControlPanel {
     }
 
     private boolean bindSongMetadata(MediaData data) {
-        // Accessibility label
-        mMediaViewHolder.getPlayer().setContentDescription(
-                mContext.getString(
-                        R.string.controls_media_playing_item_description,
-                        data.getSong(), data.getArtist(), data.getApp()));
-
         TextView titleText = mMediaViewHolder.getTitleText();
         TextView artistText = mMediaViewHolder.getArtistText();
         return mMetadataAnimationHandler.setNext(
@@ -568,7 +618,53 @@ public class MediaControlPanel {
             });
     }
 
-    private void bindArtworkAndColors(MediaData data, boolean updateBackground) {
+    // We may want to look into unifying this with bindRecommendationContentDescription if/when we
+    // do a refactor of this class.
+    private void bindPlayerContentDescription(MediaData data) {
+        if (mMediaViewHolder == null) {
+            return;
+        }
+
+        CharSequence contentDescription;
+        if (mMediaViewController.isGutsVisible()) {
+            contentDescription = mMediaViewHolder.getGutsViewHolder().getGutsText().getText();
+        } else if (data != null) {
+            contentDescription = mContext.getString(
+                    R.string.controls_media_playing_item_description,
+                    data.getSong(),
+                    data.getArtist(),
+                    data.getApp());
+        } else {
+            contentDescription = null;
+        }
+        mMediaViewHolder.getPlayer().setContentDescription(contentDescription);
+    }
+
+    private void bindRecommendationContentDescription(SmartspaceMediaData data) {
+        if (mRecommendationViewHolder == null) {
+            return;
+        }
+
+       CharSequence contentDescription;
+        if (mMediaViewController.isGutsVisible()) {
+            contentDescription =
+                    mRecommendationViewHolder.getGutsViewHolder().getGutsText().getText();
+        } else if (data != null) {
+            contentDescription = mContext.getString(
+                    R.string.controls_media_smartspace_rec_description,
+                    data.getAppName(mContext));
+        } else {
+            contentDescription = null;
+        }
+
+        mRecommendationViewHolder.getRecommendations().setContentDescription(contentDescription);
+    }
+
+    private void bindArtworkAndColors(MediaData data, String key, boolean updateBackground) {
+        final int traceCookie = data.hashCode();
+        final String traceName = "MediaControlPanel#bindArtworkAndColors<" + key + ">";
+        Trace.beginAsyncSection(traceName, traceCookie);
+
         final int reqId = mArtworkNextBindRequestId++;
         if (updateBackground) {
             mIsArtworkBound = false;
@@ -586,11 +682,35 @@ public class MediaControlPanel {
             Drawable artwork;
             boolean isArtworkBound;
             Icon artworkIcon = data.getArtwork();
+            WallpaperColors wallpaperColors = null;
             if (artworkIcon != null) {
-                WallpaperColors wallpaperColors = WallpaperColors
-                        .fromBitmap(artworkIcon.getBitmap());
-                mutableColorScheme = new ColorScheme(wallpaperColors, true);
-                artwork = getScaledBackground(artworkIcon, width, height);
+                if (artworkIcon.getType() == Icon.TYPE_BITMAP
+                        || artworkIcon.getType() == Icon.TYPE_ADAPTIVE_BITMAP) {
+                    // Avoids extra processing if this is already a valid bitmap
+                    wallpaperColors = WallpaperColors
+                            .fromBitmap(artworkIcon.getBitmap());
+                } else {
+                    Drawable artworkDrawable = artworkIcon.loadDrawable(mContext);
+                    if (artworkDrawable != null) {
+                        wallpaperColors = WallpaperColors
+                                .fromDrawable(artworkIcon.loadDrawable(mContext));
+                    }
+                }
+            }
+            if (wallpaperColors != null) {
+                mutableColorScheme = new ColorScheme(wallpaperColors, true, Style.CONTENT);
+                Drawable albumArt = getScaledBackground(artworkIcon, width, height);
+                GradientDrawable gradient = (GradientDrawable) mContext
+                        .getDrawable(R.drawable.qs_media_scrim);
+                gradient.setColors(new int[] {
+                        ColorUtilKt.getColorWithAlpha(
+                                MediaColorSchemesKt.backgroundStartFromScheme(mutableColorScheme),
+                                0.25f),
+                        ColorUtilKt.getColorWithAlpha(
+                                MediaColorSchemesKt.backgroundEndFromScheme(mutableColorScheme),
+                                0.9f),
+                });
+                artwork = new LayerDrawable(new Drawable[] { albumArt, gradient });
                 isArtworkBound = true;
             } else {
                 // If there's no artwork, use colors from the app icon
@@ -599,7 +719,8 @@ public class MediaControlPanel {
                 try {
                     Drawable icon = mContext.getPackageManager()
                             .getApplicationIcon(data.getPackageName());
-                    mutableColorScheme = new ColorScheme(WallpaperColors.fromDrawable(icon), true);
+                    mutableColorScheme = new ColorScheme(WallpaperColors.fromDrawable(icon), true,
+                            Style.CONTENT);
                 } catch (PackageManager.NameNotFoundException e) {
                     Log.w(TAG, "Cannot find icon for package " + data.getPackageName(), e);
                 }
@@ -608,7 +729,10 @@ public class MediaControlPanel {
             final ColorScheme colorScheme = mutableColorScheme;
             mMainExecutor.execute(() -> {
                 // Cancel the request if a later one arrived first
-                if (reqId < mArtworkBoundId) return;
+                if (reqId < mArtworkBoundId) {
+                    Trace.endAsyncSection(traceName, traceCookie);
+                    return;
+                }
                 mArtworkBoundId = reqId;
 
                 // Bind the album view to the artwork or a transition drawable
@@ -628,6 +752,7 @@ public class MediaControlPanel {
                         scaleTransitionDrawableLayer(transitionDrawable, 1, width, height);
                         transitionDrawable.setLayerGravity(0, Gravity.CENTER);
                         transitionDrawable.setLayerGravity(1, Gravity.CENTER);
+                        transitionDrawable.setCrossFadeEnabled(!isArtworkBound);
 
                         albumView.setImageDrawable(transitionDrawable);
                         transitionDrawable.startTransition(isArtworkBound ? 333 : 80);
@@ -637,7 +762,7 @@ public class MediaControlPanel {
                 }
 
                 // Transition Colors to current color scheme
-                mColorSchemeTransition.updateColorScheme(colorScheme, mIsArtworkBound);
+                mColorSchemeTransition.updateColorScheme(colorScheme);
 
                 // App icon - use notification icon
                 ImageView appIconView = mMediaViewHolder.getAppIcon();
@@ -658,6 +783,7 @@ public class MediaControlPanel {
                         appIconView.setImageResource(R.drawable.ic_music_note);
                     }
                 }
+                Trace.endAsyncSection(traceName, traceCookie);
             });
         });
     }
@@ -892,16 +1018,13 @@ public class MediaControlPanel {
 
     private void bindScrubbingTime(MediaData data) {
         ConstraintSet expandedSet = mMediaViewController.getExpandedLayout();
-        ConstraintSet collapsedSet = mMediaViewController.getCollapsedLayout();
         int elapsedTimeId = mMediaViewHolder.getScrubbingElapsedTimeView().getId();
         int totalTimeId = mMediaViewHolder.getScrubbingTotalTimeView().getId();
 
         boolean visible = scrubbingTimeViewsEnabled(data.getSemanticActions()) && mIsScrubbing;
         setVisibleAndAlpha(expandedSet, elapsedTimeId, visible);
         setVisibleAndAlpha(expandedSet, totalTimeId, visible);
-        // Never show in collapsed
-        setVisibleAndAlpha(collapsedSet, elapsedTimeId, false);
-        setVisibleAndAlpha(collapsedSet, totalTimeId, false);
+        // Collapsed view is always GONE as set in XML, so doesn't need to be updated dynamically
     }
 
     private boolean scrubbingTimeViewsEnabled(@Nullable MediaButton semanticActions) {
@@ -950,6 +1073,10 @@ public class MediaControlPanel {
             return;
         }
 
+        Trace.beginSection(
+                "MediaControlPanel#bindRecommendation<" + data.getPackageName() + ">");
+
+        mRecommendationData = data;
         mSmartspaceId = SmallHash.hash(data.getTargetId());
         mPackageName = data.getPackageName();
         mInstanceId = data.getInstanceId();
@@ -962,6 +1089,14 @@ public class MediaControlPanel {
             mUid = applicationInfo.uid;
         } catch (PackageManager.NameNotFoundException e) {
             Log.w(TAG, "Fail to get media recommendation's app info", e);
+            Trace.endSection();
+            return;
+        }
+
+        CharSequence appName = data.getAppName(mContext);
+        if (appName == null) {
+            Log.w(TAG, "Fail to get media recommendation's app name");
+            Trace.endSection();
             return;
         }
 
@@ -972,28 +1107,11 @@ public class MediaControlPanel {
         headerLogoImageView.setImageDrawable(icon);
         fetchAndUpdateRecommendationColors(icon);
 
-        // Set up media source app's label text.
-        CharSequence appName = getAppName(data.getCardAction());
-        if (TextUtils.isEmpty(appName)) {
-            Intent launchIntent =
-                    packageManager.getLaunchIntentForPackage(data.getPackageName());
-            if (launchIntent != null) {
-                ActivityInfo launchActivity = launchIntent.resolveActivityInfo(packageManager, 0);
-                appName = launchActivity.loadLabel(packageManager);
-            } else {
-                Log.w(TAG, "Package " + data.getPackageName()
-                        +  " does not have a main launcher activity. Fallback to full app name");
-                appName = packageManager.getApplicationLabel(applicationInfo);
-            }
-        }
-
         // Set up media rec card's tap action if applicable.
         TransitionLayout recommendationCard = mRecommendationViewHolder.getRecommendations();
         setSmartspaceRecItemOnClickListener(recommendationCard, data.getCardAction(),
                 /* interactedSubcardRank */ -1);
-        // Set up media rec card's accessibility label.
-        recommendationCard.setContentDescription(
-                mContext.getString(R.string.controls_media_smartspace_rec_description, appName));
+        bindRecommendationContentDescription(data);
 
         List<ImageView> mediaCoverItems = mRecommendationViewHolder.getMediaCoverItems();
         List<ViewGroup> mediaCoverContainers = mRecommendationViewHolder.getMediaCoverContainers();
@@ -1093,6 +1211,7 @@ public class MediaControlPanel {
         if (mMetadataAnimationHandler == null || !mMetadataAnimationHandler.isRunning()) {
             mMediaViewController.refreshState();
         }
+        Trace.endSection();
     }
 
     private void fetchAndUpdateRecommendationColors(Drawable appIcon) {
@@ -1137,7 +1256,7 @@ public class MediaControlPanel {
         gutsViewHolder.getGutsText().setText(text);
 
         // Dismiss button
-        gutsViewHolder.getDismissText().setAlpha(isDismissible ? 1 : DISABLED_ALPHA);
+        gutsViewHolder.getDismissText().setVisibility(isDismissible ? View.VISIBLE : View.GONE);
         gutsViewHolder.getDismiss().setEnabled(isDismissible);
         gutsViewHolder.getDismiss().setOnClickListener(v -> {
             if (mFalsingManager.isFalseTap(FalsingManager.LOW_PENALTY)) return;
@@ -1148,11 +1267,18 @@ public class MediaControlPanel {
         });
 
         // Cancel button
+        TextView cancelText = gutsViewHolder.getCancelText();
+        if (isDismissible) {
+            cancelText.setBackground(mContext.getDrawable(R.drawable.qs_media_outline_button));
+        } else {
+            cancelText.setBackground(mContext.getDrawable(R.drawable.qs_media_solid_button));
+        }
         gutsViewHolder.getCancel().setOnClickListener(v -> {
             if (!mFalsingManager.isFalseTap(FalsingManager.LOW_PENALTY)) {
                 closeGuts();
             }
         });
+        gutsViewHolder.setDismissible(isDismissible);
 
         // Settings button
         gutsViewHolder.getSettings().setOnClickListener(v -> {
@@ -1175,6 +1301,11 @@ public class MediaControlPanel {
             mRecommendationViewHolder.marquee(false, mMediaViewController.GUTS_ANIMATION_DURATION);
         }
         mMediaViewController.closeGuts(immediate);
+        if (mMediaViewHolder != null) {
+            bindPlayerContentDescription(mMediaData);
+        } else if (mRecommendationViewHolder != null) {
+            bindRecommendationContentDescription(mRecommendationData);
+        }
     }
 
     private void closeGuts() {
@@ -1188,6 +1319,11 @@ public class MediaControlPanel {
             mRecommendationViewHolder.marquee(true, mMediaViewController.GUTS_ANIMATION_DURATION);
         }
         mMediaViewController.openGuts();
+        if (mMediaViewHolder != null) {
+            bindPlayerContentDescription(mMediaData);
+        } else if (mRecommendationViewHolder != null) {
+            bindRecommendationContentDescription(mRecommendationData);
+        }
         mLogger.logLongPressOpen(mUid, mPackageName, mInstanceId);
     }
 
@@ -1300,17 +1436,6 @@ public class MediaControlPanel {
             // Automatically scroll to the active player once the media is loaded.
             mMediaCarouselController.setShouldScrollToActivePlayer(true);
         });
-    }
-
-    /** Returns the upstream app name if available. */
-    @Nullable
-    private String getAppName(SmartspaceAction action) {
-        if (action == null || action.getIntent() == null
-                || action.getIntent().getExtras() == null) {
-            return null;
-        }
-
-        return action.getIntent().getExtras().getString(KEY_SMARTSPACE_APP_NAME);
     }
 
     /** Returns if the Smartspace action will open the activity in foreground. */

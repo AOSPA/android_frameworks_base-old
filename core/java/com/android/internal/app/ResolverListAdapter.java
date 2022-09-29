@@ -38,6 +38,7 @@ import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.AsyncTask;
 import android.os.RemoteException;
+import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.text.TextUtils;
@@ -188,6 +189,7 @@ public class ResolverListAdapter extends BaseAdapter {
      * Otherwise the callback is only queued once, with {@code rebuildCompleted} true.
      */
     protected boolean rebuildList(boolean doPostProcessing) {
+        Trace.beginSection("ResolverListAdapter#rebuildList");
         mDisplayList.clear();
         mIsTabLoaded = false;
         mLastChosenPosition = -1;
@@ -241,8 +243,10 @@ public class ResolverListAdapter extends BaseAdapter {
             mUnfilteredResolveList = originalList;
         }
 
-
-        return finishRebuildingListWithFilteredResults(currentResolveList, doPostProcessing);
+        boolean result =
+                finishRebuildingListWithFilteredResults(currentResolveList, doPostProcessing);
+        Trace.endSection();
+        return result;
     }
 
     /**
@@ -261,6 +265,7 @@ public class ResolverListAdapter extends BaseAdapter {
             return mResolverListController.getResolversForIntent(
                             /* shouldGetResolvedFilter= */ true,
                             mResolverListCommunicator.shouldGetActivityMetadata(),
+                            mResolverListCommunicator.shouldGetOnlyDefaultActivities(),
                             mIntents);
         }
     }
@@ -402,8 +407,9 @@ public class ResolverListAdapter extends BaseAdapter {
 
     protected void processSortedList(List<ResolvedComponentInfo> sortedComponents,
             boolean doPostProcessing) {
-        int n;
-        if (sortedComponents != null && (n = sortedComponents.size()) != 0) {
+        final int n = sortedComponents != null ? sortedComponents.size() : 0;
+        Trace.beginSection("ResolverListAdapter#processSortedList:" + n);
+        if (n != 0) {
             // First put the initial items at the top.
             if (mInitialIntents != null) {
                 for (int i = 0; i < mInitialIntents.length; i++) {
@@ -411,8 +417,9 @@ public class ResolverListAdapter extends BaseAdapter {
                     if (ii == null) {
                         continue;
                     }
-                    ActivityInfo ai = ii.resolveActivityInfo(
-                            mPm, 0);
+                    // Because of AIDL bug, resolveActivityInfo can't accept subclasses of Intent.
+                    final Intent rii = (ii.getClass() == Intent.class) ? ii : new Intent(ii);
+                    ActivityInfo ai = rii.resolveActivityInfo(mPm, 0);
                     if (ai == null) {
                         Log.w(TAG, "No activity found for " + ii);
                         continue;
@@ -451,6 +458,7 @@ public class ResolverListAdapter extends BaseAdapter {
         mResolverListCommunicator.sendVoiceChoicesIfNeeded();
         postListReadyRunnable(doPostProcessing, /* rebuildCompleted */ true);
         mIsTabLoaded = true;
+        Trace.endSection();
     }
 
     /**
@@ -721,6 +729,7 @@ public class ResolverListAdapter extends BaseAdapter {
     protected List<ResolvedComponentInfo> getResolversForUser(UserHandle userHandle) {
         return mResolverListController.getResolversForIntentAsUser(true,
                 mResolverListCommunicator.shouldGetActivityMetadata(),
+                mResolverListCommunicator.shouldGetOnlyDefaultActivities(),
                 mIntents, userHandle);
     }
 
@@ -813,6 +822,12 @@ public class ResolverListAdapter extends BaseAdapter {
         boolean useLayoutWithDefault();
 
         boolean shouldGetActivityMetadata();
+
+        /**
+         * @return true to filter only apps that can handle
+         *     {@link android.content.Intent#CATEGORY_DEFAULT} intents
+         */
+        default boolean shouldGetOnlyDefaultActivities() { return true; };
 
         Intent getTargetIntent();
 

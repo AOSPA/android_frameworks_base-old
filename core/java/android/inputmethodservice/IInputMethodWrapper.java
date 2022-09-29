@@ -31,25 +31,22 @@ import android.os.ResultReceiver;
 import android.util.Log;
 import android.view.InputChannel;
 import android.view.MotionEvent;
-import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputBinding;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethod;
 import android.view.inputmethod.InputMethodSession;
 import android.view.inputmethod.InputMethodSubtype;
-import android.window.ImeOnBackInvokedDispatcher;
 
 import com.android.internal.inputmethod.CancellationGroup;
-import com.android.internal.inputmethod.IInputMethodPrivilegedOperations;
+import com.android.internal.inputmethod.IInlineSuggestionsRequestCallback;
+import com.android.internal.inputmethod.IInputMethod;
+import com.android.internal.inputmethod.IInputMethodSession;
+import com.android.internal.inputmethod.IInputMethodSessionCallback;
+import com.android.internal.inputmethod.IRemoteInputConnection;
+import com.android.internal.inputmethod.InlineSuggestionsRequestInfo;
 import com.android.internal.inputmethod.InputMethodNavButtonFlags;
 import com.android.internal.os.HandlerCaller;
 import com.android.internal.os.SomeArgs;
-import com.android.internal.view.IInlineSuggestionsRequestCallback;
-import com.android.internal.view.IInputContext;
-import com.android.internal.view.IInputMethod;
-import com.android.internal.view.IInputMethodSession;
-import com.android.internal.view.IInputSessionCallback;
-import com.android.internal.view.InlineSuggestionsRequestInfo;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -98,9 +95,9 @@ class IInputMethodWrapper extends IInputMethod.Stub
      *
      * <p>This field must be set and cleared only from the binder thread(s), where the system
      * guarantees that {@link #bindInput(InputBinding)},
-     * {@link #startInput(IBinder, IInputContext, int, EditorInfo, boolean, boolean)}, and
-     * {@link #unbindInput()} are called with the same order as the original calls
-     * in {@link com.android.server.inputmethod.InputMethodManagerService}.
+     * {@link #startInput(IInputMethod.StartInputParams)}, and {@link #unbindInput()} are called
+     * with the same order as the original calls in
+     * {@link com.android.server.inputmethod.InputMethodManagerService}.
      * See {@link IBinder#FLAG_ONEWAY} for detailed semantics.</p>
      */
     @Nullable
@@ -110,10 +107,10 @@ class IInputMethodWrapper extends IInputMethod.Stub
     static final class InputMethodSessionCallbackWrapper implements InputMethod.SessionCallback {
         final Context mContext;
         final InputChannel mChannel;
-        final IInputSessionCallback mCb;
+        final IInputMethodSessionCallback mCb;
 
         InputMethodSessionCallbackWrapper(Context context, InputChannel channel,
-                IInputSessionCallback cb) {
+                IInputMethodSessionCallback cb) {
             mContext = context;
             mChannel = channel;
             mCb = cb;
@@ -174,17 +171,9 @@ class IInputMethodWrapper extends IInputMethod.Stub
                 args.recycle();
                 return;
             }
-            case DO_INITIALIZE_INTERNAL: {
-                SomeArgs args = (SomeArgs) msg.obj;
-                try {
-                    inputMethod.initializeInternal((IBinder) args.arg1,
-                            (IInputMethodPrivilegedOperations) args.arg2, msg.arg1,
-                            (boolean) args.arg3, msg.arg2);
-                } finally {
-                    args.recycle();
-                }
+            case DO_INITIALIZE_INTERNAL:
+                inputMethod.initializeInternal((IInputMethod.InitParams) msg.obj);
                 return;
-            }
             case DO_SET_INPUT_CONTEXT: {
                 inputMethod.bindInput((InputBinding)msg.obj);
                 return;
@@ -194,21 +183,10 @@ class IInputMethodWrapper extends IInputMethod.Stub
                 return;
             case DO_START_INPUT: {
                 final SomeArgs args = (SomeArgs) msg.obj;
-                final IBinder startInputToken = (IBinder) args.arg1;
-                final IInputContext inputContext = (IInputContext) ((SomeArgs) args.arg2).arg1;
-                final ImeOnBackInvokedDispatcher imeDispatcher =
-                        (ImeOnBackInvokedDispatcher) ((SomeArgs) args.arg2).arg2;
-                final EditorInfo info = (EditorInfo) args.arg3;
-                final CancellationGroup cancellationGroup = (CancellationGroup) args.arg4;
-                final boolean restarting = args.argi5 == 1;
-                @InputMethodNavButtonFlags
-                final int navButtonFlags = args.argi6;
-                final InputConnection ic = inputContext != null
-                        ? new RemoteInputConnection(mTarget, inputContext, cancellationGroup)
-                        : null;
-                info.makeCompatible(mTargetSdkVersion);
-                inputMethod.dispatchStartInputWithToken(ic, info, restarting, startInputToken,
-                        navButtonFlags, imeDispatcher);
+                final InputConnection inputConnection = (InputConnection) args.arg1;
+                final IInputMethod.StartInputParams params =
+                        (IInputMethod.StartInputParams) args.arg2;
+                inputMethod.dispatchStartInput(inputConnection, params);
                 args.recycle();
                 return;
             }
@@ -218,8 +196,8 @@ class IInputMethodWrapper extends IInputMethod.Stub
             case DO_CREATE_SESSION: {
                 SomeArgs args = (SomeArgs)msg.obj;
                 inputMethod.createSession(new InputMethodSessionCallbackWrapper(
-                        mContext, (InputChannel)args.arg1,
-                        (IInputSessionCallback)args.arg2));
+                        mContext, (InputChannel) args.arg1,
+                        (IInputMethodSessionCallback) args.arg2));
                 args.recycle();
                 return;
             }
@@ -306,11 +284,8 @@ class IInputMethodWrapper extends IInputMethod.Stub
 
     @BinderThread
     @Override
-    public void initializeInternal(IBinder token, IInputMethodPrivilegedOperations privOps,
-            int configChanges, boolean stylusHwSupported,
-            @InputMethodNavButtonFlags int navButtonFlags) {
-        mCaller.executeOrSendMessage(mCaller.obtainMessageIIOOO(DO_INITIALIZE_INTERNAL,
-                configChanges, navButtonFlags, token, privOps, stylusHwSupported));
+    public void initializeInternal(@NonNull IInputMethod.InitParams params) {
+        mCaller.executeOrSendMessage(mCaller.obtainMessageO(DO_INITIALIZE_INTERNAL, params));
     }
 
     @BinderThread
@@ -329,7 +304,8 @@ class IInputMethodWrapper extends IInputMethod.Stub
         }
         mCancellationGroup = new CancellationGroup();
         InputConnection ic = new RemoteInputConnection(mTarget,
-                IInputContext.Stub.asInterface(binding.getConnectionToken()), mCancellationGroup);
+                IRemoteInputConnection.Stub.asInterface(binding.getConnectionToken()),
+                mCancellationGroup);
         InputBinding nu = new InputBinding(ic, binding);
         mCaller.executeOrSendMessage(mCaller.obtainMessageO(DO_SET_INPUT_CONTEXT, nu));
     }
@@ -349,19 +325,19 @@ class IInputMethodWrapper extends IInputMethod.Stub
 
     @BinderThread
     @Override
-    public void startInput(IBinder startInputToken, IInputContext inputContext,
-            EditorInfo attribute, boolean restarting,
-            @InputMethodNavButtonFlags int navButtonFlags,
-            @NonNull ImeOnBackInvokedDispatcher imeDispatcher) {
+    public void startInput(@NonNull IInputMethod.StartInputParams params) {
         if (mCancellationGroup == null) {
             Log.e(TAG, "startInput must be called after bindInput.");
             mCancellationGroup = new CancellationGroup();
         }
-        SomeArgs args = SomeArgs.obtain();
-        args.arg1 = inputContext;
-        args.arg2 = imeDispatcher;
-        mCaller.executeOrSendMessage(mCaller.obtainMessageOOOOII(DO_START_INPUT, startInputToken,
-                args, attribute, mCancellationGroup, restarting ? 1 : 0, navButtonFlags));
+
+        params.editorInfo.makeCompatible(mTargetSdkVersion);
+
+        final InputConnection ic = params.remoteInputConnection == null ? null
+                : new RemoteInputConnection(mTarget, params.remoteInputConnection,
+                        mCancellationGroup);
+
+        mCaller.executeOrSendMessage(mCaller.obtainMessageOO(DO_START_INPUT, ic, params));
     }
 
     @BinderThread
@@ -373,7 +349,7 @@ class IInputMethodWrapper extends IInputMethod.Stub
 
     @BinderThread
     @Override
-    public void createSession(InputChannel channel, IInputSessionCallback callback) {
+    public void createSession(InputChannel channel, IInputMethodSessionCallback callback) {
         mCaller.executeOrSendMessage(mCaller.obtainMessageOO(DO_CREATE_SESSION,
                 channel, callback));
     }

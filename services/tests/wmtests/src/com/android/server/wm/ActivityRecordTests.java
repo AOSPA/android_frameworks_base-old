@@ -29,6 +29,8 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.content.pm.ActivityInfo.CONFIG_ORIENTATION;
 import static android.content.pm.ActivityInfo.CONFIG_SCREEN_LAYOUT;
+import static android.content.pm.ActivityInfo.CONFIG_SCREEN_SIZE;
+import static android.content.pm.ActivityInfo.CONFIG_SMALLEST_SCREEN_SIZE;
 import static android.content.pm.ActivityInfo.FLAG_SUPPORTS_PICTURE_IN_PICTURE;
 import static android.content.pm.ActivityInfo.LOCK_TASK_LAUNCH_MODE_ALWAYS;
 import static android.content.pm.ActivityInfo.LOCK_TASK_LAUNCH_MODE_DEFAULT;
@@ -47,7 +49,6 @@ import static android.os.InputConstants.DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
 import static android.os.Process.NOBODY_UID;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.InsetsState.ITYPE_IME;
-import static android.view.WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.FIRST_SUB_WINDOW;
 import static android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
 import static android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD;
@@ -181,6 +182,10 @@ import java.util.function.Consumer;
 public class ActivityRecordTests extends WindowTestsBase {
 
     private final String mPackageName = getInstrumentation().getTargetContext().getPackageName();
+
+    private static final int ORIENTATION_CONFIG_CHANGES =
+            CONFIG_ORIENTATION | CONFIG_SCREEN_LAYOUT | CONFIG_SCREEN_SIZE
+                    | CONFIG_SMALLEST_SCREEN_SIZE;
 
     @Before
     public void setUp() throws Exception {
@@ -487,7 +492,7 @@ public class ActivityRecordTests extends WindowTestsBase {
     public void testSetRequestedOrientationUpdatesConfiguration() throws Exception {
         final ActivityRecord activity = new ActivityBuilder(mAtm)
                 .setCreateTask(true)
-                .setConfigChanges(CONFIG_ORIENTATION | CONFIG_SCREEN_LAYOUT)
+                .setConfigChanges(ORIENTATION_CONFIG_CHANGES)
                 .build();
         activity.setState(RESUMED, "Testing");
 
@@ -611,10 +616,9 @@ public class ActivityRecordTests extends WindowTestsBase {
         activity.setRequestedOrientation(activityCurOrientation == ORIENTATION_LANDSCAPE
                 ? SCREEN_ORIENTATION_PORTRAIT : SCREEN_ORIENTATION_LANDSCAPE);
 
-        // Asserts fixed orientation request is ignored, and the orientation is not changed
-        // (fill Task).
-        assertEquals(activityCurOrientation, activity.getConfiguration().orientation);
-        assertFalse(activity.isLetterboxedForFixedOrientationAndAspectRatio());
+        // Asserts fixed orientation request is not ignored, and the orientation is changed.
+        assertNotEquals(activityCurOrientation, activity.getConfiguration().orientation);
+        assertTrue(activity.isLetterboxedForFixedOrientationAndAspectRatio());
     }
 
     @Test
@@ -711,7 +715,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         final ActivityRecord activity = new ActivityBuilder(mAtm)
                 .setCreateTask(true)
                 .setLaunchTaskBehind(true)
-                .setConfigChanges(CONFIG_ORIENTATION | CONFIG_SCREEN_LAYOUT)
+                .setConfigChanges(ORIENTATION_CONFIG_CHANGES)
                 .build();
         final Task task = activity.getTask();
         activity.setState(STOPPED, "Testing");
@@ -757,8 +761,8 @@ public class ActivityRecordTests extends WindowTestsBase {
         final ActivityRecord activity = createActivityWithTask();
         ActivityRecord topActivity = new ActivityBuilder(mAtm).setTask(activity.getTask()).build();
         topActivity.setOccludesParent(false);
-        // The requested occluding state doesn't affect whether it fills parent.
-        assertTrue(topActivity.fillsParent());
+        // The requested occluding state doesn't affect whether it can decide orientation.
+        assertTrue(topActivity.providesOrientation());
         activity.setState(STOPPED, "Testing");
         activity.setVisibility(true);
         activity.makeActiveIfNeeded(null /* activeActivity */);
@@ -780,7 +784,7 @@ public class ActivityRecordTests extends WindowTestsBase {
                     }
 
                     @Override
-                    public void onAnimationCancelled() {
+                    public void onAnimationCancelled(boolean isKeyguardOccluded) {
                     }
                 }, 0, 0));
         activity.updateOptionsLocked(opts);
@@ -1159,6 +1163,45 @@ public class ActivityRecordTests extends WindowTestsBase {
         assertTrue(activity2.inTransition());
         assertEquals(lastTransition, testPlayer.mLastTransit);
         assertTrue(lastTransition.allReady());
+    }
+
+    @Test
+    public void testFinishActivityIfPossible_sendResultImmediately() {
+        // Create activity representing the source of the activity result.
+        final ComponentName sourceComponent = ComponentName.createRelative(
+                DEFAULT_COMPONENT_PACKAGE_NAME, ".SourceActivity");
+        final ComponentName targetComponent = ComponentName.createRelative(
+                sourceComponent.getPackageName(), ".TargetActivity");
+
+        final ActivityRecord sourceActivity = new ActivityBuilder(mWm.mAtmService)
+                .setComponent(sourceComponent)
+                .setLaunchMode(ActivityInfo.LAUNCH_SINGLE_INSTANCE)
+                .setCreateTask(true)
+                .build();
+        sourceActivity.finishing = false;
+        sourceActivity.setState(STOPPED, "test");
+
+        final ActivityRecord targetActivity = new ActivityBuilder(mWm.mAtmService)
+                .setComponent(targetComponent)
+                .setTargetActivity(sourceComponent.getClassName())
+                .setLaunchMode(ActivityInfo.LAUNCH_SINGLE_INSTANCE)
+                .setCreateTask(true)
+                .setOnTop(true)
+                .build();
+        targetActivity.finishing = false;
+        targetActivity.setState(RESUMED, "test");
+        targetActivity.resultTo = sourceActivity;
+        targetActivity.setForceSendResultForMediaProjection();
+
+        clearInvocations(mAtm.getLifecycleManager());
+
+        targetActivity.finishIfPossible(0, new Intent(), null, "test", false /* oomAdj */);
+
+        try {
+            verify(mAtm.getLifecycleManager(), atLeastOnce()).scheduleTransaction(
+                    any(ClientTransaction.class));
+        } catch (RemoteException ignored) {
+        }
     }
 
     /**
@@ -1787,13 +1830,16 @@ public class ActivityRecordTests extends WindowTestsBase {
     public void testActivityOnCancelFixedRotationTransform() {
         final ActivityRecord activity = createActivityWithTask();
         final DisplayRotation displayRotation = activity.mDisplayContent.getDisplayRotation();
+        final RemoteDisplayChangeController remoteDisplayChangeController = activity
+                .mDisplayContent.mRemoteDisplayChangeController;
         spyOn(displayRotation);
+        spyOn(remoteDisplayChangeController);
 
         final DisplayContent display = activity.mDisplayContent;
         final int originalRotation = display.getRotation();
 
         // Make {@link DisplayContent#sendNewConfiguration} not apply rotation immediately.
-        doReturn(true).when(displayRotation).isWaitingForRemoteRotation();
+        doReturn(true).when(remoteDisplayChangeController).isWaitingForRemoteDisplayChange();
         doReturn((originalRotation + 1) % 4).when(displayRotation).rotationForOrientation(
                 anyInt() /* orientation */, anyInt() /* lastRotation */);
         // Set to visible so the activity can freeze the screen.
@@ -1831,7 +1877,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         // Simulate the remote rotation has completed and the configuration doesn't change, then
         // the rotated activity should also be restored by clearing the transform.
         displayRotation.updateRotationUnchecked(true /* forceUpdate */);
-        doReturn(false).when(displayRotation).isWaitingForRemoteRotation();
+        doReturn(false).when(remoteDisplayChangeController).isWaitingForRemoteDisplayChange();
         clearInvocations(activity);
         display.setFixedRotationLaunchingAppUnchecked(activity);
         display.sendNewConfiguration();
@@ -1955,7 +2001,8 @@ public class ActivityRecordTests extends WindowTestsBase {
                     any() /* window */,  any() /* attrs */,
                     anyInt() /* viewVisibility */, anyInt() /* displayId */,
                     any() /* requestedVisibilities */, any() /* outInputChannel */,
-                    any() /* outInsetsState */, any() /* outActiveControls */);
+                    any() /* outInsetsState */, any() /* outActiveControls */,
+                    any() /* outAttachedFrame */);
             mAtm.mWindowManager.mStartingSurfaceController
                     .createTaskSnapshotSurface(activity, snapshot);
         } catch (RemoteException ignored) {
@@ -2163,39 +2210,6 @@ public class ActivityRecordTests extends WindowTestsBase {
                 true /* shouldUpdate */, false /* activityChange */);
         verifyProcessInfoUpdate(activity, DESTROYED,
                 true /* shouldUpdate */, false /* activityChange */);
-    }
-
-    @Test
-    public void testSupportsSplitScreenWindowingMode() {
-        final ActivityRecord activity = new ActivityBuilder(mAtm)
-                .setCreateTask(true)
-                .setResizeMode(ActivityInfo.RESIZE_MODE_UNRESIZEABLE)
-                .setScreenOrientation(SCREEN_ORIENTATION_LANDSCAPE)
-                .build();
-
-        // Not allow non-resizable
-        mAtm.mForceResizableActivities = false;
-        mAtm.mSupportsNonResizableMultiWindow = -1;
-        mAtm.mDevEnableNonResizableMultiWindow = false;
-        assertFalse(activity.supportsSplitScreenWindowingMode());
-
-        // Force resizable
-        mAtm.mForceResizableActivities = true;
-        mAtm.mSupportsNonResizableMultiWindow = -1;
-        mAtm.mDevEnableNonResizableMultiWindow = false;
-        assertTrue(activity.supportsSplitScreenWindowingMode());
-
-        // Use development option to allow non-resizable
-        mAtm.mForceResizableActivities = false;
-        mAtm.mSupportsNonResizableMultiWindow = -1;
-        mAtm.mDevEnableNonResizableMultiWindow = true;
-        assertTrue(activity.supportsSplitScreenWindowingMode());
-
-        // Always allow non-resizable
-        mAtm.mForceResizableActivities = false;
-        mAtm.mSupportsNonResizableMultiWindow = 1;
-        mAtm.mDevEnableNonResizableMultiWindow = false;
-        assertTrue(activity.supportsSplitScreenWindowingMode());
     }
 
     @Test
@@ -2524,21 +2538,6 @@ public class ActivityRecordTests extends WindowTestsBase {
     }
 
     @Test
-    public void testStuckExitingWindow() {
-        final WindowState closingWindow = createWindow(null, FIRST_APPLICATION_WINDOW,
-                "closingWindow");
-        closingWindow.mAnimatingExit = true;
-        closingWindow.mRemoveOnExit = true;
-        closingWindow.mActivityRecord.commitVisibility(
-                false /* visible */, true /* performLayout */);
-
-        // We pretended that we were running an exit animation, but that should have been cleared up
-        // by changing visibility of ActivityRecord
-        closingWindow.removeIfPossible();
-        assertTrue(closingWindow.mRemoved);
-    }
-
-    @Test
     public void testSetOrientation() {
         final ActivityRecord activity = new ActivityBuilder(mAtm).setCreateTask(true).build();
         activity.setVisible(true);
@@ -2631,7 +2630,11 @@ public class ActivityRecordTests extends WindowTestsBase {
             DeviceConfig.setProperty(DeviceConfig.NAMESPACE_WINDOW_MANAGER,
                     "splash_screen_exception_list", DEFAULT_COMPONENT_PACKAGE_NAME, false);
             testLegacySplashScreen(Build.VERSION_CODES.R, TYPE_PARAMETER_LEGACY_SPLASH_SCREEN);
-            testLegacySplashScreen(Build.VERSION_CODES.S, 0);
+            testLegacySplashScreen(Build.VERSION_CODES.S, TYPE_PARAMETER_LEGACY_SPLASH_SCREEN);
+            testLegacySplashScreen(Build.VERSION_CODES.TIRAMISU,
+                    TYPE_PARAMETER_LEGACY_SPLASH_SCREEN);
+            // Above T
+            testLegacySplashScreen(Build.VERSION_CODES.TIRAMISU + 1, 0);
         } finally {
             try {
                 DeviceConfig.setProperties(properties);
@@ -2808,11 +2811,17 @@ public class ActivityRecordTests extends WindowTestsBase {
                 true, false, false, false);
         waitUntilHandlersIdle();
 
+        final WindowState startingWindow = activityTop.mStartingWindow;
+        assertNotNull(startingWindow);
+
         // Make the top one invisible, and try transferring the starting window from the top to the
         // bottom one.
         activityTop.setVisibility(false, false);
         activityBottom.transferStartingWindowFromHiddenAboveTokenIfNeeded();
         waitUntilHandlersIdle();
+
+        // Expect getFrozenInsetsState will be null when transferring the starting window.
+        assertNull(startingWindow.getFrozenInsetsState());
 
         // Assert that the bottom window now has the starting window.
         assertNoStartingWindow(activityTop);
@@ -2853,6 +2862,11 @@ public class ActivityRecordTests extends WindowTestsBase {
         taskFragment2.addChild(activity2);
         assertTrue(activity2.isResizeable());
         activity1.reparent(taskFragment1, POSITION_TOP);
+
+        // Adds an Activity which doesn't have shared starting data, and verify if it blocks
+        // starting window removal.
+        final ActivityRecord activity3 = new ActivityBuilder(mAtm).build();
+        taskFragment2.addChild(activity3, POSITION_TOP);
 
         verify(activity1.getSyncTransaction()).reparent(eq(startingWindow.mSurfaceControl),
                 eq(task.mSurfaceControl));
@@ -3119,6 +3133,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         mDisplayContent.mOpeningApps.clear();
         app.mActivityRecord.commitVisibility(false, false);
         app.mActivityRecord.onWindowsGone();
+        mDisplayContent.computeImeTargetIfNeeded(app.mActivityRecord);
 
         assertTrue(app.mActivityRecord.mLastImeShown);
         assertTrue(app.mActivityRecord.mImeInsetsFrozenUntilStartInput);

@@ -106,6 +106,7 @@ class ScreenRotationAnimation {
     private SurfaceControl mEnterBlackFrameLayer;
     /** This layer contains the actual screenshot that is to be faded out. */
     private SurfaceControl mScreenshotLayer;
+    private SurfaceControl[] mRoundedCornerOverlay;
     /**
      * Only used for screen rotation and not custom animations. Layered behind all other layers
      * to avoid showing any "empty" spots
@@ -157,6 +158,11 @@ class ScreenRotationAnimation {
         final boolean flipped = delta == Surface.ROTATION_90 || delta == Surface.ROTATION_270;
         mOriginalWidth = flipped ? height : width;
         mOriginalHeight = flipped ? width : height;
+        final int logicalWidth = displayInfo.logicalWidth;
+        final int logicalHeight = displayInfo.logicalHeight;
+        final boolean isSizeChanged =
+                logicalWidth > mOriginalWidth == logicalHeight > mOriginalHeight
+                && (logicalWidth != mOriginalWidth || logicalHeight != mOriginalHeight);
         mSurfaceRotationAnimationController = new SurfaceRotationAnimationController();
 
         // Check whether the current screen contains any secure content.
@@ -165,14 +171,18 @@ class ScreenRotationAnimation {
         final SurfaceControl.Transaction t = mService.mTransactionFactory.get();
 
         try {
-            SurfaceControl.LayerCaptureArgs args =
+            SurfaceControl.LayerCaptureArgs.Builder builder =
                     new SurfaceControl.LayerCaptureArgs.Builder(displayContent.getSurfaceControl())
                             .setCaptureSecureLayers(true)
                             .setAllowProtected(true)
-                            .setSourceCrop(new Rect(0, 0, width, height))
-                            .build();
+                            .setSourceCrop(new Rect(0, 0, width, height));
+
+            if (isSizeChanged) {
+                mRoundedCornerOverlay = displayContent.findRoundedCornerOverlays();
+            }
+
             SurfaceControl.ScreenshotHardwareBuffer screenshotBuffer =
-                    SurfaceControl.captureLayers(args);
+                    SurfaceControl.captureLayers(builder.build());
             if (screenshotBuffer == null) {
                 Slog.w(TAG, "Unable to take screenshot of display " + displayId);
                 return;
@@ -234,6 +244,14 @@ class ScreenRotationAnimation {
             t.show(mScreenshotLayer);
             t.show(mBackColorSurface);
 
+            if (mRoundedCornerOverlay != null) {
+                for (SurfaceControl sc : mRoundedCornerOverlay) {
+                    if (sc.isValid()) {
+                        t.hide(sc);
+                    }
+                }
+            }
+
         } catch (OutOfResourcesException e) {
             Slog.w(TAG, "Unable to allocate freeze surface", e);
         }
@@ -242,10 +260,7 @@ class ScreenRotationAnimation {
         // the new logical display size. Currently pending transaction and RWC#mDisplayTransaction
         // are merged to global transaction, so it can be synced with display change when calling
         // DisplayManagerInternal#performTraversal(transaction).
-        final int logicalWidth = displayInfo.logicalWidth;
-        final int logicalHeight = displayInfo.logicalHeight;
-        if (logicalWidth > mOriginalWidth == logicalHeight > mOriginalHeight
-                && (logicalWidth != mOriginalWidth || logicalHeight != mOriginalHeight)) {
+        if (mScreenshotLayer != null && isSizeChanged) {
             displayContent.getPendingTransaction().setGeometry(mScreenshotLayer,
                     new Rect(0, 0, mOriginalWidth, mOriginalHeight),
                     new Rect(0, 0, logicalWidth, logicalHeight), Surface.ROTATION_0);
@@ -478,6 +493,14 @@ class ScreenRotationAnimation {
                 }
                 mBackColorSurface = null;
             }
+            if (mRoundedCornerOverlay != null) {
+                for (SurfaceControl sc : mRoundedCornerOverlay) {
+                    if (sc.isValid()) {
+                        t.show(sc);
+                    }
+                }
+                mRoundedCornerOverlay = null;
+            }
             t.apply();
         }
 
@@ -580,13 +603,14 @@ class ScreenRotationAnimation {
 
         private SimpleSurfaceAnimatable.Builder initializeBuilder() {
             return new SimpleSurfaceAnimatable.Builder()
+                    .setSyncTransactionSupplier(mDisplayContent::getSyncTransaction)
                     .setPendingTransactionSupplier(mDisplayContent::getPendingTransaction)
                     .setCommitTransactionRunnable(mDisplayContent::commitPendingTransaction)
                     .setAnimationLeashSupplier(mDisplayContent::makeOverlay);
         }
 
         private SurfaceAnimator startDisplayRotation() {
-            return startAnimation(initializeBuilder()
+            SurfaceAnimator animator = startAnimation(initializeBuilder()
                             .setAnimationLeashParent(mDisplayContent.getSurfaceControl())
                             .setSurfaceControl(mDisplayContent.getWindowingLayer())
                             .setParentSurfaceControl(mDisplayContent.getSurfaceControl())
@@ -595,6 +619,13 @@ class ScreenRotationAnimation {
                             .build(),
                     createWindowAnimationSpec(mRotateEnterAnimation),
                     this::onAnimationEnd);
+
+            // Crop the animation leash to avoid extended wallpaper from showing over
+            // mBackColorSurface
+            Rect displayBounds = mDisplayContent.getBounds();
+            mDisplayContent.getPendingTransaction()
+                    .setWindowCrop(animator.mLeash, displayBounds.width(), displayBounds.height());
+            return animator;
         }
 
         private SurfaceAnimator startScreenshotAlphaAnimation() {

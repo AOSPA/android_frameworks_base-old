@@ -34,6 +34,10 @@ import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.flags.Flags;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.privacy.OngoingPrivacyChip;
+import com.android.systemui.shade.NotificationPanelView;
+import com.android.systemui.shade.NotificationPanelViewController;
+import com.android.systemui.shade.NotificationShadeWindowView;
+import com.android.systemui.shade.NotificationsQuickSettingsContainer;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.NotificationShelf;
 import com.android.systemui.statusbar.NotificationShelfController;
@@ -41,11 +45,8 @@ import com.android.systemui.statusbar.OperatorNameViewController;
 import com.android.systemui.statusbar.events.SystemStatusAnimationScheduler;
 import com.android.systemui.statusbar.notification.row.dagger.NotificationShelfComponent;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
+import com.android.systemui.statusbar.phone.KeyguardBottomAreaView;
 import com.android.systemui.statusbar.phone.NotificationIconAreaController;
-import com.android.systemui.statusbar.phone.NotificationPanelView;
-import com.android.systemui.statusbar.phone.NotificationPanelViewController;
-import com.android.systemui.statusbar.phone.NotificationShadeWindowView;
-import com.android.systemui.statusbar.phone.NotificationsQuickSettingsContainer;
 import com.android.systemui.statusbar.phone.StatusBarHideIconsForBouncerManager;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
 import com.android.systemui.statusbar.phone.StatusBarLocationPublisher;
@@ -287,4 +288,17 @@ public abstract class StatusBarViewModule {
                 secureSettings,
                 mainExecutor);
     }
+
+    /**
+     * Constructs a new, unattached {@link KeyguardBottomAreaView}.
+     *
+     * Note that this is explicitly _not_ a singleton, as we want to be able to reinflate it
+     */
+    @Provides
+    public static KeyguardBottomAreaView providesKeyguardBottomAreaView(
+            NotificationPanelView npv, LayoutInflater layoutInflater) {
+        return (KeyguardBottomAreaView) layoutInflater.inflate(R
+                .layout.keyguard_bottom_area, npv, false);
+    }
+
 }

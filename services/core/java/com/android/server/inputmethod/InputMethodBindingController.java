@@ -45,9 +45,9 @@ import android.view.inputmethod.InputMethod;
 import android.view.inputmethod.InputMethodInfo;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.inputmethod.IInputMethod;
 import com.android.internal.inputmethod.InputBindResult;
 import com.android.internal.inputmethod.UnbindReason;
-import com.android.internal.view.IInputMethod;
 import com.android.server.EventLogTags;
 import com.android.server.wm.WindowManagerInternal;
 
@@ -77,7 +77,7 @@ final class InputMethodBindingController {
     @GuardedBy("ImfLock.class") @Nullable private Intent mCurIntent;
     @GuardedBy("ImfLock.class") @Nullable private IInputMethodInvoker mCurMethod;
     @GuardedBy("ImfLock.class") private int mCurMethodUid = Process.INVALID_UID;
-    @GuardedBy("ImfLock.class") private IBinder mCurToken;
+    @GuardedBy("ImfLock.class") @Nullable private IBinder mCurToken;
     @GuardedBy("ImfLock.class") private int mCurSeq;
     @GuardedBy("ImfLock.class") private boolean mVisibleBound;
     private boolean mSupportsStylusHw;
@@ -89,14 +89,8 @@ final class InputMethodBindingController {
             Context.BIND_AUTO_CREATE
                     | Context.BIND_NOT_VISIBLE
                     | Context.BIND_NOT_FOREGROUND
-                    | Context.BIND_IMPORTANT_BACKGROUND;
-    /**
-     * Binding flags for establishing connection to the {@link InputMethodService} when
-     * config_killableInputMethods is enabled.
-     */
-    private static final int IME_CONNECTION_LOW_PRIORITY_BIND_FLAGS =
-            Context.BIND_AUTO_CREATE
-                    | Context.BIND_REDUCTION_FLAGS;
+                    | Context.BIND_IMPORTANT_BACKGROUND
+                    | Context.BIND_SCHEDULE_LIKE_TOP_APP;
     /**
      * Binding flags used only while the {@link InputMethodService} is showing window.
      */
@@ -105,18 +99,7 @@ final class InputMethodBindingController {
                     | Context.BIND_TREAT_LIKE_ACTIVITY
                     | Context.BIND_FOREGROUND_SERVICE
                     | Context.BIND_INCLUDE_CAPABILITIES
-                    | Context.BIND_SHOWING_UI
-                    | Context.BIND_SCHEDULE_LIKE_TOP_APP;
-
-    /**
-     * Binding flags for establishing connection to the {@link InputMethodService}.
-     *
-     * <p>
-     * This defaults to {@link InputMethodBindingController#IME_CONNECTION_BIND_FLAGS} unless
-     * config_killableInputMethods is enabled, in which case this takes the value of
-     * {@link InputMethodBindingController#IME_CONNECTION_LOW_PRIORITY_BIND_FLAGS}.
-     */
-    private final int mImeConnectionBindFlags;
+                    | Context.BIND_SHOWING_UI;
 
     InputMethodBindingController(@NonNull InputMethodManagerService service) {
         mService = service;
@@ -127,17 +110,6 @@ final class InputMethodBindingController {
         mIWindowManager = mService.mIWindowManager;
         mWindowManagerInternal = mService.mWindowManagerInternal;
         mRes = mService.mRes;
-
-        // If configured, use low priority flags to make the IME killable by the lowmemorykiller
-        final boolean lowerIMEPriority = mRes.getBoolean(
-                com.android.internal.R.bool.config_killableInputMethods);
-
-        if (lowerIMEPriority) {
-            mImeConnectionBindFlags =
-                    InputMethodBindingController.IME_CONNECTION_LOW_PRIORITY_BIND_FLAGS;
-        } else {
-            mImeConnectionBindFlags = InputMethodBindingController.IME_CONNECTION_BIND_FLAGS;
-        }
     }
 
     /**
@@ -201,6 +173,7 @@ final class InputMethodBindingController {
      * identify it in the future.
      */
     @GuardedBy("ImfLock.class")
+    @Nullable
     IBinder getCurToken() {
         return mCurToken;
     }
@@ -275,6 +248,7 @@ final class InputMethodBindingController {
     private final ServiceConnection mVisibleConnection = new ServiceConnection() {
         @Override public void onBindingDied(ComponentName name) {
             synchronized (ImfLock.class) {
+                mService.invalidateAutofillSessionLocked();
                 if (mVisibleBound) {
                     unbindVisibleConnection();
                 }
@@ -285,6 +259,9 @@ final class InputMethodBindingController {
         }
 
         @Override public void onServiceDisconnected(ComponentName name) {
+            synchronized (ImfLock.class) {
+                mService.invalidateAutofillSessionLocked();
+            }
         }
     };
 
@@ -500,8 +477,7 @@ final class InputMethodBindingController {
 
     @GuardedBy("ImfLock.class")
     private boolean bindCurrentInputMethodServiceMainConnection() {
-        mHasConnection = bindCurrentInputMethodService(mMainConnection,
-                mImeConnectionBindFlags);
+        mHasConnection = bindCurrentInputMethodService(mMainConnection, IME_CONNECTION_BIND_FLAGS);
         return mHasConnection;
     }
 

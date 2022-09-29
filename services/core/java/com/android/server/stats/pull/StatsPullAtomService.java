@@ -15,6 +15,7 @@
  */
 
 package com.android.server.stats.pull;
+
 import static android.app.AppOpsManager.OP_FLAG_SELF;
 import static android.app.AppOpsManager.OP_FLAG_TRUSTED_PROXIED;
 import static android.content.pm.PackageInfo.REQUESTED_PERMISSION_GRANTED;
@@ -182,14 +183,11 @@ import com.android.internal.os.KernelCpuUidTimeReader.KernelCpuUidClusterTimeRea
 import com.android.internal.os.KernelCpuUidTimeReader.KernelCpuUidFreqTimeReader;
 import com.android.internal.os.KernelCpuUidTimeReader.KernelCpuUidUserSysTimeReader;
 import com.android.internal.os.KernelSingleProcessCpuThreadReader.ProcessCpuUsage;
-import com.android.internal.os.KernelWakelockReader;
-import com.android.internal.os.KernelWakelockStats;
 import com.android.internal.os.LooperStats;
 import com.android.internal.os.PowerProfile;
 import com.android.internal.os.ProcessCpuTracker;
 import com.android.internal.os.SelectedProcessCpuThreadReader;
 import com.android.internal.os.StoragedUidIoStatsReader;
-import com.android.internal.os.SystemServerCpuThreadReader.SystemServiceCpuThreadTimes;
 import com.android.internal.util.CollectionUtils;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.net.module.util.NetworkStatsUtils;
@@ -204,6 +202,10 @@ import com.android.server.SystemServiceManager;
 import com.android.server.am.MemoryStatUtil.MemoryStat;
 import com.android.server.health.HealthServiceWrapper;
 import com.android.server.notification.NotificationManagerService;
+import com.android.server.pm.UserManagerInternal;
+import com.android.server.power.stats.KernelWakelockReader;
+import com.android.server.power.stats.KernelWakelockStats;
+import com.android.server.power.stats.SystemServerCpuThreadReader.SystemServiceCpuThreadTimes;
 import com.android.server.stats.pull.IonMemoryUtil.IonAllocations;
 import com.android.server.stats.pull.ProcfsMemoryUtil.MemorySnapshot;
 import com.android.server.stats.pull.netstats.NetworkStatsExt;
@@ -2268,7 +2270,7 @@ public class StatsPullAtomService extends SystemService {
                     managedProcess.processName, managedProcess.pid, managedProcess.oomScore,
                     snapshot.rssInKilobytes, snapshot.anonRssInKilobytes, snapshot.swapInKilobytes,
                     snapshot.anonRssInKilobytes + snapshot.swapInKilobytes,
-                    gpuMemPerPid.get(managedProcess.pid)));
+                    gpuMemPerPid.get(managedProcess.pid), managedProcess.hasForegroundServices));
         }
         // Complement the data with native system processes. Given these measurements can be taken
         // in response to LMKs happening, we want to first collect the managed app stats (to
@@ -2287,7 +2289,7 @@ public class StatsPullAtomService extends SystemService {
                     -1001 /*Placeholder for native processes, OOM_SCORE_ADJ_MIN - 1.*/,
                     snapshot.rssInKilobytes, snapshot.anonRssInKilobytes, snapshot.swapInKilobytes,
                     snapshot.anonRssInKilobytes + snapshot.swapInKilobytes,
-                    gpuMemPerPid.get(pid)));
+                    gpuMemPerPid.get(pid), false /* has_foreground_services */));
         }
         return StatsManager.PULL_SUCCESS;
     }
@@ -2630,7 +2632,7 @@ public class StatsPullAtomService extends SystemService {
             latency = -1;
         }
         // File based encryption.
-        boolean fileBased = StorageManager.isFileEncryptedNativeOnly();
+        boolean fileBased = StorageManager.isFileEncrypted();
 
         //Recent disk write speed. Binder call to storaged.
         int writeSpeed = -1;
@@ -4106,11 +4108,24 @@ public class StatsPullAtomService extends SystemService {
             // Incremental is not enabled on this device. The result list will be empty.
             return StatsManager.PULL_SUCCESS;
         }
-        List<PackageInfo> installedPackages = pm.getInstalledPackages(0);
-        for (PackageInfo pi : installedPackages) {
-            if (IncrementalManager.isIncrementalPath(pi.applicationInfo.getBaseCodePath())) {
-                pulledData.add(FrameworkStatsLog.buildStatsEvent(atomTag, pi.applicationInfo.uid));
+        final long token = Binder.clearCallingIdentity();
+        try {
+            int[] userIds = LocalServices.getService(UserManagerInternal.class).getUserIds();
+            for (int userId : userIds) {
+                List<PackageInfo> installedPackages = pm.getInstalledPackagesAsUser(0, userId);
+                for (PackageInfo pi : installedPackages) {
+                    if (IncrementalManager.isIncrementalPath(
+                            pi.applicationInfo.getBaseCodePath())) {
+                        pulledData.add(
+                                FrameworkStatsLog.buildStatsEvent(atomTag, pi.applicationInfo.uid));
+                    }
+                }
             }
+        } catch (Exception e) {
+            Slog.e(TAG, "failed to pullInstalledIncrementalPackagesLocked", e);
+            return StatsManager.PULL_SKIP;
+        } finally {
+            Binder.restoreCallingIdentity(token);
         }
         return StatsManager.PULL_SUCCESS;
     }
@@ -4352,7 +4367,8 @@ public class StatsPullAtomService extends SystemService {
             }
             RkpErrorStats atom = atomWrapper.payload.getRkpErrorStats();
             pulledData.add(FrameworkStatsLog.buildStatsEvent(
-                    FrameworkStatsLog.RKP_ERROR_STATS, atom.rkpError, atomWrapper.count));
+                    FrameworkStatsLog.RKP_ERROR_STATS, atom.rkpError, atomWrapper.count,
+                    atom.security_level));
         }
         return StatsManager.PULL_SUCCESS;
     }

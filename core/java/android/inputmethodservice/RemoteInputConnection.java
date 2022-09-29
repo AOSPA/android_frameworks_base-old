@@ -35,11 +35,9 @@ import android.view.inputmethod.TextAttribute;
 
 import com.android.internal.inputmethod.CancellationGroup;
 import com.android.internal.inputmethod.CompletableFutureUtil;
-import com.android.internal.inputmethod.IInputContextInvoker;
+import com.android.internal.inputmethod.IRemoteInputConnection;
 import com.android.internal.inputmethod.ImeTracing;
 import com.android.internal.inputmethod.InputConnectionProtoDumper;
-import com.android.internal.view.IInputContext;
-import com.android.internal.view.IInputMethod;
 
 import java.lang.ref.WeakReference;
 import java.util.concurrent.CompletableFuture;
@@ -51,8 +49,8 @@ import java.util.concurrent.CompletableFuture;
  * {@link com.android.internal.inputmethod.RemoteInputConnectionImpl} running on the IME client
  * (editor app) process then waits replies as needed.</p>
  *
- * <p>See also {@link IInputContext} for the actual {@link android.os.Binder} IPC protocols under
- * the hood.</p>
+ * <p>See also {@link IRemoteInputConnection} for the actual {@link android.os.Binder} IPC protocols
+ * under the hood.</p>
  */
 final class RemoteInputConnection implements InputConnection {
     private static final String TAG = "RemoteInputConnection";
@@ -60,7 +58,7 @@ final class RemoteInputConnection implements InputConnection {
     private static final int MAX_WAIT_TIME_MILLIS = 2000;
 
     @NonNull
-    private final IInputContextInvoker mInvoker;
+    private final IRemoteInputConnectionInvoker mInvoker;
 
     private static final class InputMethodServiceInternalHolder {
         @NonNull
@@ -90,22 +88,22 @@ final class RemoteInputConnection implements InputConnection {
      * Signaled when the system decided to take away IME focus from the target app.
      *
      * <p>This is expected to be signaled immediately when the IME process receives
-     * {@link IInputMethod#unbindInput()}.</p>
+     * {@link com.android.internal.inputmethod.IInputMethod#unbindInput()}.</p>
      */
     @NonNull
     private final CancellationGroup mCancellationGroup;
 
     RemoteInputConnection(
             @NonNull WeakReference<InputMethodServiceInternal> inputMethodService,
-            IInputContext inputContext, @NonNull CancellationGroup cancellationGroup) {
+            IRemoteInputConnection inputConnection, @NonNull CancellationGroup cancellationGroup) {
         mImsInternal = new InputMethodServiceInternalHolder(inputMethodService);
-        mInvoker = IInputContextInvoker.create(inputContext);
+        mInvoker = IRemoteInputConnectionInvoker.create(inputConnection);
         mCancellationGroup = cancellationGroup;
     }
 
     @AnyThread
-    public boolean isSameConnection(@NonNull IInputContext inputContext) {
-        return mInvoker.isSameConnection(inputContext);
+    public boolean isSameConnection(@NonNull IRemoteInputConnection inputConnection) {
+        return mInvoker.isSameConnection(inputConnection);
     }
 
     RemoteInputConnection(@NonNull RemoteInputConnection original, int sessionId) {

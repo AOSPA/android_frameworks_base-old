@@ -75,6 +75,7 @@ class TransitionController {
 
     private ITransitionPlayer mTransitionPlayer;
     final TransitionMetricsReporter mTransitionMetricsReporter = new TransitionMetricsReporter();
+    final TransitionTracer mTransitionTracer;
 
     private IApplicationThread mTransitionPlayerThread;
     final ActivityTaskManagerService mAtm;
@@ -99,11 +100,21 @@ class TransitionController {
     // TODO(b/188595497): remove when not needed.
     final StatusBarManagerInternal mStatusBar;
 
+    /**
+     * `true` when building surface layer order for the finish transaction. We want to prevent
+     * wm from touching z-order of surfaces during transitions, but we still need to be able to
+     * calculate the layers for the finishTransaction. So, when assigning layers into the finish
+     * transaction, set this to true so that the {@link canAssignLayers} will allow it.
+     */
+    boolean mBuildingFinishLayers = false;
+
     TransitionController(ActivityTaskManagerService atm,
-            TaskSnapshotController taskSnapshotController) {
+            TaskSnapshotController taskSnapshotController,
+            TransitionTracer transitionTracer) {
         mAtm = atm;
         mStatusBar = LocalServices.getService(StatusBarManagerInternal.class);
         mTaskSnapshotController = taskSnapshotController;
+        mTransitionTracer = transitionTracer;
         mTransitionPlayerDeath = () -> {
             synchronized (mAtm.mGlobalLock) {
                 // Clean-up/finish any playing transitions.
@@ -207,11 +218,35 @@ class TransitionController {
     }
 
     /**
+     * @return {@code true} if transition is actively collecting changes and `wc` is one of them
+     *                      or a descendant of one of them. {@code false} once playing.
+     */
+    boolean inCollectingTransition(@NonNull WindowContainer wc) {
+        if (!isCollecting()) return false;
+        for (WindowContainer p = wc; p != null; p = p.getParent()) {
+            if (mCollectingTransition.mParticipants.contains(p)) return true;
+        }
+        return false;
+    }
+
+    /**
      * @return {@code true} if transition is actively playing. This is not necessarily {@code true}
      * during collection.
      */
     boolean isPlaying() {
         return !mPlayingTransitions.isEmpty();
+    }
+
+    /**
+     * @return {@code true} if one of the playing transitions contains `wc`.
+     */
+    boolean inPlayingTransition(@NonNull WindowContainer wc) {
+        for (int i = mPlayingTransitions.size() - 1; i >= 0; --i) {
+            for (WindowContainer p = wc; p != null; p = p.getParent()) {
+                if (mPlayingTransitions.get(i).mParticipants.contains(p)) return true;
+            }
+        }
+        return false;
     }
 
     /** @return {@code true} if a transition is running */
@@ -222,19 +257,7 @@ class TransitionController {
 
     /** @return {@code true} if a transition is running in a participant subtree of wc */
     boolean inTransition(@NonNull WindowContainer wc) {
-        if (isCollecting()) {
-            for (WindowContainer p = wc; p != null; p = p.getParent()) {
-                if (isCollecting(p)) return true;
-            }
-        }
-        for (int i = mPlayingTransitions.size() - 1; i >= 0; --i) {
-            for (WindowContainer p = wc; p != null; p = p.getParent()) {
-                if (mPlayingTransitions.get(i).mParticipants.contains(p)) {
-                    return true;
-                }
-            }
-        }
-        return false;
+        return inCollectingTransition(wc) || inPlayingTransition(wc);
     }
 
     boolean inRecentsTransition(@NonNull WindowContainer wc) {
@@ -270,6 +293,16 @@ class TransitionController {
         return false;
     }
 
+    boolean isTransientHide(@NonNull Task task) {
+        if (mCollectingTransition != null && mCollectingTransition.isTransientHide(task)) {
+            return true;
+        }
+        for (int i = mPlayingTransitions.size() - 1; i >= 0; --i) {
+            if (mPlayingTransitions.get(i).isTransientHide(task)) return true;
+        }
+        return false;
+    }
+
     /**
      * @return {@code true} if {@param ar} is part of a transient-launch activity in an active
      * transition.
@@ -282,6 +315,15 @@ class TransitionController {
             if (mPlayingTransitions.get(i).isTransientLaunch(ar)) return true;
         }
         return false;
+    }
+
+    /**
+     * Whether WM can assign layers to window surfaces at this time. This is usually false while
+     * playing, but can be "opened-up" for certain transition operations like calculating layers
+     * for finishTransaction.
+     */
+    boolean canAssignLayers() {
+        return mBuildingFinishLayers || !isPlaying();
     }
 
     @WindowConfiguration.WindowingMode
@@ -437,6 +479,12 @@ class TransitionController {
         }, true /* traverseTopToBottom */);
     }
 
+    /** @see Transition#mStatusBarTransitionDelay */
+    void setStatusBarTransitionDelay(long delay) {
+        if (mCollectingTransition == null) return;
+        mCollectingTransition.mStatusBarTransitionDelay = delay;
+    }
+
     /** @see Transition#setOverrideAnimation */
     void setOverrideAnimation(TransitionInfo.AnimationOptions options,
             @Nullable IRemoteCallback startCallback, @Nullable IRemoteCallback finishCallback) {
@@ -502,6 +550,7 @@ class TransitionController {
             setAnimationRunning(true /* running */);
         }
         mPlayingTransitions.add(transition);
+        mTransitionTracer.logState(transition);
     }
 
     private void setAnimationRunning(boolean running) {
@@ -520,6 +569,7 @@ class TransitionController {
         }
         transition.abort();
         mCollectingTransition = null;
+        mTransitionTracer.logState(transition);
     }
 
     /**
@@ -573,13 +623,14 @@ class TransitionController {
         }
     }
 
-    void dispatchLegacyAppTransitionStarting(TransitionInfo info) {
+    void dispatchLegacyAppTransitionStarting(TransitionInfo info, long statusBarTransitionDelay) {
         final boolean keyguardGoingAway = info.isKeyguardGoingAway();
         for (int i = 0; i < mLegacyListeners.size(); ++i) {
             // TODO(shell-transitions): handle (un)occlude transition.
             mLegacyListeners.get(i).onAppTransitionStartingLocked(keyguardGoingAway,
                     false /* keyguardOcclude */, 0 /* durationHint */,
-                    SystemClock.uptimeMillis(), AnimationAdapter.STATUS_BAR_TRANSITION_DURATION);
+                    SystemClock.uptimeMillis() + statusBarTransitionDelay,
+                    AnimationAdapter.STATUS_BAR_TRANSITION_DURATION);
         }
     }
 

@@ -28,6 +28,7 @@ import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.Intent;
 import android.content.IntentSender;
+import android.content.pm.PackageManager.SignatureResult;
 import android.content.pm.SigningDetails.CertCapabilities;
 import android.content.pm.overlay.OverlayPaths;
 import android.os.Bundle;
@@ -334,10 +335,14 @@ public abstract class PackageManagerInternal {
 
     /**
      * Retrieve all receivers that can handle a broadcast of the given intent.
+     * @param filterCallingUid The results will be filtered in the context of this UID instead
+     *                         of the calling UID.
+     * @param forSend true if the invocation is intended for sending broadcasts. The value
+     *                of this parameter affects how packages are filtered.
      */
     public abstract List<ResolveInfo> queryIntentReceivers(Intent intent,
             String resolvedType, @PackageManager.ResolveInfoFlagsBits long flags,
-            int filterCallingUid, int userId);
+            int filterCallingUid, int userId, boolean forSend);
 
     /**
      * Retrieve all services that can be performed for the given intent.
@@ -371,10 +376,10 @@ public abstract class PackageManagerInternal {
             int deviceOwnerUserId, String deviceOwner, SparseArray<String> profileOwners);
 
     /**
-     * Called by Owners to set the package names protected by the device owner.
+     * Marks packages as protected for a given user or all users in case of USER_ALL.
      */
-    public abstract void setDeviceOwnerProtectedPackages(
-            String deviceOwnerPackageName, List<String> packageNames);
+    public abstract void setOwnerProtectedPackages(
+            @UserIdInt int userId, @NonNull List<String> packageNames);
 
     /**
      * Returns {@code true} if a given package can't be wiped. Otherwise, returns {@code false}.
@@ -496,12 +501,6 @@ public abstract class PackageManagerInternal {
      * instant apps according to the current platform policy.
      */
     public abstract void pruneInstantApps();
-
-    /**
-     * Prunes the cache of the APKs in the given APEXes.
-     * @param apexPackageNames The list of APEX package names that may contain APK-in-APEX.
-     */
-    public abstract void pruneCachedApksInApex(@NonNull List<String> apexPackageNames);
 
     /**
      * @return The SetupWizard package name.
@@ -732,28 +731,49 @@ public abstract class PackageManagerInternal {
     public abstract @Nullable String getInstantAppPackageName(int uid);
 
     /**
-     * Returns whether or not access to the application should be filtered.
+     * Returns whether or not access to the application should be filtered. The access is not
+     * allowed if the application is not installed under the given user.
      * <p>
      * Access may be limited based upon whether the calling or target applications
      * are instant applications.
      *
      * @see #canAccessInstantApps
+     *
+     * @param pkg The package to be accessed.
+     * @param callingUid The uid that attempts to access the package.
+     * @param userId The user id where the package resides.
      */
     public abstract boolean filterAppAccess(
             @NonNull AndroidPackage pkg, int callingUid, int userId);
 
     /**
-     * Returns whether or not access to the application should be filtered.
+     * Returns whether or not access to the application should be filtered. The access is not
+     * allowed if the application is not installed under the given user.
      *
      * @see #filterAppAccess(AndroidPackage, int, int)
      */
+    public boolean filterAppAccess(@NonNull String packageName, int callingUid, int userId) {
+        return filterAppAccess(packageName, callingUid, userId, true /* filterUninstalled */);
+    }
+
+    /**
+     * Returns whether or not access to the application should be filtered.
+     *
+     * @param packageName The package to be accessed.
+     * @param callingUid The uid that attempts to access the package.
+     * @param userId The user id where the package resides.
+     * @param filterUninstalled Set to true to filter the access if the package is not installed
+     *                        under the given user.
+     * @see #filterAppAccess(AndroidPackage, int, int)
+     */
     public abstract boolean filterAppAccess(
-            @NonNull String packageName, int callingUid, int userId);
+            @NonNull String packageName, int callingUid, int userId, boolean filterUninstalled);
 
     /**
      * Returns whether or not access to the application which belongs to the given UID should be
      * filtered. If the UID is part of a shared user ID, return {@code true} if all applications
-     * belong to the shared user ID should be filtered.
+     * belong to the shared user ID should be filtered. The access is not allowed if the uid does
+     * not exist in the device.
      *
      * @see #filterAppAccess(AndroidPackage, int, int)
      */
@@ -1279,4 +1299,15 @@ public abstract class PackageManagerInternal {
     public abstract void shutdown();
 
     public abstract DynamicCodeLogger getDynamicCodeLogger();
+
+    /**
+     * Compare the signatures of two packages that are installed in different users.
+     *
+     * @param uid1 First UID whose signature will be compared.
+     * @param uid2 Second UID whose signature will be compared.
+     * @return {@link PackageManager#SIGNATURE_MATCH} if signatures are matched.
+     * @throws SecurityException if the caller does not hold the
+     * {@link android.Manifest.permission#INTERACT_ACROSS_USERS}.
+     */
+    public abstract @SignatureResult int checkUidSignaturesForAllUsers(int uid1, int uid2);
 }

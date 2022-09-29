@@ -27,6 +27,7 @@ import android.view.ViewGroup;
 import android.widget.BaseAdapter;
 import android.widget.Filter;
 import android.widget.Filterable;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.android.internal.R;
@@ -35,7 +36,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Locale;
 import java.util.Set;
-
 
 /**
  * This adapter wraps around a regular ListAdapter for LocaleInfo, and creates 2 sections.
@@ -50,25 +50,25 @@ import java.util.Set;
  * (Austria, Belgium, Germany, Liechtenstein, Luxembourg)</p>
  */
 public class SuggestedLocaleAdapter extends BaseAdapter implements Filterable {
-    private static final int TYPE_HEADER_SUGGESTED = 0;
-    private static final int TYPE_HEADER_ALL_OTHERS = 1;
-    private static final int TYPE_LOCALE = 2;
-    private static final int TYPE_SYSTEM_LANGUAGE_FOR_APP_LANGUAGE_PICKER = 3;
-    private static final int TYPE_CURRENT_LOCALE = 4;
-    private static final int MIN_REGIONS_FOR_SUGGESTIONS = 6;
-    private static final int APP_LANGUAGE_PICKER_TYPE_COUNT = 5;
-    private static final int SYSTEM_LANGUAGE_TYPE_COUNT = 3;
-    private static final int SYSTEM_LANGUAGE_WITHOUT_HEADER_TYPE_COUNT = 1;
+    protected static final int TYPE_HEADER_SUGGESTED = 0;
+    protected static final int TYPE_HEADER_ALL_OTHERS = 1;
+    protected static final int TYPE_LOCALE = 2;
+    protected static final int TYPE_SYSTEM_LANGUAGE_FOR_APP_LANGUAGE_PICKER = 3;
+    protected static final int TYPE_CURRENT_LOCALE = 4;
+    protected static final int MIN_REGIONS_FOR_SUGGESTIONS = 6;
+    protected static final int APP_LANGUAGE_PICKER_TYPE_COUNT = 5;
+    protected static final int SYSTEM_LANGUAGE_TYPE_COUNT = 3;
+    protected static final int SYSTEM_LANGUAGE_WITHOUT_HEADER_TYPE_COUNT = 1;
 
-    private ArrayList<LocaleStore.LocaleInfo> mLocaleOptions;
-    private ArrayList<LocaleStore.LocaleInfo> mOriginalLocaleOptions;
-    private int mSuggestionCount;
-    private final boolean mCountryMode;
-    private LayoutInflater mInflater;
+    protected ArrayList<LocaleStore.LocaleInfo> mLocaleOptions;
+    protected ArrayList<LocaleStore.LocaleInfo> mOriginalLocaleOptions;
+    protected int mSuggestionCount;
+    protected final boolean mCountryMode;
+    protected LayoutInflater mInflater;
 
-    private Locale mDisplayLocale = null;
+    protected Locale mDisplayLocale = null;
     // used to potentially cache a modified Context that uses mDisplayLocale
-    private Context mContextOverride = null;
+    protected Context mContextOverride = null;
     private String mAppPackageName;
 
     public SuggestedLocaleAdapter(Set<LocaleStore.LocaleInfo> localeOptions, boolean countryMode) {
@@ -104,6 +104,13 @@ public class SuggestedLocaleAdapter extends BaseAdapter implements Filterable {
     @Override
     public int getItemViewType(int position) {
         if (!showHeaders()) {
+            LocaleStore.LocaleInfo item = (LocaleStore.LocaleInfo) getItem(position);
+            if (item.isSystemLocale()) {
+                return TYPE_SYSTEM_LANGUAGE_FOR_APP_LANGUAGE_PICKER;
+            }
+            if (item.isAppCurrentLocale()) {
+                return TYPE_CURRENT_LOCALE;
+            }
             return TYPE_LOCALE;
         } else {
             if (position == 0) {
@@ -114,6 +121,9 @@ public class SuggestedLocaleAdapter extends BaseAdapter implements Filterable {
             }
 
             LocaleStore.LocaleInfo item = (LocaleStore.LocaleInfo) getItem(position);
+            if (item == null) {
+                throw new NullPointerException("Non header locale cannot be null");
+            }
             if (item.isSystemLocale()) {
                 return TYPE_SYSTEM_LANGUAGE_FOR_APP_LANGUAGE_PICKER;
             }
@@ -148,12 +158,20 @@ public class SuggestedLocaleAdapter extends BaseAdapter implements Filterable {
 
     @Override
     public Object getItem(int position) {
+        if (isHeaderPosition(position)) {
+            return null;
+        }
+
         int offset = 0;
         if (showHeaders()) {
             offset = position > mSuggestionCount ? -2 : -1;
         }
 
         return mLocaleOptions.get(position + offset);
+    }
+
+    private boolean isHeaderPosition(int position) {
+        return showHeaders() && (position == 0 || position == mSuggestionCount + 1);
     }
 
     @Override
@@ -177,7 +195,7 @@ public class SuggestedLocaleAdapter extends BaseAdapter implements Filterable {
         }
     }
 
-    private void setTextTo(@NonNull TextView textView, int resId) {
+    protected void setTextTo(@NonNull TextView textView, int resId) {
         if (mContextOverride == null) {
             textView.setText(resId);
         } else {
@@ -193,15 +211,11 @@ public class SuggestedLocaleAdapter extends BaseAdapter implements Filterable {
         }
 
         int itemType = getItemViewType(position);
+        View itemView = getNewViewIfNeeded(convertView, parent, itemType, position);
         switch (itemType) {
             case TYPE_HEADER_SUGGESTED: // intentional fallthrough
             case TYPE_HEADER_ALL_OTHERS:
-                // Covers both null, and "reusing" a wrong kind of view
-                if (!(convertView instanceof TextView)) {
-                    convertView = mInflater.inflate(R.layout.language_picker_section_header,
-                            parent, false);
-                }
-                TextView textView = (TextView) convertView;
+                TextView textView = (TextView) itemView;
                 if (itemType == TYPE_HEADER_SUGGESTED) {
                     setTextTo(textView, R.string.language_picker_section_suggested);
                 } else {
@@ -215,41 +229,84 @@ public class SuggestedLocaleAdapter extends BaseAdapter implements Filterable {
                         mDisplayLocale != null ? mDisplayLocale : Locale.getDefault());
                 break;
             case TYPE_SYSTEM_LANGUAGE_FOR_APP_LANGUAGE_PICKER:
-                if (!(convertView instanceof ViewGroup)) {
-                    TextView title;
-                    if (((LocaleStore.LocaleInfo)getItem(position)).isAppCurrentLocale()) {
-                        convertView = mInflater.inflate(
-                                R.layout.app_language_picker_current_locale_item, parent, false);
-                        title = convertView.findViewById(R.id.language_picker_item);
-                        addStateDescriptionIntoCurrentLocaleItem(convertView);
-                    } else {
-                        convertView = mInflater.inflate(
-                                R.layout.language_picker_item, parent, false);
-                        title = convertView.findViewById(R.id.locale);
+                TextView title;
+                LocaleStore.LocaleInfo info = (LocaleStore.LocaleInfo) getItem(position);
+                if (info == null) {
+                    throw new NullPointerException("Non header locale cannot be null.");
+                }
+                if (info.isAppCurrentLocale()) {
+                    title = itemView.findViewById(R.id.language_picker_item);
+                } else {
+                    title = itemView.findViewById(R.id.locale);
+                }
+                title.setText(R.string.system_locale_title);
+                break;
+            case TYPE_CURRENT_LOCALE:
+                updateTextView(itemView,
+                        itemView.findViewById(R.id.language_picker_item), position);
+                break;
+            default:
+                updateTextView(itemView, itemView.findViewById(R.id.locale), position);
+                break;
+        }
+        return itemView;
+    }
+
+    /** Check if the old view can be reused, otherwise create a new one. */
+    private View getNewViewIfNeeded(
+            View convertView, ViewGroup parent, int itemType, int position) {
+        View updatedView = convertView;
+        boolean shouldReuseView;
+        switch (itemType) {
+            case TYPE_HEADER_SUGGESTED: // intentional fallthrough
+            case TYPE_HEADER_ALL_OTHERS:
+                shouldReuseView = convertView instanceof TextView
+                        && convertView.findViewById(R.id.language_picker_header) != null;
+                if (!shouldReuseView) {
+                    updatedView = mInflater.inflate(
+                            R.layout.language_picker_section_header, parent, false);
+                }
+                break;
+            case TYPE_SYSTEM_LANGUAGE_FOR_APP_LANGUAGE_PICKER:
+                if (((LocaleStore.LocaleInfo) getItem(position)).isAppCurrentLocale()) {
+                    shouldReuseView = convertView instanceof LinearLayout
+                            && convertView.findViewById(R.id.language_picker_item) != null;
+                    if (!shouldReuseView) {
+                        updatedView = mInflater.inflate(
+                                R.layout.app_language_picker_current_locale_item,
+                                parent, false);
+                        addStateDescriptionIntoCurrentLocaleItem(updatedView);
                     }
-                    title.setText(R.string.system_locale_title);
+                } else {
+                    shouldReuseView = convertView instanceof TextView
+                            && convertView.findViewById(R.id.locale) != null;
+                    if (!shouldReuseView) {
+                        updatedView = mInflater.inflate(
+                                R.layout.language_picker_item, parent, false);
+                    }
                 }
                 break;
             case TYPE_CURRENT_LOCALE:
-                if (!(convertView instanceof ViewGroup)) {
-                    convertView = mInflater.inflate(
+                shouldReuseView = convertView instanceof LinearLayout
+                        && convertView.findViewById(R.id.language_picker_item) != null;
+                if (!shouldReuseView) {
+                    updatedView = mInflater.inflate(
                             R.layout.app_language_picker_current_locale_item, parent, false);
-                    addStateDescriptionIntoCurrentLocaleItem(convertView);
+                    addStateDescriptionIntoCurrentLocaleItem(updatedView);
                 }
-                updateTextView(
-                        convertView, convertView.findViewById(R.id.language_picker_item), position);
                 break;
             default:
-                // Covers both null, and "reusing" a wrong kind of view
-                if (!(convertView instanceof ViewGroup)) {
-                    convertView = mInflater.inflate(R.layout.language_picker_item, parent, false);
+                shouldReuseView = convertView instanceof TextView
+                        && convertView.findViewById(R.id.locale) != null;
+                if (!shouldReuseView) {
+                    updatedView = mInflater.inflate(R.layout.language_picker_item, parent, false);
                 }
-                updateTextView(convertView, convertView.findViewById(R.id.locale), position);
+                break;
         }
-        return convertView;
+        return updatedView;
     }
 
-    private boolean showHeaders() {
+    protected boolean showHeaders() {
         // We don't want to show suggestions for locales with very few regions
         // (e.g. Romanian, with 2 regions)
         // So we put a (somewhat) arbitrary limit.

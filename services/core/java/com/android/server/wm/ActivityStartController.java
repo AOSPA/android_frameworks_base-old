@@ -19,7 +19,9 @@ package com.android.server.wm;
 import static android.app.ActivityManager.START_CANCELED;
 import static android.app.ActivityManager.START_SUCCESS;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
+import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
 import static android.os.FactoryTest.FACTORY_TEST_LOW_LEVEL;
 
@@ -29,6 +31,7 @@ import static com.android.server.wm.ActivityTaskSupervisor.ON_TOP;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.app.ActivityManager;
 import android.app.ActivityOptions;
 import android.app.IApplicationThread;
 import android.content.ComponentName;
@@ -46,6 +49,7 @@ import android.provider.Settings;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.view.RemoteAnimationAdapter;
+import android.view.WindowManager;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.ArrayUtils;
@@ -228,8 +232,8 @@ public class ActivityStartController {
                     vers = ri.activityInfo.applicationInfo.metaData.getString(
                             Intent.METADATA_SETUP_VERSION);
                 }
-                String lastVers = Settings.Secure.getString(
-                        resolver, Settings.Secure.LAST_SETUP_SHOWN);
+                String lastVers = Settings.Secure.getStringForUser(
+                        resolver, Settings.Secure.LAST_SETUP_SHOWN, resolver.getUserId());
                 if (vers != null && !vers.equals(lastVers)) {
                     intent.setFlags(FLAG_ACTIVITY_NEW_TASK);
                     intent.setComponent(new ComponentName(
@@ -518,7 +522,8 @@ public class ActivityStartController {
      */
     int startActivityInTaskFragment(@NonNull TaskFragment taskFragment,
             @NonNull Intent activityIntent, @Nullable Bundle activityOptions,
-            @Nullable IBinder resultTo, int callingUid, int callingPid) {
+            @Nullable IBinder resultTo, int callingUid, int callingPid,
+            @Nullable IBinder errorCallbackToken) {
         final ActivityRecord caller =
                 resultTo != null ? ActivityRecord.forTokenLocked(resultTo) : null;
         return obtainStarter(activityIntent, "startActivityInTaskFragment")
@@ -528,8 +533,47 @@ public class ActivityStartController {
                 .setRequestCode(-1)
                 .setCallingUid(callingUid)
                 .setCallingPid(callingPid)
+                .setRealCallingUid(callingUid)
+                .setRealCallingPid(callingPid)
                 .setUserId(caller != null ? caller.mUserId : mService.getCurrentUserId())
+                .setErrorCallbackToken(errorCallbackToken)
                 .execute();
+    }
+
+    boolean startExistingRecentsIfPossible(Intent intent, ActivityOptions options) {
+        final int activityType = mService.getRecentTasks().getRecentsComponent()
+                .equals(intent.getComponent()) ? ACTIVITY_TYPE_RECENTS : ACTIVITY_TYPE_HOME;
+        final Task rootTask = mService.mRootWindowContainer.getDefaultTaskDisplayArea()
+                .getRootTask(WINDOWING_MODE_UNDEFINED, activityType);
+        if (rootTask == null) return false;
+        final ActivityRecord r = rootTask.topRunningActivity();
+        if (r == null || r.mVisibleRequested || !r.attachedToProcess()
+                || !r.mActivityComponent.equals(intent.getComponent())
+                // Recents keeps invisible while device is locked.
+                || r.mDisplayContent.isKeyguardLocked()) {
+            return false;
+        }
+        mService.mRootWindowContainer.startPowerModeLaunchIfNeeded(true /* forceSend */, r);
+        final ActivityMetricsLogger.LaunchingState launchingState =
+                mSupervisor.getActivityMetricsLogger().notifyActivityLaunching(intent);
+        final Task task = r.getTask();
+        mService.deferWindowLayout();
+        try {
+            task.mTransitionController.requestTransitionIfNeeded(WindowManager.TRANSIT_TO_FRONT,
+                    0 /* flags */, task, task /* readyGroupRef */,
+                    options.getRemoteTransition(), null /* displayChange */);
+            r.mTransitionController.setTransientLaunch(r,
+                    TaskDisplayArea.getRootTaskAbove(rootTask));
+            task.moveToFront("startExistingRecents");
+            task.mInResumeTopActivity = true;
+            task.resumeTopActivity(null /* prev */, options, true /* deferPause */);
+            mSupervisor.getActivityMetricsLogger().notifyActivityLaunched(launchingState,
+                    ActivityManager.START_TASK_TO_FRONT, false, r, options);
+        } finally {
+            task.mInResumeTopActivity = false;
+            mService.continueWindowLayout();
+        }
+        return true;
     }
 
     void registerRemoteAnimationForNextActivityStart(String packageName,

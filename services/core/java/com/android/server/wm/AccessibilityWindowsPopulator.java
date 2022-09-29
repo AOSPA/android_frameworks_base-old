@@ -16,8 +16,6 @@
 
 package com.android.server.wm;
 
-import static android.view.WindowManager.LayoutParams.TYPE_DOCK_DIVIDER;
-
 import static com.android.server.wm.utils.RegionUtils.forEachRect;
 
 import android.annotation.NonNull;
@@ -154,7 +152,8 @@ public final class AccessibilityWindowsPopulator extends WindowInfosListener {
 
         for (InputWindowHandle window : windowHandles) {
             final boolean visible = (window.inputConfig & InputConfig.NOT_VISIBLE) == 0;
-            if (visible && window.getWindow() != null) {
+            final boolean isNotClone = (window.inputConfig & InputConfig.CLONE) == 0;
+            if (visible && window.getWindow() != null && isNotClone) {
                 tempVisibleWindows.add(window);
             }
         }
@@ -845,15 +844,8 @@ public final class AccessibilityWindowsPopulator extends WindowInfosListener {
             windowInfo.token = window.mWindow.asBinder();
             windowInfo.hasFlagWatchOutsideTouch = (window.mInputConfig
                     & InputConfig.WATCH_OUTSIDE_TOUCH) != 0;
-            windowInfo.inPictureInPicture = false;
-
-            // There only are two windowless windows now, one is split window, and the other
-            // one is PIP.
-            if (windowInfo.type == TYPE_DOCK_DIVIDER) {
-                windowInfo.title = "Splitscreen Divider";
-            } else if (window.mIsPIPMenu) {
-                windowInfo.title = "Picture-in-Picture menu";
-            }
+            // Set it to true to be consistent with the legacy implementation.
+            windowInfo.inPictureInPicture = window.mIsPIPMenu;
             return windowInfo;
         }
 

@@ -21,11 +21,6 @@
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="byteShort" msgid="202579285008794431">"B"</string>
-    <string name="kilobyteShort" msgid="2214285521564195803">"kB"</string>
-    <string name="megabyteShort" msgid="6649361267635823443">"MB"</string>
-    <string name="gigabyteShort" msgid="7515809460261287991">"GB"</string>
-    <string name="terabyteShort" msgid="1822367128583886496">"TB"</string>
-    <string name="petabyteShort" msgid="5651571254228534832">"PB"</string>
     <string name="fileSizeSuffix" msgid="4233671691980131257">"<xliff:g id="NUMBER">%1$s</xliff:g> <xliff:g id="UNIT">%2$s</xliff:g>"</string>
     <string name="untitled" msgid="3381766946944136678">"&lt;Névtelen&gt;"</string>
     <string name="emptyPhoneNumber" msgid="5812172618020360048">"(Nincs telefonszám)"</string>
@@ -305,8 +300,8 @@
     <string name="permgroupdesc_calendar" msgid="6762751063361489379">"hozzáférés a naptárhoz"</string>
     <string name="permgrouplab_sms" msgid="795737735126084874">"SMS"</string>
     <string name="permgroupdesc_sms" msgid="5726462398070064542">"SMS-ek küldése és megtekintése"</string>
-    <string name="permgrouplab_storage" msgid="5570124978732352858">"Fájlok és dokumentumok"</string>
-    <string name="permgroupdesc_storage" msgid="8352226729501080525">"hozzáférhet fájljaihoz és dokumentumaihoz az eszközén"</string>
+    <string name="permgrouplab_storage" msgid="17339216290379241">"Fájlok"</string>
+    <string name="permgroupdesc_storage" msgid="5378659041354582769">"hozzáférés az eszközön lévő fájlokhoz"</string>
     <string name="permgrouplab_readMediaAural" msgid="1858331312624942053">"Zene és hang"</string>
     <string name="permgroupdesc_readMediaAural" msgid="7565467343667089595">"hozzáférés a zenékhez és más hanganyagokhoz az eszközön"</string>
     <string name="permgrouplab_readMediaVisual" msgid="4724874717811908660">"Fotók és videók"</string>
@@ -558,6 +553,8 @@
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"Lehetővé teszi az alkalmazás számára, hogy megismerje a képernyőzár összetettségi szintjét (magas, közepes, alacsony vagy nincs), amely jelzi a képernyőzár lehetséges típusát és hosszát. Az alkalmazás ezenkívül javaslatot tehet a felhasználóknak a képernyőzár bizonyos szintre való frissítésére, de ezt a javaslatot a felhasználók figyelmen kívül hagyhatják. A képernyőzárat nem egyszerű szöveges formátumban tárolja a rendszer, ezért az alkalmazás nem fogja tudni a pontos jelszót."</string>
     <string name="permlab_postNotification" msgid="4875401198597803658">"értesítések megjelenítése"</string>
     <string name="permdesc_postNotification" msgid="5974977162462877075">"Lehetővé teszi az alkalmazás számára az értesítések megjelenítését"</string>
+    <string name="permlab_turnScreenOn" msgid="219344053664171492">"képernyő bekapcsolása"</string>
+    <string name="permdesc_turnScreenOn" msgid="4394606875897601559">"Engedélyezi az alkalmazásnak a képernyő bekapcsolását."</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"biometrikus hardver használata"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"Lehetővé teszi az alkalmazás számára a biometrikus hardver hitelesítésre való használatát"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"ujjlenyomat-olvasó hardver kezelése"</string>
@@ -1924,6 +1921,8 @@
     <string name="country_selection_title" msgid="5221495687299014379">"Régió beállítása"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Adja meg a nyelvet"</string>
     <string name="language_picker_section_suggested" msgid="6556199184638990447">"Javasolt"</string>
+    <string name="language_picker_section_suggested_bilingual" msgid="5932198319583556613">"Javasolt nyelvek"</string>
+    <string name="region_picker_section_suggested_bilingual" msgid="704607569328224133">"Javasolt régiók"</string>
     <string name="language_picker_section_all" msgid="1985809075777564284">"Minden nyelv"</string>
     <string name="region_picker_section_all" msgid="756441309928774155">"Minden régió"</string>
     <string name="locale_search_menu" msgid="6258090710176422934">"Keresés"</string>
@@ -2078,8 +2077,8 @@
     <string name="nas_upgrade_notification_learn_more_action" msgid="7011130656195423947">"További információ"</string>
     <string name="nas_upgrade_notification_learn_more_content" msgid="3735480566983530650">"A bővített értesítések felváltják az androidos alkalmazkodó értesítéseket az Android 12-es verziójában. Ez a funkció javasolt műveleteket és válaszokat mutat, és rendszerezi az értesítéseket.\n\nA bővített értesítések minden értesítéstartalmat olvashatnak (így a személyes adatokat, mint például a névjegyek nevét és az üzeneteket is). Ez a funkció emellett elvetheti az értesítéseket, valamint reagálhat rájuk, például felveheti a telefonhívásokat, és vezérelheti a Ne zavarjanak módot."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Információs értesítés a rutinmódról"</string>
-    <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Előfordulhat, hogy az akkumulátor lemerül a szokásos töltési időszak előtt"</string>
-    <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Akkumulátorkímélő mód aktiválva az akkumulátor üzemidejének növelése érdekében"</string>
+    <string name="dynamic_mode_notification_title" msgid="1388718452788985481">"Akkumulátorkímélő mód bekapcsolva"</string>
+    <string name="dynamic_mode_notification_summary" msgid="1639031262484979689">"Akkumulátorhasználat csökkentése a hosszabb akkumulátor-élettartam érdekében"</string>
     <string name="battery_saver_notification_channel_name" msgid="3918243458067916913">"Akkumulátorkímélő mód"</string>
     <string name="battery_saver_off_notification_title" msgid="7637255960468032515">"Akkumulátorkímélő mód kikapcsolva"</string>
     <string name="battery_saver_charged_notification_summary" product="default" msgid="5544457317418624367">"A telefon töltöttsége elegendő. A funkciók használata már nincs korlátozva."</string>
@@ -2286,5 +2285,7 @@
     <string name="notification_action_check_bg_apps" msgid="4758877443365362532">"Aktív alkalmazások ellenőrzése"</string>
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"Nem lehet hozzáférni a telefon kamerájához a következő eszközön: <xliff:g id="DEVICE">%1$s</xliff:g>"</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"Nem lehet hozzáférni a táblagép kamerájához a következő eszközön: <xliff:g id="DEVICE">%1$s</xliff:g>"</string>
-    <string name="system_locale_title" msgid="3978041860457277638">"Alapértelmezett nyelv"</string>
+    <string name="system_locale_title" msgid="711882686834677268">"Rendszerbeállítás"</string>
+    <!-- no translation found for default_card_name (9198284935962911468) -->
+    <skip />
 </resources>

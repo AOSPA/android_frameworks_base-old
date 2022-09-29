@@ -21,11 +21,6 @@
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="byteShort" msgid="202579285008794431">"Б"</string>
-    <string name="kilobyteShort" msgid="2214285521564195803">"КБ"</string>
-    <string name="megabyteShort" msgid="6649361267635823443">"МБ"</string>
-    <string name="gigabyteShort" msgid="7515809460261287991">"ГБ"</string>
-    <string name="terabyteShort" msgid="1822367128583886496">"ТБ"</string>
-    <string name="petabyteShort" msgid="5651571254228534832">"ПБ"</string>
     <string name="fileSizeSuffix" msgid="4233671691980131257">"<xliff:g id="NUMBER">%1$s</xliff:g> <xliff:g id="UNIT">%2$s</xliff:g>"</string>
     <string name="untitled" msgid="3381766946944136678">"&lt;Без заглавие&gt;"</string>
     <string name="emptyPhoneNumber" msgid="5812172618020360048">"(Няма телефонен номер)"</string>
@@ -305,8 +300,8 @@
     <string name="permgroupdesc_calendar" msgid="6762751063361489379">"има достъп до календара ви"</string>
     <string name="permgrouplab_sms" msgid="795737735126084874">"SMS"</string>
     <string name="permgroupdesc_sms" msgid="5726462398070064542">"да изпраща и преглежда SMS съобщения"</string>
-    <string name="permgrouplab_storage" msgid="5570124978732352858">"Файлове и документи"</string>
-    <string name="permgroupdesc_storage" msgid="8352226729501080525">"достъп до файловете и документите на устройството ви"</string>
+    <string name="permgrouplab_storage" msgid="17339216290379241">"Файлове"</string>
+    <string name="permgroupdesc_storage" msgid="5378659041354582769">"достъп до файловете на устройството ви"</string>
     <string name="permgrouplab_readMediaAural" msgid="1858331312624942053">"Музика и аудио"</string>
     <string name="permgroupdesc_readMediaAural" msgid="7565467343667089595">"достъп до музиката и аудиото на устройството ви"</string>
     <string name="permgrouplab_readMediaVisual" msgid="4724874717811908660">"Снимки и видеоклипове"</string>
@@ -558,6 +553,8 @@
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"Разрешава на приложението да разбере нивото на сложност на опцията за заключване на екрана (високо, средно, ниско или липса на такова), което указва възможния диапазон на дължината и типа на опцията. Приложението може също да предложи на потребителите да актуализират опцията за заключване на екрана до определено ниво, но те могат да пренебрегнат това и да излязат от него. Обърнете внимание, че опцията за заключване на екрана не се съхранява като обикновен текст, така че приложението не знае точната парола."</string>
     <string name="permlab_postNotification" msgid="4875401198597803658">"показване на известията"</string>
     <string name="permdesc_postNotification" msgid="5974977162462877075">"Разрешава на приложението да показва известия"</string>
+    <string name="permlab_turnScreenOn" msgid="219344053664171492">"включване на екрана"</string>
+    <string name="permdesc_turnScreenOn" msgid="4394606875897601559">"Разрешава на приложението да включва екрана."</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"използване на хардуера за биометрични данни"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"Разрешава на приложението да използва хардуера за биометрични данни с цел удостоверяване"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"управление на хардуера за отпечатъци"</string>
@@ -1924,6 +1921,8 @@
     <string name="country_selection_title" msgid="5221495687299014379">"Предпочитание за региона"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Въведете име на език"</string>
     <string name="language_picker_section_suggested" msgid="6556199184638990447">"Предложени"</string>
+    <string name="language_picker_section_suggested_bilingual" msgid="5932198319583556613">"Предложени езици"</string>
+    <string name="region_picker_section_suggested_bilingual" msgid="704607569328224133">"Предложени региони"</string>
     <string name="language_picker_section_all" msgid="1985809075777564284">"Всички езици"</string>
     <string name="region_picker_section_all" msgid="756441309928774155">"Всички региони"</string>
     <string name="locale_search_menu" msgid="6258090710176422934">"Търсене"</string>
@@ -2078,8 +2077,8 @@
     <string name="nas_upgrade_notification_learn_more_action" msgid="7011130656195423947">"Научете повече"</string>
     <string name="nas_upgrade_notification_learn_more_content" msgid="3735480566983530650">"Адаптивните известия бяха заменени от функцията за подобрени известия в Android 12. Тя показва предложени действия и отговори и организира известията ви.\n\nФункцията може да осъществява достъп до съдържанието в известията, включително личната информация, като например имената на контактите и текстовите съобщения. Тя има възможност да отхвърля известията или да предприема действия в тях, като например приемане на телефонни обаждания или контролиране на режима „Не безпокойте“."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Известие с информация за режима на поредица"</string>
-    <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Батерията може да се изтощи преди обичайното зареждане"</string>
-    <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Режимът за запазване на батерията е активиран с цел удължаване на живота на батерията"</string>
+    <string name="dynamic_mode_notification_title" msgid="1388718452788985481">"Режимът за запазване на батерията е включен"</string>
+    <string name="dynamic_mode_notification_summary" msgid="1639031262484979689">"Използването на батерията се намалява с цел удължаване на живота ѝ"</string>
     <string name="battery_saver_notification_channel_name" msgid="3918243458067916913">"Режим за запазване на батерията"</string>
     <string name="battery_saver_off_notification_title" msgid="7637255960468032515">"Режимът за запазване на батерията е изключен"</string>
     <string name="battery_saver_charged_notification_summary" product="default" msgid="5544457317418624367">"Батерията на телефона има достатъчно заряд. Функциите вече не са ограничени."</string>
@@ -2286,5 +2285,7 @@
     <string name="notification_action_check_bg_apps" msgid="4758877443365362532">"Проверете активните приложения"</string>
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"Няма достъп до камерата на телефона от вашия <xliff:g id="DEVICE">%1$s</xliff:g>"</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"Няма достъп до камерата на таблета от вашия <xliff:g id="DEVICE">%1$s</xliff:g>"</string>
-    <string name="system_locale_title" msgid="3978041860457277638">"Системен език"</string>
+    <string name="system_locale_title" msgid="711882686834677268">"Стандартно за системата"</string>
+    <!-- no translation found for default_card_name (9198284935962911468) -->
+    <skip />
 </resources>

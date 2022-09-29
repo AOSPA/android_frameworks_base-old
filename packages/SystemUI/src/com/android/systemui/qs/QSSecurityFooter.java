@@ -22,6 +22,9 @@ import static android.app.admin.DevicePolicyResources.Strings.SystemUi.QS_DIALOG
 import static android.app.admin.DevicePolicyResources.Strings.SystemUi.QS_DIALOG_MANAGEMENT_NETWORK;
 import static android.app.admin.DevicePolicyResources.Strings.SystemUi.QS_DIALOG_MANAGEMENT_TITLE;
 import static android.app.admin.DevicePolicyResources.Strings.SystemUi.QS_DIALOG_MANAGEMENT_TWO_NAMED_VPN;
+import static android.app.admin.DevicePolicyResources.Strings.SystemUi.QS_DIALOG_MONITORING_CA_CERT_SUBTITLE;
+import static android.app.admin.DevicePolicyResources.Strings.SystemUi.QS_DIALOG_MONITORING_NETWORK_SUBTITLE;
+import static android.app.admin.DevicePolicyResources.Strings.SystemUi.QS_DIALOG_MONITORING_VPN_SUBTITLE;
 import static android.app.admin.DevicePolicyResources.Strings.SystemUi.QS_DIALOG_NAMED_MANAGEMENT;
 import static android.app.admin.DevicePolicyResources.Strings.SystemUi.QS_DIALOG_PERSONAL_PROFILE_NAMED_VPN;
 import static android.app.admin.DevicePolicyResources.Strings.SystemUi.QS_DIALOG_VIEW_POLICIES;
@@ -77,9 +80,11 @@ import android.widget.TextView;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.systemui.FontSizeUtils;
 import com.android.systemui.R;
+import com.android.systemui.animation.DialogCuj;
 import com.android.systemui.animation.DialogLaunchAnimator;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.qualifiers.Background;
@@ -92,6 +97,7 @@ import com.android.systemui.statusbar.policy.SecurityController;
 import com.android.systemui.util.ViewController;
 
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 
 import javax.inject.Inject;
 import javax.inject.Named;
@@ -104,9 +110,11 @@ class QSSecurityFooter extends ViewController<View>
     protected static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
     private static final boolean DEBUG_FORCE_VISIBLE = false;
 
+    private static final String INTERACTION_JANK_TAG = "managed_device_info";
+
     private final TextView mFooterText;
     private final ImageView mPrimaryFooterIcon;
-    private final Context mContext;
+    private Context mContext;
     private final DevicePolicyManager mDpm;
     private final Callback mCallback = new Callback();
     private final SecurityController mSecurityController;
@@ -140,6 +148,63 @@ class QSSecurityFooter extends ViewController<View>
             }
         }
     };
+
+    private Supplier<String> mManagementTitleSupplier = () ->
+            mContext == null ? null : mContext.getString(R.string.monitoring_title_device_owned);
+
+    private Supplier<String> mManagementMessageSupplier = () ->
+            mContext == null ? null : mContext.getString(
+                    R.string.quick_settings_disclosure_management);
+
+    private Supplier<String> mManagementMonitoringStringSupplier = () ->
+            mContext == null ? null : mContext.getString(
+                    R.string.quick_settings_disclosure_management_monitoring);
+
+    private Supplier<String> mManagementMultipleVpnStringSupplier = () ->
+            mContext == null ? null : mContext.getString(
+                    R.string.quick_settings_disclosure_management_vpns);
+
+    private Supplier<String> mWorkProfileMonitoringStringSupplier = () ->
+            mContext == null ? null : mContext.getString(
+                    R.string.quick_settings_disclosure_managed_profile_monitoring);
+
+    private Supplier<String> mWorkProfileNetworkStringSupplier = () ->
+            mContext == null ? null : mContext.getString(
+                    R.string.quick_settings_disclosure_managed_profile_network_activity);
+
+    private Supplier<String> mMonitoringSubtitleCaCertStringSupplier = () ->
+            mContext == null ? null : mContext.getString(
+                    R.string.monitoring_subtitle_ca_certificate);
+
+    private Supplier<String> mMonitoringSubtitleNetworkStringSupplier = () ->
+            mContext == null ? null : mContext.getString(
+                    R.string.monitoring_subtitle_network_logging);
+
+    private Supplier<String> mMonitoringSubtitleVpnStringSupplier = () ->
+            mContext == null ? null : mContext.getString(R.string.monitoring_subtitle_vpn);
+
+    private Supplier<String> mViewPoliciesButtonStringSupplier = () ->
+            mContext == null ? null : mContext.getString(R.string.monitoring_button_view_policies);
+
+    private Supplier<String> mManagementDialogStringSupplier = () ->
+            mContext == null ? null : mContext.getString(
+                    R.string.monitoring_description_management);
+
+    private Supplier<String> mManagementDialogCaCertStringSupplier = () ->
+            mContext == null ? null : mContext.getString(
+                    R.string.monitoring_description_management_ca_certificate);
+
+    private Supplier<String> mWorkProfileDialogCaCertStringSupplier = () ->
+            mContext == null ? null : mContext.getString(
+                    R.string.monitoring_description_managed_profile_ca_certificate);
+
+    private Supplier<String> mManagementDialogNetworkStringSupplier = () ->
+            mContext == null ? null : mContext.getString(
+                    R.string.monitoring_description_management_network_logging);
+
+    private Supplier<String> mWorkProfileDialogNetworkStringSupplier = () ->
+            mContext == null ? null : mContext.getString(
+                    R.string.monitoring_description_managed_profile_network_logging);
 
     @Inject
     QSSecurityFooter(@Named(QS_SECURITY_FOOTER_VIEW) View rootView,
@@ -337,9 +402,7 @@ class QSSecurityFooter extends ViewController<View>
     private String getManagedDeviceMonitoringText(CharSequence organizationName) {
         if (organizationName == null) {
             return mDpm.getResources().getString(
-                    QS_MSG_MANAGEMENT_MONITORING,
-                    () -> mContext.getString(
-                            R.string.quick_settings_disclosure_management_monitoring));
+                    QS_MSG_MANAGEMENT_MONITORING, mManagementMonitoringStringSupplier);
         }
         return mDpm.getResources().getString(
                 QS_MSG_NAMED_MANAGEMENT_MONITORING,
@@ -354,9 +417,7 @@ class QSSecurityFooter extends ViewController<View>
         if (vpnName != null && vpnNameWorkProfile != null) {
             if (organizationName == null) {
                 return mDpm.getResources().getString(
-                        QS_MSG_MANAGEMENT_MULTIPLE_VPNS,
-                        () -> mContext.getString(
-                                R.string.quick_settings_disclosure_management_vpns));
+                        QS_MSG_MANAGEMENT_MULTIPLE_VPNS, mManagementMultipleVpnStringSupplier);
             }
             return mDpm.getResources().getString(
                     QS_MSG_NAMED_MANAGEMENT_MULTIPLE_VPNS,
@@ -386,10 +447,7 @@ class QSSecurityFooter extends ViewController<View>
 
     private String getMangedDeviceGeneralText(CharSequence organizationName) {
         if (organizationName == null) {
-            return mDpm.getResources().getString(
-                    QS_MSG_MANAGEMENT,
-                    () -> mContext.getString(
-                            R.string.quick_settings_disclosure_management));
+            return mDpm.getResources().getString(QS_MSG_MANAGEMENT, mManagementMessageSupplier);
         }
         if (isFinancedDevice()) {
             return mContext.getString(
@@ -431,9 +489,7 @@ class QSSecurityFooter extends ViewController<View>
         if (hasCACertsInWorkProfile && isWorkProfileOn) {
             if (workProfileOrganizationName == null) {
                 return mDpm.getResources().getString(
-                        QS_MSG_WORK_PROFILE_MONITORING,
-                        () -> mContext.getString(
-                                R.string.quick_settings_disclosure_managed_profile_monitoring));
+                        QS_MSG_WORK_PROFILE_MONITORING, mWorkProfileMonitoringStringSupplier);
             }
             return mDpm.getResources().getString(
                     QS_MSG_NAMED_WORK_PROFILE_MONITORING,
@@ -478,10 +534,9 @@ class QSSecurityFooter extends ViewController<View>
 
     private String getManagedProfileNetworkActivityText() {
         return mDpm.getResources().getString(
-                QS_MSG_WORK_PROFILE_NETWORK,
-                () -> mContext.getString(
-                        R.string.quick_settings_disclosure_managed_profile_network_activity));
+                QS_MSG_WORK_PROFILE_NETWORK, mWorkProfileNetworkStringSupplier);
     }
+
     @Override
     public void onClick(DialogInterface dialog, int which) {
         if (which == DialogInterface.BUTTON_NEGATIVE) {
@@ -506,7 +561,8 @@ class QSSecurityFooter extends ViewController<View>
 
                 mDialog.setView(view);
                 if (mView.isAggregatedVisible()) {
-                    mDialogLaunchAnimator.showFromView(mDialog, mView);
+                    mDialogLaunchAnimator.showFromView(mDialog, mView, new DialogCuj(
+                            InteractionJankMonitor.CUJ_SHADE_DIALOG_OPEN, INTERACTION_JANK_TAG));
                 } else {
                     mDialog.show();
                 }
@@ -569,6 +625,12 @@ class QSSecurityFooter extends ViewController<View>
             caCertsWarning.setText(caCertsMessage);
             // Make "Open trusted credentials"-link clickable
             caCertsWarning.setMovementMethod(new LinkMovementMethod());
+
+            TextView caCertsSubtitle = (TextView) dialogView.findViewById(R.id.ca_certs_subtitle);
+            String caCertsSubtitleMessage = mDpm.getResources().getString(
+                    QS_DIALOG_MONITORING_CA_CERT_SUBTITLE, mMonitoringSubtitleCaCertStringSupplier);
+            caCertsSubtitle.setText(caCertsSubtitleMessage);
+
         }
 
         // network logging section
@@ -581,6 +643,13 @@ class QSSecurityFooter extends ViewController<View>
             TextView networkLoggingWarning =
                     (TextView) dialogView.findViewById(R.id.network_logging_warning);
             networkLoggingWarning.setText(networkLoggingMessage);
+
+            TextView networkLoggingSubtitle = (TextView) dialogView.findViewById(
+                    R.id.network_logging_subtitle);
+            String networkLoggingSubtitleMessage = mDpm.getResources().getString(
+                    QS_DIALOG_MONITORING_NETWORK_SUBTITLE,
+                    mMonitoringSubtitleNetworkStringSupplier);
+            networkLoggingSubtitle.setText(networkLoggingSubtitleMessage);
         }
 
         // vpn section
@@ -594,6 +663,11 @@ class QSSecurityFooter extends ViewController<View>
             vpnWarning.setText(vpnMessage);
             // Make "Open VPN Settings"-link clickable
             vpnWarning.setMovementMethod(new LinkMovementMethod());
+
+            TextView vpnSubtitle = (TextView) dialogView.findViewById(R.id.vpn_subtitle);
+            String vpnSubtitleMessage = mDpm.getResources().getString(
+                    QS_DIALOG_MONITORING_VPN_SUBTITLE, mMonitoringSubtitleVpnStringSupplier);
+            vpnSubtitle.setText(vpnSubtitleMessage);
         }
 
         // Note: if a new section is added, should update configSubtitleVisibility to include
@@ -657,8 +731,7 @@ class QSSecurityFooter extends ViewController<View>
     @VisibleForTesting
     String getSettingsButton() {
         return mDpm.getResources().getString(
-                QS_DIALOG_VIEW_POLICIES,
-                () -> mContext.getString(R.string.monitoring_button_view_policies));
+                QS_DIALOG_VIEW_POLICIES, mViewPoliciesButtonStringSupplier);
     }
 
     private String getPositiveButton() {
@@ -692,9 +765,7 @@ class QSSecurityFooter extends ViewController<View>
                         organizationName);
             }
         }
-        return mDpm.getResources().getString(
-                QS_DIALOG_MANAGEMENT,
-                () -> mContext.getString(R.string.monitoring_description_management));
+        return mDpm.getResources().getString(QS_DIALOG_MANAGEMENT, mManagementDialogStringSupplier);
     }
 
     @Nullable
@@ -703,15 +774,11 @@ class QSSecurityFooter extends ViewController<View>
         if (!(hasCACerts || hasCACertsInWorkProfile)) return null;
         if (isDeviceManaged) {
             return mDpm.getResources().getString(
-                    QS_DIALOG_MANAGEMENT_CA_CERT,
-                    () -> mContext.getString(
-                            R.string.monitoring_description_management_ca_certificate));
+                    QS_DIALOG_MANAGEMENT_CA_CERT, mManagementDialogCaCertStringSupplier);
         }
         if (hasCACertsInWorkProfile) {
             return mDpm.getResources().getString(
-                    QS_DIALOG_WORK_PROFILE_CA_CERT,
-                    () -> mContext.getString(
-                            R.string.monitoring_description_managed_profile_ca_certificate));
+                    QS_DIALOG_WORK_PROFILE_CA_CERT, mWorkProfileDialogCaCertStringSupplier);
         }
         return mContext.getString(R.string.monitoring_description_ca_certificate);
     }
@@ -722,14 +789,10 @@ class QSSecurityFooter extends ViewController<View>
         if (!isNetworkLoggingEnabled) return null;
         if (isDeviceManaged) {
             return mDpm.getResources().getString(
-                    QS_DIALOG_MANAGEMENT_NETWORK,
-                    () -> mContext.getString(
-                            R.string.monitoring_description_management_network_logging));
+                    QS_DIALOG_MANAGEMENT_NETWORK, mManagementDialogNetworkStringSupplier);
         } else {
             return mDpm.getResources().getString(
-                    QS_DIALOG_WORK_PROFILE_NETWORK,
-                    () -> mContext.getString(
-                            R.string.monitoring_description_managed_profile_network_logging));
+                    QS_DIALOG_WORK_PROFILE_NETWORK, mWorkProfileDialogNetworkStringSupplier);
         }
     }
 
@@ -799,7 +862,7 @@ class QSSecurityFooter extends ViewController<View>
         } else {
             return mDpm.getResources().getString(
                     QS_DIALOG_MANAGEMENT_TITLE,
-                    () -> mContext.getString(R.string.monitoring_title_device_owned));
+                    mManagementTitleSupplier);
         }
     }
 

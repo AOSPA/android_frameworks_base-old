@@ -16,22 +16,27 @@
 
 package com.android.server.pm;
 
+import static android.app.AppOpsManager.MODE_DEFAULT;
+
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.content.pm.DataLoaderType;
 import android.content.pm.IPackageInstallObserver2;
+import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
 import android.content.pm.SigningDetails;
 import android.os.UserHandle;
 
 import com.android.internal.util.Preconditions;
-import com.android.server.pm.parsing.pkg.ParsedPackage;
 
+import java.io.File;
 import java.util.List;
 
-abstract class InstallArgs {
-    /** @see InstallParams#mOriginInfo */
+final class InstallArgs {
+    File mCodeFile;
+    /** @see InstallingSession#mOriginInfo */
     final OriginInfo mOriginInfo;
-    /** @see InstallParams#mMoveInfo */
+    /** @see InstallingSession#mMoveInfo */
     final MoveInfo mMoveInfo;
 
     final IPackageInstallObserver2 mObserver;
@@ -97,7 +102,7 @@ abstract class InstallArgs {
     }
 
     /** New install */
-    InstallArgs(InstallParams params) {
+    InstallArgs(InstallingSession params) {
         this(params.mOriginInfo, params.mMoveInfo, params.mObserver, params.mInstallFlags,
                 params.mInstallSource, params.mVolumeUuid,
                 params.getUser(), null /*instructionSets*/, params.mPackageAbiOverride,
@@ -108,46 +113,21 @@ abstract class InstallArgs {
                 params.mDataLoaderType, params.mPackageSource, params.mPm);
     }
 
-    abstract int copyApk();
-    abstract int doPreInstall(int status);
-
     /**
-     * Rename package into final resting place. All paths on the given
-     * scanned package should be updated to reflect the rename.
+     * Create args that describe an existing installed package. Typically used
+     * when cleaning up old installs, or used as a move source.
      */
-    abstract boolean doRename(int status, ParsedPackage parsedPackage);
-    abstract int doPostInstall(int status, int uid);
+    InstallArgs(String codePath, String[] instructionSets, PackageManagerService pm) {
+        this(OriginInfo.fromNothing(), null, null, 0, InstallSource.EMPTY,
+                null, null, instructionSets, null, null, null, MODE_DEFAULT, null, 0,
+                SigningDetails.UNKNOWN, PackageManager.INSTALL_REASON_UNKNOWN,
+                PackageManager.INSTALL_SCENARIO_DEFAULT, false, DataLoaderType.NONE,
+                PackageInstaller.PACKAGE_SOURCE_UNSPECIFIED, pm);
+        mCodeFile = (codePath != null) ? new File(codePath) : null;
+    }
 
     /** @see PackageSettingBase#getPath() */
-    abstract String getCodePath();
-
-    // Need installer lock especially for dex file removal.
-    abstract void cleanUpResourcesLI();
-    abstract boolean doPostDeleteLI(boolean delete);
-
-    /**
-     * Called before the source arguments are copied. This is used mostly
-     * for MoveParams when it needs to read the source file to put it in the
-     * destination.
-     */
-    int doPreCopy() {
-        return PackageManager.INSTALL_SUCCEEDED;
-    }
-
-    /**
-     * Called after the source arguments are copied. This is used mostly for
-     * MoveParams when it needs to read the source file to put it in the
-     * destination.
-     */
-    int doPostCopy(int uid) {
-        return PackageManager.INSTALL_SUCCEEDED;
-    }
-
-    protected boolean isEphemeral() {
-        return (mInstallFlags & PackageManager.INSTALL_INSTANT_APP) != 0;
-    }
-
-    UserHandle getUser() {
-        return mUser;
+    String getCodePath() {
+        return (mCodeFile != null) ? mCodeFile.getAbsolutePath() : null;
     }
 }

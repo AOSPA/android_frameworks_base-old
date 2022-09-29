@@ -176,7 +176,8 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
             int minX = tmpArray[0];
             int maxX = tmpArray[0] + topRow.getWidth();
             int height = topRow.getIntrinsicHeight();
-            mTouchableRegion.set(minX, 0, maxX, mHeadsUpInset + height);
+            final boolean stretchToTop = tmpArray[1] <= mHeadsUpInset;
+            mTouchableRegion.set(minX, stretchToTop ? 0 : tmpArray[1], maxX, tmpArray[1] + height);
             return mTouchableRegion;
         }
     }
@@ -220,8 +221,9 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
      * Notify that the status bar panel gets expanded or collapsed.
      *
      * @param isExpanded True to notify expanded, false to notify collapsed.
+     * TODO(b/237811427) replace with a listener
      */
-    void setIsPanelExpanded(boolean isExpanded) {
+    public void setIsPanelExpanded(boolean isExpanded) {
         if (isExpanded != mIsExpanded) {
             mIsExpanded = isExpanded;
             if (isExpanded) {

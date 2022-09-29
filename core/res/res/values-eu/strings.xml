@@ -21,11 +21,6 @@
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="byteShort" msgid="202579285008794431">"B"</string>
-    <string name="kilobyteShort" msgid="2214285521564195803">"kB"</string>
-    <string name="megabyteShort" msgid="6649361267635823443">"MB"</string>
-    <string name="gigabyteShort" msgid="7515809460261287991">"GB"</string>
-    <string name="terabyteShort" msgid="1822367128583886496">"TB"</string>
-    <string name="petabyteShort" msgid="5651571254228534832">"PB"</string>
     <string name="fileSizeSuffix" msgid="4233671691980131257">"<xliff:g id="NUMBER">%1$s</xliff:g> <xliff:g id="UNIT">%2$s</xliff:g>"</string>
     <string name="untitled" msgid="3381766946944136678">"&lt;Izengabea&gt;"</string>
     <string name="emptyPhoneNumber" msgid="5812172618020360048">"(Ez dago telefono-zenbakirik)"</string>
@@ -305,11 +300,11 @@
     <string name="permgroupdesc_calendar" msgid="6762751063361489379">"atzitu egutegia"</string>
     <string name="permgrouplab_sms" msgid="795737735126084874">"SMSak"</string>
     <string name="permgroupdesc_sms" msgid="5726462398070064542">"bidali eta ikusi SMS mezuak"</string>
-    <string name="permgrouplab_storage" msgid="5570124978732352858">"fitxategiak eta dokumentuak"</string>
-    <string name="permgroupdesc_storage" msgid="8352226729501080525">"gailuko fitxategiak eta dokumentuak atzitu"</string>
-    <string name="permgrouplab_readMediaAural" msgid="1858331312624942053">"musika eta audioa"</string>
+    <string name="permgrouplab_storage" msgid="17339216290379241">"Fitxategiak"</string>
+    <string name="permgroupdesc_storage" msgid="5378659041354582769">"gailuko fitxategiak atzitu"</string>
+    <string name="permgrouplab_readMediaAural" msgid="1858331312624942053">"Musika eta audioa"</string>
     <string name="permgroupdesc_readMediaAural" msgid="7565467343667089595">"atzitu gailuko musika eta audioak"</string>
-    <string name="permgrouplab_readMediaVisual" msgid="4724874717811908660">"argazkiak eta bideoak"</string>
+    <string name="permgrouplab_readMediaVisual" msgid="4724874717811908660">"Argazkiak eta bideoak"</string>
     <string name="permgroupdesc_readMediaVisual" msgid="4080463241903508688">"atzitu gailuko argazkiak eta bideoak"</string>
     <string name="permgrouplab_microphone" msgid="2480597427667420076">"Mikrofonoa"</string>
     <string name="permgroupdesc_microphone" msgid="1047786732792487722">"grabatu audioa"</string>
@@ -558,6 +553,8 @@
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"Pantailaren blokeoaren konplexutasun-maila (handia, ertaina, txikia edo bat ere ez) jakiteko baimena ematen die aplikazioei. Informazio horrekin, pantailaren blokeoaren luzera-barruti edo mota posiblea ondoriozta liteke. Halaber, pantailaren blokeoa maila jakin batera igotzeko iradoki diezaiekete aplikazioek erabiltzaileei, baina horri ez ikusi egin eta aplikazioak erabiltzen jarraitzeko aukera dute erabiltzaileek. Kontuan izan pantailaren blokeoa ez dela gordetzen testu arrunt gisa; beraz, aplikazioek ez dute jakingo pasahitz zehatza zein den."</string>
     <string name="permlab_postNotification" msgid="4875401198597803658">"jakinarazpenak erakutsi"</string>
     <string name="permdesc_postNotification" msgid="5974977162462877075">"Jakinarazpenak erakusteko baimena ematen die aplikazioei"</string>
+    <string name="permlab_turnScreenOn" msgid="219344053664171492">"piztu pantaila"</string>
+    <string name="permdesc_turnScreenOn" msgid="4394606875897601559">"Pantaila pizteko baimena ematen dio aplikazioari."</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"erabili hardware biometrikoa"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"Autentifikatzeko hardware biometrikoa erabiltzeko baimena ematen die aplikazioei."</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"kudeatu hatz-marken hardwarea"</string>
@@ -1392,7 +1389,7 @@
     <string name="alert_windows_notification_channel_group_name" msgid="6063891141815714246">"Bistaratu beste aplikazioen gainean"</string>
     <string name="alert_windows_notification_channel_name" msgid="3437528564303192620">"<xliff:g id="NAME">%s</xliff:g> aplikazioen gainean agertzea"</string>
     <string name="alert_windows_notification_title" msgid="6331662751095228536">"Besteen gainean agertzen da <xliff:g id="NAME">%s</xliff:g>"</string>
-    <string name="alert_windows_notification_message" msgid="6538171456970725333">"Ez baduzu nahi <xliff:g id="NAME">%s</xliff:g> zerbitzuak eginbide hori erabiltzea, sakatu hau ezarpenak ireki eta aukera desaktibatzeko."</string>
+    <string name="alert_windows_notification_message" msgid="6538171456970725333">"<xliff:g id="NAME">%s</xliff:g> zerbitzuak eginbide hori erabiltzea nahi ez baduzu, sakatu hau ezarpenak ireki eta aukera desaktibatzeko."</string>
     <string name="alert_windows_notification_turn_off_action" msgid="7805857234839123780">"Desaktibatu"</string>
     <string name="ext_media_checking_notification_title" msgid="8299199995416510094">"<xliff:g id="NAME">%s</xliff:g> egiaztatzen…"</string>
     <string name="ext_media_checking_notification_message" msgid="2231566971425375542">"Edukia berrikusten"</string>
@@ -1924,6 +1921,8 @@
     <string name="country_selection_title" msgid="5221495687299014379">"Lurralde-hobespena"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Adierazi hizkuntza"</string>
     <string name="language_picker_section_suggested" msgid="6556199184638990447">"Iradokitakoak"</string>
+    <string name="language_picker_section_suggested_bilingual" msgid="5932198319583556613">"Iradokitako hizkuntzak"</string>
+    <string name="region_picker_section_suggested_bilingual" msgid="704607569328224133">"Iradokitako lurraldeak"</string>
     <string name="language_picker_section_all" msgid="1985809075777564284">"Hizkuntza guztiak"</string>
     <string name="region_picker_section_all" msgid="756441309928774155">"Lurralde guztiak"</string>
     <string name="locale_search_menu" msgid="6258090710176422934">"Bilaketa"</string>
@@ -2078,8 +2077,8 @@
     <string name="nas_upgrade_notification_learn_more_action" msgid="7011130656195423947">"Lortu informazio gehiago"</string>
     <string name="nas_upgrade_notification_learn_more_content" msgid="3735480566983530650">"Android 12-n, jakinarazpen hobetuek ordeztu dituzte Android-eko jakinarazpen egokituak. Eginbide horrek, iradokitako ekintzak eta erantzunak erakusten, eta zure jakinarazpenak antolatzen ditu.\n\nJakinarazpen hobetuek jakinarazpenen eduki osoa atzi dezakete, informazio pertsonala barne (esaterako, kontaktuen izenak eta mezuak). Halaber, eginbideak jakinarazpenak baztertu, edo haiei erantzun diezaieke; adibidez, telefono-deiei erantzun diezaieke, eta ez molestatzeko modua kontrolatu."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Ohitura moduaren informazio-jakinarazpena"</string>
-    <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Baliteke bateria ohi baino lehenago agortzea"</string>
-    <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Bateria-aurrezlea aktibatuta dago bateriaren iraupena luzatzeko"</string>
+    <string name="dynamic_mode_notification_title" msgid="1388718452788985481">"Bateria-aurrezlea aktibatu da"</string>
+    <string name="dynamic_mode_notification_summary" msgid="1639031262484979689">"Bateria-erabilera murrizten hasi da haren iraupena luzatzeko"</string>
     <string name="battery_saver_notification_channel_name" msgid="3918243458067916913">"Bateria-aurrezlea"</string>
     <string name="battery_saver_off_notification_title" msgid="7637255960468032515">"Desaktibatu egin da bateria-aurrezlea"</string>
     <string name="battery_saver_charged_notification_summary" product="default" msgid="5544457317418624367">"Behar adina bateria dauka telefonoak. Jada ez dago eginbiderik murriztuta."</string>
@@ -2286,5 +2285,7 @@
     <string name="notification_action_check_bg_apps" msgid="4758877443365362532">"Ikusi zer aplikazio dauden aktibo"</string>
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"Ezin da atzitu telefonoaren kamera <xliff:g id="DEVICE">%1$s</xliff:g> gailutik"</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"Ezin da atzitu tabletaren kamera <xliff:g id="DEVICE">%1$s</xliff:g> gailutik"</string>
-    <string name="system_locale_title" msgid="3978041860457277638">"Sistemaren hizkuntza"</string>
+    <string name="system_locale_title" msgid="711882686834677268">"Sistemaren balio lehenetsia"</string>
+    <!-- no translation found for default_card_name (9198284935962911468) -->
+    <skip />
 </resources>

@@ -18,10 +18,9 @@ package com.android.server.wm.flicker.helpers
 
 import android.app.Instrumentation
 import androidx.test.uiautomator.By
-import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import com.android.server.wm.flicker.testapp.ActivityOptions
-import com.android.server.wm.traces.common.FlickerComponentName
+import com.android.server.wm.traces.common.IComponentMatcher
 import com.android.server.wm.traces.parser.toFlickerComponent
 import com.android.server.wm.traces.parser.windowmanager.WindowManagerStateHelper
 
@@ -30,21 +29,18 @@ class ImeEditorPopupDialogAppHelper @JvmOverloads constructor(
     private val rotation: Int,
     private val imePackageName: String = IME_PACKAGE,
     launcherName: String = ActivityOptions.EDITOR_POPUP_DIALOG_ACTIVITY_LAUNCHER_NAME,
-    component: FlickerComponentName =
+    component: IComponentMatcher =
             ActivityOptions.EDITOR_POPUP_DIALOG_ACTIVITY_COMPONENT_NAME.toFlickerComponent()
 ) : ImeAppHelper(instr, launcherName, component) {
-    override fun openIME(
-        device: UiDevice,
-        wmHelper: WindowManagerStateHelper?
-    ) {
-        val editText = device.wait(Until.findObject(By.text("focused editText")), FIND_TIMEOUT)
+    override fun openIME(wmHelper: WindowManagerStateHelper) {
+        val editText = uiDevice.wait(Until.findObject(By.text("focused editText")), FIND_TIMEOUT)
 
         require(editText != null) {
             "Text field not found, this usually happens when the device " +
                     "was left in an unknown state (e.g. in split screen)"
         }
         editText.click()
-        waitIMEShown(device, wmHelper)
+        waitIMEShown(wmHelper)
     }
 
     fun dismissDialog(wmHelper: WindowManagerStateHelper) {
@@ -54,7 +50,9 @@ class ImeEditorPopupDialogAppHelper @JvmOverloads constructor(
         // Pressing back key to dismiss the dialog
         if (dismissButton != null) {
             dismissButton.click()
-            wmHelper.waitForAppTransitionIdle()
+            wmHelper.StateSyncBuilder()
+                .withAppTransitionIdle()
+                .waitForAndVerify()
         }
     }
 }

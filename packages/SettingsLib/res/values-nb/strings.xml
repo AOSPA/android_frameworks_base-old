@@ -125,9 +125,9 @@
     <string name="bluetooth_profile_a2dp_high_quality" msgid="4739440941324792775">"HD-lyd: <xliff:g id="CODEC_NAME">%1$s</xliff:g>"</string>
     <string name="bluetooth_profile_a2dp_high_quality_unknown_codec" msgid="2477639096903834374">"HD-lyd"</string>
     <string name="bluetooth_profile_hearing_aid" msgid="58154575573984914">"Høreapparater"</string>
-    <string name="bluetooth_profile_le_audio" msgid="5158149987518342036">"LE_AUDIO"</string>
+    <string name="bluetooth_profile_le_audio" msgid="3237854988278539061">"LE-lyd"</string>
     <string name="bluetooth_hearing_aid_profile_summary_connected" msgid="8191273236809964030">"Koblet til høreapparater"</string>
-    <string name="bluetooth_le_audio_profile_summary_connected" msgid="3162538609379333442">"Koblet til LE_AUDIO"</string>
+    <string name="bluetooth_le_audio_profile_summary_connected" msgid="6916226974453480650">"Koblet til LE-lyd"</string>
     <string name="bluetooth_a2dp_profile_summary_connected" msgid="7422607970115444153">"Koblet til medielyd"</string>
     <string name="bluetooth_headset_profile_summary_connected" msgid="2420981566026949688">"Koblet til telefonlyd"</string>
     <string name="bluetooth_opp_profile_summary_connected" msgid="2393521801478157362">"Koblet til tjener for filoverføring"</string>
@@ -482,6 +482,7 @@
     <string name="battery_info_status_charging_fast" msgid="8027559755902954885">"Lader raskt"</string>
     <string name="battery_info_status_charging_slow" msgid="3190803837168962319">"Lader sakte"</string>
     <string name="battery_info_status_charging_wireless" msgid="8924722966861282197">"Lader trådløst"</string>
+    <string name="battery_info_status_charging_dock" msgid="3554147903321236585">"Ladedokk"</string>
     <string name="battery_info_status_discharging" msgid="6962689305413556485">"Lader ikke"</string>
     <string name="battery_info_status_not_charging" msgid="3371084153747234837">"Tilkoblet, lader ikke"</string>
     <string name="battery_info_status_full" msgid="1339002294876531312">"Ladet"</string>
@@ -667,11 +668,11 @@
     <string name="turn_screen_on_title" msgid="3266937298097573424">"Slå på skjermen"</string>
     <string name="allow_turn_screen_on" msgid="6194845766392742639">"Tillat å slå på skjermen"</string>
     <string name="allow_turn_screen_on_description" msgid="43834403291575164">"Tillat at en app slår på skjermen. Hvis tillatelsen gis, kan appen slå på skjermen når som helst uten din eksplisitte intensjon."</string>
-    <string name="bt_le_audio_scan_qr_code" msgid="3521809854780392679">"Skann QR-koden"</string>
-    <string name="bt_le_audio_scan_qr_code_scanner" msgid="4679500020630341107">"For å begynne å lytte, midtstill QR-koden nedenfor"</string>
-    <string name="bt_le_audio_qr_code_is_not_valid_format" msgid="6092191081849434734">"QR-koden er ikke i et gyldig format"</string>
     <string name="bt_le_audio_broadcast_dialog_title" msgid="5392738488989777074">"Vil du stoppe kringkastingen av <xliff:g id="APP_NAME">%1$s</xliff:g>?"</string>
     <string name="bt_le_audio_broadcast_dialog_sub_title" msgid="268234802198852753">"Hvis du kringkaster <xliff:g id="SWITCHAPP">%1$s</xliff:g> eller endrer utgangen, stopper den nåværende kringkastingen din"</string>
     <string name="bt_le_audio_broadcast_dialog_switch_app" msgid="5749813313369517812">"Kringkast <xliff:g id="SWITCHAPP">%1$s</xliff:g>"</string>
     <string name="bt_le_audio_broadcast_dialog_different_output" msgid="2638402023060391333">"Endre utgang"</string>
+    <string name="back_navigation_animation" msgid="8105467568421689484">"Tilbake-animasjoner med forslag"</string>
+    <string name="back_navigation_animation_summary" msgid="741292224121599456">"Slå på systemanimasjoner for tilbakebevegelser med forslag."</string>
+    <string name="back_navigation_animation_dialog" msgid="8696966520944625596">"Denne innstillingen slår på systemanimasjoner for bevegelsesanimasjoner med forslag. Den krever at enableOnBackInvokedCallback settes til sann i manifestfilen for hver app."</string>
 </resources>

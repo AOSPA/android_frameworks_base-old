@@ -19,6 +19,7 @@ package android.companion;
 import android.app.PendingIntent;
 import android.companion.IAssociationRequestCallback;
 import android.companion.IOnAssociationsChangedListener;
+import android.companion.ISystemDataTransferCallback;
 import android.companion.AssociationInfo;
 import android.companion.AssociationRequest;
 import android.content.ComponentName;
@@ -62,8 +63,6 @@ interface ICompanionDeviceManager {
     void createAssociation(in String packageName, in String macAddress, int userId,
         in byte[] certificate);
 
-    void dispatchMessage(int messageId, int associationId, in byte[] message);
-
     void addOnAssociationsChangedListener(IOnAssociationsChangedListener listener, int userId);
 
     void removeOnAssociationsChangedListener(IOnAssociationsChangedListener listener, int userId);
@@ -75,5 +74,10 @@ interface ICompanionDeviceManager {
     PendingIntent buildPermissionTransferUserConsentIntent(String callingPackage, int userId,
         int associationId);
 
-    void startSystemDataTransfer(String packageName, int userId, int associationId);
+    void startSystemDataTransfer(String packageName, int userId, int associationId,
+        in ISystemDataTransferCallback callback);
+
+    void attachSystemDataTransport(String packageName, int userId, int associationId, in ParcelFileDescriptor fd);
+
+    void detachSystemDataTransport(String packageName, int userId, int associationId);
 }

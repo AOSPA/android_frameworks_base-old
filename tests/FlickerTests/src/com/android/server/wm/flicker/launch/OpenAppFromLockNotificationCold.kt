@@ -16,15 +16,20 @@
 
 package com.android.server.wm.flicker.launch
 
+import android.platform.test.annotations.FlakyTest
 import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.RequiresDevice
-import androidx.test.filters.FlakyTest
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
 import com.android.server.wm.flicker.annotation.Group1
 import com.android.server.wm.flicker.dsl.FlickerBuilder
+import com.android.server.wm.flicker.navBarLayerPositionAtEnd
+import com.android.server.wm.flicker.statusBarLayerPositionAtEnd
+import com.android.server.wm.traces.common.ComponentMatcher
+import org.junit.Assume
 import org.junit.FixMethodOrder
+import org.junit.Ignore
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
@@ -43,8 +48,8 @@ import org.junit.runners.Parameterized
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @Group1
 @Postsubmit
-open class OpenAppFromLockNotificationCold(testSpec: FlickerTestParameter)
-    : OpenAppFromNotificationCold(testSpec) {
+open class OpenAppFromLockNotificationCold(testSpec: FlickerTestParameter) :
+    OpenAppFromNotificationCold(testSpec) {
 
     override val openingNotificationsFromLockScreen = true
 
@@ -62,9 +67,9 @@ open class OpenAppFromLockNotificationCold(testSpec: FlickerTestParameter)
             setup {
                 eachRun {
                     device.sleep()
-                    wmHelper.waitFor("noAppWindowsOnTop") {
-                        it.wmState.topVisibleAppWindow.isEmpty()
-                    }
+                    wmHelper.StateSyncBuilder()
+                        .withoutTopVisibleAppWindows()
+                        .waitForAndVerify()
                 }
             }
         }
@@ -85,6 +90,75 @@ open class OpenAppFromLockNotificationCold(testSpec: FlickerTestParameter)
     @Test
     override fun appWindowBecomesTopWindow() = super.appWindowBecomesTopWindow()
 
+    /** {@inheritDoc} */
+    @Ignore("Display is off at the start")
+    override fun navBarLayerPositionAtStartAndEnd() { }
+
+    /**
+     * Checks the position of the [ComponentMatcher.NAV_BAR] at the end of the transition
+     */
+    @Postsubmit
+    @Test
+    fun navBarLayerPositionAtEnd() {
+        Assume.assumeFalse(testSpec.isTablet)
+        testSpec.navBarLayerPositionAtEnd()
+    }
+
+    /** {@inheritDoc} */
+    @Ignore("Display is off at the start")
+    override fun statusBarLayerPositionAtStartAndEnd() { }
+
+    /**
+     * Checks the position of the [ComponentMatcher.STATUS_BAR] at the start and end of the
+     * transition
+     */
+    @Postsubmit
+    @Test
+    fun statusBarLayerPositionEnd() = testSpec.statusBarLayerPositionAtEnd()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun navBarLayerIsVisibleAtStartAndEnd() = super.navBarLayerIsVisibleAtStartAndEnd()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun navBarWindowIsAlwaysVisible() = super.navBarWindowIsAlwaysVisible()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun appLayerBecomesVisible() = super.appLayerBecomesVisible()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun statusBarWindowIsAlwaysVisible() = super.statusBarWindowIsAlwaysVisible()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun appWindowBecomesVisible() = super.appWindowBecomesVisible()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun statusBarLayerIsVisibleAtStartAndEnd() =
+        super.statusBarLayerIsVisibleAtStartAndEnd()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
+        super.visibleLayersShownMoreThanOneConsecutiveEntry()
+
+    /** {@inheritDoc} */
+    @Postsubmit
+    @Test
+    override fun appWindowIsTopWindowAtEnd() =
+        super.appWindowIsTopWindowAtEnd()
+
     companion object {
         /**
          * Creates the test configurations.
@@ -95,7 +169,7 @@ open class OpenAppFromLockNotificationCold(testSpec: FlickerTestParameter)
         @Parameterized.Parameters(name = "{0}")
         @JvmStatic
         fun getParams(): Collection<FlickerTestParameter> {
-            return com.android.server.wm.flicker.FlickerTestParameterFactory.getInstance()
+            return FlickerTestParameterFactory.getInstance()
                     .getConfigNonRotationTests(repetitions = 3)
         }
     }

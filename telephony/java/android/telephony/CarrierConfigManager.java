@@ -5045,12 +5045,17 @@ public class CarrierConfigManager {
         /**
          * Flag indicating whether or not to use TEL URI when setting the entity uri field and
          * contact element of each tuple.
+         *
          * When {@code true}, the device sets the entity uri field and contact element to be
+         * TEL URI. This is done by first searching for the first TEL URI provided in
+         * p-associated-uri header. If there are no TEL URIs in the p-associated-uri header, we will
+         * convert the first SIP URI provided in the header to a TEL URI. If there are no URIs in
+         * the p-associated-uri header, we will then fall back to using the SIM card to generate the
          * TEL URI.
-         * If the TEL URI does not exist, the first URI provided in p-associated-uri header is
-         * converted into a TEL URI.
-         * If {@code false}, if false, the first URI provided in the p-associated-uri header
-         * is used.
+         * If {@code false}, the first URI provided in the p-associated-uri header is used,
+         * independent of the URI scheme. If there are no URIs available from p-associated-uri
+         * header, we will try to generate a SIP URI or TEL URI from the information provided by the
+         * SIM card, depending on the information available.
          * @hide
          */
         public static final String KEY_USE_TEL_URI_FOR_PIDF_XML_BOOL =
@@ -7781,6 +7786,100 @@ public class CarrierConfigManager {
         public static final String KEY_XCAP_OVER_UT_SUPPORTED_RATS_INT_ARRAY =
                 KEY_PREFIX + "xcap_over_ut_supported_rats_int_array";
 
+        /** @hide */
+        @IntDef({
+            CALL_WAITING_SYNC_NONE,
+            CALL_WAITING_SYNC_USER_CHANGE,
+            CALL_WAITING_SYNC_FIRST_POWER_UP,
+            CALL_WAITING_SYNC_FIRST_CHANGE,
+            CALL_WAITING_SYNC_IMS_ONLY
+        })
+
+        public @interface CwSyncType {}
+
+        /**
+         * Do not synchronize the user's call waiting setting with the network. Call waiting is
+         * always enabled on the carrier network and the user setting for call waiting is applied
+         * on the terminal side. If the user disables call waiting, the call will be rejected on
+         * the terminal.
+         */
+        public static final int CALL_WAITING_SYNC_NONE = 0;
+
+        /**
+         * The change of user’s setting is always passed to the carrier network
+         * and then synchronized to the terminal based call waiting solution over IMS.
+         * If changing the service over the carrier network is not successful,
+         * the setting over IMS shall not be changed.
+         */
+        public static final int CALL_WAITING_SYNC_USER_CHANGE = 1;
+
+        /**
+         * Activate call waiting on the carrier network when the device boots or a subscription
+         * using this carrier is loaded. Call waiting is always considered enabled on the carrier
+         * network and the user setting for call waiting is applied on the terminal side only. If
+         * the user disables call waiting, the call will be rejected on the terminal.
+         * The mismatch between CS calls and IMS calls can happen when the network based call
+         * waiting service is in disabled state in the legacy 3G/2G networks while it's enabled
+         * in the terminal side.
+         */
+        public static final int CALL_WAITING_SYNC_FIRST_POWER_UP = 2;
+
+        /**
+         * Activate call waiting on the carrier network when the user enables call waiting the
+         * first time. Call waiting is then always considered enabled on the carrier network. If
+         * the user disables call waiting, the setting will only be applied to the terminal based
+         * call waiting service and the call will be rejected on the terminal.
+         * The mismatch between CS calls and IMS calls can happen when the network based call
+         * waiting service is in disabled state in the legacy 3G/2G networks while it's enabled
+         * in the terminal side. However, if the user retrieves the setting again when the device
+         * is in the legacy 3G/2G networks, the correct state will be shown to the user.
+         */
+        public static final int CALL_WAITING_SYNC_FIRST_CHANGE = 3;
+
+        /**
+         * Do not synchronize the call waiting service state between the carrier network and
+         * the terminal based IMS call waiting service. If the user changes the call waiting setting
+         * when IMS is registered, the change will only be applied to the terminal based call
+         * waiting service. If IMS is not registered when call waiting is changed, synchronize this
+         * setting with the carrier network.
+         */
+        public static final int CALL_WAITING_SYNC_IMS_ONLY = 4;
+
+        /** @hide */
+        public static final int CALL_WAITING_SYNC_MAX = CALL_WAITING_SYNC_IMS_ONLY;
+
+        /**
+         * Flag indicating the way to synchronize the setting between CS and IMS.
+         *
+         * <p>Possible values are,
+         * {@link #CALL_WAITING_SYNC_NONE},
+         * {@link #CALL_WAITING_SYNC_USER_CHANGE},
+         * {@link #CALL_WAITING_SYNC_FIRST_POWER_UP},
+         * {@link #CALL_WAITING_SYNC_FIRST_CHANGE},
+         * {@link #CALL_WAITING_SYNC_IMS_ONLY}.
+         *
+         * This configuration is valid only when
+         * {@link #KEY_UT_TERMINAL_BASED_SERVICES_INT_ARRAY} includes
+         * {@link #SUPPLEMENTARY_SERVICE_CW}.
+         *
+         * <p>If key is invalid or not configured, the default value
+         * {@link #CALL_WAITING_SYNC_FIRST_CHANGE} will apply.
+         */
+        public static final String KEY_TERMINAL_BASED_CALL_WAITING_SYNC_TYPE_INT =
+                KEY_PREFIX + "terminal_based_call_waiting_sync_type_int";
+
+        /**
+         * Flag indicating whether the user setting for terminal-based call waiting
+         * is enabled by default or not.
+         * This configuration is valid only when
+         * {@link #KEY_UT_TERMINAL_BASED_SERVICES_INT_ARRAY} includes
+         * {@link #SUPPLEMENTARY_SERVICE_CW}.
+         *
+         * The default value for this key is {@code true}.
+         */
+        public static final String KEY_TERMINAL_BASED_CALL_WAITING_DEFAULT_ENABLED_BOOL =
+                KEY_PREFIX + "terminal_based_call_waiting_default_enabled_bool";
+
         private static PersistableBundle getDefaults() {
             PersistableBundle defaults = new PersistableBundle();
             defaults.putBoolean(KEY_UT_REQUIRES_IMS_REGISTRATION_BOOL, false);
@@ -7831,6 +7930,9 @@ public class CarrierConfigManager {
                         AccessNetworkType.IWLAN
                     });
             defaults.putString(KEY_UT_AS_SERVER_FQDN_STRING, "");
+            defaults.putBoolean(KEY_TERMINAL_BASED_CALL_WAITING_DEFAULT_ENABLED_BOOL, true);
+            defaults.putInt(KEY_TERMINAL_BASED_CALL_WAITING_SYNC_TYPE_INT,
+                    CALL_WAITING_SYNC_FIRST_CHANGE);
 
             return defaults;
         }

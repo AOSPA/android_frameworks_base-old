@@ -404,27 +404,20 @@ public class InsetsState implements Parcelable {
             if (source == null) {
                 continue;
             }
-            if (!canControlSide(frame, getInsetSide(
-                    source.calculateInsets(frame, true /* ignoreVisibility */)))) {
+            if (!canControlSource(frame, source)) {
                 blocked |= toPublicType(type);
             }
         }
         return blocked;
     }
 
-    private boolean canControlSide(Rect frame, int side) {
-        switch (side) {
-            case ISIDE_LEFT:
-            case ISIDE_RIGHT:
-                return frame.left == mDisplayFrame.left && frame.right == mDisplayFrame.right;
-            case ISIDE_TOP:
-            case ISIDE_BOTTOM:
-                return frame.top == mDisplayFrame.top && frame.bottom == mDisplayFrame.bottom;
-            case ISIDE_FLOATING:
-                return true;
-            default:
-                return false;
-        }
+    private static boolean canControlSource(Rect frame, InsetsSource source) {
+        final Insets insets = source.calculateInsets(frame, true /* ignoreVisibility */);
+        final Rect sourceFrame = source.getFrame();
+        final int sourceWidth = sourceFrame.width();
+        final int sourceHeight = sourceFrame.height();
+        return insets.left == sourceWidth || insets.right == sourceWidth
+                || insets.top == sourceHeight || insets.bottom == sourceHeight;
     }
 
     private void processSource(InsetsSource source, Rect relativeFrame, boolean ignoreVisibility,
@@ -548,7 +541,8 @@ public class InsetsState implements Parcelable {
     }
 
     public void getDisplayCutoutSafe(Rect outBounds) {
-        outBounds.set(Integer.MIN_VALUE, Integer.MIN_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE);
+        outBounds.set(
+                WindowLayout.MIN_X, WindowLayout.MIN_Y, WindowLayout.MAX_X, WindowLayout.MAX_Y);
         final DisplayCutout cutout = mDisplayCutout.get();
         final Rect displayFrame = mDisplayFrame;
         if (!cutout.isEmpty()) {
@@ -913,6 +907,11 @@ public class InsetsState implements Parcelable {
             InsetsSource source = mSources[i];
             InsetsSource otherSource = state.mSources[i];
             if (source == null && otherSource == null) {
+                continue;
+            }
+            if (excludeInvisibleImeFrames && i == ITYPE_IME
+                    && ((source == null && !otherSource.isVisible())
+                            || (otherSource == null && !source.isVisible()))) {
                 continue;
             }
             if (source == null || otherSource == null) {

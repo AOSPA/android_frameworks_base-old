@@ -39,9 +39,9 @@ import android.util.Log;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 
@@ -478,8 +478,15 @@ public class Environment {
     }
 
     /** {@hide} */
-    public static File getDataMiscCeSharedSdkSandboxDirectory(int userId, String packageName) {
-        return buildPath(getDataMiscCeDirectory(userId), "sdksandbox", packageName, "shared");
+    private static File getDataMiscCeDirectory(String volumeUuid, int userId) {
+        return buildPath(getDataDirectory(volumeUuid), "misc_ce", String.valueOf(userId));
+    }
+
+    /** {@hide} */
+    public static File getDataMiscCeSharedSdkSandboxDirectory(String volumeUuid, int userId,
+            String packageName) {
+        return buildPath(getDataMiscCeDirectory(volumeUuid, userId), "sdksandbox",
+                packageName, "shared");
     }
 
     /** {@hide} */
@@ -488,8 +495,15 @@ public class Environment {
     }
 
     /** {@hide} */
-    public static File getDataMiscDeSharedSdkSandboxDirectory(int userId, String packageName) {
-        return buildPath(getDataMiscDeDirectory(userId), "sdksandbox", packageName, "shared");
+    private static File getDataMiscDeDirectory(String volumeUuid, int userId) {
+        return buildPath(getDataDirectory(volumeUuid), "misc_de", String.valueOf(userId));
+    }
+
+    /** {@hide} */
+    public static File getDataMiscDeSharedSdkSandboxDirectory(String volumeUuid, int userId,
+            String packageName) {
+        return buildPath(getDataMiscDeDirectory(volumeUuid, userId), "sdksandbox",
+                packageName, "shared");
     }
 
     private static File getDataProfilesDeDirectory(int userId) {
@@ -963,7 +977,7 @@ public class Environment {
     }
 
     private static boolean hasInterestingFiles(File dir) {
-        final LinkedList<File> explore = new LinkedList<>();
+        final ArrayDeque<File> explore = new ArrayDeque<>();
         explore.add(dir);
         while (!explore.isEmpty()) {
             dir = explore.pop();

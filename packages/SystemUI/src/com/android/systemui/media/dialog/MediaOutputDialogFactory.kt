@@ -17,10 +17,14 @@
 package com.android.systemui.media.dialog
 
 import android.content.Context
+import android.media.AudioManager
 import android.media.session.MediaSessionManager
+import android.os.PowerExemptionManager
 import android.view.View
+import com.android.internal.jank.InteractionJankMonitor
 import com.android.internal.logging.UiEventLogger
 import com.android.settingslib.bluetooth.LocalBluetoothManager
+import com.android.systemui.animation.DialogCuj
 import com.android.systemui.animation.DialogLaunchAnimator
 import com.android.systemui.broadcast.BroadcastSender
 import com.android.systemui.media.nearby.NearbyMediaDevicesManager
@@ -41,9 +45,12 @@ class MediaOutputDialogFactory @Inject constructor(
     private val notifCollection: CommonNotifCollection,
     private val uiEventLogger: UiEventLogger,
     private val dialogLaunchAnimator: DialogLaunchAnimator,
-    private val nearbyMediaDevicesManagerOptional: Optional<NearbyMediaDevicesManager>
+    private val nearbyMediaDevicesManagerOptional: Optional<NearbyMediaDevicesManager>,
+    private val audioManager: AudioManager,
+    private val powerExemptionManager: PowerExemptionManager
 ) {
     companion object {
+        private const val INTERACTION_JANK_TAG = "media_output"
         var mediaOutputDialog: MediaOutputDialog? = null
     }
 
@@ -52,16 +59,24 @@ class MediaOutputDialogFactory @Inject constructor(
         // Dismiss the previous dialog, if any.
         mediaOutputDialog?.dismiss()
 
-        val controller = MediaOutputController(context, packageName,
-                mediaSessionManager, lbm, starter, notifCollection,
-                dialogLaunchAnimator, nearbyMediaDevicesManagerOptional)
+        val controller = MediaOutputController(
+            context, packageName,
+            mediaSessionManager, lbm, starter, notifCollection,
+            dialogLaunchAnimator, nearbyMediaDevicesManagerOptional, audioManager,
+            powerExemptionManager)
         val dialog =
             MediaOutputDialog(context, aboveStatusBar, broadcastSender, controller, uiEventLogger)
         mediaOutputDialog = dialog
 
         // Show the dialog.
         if (view != null) {
-            dialogLaunchAnimator.showFromView(dialog, view)
+            dialogLaunchAnimator.showFromView(
+                dialog, view,
+                cuj = DialogCuj(
+                    InteractionJankMonitor.CUJ_SHADE_DIALOG_OPEN,
+                    INTERACTION_JANK_TAG
+                )
+            )
         } else {
             dialog.show()
         }

@@ -54,6 +54,7 @@ import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.hardware.SensorManager;
 import android.hardware.display.AmbientDisplayConfiguration;
@@ -75,6 +76,7 @@ import android.os.UserHandle;
 import android.os.test.TestLooper;
 import android.provider.Settings;
 import android.service.dreams.DreamManagerInternal;
+import android.sysprop.PowerProperties;
 import android.test.mock.MockContentResolver;
 import android.view.Display;
 import android.view.DisplayInfo;
@@ -85,6 +87,7 @@ import com.android.internal.app.IBatteryStats;
 import com.android.internal.util.test.FakeSettingsProvider;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
+import com.android.server.compat.PlatformCompat;
 import com.android.server.lights.LightsManager;
 import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.power.PowerManagerService.BatteryReceiver;
@@ -144,6 +147,7 @@ public class PowerManagerServiceTest {
     @Mock private SystemPropertiesWrapper mSystemPropertiesMock;
     @Mock private AppOpsManager mAppOpsManagerMock;
     @Mock private LowPowerStandbyController mLowPowerStandbyControllerMock;
+    @Mock private PlatformCompat mPlatformCompat;
 
     @Mock
     private InattentiveSleepWarningController mInattentiveSleepWarningControllerMock;
@@ -154,6 +158,7 @@ public class PowerManagerServiceTest {
     private UserSwitchedReceiver mUserSwitchedReceiver;
     private Resources mResourcesSpy;
     private OffsettableClock mClock;
+    private long mLastElapsedRealtime;
     private TestLooper mTestLooper;
 
     private static class IntentFilterMatcher implements ArgumentMatcher<IntentFilter> {
@@ -282,7 +287,18 @@ public class PowerManagerServiceTest {
 
             @Override
             PowerManagerService.Clock createClock() {
-                return () -> mClock.now();
+                return new PowerManagerService.Clock() {
+                    @Override
+                    public long uptimeMillis() {
+                        return mClock.now();
+                    }
+
+                    @Override
+                    public long elapsedRealtime() {
+                        mLastElapsedRealtime = mClock.now();
+                        return mLastElapsedRealtime;
+                    }
+                };
             }
 
             @Override
@@ -304,6 +320,11 @@ public class PowerManagerServiceTest {
             @Override
             AppOpsManager createAppOpsManager(Context context) {
                 return mAppOpsManagerMock;
+            }
+
+            @Override
+            PlatformCompat createPlatformCompat(Context context) {
+                return mPlatformCompat;
             }
         });
         return mService;
@@ -478,6 +499,12 @@ public class PowerManagerServiceTest {
         String packageName = "pkg.name";
         when(mAppOpsManagerMock.checkOpNoThrow(AppOpsManager.OP_TURN_SCREEN_ON,
                 Binder.getCallingUid(), packageName)).thenReturn(MODE_ALLOWED);
+        when(mPlatformCompat.isChangeEnabledByPackageName(
+                eq(PowerManagerService.REQUIRE_TURN_SCREEN_ON_PERMISSION), anyString(),
+                anyInt())).thenReturn(true);
+        when(mContextSpy.checkCallingOrSelfPermission(
+                android.Manifest.permission.TURN_SCREEN_ON)).thenReturn(
+                PackageManager.PERMISSION_GRANTED);
 
         // First, ensure that a normal full wake lock does not cause a wakeup
         int flags = PowerManager.FULL_WAKE_LOCK;
@@ -494,6 +521,23 @@ public class PowerManagerServiceTest {
         mService.getBinderServiceInstance().releaseWakeLock(token, 0 /* flags */);
 
         // Verify that flag forces a wakeup when paired to a FULL_WAKE_LOCK
+        flags = PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP;
+        mService.getBinderServiceInstance().acquireWakeLock(token, flags, tag, packageName,
+                null /* workSource */, null /* historyTag */, Display.INVALID_DISPLAY, null);
+        assertThat(mService.getGlobalWakefulnessLocked()).isEqualTo(WAKEFULNESS_AWAKE);
+        mService.getBinderServiceInstance().releaseWakeLock(token, 0 /* flags */);
+
+        // Verify that on older platforms only the appOp is necessary and the permission isn't
+        // checked
+        when(mPlatformCompat.isChangeEnabledByPackageName(
+                eq(PowerManagerService.REQUIRE_TURN_SCREEN_ON_PERMISSION), anyString(),
+                anyInt())).thenReturn(false);
+        when(mContextSpy.checkCallingOrSelfPermission(
+                android.Manifest.permission.TURN_SCREEN_ON)).thenReturn(
+                PackageManager.PERMISSION_DENIED);
+        forceSleep();
+        assertThat(mService.getGlobalWakefulnessLocked()).isEqualTo(WAKEFULNESS_ASLEEP);
+
         flags = PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP;
         mService.getBinderServiceInstance().acquireWakeLock(token, flags, tag, packageName,
                 null /* workSource */, null /* historyTag */, Display.INVALID_DISPLAY, null);
@@ -518,7 +562,32 @@ public class PowerManagerServiceTest {
         int flags = PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP;
         mService.getBinderServiceInstance().acquireWakeLock(token, flags, tag, packageName,
                 null /* workSource */, null /* historyTag */, Display.INVALID_DISPLAY, null);
-        assertThat(mService.getGlobalWakefulnessLocked()).isEqualTo(WAKEFULNESS_ASLEEP);
+        if (PowerProperties.permissionless_turn_screen_on().orElse(true)) {
+            assertThat(mService.getGlobalWakefulnessLocked()).isEqualTo(WAKEFULNESS_AWAKE);
+        } else {
+            assertThat(mService.getGlobalWakefulnessLocked()).isEqualTo(WAKEFULNESS_ASLEEP);
+        }
+        mService.getBinderServiceInstance().releaseWakeLock(token, 0 /* flags */);
+
+        when(mAppOpsManagerMock.checkOpNoThrow(AppOpsManager.OP_TURN_SCREEN_ON,
+                Binder.getCallingUid(), packageName)).thenReturn(MODE_ALLOWED);
+        when(mPlatformCompat.isChangeEnabledByPackageName(
+                eq(PowerManagerService.REQUIRE_TURN_SCREEN_ON_PERMISSION), anyString(),
+                anyInt())).thenReturn(true);
+        when(mContextSpy.checkCallingOrSelfPermission(
+                android.Manifest.permission.TURN_SCREEN_ON)).thenReturn(
+                PackageManager.PERMISSION_DENIED);
+
+        // Verify that the flag has no effect when OP_TURN_SCREEN_ON is allowed but
+        // android.permission.TURN_SCREEN_ON is denied
+        flags = PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP;
+        mService.getBinderServiceInstance().acquireWakeLock(token, flags, tag, packageName,
+                null /* workSource */, null /* historyTag */, Display.INVALID_DISPLAY, null);
+        if (PowerProperties.permissionless_turn_screen_on().orElse(true)) {
+            assertThat(mService.getGlobalWakefulnessLocked()).isEqualTo(WAKEFULNESS_AWAKE);
+        } else {
+            assertThat(mService.getGlobalWakefulnessLocked()).isEqualTo(WAKEFULNESS_ASLEEP);
+        }
         mService.getBinderServiceInstance().releaseWakeLock(token, 0 /* flags */);
     }
 
@@ -1629,6 +1698,7 @@ public class PowerManagerServiceTest {
 
         mService.setWakefulnessLocked(nonDefaultPowerGroupId, WAKEFULNESS_DOZING, eventTime2,
                 0, PowerManager.GO_TO_SLEEP_REASON_APPLICATION, 0, null, null);
+        long eventElapsedRealtime1 = mLastElapsedRealtime;
         assertThat(mService.getGlobalWakefulnessLocked()).isEqualTo(WAKEFULNESS_DOZING);
         assertThat(mService.getBinderServiceInstance().getLastSleepReason()).isEqualTo(
                 PowerManager.GO_TO_SLEEP_REASON_APPLICATION);
@@ -1636,19 +1706,20 @@ public class PowerManagerServiceTest {
         mService.setWakefulnessLocked(Display.DEFAULT_DISPLAY_GROUP, WAKEFULNESS_AWAKE,
                 eventTime3, /* uid= */ 0, PowerManager.WAKE_REASON_PLUGGED_IN, /* opUid= */
                 0, /* opPackageName= */ null, /* details= */ null);
+        long eventElapsedRealtime2 = mLastElapsedRealtime;
         PowerManager.WakeData wakeData = mService.getLocalServiceInstance().getLastWakeup();
         assertThat(wakeData.wakeTime).isEqualTo(eventTime3);
         assertThat(wakeData.wakeReason).isEqualTo(PowerManager.WAKE_REASON_PLUGGED_IN);
-        assertThat(wakeData.sleepDuration).isEqualTo(eventTime3 - eventTime2);
+        assertThat(wakeData.sleepDurationRealtime)
+                .isEqualTo(eventElapsedRealtime2 - eventElapsedRealtime1);
 
         // The global wake time and reason as well as sleep duration shouldn't change when another
         // PowerGroup wakes up.
         mService.setWakefulnessLocked(nonDefaultPowerGroupId, WAKEFULNESS_AWAKE,
                 eventTime4, /* uid= */ 0, PowerManager.WAKE_REASON_CAMERA_LAUNCH, /* opUid= */
                 0, /* opPackageName= */ null, /* details= */ null);
-        assertThat(wakeData.wakeTime).isEqualTo(eventTime3);
-        assertThat(wakeData.wakeReason).isEqualTo(PowerManager.WAKE_REASON_PLUGGED_IN);
-        assertThat(wakeData.sleepDuration).isEqualTo(eventTime3 - eventTime2);
+        PowerManager.WakeData wakeData2 = mService.getLocalServiceInstance().getLastWakeup();
+        assertThat(wakeData2).isEqualTo(wakeData);
     }
 
     @Test

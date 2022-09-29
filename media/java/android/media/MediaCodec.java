@@ -291,8 +291,11 @@ import java.util.concurrent.locks.ReentrantLock;
  most of its life. When you queue an input buffer with the {@linkplain #BUFFER_FLAG_END_OF_STREAM
  end-of-stream marker}, the codec transitions to the End-of-Stream sub-state. In this state the
  codec no longer accepts further input buffers, but still generates output buffers until the
- end-of-stream is reached on the output. You can move back to the Flushed sub-state at any time
- while in the Executing state using {@link #flush}.
+ end-of-stream is reached on the output. For decoders, you can move back to the Flushed sub-state
+ at any time while in the Executing state using {@link #flush}.
+ <p class=note>
+ <strong>Note:</strong> Going back to Flushed state is only supported for decoders, and may not
+ work for encoders (the behavior is undefined).
  <p>
  Call {@link #stop} to return the codec to the Uninitialized state, whereupon it may be configured
  again. When you are done using a codec, you must release it by calling {@link #release}.
@@ -439,6 +442,14 @@ import java.util.concurrent.locks.ReentrantLock;
     <td>VP9</td>
     <td>VP9 <a href="http://wiki.webmproject.org/vp9-codecprivate">CodecPrivate</a> Data
         (optional)</td>
+    <td class=NA>Not Used</td>
+    <td class=NA>Not Used</td>
+   </tr>
+   <tr>
+    <td>AV1</td>
+    <td>AV1 <a href="https://aomediacodec.github.io/av1-isobmff/#av1codecconfigurationbox-syntax">
+        AV1CodecConfigurationRecord</a> Data (optional)
+    </td>
     <td class=NA>Not Used</td>
     <td class=NA>Not Used</td>
    </tr>
@@ -755,7 +766,7 @@ import java.util.concurrent.locks.ReentrantLock;
  <h4 id=KeyFrames><a name="KeyFrames"></a>Stream Boundary and Key Frames</h4>
  <p>
  It is important that the input data after {@link #start} or {@link #flush} starts at a suitable
- stream boundary: the first frame must a key frame. A <em>key frame</em> can be decoded
+ stream boundary: the first frame must be a key frame. A <em>key frame</em> can be decoded
  completely on its own (for most codecs this means an I-frame), and no frames that are to be
  displayed after a key frame refer to frames before the key frame.
  <p>

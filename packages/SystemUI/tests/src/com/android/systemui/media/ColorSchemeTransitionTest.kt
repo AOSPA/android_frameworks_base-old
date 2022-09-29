@@ -16,7 +16,6 @@
 
 package com.android.systemui.media
 
-import org.mockito.Mockito.`when` as whenever
 import android.animation.ValueAnimator
 import android.graphics.Color
 import android.testing.AndroidTestingRunner
@@ -34,6 +33,7 @@ import org.mockito.Mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
+import org.mockito.Mockito.`when` as whenever
 import org.mockito.junit.MockitoJUnit
 
 private const val DEFAULT_COLOR = Color.RED
@@ -57,11 +57,13 @@ class ColorSchemeTransitionTest : SysuiTestCase() {
 
     private lateinit var animatingColorTransitionFactory: AnimatingColorTransitionFactory
     @Mock private lateinit var mediaViewHolder: MediaViewHolder
+    @Mock private lateinit var gutsViewHolder: GutsViewHolder
 
     @JvmField @Rule val mockitoRule = MockitoJUnit.rule()
 
     @Before
     fun setUp() {
+        whenever(mediaViewHolder.gutsViewHolder).thenReturn(gutsViewHolder)
         animatingColorTransitionFactory = { _, _, _ -> mockAnimatingTransition }
         whenever(extractColor.invoke(colorScheme)).thenReturn(TARGET_COLOR)
 
@@ -145,7 +147,8 @@ class ColorSchemeTransitionTest : SysuiTestCase() {
 
     @Test
     fun testColorSchemeTransition_update() {
-        colorSchemeTransition.updateColorScheme(colorScheme, true)
-        verify(mockAnimatingTransition, times(9)).updateColorScheme(colorScheme)
+        colorSchemeTransition.updateColorScheme(colorScheme)
+        verify(mockAnimatingTransition, times(8)).updateColorScheme(colorScheme)
+        verify(gutsViewHolder).colorScheme = colorScheme
     }
 }

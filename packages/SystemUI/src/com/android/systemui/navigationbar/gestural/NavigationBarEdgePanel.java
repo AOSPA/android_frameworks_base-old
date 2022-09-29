@@ -363,6 +363,7 @@ public class NavigationBarEdgePanel extends View implements NavigationEdgeBackPl
         initializeBackAnimation();
 
         setVisibility(GONE);
+
         Executor backgroundExecutor = Dependency.get(Dependency.BACKGROUND_EXECUTOR);
         boolean isPrimaryDisplay = mContext.getDisplayId() == DEFAULT_DISPLAY;
         mRegionSamplingHelper = new RegionSamplingHelper(this,
@@ -485,7 +486,7 @@ public class NavigationBarEdgePanel extends View implements NavigationEdgeBackPl
     public void onMotionEvent(MotionEvent event) {
         if (mBackAnimation != null) {
             mBackAnimation.onBackMotion(
-                    event,
+                    event.getX(), event.getY(),
                     event.getActionMasked(),
                     mIsLeftPanel ? BackEvent.EDGE_LEFT : BackEvent.EDGE_RIGHT);
         }

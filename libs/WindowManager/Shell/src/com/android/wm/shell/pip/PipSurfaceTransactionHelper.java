@@ -104,9 +104,11 @@ public class PipSurfaceTransactionHelper {
     public PipSurfaceTransactionHelper scaleAndCrop(SurfaceControl.Transaction tx,
             SurfaceControl leash, Rect sourceRectHint,
             Rect sourceBounds, Rect destinationBounds, Rect insets,
-            boolean isInPipDirection) {
-        mTmpSourceRectF.set(sourceBounds);
+            boolean isInPipDirection, float fraction) {
         mTmpDestinationRect.set(sourceBounds);
+        // Similar to {@link #scale}, we want to position the surface relative to the screen
+        // coordinates so offset the bounds to 0,0
+        mTmpDestinationRect.offsetTo(0, 0);
         mTmpDestinationRect.inset(insets);
         // Scale by the shortest edge and offset such that the top/left of the scaled inset source
         // rect aligns with the top/left of the destination bounds
@@ -114,9 +116,13 @@ public class PipSurfaceTransactionHelper {
         if (isInPipDirection
                 && sourceRectHint != null && sourceRectHint.width() < sourceBounds.width()) {
             // scale by sourceRectHint if it's not edge-to-edge, for entering PiP transition only.
-            scale = sourceBounds.width() <= sourceBounds.height()
+            final float endScale = sourceBounds.width() <= sourceBounds.height()
                     ? (float) destinationBounds.width() / sourceRectHint.width()
                     : (float) destinationBounds.height() / sourceRectHint.height();
+            final float startScale = sourceBounds.width() <= sourceBounds.height()
+                    ? (float) destinationBounds.width() / sourceBounds.width()
+                    : (float) destinationBounds.height() / sourceBounds.height();
+            scale = (1 - fraction) * startScale + fraction * endScale;
         } else {
             scale = sourceBounds.width() <= sourceBounds.height()
                     ? (float) destinationBounds.width() / sourceBounds.width()

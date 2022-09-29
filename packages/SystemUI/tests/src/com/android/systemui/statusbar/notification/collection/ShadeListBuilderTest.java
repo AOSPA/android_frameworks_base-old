@@ -53,6 +53,7 @@ import androidx.test.filters.SmallTest;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.statusbar.NotificationInteractionTracker;
+import com.android.systemui.statusbar.RankingBuilder;
 import com.android.systemui.statusbar.notification.NotifPipelineFlags;
 import com.android.systemui.statusbar.notification.collection.ShadeListBuilder.OnRenderListListener;
 import com.android.systemui.statusbar.notification.collection.listbuilder.NotifSection;
@@ -569,7 +570,7 @@ public class ShadeListBuilderTest extends SysuiTestCase {
         assertTrue(entry.hasFinishedInitialization());
 
         // WHEN the pipeline is kicked off
-        mReadyForBuildListener.onBuildList(singletonList(entry));
+        mReadyForBuildListener.onBuildList(singletonList(entry), "test");
         mPipelineChoreographer.runIfScheduled();
 
         // THEN the entry's initialization time is reset
@@ -1027,37 +1028,37 @@ public class ShadeListBuilderTest extends SysuiTestCase {
         // WHEN each pluggable is invalidated THEN the list is re-rendered
 
         clearInvocations(mOnRenderListListener);
-        packageFilter.invalidateList();
+        packageFilter.invalidateList(null);
         assertTrue(mPipelineChoreographer.isScheduled());
         mPipelineChoreographer.runIfScheduled();
         verify(mOnRenderListListener).onRenderList(anyList());
 
         clearInvocations(mOnRenderListListener);
-        idPromoter.invalidateList();
+        idPromoter.invalidateList(null);
         assertTrue(mPipelineChoreographer.isScheduled());
         mPipelineChoreographer.runIfScheduled();
         verify(mOnRenderListListener).onRenderList(anyList());
 
         clearInvocations(mOnRenderListListener);
-        section.invalidateList();
+        section.invalidateList(null);
         assertTrue(mPipelineChoreographer.isScheduled());
         mPipelineChoreographer.runIfScheduled();
         verify(mOnRenderListListener).onRenderList(anyList());
 
         clearInvocations(mOnRenderListListener);
-        hypeComparator.invalidateList();
+        hypeComparator.invalidateList(null);
         assertTrue(mPipelineChoreographer.isScheduled());
         mPipelineChoreographer.runIfScheduled();
         verify(mOnRenderListListener).onRenderList(anyList());
 
         clearInvocations(mOnRenderListListener);
-        sectionComparator.invalidateList();
+        sectionComparator.invalidateList(null);
         assertTrue(mPipelineChoreographer.isScheduled());
         mPipelineChoreographer.runIfScheduled();
         verify(mOnRenderListListener).onRenderList(anyList());
 
         clearInvocations(mOnRenderListListener);
-        preRenderInvalidator.invalidateList();
+        preRenderInvalidator.invalidateList(null);
         assertTrue(mPipelineChoreographer.isScheduled());
         mPipelineChoreographer.runIfScheduled();
         verify(mOnRenderListListener).onRenderList(anyList());
@@ -1528,6 +1529,34 @@ public class ShadeListBuilderTest extends SysuiTestCase {
     }
 
     @Test
+    public void testContiguousSections() {
+        mListBuilder.setSectioners(List.of(
+                new PackageSectioner("pkg", 1),
+                new PackageSectioner("pkg", 1),
+                new PackageSectioner("pkg", 3),
+                new PackageSectioner("pkg", 2)
+        ));
+    }
+
+    @Test(expected = IllegalStateException.class)
+    public void testNonContiguousSections() {
+        mListBuilder.setSectioners(List.of(
+                new PackageSectioner("pkg", 1),
+                new PackageSectioner("pkg", 1),
+                new PackageSectioner("pkg", 3),
+                new PackageSectioner("pkg", 1)
+        ));
+    }
+
+    @Test(expected = IllegalStateException.class)
+    public void testBucketZeroNotAllowed() {
+        mListBuilder.setSectioners(List.of(
+                new PackageSectioner("pkg", 0),
+                new PackageSectioner("pkg", 1)
+        ));
+    }
+
+    @Test
     public void testStabilizeGroupsDelayedSummaryRendersAllNotifsTopLevel() {
         // GIVEN group children posted without a summary
         addGroupChild(0, PACKAGE_1, GROUP_1);
@@ -1555,7 +1584,7 @@ public class ShadeListBuilderTest extends SysuiTestCase {
 
         // WHEN visual stability manager allows group changes again
         mStabilityManager.setAllowGroupChanges(true);
-        mStabilityManager.invalidateList();
+        mStabilityManager.invalidateList(null);
         mPipelineChoreographer.runIfScheduled();
 
         // THEN entries are grouped
@@ -1594,7 +1623,7 @@ public class ShadeListBuilderTest extends SysuiTestCase {
 
         // WHEN section changes are allowed again
         mStabilityManager.setAllowSectionChanges(true);
-        mStabilityManager.invalidateList();
+        mStabilityManager.invalidateList(null);
         mPipelineChoreographer.runIfScheduled();
 
         // THEN the section updates
@@ -1690,7 +1719,7 @@ public class ShadeListBuilderTest extends SysuiTestCase {
     public void testOutOfOrderPreGroupFilterInvalidationThrows() {
         // GIVEN a PreGroupNotifFilter that gets invalidated during the grouping stage
         NotifFilter filter = new PackageFilter(PACKAGE_5);
-        OnBeforeTransformGroupsListener listener = (list) -> filter.invalidateList();
+        OnBeforeTransformGroupsListener listener = (list) -> filter.invalidateList(null);
         mListBuilder.addPreGroupFilter(filter);
         mListBuilder.addOnBeforeTransformGroupsListener(listener);
 
@@ -1706,7 +1735,7 @@ public class ShadeListBuilderTest extends SysuiTestCase {
         // GIVEN a NotifPromoter that gets invalidated during the sorting stage
         NotifPromoter promoter = new IdPromoter(47);
         OnBeforeSortListener listener =
-                (list) -> promoter.invalidateList();
+                (list) -> promoter.invalidateList(null);
         mListBuilder.addPromoter(promoter);
         mListBuilder.addOnBeforeSortListener(listener);
 
@@ -1722,7 +1751,7 @@ public class ShadeListBuilderTest extends SysuiTestCase {
         // GIVEN a NotifComparator that gets invalidated during the finalizing stage
         NotifComparator comparator = new HypeComparator(PACKAGE_5);
         OnBeforeRenderListListener listener =
-                (list) -> comparator.invalidateList();
+                (list) -> comparator.invalidateList(null);
         mListBuilder.setComparators(singletonList(comparator));
         mListBuilder.addOnBeforeRenderListListener(listener);
 
@@ -1737,7 +1766,7 @@ public class ShadeListBuilderTest extends SysuiTestCase {
     public void testOutOfOrderPreRenderFilterInvalidationThrows() {
         // GIVEN a PreRenderNotifFilter that gets invalidated during the finalizing stage
         NotifFilter filter = new PackageFilter(PACKAGE_5);
-        OnBeforeRenderListListener listener = (list) -> filter.invalidateList();
+        OnBeforeRenderListListener listener = (list) -> filter.invalidateList(null);
         mListBuilder.addFinalizeFilter(filter);
         mListBuilder.addOnBeforeRenderListListener(listener);
 
@@ -1769,6 +1798,7 @@ public class ShadeListBuilderTest extends SysuiTestCase {
 
     @Test
     public void testStableMultipleSectionOrdering() {
+        // WHEN the list is originally built with reordering disabled
         mListBuilder.setSectioners(asList(
                 new PackageSectioner(PACKAGE_1), new PackageSectioner(PACKAGE_2)));
         mStabilityManager.setAllowEntryReordering(false);
@@ -1779,19 +1809,101 @@ public class ShadeListBuilderTest extends SysuiTestCase {
         addNotif(3, PACKAGE_1).setRank(3);
         dispatchBuild();
 
+        // VERIFY the order and that entry reordering has not been suppressed
         verifyBuiltList(
                 notif(0),
                 notif(1),
                 notif(3),
                 notif(2)
         );
+        verify(mStabilityManager, never()).onEntryReorderSuppressed();
+
+        // WHEN the ranks change
+        setNewRank(notif(0).entry, 4);
+        dispatchBuild();
+
+        // VERIFY the order does not change that entry reordering has been suppressed
+        verifyBuiltList(
+                notif(0),
+                notif(1),
+                notif(3),
+                notif(2)
+        );
+        verify(mStabilityManager).onEntryReorderSuppressed();
+
+        // WHEN reordering is now allowed again
+        mStabilityManager.setAllowEntryReordering(true);
+        dispatchBuild();
+
+        // VERIFY that list order changes
+        verifyBuiltList(
+                notif(1),
+                notif(3),
+                notif(0),
+                notif(2)
+        );
+    }
+
+    @Test
+    public void testStableChildOrdering() {
+        // WHEN the list is originally built with reordering disabled
+        mStabilityManager.setAllowEntryReordering(false);
+        addGroupSummary(0, PACKAGE_1, GROUP_1).setRank(0);
+        addGroupChild(1, PACKAGE_1, GROUP_1).setRank(1);
+        addGroupChild(2, PACKAGE_1, GROUP_1).setRank(2);
+        addGroupChild(3, PACKAGE_1, GROUP_1).setRank(3);
+        dispatchBuild();
+
+        // VERIFY the order and that entry reordering has not been suppressed
+        verifyBuiltList(
+                group(
+                        summary(0),
+                        child(1),
+                        child(2),
+                        child(3)
+                )
+        );
+        verify(mStabilityManager, never()).onEntryReorderSuppressed();
+
+        // WHEN the ranks change
+        setNewRank(notif(2).entry, 5);
+        dispatchBuild();
+
+        // VERIFY the order does not change that entry reordering has been suppressed
+        verifyBuiltList(
+                group(
+                        summary(0),
+                        child(1),
+                        child(2),
+                        child(3)
+                )
+        );
+        verify(mStabilityManager).onEntryReorderSuppressed();
+
+        // WHEN reordering is now allowed again
+        mStabilityManager.setAllowEntryReordering(true);
+        dispatchBuild();
+
+        // VERIFY that list order changes
+        verifyBuiltList(
+                group(
+                        summary(0),
+                        child(1),
+                        child(3),
+                        child(2)
+                )
+        );
+    }
+
+    private static void setNewRank(NotificationEntry entry, int rank) {
+        entry.setRanking(new RankingBuilder(entry.getRanking()).setRank(rank).build());
     }
 
     @Test
     public void testInOrderPreRenderFilter() {
         // GIVEN a PreRenderFilter that gets invalidated during the grouping stage
         NotifFilter filter = new PackageFilter(PACKAGE_5);
-        OnBeforeTransformGroupsListener listener = (list) -> filter.invalidateList();
+        OnBeforeTransformGroupsListener listener = (list) -> filter.invalidateList(null);
         mListBuilder.addFinalizeFilter(filter);
         mListBuilder.addOnBeforeTransformGroupsListener(listener);
 
@@ -1824,8 +1936,8 @@ public class ShadeListBuilderTest extends SysuiTestCase {
         mListBuilder.addFinalizeFilter(filter2);
 
         // WHEN both filters invalidate
-        filter1.invalidateList();
-        filter2.invalidateList();
+        filter1.invalidateList(null);
+        filter2.invalidateList(null);
 
         // THEN the pipeline choreographer is scheduled to evaluate, AND the pipeline hasn't
         // actually run.
@@ -1980,7 +2092,7 @@ public class ShadeListBuilderTest extends SysuiTestCase {
             mPendingSet.clear();
         }
 
-        mReadyForBuildListener.onBuildList(mEntrySet);
+        mReadyForBuildListener.onBuildList(mEntrySet, "test");
         mPipelineChoreographer.runIfScheduled();
     }
 
@@ -2189,7 +2301,11 @@ public class ShadeListBuilderTest extends SysuiTestCase {
         }
 
         PackageSectioner(String pkg) {
-            super("PackageSection_" + pkg, 0);
+            this(pkg, 0);
+        }
+
+        PackageSectioner(String pkg, int bucket) {
+            super("PackageSection_" + pkg, bucket);
             mPackages = List.of(pkg);
             mComparator = null;
         }

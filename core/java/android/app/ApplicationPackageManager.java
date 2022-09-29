@@ -1695,8 +1695,8 @@ public class ApplicationPackageManager extends PackageManager {
         ComponentName className, int flags)
             throws NameNotFoundException {
         try {
-            InstrumentationInfo ii = mPM.getInstrumentationInfo(
-                className, flags);
+            InstrumentationInfo ii = mPM.getInstrumentationInfoAsUser(
+                    className, flags, getUserId());
             if (ii != null) {
                 return ii;
             }
@@ -1713,7 +1713,7 @@ public class ApplicationPackageManager extends PackageManager {
         String targetPackage, int flags) {
         try {
             ParceledListSlice<InstrumentationInfo> parceledList =
-                    mPM.queryInstrumentation(targetPackage, flags);
+                    mPM.queryInstrumentationAsUser(targetPackage, flags, getUserId());
             if (parceledList == null) {
                 return Collections.emptyList();
             }
@@ -3657,15 +3657,6 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @Override
-    public String getContentCaptureServicePackageName() {
-        try {
-            return mPM.getContentCaptureServicePackageName();
-        } catch (RemoteException e) {
-            throw e.rethrowAsRuntimeException();
-        }
-    }
-
-    @Override
     public boolean isPackageStateProtected(String packageName, int userId) {
         try {
             return mPM.isPackageStateProtected(packageName, userId);
@@ -3716,15 +3707,7 @@ public class ApplicationPackageManager extends PackageManager {
             throws NameNotFoundException {
         Objects.requireNonNull(packageName);
         Objects.requireNonNull(propertyName);
-        try {
-            final Property property = mPM.getProperty(propertyName, packageName, null);
-            if (property == null) {
-                throw new NameNotFoundException();
-            }
-            return property;
-        } catch (RemoteException e) {
-            throw e.rethrowAsRuntimeException();
-        }
+        return getPropertyAsUser(propertyName, packageName, null /* className */, getUserId());
     }
 
     @Override
@@ -3732,9 +3715,18 @@ public class ApplicationPackageManager extends PackageManager {
             throws NameNotFoundException {
         Objects.requireNonNull(component);
         Objects.requireNonNull(propertyName);
+        return getPropertyAsUser(propertyName,
+                component.getPackageName(), component.getClassName(), getUserId());
+    }
+
+    @Override
+    public Property getPropertyAsUser(@NonNull String propertyName, @NonNull String packageName,
+            @Nullable String className, int userId) throws NameNotFoundException {
+        Objects.requireNonNull(packageName);
+        Objects.requireNonNull(propertyName);
         try {
-            final Property property = mPM.getProperty(
-                    propertyName, component.getPackageName(), component.getClassName());
+            final Property property = mPM.getPropertyAsUser(propertyName,
+                    packageName, className, userId);
             if (property == null) {
                 throw new NameNotFoundException();
             }

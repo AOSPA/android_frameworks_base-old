@@ -51,6 +51,7 @@ public class GlobalSettingsValidators {
                                 || (val == BatteryManager.BATTERY_PLUGGED_AC)
                                 || (val == BatteryManager.BATTERY_PLUGGED_USB)
                                 || (val == BatteryManager.BATTERY_PLUGGED_WIRELESS)
+                                || (val == BatteryManager.BATTERY_PLUGGED_DOCK)
                                 || (val
                                         == (BatteryManager.BATTERY_PLUGGED_AC
                                                 | BatteryManager.BATTERY_PLUGGED_USB))
@@ -58,12 +59,29 @@ public class GlobalSettingsValidators {
                                         == (BatteryManager.BATTERY_PLUGGED_AC
                                                 | BatteryManager.BATTERY_PLUGGED_WIRELESS))
                                 || (val
+                                        == (BatteryManager.BATTERY_PLUGGED_AC
+                                                | BatteryManager.BATTERY_PLUGGED_DOCK))
+                                || (val
                                         == (BatteryManager.BATTERY_PLUGGED_USB
+                                                | BatteryManager.BATTERY_PLUGGED_WIRELESS))
+                                || (val
+                                        == (BatteryManager.BATTERY_PLUGGED_USB
+                                                | BatteryManager.BATTERY_PLUGGED_DOCK))
+                                || (val
+                                        == (BatteryManager.BATTERY_PLUGGED_WIRELESS
+                                                | BatteryManager.BATTERY_PLUGGED_DOCK))
+                                || (val
+                                        == (BatteryManager.BATTERY_PLUGGED_AC
+                                                | BatteryManager.BATTERY_PLUGGED_USB
                                                 | BatteryManager.BATTERY_PLUGGED_WIRELESS))
                                 || (val
                                         == (BatteryManager.BATTERY_PLUGGED_AC
                                                 | BatteryManager.BATTERY_PLUGGED_USB
-                                                | BatteryManager.BATTERY_PLUGGED_WIRELESS));
+                                                | BatteryManager.BATTERY_PLUGGED_DOCK))
+                                || (val
+                                        == (BatteryManager.BATTERY_PLUGGED_USB
+                                                | BatteryManager.BATTERY_PLUGGED_WIRELESS
+                                                | BatteryManager.BATTERY_PLUGGED_DOCK));
                     } catch (NumberFormatException e) {
                         return false;
                     }
@@ -155,6 +173,7 @@ public class GlobalSettingsValidators {
         VALIDATORS.put(Global.DEVICE_CONFIG_SYNC_DISABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Global.AUTOMATIC_POWER_SAVE_MODE, ANY_INTEGER_VALIDATOR);
         VALIDATORS.put(Global.ADVANCED_BATTERY_USAGE_AMOUNT, PERCENTAGE_INTEGER_VALIDATOR);
+        VALIDATORS.put(Global.ADAPTIVE_BATTERY_MANAGEMENT_ENABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Global.POWER_BUTTON_LONG_PRESS_DURATION_MS, NONE_NEGATIVE_LONG_VALIDATOR);
 
         VALIDATORS.put(Global.Wearable.HAS_PAY_TOKENS, BOOLEAN_VALIDATOR);
@@ -162,13 +181,6 @@ public class GlobalSettingsValidators {
         VALIDATORS.put(Global.Wearable.HOTWORD_DETECTION_ENABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Global.Wearable.SMART_REPLIES_ENABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Global.Wearable.OBTAIN_PAIRED_DEVICE_LOCATION, BOOLEAN_VALIDATOR);
-        VALIDATORS.put(
-                Global.Wearable.RETAIL_MODE,
-                new DiscreteValueValidator(
-                        new String[] {
-                            String.valueOf(Global.Wearable.RETAIL_MODE_CONSUMER),
-                            String.valueOf(Global.Wearable.RETAIL_MODE_RETAIL)
-                        }));
         VALIDATORS.put(
                 Global.Wearable.PHONE_PLAY_STORE_AVAILABILITY,
                 new DiscreteValueValidator(
@@ -307,6 +319,9 @@ public class GlobalSettingsValidators {
         VALIDATORS.put(
                 Global.Wearable.WEAR_ACTIVITY_AUTO_RESUME_TIMEOUT_MS,
                 NON_NEGATIVE_INTEGER_VALIDATOR);
+        VALIDATORS.put(
+                Global.Wearable.WEAR_ACTIVITY_AUTO_RESUME_TIMEOUT_SET_BY_USER,
+                BOOLEAN_VALIDATOR);
         VALIDATORS.put(Global.Wearable.BURN_IN_PROTECTION_ENABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Global.Wearable.COMBINED_LOCATION_ENABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Global.Wearable.WRIST_ORIENTATION_MODE,
@@ -316,9 +331,14 @@ public class GlobalSettingsValidators {
         VALIDATORS.put(Global.USER_PREFERRED_RESOLUTION_WIDTH, ANY_INTEGER_VALIDATOR);
         VALIDATORS.put(Global.Wearable.WET_MODE_ON, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Global.Wearable.COOLDOWN_MODE_ON, BOOLEAN_VALIDATOR);
-        VALIDATORS.put(Global.Wearable.TOUCH_AND_HOLD_WATCH_FACE, BOOLEAN_VALIDATOR);
+        VALIDATORS.put(
+                Global.Wearable.GESTURE_TOUCH_AND_HOLD_WATCH_FACE_ENABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Global.Wearable.SCREEN_UNLOCK_SOUND_ENABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Global.Wearable.CHARGING_SOUNDS_ENABLED, BOOLEAN_VALIDATOR);
+        VALIDATORS.put(Global.Wearable.BEDTIME_MODE, BOOLEAN_VALIDATOR);
+        VALIDATORS.put(
+                Global.Wearable.WEAR_ACTIVITY_AUTO_RESUME_TIMEOUT_MAX_RESET_COUNT,
+                NON_NEGATIVE_INTEGER_VALIDATOR);
     }
 }
 

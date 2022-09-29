@@ -18,6 +18,7 @@ package com.android.systemui.statusbar.policy;
 
 import android.app.IActivityTaskManager;
 
+import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.policy.KeyguardStateController.Callback;
 
@@ -94,33 +95,29 @@ public interface KeyguardStateController extends CallbackController<Callback> {
     boolean isKeyguardGoingAway();
 
     /**
+     * Whether we're currently animating between the keyguard and the app/launcher surface behind
+     * it, or will be shortly (which happens if we started a fling to dismiss the keyguard).
+     * @see {@link KeyguardViewMediator#isAnimatingBetweenKeyguardAndSurfaceBehind()}
+     */
+    default boolean isAnimatingBetweenKeyguardAndSurfaceBehind() {
+        return false;
+    };
+
+    /**
      * @return a shortened fading away duration similar to
      * {{@link #getKeyguardFadingAwayDuration()}} which may only span half of the duration, unless
      * we're bypassing
      */
     default long getShortenedFadingAwayDuration() {
-        if (isBypassFadingAnimation()) {
-            return getKeyguardFadingAwayDuration();
-        } else {
-            return getKeyguardFadingAwayDuration() / 2;
-        }
-    }
-
-    /**
-     * @return {@code true} if the current fading away animation is the fast bypass fading.
-     */
-    default boolean isBypassFadingAnimation() {
-        return false;
+        return getKeyguardFadingAwayDuration() / 2;
     }
 
     /**
      * Notifies that the Keyguard is fading away with the specified timings.
      * @param delay the precalculated animation delay in milliseconds
      * @param fadeoutDuration the duration of the exit animation, in milliseconds
-     * @param isBypassFading is this a fading away animation while bypassing
      */
-    default void notifyKeyguardFadingAway(long delay, long fadeoutDuration,
-            boolean isBypassFading) {
+    default void notifyKeyguardFadingAway(long delay, long fadeoutDuratio) {
     }
 
     /**

@@ -33,6 +33,7 @@ import android.util.Log;
 
 import com.android.server.companion.AssociationStore;
 
+import java.io.PrintWriter;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -149,6 +150,13 @@ public class CompanionDevicePresenceMonitor implements AssociationStore.OnChange
         onDeviceGone(mReportedSelfManagedDevices, associationId, "application-reported");
     }
 
+    /**
+     * Marks a "self-managed" device as disconnected when binderDied.
+     */
+    public void onSelfManagedDeviceReporterBinderDied(int associationId) {
+        onDeviceGone(mReportedSelfManagedDevices, associationId, "application-reported");
+    }
+
     @Override
     public void onBluetoothCompanionDeviceConnected(int associationId) {
         onDevicePresent(mConnectedBtDevices, associationId, /* sourceLoggingTag */ "bt");
@@ -259,16 +267,6 @@ public class CompanionDevicePresenceMonitor implements AssociationStore.OnChange
     }
 
     /**
-     * Remove the current connected devices by associationId.
-     */
-    public void removeDeviceFromMonitoring(int associationId) {
-        mConnectedBtDevices.remove(associationId);
-        mNearbyBleDevices.remove(associationId);
-        mReportedSelfManagedDevices.remove(associationId);
-        mSimulated.remove(associationId);
-    }
-
-    /**
      * Implements
      * {@link AssociationStore.OnChangeListener#onAssociationRemoved(AssociationInfo)}
      */
@@ -280,7 +278,9 @@ public class CompanionDevicePresenceMonitor implements AssociationStore.OnChange
             Log.d(TAG, "  > association=" + association);
         }
 
-        removeDeviceFromMonitoring(id);
+        mConnectedBtDevices.remove(id);
+        mNearbyBleDevices.remove(id);
+        mReportedSelfManagedDevices.remove(id);
 
         // Do NOT call mCallback.onDeviceDisappeared()!
         // CompanionDeviceManagerService will know that the association is removed, and will do
@@ -292,6 +292,54 @@ public class CompanionDevicePresenceMonitor implements AssociationStore.OnChange
         if (callingUid == SHELL_UID || callingUid == ROOT_UID) return;
 
         throw new SecurityException("Caller is neither Shell nor Root");
+    }
+
+    /**
+     * Dumps system information about devices that are marked as "present".
+     */
+    public void dump(@NonNull PrintWriter out) {
+        out.append("Companion Device Present: ");
+        if (mConnectedBtDevices.isEmpty()
+                && mNearbyBleDevices.isEmpty()
+                && mReportedSelfManagedDevices.isEmpty()) {
+            out.append("<empty>\n");
+            return;
+        } else {
+            out.append("\n");
+        }
+
+        out.append("  Connected Bluetooth Devices: ");
+        if (mConnectedBtDevices.isEmpty()) {
+            out.append("<empty>\n");
+        } else {
+            out.append("\n");
+            for (int associationId : mConnectedBtDevices) {
+                AssociationInfo a = mAssociationStore.getAssociationById(associationId);
+                out.append("    ").append(a.toShortString()).append('\n');
+            }
+        }
+
+        out.append("  Nearby BLE Devices: ");
+        if (mNearbyBleDevices.isEmpty()) {
+            out.append("<empty>\n");
+        } else {
+            out.append("\n");
+            for (int associationId : mNearbyBleDevices) {
+                AssociationInfo a = mAssociationStore.getAssociationById(associationId);
+                out.append("    ").append(a.toShortString()).append('\n');
+            }
+        }
+
+        out.append("  Self-Reported Devices: ");
+        if (mReportedSelfManagedDevices.isEmpty()) {
+            out.append("<empty>\n");
+        } else {
+            out.append("\n");
+            for (int associationId : mReportedSelfManagedDevices) {
+                AssociationInfo a = mAssociationStore.getAssociationById(associationId);
+                out.append("    ").append(a.toShortString()).append('\n');
+            }
+        }
     }
 
     private class SimulatedDevicePresenceSchedulerHelper extends Handler {

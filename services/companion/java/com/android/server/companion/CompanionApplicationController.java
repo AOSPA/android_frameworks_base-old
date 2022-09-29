@@ -33,6 +33,7 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.infra.PerUser;
 import com.android.internal.util.CollectionUtils;
 
+import java.io.PrintWriter;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -103,11 +104,14 @@ public class CompanionApplicationController {
         mCompanionServicesRegister.invalidate(userId);
     }
 
-    void bindCompanionApplication(@UserIdInt int userId, @NonNull String packageName,
-            boolean bindImportant) {
+    /**
+     * CDM binds to the companion app.
+     */
+    public void bindCompanionApplication(@UserIdInt int userId, @NonNull String packageName,
+            boolean isSelfManaged) {
         if (DEBUG) {
             Log.i(TAG, "bind() u" + userId + "/" + packageName
-                    + " important=" + bindImportant);
+                    + " isSelfManaged=" + isSelfManaged);
         }
 
         final List<ComponentName> companionServices =
@@ -130,7 +134,7 @@ public class CompanionApplicationController {
 
             serviceConnectors = CollectionUtils.map(companionServices, componentName ->
                             CompanionDeviceServiceConnector.newInstance(mContext, userId,
-                                    componentName, bindImportant));
+                                    componentName, isSelfManaged));
             mBoundCompanionApplications.setValueForPackage(userId, packageName, serviceConnectors);
         }
 
@@ -143,7 +147,10 @@ public class CompanionApplicationController {
         }
     }
 
-    void unbindCompanionApplication(@UserIdInt int userId, @NonNull String packageName) {
+    /**
+     * CDM unbinds the companion app.
+     */
+    public void unbindCompanionApplication(@UserIdInt int userId, @NonNull String packageName) {
         if (DEBUG) Log.i(TAG, "unbind() u" + userId + "/" + packageName);
 
         final List<CompanionDeviceServiceConnector> serviceConnectors;
@@ -237,26 +244,26 @@ public class CompanionApplicationController {
         primaryServiceConnector.postOnDeviceDisappeared(association);
     }
 
-    /** Pass an encryped secure message to the companion application for transporting. */
-    public void dispatchMessage(@UserIdInt int userId, @NonNull String packageName,
-            int associationId, @NonNull byte[] message) {
-        if (DEBUG) {
-            Log.i(TAG, "dispatchMessage() u" + userId + "/" + packageName
-                    + " associationId=" + associationId);
-        }
+    void dump(@NonNull PrintWriter out) {
+        out.append("Companion Device Application Controller: \n");
 
-        final CompanionDeviceServiceConnector primaryServiceConnector =
-                getPrimaryServiceConnector(userId, packageName);
-        if (primaryServiceConnector == null) {
-            if (DEBUG) {
-                Log.e(TAG, "dispatchMessage(): "
-                        + "u" + userId + "/" + packageName + " is NOT bound.");
-                Log.d(TAG, "Stacktrace", new Throwable());
+        synchronized (mBoundCompanionApplications) {
+            out.append("  Bound Companion Applications: ");
+            if (mBoundCompanionApplications.size() == 0) {
+                out.append("<empty>\n");
+            } else {
+                out.append("\n");
+                mBoundCompanionApplications.dump(out);
             }
-            return;
         }
 
-        primaryServiceConnector.postOnMessageDispatchedFromSystem(associationId, message);
+        out.append("  Companion Applications Scheduled For Rebinding: ");
+        if (mScheduledForRebindingCompanionApplications.size() == 0) {
+            out.append("<empty>\n");
+        } else {
+            out.append("\n");
+            mScheduledForRebindingCompanionApplications.dump(out);
+        }
     }
 
     private void onPrimaryServiceBindingDied(@UserIdInt int userId, @NonNull String packageName) {
@@ -355,6 +362,24 @@ public class CompanionApplicationController {
                     final String packageName = packageValue.getKey();
                     final T value = packageValue.getValue();
                     Log.d(TAG, "u" + userId + "\\" + packageName + " -> " + value);
+                }
+            }
+        }
+
+        private void dump(@NonNull PrintWriter out) {
+            for (int i = 0; i < size(); i++) {
+                final int userId = keyAt(i);
+                final Map<String, T> forUser = get(userId);
+                if (forUser.isEmpty()) {
+                    out.append("    u").append(String.valueOf(userId)).append(": <empty>\n");
+                }
+
+                for (Map.Entry<String, T> packageValue : forUser.entrySet()) {
+                    final String packageName = packageValue.getKey();
+                    final T value = packageValue.getValue();
+                    out.append("    u").append(String.valueOf(userId)).append("\\")
+                            .append(packageName).append(" -> ")
+                            .append(value.toString()).append('\n');
                 }
             }
         }

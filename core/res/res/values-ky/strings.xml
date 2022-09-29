@@ -21,11 +21,6 @@
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="byteShort" msgid="202579285008794431">"Б"</string>
-    <string name="kilobyteShort" msgid="2214285521564195803">"Кб"</string>
-    <string name="megabyteShort" msgid="6649361267635823443">"Мб"</string>
-    <string name="gigabyteShort" msgid="7515809460261287991">"Гб"</string>
-    <string name="terabyteShort" msgid="1822367128583886496">"ТБ"</string>
-    <string name="petabyteShort" msgid="5651571254228534832">"ПБ"</string>
     <string name="fileSizeSuffix" msgid="4233671691980131257">"<xliff:g id="NUMBER">%1$s</xliff:g> <xliff:g id="UNIT">%2$s</xliff:g>"</string>
     <string name="untitled" msgid="3381766946944136678">"&lt;Баш аты жок&gt;"</string>
     <string name="emptyPhoneNumber" msgid="5812172618020360048">"(Телефон номери жок)"</string>
@@ -221,7 +216,7 @@
     <string name="silent_mode_silent" msgid="5079789070221150912">"Коңгуроо өчүк"</string>
     <string name="silent_mode_vibrate" msgid="8821830448369552678">"Чалганда титирөө"</string>
     <string name="silent_mode_ring" msgid="6039011004781526678">"Коңгуроо жандырылган"</string>
-    <string name="reboot_to_update_title" msgid="2125818841916373708">"Android тутум жаңыртуусу"</string>
+    <string name="reboot_to_update_title" msgid="2125818841916373708">"Android системасын жаңыртуу"</string>
     <string name="reboot_to_update_prepare" msgid="6978842143587422365">"Жаңыртууга даярдалууда…"</string>
     <string name="reboot_to_update_package" msgid="4644104795527534811">"Жаңыртуу топтому иштелүүдө…"</string>
     <string name="reboot_to_update_reboot" msgid="4474726009984452312">"Өчүрүлүп күйгүзүлүүдө…"</string>
@@ -305,8 +300,8 @@
     <string name="permgroupdesc_calendar" msgid="6762751063361489379">"жылнаамаңызды пайдалануу"</string>
     <string name="permgrouplab_sms" msgid="795737735126084874">"SMS"</string>
     <string name="permgroupdesc_sms" msgid="5726462398070064542">"SMS билдирүүлөрдү жиберүү жана көрсөтүү"</string>
-    <string name="permgrouplab_storage" msgid="5570124978732352858">"Файлдар жана документтер"</string>
-    <string name="permgroupdesc_storage" msgid="8352226729501080525">"түзмөгүңүздөгү файлдары жана документтерди колдонуу"</string>
+    <string name="permgrouplab_storage" msgid="17339216290379241">"Файлдар"</string>
+    <string name="permgroupdesc_storage" msgid="5378659041354582769">"түзмөгүңүздөгү файлдар жеткиликтүү болот"</string>
     <string name="permgrouplab_readMediaAural" msgid="1858331312624942053">"Музыка жана аудио"</string>
     <string name="permgroupdesc_readMediaAural" msgid="7565467343667089595">"түзмөгүңүздөгү музыка менен аудиолорго мүмкүнчүлүк алуу"</string>
     <string name="permgrouplab_readMediaVisual" msgid="4724874717811908660">"Сүрөттөр жана видеолор"</string>
@@ -558,6 +553,8 @@
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"Колдонмого экранды бөгөттөөнүн татаалдыгын (татаал, орточо, оңой же такыр жок) үйрөнүүгө мүмкүнчүлүк берет. Татаалдык деңгээли сырсөздүн узундугу жана экранды бөгөттөөнүн түрү боюнча айырмаланат. Колдонмо экранды бөгөттөөнү белгилүү деңгээлге тууралоону колдонуучуларга сунуштай да алат, бирок колдонуучулар ага көңүл бурбай койсо болот. Сырсөздү колдонмо билбеши үчүн, экранды бөгөттөө сырсөзүн кадимки текстте сактоого болбойт."</string>
     <string name="permlab_postNotification" msgid="4875401198597803658">"билдирмелерди көрсөтүү"</string>
     <string name="permdesc_postNotification" msgid="5974977162462877075">"Колдонмолор билдирмелерди көрсөтө алат"</string>
+    <string name="permlab_turnScreenOn" msgid="219344053664171492">"экранды күйгүзүү"</string>
+    <string name="permdesc_turnScreenOn" msgid="4394606875897601559">"Колдонмого экранды күйгүзүүгө уруксат берет."</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"биометрикалык аппаратты колдонуу"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"Колдонмого аныктыгын текшерүү үчүн биометрикалык аппаратты пайдалануу мүмкүндүгүн берет"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"манжа изинин аппараттык камсыздоосун башкаруу"</string>
@@ -636,9 +633,9 @@
     <string name="fingerprint_recalibrate_notification_content" msgid="8519935717822194943">"Тейлөө кызматына кайрылыңыз."</string>
     <string name="face_acquired_insufficient" msgid="6889245852748492218">"Жүзүңүздүн үлгүсү түзүлгөн жок. Кайталаңыз."</string>
     <string name="face_acquired_too_bright" msgid="8070756048978079164">"Өтө жарык. Жарыктыкты азайтып көрүңүз."</string>
-    <string name="face_acquired_too_dark" msgid="7919016380747701228">"Жарыгыраак жерден тартып көрүңүз"</string>
+    <string name="face_acquired_too_dark" msgid="7919016380747701228">"Жарыгыраак жерге туруңуз"</string>
     <string name="face_acquired_too_close" msgid="4453646176196302462">"Телефонду алысыраак жылдырыңыз"</string>
-    <string name="face_acquired_too_far" msgid="2922278214231064859">"Телефонду жакыныраак жылдырыңыз"</string>
+    <string name="face_acquired_too_far" msgid="2922278214231064859">"Телефонду жакындатыңыз"</string>
     <string name="face_acquired_too_high" msgid="8278815780046368576">"Телефонду жогору жылдырыңыз"</string>
     <string name="face_acquired_too_low" msgid="4075391872960840081">"Телефонду ылдый жылдырыңыз"</string>
     <string name="face_acquired_too_right" msgid="6245286514593540859">"Телефонду солго жылдырыңыз"</string>
@@ -654,11 +651,11 @@
     <string name="face_acquired_roll_too_extreme" msgid="8261939882838881194">"Телефонуңузду караңыз"</string>
     <string name="face_acquired_obscured" msgid="4917643294953326639">"Жүзүңүздү жашырып турган нерселерди алып салыңыз."</string>
     <string name="face_acquired_sensor_dirty" msgid="8968391891086721678">"Экраныңыздын жогору жагын, анын ичинде тилкени да тазалаңыз"</string>
-    <string name="face_acquired_dark_glasses_detected" msgid="7263638432128692048">"Жүзүңүз толугу менен көрүнүшү керек"</string>
-    <string name="face_acquired_mouth_covering_detected" msgid="615991670821926847">"Жүзүңүз толугу менен көрүнүшү керек"</string>
+    <string name="face_acquired_dark_glasses_detected" msgid="7263638432128692048">"Жүзүңүз толук көрүнүшү керек"</string>
+    <string name="face_acquired_mouth_covering_detected" msgid="615991670821926847">"Жүзүңүз толук көрүнүшү керек"</string>
     <string name="face_acquired_recalibrate_alt" msgid="5702674220280332115">"Жүзүңүздүн үлгүсү түзүлгөн жок. Кайталаңыз."</string>
-    <string name="face_acquired_dark_glasses_detected_alt" msgid="4052123776406041972">"Кара көз айнек аныкталды. Жүзүңүз толугу менен көрүнүшү керек."</string>
-    <string name="face_acquired_mouth_covering_detected_alt" msgid="1122294982850589766">"Жүзүңүз жабылып турат. Жүзүңүз толугу менен көрүнүшү керек."</string>
+    <string name="face_acquired_dark_glasses_detected_alt" msgid="4052123776406041972">"Кара көз айнек кийгенге болбойт. Жүзүңүз толук көрүнүшү керек."</string>
+    <string name="face_acquired_mouth_covering_detected_alt" msgid="1122294982850589766">"Жүзүңүз жабылып калды. Ал толук көрүнүшү керек."</string>
   <string-array name="face_acquired_vendor">
   </string-array>
     <string name="face_error_hw_not_available" msgid="5085202213036026288">"Жүз ырасталбай жатат. Аппараттык камсыздоо жеткиликсиз."</string>
@@ -1234,7 +1231,7 @@
     <string name="smv_process" msgid="1398801497130695446">"<xliff:g id="PROCESS">%1$s</xliff:g> процесси өзүнүн мажбурланган StrictMode саясатын бузуп койду."</string>
     <string name="android_upgrading_title" product="default" msgid="7279077384220829683">"Телефон жаңырууда…"</string>
     <string name="android_upgrading_title" product="tablet" msgid="4268417249079938805">"Планшет жаңыртылууда…"</string>
-    <string name="android_upgrading_title" product="device" msgid="6774767702998149762">"Түзмөк жаңыртылууда…"</string>
+    <string name="android_upgrading_title" product="device" msgid="6774767702998149762">"Түзмөк жаңырууда…"</string>
     <string name="android_start_title" product="default" msgid="4036708252778757652">"Телефон күйгүзүлүүдө…"</string>
     <string name="android_start_title" product="automotive" msgid="7917984412828168079">"Android жүргүзүлүүдө…"</string>
     <string name="android_start_title" product="tablet" msgid="4429767260263190344">"Планшет күйгүзүлүүдө…"</string>
@@ -1675,21 +1672,21 @@
     <string name="accessibility_shortcut_warning_dialog_title" msgid="4017995837692622933">"Ыкчам иштетесизби?"</string>
     <string name="accessibility_shortcut_toogle_warning" msgid="4161716521310929544">"Атайын мүмкүнчүлүктөр функциясын пайдалануу үчүн ал күйгүзүлгөндө, үндү катуулатып/акырындаткан эки баскычты тең 3 секунддай коё бербей басып туруңуз."</string>
     <string name="accessibility_shortcut_multiple_service_warning_title" msgid="3135860819356676426">"Атайын мүмкүнчүлүктөрдүн ыкчам баскычын иштетесизби?"</string>
-    <string name="accessibility_shortcut_multiple_service_warning" msgid="3740723309483706911">"Атайын мүмкүнчүлүктөр функциясын иштетүү үчүн үндү чоңойтуп/кичирейтүү баскычтарын бир нече секунд коё бербей басып туруңуз. Ушуну менен, түзмөгүңүз бир аз башкача иштеп калышы мүмкүн.\n\nУчурдагы функциялар:\n<xliff:g id="SERVICE">%1$s</xliff:g>\nТандалган функцияларды өзгөртүү үчүн Жөндөөлөр &gt; Атайын мүмкүнчүлүктөр бөлүмүнө өтүңүз."</string>
+    <string name="accessibility_shortcut_multiple_service_warning" msgid="3740723309483706911">"Атайын мүмкүнчүлүктөр функциясын иштетүү үчүн үндү катуулатуу/акырындатуу баскычтарын бир нече секунд коё бербей басып туруңуз. Ушуну менен, түзмөгүңүз бир аз башкача иштеп калышы мүмкүн.\n\nУчурдагы функциялар:\n<xliff:g id="SERVICE">%1$s</xliff:g>\nТандалган функцияларды өзгөртүү үчүн Жөндөөлөр &gt; Атайын мүмкүнчүлүктөр бөлүмүнө өтүңүз."</string>
     <string name="accessibility_shortcut_multiple_service_list" msgid="2128323171922023762">" • <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
     <string name="accessibility_shortcut_single_service_warning_title" msgid="1909518473488345266">"<xliff:g id="SERVICE">%1$s</xliff:g> ыкчам баскычын иштетесизби?"</string>
-    <string name="accessibility_shortcut_single_service_warning" msgid="6363127705112844257">"<xliff:g id="SERVICE">%1$s</xliff:g> кызматын иштетүү үчүн үндү чоңойтуп/кичирейтүү баскычтарын бир нече секунд коё бербей басып туруңуз. Ушуну менен, түзмөгүңүз бир аз башкача иштеп калышы мүмкүн.\n\nБаскычтардын ушул айкалышын башка функцияга дайындоо үчүн, Жөндөөлөр &gt; Атайын мүмкүнчүлүктөр бөлүмүнө өтүңүз."</string>
+    <string name="accessibility_shortcut_single_service_warning" msgid="6363127705112844257">"<xliff:g id="SERVICE">%1$s</xliff:g> кызматын иштетүү үчүн үндү катуулатуу/акырындатуу баскычтарын бир нече секунд коё бербей басып туруңуз. Ушуну менен, түзмөгүңүз бир аз башкача иштеп калышы мүмкүн.\n\nБаскычтардын ушул айкалышын башка функцияга дайындоо үчүн, Жөндөөлөр &gt; Атайын мүмкүнчүлүктөр бөлүмүнө өтүңүз."</string>
     <string name="accessibility_shortcut_on" msgid="5463618449556111344">"Ооба"</string>
     <string name="accessibility_shortcut_off" msgid="3651336255403648739">"Жок"</string>
     <string name="accessibility_shortcut_menu_item_status_on" msgid="6608392117189732543">"КҮЙҮК"</string>
     <string name="accessibility_shortcut_menu_item_status_off" msgid="5531598275559472393">"ӨЧҮК"</string>
     <string name="accessibility_enable_service_title" msgid="3931558336268541484">"<xliff:g id="SERVICE">%1$s</xliff:g> кызматына түзмөгүңүздү толугу менен көзөмөлдөөгө уруксат бересизби?"</string>
-    <string name="accessibility_service_warning_description" msgid="291674995220940133">"Толук көзөмөл атайын мүмкүнчүлүктөрдү пайдаланууга керек, бирок калган көпчүлүк колдонмолорго кереги жок."</string>
+    <string name="accessibility_service_warning_description" msgid="291674995220940133">"Толук көзөмөл атайын мүмкүнчүлүктөрдү иштеткен колдонмолорго керек болуп, калган көптөгөн колдонмолорго кереги деле жок."</string>
     <string name="accessibility_service_screen_control_title" msgid="190017412626919776">"Экранды көрүп, көзөмөлдөө"</string>
-    <string name="accessibility_service_screen_control_description" msgid="6946315917771791525">"Кызмат экрандагы нерселерди окуп, материалды башка колдонмолордун үстүнөн көрсөтөт."</string>
+    <string name="accessibility_service_screen_control_description" msgid="6946315917771791525">"Кызмат экрандагы нерселерди окуп, аларды башка колдонмолордун үстүнөн көрсөтөт."</string>
     <string name="accessibility_service_action_perform_title" msgid="779670378951658160">"Аракеттерди көрүп, аткаруу"</string>
     <string name="accessibility_service_action_perform_description" msgid="2718852014003170558">"Кызмат колдонмодо жасаган аракеттериңизге же түзмөктүн сенсорлоруна көз салып, сиздин атыңыздан буйруктарды берет."</string>
-    <string name="accessibility_dialog_button_allow" msgid="2092558122987144530">"Уруксат берүү"</string>
+    <string name="accessibility_dialog_button_allow" msgid="2092558122987144530">"Ооба"</string>
     <string name="accessibility_dialog_button_deny" msgid="4129575637812472671">"Жок"</string>
     <string name="accessibility_select_shortcut_menu_title" msgid="6002726538854613272">"Функцияны колдонуп баштоо үчүн аны таптап коюңуз:"</string>
     <string name="accessibility_edit_shortcut_menu_button_title" msgid="239446795930436325">"Атайын мүмкүнчүлүктөр баскычы менен колдонгуңуз келген функцияларды тандаңыз"</string>
@@ -1924,6 +1921,8 @@
     <string name="country_selection_title" msgid="5221495687299014379">"Чөлкөмдүк жөндөөлөр"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Тилди киргизиңиз"</string>
     <string name="language_picker_section_suggested" msgid="6556199184638990447">"Сунушталгандар"</string>
+    <string name="language_picker_section_suggested_bilingual" msgid="5932198319583556613">"Сунушталган тилдер"</string>
+    <string name="region_picker_section_suggested_bilingual" msgid="704607569328224133">"Сунушталган региондор"</string>
     <string name="language_picker_section_all" msgid="1985809075777564284">"Бардык тилдер"</string>
     <string name="region_picker_section_all" msgid="756441309928774155">"Бардык өлкөлөр"</string>
     <string name="locale_search_menu" msgid="6258090710176422934">"Издөө"</string>
@@ -2042,10 +2041,10 @@
     <string name="harmful_app_warning_uninstall" msgid="6472912975664191772">"ЧЫГАРЫП САЛУУ"</string>
     <string name="harmful_app_warning_open_anyway" msgid="5963657791740211807">"БААРЫ БИР АЧЫЛСЫН"</string>
     <string name="harmful_app_warning_title" msgid="8794823880881113856">"Зыянкеч колдонмо аныкталды"</string>
-    <string name="log_access_confirmation_title" msgid="2343578467290592708">"<xliff:g id="LOG_ACCESS_APP_NAME">%s</xliff:g> колдонмосуна түзмөктөгү бардык таржымалдарды колдонууга уруксат бересизби?"</string>
-    <string name="log_access_confirmation_allow" msgid="5302517782599389507">"Бир жолу кирүүгө уруксат берүү"</string>
-    <string name="log_access_confirmation_deny" msgid="7685790957455099845">"Уруксат берилбесин"</string>
-    <string name="log_access_confirmation_body" msgid="6581985716241928135">"Түзмөктө аткарылган бардык аракеттер түзмөктүн таржымалдарында сакталып калат. Колдонмолор бул таржымалдарды колдонуп, маселелерди оңдошот.\n\nАйрым таржымалдарда купуя маалымат болушу мүмкүн, андыктан түзмөктөгү бардык таржымалдарды ишенимдүү колдонмолорго гана пайдаланууга уруксат бериңиз. \n\nЭгер бул колдонмого түзмөктөгү айрым таржымалдарга кирүүгө тыюу салсаңыз, ал өзүнүн таржымалдарын пайдалана берет. Түзмөктү өндүрүүчү түзмөгүңүздөгү айрым таржымалдарды же маалыматты көрө берет. Кеңири маалымат"</string>
+    <string name="log_access_confirmation_title" msgid="2343578467290592708">"<xliff:g id="LOG_ACCESS_APP_NAME">%s</xliff:g> колдонмосуна түзмөктөгү бардык таржымалдарды жеткиликтүү кыласызбы?"</string>
+    <string name="log_access_confirmation_allow" msgid="5302517782599389507">"Бир жолу жеткиликтүү кылуу"</string>
+    <string name="log_access_confirmation_deny" msgid="7685790957455099845">"Жок"</string>
+    <string name="log_access_confirmation_body" msgid="6581985716241928135">"Түзмөктө жасалган нерселердин баары таржымал болуп сактала берет. Колдонмолор анын жардамы менен көйгөйлөрдү аныктап, оңдоп турушат.\n\nАйрым таржымалдарда купуя маалымат болушу мүмкүн, андыктан түзмөктөгү бардык таржымалдарды ишенимдүү колдонмолорго гана пайдаланууга уруксат бериңиз. \n\nЭгер бул колдонмого түзмөктөгү айрым таржымалдарга кирүүгө тыюу салсаңыз, ал өзүнүн таржымалдарын пайдалана берет. Түзмөктү өндүрүүчү түзмөгүңүздөгү айрым таржымалдарды же маалыматты көрө берет. Кеңири маалымат"</string>
     <string name="log_access_do_not_show_again" msgid="1058690599083091552">"Экинчи көрүнбөсүн"</string>
     <string name="slices_permission_request" msgid="3677129866636153406">"<xliff:g id="APP_0">%1$s</xliff:g> колдонмосу <xliff:g id="APP_2">%2$s</xliff:g> үлгүлөрүн көрсөткөнү жатат"</string>
     <string name="screenshot_edit" msgid="7408934887203689207">"Түзөтүү"</string>
@@ -2078,8 +2077,8 @@
     <string name="nas_upgrade_notification_learn_more_action" msgid="7011130656195423947">"Кененирээк"</string>
     <string name="nas_upgrade_notification_learn_more_content" msgid="3735480566983530650">"Android 12 версиясында ыңгайлаштырылуучу билдирмелер жакшыртылган билдирмелерге алмаштырылды. Бул функция ыкчам аракеттерди жана жоопторду көрсөтүп, билдирмелериңизди иреттейт.\n\nЖакшыртылган билдирмелер бардык билдирмелердин мазмунун, ошондой эле байланыштардын аты-жөнү жана билдирүүлөрү сыяктуу жеке маалыматты көрө алат. Ошондой эле, бул функция билдирмелерди жаап, баскычтарын басып, телефон чалууларга жооп берип жана \"Тынчымды алба\" функциясын башкара алат."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Режимдин адаттагы билдирмеси"</string>
-    <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Батарея кубаттоого чейин отуруп калышы мүмкүн"</string>
-    <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Батареянын отуруп калбашы үчүн Батареяны үнөмдөгүч режими иштетилди"</string>
+    <string name="dynamic_mode_notification_title" msgid="1388718452788985481">"Батареяны үнөмдөгүч күйгүзүлдү"</string>
+    <string name="dynamic_mode_notification_summary" msgid="1639031262484979689">"Батареянын кубатынын мөөнөтүн узартуу үчүн батареянын колдонулушун азайтуу"</string>
     <string name="battery_saver_notification_channel_name" msgid="3918243458067916913">"Батареяны үнөмдөгүч"</string>
     <string name="battery_saver_off_notification_title" msgid="7637255960468032515">"Батареяны үнөмдөө режими өчүк"</string>
     <string name="battery_saver_charged_notification_summary" product="default" msgid="5544457317418624367">"Телефондун кубаты жетиштүү. Функциялар мындан ары чектелбейт."</string>
@@ -2286,5 +2285,7 @@
     <string name="notification_action_check_bg_apps" msgid="4758877443365362532">"Жигердүү колдонмолорду карап чыгуу"</string>
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"<xliff:g id="DEVICE">%1$s</xliff:g> түзмөгүңүздөн телефондун камерасына мүмкүнчүлүк жок"</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"<xliff:g id="DEVICE">%1$s</xliff:g> түзмөгүңүздөн планшетиңиздин камерасына мүмкүнчүлүк жок"</string>
-    <string name="system_locale_title" msgid="3978041860457277638">"Тутумдун тили"</string>
+    <string name="system_locale_title" msgid="711882686834677268">"Системанын демейки параметрлери"</string>
+    <!-- no translation found for default_card_name (9198284935962911468) -->
+    <skip />
 </resources>

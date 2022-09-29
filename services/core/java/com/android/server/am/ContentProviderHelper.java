@@ -22,9 +22,14 @@ import static android.os.Process.PROC_PARENS;
 import static android.os.Process.PROC_SPACE_TERM;
 import static android.os.Process.SYSTEM_UID;
 
+import static com.android.internal.util.FrameworkStatsLog.PROVIDER_ACQUISITION_EVENT_REPORTED;
+import static com.android.internal.util.FrameworkStatsLog.PROVIDER_ACQUISITION_EVENT_REPORTED__PROC_START_TYPE__PROCESS_START_TYPE_COLD;
+import static com.android.internal.util.FrameworkStatsLog.PROVIDER_ACQUISITION_EVENT_REPORTED__PROC_START_TYPE__PROCESS_START_TYPE_WARM;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_MU;
 import static com.android.server.am.ActivityManagerService.TAG_MU;
+import static com.android.server.am.ProcessProfileRecord.HOSTING_COMPONENT_TYPE_PROVIDER;
 
+import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
@@ -44,7 +49,6 @@ import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
-import android.content.pm.PackageManagerInternal;
 import android.content.pm.PathPermission;
 import android.content.pm.ProviderInfo;
 import android.content.pm.UserInfo;
@@ -72,6 +76,7 @@ import android.util.SparseArray;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.util.ArrayUtils;
+import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.LocalServices;
 import com.android.server.RescueParty;
 import com.android.server.pm.UserManagerInternal;
@@ -240,6 +245,10 @@ public class ContentProviderHelper {
                     ContentProviderHolder holder = cpr.newHolder(null, true);
                     // don't give caller the provider object, it needs to make its own.
                     holder.provider = null;
+                    FrameworkStatsLog.write(
+                            PROVIDER_ACQUISITION_EVENT_REPORTED,
+                            r.uid, callingUid,
+                            PROVIDER_ACQUISITION_EVENT_REPORTED__PROC_START_TYPE__PROCESS_START_TYPE_WARM);
                     return holder;
                 }
 
@@ -306,6 +315,10 @@ public class ContentProviderHelper {
                         dyingProc = cpr.proc;
                     } else {
                         cpr.proc.mState.setVerifiedAdj(cpr.proc.mState.getSetAdj());
+                        FrameworkStatsLog.write(
+                                PROVIDER_ACQUISITION_EVENT_REPORTED,
+                                cpr.proc.uid, callingUid,
+                                PROVIDER_ACQUISITION_EVENT_REPORTED__PROC_START_TYPE__PROCESS_START_TYPE_WARM);
                     }
                 } finally {
                     Binder.restoreCallingIdentity(origId);
@@ -478,11 +491,15 @@ public class ContentProviderHelper {
                                 } catch (RemoteException e) {
                                 }
                             }
+                            FrameworkStatsLog.write(
+                                    PROVIDER_ACQUISITION_EVENT_REPORTED,
+                                    proc.uid, callingUid,
+                                    PROVIDER_ACQUISITION_EVENT_REPORTED__PROC_START_TYPE__PROCESS_START_TYPE_WARM);
                         } else {
                             checkTime(startTime, "getContentProviderImpl: before start process");
                             proc = mService.startProcessLocked(
                                     cpi.processName, cpr.appInfo, false, 0,
-                                    new HostingRecord("content provider",
+                                    new HostingRecord(HostingRecord.HOSTING_TYPE_CONTENT_PROVIDER,
                                         new ComponentName(
                                                 cpi.applicationInfo.packageName, cpi.name)),
                                     Process.ZYGOTE_POLICY_FLAG_EMPTY, false, false);
@@ -494,6 +511,10 @@ public class ContentProviderHelper {
                                         + ": process is bad");
                                 return null;
                             }
+                            FrameworkStatsLog.write(
+                                    PROVIDER_ACQUISITION_EVENT_REPORTED,
+                                    proc.uid, callingUid,
+                                    PROVIDER_ACQUISITION_EVENT_REPORTED__PROC_START_TYPE__PROCESS_START_TYPE_COLD);
                         }
                         cpr.launchingApp = proc;
                         mLaunchingProviders.add(cpr);
@@ -701,6 +722,9 @@ public class ContentProviderHelper {
                     dst.onProviderPublishStatusLocked(true);
                 }
                 dst.mRestartCount = 0;
+                if (hasProviderConnectionLocked(r)) {
+                    r.mProfile.addHostingComponentType(HOSTING_COMPONENT_TYPE_PROVIDER);
+                }
             }
 
             // update the app's oom adj value and each provider's usage stats
@@ -934,20 +958,22 @@ public class ContentProviderHelper {
     String getProviderMimeType(Uri uri, int userId) {
         mService.enforceNotIsolatedCaller("getProviderMimeType");
         final String name = uri.getAuthority();
-        int callingUid = Binder.getCallingUid();
-        int callingPid = Binder.getCallingPid();
-        long ident = 0;
-        boolean clearedIdentity = false;
-        userId = mService.mUserController.unsafeConvertIncomingUser(userId);
-        if (canClearIdentity(callingPid, callingUid, userId)) {
-            clearedIdentity = true;
-            ident = Binder.clearCallingIdentity();
-        }
-        ContentProviderHolder holder = null;
+        final int callingUid = Binder.getCallingUid();
+        final int callingPid = Binder.getCallingPid();
+        final int safeUserId = mService.mUserController.unsafeConvertIncomingUser(userId);
+        final long ident = canClearIdentity(callingPid, callingUid, safeUserId)
+                ? Binder.clearCallingIdentity() : 0;
+        final ContentProviderHolder holder;
         try {
             holder = getContentProviderExternalUnchecked(name, null, callingUid,
-                    "*getmimetype*", userId);
-            if (holder != null) {
+                    "*getmimetype*", safeUserId);
+        } finally {
+            if (ident != 0) {
+                Binder.restoreCallingIdentity(ident);
+            }
+        }
+        try {
+            if (isHolderVisibleToCaller(holder, callingUid, safeUserId)) {
                 final IBinder providerConnection = holder.connection;
                 final ComponentName providerName = holder.info.getComponentName();
                 // Note: creating a new Runnable instead of using a lambda here since lambdas in
@@ -976,15 +1002,13 @@ public class ContentProviderHelper {
             return null;
         } finally {
             // We need to clear the identity to call removeContentProviderExternalUnchecked
-            if (!clearedIdentity) {
-                ident = Binder.clearCallingIdentity();
-            }
+            final long token = Binder.clearCallingIdentity();
             try {
                 if (holder != null) {
-                    removeContentProviderExternalUnchecked(name, null, userId);
+                    removeContentProviderExternalUnchecked(name, null /* token */, safeUserId);
                 }
             } finally {
-                Binder.restoreCallingIdentity(ident);
+                Binder.restoreCallingIdentity(token);
             }
         }
 
@@ -1003,12 +1027,20 @@ public class ContentProviderHelper {
         final int callingUid = Binder.getCallingUid();
         final int callingPid = Binder.getCallingPid();
         final int safeUserId = mService.mUserController.unsafeConvertIncomingUser(userId);
-        final long ident = canClearIdentity(callingPid, callingUid, userId)
+        final long ident = canClearIdentity(callingPid, callingUid, safeUserId)
                 ? Binder.clearCallingIdentity() : 0;
+        final ContentProviderHolder holder;
         try {
-            final ContentProviderHolder holder = getContentProviderExternalUnchecked(name, null,
+            holder = getContentProviderExternalUnchecked(name, null /* token */,
                     callingUid, "*getmimetype*", safeUserId);
-            if (holder != null) {
+        } finally {
+            if (ident != 0) {
+                Binder.restoreCallingIdentity(ident);
+            }
+        }
+
+        try {
+            if (isHolderVisibleToCaller(holder, callingUid, safeUserId)) {
                 holder.provider.getTypeAsync(uri, new RemoteCallback(result -> {
                     final long identity = Binder.clearCallingIdentity();
                     try {
@@ -1024,8 +1056,6 @@ public class ContentProviderHelper {
         } catch (RemoteException e) {
             Log.w(TAG, "Content provider dead retrieving " + uri, e);
             resultCallback.sendResult(Bundle.EMPTY);
-        } finally {
-            Binder.restoreCallingIdentity(ident);
         }
     }
 
@@ -1039,6 +1069,16 @@ public class ContentProviderHelper {
                 || ActivityManagerService.checkComponentPermission(
                         android.Manifest.permission.INTERACT_ACROSS_USERS_FULL, callingPid,
                         callingUid, -1, true) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private boolean isHolderVisibleToCaller(@Nullable ContentProviderHolder holder, int callingUid,
+            @UserIdInt int userId) {
+        if (holder == null || holder.info == null) {
+            return false;
+        }
+
+        return !mService.getPackageManagerInternal()
+                .filterAppAccess(holder.info.packageName, callingUid, userId);
     }
 
     /**
@@ -1109,9 +1149,7 @@ public class ContentProviderHelper {
                     "*checkContentProviderUriPermission*", userId);
             if (holder != null) {
 
-                final PackageManagerInternal packageManagerInt = LocalServices.getService(
-                        PackageManagerInternal.class);
-                final AndroidPackage androidPackage = packageManagerInt
+                final AndroidPackage androidPackage = mService.getPackageManagerInternal()
                         .getPackage(Binder.getCallingUid());
                 if (androidPackage == null) {
                     return PackageManager.PERMISSION_DENIED;
@@ -1375,6 +1413,9 @@ public class ContentProviderHelper {
         conn.startAssociationIfNeeded();
         conn.initializeCount(stable);
         cpr.connections.add(conn);
+        if (cpr.proc != null) {
+            cpr.proc.mProfile.addHostingComponentType(HOSTING_COMPONENT_TYPE_PROVIDER);
+        }
         pr.addProviderConnection(conn);
         mService.startAssociationLocked(r.uid, r.processName, r.mState.getCurProcState(),
                 cpr.uid, cpr.appInfo.longVersionCode, cpr.name, cpr.info.processName);
@@ -1418,6 +1459,16 @@ public class ContentProviderHelper {
         return true;
     }
 
+    @GuardedBy("mService")
+    private boolean hasProviderConnectionLocked(ProcessRecord proc) {
+        for (int i = proc.mProviders.numberOfProviders() - 1; i >= 0; i--) {
+            if (!proc.mProviders.getProviderAt(i).connections.isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void handleProviderRemoval(ContentProviderConnection conn, boolean stable,
             boolean updateOomAdj) {
         synchronized (mService) {
@@ -1429,6 +1480,9 @@ public class ContentProviderHelper {
             final ContentProviderRecord cpr = conn.provider;
             conn.stopAssociation();
             cpr.connections.remove(conn);
+            if (cpr.proc != null && !hasProviderConnectionLocked(cpr.proc)) {
+                cpr.proc.mProfile.clearHostingComponentType(HOSTING_COMPONENT_TYPE_PROVIDER);
+            }
             conn.client.mProviders.removeProviderConnection(conn);
             if (conn.client.mState.getSetProcState()
                     < ActivityManager.PROCESS_STATE_LAST_ACTIVITY) {
@@ -1737,6 +1791,9 @@ public class ContentProviderHelper {
                 // In the protocol here, we don't expect the client to correctly
                 // clean up this connection, we'll just remove it.
                 cpr.connections.remove(i);
+                if (cpr.proc != null && !hasProviderConnectionLocked(cpr.proc)) {
+                    cpr.proc.mProfile.clearHostingComponentType(HOSTING_COMPONENT_TYPE_PROVIDER);
+                }
                 if (conn.client.mProviders.removeProviderConnection(conn)) {
                     mService.stopAssociationLocked(capp.uid, capp.processName,
                             cpr.uid, cpr.appInfo.longVersionCode, cpr.name, cpr.info.processName);

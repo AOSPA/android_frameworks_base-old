@@ -43,12 +43,14 @@ import static org.mockito.Mockito.withSettings;
 
 import android.app.ActivityManagerInternal;
 import android.app.AppOpsManager;
+import android.app.IApplicationThread;
 import android.app.usage.UsageStatsManagerInternal;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.IntentFilter;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManagerInternal;
 import android.database.ContentObserver;
@@ -368,8 +370,6 @@ public class SystemServicesTestRule implements TestRule {
         // This makes sure the posted messages without delay are processed, e.g.
         // DisplayPolicy#release, WindowManagerService#setAnimationScale.
         waitUntilWindowManagerHandlersIdle();
-        // Clear all posted messages with delay, so they don't be executed at unexpected times.
-        cleanupWindowManagerHandlers();
         // Needs to explicitly dispose current static threads because there could be messages
         // scheduled at a later time, and all mocks are invalid when it's executed.
         DisplayThread.dispose();
@@ -430,16 +430,32 @@ public class SystemServicesTestRule implements TestRule {
                 .spiedInstance(sWakeLock).stubOnly());
     }
 
-    void cleanupWindowManagerHandlers() {
-        final WindowManagerService wm = getWindowManagerService();
-        if (wm == null) {
-            return;
+    WindowProcessController addProcess(String pkgName, String procName, int pid, int uid) {
+        return addProcess(mAtmService, pkgName, procName, pid, uid);
+    }
+
+    static WindowProcessController addProcess(ActivityTaskManagerService atmService, String pkgName,
+            String procName, int pid, int uid) {
+        final ApplicationInfo info = new ApplicationInfo();
+        info.uid = uid;
+        info.packageName = pkgName;
+        return addProcess(atmService, info, procName, pid);
+    }
+
+    static WindowProcessController addProcess(ActivityTaskManagerService atmService,
+            ApplicationInfo info, String procName, int pid) {
+        final WindowProcessListener mockListener = mock(WindowProcessListener.class,
+                withSettings().stubOnly());
+        final int uid = info.uid;
+        final WindowProcessController proc = new WindowProcessController(atmService,
+                info, procName, uid, UserHandle.getUserId(uid), mockListener, mockListener);
+        proc.setThread(mock(IApplicationThread.class, withSettings().stubOnly()));
+        atmService.mProcessNames.put(procName, uid, proc);
+        if (pid > 0) {
+            proc.setPid(pid);
+            atmService.mProcessMap.put(pid, proc);
         }
-        wm.mH.removeCallbacksAndMessages(null);
-        wm.mAnimationHandler.removeCallbacksAndMessages(null);
-        // This is a different handler object than the wm.mAnimationHandler above.
-        AnimationThread.getHandler().removeCallbacksAndMessages(null);
-        SurfaceAnimationThread.getHandler().removeCallbacksAndMessages(null);
+        return proc;
     }
 
     void waitUntilWindowManagerHandlersIdle() {

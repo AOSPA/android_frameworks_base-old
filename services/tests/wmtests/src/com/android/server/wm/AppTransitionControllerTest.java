@@ -47,6 +47,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assume.assumeFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.clearInvocations;
@@ -89,6 +90,7 @@ public class AppTransitionControllerTest extends WindowTestsBase {
 
     @Before
     public void setUp() throws Exception {
+        assumeFalse(WindowManagerService.sEnableShellTransitions);
         mAppTransitionController = new AppTransitionController(mWm, mDisplayContent);
     }
 
@@ -593,7 +595,7 @@ public class AppTransitionControllerTest extends WindowTestsBase {
                 .setCreatedByOrganizer(true);
         final Task splitRoot1 = builder.build();
         final Task splitRoot2 = builder.build();
-        splitRoot1.setAdjacentTaskFragment(splitRoot2, false /* moveTogether */);
+        splitRoot1.setAdjacentTaskFragment(splitRoot2);
         final ActivityRecord activity1 = createActivityRecordWithParentTask(splitRoot1);
         activity1.setVisible(false);
         activity1.mVisibleRequested = true;
@@ -806,7 +808,7 @@ public class AppTransitionControllerTest extends WindowTestsBase {
         }
 
         @Override
-        public void onAnimationCancelled() throws RemoteException {
+        public void onAnimationCancelled(boolean isKeyguardOccluded) throws RemoteException {
             mFinishedCallback = null;
         }
 
@@ -1157,6 +1159,41 @@ public class AppTransitionControllerTest extends WindowTestsBase {
         verify(activity).setDropInputMode(DropInputMode.NONE);
     }
 
+    /**
+     * We don't need to drop input for fully trusted embedding (system app, and embedding in the
+     * same app). This will allow users to do fast tapping.
+     */
+    @Test
+    public void testOverrideTaskFragmentAdapter_noInputProtectedForFullyTrustedAnimation() {
+        final Task task = createTask(mDisplayContent);
+        final TaskFragmentOrganizer organizer = new TaskFragmentOrganizer(Runnable::run);
+        final TestRemoteAnimationRunner remoteAnimationRunner = new TestRemoteAnimationRunner();
+        setupTaskFragmentRemoteAnimation(organizer, task.mTaskId, remoteAnimationRunner);
+
+        // Create a TaskFragment with only trusted embedded activity
+        final TaskFragment taskFragment = new TaskFragmentBuilder(mAtm)
+                .setParentTask(task)
+                .createActivityCount(1)
+                .setOrganizer(organizer)
+                .build();
+        final ActivityRecord activity = taskFragment.getChildAt(0).asActivityRecord();
+        prepareActivityForAppTransition(activity);
+        final int uid = mAtm.mTaskFragmentOrganizerController.getTaskFragmentOrganizerUid(
+                getITaskFragmentOrganizer(organizer));
+        doReturn(true).when(task).isFullyTrustedEmbedding(uid);
+        spyOn(mDisplayContent.mAppTransition);
+
+        // Prepare and start transition.
+        prepareAndTriggerAppTransition(activity, null /* closingActivity */, taskFragment);
+        mWm.mAnimator.executeAfterPrepareSurfacesRunnables();
+
+        // The animation will be animated remotely by client, but input should not be dropped for
+        // fully trusted.
+        assertTrue(remoteAnimationRunner.isAnimationStarted());
+        verify(activity, never()).setDropInputForAnimation(true);
+        verify(activity, never()).setDropInputMode(DropInputMode.ALL);
+    }
+
     @Test
     public void testTransitionGoodToGoForTaskFragments() {
         final TaskFragmentOrganizer organizer = new TaskFragmentOrganizer(Runnable::run);
@@ -1226,8 +1263,7 @@ public class AppTransitionControllerTest extends WindowTestsBase {
             TestRemoteAnimationRunner remoteAnimationRunner) {
         final RemoteAnimationAdapter adapter = new RemoteAnimationAdapter(
                 remoteAnimationRunner, 10, 1);
-        final ITaskFragmentOrganizer iOrganizer =
-                ITaskFragmentOrganizer.Stub.asInterface(organizer.getOrganizerToken().asBinder());
+        final ITaskFragmentOrganizer iOrganizer = getITaskFragmentOrganizer(organizer);
         final RemoteAnimationDefinition definition = new RemoteAnimationDefinition();
         definition.addRemoteAnimation(TRANSIT_OLD_TASK_FRAGMENT_CHANGE, adapter);
         definition.addRemoteAnimation(TRANSIT_OLD_TASK_FRAGMENT_OPEN, adapter);
@@ -1235,6 +1271,11 @@ public class AppTransitionControllerTest extends WindowTestsBase {
         mAtm.mTaskFragmentOrganizerController.registerOrganizer(iOrganizer);
         mAtm.mTaskFragmentOrganizerController.registerRemoteAnimations(iOrganizer, taskId,
                 definition);
+    }
+
+    private static ITaskFragmentOrganizer getITaskFragmentOrganizer(
+            TaskFragmentOrganizer organizer) {
+        return ITaskFragmentOrganizer.Stub.asInterface(organizer.getOrganizerToken().asBinder());
     }
 
     private void prepareAndTriggerAppTransition(@Nullable ActivityRecord openingActivity,

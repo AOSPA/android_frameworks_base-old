@@ -20,6 +20,7 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.annotation.IntDef;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Point;
@@ -324,7 +325,7 @@ public class DisplayImeController implements DisplayController.OnDisplaysChanged
         }
 
         @Override
-        public void topFocusedWindowChanged(String packageName,
+        public void topFocusedWindowChanged(ComponentName component,
                 InsetsVisibilities requestedVisibilities) {
             // Do nothing
         }
@@ -497,6 +498,11 @@ public class DisplayImeController implements DisplayController.OnDisplaysChanged
                 mImeShowing = isShowing;
                 dispatchVisibilityChanged(mDisplayId, isShowing);
             }
+        }
+
+        @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+        public InsetsSourceControl getImeSourceControl() {
+            return mImeSourceControl;
         }
     }
 

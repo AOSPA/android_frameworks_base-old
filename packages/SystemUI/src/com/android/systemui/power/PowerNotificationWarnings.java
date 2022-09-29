@@ -55,6 +55,7 @@ import android.view.WindowManager;
 
 import androidx.annotation.VisibleForTesting;
 
+import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.logging.UiEventLogger;
 import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.settingslib.Utils;
@@ -62,6 +63,7 @@ import com.android.settingslib.fuelgauge.BatterySaverUtils;
 import com.android.settingslib.utils.PowerUtil;
 import com.android.systemui.R;
 import com.android.systemui.SystemUIApplication;
+import com.android.systemui.animation.DialogCuj;
 import com.android.systemui.animation.DialogLaunchAnimator;
 import com.android.systemui.broadcast.BroadcastSender;
 import com.android.systemui.dagger.SysUISingleton;
@@ -92,6 +94,8 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
     private static final String TAG_BATTERY = "low_battery";
     private static final String TAG_TEMPERATURE = "high_temp";
     private static final String TAG_AUTO_SAVER = "auto_saver";
+
+    private static final String INTERACTION_JANK_TAG = "start_power_saver";
 
     private static final int SHOWING_NOTHING = 0;
     private static final int SHOWING_WARNING = 1;
@@ -292,10 +296,8 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
             return;
         }
 
-        final int warningLevel = mContext.getResources().getInteger(
-                com.android.internal.R.integer.config_lowBatteryWarningLevel);
         final String percentage = NumberFormat.getPercentInstance()
-                .format((double) warningLevel / 100.0);
+                .format((double) mCurrentBatterySnapshot.getBatteryLevel() / 100.0);
         final String title = mContext.getString(R.string.battery_low_title);
         final String contentText = mContext.getString(
                 R.string.battery_low_description, percentage);
@@ -309,7 +311,7 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
                         .setContentText(contentText)
                         .setContentTitle(title)
                         .setOnlyAlertOnce(true)
-                        .setOngoing(true)
+                        .setDeleteIntent(pendingBroadcast(ACTION_DISMISSED_WARNING))
                         .setStyle(new Notification.BigTextStyle().bigText(contentText))
                         .setVisibility(Notification.VISIBILITY_PUBLIC);
         if (hasBatterySettings()) {
@@ -336,12 +338,10 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
         final Notification n = nb.build();
         mNoMan.cancelAsUser(TAG_BATTERY, SystemMessage.NOTE_BAD_CHARGER, UserHandle.ALL);
         mNoMan.notifyAsUser(TAG_BATTERY, SystemMessage.NOTE_POWER_LOW, n, UserHandle.ALL);
-        logEvent(BatteryWarningEvents.LowBatteryWarningEvent.LOW_BATTERY_NOTIFICATION);
     }
 
     private boolean showSevereLowBatteryDialog() {
-        final boolean isSevereState = !mCurrentBatterySnapshot.isHybrid() || mBucket < -1;
-        return isSevereState && mUseSevereDialog;
+        return mBucket < -1 && mUseSevereDialog;
     }
 
     /**
@@ -619,6 +619,7 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
         Slog.i(TAG,
                 "show low battery warning: level=" + mBatteryLevel
                         + " [" + mBucket + "] playSound=" + playSound);
+        logEvent(BatteryWarningEvents.LowBatteryWarningEvent.LOW_BATTERY_NOTIFICATION);
         mPlaySound = playSound;
         mWarning = true;
         updateNotification();
@@ -710,7 +711,9 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
         });
         WeakReference<View> ref = mBatteryControllerLazy.get().getLastPowerSaverStartView();
         if (ref != null && ref.get() != null && ref.get().isAggregatedVisible()) {
-            mDialogLaunchAnimator.showFromView(d, ref.get());
+            mDialogLaunchAnimator.showFromView(d, ref.get(),
+                    new DialogCuj(InteractionJankMonitor.CUJ_SHADE_DIALOG_OPEN,
+                            INTERACTION_JANK_TAG));
         } else {
             d.show();
         }

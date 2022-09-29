@@ -25,7 +25,6 @@ import android.content.Intent;
 import android.content.pm.IPackageInstallObserver2;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
-import android.content.pm.PackageManagerInternal;
 import android.content.pm.SigningDetails;
 import android.content.pm.parsing.result.ParseResult;
 import android.content.pm.parsing.result.ParseTypeImpl;
@@ -186,12 +185,12 @@ final class PackageSessionVerifier {
                 }
             }
         };
-        final VerificationParams verifyingSession = makeVerificationParams(session, observer);
+        final VerifyingSession verifyingSession = createVerifyingSession(session, observer);
         if (session.isMultiPackage()) {
             final List<PackageInstallerSession> childSessions = session.getChildSessions();
-            List<VerificationParams> verifyingChildSessions = new ArrayList<>(childSessions.size());
+            List<VerifyingSession> verifyingChildSessions = new ArrayList<>(childSessions.size());
             for (PackageInstallerSession child : childSessions) {
-                verifyingChildSessions.add(makeVerificationParams(child, null));
+                verifyingChildSessions.add(createVerifyingSession(child, null));
             }
             verifyingSession.verifyStage(verifyingChildSessions);
         } else {
@@ -199,7 +198,7 @@ final class PackageSessionVerifier {
         }
     }
 
-    private VerificationParams makeVerificationParams(
+    private VerifyingSession createVerifyingSession(
             PackageInstallerSession session, IPackageInstallObserver2 observer) {
         final UserHandle user;
         if ((session.params.installFlags & PackageManager.INSTALL_ALL_USERS) != 0) {
@@ -207,7 +206,7 @@ final class PackageSessionVerifier {
         } else {
             user = new UserHandle(session.userId);
         }
-        return new VerificationParams(user, session.stageDir, observer, session.params,
+        return new VerifyingSession(user, session.stageDir, observer, session.params,
                 session.getInstallSource(), session.getInstallerUid(), session.getSigningDetails(),
                 session.sessionId, session.getPackageLite(), session.getUserActionRequired(), mPm);
     }
@@ -325,10 +324,7 @@ final class PackageSessionVerifier {
         // APEX checks. For single-package sessions, check if they contain an APEX. For
         // multi-package sessions, find all the child sessions that contain an APEX.
         if (hasApex) {
-            final List<String> apexPackageNames = submitSessionToApexService(session, rollbackId);
-            final PackageManagerInternal packageManagerInternal =
-                    LocalServices.getService(PackageManagerInternal.class);
-            packageManagerInternal.pruneCachedApksInApex(apexPackageNames);
+            submitSessionToApexService(session, rollbackId);
         }
     }
 
@@ -372,7 +368,7 @@ final class PackageSessionVerifier {
         }
     }
 
-    private List<String> submitSessionToApexService(StagingManager.StagedSession session,
+    private void submitSessionToApexService(StagingManager.StagedSession session,
             int rollbackId) throws PackageManagerException {
         final IntArray childSessionIds = new IntArray();
         if (session.isMultiPackage()) {
@@ -412,7 +408,6 @@ final class PackageSessionVerifier {
         }
         Slog.d(TAG, "Session " + session.sessionId() + " has following APEX packages: "
                 + apexPackageNames);
-        return apexPackageNames;
     }
 
     private int retrieveRollbackIdForCommitSession(int sessionId) throws PackageManagerException {

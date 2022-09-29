@@ -59,6 +59,17 @@ public class FeatureFlagUtils {
      */
     public static final String SETTINGS_APP_LANGUAGE_SELECTION = "settings_app_language_selection";
 
+
+    /**
+     * Feature flag to allow/restrict intent redirection from/to clone profile.
+     * Default value is false,this is to ensure that framework is not impacted by intent redirection
+     * till we are ready to launch.
+     * From Android U onwards, this would be set to true and eventually removed.
+     * @hide
+     */
+    public static final String SETTINGS_ALLOW_INTENT_REDIRECTION_FOR_CLONE_PROFILE =
+            "settings_allow_intent_redirection_for_clone_profile";
+
     /**
      * Support locale opt-out and opt-in switch for per app's language.
      * @hide
@@ -91,7 +102,12 @@ public class FeatureFlagUtils {
     /** Flag to enable/disable guest mode UX changes as mentioned in b/214031645
      *  @hide
      */
-    public static  final String SETTINGS_GUEST_MODE_UX_CHANGES = "settings_guest_mode_ux_changes";
+    public static final String SETTINGS_GUEST_MODE_UX_CHANGES = "settings_guest_mode_ux_changes";
+
+    /** Support Clear Calling feature.
+     *  @hide
+     */
+    public static final String SETTINGS_ENABLE_CLEAR_CALLING = "settings_enable_clear_calling";
 
     private static final Map<String, String> DEFAULT_FLAGS;
 
@@ -117,18 +133,21 @@ public class FeatureFlagUtils {
         DEFAULT_FLAGS.put(SETTINGS_SUPPORT_LARGE_SCREEN, "true");
         DEFAULT_FLAGS.put("settings_search_always_expand", "true");
         DEFAULT_FLAGS.put(SETTINGS_APP_LANGUAGE_SELECTION, "true");
+        DEFAULT_FLAGS.put(SETTINGS_ALLOW_INTENT_REDIRECTION_FOR_CLONE_PROFILE, "false");
         DEFAULT_FLAGS.put(SETTINGS_APP_LOCALE_OPT_IN_ENABLED, "true");
         DEFAULT_FLAGS.put(SETTINGS_ENABLE_MONITOR_PHANTOM_PROCS, "true");
         DEFAULT_FLAGS.put(SETTINGS_APP_ALLOW_DARK_THEME_ACTIVATION_AT_BEDTIME, "true");
         DEFAULT_FLAGS.put(SETTINGS_HIDE_SECOND_LAYER_PAGE_NAVIGATE_UP_BUTTON_IN_TWO_PANE, "true");
         DEFAULT_FLAGS.put(SETTINGS_AUTO_TEXT_WRAPPING, "false");
         DEFAULT_FLAGS.put(SETTINGS_GUEST_MODE_UX_CHANGES, "true");
+        DEFAULT_FLAGS.put(SETTINGS_ENABLE_CLEAR_CALLING, "false");
     }
 
     private static final Set<String> PERSISTENT_FLAGS;
     static {
         PERSISTENT_FLAGS = new HashSet<>();
         PERSISTENT_FLAGS.add(SETTINGS_APP_LANGUAGE_SELECTION);
+        PERSISTENT_FLAGS.add(SETTINGS_ALLOW_INTENT_REDIRECTION_FOR_CLONE_PROFILE);
         PERSISTENT_FLAGS.add(SETTINGS_APP_LOCALE_OPT_IN_ENABLED);
         PERSISTENT_FLAGS.add(SETTINGS_SUPPORT_LARGE_SCREEN);
         PERSISTENT_FLAGS.add(SETTINGS_ENABLE_MONITOR_PHANTOM_PROCS);

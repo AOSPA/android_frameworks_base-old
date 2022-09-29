@@ -948,19 +948,17 @@ public final class ColorDisplayService extends SystemService {
         if (!isColorModeAvailable(colorMode)) {
             final int[] mappedColorModes = getContext().getResources().getIntArray(
                     R.array.config_mappedColorModes);
-            if (colorMode == COLOR_MODE_BOOSTED && mappedColorModes.length > COLOR_MODE_NATURAL
-                    && isColorModeAvailable(mappedColorModes[COLOR_MODE_NATURAL])) {
-                colorMode = COLOR_MODE_NATURAL;
-            } else if (colorMode == COLOR_MODE_SATURATED
-                    && mappedColorModes.length > COLOR_MODE_AUTOMATIC
-                    && isColorModeAvailable(mappedColorModes[COLOR_MODE_AUTOMATIC])) {
-                colorMode = COLOR_MODE_AUTOMATIC;
-            } else if (colorMode == COLOR_MODE_AUTOMATIC
-                    && mappedColorModes.length > COLOR_MODE_SATURATED
-                    && isColorModeAvailable(mappedColorModes[COLOR_MODE_SATURATED])) {
-                colorMode = COLOR_MODE_SATURATED;
+            if (colorMode != -1 && mappedColorModes.length > colorMode
+                    && isColorModeAvailable(mappedColorModes[colorMode])) {
+                colorMode = mappedColorModes[colorMode];
             } else {
-                colorMode = -1;
+                final int[] availableColorModes = getContext().getResources().getIntArray(
+                        R.array.config_availableColorModes);
+                if (availableColorModes.length > 0) {
+                    colorMode = availableColorModes[0];
+                } else {
+                    colorMode = NOT_SET;
+                }
             }
         }
 
@@ -1668,11 +1666,9 @@ public final class ColorDisplayService extends SystemService {
             return true;
         }
 
+        @android.annotation.EnforcePermission(android.Manifest.permission.CONTROL_DISPLAY_COLOR_TRANSFORMS)
         @Override
         public boolean isSaturationActivated() {
-            getContext().enforceCallingPermission(
-                    Manifest.permission.CONTROL_DISPLAY_COLOR_TRANSFORMS,
-                    "Permission required to get display saturation level");
             final long token = Binder.clearCallingIdentity();
             try {
                 return !mGlobalSaturationTintController.isActivatedStateNotSet()
@@ -1682,11 +1678,9 @@ public final class ColorDisplayService extends SystemService {
             }
         }
 
+        @android.annotation.EnforcePermission(android.Manifest.permission.CONTROL_DISPLAY_COLOR_TRANSFORMS)
         @Override
         public boolean setAppSaturationLevel(String packageName, int level) {
-            getContext().enforceCallingPermission(
-                    Manifest.permission.CONTROL_DISPLAY_COLOR_TRANSFORMS,
-                    "Permission required to set display saturation level");
             final String callingPackageName = LocalServices.getService(PackageManagerInternal.class)
                     .getNameForUid(Binder.getCallingUid());
             final long token = Binder.clearCallingIdentity();
@@ -1697,10 +1691,8 @@ public final class ColorDisplayService extends SystemService {
             }
         }
 
+        @android.annotation.EnforcePermission(android.Manifest.permission.CONTROL_DISPLAY_COLOR_TRANSFORMS)
         public int getTransformCapabilities() {
-            getContext().enforceCallingPermission(
-                    Manifest.permission.CONTROL_DISPLAY_COLOR_TRANSFORMS,
-                    "Permission required to query transform capabilities");
             final long token = Binder.clearCallingIdentity();
             try {
                 return getTransformCapabilitiesInternal();

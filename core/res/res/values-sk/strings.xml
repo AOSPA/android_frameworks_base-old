@@ -21,11 +21,6 @@
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="byteShort" msgid="202579285008794431">"B"</string>
-    <string name="kilobyteShort" msgid="2214285521564195803">"kB"</string>
-    <string name="megabyteShort" msgid="6649361267635823443">"MB"</string>
-    <string name="gigabyteShort" msgid="7515809460261287991">"GB"</string>
-    <string name="terabyteShort" msgid="1822367128583886496">"TB"</string>
-    <string name="petabyteShort" msgid="5651571254228534832">"PB"</string>
     <string name="fileSizeSuffix" msgid="4233671691980131257">"<xliff:g id="NUMBER">%1$s</xliff:g> <xliff:g id="UNIT">%2$s</xliff:g>"</string>
     <string name="untitled" msgid="3381766946944136678">"&lt;Bez mena&gt;"</string>
     <string name="emptyPhoneNumber" msgid="5812172618020360048">"(žiadne telefónne číslo)"</string>
@@ -307,8 +302,8 @@
     <string name="permgroupdesc_calendar" msgid="6762751063361489379">"prístup ku kalendáru"</string>
     <string name="permgrouplab_sms" msgid="795737735126084874">"SMS"</string>
     <string name="permgroupdesc_sms" msgid="5726462398070064542">"posielanie a zobrazovanie SMS"</string>
-    <string name="permgrouplab_storage" msgid="5570124978732352858">"Súbory a dokumenty"</string>
-    <string name="permgroupdesc_storage" msgid="8352226729501080525">"prístup k súborom a dokumentom vo vašom zariadení"</string>
+    <string name="permgrouplab_storage" msgid="17339216290379241">"Súbory"</string>
+    <string name="permgroupdesc_storage" msgid="5378659041354582769">"dostať sa k súborom vo vašom zariadení"</string>
     <string name="permgrouplab_readMediaAural" msgid="1858331312624942053">"Hudba a zvuk"</string>
     <string name="permgroupdesc_readMediaAural" msgid="7565467343667089595">"prístup k hudbe a zvuku vo vašom zariadení"</string>
     <string name="permgrouplab_readMediaVisual" msgid="4724874717811908660">"Fotky a videá"</string>
@@ -352,7 +347,7 @@
     <string name="permlab_fullScreenIntent" msgid="4310888199502509104">"zobrazovanie upozornení ako aktivít na celej obrazovke v uzamknutom zariadení"</string>
     <string name="permdesc_fullScreenIntent" msgid="1100721419406643997">"Táto možnosť umožňuje aplikácii zobrazovať upozornenia ako aktivity na celej obrazovke v uzamknutom zariadení"</string>
     <string name="permlab_install_shortcut" msgid="7451554307502256221">"Inštalovať odkazy"</string>
-    <string name="permdesc_install_shortcut" msgid="4476328467240212503">"Povoľuje aplikácii pridať odkazy na ploche bez zásahu používateľa."</string>
+    <string name="permdesc_install_shortcut" msgid="4476328467240212503">"povoliť aplikácii pridať odkazy na ploche bez zásahu používateľa."</string>
     <string name="permlab_uninstall_shortcut" msgid="295263654781900390">"odinštalovať odkazy"</string>
     <string name="permdesc_uninstall_shortcut" msgid="1924735350988629188">"Povoľuje aplikácii odstrániť odkazy na ploche bez zásahu používateľa."</string>
     <string name="permlab_processOutgoingCalls" msgid="4075056020714266558">"presmerovať odchádzajúce hovory"</string>
@@ -560,6 +555,8 @@
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"Umožňuje aplikácii zapamätať si úroveň zložitosti zámky obrazovky (vysoká, stredná, nízka alebo žiadna), ktorá udáva pravdepodobný rozsah dĺžky a typu zámky obrazovky. Aplikácia tiež navrhuje používateľom aktualizáciu zámky obrazovky na určitú úroveň, používatelia sa však môžu na základe vlastného uváženia rozhodnúť tento návrh ignorovať a prejsť inam. Upozorňujeme, že zámka obrazovky nie je uložená vo forme obyčajného textu, takže aplikácia nepozná presné heslo."</string>
     <string name="permlab_postNotification" msgid="4875401198597803658">"zobrazovať upozornenia"</string>
     <string name="permdesc_postNotification" msgid="5974977162462877075">"Povolí aplikácii zobrazovať upozornenia"</string>
+    <string name="permlab_turnScreenOn" msgid="219344053664171492">"zapnúť obrazovku"</string>
+    <string name="permdesc_turnScreenOn" msgid="4394606875897601559">"Umožňuje aplikácii zapnúť obrazovku."</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"používať biometrický hardvér"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"Umožňuje aplikácii používať na overenie totožnosti biometrický hardvér"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"spravovať hardvér na snímanie odtlačkov prstov"</string>
@@ -1926,6 +1923,8 @@
     <string name="country_selection_title" msgid="5221495687299014379">"Preferovaný región"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"Zadajte názov jazyka"</string>
     <string name="language_picker_section_suggested" msgid="6556199184638990447">"Navrhované"</string>
+    <string name="language_picker_section_suggested_bilingual" msgid="5932198319583556613">"Navrhované jazyky"</string>
+    <string name="region_picker_section_suggested_bilingual" msgid="704607569328224133">"Navrhované oblasti"</string>
     <string name="language_picker_section_all" msgid="1985809075777564284">"Všetky jazyky"</string>
     <string name="region_picker_section_all" msgid="756441309928774155">"Všetky oblasti"</string>
     <string name="locale_search_menu" msgid="6258090710176422934">"Vyhľadávanie"</string>
@@ -2065,7 +2064,7 @@
     <string name="review_notification_settings_dismiss" msgid="4160916504616428294">"Zavrieť"</string>
     <string name="notification_app_name_system" msgid="3045196791746735601">"Systém"</string>
     <string name="notification_app_name_settings" msgid="9088548800899952531">"Nastavenia"</string>
-    <string name="notification_appops_camera_active" msgid="8177643089272352083">"Fotoaparát"</string>
+    <string name="notification_appops_camera_active" msgid="8177643089272352083">"Kamera"</string>
     <string name="notification_appops_microphone_active" msgid="581333393214739332">"Mikrofón"</string>
     <string name="notification_appops_overlay_active" msgid="5571732753262836481">"sa zobrazuje cez ďalšie aplikácie na obrazovke"</string>
     <string name="notification_feedback_indicator" msgid="663476517711323016">"Poskytnúť spätnú väzbu"</string>
@@ -2080,8 +2079,8 @@
     <string name="nas_upgrade_notification_learn_more_action" msgid="7011130656195423947">"Ďalšie informácie"</string>
     <string name="nas_upgrade_notification_learn_more_content" msgid="3735480566983530650">"Adaptívne upozornenia Androidu boli v Androide 12 nahradené zlepšenými upozorneniami. Táto funkcia zobrazuje navrhované akcie aj odpovede a organizuje vaše upozornenia.\n\nZlepšené upozornenia majú prístup k obsahu upozornení vrátane osobných údajov, ako sú mená kontaktov a správy. Táto funkcia tiež môže zavrieť upozornenia alebo na ne reagovať, napríklad prijať telefonáty a ovládať režim bez vyrušení."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Upozornenie s informáciami o rutinnom režime"</string>
-    <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Batéria sa môže vybiť pred obvyklým nabitím"</string>
-    <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Bol aktivovaný šetrič batérie na predĺženie výdrže batérie"</string>
+    <string name="dynamic_mode_notification_title" msgid="1388718452788985481">"Bol zapnutý šetrič batérie"</string>
+    <string name="dynamic_mode_notification_summary" msgid="1639031262484979689">"Zníženie spotreby batérie predlžuje jej výdrž"</string>
     <string name="battery_saver_notification_channel_name" msgid="3918243458067916913">"Šetrič batérie"</string>
     <string name="battery_saver_off_notification_title" msgid="7637255960468032515">"Šetrič batérie bol vypnutý."</string>
     <string name="battery_saver_charged_notification_summary" product="default" msgid="5544457317418624367">"Telefón je dostatočne nabitý. Funkcie už nie sú obmedzené."</string>
@@ -2288,5 +2287,7 @@
     <string name="notification_action_check_bg_apps" msgid="4758877443365362532">"Skontrolovať aktívne aplikácie"</string>
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"V zariadení <xliff:g id="DEVICE">%1$s</xliff:g> nemáte prístup ku kamere telefónu"</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"V zariadení <xliff:g id="DEVICE">%1$s</xliff:g> nemáte prístup ku kamere tabletu"</string>
-    <string name="system_locale_title" msgid="3978041860457277638">"Jazyk systému"</string>
+    <string name="system_locale_title" msgid="711882686834677268">"Predvolené systémom"</string>
+    <!-- no translation found for default_card_name (9198284935962911468) -->
+    <skip />
 </resources>

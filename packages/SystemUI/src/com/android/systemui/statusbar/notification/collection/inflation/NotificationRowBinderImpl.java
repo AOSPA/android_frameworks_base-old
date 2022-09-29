@@ -16,6 +16,10 @@
 
 package com.android.systemui.statusbar.notification.collection.inflation;
 
+import static com.android.systemui.statusbar.notification.row.NotificationRowContentBinder.FLAG_CONTENT_VIEW_CONTRACTED;
+import static com.android.systemui.statusbar.notification.row.NotificationRowContentBinder.FLAG_CONTENT_VIEW_EXPANDED;
+import static com.android.systemui.statusbar.notification.row.NotificationRowContentBinder.FLAG_CONTENT_VIEW_PUBLIC;
+
 import static java.util.Objects.requireNonNull;
 
 import android.annotation.Nullable;
@@ -159,6 +163,18 @@ public class NotificationRowBinderImpl implements NotificationRowBinder {
         }
     }
 
+    @Override
+    public void releaseViews(NotificationEntry entry) {
+        if (!entry.rowExists()) {
+            return;
+        }
+        final RowContentBindParams params = mRowContentBindStage.getStageParams(entry);
+        params.markContentViewsFreeable(FLAG_CONTENT_VIEW_CONTRACTED);
+        params.markContentViewsFreeable(FLAG_CONTENT_VIEW_EXPANDED);
+        params.markContentViewsFreeable(FLAG_CONTENT_VIEW_PUBLIC);
+        mRowContentBindStage.requestRebind(entry, null);
+    }
+
     /**
      * Bind row to various controllers and managers. This is only called when the row is first
      * created.
@@ -247,12 +263,16 @@ public class NotificationRowBinderImpl implements NotificationRowBinder {
         }
 
         RowContentBindParams params = mRowContentBindStage.getStageParams(entry);
+        params.requireContentViews(FLAG_CONTENT_VIEW_CONTRACTED);
+        params.requireContentViews(FLAG_CONTENT_VIEW_EXPANDED);
         params.setUseIncreasedCollapsedHeight(useIncreasedCollapsedHeight);
         params.setUseLowPriority(isLowPriority);
 
-        // TODO: Replace this API with RowContentBindParams directly. Also move to a separate
-        // redaction controller.
-        row.setNeedsRedaction(mNotificationLockscreenUserManager.needsRedaction(entry));
+        if (mNotificationLockscreenUserManager.needsRedaction(entry)) {
+            params.requireContentViews(FLAG_CONTENT_VIEW_PUBLIC);
+        } else {
+            params.markContentViewsFreeable(FLAG_CONTENT_VIEW_PUBLIC);
+        }
 
         params.rebindAllContentViews();
         mRowContentBindStage.requestRebind(entry, en -> {

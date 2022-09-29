@@ -98,7 +98,6 @@ import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
-import android.graphics.Insets;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.graphics.Rect;
@@ -819,6 +818,33 @@ public interface WindowManager extends ViewManager {
      * @hide
      */
     public static final String PARCEL_KEY_SHORTCUTS_ARRAY = "shortcuts_array";
+
+    /**
+     * Application level {@link android.content.pm.PackageManager.Property} tag for developers to
+     * provide consent for their app to allow OEMs to manually provide ActivityEmbedding split
+     * rule configuration on behalf of the app.
+     *
+     * <p>If {@code true}, the system CAN override the windowing behaviors for the app, such as
+     * showing some activities side-by-side. In this case, it will report that ActivityEmbedding
+     * APIs are disabled for the app to avoid conflict.
+     *
+     * <p>If {@code false}, the system MUST NOT override the window behavior for the app. It should
+     * be used if the app wants to provide their own ActivityEmbedding split rules, or if the app
+     * wants to opt-out of system overrides for any other reason.
+     *
+     * <p>Default is {@code false}.
+     *
+     * <p>Example usage:
+     * <pre>
+     * &lt;application&gt;
+     *   &lt;property
+     *     android:name="android.window.PROPERTY_ACTIVITY_EMBEDDING_ALLOW_SYSTEM_OVERRIDE"
+     *     android:value="true|false"/&gt;
+     * &lt;/application&gt;
+     * </pre>
+     */
+    String PROPERTY_ACTIVITY_EMBEDDING_ALLOW_SYSTEM_OVERRIDE =
+            "android.window.PROPERTY_ACTIVITY_EMBEDDING_ALLOW_SYSTEM_OVERRIDE";
 
     /**
      * Request for keyboard shortcuts to be retrieved asynchronously.
@@ -2599,6 +2625,7 @@ public interface WindowManager extends ViewManager {
                 PRIVATE_FLAG_SYSTEM_ERROR,
                 PRIVATE_FLAG_DISABLE_WALLPAPER_TOUCH_EVENTS,
                 PRIVATE_FLAG_FORCE_SHOW_STATUS_BAR,
+                PRIVATE_FLAG_LAYOUT_SIZE_EXTENDED_BY_CUTOUT,
                 PRIVATE_FLAG_FORCE_DECOR_VIEW_VISIBILITY,
                 PRIVATE_FLAG_WILL_NOT_REPLACE_ON_RELAUNCH,
                 PRIVATE_FLAG_LAYOUT_CHILD_WINDOW_IN_PARENT_FRAME,
@@ -2659,6 +2686,10 @@ public interface WindowManager extends ViewManager {
                         mask = PRIVATE_FLAG_FORCE_SHOW_STATUS_BAR,
                         equals = PRIVATE_FLAG_FORCE_SHOW_STATUS_BAR,
                         name = "FORCE_STATUS_BAR_VISIBLE"),
+                @ViewDebug.FlagToString(
+                        mask = PRIVATE_FLAG_LAYOUT_SIZE_EXTENDED_BY_CUTOUT,
+                        equals = PRIVATE_FLAG_LAYOUT_SIZE_EXTENDED_BY_CUTOUT,
+                        name = "LAYOUT_SIZE_EXTENDED_BY_CUTOUT"),
                 @ViewDebug.FlagToString(
                         mask = PRIVATE_FLAG_FORCE_DECOR_VIEW_VISIBILITY,
                         equals = PRIVATE_FLAG_FORCE_DECOR_VIEW_VISIBILITY,
@@ -3129,10 +3160,14 @@ public interface WindowManager extends ViewManager {
 
         /**
          * The preferred refresh rate for the window.
-         *
+         * <p>
          * This must be one of the supported refresh rates obtained for the display(s) the window
          * is on. The selected refresh rate will be applied to the display's default mode.
-         *
+         * <p>
+         * This should be used in favor of {@link LayoutParams#preferredDisplayModeId} for
+         * applications that want to specify the refresh rate, but do not want to specify a
+         * preference for any other displayMode properties (e.g., resolution).
+         * <p>
          * This value is ignored if {@link #preferredDisplayModeId} is set.
          *
          * @see Display#getSupportedRefreshRates()
@@ -3606,34 +3641,17 @@ public interface WindowManager extends ViewManager {
         private boolean mFitInsetsIgnoringVisibility = false;
 
         /**
-         * {@link InsetsState.InternalInsetsType}s to be applied to the window
-         * If {@link #type} has the predefined insets (like {@link #TYPE_STATUS_BAR} or
-         * {@link #TYPE_NAVIGATION_BAR}), this field will be ignored.
-         *
-         * <p>Note: provide only one inset corresponding to the window type (like
-         * {@link InsetsState.InternalInsetsType#ITYPE_STATUS_BAR} or
-         * {@link InsetsState.InternalInsetsType#ITYPE_NAVIGATION_BAR})</p>
-         * @hide
-         */
-        public @InsetsState.InternalInsetsType int[] providesInsetsTypes;
-
-        /**
-         * If specified, the insets provided by this window will be our window frame minus the
-         * insets specified by providedInternalInsets for each type. This should not be used
-         * together with {@link WindowState#mGivenContentInsets}. If both of them are set, both will
-         * be applied.
+         * If set, the specified insets types will be provided by the window and the insets frame
+         * will be calculated based on the provider's parameters. The insets types and the array
+         * should not be modified after the window is added. If multiple layout parameters are
+         * provided for different rotations in {@link LayoutParams#paramsForRotation}, the types in
+         * the providedInsets array should be the same in all rotations, including the base one.
+         * All other params can be adjusted at runtime.
+         * See {@link InsetsFrameProvider}.
          *
          * @hide
          */
-        public Insets[] providedInternalInsets;
-
-        /**
-         * If specified, the insets provided by this window for the IME will be our window frame
-         * minus the insets specified by providedInternalImeInsets.
-         *
-         * @hide
-         */
-        public Insets[] providedInternalImeInsets;
+        public InsetsFrameProvider[] providedInsets;
 
         /**
          * If specified, the frame that used to calculate relative {@link RoundedCorner} will be
@@ -3797,6 +3815,18 @@ public interface WindowManager extends ViewManager {
                             "Params cannot contain params recursively.");
                 }
             }
+        }
+
+        /**
+         * @see #paramsForRotation
+         * @hide
+         */
+        public LayoutParams forRotation(int rotation) {
+            if (paramsForRotation == null || paramsForRotation.length <= rotation
+                    || paramsForRotation[rotation] == null) {
+                return this;
+            }
+            return paramsForRotation[rotation];
         }
 
         public LayoutParams() {
@@ -4047,33 +4077,11 @@ public interface WindowManager extends ViewManager {
             out.writeBoolean(mFitInsetsIgnoringVisibility);
             out.writeBoolean(preferMinimalPostProcessing);
             out.writeInt(mBlurBehindRadius);
-            if (providesInsetsTypes != null) {
-                out.writeInt(providesInsetsTypes.length);
-                out.writeIntArray(providesInsetsTypes);
-            } else {
-                out.writeInt(0);
-            }
-            if (providedInternalInsets != null) {
-                out.writeInt(providedInternalInsets.length);
-                out.writeTypedArray(providedInternalInsets, 0 /* parcelableFlags */);
-            } else {
-                out.writeInt(0);
-            }
-            if (providedInternalImeInsets != null) {
-                out.writeInt(providedInternalImeInsets.length);
-                out.writeTypedArray(providedInternalImeInsets, 0 /* parcelableFlags */);
-            } else {
-                out.writeInt(0);
-            }
             out.writeBoolean(insetsRoundedCornerFrame);
-            if (paramsForRotation != null) {
-                checkNonRecursiveParams();
-                out.writeInt(paramsForRotation.length);
-                out.writeTypedArray(paramsForRotation, 0 /* parcelableFlags */);
-            } else {
-                out.writeInt(0);
-            }
             out.writeBoolean(mWallpaperTouchEventsEnabled);
+            out.writeTypedArray(providedInsets, 0 /* parcelableFlags */);
+            checkNonRecursiveParams();
+            out.writeTypedArray(paramsForRotation, 0 /* parcelableFlags */);
         }
 
         public static final @android.annotation.NonNull Parcelable.Creator<LayoutParams> CREATOR
@@ -4140,28 +4148,10 @@ public interface WindowManager extends ViewManager {
             mFitInsetsIgnoringVisibility = in.readBoolean();
             preferMinimalPostProcessing = in.readBoolean();
             mBlurBehindRadius = in.readInt();
-            int insetsTypesLength = in.readInt();
-            if (insetsTypesLength > 0) {
-                providesInsetsTypes = new int[insetsTypesLength];
-                in.readIntArray(providesInsetsTypes);
-            }
-            int providedInternalInsetsLength = in.readInt();
-            if (providedInternalInsetsLength > 0) {
-                providedInternalInsets = new Insets[providedInternalInsetsLength];
-                in.readTypedArray(providedInternalInsets, Insets.CREATOR);
-            }
-            int providedInternalImeInsetsLength = in.readInt();
-            if (providedInternalImeInsetsLength > 0) {
-                providedInternalImeInsets = new Insets[providedInternalImeInsetsLength];
-                in.readTypedArray(providedInternalImeInsets, Insets.CREATOR);
-            }
             insetsRoundedCornerFrame = in.readBoolean();
-            int paramsForRotationLength = in.readInt();
-            if (paramsForRotationLength > 0) {
-                paramsForRotation = new LayoutParams[paramsForRotationLength];
-                in.readTypedArray(paramsForRotation, LayoutParams.CREATOR);
-            }
             mWallpaperTouchEventsEnabled = in.readBoolean();
+            providedInsets = in.createTypedArray(InsetsFrameProvider.CREATOR);
+            paramsForRotation = in.createTypedArray(LayoutParams.CREATOR);
         }
 
         @SuppressWarnings({"PointlessBitwiseExpression"})
@@ -4453,18 +4443,8 @@ public interface WindowManager extends ViewManager {
                 changes |= LAYOUT_CHANGED;
             }
 
-            if (!Arrays.equals(providesInsetsTypes, o.providesInsetsTypes)) {
-                providesInsetsTypes = o.providesInsetsTypes;
-                changes |= LAYOUT_CHANGED;
-            }
-
-            if (!Arrays.equals(providedInternalInsets, o.providedInternalInsets)) {
-                providedInternalInsets = o.providedInternalInsets;
-                changes |= LAYOUT_CHANGED;
-            }
-
-            if (!Arrays.equals(providedInternalImeInsets, o.providedInternalImeInsets)) {
-                providedInternalImeInsets = o.providedInternalImeInsets;
+            if (!Arrays.equals(providedInsets, o.providedInsets)) {
+                providedInsets = o.providedInsets;
                 changes |= LAYOUT_CHANGED;
             }
 
@@ -4671,28 +4651,12 @@ public interface WindowManager extends ViewManager {
                 sb.append(System.lineSeparator());
                 sb.append(prefix).append("  fitIgnoreVis");
             }
-            if (providesInsetsTypes != null) {
+            if (providedInsets != null) {
                 sb.append(System.lineSeparator());
-                sb.append(prefix).append("  insetsTypes=");
-                for (int i = 0; i < providesInsetsTypes.length; ++i) {
+                sb.append(" providedInsets=");
+                for (int i = 0; i < providedInsets.length; ++i) {
                     if (i > 0) sb.append(' ');
-                    sb.append(InsetsState.typeToString(providesInsetsTypes[i]));
-                }
-            }
-            if (providedInternalInsets != null) {
-                sb.append(System.lineSeparator());
-                sb.append(" providedInternalInsets=");
-                for (int i = 0; i < providedInternalInsets.length; ++i) {
-                    if (i > 0) sb.append(' ');
-                    sb.append((providedInternalInsets[i]));
-                }
-            }
-            if (providedInternalImeInsets != null) {
-                sb.append(System.lineSeparator());
-                sb.append(" providedInternalImeInsets=");
-                for (int i = 0; i < providedInternalImeInsets.length; ++i) {
-                    if (i > 0) sb.append(' ');
-                    sb.append((providedInternalImeInsets[i]));
+                    sb.append((providedInsets[i]));
                 }
             }
             if (insetsRoundedCornerFrame) {

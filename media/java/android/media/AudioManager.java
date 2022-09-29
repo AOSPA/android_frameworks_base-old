@@ -4028,7 +4028,7 @@ public class AudioManager {
      * Timeout duration in ms when waiting on an external focus policy for the result for a
      * focus request
      */
-    private static final int EXT_FOCUS_POLICY_TIMEOUT_MS = 200;
+    private static final int EXT_FOCUS_POLICY_TIMEOUT_MS = 250;
 
     private static final String FOCUS_CLIENT_ID_STRING = "android_audio_focus_client_id";
 
@@ -4296,8 +4296,9 @@ public class AudioManager {
             @NonNull String clientFakeId, int clientFakeUid, int clientTargetSdk) {
         Objects.requireNonNull(afr);
         Objects.requireNonNull(clientFakeId);
+        int status;
         try {
-            return getService().requestAudioFocusForTest(afr.getAudioAttributes(),
+            status = getService().requestAudioFocusForTest(afr.getAudioAttributes(),
                     afr.getFocusGain(),
                     mICallBack,
                     mAudioFocusDispatcher,
@@ -4307,6 +4308,17 @@ public class AudioManager {
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
+        if (status != AudioManager.AUDIOFOCUS_REQUEST_WAITING_FOR_EXT_POLICY) {
+            // default path with no external focus policy
+            return status;
+        }
+
+        BlockingFocusResultReceiver focusReceiver;
+        synchronized (mFocusRequestsLock) {
+            focusReceiver = addClientIdToFocusReceiverLocked(clientFakeId);
+        }
+
+        return handleExternalAudioPolicyWaitIfNeeded(clientFakeId, focusReceiver);
     }
 
     /**
@@ -4389,8 +4401,9 @@ public class AudioManager {
         }
 
         final String clientId = getIdForAudioFocusListener(afr.getOnAudioFocusChangeListener());
-        final BlockingFocusResultReceiver focusReceiver;
+        BlockingFocusResultReceiver focusReceiver;
         synchronized (mFocusRequestsLock) {
+
             try {
                 // TODO status contains result and generation counter for ext policy
                 status = service.requestAudioFocus(afr.getAudioAttributes(),
@@ -4409,17 +4422,32 @@ public class AudioManager {
                 // default path with no external focus policy
                 return status;
             }
-            if (mFocusRequestsAwaitingResult == null) {
-                mFocusRequestsAwaitingResult =
-                        new HashMap<String, BlockingFocusResultReceiver>(1);
-            }
-            focusReceiver = new BlockingFocusResultReceiver(clientId);
-            mFocusRequestsAwaitingResult.put(clientId, focusReceiver);
+            focusReceiver = addClientIdToFocusReceiverLocked(clientId);
         }
+
+        return handleExternalAudioPolicyWaitIfNeeded(clientId, focusReceiver);
+    }
+
+    @GuardedBy("mFocusRequestsLock")
+    private BlockingFocusResultReceiver addClientIdToFocusReceiverLocked(String clientId) {
+        BlockingFocusResultReceiver focusReceiver;
+        if (mFocusRequestsAwaitingResult == null) {
+            mFocusRequestsAwaitingResult =
+                    new HashMap<String, BlockingFocusResultReceiver>(1);
+        }
+        focusReceiver = new BlockingFocusResultReceiver(clientId);
+        mFocusRequestsAwaitingResult.put(clientId, focusReceiver);
+        return focusReceiver;
+    }
+
+    private @FocusRequestResult int handleExternalAudioPolicyWaitIfNeeded(String clientId,
+            BlockingFocusResultReceiver focusReceiver) {
         focusReceiver.waitForResult(EXT_FOCUS_POLICY_TIMEOUT_MS);
         if (DEBUG && !focusReceiver.receivedResult()) {
-            Log.e(TAG, "requestAudio response from ext policy timed out, denying request");
+            Log.e(TAG, "handleExternalAudioPolicyWaitIfNeeded"
+                    + " response from ext policy timed out, denying request");
         }
+
         synchronized (mFocusRequestsLock) {
             mFocusRequestsAwaitingResult.remove(clientId);
         }
@@ -6684,7 +6712,7 @@ public class AudioManager {
 
     /**
      * The message sent to apps when the contents of the device list changes if they provide
-     * a {@link Handler} object to addOnAudioDeviceConnectionListener().
+     * a {@link Handler} object to {@link registerAudioDeviceCallback}.
      */
     private final static int MSG_DEVICES_CALLBACK_REGISTERED = 0;
     private final static int MSG_DEVICES_DEVICES_ADDED = 1;

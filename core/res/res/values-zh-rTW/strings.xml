@@ -21,11 +21,6 @@
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="byteShort" msgid="202579285008794431">"B"</string>
-    <string name="kilobyteShort" msgid="2214285521564195803">"KB"</string>
-    <string name="megabyteShort" msgid="6649361267635823443">"MB"</string>
-    <string name="gigabyteShort" msgid="7515809460261287991">"GB"</string>
-    <string name="terabyteShort" msgid="1822367128583886496">"TB"</string>
-    <string name="petabyteShort" msgid="5651571254228534832">"PB"</string>
     <string name="fileSizeSuffix" msgid="4233671691980131257">"<xliff:g id="NUMBER">%1$s</xliff:g> <xliff:g id="UNIT">%2$s</xliff:g>"</string>
     <string name="untitled" msgid="3381766946944136678">"&lt;未命名&gt;"</string>
     <string name="emptyPhoneNumber" msgid="5812172618020360048">"(沒有電話號碼)"</string>
@@ -305,8 +300,8 @@
     <string name="permgroupdesc_calendar" msgid="6762751063361489379">"存取你的日曆"</string>
     <string name="permgrouplab_sms" msgid="795737735126084874">"簡訊"</string>
     <string name="permgroupdesc_sms" msgid="5726462398070064542">"傳送及查看簡訊"</string>
-    <string name="permgrouplab_storage" msgid="5570124978732352858">"檔案和文件"</string>
-    <string name="permgroupdesc_storage" msgid="8352226729501080525">"存取裝置上的檔案與文件"</string>
+    <string name="permgrouplab_storage" msgid="17339216290379241">"檔案"</string>
+    <string name="permgroupdesc_storage" msgid="5378659041354582769">"存取裝置上的檔案"</string>
     <string name="permgrouplab_readMediaAural" msgid="1858331312624942053">"音樂和音訊"</string>
     <string name="permgroupdesc_readMediaAural" msgid="7565467343667089595">"存取裝置上的音樂和音訊"</string>
     <string name="permgrouplab_readMediaVisual" msgid="4724874717811908660">"相片和影片"</string>
@@ -558,6 +553,8 @@
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"允許應用程式記住螢幕鎖定的複雜度 (高、中、低或無)，即螢幕鎖定的可能長度範圍和類型。這樣一來，應用程式還能建議使用者將螢幕鎖定更新為特定複雜度，但使用者可選擇忽略建議並離開應用程式。請注意，系統不會以純文字格式儲存螢幕鎖定選項的內容，因此應用程式不會知道確切密碼。"</string>
     <string name="permlab_postNotification" msgid="4875401198597803658">"顯示通知"</string>
     <string name="permdesc_postNotification" msgid="5974977162462877075">"允許應用程式顯示通知"</string>
+    <string name="permlab_turnScreenOn" msgid="219344053664171492">"開啟螢幕"</string>
+    <string name="permdesc_turnScreenOn" msgid="4394606875897601559">"允許應用程式開啟螢幕。"</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"使用生物特徵硬體"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"允許應用程式使用生物特徵硬體進行驗證"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"管理指紋硬體"</string>
@@ -636,7 +633,7 @@
     <string name="fingerprint_recalibrate_notification_content" msgid="8519935717822194943">"請洽詢維修供應商。"</string>
     <string name="face_acquired_insufficient" msgid="6889245852748492218">"無法建立臉部模型，請再試一次。"</string>
     <string name="face_acquired_too_bright" msgid="8070756048978079164">"亮度過高，請嘗試使用較柔和的照明方式。"</string>
-    <string name="face_acquired_too_dark" msgid="7919016380747701228">"請試著提高亮度"</string>
+    <string name="face_acquired_too_dark" msgid="7919016380747701228">"請採用更明亮的光源"</string>
     <string name="face_acquired_too_close" msgid="4453646176196302462">"請將手機拿遠一點"</string>
     <string name="face_acquired_too_far" msgid="2922278214231064859">"請將手機拿近一點"</string>
     <string name="face_acquired_too_high" msgid="8278815780046368576">"請將手機舉高一點"</string>
@@ -1924,6 +1921,8 @@
     <string name="country_selection_title" msgid="5221495687299014379">"地區偏好設定"</string>
     <string name="search_language_hint" msgid="7004225294308793583">"請輸入語言名稱"</string>
     <string name="language_picker_section_suggested" msgid="6556199184638990447">"建議語言"</string>
+    <string name="language_picker_section_suggested_bilingual" msgid="5932198319583556613">"建議語言"</string>
+    <string name="region_picker_section_suggested_bilingual" msgid="704607569328224133">"建議地區"</string>
     <string name="language_picker_section_all" msgid="1985809075777564284">"所有語言"</string>
     <string name="region_picker_section_all" msgid="756441309928774155">"所有地區"</string>
     <string name="locale_search_menu" msgid="6258090710176422934">"搜尋"</string>
@@ -2043,9 +2042,9 @@
     <string name="harmful_app_warning_open_anyway" msgid="5963657791740211807">"仍要開啟"</string>
     <string name="harmful_app_warning_title" msgid="8794823880881113856">"偵測到有害應用程式"</string>
     <string name="log_access_confirmation_title" msgid="2343578467290592708">"要允許「<xliff:g id="LOG_ACCESS_APP_NAME">%s</xliff:g>」存取所有裝置記錄嗎？"</string>
-    <string name="log_access_confirmation_allow" msgid="5302517782599389507">"允許存取一次"</string>
+    <string name="log_access_confirmation_allow" msgid="5302517782599389507">"允許一次性存取"</string>
     <string name="log_access_confirmation_deny" msgid="7685790957455099845">"不允許"</string>
-    <string name="log_access_confirmation_body" msgid="6581985716241928135">"系統會透過裝置記錄記下裝置上的活動。應用程式可以根據這些記錄找出問題並進行修正。\n\n某些記錄可能含有機密資訊，因此請勿讓不信任的應用程式存取所有裝置記錄。\n\n即使你不允許這個應用程式存取所有裝置記錄，這個應用程式仍能存取自己的記錄，而且裝置製造商或許仍可存取裝置的某些記錄或資訊。瞭解詳情"</string>
+    <string name="log_access_confirmation_body" msgid="6581985716241928135">"裝置記錄會記下裝置上的活動。應用程式可以根據這些記錄找出問題並進行修正。\n\n由於某些記錄可能含有機密資訊，建議只讓信任的應用程式存取所有裝置記錄。\n\n如果你不允許這個應用程式存取所有裝置記錄，這個應用程式仍可存取屬於自己的記錄，而裝置製造商也或許還是可以存取裝置的某些記錄或資訊。瞭解詳情"</string>
     <string name="log_access_do_not_show_again" msgid="1058690599083091552">"不要再顯示"</string>
     <string name="slices_permission_request" msgid="3677129866636153406">"「<xliff:g id="APP_0">%1$s</xliff:g>」想要顯示「<xliff:g id="APP_2">%2$s</xliff:g>」的區塊"</string>
     <string name="screenshot_edit" msgid="7408934887203689207">"編輯"</string>
@@ -2078,8 +2077,8 @@
     <string name="nas_upgrade_notification_learn_more_action" msgid="7011130656195423947">"瞭解詳情"</string>
     <string name="nas_upgrade_notification_learn_more_content" msgid="3735480566983530650">"在 Android 12 中，加強型通知功能已取代 Android 自動調整通知。這項功能可以顯示建議的操作和回覆內容，也可以幫你整理通知訊息。\n\n加強型通知功能可存取通知內容，包括聯絡人名稱和訊息內文等個人資訊。此外，這項功能還能關閉或回覆通知，例如接聽來電及控管「零打擾」功能。"</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"日常安排模式資訊通知"</string>
-    <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"電池電力可能會在你平常的充電時間前耗盡"</string>
-    <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"已啟用省電模式以延長電池續航力"</string>
+    <string name="dynamic_mode_notification_title" msgid="1388718452788985481">"已開啟省電模式"</string>
+    <string name="dynamic_mode_notification_summary" msgid="1639031262484979689">"降低電池用量，以便延長電池續航力"</string>
     <string name="battery_saver_notification_channel_name" msgid="3918243458067916913">"省電模式"</string>
     <string name="battery_saver_off_notification_title" msgid="7637255960468032515">"省電模式已關閉"</string>
     <string name="battery_saver_charged_notification_summary" product="default" msgid="5544457317418624367">"手機電力充足，各項功能不再受到限制。"</string>
@@ -2286,5 +2285,7 @@
     <string name="notification_action_check_bg_apps" msgid="4758877443365362532">"查看使用中的應用程式"</string>
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"無法從 <xliff:g id="DEVICE">%1$s</xliff:g> 存取手機的相機"</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"無法從 <xliff:g id="DEVICE">%1$s</xliff:g> 存取平板電腦的相機"</string>
-    <string name="system_locale_title" msgid="3978041860457277638">"系統語言"</string>
+    <string name="system_locale_title" msgid="711882686834677268">"系統預設"</string>
+    <!-- no translation found for default_card_name (9198284935962911468) -->
+    <skip />
 </resources>

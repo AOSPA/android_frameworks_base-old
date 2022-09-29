@@ -26,6 +26,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.pm.SigningDetails;
 import android.os.Binder;
+import android.os.Handler;
 import android.os.Process;
 import android.os.Trace;
 import android.os.UserHandle;
@@ -53,7 +54,7 @@ import java.io.PrintWriter;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Objects;
-import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * AppsFilter is the entity responsible for filtering visibility between apps based on declarations
@@ -67,6 +68,11 @@ public abstract class AppsFilterBase implements AppsFilterSnapshot {
     protected static final boolean DEBUG_ALLOW_ALL = false;
     protected static final boolean DEBUG_LOGGING = false;
     public static final boolean DEBUG_TRACING = false;
+
+    // Allow some time for cache rebuilds.
+    protected static final int CACHE_REBUILD_DELAY_MIN_MS = 10000;
+    // With each new rebuild the delay doubles until it reaches max delay.
+    protected static final int CACHE_REBUILD_DELAY_MAX_MS = 10000;
 
     /**
      * This contains a list of app UIDs that are implicitly queryable because another app explicitly
@@ -122,10 +128,20 @@ public abstract class AppsFilterBase implements AppsFilterSnapshot {
     protected SnapshotCache<WatchedSparseSetArray<Integer>> mQueryableViaUsesLibrarySnapshot;
 
     /**
-     * Executor for running reasonably short background tasks such as building the initial
+     * A mapping from the set of App IDs that query other App IDs via custom permissions to the
+     * list of packages that they can see.
+     */
+    @NonNull
+    @Watched
+    protected WatchedSparseSetArray<Integer> mQueryableViaUsesPermission;
+    @NonNull
+    protected SnapshotCache<WatchedSparseSetArray<Integer>> mQueryableViaUsesPermissionSnapshot;
+
+    /**
+     * Handler for running reasonably short background tasks such as building the initial
      * visibility cache.
      */
-    protected Executor mBackgroundExecutor;
+    protected Handler mBackgroundHandler;
 
     /**
      * Pending full recompute of mQueriesViaComponent. Occurs when a package adds a new set of
@@ -133,7 +149,7 @@ public abstract class AppsFilterBase implements AppsFilterSnapshot {
      * computationally expensive recomputing.
      * Full recompute is done lazily at the point when we use mQueriesViaComponent to filter apps.
      */
-    protected boolean mQueriesViaComponentRequireRecompute = false;
+    protected AtomicBoolean mQueriesViaComponentRequireRecompute = new AtomicBoolean(false);
 
     /**
      * A set of App IDs that are always queryable by any package, regardless of their manifest
@@ -173,7 +189,7 @@ public abstract class AppsFilterBase implements AppsFilterSnapshot {
      * {@link #shouldFilterApplicationInternal(PackageDataSnapshot, int, Object,
      * PackageStateInternal, int)} call.
      * NOTE: It can only be relied upon after the system is ready to avoid unnecessary update on
-     * initial scam and is empty until {@link #mSystemReady} is true.
+     * initial scam and is empty until {@link #mCacheReady} is true.
      */
     @NonNull
     @Watched
@@ -181,7 +197,11 @@ public abstract class AppsFilterBase implements AppsFilterSnapshot {
     @NonNull
     protected SnapshotCache<WatchedSparseBooleanMatrix> mShouldFilterCacheSnapshot;
 
-    protected volatile boolean mSystemReady = false;
+    protected volatile boolean mCacheReady = false;
+
+    protected static final boolean CACHE_VALID = true;
+    protected static final boolean CACHE_INVALID = false;
+    protected AtomicBoolean mCacheValid = new AtomicBoolean(CACHE_INVALID);
 
     protected boolean isForceQueryable(int callingAppId) {
         return mForceQueryable.contains(callingAppId);
@@ -205,6 +225,10 @@ public abstract class AppsFilterBase implements AppsFilterSnapshot {
 
     protected boolean isQueryableViaUsesLibrary(int callingAppId, int targetAppId) {
         return mQueryableViaUsesLibrary.contains(callingAppId, targetAppId);
+    }
+
+    protected boolean isQueryableViaUsesPermission(int callingAppId, int targetAppId) {
+        return mQueryableViaUsesPermission.contains(callingAppId, targetAppId);
     }
 
     protected boolean isQueryableViaComponentWhenRequireRecompute(
@@ -311,15 +335,19 @@ public abstract class AppsFilterBase implements AppsFilterSnapshot {
                     || targetPkgSetting.getAppId() < Process.FIRST_APPLICATION_UID
                     || callingAppId == targetPkgSetting.getAppId()) {
                 return false;
+            } else if (Process.isSdkSandboxUid(callingAppId)) {
+                // we only allow sdk sandbox processes access to forcequeryable packages
+                return !isForceQueryable(targetPkgSetting.getAppId())
+                      && !isImplicitlyQueryable(callingAppId, targetPkgSetting.getAppId());
             }
-            if (mSystemReady) { // use cache
+            if (mCacheReady) { // use cache
                 if (!shouldFilterApplicationUsingCache(callingUid,
                         targetPkgSetting.getAppId(),
                         userId)) {
                     return false;
                 }
             } else {
-                if (!shouldFilterApplicationInternal(snapshot,
+                if (!shouldFilterApplicationInternal((Computer) snapshot,
                         callingUid, callingSetting, targetPkgSetting, userId)) {
                     return false;
                 }
@@ -352,7 +380,7 @@ public abstract class AppsFilterBase implements AppsFilterSnapshot {
         return mShouldFilterCache.valueAt(callingIndex, targetIndex);
     }
 
-    protected boolean shouldFilterApplicationInternal(PackageDataSnapshot snapshot, int callingUid,
+    protected boolean shouldFilterApplicationInternal(Computer snapshot, int callingUid,
             Object callingSetting, PackageStateInternal targetPkgSetting, int targetUserId) {
         if (DEBUG_TRACING) {
             Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "shouldFilterApplicationInternal");
@@ -506,7 +534,7 @@ public abstract class AppsFilterBase implements AppsFilterSnapshot {
                 if (DEBUG_TRACING) {
                     Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "mQueriesViaComponent");
                 }
-                if (!mQueriesViaComponentRequireRecompute) {
+                if (!mQueriesViaComponentRequireRecompute.get()) {
                     if (isQueryableViaComponent(callingAppId, targetAppId)) {
                         if (DEBUG_LOGGING) {
                             log(callingSetting, targetPkgSetting, "queries component");
@@ -614,6 +642,22 @@ public abstract class AppsFilterBase implements AppsFilterSnapshot {
                 }
             }
 
+            try {
+                if (DEBUG_TRACING) {
+                    Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "mQueryableViaUsesPermission");
+                }
+                if (isQueryableViaUsesPermission(callingAppId, targetAppId)) {
+                    if (DEBUG_LOGGING) {
+                        log(callingSetting, targetPkgSetting, "queryable for permission users");
+                    }
+                    return false;
+                }
+            } finally {
+                if (DEBUG_TRACING) {
+                    Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
+                }
+            }
+
             return true;
         } finally {
             if (DEBUG_TRACING) {
@@ -702,17 +746,34 @@ public abstract class AppsFilterBase implements AppsFilterSnapshot {
             }
         }
         pw.println("  system apps queryable: " + mSystemAppsQueryable);
-        dumpQueryables(pw, filteringAppId, users, expandPackages);
+        dumpForceQueryable(pw, filteringAppId, expandPackages);
+        dumpQueriesViaPackage(pw, filteringAppId, expandPackages);
+        dumpQueriesViaComponent(pw, filteringAppId, expandPackages);
+        dumpQueriesViaImplicitlyQueryable(pw, filteringAppId, users, expandPackages);
+        dumpQueriesViaUsesLibrary(pw, filteringAppId, expandPackages);
     }
 
-    protected void dumpQueryables(PrintWriter pw, @Nullable Integer filteringAppId, int[] users,
+    protected void dumpForceQueryable(PrintWriter pw, @Nullable Integer filteringAppId,
             ToString<Integer> expandPackages) {
+        pw.println("  queries via forceQueryable:");
         dumpPackageSet(pw, filteringAppId, mForceQueryable.untrackedStorage(),
                 "forceQueryable", "  ", expandPackages);
+    }
+
+    protected void dumpQueriesViaPackage(PrintWriter pw, @Nullable Integer filteringAppId,
+            ToString<Integer> expandPackages) {
         pw.println("  queries via package name:");
         dumpQueriesMap(pw, filteringAppId, mQueriesViaPackage, "    ", expandPackages);
+    }
+
+    protected void dumpQueriesViaComponent(PrintWriter pw, @Nullable Integer filteringAppId,
+            ToString<Integer> expandPackages) {
         pw.println("  queries via component:");
         dumpQueriesMap(pw, filteringAppId, mQueriesViaComponent, "    ", expandPackages);
+    }
+
+    protected void dumpQueriesViaImplicitlyQueryable(PrintWriter pw,
+            @Nullable Integer filteringAppId, int[] users, ToString<Integer> expandPackages) {
         pw.println("  queryable via interaction:");
         for (int user : users) {
             pw.append("    User ").append(Integer.toString(user)).println(":");
@@ -723,8 +784,19 @@ public abstract class AppsFilterBase implements AppsFilterSnapshot {
                     filteringAppId == null ? null : UserHandle.getUid(user, filteringAppId),
                     mRetainedImplicitlyQueryable, "      ", expandPackages);
         }
+    }
+
+    protected void dumpQueriesViaUsesLibrary(PrintWriter pw, @Nullable Integer filteringAppId,
+            ToString<Integer> expandPackages) {
         pw.println("  queryable via uses-library:");
         dumpQueriesMap(pw, filteringAppId, mQueryableViaUsesLibrary, "    ",
+                expandPackages);
+    }
+
+    protected void dumpQueriesViaUsesPermission(PrintWriter pw, @Nullable Integer filteringAppId,
+            ToString<Integer> expandPackages) {
+        pw.println("  queryable via uses-permission:");
+        dumpQueriesMap(pw, filteringAppId, mQueryableViaUsesPermission, "    ",
                 expandPackages);
     }
 
