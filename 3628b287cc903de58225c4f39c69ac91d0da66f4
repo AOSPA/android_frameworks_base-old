@@ -70,6 +70,24 @@
       "parentUuid": "04e8f130_05f7fc13",
       "revId": "3628b287cc903de58225c4f39c69ac91d0da66f4",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "9410ca81_61deef57",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2022-09-29T13:48:09Z",
+      "side": 1,
+      "message": "this breaks already existing screen off udfps controls by aosp so nada",
+      "parentUuid": "6737f373_991302a9",
+      "revId": "3628b287cc903de58225c4f39c69ac91d0da66f4",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
