@@ -139,6 +139,7 @@ import com.android.internal.util.IntPair;
 import com.android.server.AccessibilityManagerInternal;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
+import com.android.server.accessibility.cursor.SoftwareCursorManager;
 import com.android.server.accessibility.magnification.MagnificationController;
 import com.android.server.accessibility.magnification.MagnificationProcessor;
 import com.android.server.accessibility.magnification.MagnificationScaleProvider;
@@ -242,6 +243,8 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
 
     private final MagnificationController mMagnificationController;
     private final MagnificationProcessor mMagnificationProcessor;
+
+    private final SoftwareCursorManager mSoftwareCursorManager;
 
     private final MainHandler mMainHandler;
 
@@ -404,6 +407,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         mMagnificationController = magnificationController;
         mMagnificationProcessor = new MagnificationProcessor(mMagnificationController);
         mCaptioningManagerImpl = new CaptioningManagerImpl(mContext);
+        mSoftwareCursorManager = new SoftwareCursorManager();
         if (inputFilter != null) {
             mInputFilter = inputFilter;
             mHasInputFilter = true;
@@ -437,6 +441,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                 new MagnificationScaleProvider(mContext));
         mMagnificationProcessor = new MagnificationProcessor(mMagnificationController);
         mCaptioningManagerImpl = new CaptioningManagerImpl(mContext);
+        mSoftwareCursorManager = new SoftwareCursorManager();
         init();
     }
 
@@ -683,8 +688,8 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                 if (mTraceManager.isA11yTracingEnabledForTypes(FLAGS_PACKAGE_BROADCAST_RECEIVER)) {
                     mTraceManager.logTrace(LOG_TAG + ".PM.onHandleForceStop",
                             FLAGS_PACKAGE_BROADCAST_RECEIVER,
-                            "intent=" + intent + ";packages=" + packages + ";uid=" + uid
-                            + ";doit=" + doit);
+                            "intent=" + intent + ";packages=" + Arrays.toString(packages)
+                            + ";uid=" + uid + ";doit=" + doit);
                 }
                 synchronized (mLock) {
                     final int userId = getChangingUserId();
@@ -952,10 +957,11 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             // current state of the windows as the window manager may be delaying
             // the computation for performance reasons.
             boolean shouldComputeWindows = false;
-            int displayId = Display.INVALID_DISPLAY;
+            int displayId = event.getDisplayId();
             synchronized (mLock) {
                 final int windowId = event.getWindowId();
-                if (windowId != AccessibilityWindowInfo.UNDEFINED_WINDOW_ID) {
+                if (windowId != AccessibilityWindowInfo.UNDEFINED_WINDOW_ID
+                        && displayId == Display.INVALID_DISPLAY) {
                     displayId = mA11yWindowManager.getDisplayIdByUserIdAndWindowIdLocked(
                             resolvedUserId, windowId);
                     event.setDisplayId(displayId);
@@ -2281,6 +2287,9 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             if (userState.isPerformGesturesEnabledLocked()) {
                 flags |= AccessibilityInputFilter.FLAG_FEATURE_INJECT_MOTION_EVENTS;
             }
+            if (userState.isSoftwareCursorEnabledLocked()) {
+                flags |= AccessibilityInputFilter.FLAG_FEATURE_SOFTWARE_CURSOR;
+            }
             if (flags != 0) {
                 if (!mHasInputFilter) {
                     mHasInputFilter = true;
@@ -3480,6 +3489,15 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
      */
     MagnificationController getMagnificationController() {
         return mMagnificationController;
+    }
+
+    /**
+     * Getter of {@link SoftwareCursorManager}.
+     *
+     * @return SoftwareCursorManager
+     */
+    SoftwareCursorManager getSoftwareCursorManager() {
+        return mSoftwareCursorManager;
     }
 
     @Override

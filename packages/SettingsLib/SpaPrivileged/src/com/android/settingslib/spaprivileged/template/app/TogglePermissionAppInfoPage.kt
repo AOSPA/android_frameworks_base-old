@@ -26,11 +26,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.core.os.bundleOf
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
-import com.android.settingslib.spa.framework.api.SettingsPageProvider
+import com.android.settingslib.spa.framework.common.SettingsEntry
+import com.android.settingslib.spa.framework.common.SettingsEntryBuilder
+import com.android.settingslib.spa.framework.common.SettingsPage
+import com.android.settingslib.spa.framework.common.SettingsPageProvider
 import com.android.settingslib.spa.framework.compose.navigator
-import com.android.settingslib.spa.framework.compose.rememberContext
 import com.android.settingslib.spa.widget.preference.SwitchPreference
 import com.android.settingslib.spa.widget.preference.SwitchPreferenceModel
 import com.android.settingslib.spaprivileged.model.app.AppRecord
@@ -38,36 +41,51 @@ import com.android.settingslib.spaprivileged.model.app.PackageManagers
 import com.android.settingslib.spaprivileged.model.app.toRoute
 import kotlinx.coroutines.Dispatchers
 
-private const val NAME = "TogglePermissionAppInfoPage"
+private const val ENTRY_NAME = "AllowControl"
 private const val PERMISSION = "permission"
 private const val PACKAGE_NAME = "packageName"
 private const val USER_ID = "userId"
+private const val PAGE_NAME = "TogglePermissionAppInfoPage"
+private val PAGE_PARAMETER = listOf(
+    navArgument(PERMISSION) { type = NavType.StringType },
+    navArgument(PACKAGE_NAME) { type = NavType.StringType },
+    navArgument(USER_ID) { type = NavType.IntType },
+)
 
 internal class TogglePermissionAppInfoPageProvider(
-    private val factory: TogglePermissionAppListModelFactory,
+    private val appListTemplate: TogglePermissionAppListTemplate,
 ) : SettingsPageProvider {
-    override val name = NAME
+    override val name = PAGE_NAME
 
-    override val arguments = listOf(
-        navArgument(PERMISSION) { type = NavType.StringType },
-        navArgument(PACKAGE_NAME) { type = NavType.StringType },
-        navArgument(USER_ID) { type = NavType.IntType },
-    )
+    override val parameter = PAGE_PARAMETER
+
+    override fun buildEntry(arguments: Bundle?): List<SettingsEntry> {
+        val owner = SettingsPage.create(name, parameter, arguments)
+        val entryList = mutableListOf<SettingsEntry>()
+        entryList.add(
+            SettingsEntryBuilder.create(ENTRY_NAME, owner).setIsAllowSearch(false).build()
+        )
+        return entryList
+    }
 
     @Composable
     override fun Page(arguments: Bundle?) {
-        checkNotNull(arguments)
-        val permission = checkNotNull(arguments.getString(PERMISSION))
-        val packageName = checkNotNull(arguments.getString(PACKAGE_NAME))
+        val permissionType = arguments?.getString(PERMISSION)!!
+        val packageName = arguments.getString(PACKAGE_NAME)!!
         val userId = arguments.getInt(USER_ID)
-        val listModel = rememberContext { context -> factory.createModel(permission, context) }
+        val listModel = appListTemplate.rememberModel(permissionType)
         TogglePermissionAppInfoPage(listModel, packageName, userId)
     }
 
     companion object {
         @Composable
         internal fun navigator(permissionType: String, app: ApplicationInfo) =
-            navigator(route = "$NAME/$permissionType/${app.toRoute()}")
+            navigator(route = "$PAGE_NAME/$permissionType/${app.toRoute()}")
+
+        internal fun buildPageId(permissionType: String): SettingsPage {
+            return SettingsPage.create(
+                PAGE_NAME, PAGE_PARAMETER, bundleOf(PERMISSION to permissionType))
+        }
     }
 }
 

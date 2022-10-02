@@ -64,6 +64,7 @@ import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
+import java.util.ArrayList;
 import java.util.function.Consumer;
 
 @Presubmit
@@ -119,7 +120,7 @@ public class FingerprintEnrollClientTest {
 
     @Before
     public void setup() {
-        when(mBiometricLogger.createALSCallback(anyBoolean())).thenAnswer(i ->
+        when(mBiometricLogger.getAmbientLightProbe(anyBoolean())).thenAnswer(i ->
                 new CallbackWithProbe<>(mLuxProbe, i.getArgument(0)));
         when(mBiometricContext.updateContext(any(), anyBoolean())).thenAnswer(
                 i -> i.getArgument(0));
@@ -196,21 +197,22 @@ public class FingerprintEnrollClientTest {
     }
 
     @Test
-    public void luxProbeWhenFingerDown() throws RemoteException {
+    public void luxProbeWhenStarted() throws RemoteException {
         final FingerprintEnrollClient client = createClient();
         client.start(mCallback);
 
-        client.onPointerDown(TOUCH_X, TOUCH_Y, TOUCH_MAJOR, TOUCH_MINOR);
         verify(mLuxProbe).enable();
 
         client.onAcquired(2, 0);
-        verify(mLuxProbe, never()).disable();
-
         client.onPointerUp();
-        verify(mLuxProbe).disable();
-
         client.onPointerDown(TOUCH_X, TOUCH_Y, TOUCH_MAJOR, TOUCH_MINOR);
-        verify(mLuxProbe, times(2)).enable();
+        verify(mLuxProbe, never()).disable();
+        verify(mLuxProbe, never()).destroy();
+
+        client.onEnrollResult(new Fingerprint("f", 30 /* fingerId */, 14 /* deviceId */),
+                0 /* remaining */);
+
+        verify(mLuxProbe).destroy();
     }
 
     @Test

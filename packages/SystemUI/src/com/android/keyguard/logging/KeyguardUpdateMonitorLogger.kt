@@ -45,7 +45,7 @@ class KeyguardUpdateMonitorLogger @Inject constructor(
 
     fun e(@CompileTimeConstant msg: String) = log(msg, ERROR)
 
-    fun v(@CompileTimeConstant msg: String) = log(msg, VERBOSE)
+    fun v(@CompileTimeConstant msg: String) = log(msg, ERROR)
 
     fun w(@CompileTimeConstant msg: String) = log(msg, WARNING)
 
@@ -262,10 +262,18 @@ class KeyguardUpdateMonitorLogger @Inject constructor(
         logBuffer.log(TAG, VERBOSE, { int1 = subId }, { "reportSimUnlocked(subId=$int1)" })
     }
 
-    fun logStartedListeningForFace(faceRunningState: Int) {
-        logBuffer.log(TAG, VERBOSE,
-                { int1 = faceRunningState },
-                { "startListeningForFace(): $int1" })
+    fun logStartedListeningForFace(faceRunningState: Int, faceAuthReason: String) {
+        logBuffer.log(TAG, VERBOSE, {
+            int1 = faceRunningState
+            str1 = faceAuthReason
+        }, { "startListeningForFace(): $int1, reason: $str1" })
+    }
+
+    fun logStoppedListeningForFace(faceRunningState: Int, faceAuthReason: String) {
+        logBuffer.log(TAG, VERBOSE, {
+            int1 = faceRunningState
+            str1 = faceAuthReason
+        }, { "stopListeningForFace(): currentFaceRunningState: $int1, reason: $str1" })
     }
 
     fun logSubInfo(subInfo: SubscriptionInfo?) {

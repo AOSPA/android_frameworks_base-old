@@ -966,7 +966,7 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
         // Re-set the PIP bounds to none.
         mPipBoundsState.setBounds(new Rect());
         mPipUiEventLoggerLogger.setTaskInfo(null);
-        mMainExecutor.executeDelayed(() -> mPipMenuController.detach(), 0);
+        mPipMenuController.detach();
         mLeash = null;
 
         if (info.displayId != Display.DEFAULT_DISPLAY && mOnDisplayIdChangeCallback != null) {
@@ -1303,6 +1303,12 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
             @PipAnimationController.TransitionDirection int direction,
             Consumer<Rect> updateBoundsCallback) {
         if (mPipTransitionState.shouldBlockResizeRequest()) {
+            return;
+        }
+
+        if (mLeash == null || !mLeash.isValid()) {
+            Log.e(TAG, String.format("scheduleFinishResizePip with null leash! mState=%d",
+                  mPipTransitionState.getTransitionState()));
             return;
         }
 

@@ -4460,8 +4460,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     }
 
     private void updateVisibility() {
-        boolean shouldShow = !mAmbientState.isFullyHidden() || !onKeyguard();
-        setVisibility(shouldShow ? View.VISIBLE : View.INVISIBLE);
+        mController.updateVisibility(!mAmbientState.isFullyHidden() || !onKeyguard());
     }
 
     @ShadeViewRefactor(RefactorComponent.STATE_RESOLVER)
@@ -4526,15 +4525,19 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     }
 
     @ShadeViewRefactor(RefactorComponent.SHADE_VIEW)
-    void updateEmptyShadeView(boolean visible, boolean notifVisibleInShade) {
+    void updateEmptyShadeView(boolean visible, boolean areNotificationsHiddenInShade) {
         mEmptyShadeView.setVisible(visible, mIsExpanded && mAnimationsEnabled);
 
         int oldTextRes = mEmptyShadeView.getTextResource();
-        int newTextRes = notifVisibleInShade
+        int newTextRes = areNotificationsHiddenInShade
                 ? R.string.dnd_suppressing_shade_text : R.string.empty_shade_text;
         if (oldTextRes != newTextRes) {
             mEmptyShadeView.setText(newTextRes);
         }
+    }
+
+    public boolean isEmptyShadeViewVisible() {
+        return mEmptyShadeView.isVisible();
     }
 
     @ShadeViewRefactor(RefactorComponent.SHADE_VIEW)
@@ -6116,9 +6119,6 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
             }
             return row.canViewBeDismissed();
         }
-        if (v instanceof PeopleHubView) {
-            return ((PeopleHubView) v).getCanSwipe();
-        }
         return false;
     }
 
@@ -6129,9 +6129,6 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
                 return false;
             }
             return row.canViewBeCleared();
-        }
-        if (v instanceof PeopleHubView) {
-            return ((PeopleHubView) v).getCanSwipe();
         }
         return false;
     }

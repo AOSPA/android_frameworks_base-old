@@ -24,11 +24,12 @@ import androidx.core.view.isVisible
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.android.systemui.R
+import com.android.systemui.common.ui.binder.IconViewBinder
 import com.android.systemui.lifecycle.repeatWhenAttached
-import com.android.systemui.statusbar.connectivity.WifiIcons.WIFI_FULL_ICONS
 import com.android.systemui.statusbar.pipeline.wifi.ui.viewmodel.WifiViewModel
 import kotlinx.coroutines.InternalCoroutinesApi
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 /**
@@ -50,10 +51,22 @@ object WifiViewBinder {
 
         view.isVisible = true
         iconView.isVisible = true
-        iconView.setImageDrawable(view.context.getDrawable(WIFI_FULL_ICONS[2]))
 
         view.repeatWhenAttached {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch {
+                    viewModel.wifiIcon.distinctUntilChanged().collect { wifiIcon ->
+                        // TODO(b/238425913): Right now, if !isVisible, there's just an empty space
+                        //  where the wifi icon would be. We need to pipe isVisible through to
+                        //   [ModernStatusBarWifiView.isIconVisible], which is what actually makes
+                        //   the view GONE.
+                        view.isVisible = wifiIcon != null
+                        wifiIcon?.let {
+                            IconViewBinder.bind(wifiIcon, iconView)
+                        }
+                    }
+                }
+
                 launch {
                     viewModel.tint.collect { tint ->
                         iconView.imageTintList = ColorStateList.valueOf(tint)

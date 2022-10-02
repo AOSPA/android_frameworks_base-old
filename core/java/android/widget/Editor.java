@@ -226,8 +226,6 @@ public class Editor {
     final UndoInputFilter mUndoInputFilter = new UndoInputFilter(this);
     boolean mAllowUndo = true;
 
-    private int mLastInputSource = InputDevice.SOURCE_UNKNOWN;
-
     private final MetricsLogger mMetricsLogger = new MetricsLogger();
 
     // Cursor Controllers.
@@ -1735,8 +1733,6 @@ public class Editor {
     public void onTouchEvent(MotionEvent event) {
         final boolean filterOutEvent = shouldFilterOutTouchEvent(event);
 
-        mLastInputSource = event.getSource();
-
         mLastButtonState = event.getButtonState();
         if (filterOutEvent) {
             if (event.getActionMasked() == MotionEvent.ACTION_UP) {
@@ -1789,7 +1785,7 @@ public class Editor {
     }
 
     private void showFloatingToolbar() {
-        if (mTextActionMode != null && showUIForTouchScreen()) {
+        if (mTextActionMode != null && mTextView.showUIForTouchScreen()) {
             // Delay "show" so it doesn't interfere with click confirmations
             // or double-clicks that could "dismiss" the floating toolbar.
             int delay = ViewConfiguration.getDoubleTapTimeout();
@@ -1870,7 +1866,7 @@ public class Editor {
                     ? getSelectionController() : getInsertionController();
             if (cursorController != null && !cursorController.isActive()
                     && !cursorController.isCursorBeingModified()
-                    && showUIForTouchScreen()) {
+                    && mTextView.showUIForTouchScreen()) {
                 cursorController.show();
             }
         }
@@ -2521,7 +2517,7 @@ public class Editor {
             return false;
         }
 
-        if (!showUIForTouchScreen()) {
+        if (!mTextView.showUIForTouchScreen()) {
             return false;
         }
 
@@ -2677,7 +2673,7 @@ public class Editor {
                     mTextView.postDelayed(mShowSuggestionRunnable,
                             ViewConfiguration.getDoubleTapTimeout());
                 } else if (hasInsertionController()) {
-                    if (shouldInsertCursor && showUIForTouchScreen()) {
+                    if (shouldInsertCursor && mTextView.showUIForTouchScreen()) {
                         getInsertionController().show();
                     } else {
                         getInsertionController().hide();
@@ -4621,12 +4617,16 @@ public class Editor {
                     (filter & InputConnection.CURSOR_UPDATE_FILTER_CHARACTER_BOUNDS) != 0;
             boolean includeInsertionMarker =
                     (filter & InputConnection.CURSOR_UPDATE_FILTER_INSERTION_MARKER) != 0;
+            boolean includeVisibleLineBounds =
+                    (filter & InputConnection.CURSOR_UPDATE_FILTER_VISIBLE_LINE_BOUNDS) != 0;
             boolean includeAll =
-                    (!includeEditorBounds && !includeCharacterBounds && !includeInsertionMarker);
+                    (!includeEditorBounds && !includeCharacterBounds && !includeInsertionMarker
+                    && !includeVisibleLineBounds);
 
             includeEditorBounds |= includeAll;
             includeCharacterBounds |= includeAll;
             includeInsertionMarker |= includeAll;
+            includeVisibleLineBounds |= includeAll;
 
             final CursorAnchorInfo.Builder builder = mSelectionInfoBuilder;
             builder.reset();
@@ -4655,7 +4655,7 @@ public class Editor {
                 builder.setEditorBoundsInfo(editorBoundsInfo);
             }
 
-            if (includeCharacterBounds || includeInsertionMarker) {
+            if (includeCharacterBounds || includeInsertionMarker || includeVisibleLineBounds) {
                 final float viewportToContentHorizontalOffset =
                         mTextView.viewportToContentHorizontalOffset();
                 final float viewportToContentVerticalOffset =
@@ -4716,6 +4716,32 @@ public class Editor {
                         builder.setInsertionMarkerLocation(insertionMarkerX, insertionMarkerTop,
                                 insertionMarkerBaseline, insertionMarkerBottom,
                                 insertionMarkerFlags);
+                    }
+                }
+
+                if (includeVisibleLineBounds) {
+                    Rect visibleRect = new Rect();
+                    if (mTextView.getLocalVisibleRect(visibleRect)) {
+                        final float visibleTop =
+                                visibleRect.top + viewportToContentVerticalOffset;
+                        final float visibleBottom =
+                                visibleRect.bottom + viewportToContentVerticalOffset;
+                        final int firstLine =
+                                layout.getLineForVertical((int) Math.floor(visibleTop));
+                        final int lastLine =
+                                layout.getLineForVertical((int) Math.ceil(visibleBottom));
+
+                        for (int line = firstLine; line <= lastLine; ++line) {
+                            final float left = layout.getLineLeft(line)
+                                    + viewportToContentHorizontalOffset;
+                            final float top = layout.getLineTop(line)
+                                    + viewportToContentVerticalOffset;
+                            final float right = layout.getLineRight(line)
+                                    + viewportToContentHorizontalOffset;
+                            final float bottom = layout.getLineBottom(line)
+                                    + viewportToContentVerticalOffset;
+                            builder.addVisibleLineBounds(left, top, right, bottom);
+                        }
                     }
                 }
             }
@@ -5408,7 +5434,7 @@ public class Editor {
             final boolean shouldShow = checkForTransforms() /*check not rotated and compute scale*/
                     && !tooLargeTextForMagnifier()
                     && obtainMagnifierShowCoordinates(event, showPosInView)
-                    && showUIForTouchScreen();
+                    && mTextView.showUIForTouchScreen();
             if (shouldShow) {
                 // Make the cursor visible and stop blinking.
                 mRenderCursorRegardlessTiming = true;
@@ -6352,16 +6378,6 @@ public class Editor {
         if (mDrawableForCursor == null) {
             mDrawableForCursor = mTextView.getTextCursorDrawable();
         }
-    }
-
-    /**
-     * Returns true when need to show UIs, e.g. floating toolbar, etc, for finger based interaction.
-     *
-     * @return true if UIs need to show for finger interaciton. false if UIs are not necessary.
-     */
-    public boolean showUIForTouchScreen() {
-        return (mLastInputSource & InputDevice.SOURCE_TOUCHSCREEN)
-                == InputDevice.SOURCE_TOUCHSCREEN;
     }
 
     /** Controller for the insertion cursor. */

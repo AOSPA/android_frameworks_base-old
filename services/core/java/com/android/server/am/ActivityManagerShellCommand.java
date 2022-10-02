@@ -341,6 +341,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     return runNoHomeScreen(pw);
                 case "wait-for-broadcast-idle":
                     return runWaitForBroadcastIdle(pw);
+                case "wait-for-broadcast-barrier":
+                    return runWaitForBroadcastBarrier(pw);
                 case "compat":
                     return runCompat(pw);
                 case "refresh-settings-cache":
@@ -363,6 +365,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     return runGetBgRestrictionLevel(pw);
                 case "observe-foreground-process":
                     return runGetCurrentForegroundProcess(pw, mInternal, mTaskInterface);
+                case "reset-dropbox-rate-limiter":
+                    return runResetDropboxRateLimiter();
                 default:
                     return handleDefaultCommands(cmd);
             }
@@ -3110,6 +3114,11 @@ final class ActivityManagerShellCommand extends ShellCommand {
         return 0;
     }
 
+    int runWaitForBroadcastBarrier(PrintWriter pw) throws RemoteException {
+        mInternal.waitForBroadcastBarrier(pw);
+        return 0;
+    }
+
     int runRefreshSettingsCache() throws RemoteException {
         mInternal.refreshSettingsCache();
         return 0;
@@ -3574,6 +3583,11 @@ final class ActivityManagerShellCommand extends ShellCommand {
         final @ActivityManager.RestrictionLevel int level =
                 mInternal.getBackgroundRestrictionLevel(packageName, userId);
         pw.println(ActivityManager.restrictionLevelToName(level));
+        return 0;
+    }
+
+    int runResetDropboxRateLimiter() throws RemoteException {
+        mInternal.resetDropboxRateLimiter();
         return 0;
     }
 

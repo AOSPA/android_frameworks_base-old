@@ -439,17 +439,20 @@ public final class InputMethodManager {
     /**
      * True if this input method client is active, initially false.
      */
+    @GuardedBy("mH")
     private boolean mActive = false;
 
     /**
      * {@code true} if next {@link ImeFocusController#onPostWindowFocus} needs to
      * restart input.
      */
+    @GuardedBy("mH")
     private boolean mRestartOnNextWindowFocus = true;
 
     /**
      * As reported by IME through InputConnection.
      */
+    @GuardedBy("mH")
     private boolean mFullscreenMode;
 
     // -----------------------------------------------------------
@@ -460,46 +463,70 @@ public final class InputMethodManager {
      */
     @GuardedBy("mH")
     ViewRootImpl mCurRootView;
+
     /**
      * This is set when we are in the process of connecting, to determine
      * when we have actually finished.
      */
+    @GuardedBy("mH")
     private boolean mServedConnecting;
+
     /**
      * This is non-null when we have connected the served view; it holds
      * the attributes that were last retrieved from the served view and given
      * to the input connection.
      */
+    @GuardedBy("mH")
     private EditorInfo mCurrentEditorInfo;
+
+    @GuardedBy("mH")
+    @Nullable
+    private ViewFocusParameterInfo mPreviousViewFocusParameters;
+
     /**
      * The InputConnection that was last retrieved from the served view.
      */
+    @GuardedBy("mH")
     private RemoteInputConnectionImpl mServedInputConnection;
+
     /**
      * The completions that were last provided by the served view.
      */
+    @GuardedBy("mH")
     private CompletionInfo[] mCompletions;
 
     // Cursor position on the screen.
+    @GuardedBy("mH")
     @UnsupportedAppUsage
     Rect mTmpCursorRect = new Rect();
+
+    @GuardedBy("mH")
     @UnsupportedAppUsage
     Rect mCursorRect = new Rect();
+
+    @GuardedBy("mH")
     private int mCursorSelStart;
+    @GuardedBy("mH")
     private int mCursorSelEnd;
+    @GuardedBy("mH")
     private int mCursorCandStart;
+    @GuardedBy("mH")
     private int mCursorCandEnd;
+    @GuardedBy("mH")
     private int mInitialSelStart;
+    @GuardedBy("mH")
     private int mInitialSelEnd;
 
     /**
      * Handler for {@link RemoteInputConnectionImpl#getInputConnection()}.
      */
+    @GuardedBy("mH")
     private Handler mServedInputConnectionHandler;
 
     /**
      * The instance that has previously been sent to the input method.
      */
+    @GuardedBy("mH")
     private CursorAnchorInfo mCursorAnchorInfo = null;
 
     /**
@@ -522,6 +549,7 @@ public final class InputMethodManager {
      * @deprecated New code should use {@code mCurBindState.mImeId}.
      */
     @Deprecated
+    @GuardedBy("mH")
     @UnsupportedAppUsage
     String mCurId;
 
@@ -551,7 +579,9 @@ public final class InputMethodManager {
     private final SparseArray<IAccessibilityInputMethodSessionInvoker>
             mAccessibilityInputMethodSession = new SparseArray<>();
 
+    @GuardedBy("mH")
     private InputChannel mCurChannel;
+    @GuardedBy("mH")
     private ImeInputEventSender mCurSender;
 
     private static final int REQUEST_UPDATE_CURSOR_ANCHOR_INFO_NONE = 0x0;
@@ -561,14 +591,18 @@ public final class InputMethodManager {
      * @deprecated This is kept for {@link UnsupportedAppUsage}.  Must not be used.
      */
     @Deprecated
+    @GuardedBy("mH")
     private int mRequestUpdateCursorAnchorInfoMonitorMode = REQUEST_UPDATE_CURSOR_ANCHOR_INFO_NONE;
 
     /**
      * Applies the IME visibility and listens for other state changes.
      */
+    @GuardedBy("mH")
     private ImeInsetsSourceConsumer mImeInsetsConsumer;
 
+    @GuardedBy("mH")
     private final Pool<PendingEvent> mPendingEventPool = new SimplePool<>(20);
+    @GuardedBy("mH")
     private final SparseArray<PendingEvent> mPendingEvents = new SparseArray<>(20);
 
     private final DelegateImpl mDelegate = new DelegateImpl();
@@ -660,26 +694,6 @@ public final class InputMethodManager {
 
     private final class DelegateImpl implements
             ImeFocusController.InputMethodManagerDelegate {
-        @GuardedBy("mH")
-        @Nullable
-        private ViewFocusParameterInfo mPreviousViewFocusParameters;
-
-        @GuardedBy("mH")
-        private void updatePreviousViewFocusParametersLocked(
-                @Nullable EditorInfo currentEditorInfo,
-                @StartInputFlags int startInputFlags,
-                @StartInputReason int startInputReason,
-                @SoftInputModeFlags int softInputMode,
-                int windowFlags) {
-            mPreviousViewFocusParameters = new ViewFocusParameterInfo(currentEditorInfo,
-                    startInputFlags, startInputReason, softInputMode, windowFlags);
-        }
-
-        @GuardedBy("mH")
-        private void clearStateLocked() {
-            mPreviousViewFocusParameters = null;
-        }
-
         /**
          * Used by {@link ImeFocusController} to start input connection.
          */
@@ -800,8 +814,10 @@ public final class InputMethodManager {
          */
         @Override
         public void finishComposingText() {
-            if (mServedInputConnection != null) {
-                mServedInputConnection.finishComposingTextFromImm();
+            synchronized (mH) {
+                if (mServedInputConnection != null) {
+                    mServedInputConnection.finishComposingTextFromImm();
+                }
             }
         }
 
@@ -833,11 +849,13 @@ public final class InputMethodManager {
          */
         @Override
         public boolean isRestartOnNextWindowFocus(boolean reset) {
-            final boolean result = mRestartOnNextWindowFocus;
-            if (reset) {
-                mRestartOnNextWindowFocus = false;
+            synchronized (mH) {
+                final boolean result = mRestartOnNextWindowFocus;
+                if (reset) {
+                    mRestartOnNextWindowFocus = false;
+                }
+                return result;
             }
-            return result;
         }
 
         /**
@@ -878,21 +896,25 @@ public final class InputMethodManager {
         return mDelegate.hasActiveConnection(view);
     }
 
+    @GuardedBy("mH")
     private View getServedViewLocked() {
         return mCurRootView != null ? mCurRootView.getImeFocusController().getServedView() : null;
     }
 
+    @GuardedBy("mH")
     private View getNextServedViewLocked() {
         return mCurRootView != null ? mCurRootView.getImeFocusController().getNextServedView()
                 : null;
     }
 
+    @GuardedBy("mH")
     private void setServedViewLocked(View view) {
         if (mCurRootView != null) {
             mCurRootView.getImeFocusController().setServedView(view);
         }
     }
 
+    @GuardedBy("mH")
     private void setNextServedViewLocked(View view) {
         if (mCurRootView != null) {
             mCurRootView.getImeFocusController().setNextServedView(view);
@@ -911,6 +933,7 @@ public final class InputMethodManager {
     /**
      * Returns {@code true} when the given view has been served by Input Method.
      */
+    @GuardedBy("mH")
     private boolean hasServedByInputMethodLocked(View view) {
         final View servedView = getServedViewLocked();
         return (servedView == view
@@ -1729,7 +1752,7 @@ public final class InputMethodManager {
     @GuardedBy("mH")
     private void clearConnectionLocked() {
         mCurrentEditorInfo = null;
-        mDelegate.clearStateLocked();
+        mPreviousViewFocusParameters = null;
         if (mServedInputConnection != null) {
             mServedInputConnection.deactivate();
             mServedInputConnection = null;
@@ -1748,7 +1771,7 @@ public final class InputMethodManager {
         if (getServedViewLocked() != null) {
             if (DEBUG) {
                 Log.v(TAG, "FINISH INPUT: mServedView="
-                        + dumpViewInfo(getServedViewLocked()));
+                        + InputMethodDebug.dumpViewInfo(getServedViewLocked()));
             }
             setServedViewLocked(null);
             mCompletions = null;
@@ -2281,7 +2304,7 @@ public final class InputMethodManager {
 
             // Make sure we have a window token for the served view.
             if (DEBUG) {
-                Log.v(TAG, "Starting input: view=" + dumpViewInfo(view) +
+                Log.v(TAG, "Starting input: view=" + InputMethodDebug.dumpViewInfo(view) +
                         " reason=" + InputMethodDebug.startInputReasonToString(startInputReason));
             }
             if (view == null) {
@@ -2352,9 +2375,9 @@ public final class InputMethodManager {
             final View servedView = getServedViewLocked();
             if (servedView != view || !mServedConnecting) {
                 // Something else happened, so abort.
-                if (DEBUG) Log.v(TAG,
-                        "Starting input: finished by someone else. view=" + dumpViewInfo(view)
-                        + " servedView=" + dumpViewInfo(servedView)
+                if (DEBUG) Log.v(TAG, "Starting input: finished by someone else."
+                        + " view=" + InputMethodDebug.dumpViewInfo(view)
+                        + " servedView=" + InputMethodDebug.dumpViewInfo(servedView)
                         + " mServedConnecting=" + mServedConnecting);
                 if (mServedInputConnection != null && startInputReason == BOUND_TO_IMMS) {
                     // This is not an error. Once IME binds (MSG_BIND), InputConnection is fully
@@ -2414,8 +2437,8 @@ public final class InputMethodManager {
             mServedInputConnection = servedInputConnection;
 
             if (DEBUG) {
-                Log.v(TAG, "START INPUT: view=" + dumpViewInfo(view) + " ic="
-                        + ic + " editorInfo=" + editorInfo + " startInputFlags="
+                Log.v(TAG, "START INPUT: view=" + InputMethodDebug.dumpViewInfo(view)
+                        + " ic=" + ic + " editorInfo=" + editorInfo + " startInputFlags="
                         + InputMethodDebug.startInputFlagsToString(startInputFlags));
             }
 
@@ -2424,10 +2447,10 @@ public final class InputMethodManager {
                     && previouslyServedConnection == null
                     && ic == null
                     && isSwitchingBetweenEquivalentNonEditableViews(
-                            mDelegate.mPreviousViewFocusParameters, startInputFlags,
+                            mPreviousViewFocusParameters, startInputFlags,
                             startInputReason, softInputMode, windowFlags);
-            updatePreviousViewFocusParametersLocked(mCurrentEditorInfo, startInputFlags,
-                    startInputReason, softInputMode, windowFlags);
+            mPreviousViewFocusParameters = new ViewFocusParameterInfo(mCurrentEditorInfo,
+                    startInputFlags, startInputReason, softInputMode, windowFlags);
             if (canSkip) {
                 if (DEBUG) {
                     Log.d(TAG, "Not calling IMMS due to switching between non-editable views.");
@@ -2496,29 +2519,6 @@ public final class InputMethodManager {
         }
 
         return true;
-    }
-
-    /**
-     * This method exists only so that the
-     * <a href="https://errorprone.info/bugpattern/GuardedBy">errorprone</a> false positive warning
-     * can be suppressed without granting a blanket exception to the {@link #startInputInner}
-     * method.
-     * <p>
-     * The warning in question implies that the access to the
-     * {@link DelegateImpl#updatePreviousViewFocusParametersLocked} method should be guarded by
-     * {@code InputMethodManager.this.mH}, but instead {@code mDelegate.mH} is held in the caller.
-     * In this case errorprone fails to realize that it is the same object.
-     */
-    @GuardedBy("mH")
-    @SuppressWarnings("GuardedBy")
-    private void updatePreviousViewFocusParametersLocked(
-            @Nullable EditorInfo currentEditorInfo,
-            @StartInputFlags int startInputFlags,
-            @StartInputReason int startInputReason,
-            @SoftInputModeFlags int softInputMode,
-            int windowFlags) {
-        mDelegate.updatePreviousViewFocusParametersLocked(currentEditorInfo, startInputFlags,
-                startInputReason, softInputMode, windowFlags);
     }
 
     /**
@@ -3192,6 +3192,7 @@ public final class InputMethodManager {
     }
 
     // Must be called on the main looper
+    @GuardedBy("mH")
     private int sendInputEventOnMainLooperLocked(PendingEvent p) {
         if (mCurChannel != null) {
             if (mCurSender == null) {
@@ -3256,6 +3257,7 @@ public final class InputMethodManager {
         }
     }
 
+    @GuardedBy("mH")
     private void flushPendingEventsLocked() {
         mH.removeMessages(MSG_FLUSH_INPUT_EVENT);
 
@@ -3268,6 +3270,7 @@ public final class InputMethodManager {
         }
     }
 
+    @GuardedBy("mH")
     private PendingEvent obtainPendingEventLocked(InputEvent event, Object token,
             String inputMethodId, FinishedInputEventCallback callback, Handler handler) {
         PendingEvent p = mPendingEventPool.acquire();
@@ -3282,6 +3285,7 @@ public final class InputMethodManager {
         return p;
     }
 
+    @GuardedBy("mH")
     private void recyclePendingEventLocked(PendingEvent p) {
         p.recycle();
         mPendingEventPool.release(p);
@@ -3314,6 +3318,7 @@ public final class InputMethodManager {
         mServiceInvoker.showInputMethodPickerFromSystem(mClient, mode, displayId);
     }
 
+    @GuardedBy("mH")
     private void showInputMethodPickerLocked() {
         mServiceInvoker.showInputMethodPickerFromClient(mClient, SHOW_IM_PICKER_MODE_AUTO);
     }
@@ -3769,23 +3774,6 @@ public final class InputMethodManager {
         return mCurBindState != null ? mCurBindState.mBindSequence : -1;
     }
 
-    private static String dumpViewInfo(@Nullable final View view) {
-        if (view == null) {
-            return "null";
-        }
-        final StringBuilder sb = new StringBuilder();
-        sb.append(view);
-        sb.append(",focus=" + view.hasFocus());
-        sb.append(",windowFocus=" + view.hasWindowFocus());
-        sb.append(",autofillUiShowing=" + isAutofillUIShowing(view));
-        sb.append(",window=" + view.getWindowToken());
-        sb.append(",displayId=" + view.getContext().getDisplayId());
-        sb.append(",temporaryDetach=" + view.isTemporarilyDetached());
-        sb.append(",hasImeFocus=" + view.hasImeFocus());
-
-        return sb.toString();
-    }
-
     /**
      * Checks the args to see if a proto-based ime dump was requested and writes the client side
      * ime dump to the given {@link FileDescriptor}.
@@ -3848,6 +3836,7 @@ public final class InputMethodManager {
         }
     }
 
+    @GuardedBy("mH")
     private void forAccessibilitySessionsLocked(
             Consumer<IAccessibilityInputMethodSessionInvoker> consumer) {
         for (int i = 0; i < mAccessibilityInputMethodSession.size(); i++) {

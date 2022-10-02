@@ -534,9 +534,8 @@ public final class ActivityThread extends ClientTransactionHandler
         // A reusable token for other purposes, e.g. content capture, translation. It shouldn't be
         // used without security checks
         public IBinder shareableActivityToken;
-        // The token of the initial TaskFragment that embedded this activity. Do not rely on it
-        // after creation because the activity could be reparented.
-        @Nullable public IBinder mInitialTaskFragmentToken;
+        // The token of the TaskFragment that embedded this activity.
+        @Nullable public IBinder mTaskFragmentToken;
         int ident;
         @UnsupportedAppUsage
         Intent intent;
@@ -620,7 +619,7 @@ public final class ActivityThread extends ClientTransactionHandler
                 List<ReferrerIntent> pendingNewIntents, ActivityOptions activityOptions,
                 boolean isForward, ProfilerInfo profilerInfo, ClientTransactionHandler client,
                 IBinder assistToken, IBinder shareableActivityToken, boolean launchedFromBubble,
-                IBinder initialTaskFragmentToken) {
+                IBinder taskFragmentToken) {
             this.token = token;
             this.assistToken = assistToken;
             this.shareableActivityToken = shareableActivityToken;
@@ -639,7 +638,7 @@ public final class ActivityThread extends ClientTransactionHandler
             this.packageInfo = client.getPackageInfoNoCheck(activityInfo.applicationInfo);
             mActivityOptions = activityOptions;
             mLaunchedFromBubble = launchedFromBubble;
-            mInitialTaskFragmentToken = initialTaskFragmentToken;
+            mTaskFragmentToken = taskFragmentToken;
             init();
         }
 
@@ -1178,7 +1177,14 @@ public final class ActivityThread extends ClientTransactionHandler
             data.mSerializedSystemFontMap = serializedSystemFontMap;
             data.startRequestedElapsedTime = startRequestedElapsedTime;
             data.startRequestedUptime = startRequestedUptime;
+            updateCompatOverrideScale(compatInfo);
+            CompatibilityInfo.applyOverrideScaleIfNeeded(config);
             sendMessage(H.BIND_APPLICATION, data);
+        }
+
+        private void updateCompatOverrideScale(CompatibilityInfo info) {
+            CompatibilityInfo.setOverrideInvertedScale(
+                    info.hasOverrideScaling() ? info.applicationInvertedScale : 1f);
         }
 
         public final void runIsolatedEntryPoint(String entryPoint, String[] entryPointArgs) {
@@ -1757,6 +1763,7 @@ public final class ActivityThread extends ClientTransactionHandler
             UpdateCompatibilityData ucd = new UpdateCompatibilityData();
             ucd.pkg = pkg;
             ucd.info = info;
+            updateCompatOverrideScale(info);
             sendMessage(H.UPDATE_PACKAGE_COMPATIBILITY_INFO, ucd);
         }
 

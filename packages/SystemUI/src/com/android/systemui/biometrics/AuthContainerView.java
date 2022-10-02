@@ -129,6 +129,8 @@ public class AuthContainerView extends LinearLayout
     private final Set<Integer> mFailedModalities = new HashSet<Integer>();
 
     private final @Background DelayableExecutor mBackgroundExecutor;
+    private int mOrientation;
+    private boolean mSkipFirstLostFocus = false;
 
     // Non-null only if the dialog is in the act of dismissing and has not sent the reason yet.
     @Nullable @AuthDialogCallback.DismissedReason private Integer mPendingCallbackReason;
@@ -441,6 +443,12 @@ public class AuthContainerView extends LinearLayout
     public void onWindowFocusChanged(boolean hasWindowFocus) {
         super.onWindowFocusChanged(hasWindowFocus);
         if (!hasWindowFocus) {
+            //it's a workaround to avoid closing BP incorrectly
+            //BP gets a onWindowFocusChanged(false) and then gets a onWindowFocusChanged(true)
+            if (mSkipFirstLostFocus) {
+                mSkipFirstLostFocus = false;
+                return;
+            }
             Log.v(TAG, "Lost window focus, dismissing the dialog");
             animateAway(AuthDialogCallback.DISMISSED_USER_CANCELED);
         }
@@ -449,6 +457,9 @@ public class AuthContainerView extends LinearLayout
     @Override
     public void onAttachedToWindow() {
         super.onAttachedToWindow();
+
+        //save the first orientation
+        mOrientation = getResources().getConfiguration().orientation;
 
         mWakefulnessLifecycle.addObserver(this);
 
@@ -621,6 +632,12 @@ public class AuthContainerView extends LinearLayout
         if (mBiometricView != null) {
             mBiometricView.restoreState(savedState);
         }
+
+        if (savedState != null) {
+            mSkipFirstLostFocus = savedState.getBoolean(
+                    AuthDialog.KEY_BIOMETRIC_ORIENTATION_CHANGED);
+        }
+
         wm.addView(this, getLayoutParams(mWindowToken, mConfig.mPromptInfo.getTitle()));
     }
 
@@ -640,30 +657,50 @@ public class AuthContainerView extends LinearLayout
 
     @Override
     public void onAuthenticationSucceeded(@Modality int modality) {
-        mBiometricView.onAuthenticationSucceeded(modality);
+        if (mBiometricView != null) {
+            mBiometricView.onAuthenticationSucceeded(modality);
+        } else {
+            Log.e(TAG, "onAuthenticationSucceeded(): mBiometricView is null");
+        }
     }
 
     @Override
     public void onAuthenticationFailed(@Modality int modality, String failureReason) {
-        mFailedModalities.add(modality);
-        mBiometricView.onAuthenticationFailed(modality, failureReason);
+        if (mBiometricView != null) {
+            mFailedModalities.add(modality);
+            mBiometricView.onAuthenticationFailed(modality, failureReason);
+        } else {
+            Log.e(TAG, "onAuthenticationFailed(): mBiometricView is null");
+        }
     }
 
     @Override
     public void onHelp(@Modality int modality, String help) {
-        mBiometricView.onHelp(modality, help);
+        if (mBiometricView != null) {
+            mBiometricView.onHelp(modality, help);
+        } else {
+            Log.e(TAG, "onHelp(): mBiometricView is null");
+        }
     }
 
     @Override
     public void onError(@Modality int modality, String error) {
-        mBiometricView.onError(modality, error);
+        if (mBiometricView != null) {
+            mBiometricView.onError(modality, error);
+        } else {
+            Log.e(TAG, "onError(): mBiometricView is null");
+        }
     }
 
     @Override
     public void onPointerDown() {
-        if (mBiometricView.onPointerDown(mFailedModalities)) {
-            Log.d(TAG, "retrying failed modalities (pointer down)");
-            mBiometricCallback.onAction(AuthBiometricView.Callback.ACTION_BUTTON_TRY_AGAIN);
+        if (mBiometricView != null) {
+            if (mBiometricView.onPointerDown(mFailedModalities)) {
+                Log.d(TAG, "retrying failed modalities (pointer down)");
+                mBiometricCallback.onAction(AuthBiometricView.Callback.ACTION_BUTTON_TRY_AGAIN);
+            }
+        } else {
+            Log.e(TAG, "onPointerDown(): mBiometricView is null");
         }
     }
 
@@ -676,6 +713,10 @@ public class AuthContainerView extends LinearLayout
         outState.putBoolean(AuthDialog.KEY_BIOMETRIC_SHOWING,
                 mBiometricView != null && mCredentialView == null);
         outState.putBoolean(AuthDialog.KEY_CREDENTIAL_SHOWING, mCredentialView != null);
+
+        if (mOrientation != getResources().getConfiguration().orientation) {
+            outState.putBoolean(AuthDialog.KEY_BIOMETRIC_ORIENTATION_CHANGED, true);
+        }
 
         if (mBiometricView != null) {
             mBiometricView.onSaveState(outState);
@@ -694,7 +735,11 @@ public class AuthContainerView extends LinearLayout
 
     @Override
     public void animateToCredentialUI() {
-        mBiometricView.startTransitionToCredentialUI();
+        if (mBiometricView != null) {
+            mBiometricView.startTransitionToCredentialUI();
+        } else {
+            Log.e(TAG, "animateToCredentialUI(): mBiometricView is null");
+        }
     }
 
     void animateAway(@AuthDialogCallback.DismissedReason int reason) {

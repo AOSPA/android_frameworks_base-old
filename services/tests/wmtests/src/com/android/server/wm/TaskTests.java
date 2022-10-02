@@ -36,7 +36,6 @@ import static android.view.Surface.ROTATION_0;
 import static android.view.Surface.ROTATION_90;
 import static android.window.DisplayAreaOrganizer.FEATURE_VENDOR_FIRST;
 
-import static com.android.dx.mockito.inline.extended.ExtendedMockito.doAnswer;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.times;
@@ -264,7 +263,8 @@ public class TaskTests extends WindowTestsBase {
         // Detach from process so the activities can be removed from hierarchy when finishing.
         activity1.detachFromProcess();
         activity2.detachFromProcess();
-        assertTrue(task.performClearTop(activity1, 0 /* launchFlags */).finishing);
+        int[] finishCount = new int[1];
+        assertTrue(task.performClearTop(activity1, 0 /* launchFlags */, finishCount).finishing);
         assertFalse(task.hasChild());
         // In real case, the task should be preserved for adding new activity.
         assertTrue(task.isAttached());
@@ -278,7 +278,7 @@ public class TaskTests extends WindowTestsBase {
         doReturn(true).when(activityB).shouldBeVisibleUnchecked();
         doReturn(true).when(activityC).shouldBeVisibleUnchecked();
         activityA.getConfiguration().densityDpi += 100;
-        assertTrue(task.performClearTop(activityA, 0 /* launchFlags */).finishing);
+        assertTrue(task.performClearTop(activityA, 0 /* launchFlags */, finishCount).finishing);
         // The bottom activity should destroy directly without relaunch for config change.
         assertEquals(ActivityRecord.State.DESTROYING, activityA.getState());
         verify(activityA, never()).startRelaunching();
@@ -692,12 +692,9 @@ public class TaskTests extends WindowTestsBase {
         // Setup the display with a top stable inset. The later assertion will ensure the inset is
         // excluded from screenHeightDp.
         final int statusBarHeight = 100;
-        final DisplayPolicy policy = display.getDisplayPolicy();
-        doAnswer(invocationOnMock -> {
-            final Rect insets = invocationOnMock.<Rect>getArgument(0);
-            insets.top = statusBarHeight;
-            return null;
-        }).when(policy).convertNonDecorInsetsToStableInsets(any(), eq(ROTATION_0));
+        final DisplayInfo di = display.getDisplayInfo();
+        display.getDisplayPolicy().getDecorInsetsInfo(di.rotation,
+                di.logicalWidth, di.logicalHeight).mConfigInsets.top = statusBarHeight;
 
         // Without limiting to be inside the parent bounds, the out screen size should keep relative
         // to the input bounds.

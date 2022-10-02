@@ -18,6 +18,8 @@ package com.android.systemui.statusbar.pipeline.wifi.domain.interactor
 
 import androidx.test.filters.SmallTest
 import com.android.systemui.SysuiTestCase
+import com.android.systemui.statusbar.pipeline.shared.data.model.ConnectivitySlot
+import com.android.systemui.statusbar.pipeline.shared.data.repository.FakeConnectivityRepository
 import com.android.systemui.statusbar.pipeline.wifi.data.model.WifiActivityModel
 import com.android.systemui.statusbar.pipeline.wifi.data.model.WifiNetworkModel
 import com.android.systemui.statusbar.pipeline.wifi.data.repository.FakeWifiRepository
@@ -37,18 +39,22 @@ class WifiInteractorTest : SysuiTestCase() {
 
     private lateinit var underTest: WifiInteractor
 
-    private lateinit var repository: FakeWifiRepository
+    private lateinit var connectivityRepository: FakeConnectivityRepository
+    private lateinit var wifiRepository: FakeWifiRepository
 
     @Before
     fun setUp() {
-        repository = FakeWifiRepository()
-        underTest = WifiInteractor(repository)
+        connectivityRepository = FakeConnectivityRepository()
+        wifiRepository = FakeWifiRepository()
+        underTest = WifiInteractor(connectivityRepository, wifiRepository)
     }
 
     @Test
     fun hasActivityIn_noInOrOut_outputsFalse() = runBlocking(IMMEDIATE) {
-        repository.setWifiNetwork(VALID_WIFI_NETWORK_MODEL)
-        repository.setWifiActivity(WifiActivityModel(hasActivityIn = false, hasActivityOut = false))
+        wifiRepository.setWifiNetwork(VALID_WIFI_NETWORK_MODEL)
+        wifiRepository.setWifiActivity(
+            WifiActivityModel(hasActivityIn = false, hasActivityOut = false)
+        )
 
         var latest: Boolean? = null
         val job = underTest
@@ -63,8 +69,10 @@ class WifiInteractorTest : SysuiTestCase() {
 
     @Test
     fun hasActivityIn_onlyOut_outputsFalse() = runBlocking(IMMEDIATE) {
-        repository.setWifiNetwork(VALID_WIFI_NETWORK_MODEL)
-        repository.setWifiActivity(WifiActivityModel(hasActivityIn = false, hasActivityOut = true))
+        wifiRepository.setWifiNetwork(VALID_WIFI_NETWORK_MODEL)
+        wifiRepository.setWifiActivity(
+            WifiActivityModel(hasActivityIn = false, hasActivityOut = true)
+        )
 
         var latest: Boolean? = null
         val job = underTest
@@ -79,8 +87,10 @@ class WifiInteractorTest : SysuiTestCase() {
 
     @Test
     fun hasActivityIn_onlyIn_outputsTrue() = runBlocking(IMMEDIATE) {
-        repository.setWifiNetwork(VALID_WIFI_NETWORK_MODEL)
-        repository.setWifiActivity(WifiActivityModel(hasActivityIn = true, hasActivityOut = false))
+        wifiRepository.setWifiNetwork(VALID_WIFI_NETWORK_MODEL)
+        wifiRepository.setWifiActivity(
+            WifiActivityModel(hasActivityIn = true, hasActivityOut = false)
+        )
 
         var latest: Boolean? = null
         val job = underTest
@@ -95,8 +105,10 @@ class WifiInteractorTest : SysuiTestCase() {
 
     @Test
     fun hasActivityIn_inAndOut_outputsTrue() = runBlocking(IMMEDIATE) {
-        repository.setWifiNetwork(VALID_WIFI_NETWORK_MODEL)
-        repository.setWifiActivity(WifiActivityModel(hasActivityIn = true, hasActivityOut = true))
+        wifiRepository.setWifiNetwork(VALID_WIFI_NETWORK_MODEL)
+        wifiRepository.setWifiActivity(
+            WifiActivityModel(hasActivityIn = true, hasActivityOut = true)
+        )
 
         var latest: Boolean? = null
         val job = underTest
@@ -111,8 +123,10 @@ class WifiInteractorTest : SysuiTestCase() {
 
     @Test
     fun hasActivityIn_ssidNull_outputsFalse() = runBlocking(IMMEDIATE) {
-        repository.setWifiNetwork(WifiNetworkModel.Active(networkId = 1, ssid = null))
-        repository.setWifiActivity(WifiActivityModel(hasActivityIn = true, hasActivityOut = true))
+        wifiRepository.setWifiNetwork(WifiNetworkModel.Active(networkId = 1, ssid = null))
+        wifiRepository.setWifiActivity(
+            WifiActivityModel(hasActivityIn = true, hasActivityOut = true)
+        )
 
         var latest: Boolean? = null
         val job = underTest
@@ -126,8 +140,44 @@ class WifiInteractorTest : SysuiTestCase() {
     }
 
     @Test
+    fun hasActivityIn_inactiveNetwork_outputsFalse() = runBlocking(IMMEDIATE) {
+        wifiRepository.setWifiNetwork(WifiNetworkModel.Inactive)
+        wifiRepository.setWifiActivity(
+            WifiActivityModel(hasActivityIn = true, hasActivityOut = true)
+        )
+
+        var latest: Boolean? = null
+        val job = underTest
+            .hasActivityIn
+            .onEach { latest = it }
+            .launchIn(this)
+
+        assertThat(latest).isFalse()
+
+        job.cancel()
+    }
+
+    @Test
+    fun hasActivityIn_carrierMergedNetwork_outputsFalse() = runBlocking(IMMEDIATE) {
+        wifiRepository.setWifiNetwork(WifiNetworkModel.CarrierMerged)
+        wifiRepository.setWifiActivity(
+            WifiActivityModel(hasActivityIn = true, hasActivityOut = true)
+        )
+
+        var latest: Boolean? = null
+        val job = underTest
+            .hasActivityIn
+            .onEach { latest = it }
+            .launchIn(this)
+
+        assertThat(latest).isFalse()
+
+        job.cancel()
+    }
+
+    @Test
     fun hasActivityIn_multipleChanges_multipleOutputChanges() = runBlocking(IMMEDIATE) {
-        repository.setWifiNetwork(VALID_WIFI_NETWORK_MODEL)
+        wifiRepository.setWifiNetwork(VALID_WIFI_NETWORK_MODEL)
 
         var latest: Boolean? = null
         val job = underTest
@@ -136,24 +186,86 @@ class WifiInteractorTest : SysuiTestCase() {
                 .launchIn(this)
 
         // Conduct a series of changes and verify we catch each of them in succession
-        repository.setWifiActivity(WifiActivityModel(hasActivityIn = true, hasActivityOut = false))
+        wifiRepository.setWifiActivity(
+            WifiActivityModel(hasActivityIn = true, hasActivityOut = false)
+        )
         yield()
         assertThat(latest).isTrue()
 
-        repository.setWifiActivity(WifiActivityModel(hasActivityIn = false, hasActivityOut = true))
+        wifiRepository.setWifiActivity(
+            WifiActivityModel(hasActivityIn = false, hasActivityOut = true)
+        )
         yield()
         assertThat(latest).isFalse()
 
-        repository.setWifiActivity(WifiActivityModel(hasActivityIn = true, hasActivityOut = true))
+        wifiRepository.setWifiActivity(
+            WifiActivityModel(hasActivityIn = true, hasActivityOut = true)
+        )
         yield()
         assertThat(latest).isTrue()
 
-        repository.setWifiActivity(WifiActivityModel(hasActivityIn = true, hasActivityOut = false))
+        wifiRepository.setWifiActivity(
+            WifiActivityModel(hasActivityIn = true, hasActivityOut = false)
+        )
         yield()
         assertThat(latest).isTrue()
 
-        repository.setWifiActivity(WifiActivityModel(hasActivityIn = false, hasActivityOut = false))
+        wifiRepository.setWifiActivity(
+            WifiActivityModel(hasActivityIn = false, hasActivityOut = false)
+        )
         yield()
+        assertThat(latest).isFalse()
+
+        job.cancel()
+    }
+
+    @Test
+    fun wifiNetwork_matchesRepoWifiNetwork() = runBlocking(IMMEDIATE) {
+        val wifiNetwork = WifiNetworkModel.Active(
+            networkId = 45,
+            isValidated = true,
+            level = 3,
+            ssid = "AB",
+            passpointProviderFriendlyName = "friendly"
+        )
+        wifiRepository.setWifiNetwork(wifiNetwork)
+
+        var latest: WifiNetworkModel? = null
+        val job = underTest
+            .wifiNetwork
+            .onEach { latest = it }
+            .launchIn(this)
+
+        assertThat(latest).isEqualTo(wifiNetwork)
+
+        job.cancel()
+    }
+
+    @Test
+    fun isForceHidden_repoHasWifiHidden_outputsTrue() = runBlocking(IMMEDIATE) {
+        connectivityRepository.setForceHiddenIcons(setOf(ConnectivitySlot.WIFI))
+
+        var latest: Boolean? = null
+        val job = underTest
+            .isForceHidden
+            .onEach { latest = it }
+            .launchIn(this)
+
+        assertThat(latest).isTrue()
+
+        job.cancel()
+    }
+
+    @Test
+    fun isForceHidden_repoDoesNotHaveWifiHidden_outputsFalse() = runBlocking(IMMEDIATE) {
+        connectivityRepository.setForceHiddenIcons(setOf())
+
+        var latest: Boolean? = null
+        val job = underTest
+            .isForceHidden
+            .onEach { latest = it }
+            .launchIn(this)
+
         assertThat(latest).isFalse()
 
         job.cancel()

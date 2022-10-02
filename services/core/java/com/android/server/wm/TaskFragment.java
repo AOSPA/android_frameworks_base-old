@@ -100,7 +100,6 @@ import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.internal.util.function.pooled.PooledPredicate;
 import com.android.server.am.HostingRecord;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
-import com.android.server.wm.utils.WmDisplayCutout;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -304,10 +303,11 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
     final Point mLastSurfaceSize = new Point();
 
-    private final Rect mTmpInsets = new Rect();
     private final Rect mTmpBounds = new Rect();
     private final Rect mTmpFullBounds = new Rect();
+    /** For calculating screenWidthDp and screenWidthDp, i.e. the area without the system bars. */
     private final Rect mTmpStableBounds = new Rect();
+    /** For calculating app bounds, i.e. the area without the nav bar and display cutout. */
     private final Rect mTmpNonDecorBounds = new Rect();
 
     //TODO(b/207481538) Remove once the infrastructure to support per-activity screenshot is
@@ -2234,21 +2234,16 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             DisplayInfo displayInfo) {
         outNonDecorBounds.set(bounds);
         outStableBounds.set(bounds);
-        final Task rootTask = getRootTaskFragment().asTask();
-        if (rootTask == null || rootTask.mDisplayContent == null) {
+        if (mDisplayContent == null) {
             return;
         }
         mTmpBounds.set(0, 0, displayInfo.logicalWidth, displayInfo.logicalHeight);
 
-        final DisplayPolicy policy = rootTask.mDisplayContent.getDisplayPolicy();
-        final WmDisplayCutout cutout =
-                rootTask.mDisplayContent.calculateDisplayCutoutForRotation(displayInfo.rotation);
-        final DisplayFrames displayFrames = policy.getSimulatedDisplayFrames(displayInfo.rotation,
-                displayInfo.logicalWidth, displayInfo.logicalHeight, cutout);
-        policy.getNonDecorInsetsWithSimulatedFrame(displayFrames, mTmpInsets);
-        intersectWithInsetsIfFits(outNonDecorBounds, mTmpBounds, mTmpInsets);
-        policy.getStableInsetsWithSimulatedFrame(displayFrames, mTmpInsets);
-        intersectWithInsetsIfFits(outStableBounds, mTmpBounds, mTmpInsets);
+        final DisplayPolicy policy = mDisplayContent.getDisplayPolicy();
+        final DisplayPolicy.DecorInsets.Info info = policy.getDecorInsetsInfo(
+                displayInfo.rotation, displayInfo.logicalWidth, displayInfo.logicalHeight);
+        intersectWithInsetsIfFits(outNonDecorBounds, mTmpBounds, info.mNonDecorInsets);
+        intersectWithInsetsIfFits(outStableBounds, mTmpBounds, info.mConfigInsets);
     }
 
     /**
@@ -2312,17 +2307,31 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
         super.onConfigurationChanged(newParentConfig);
 
-        if (shouldStartChangeTransition(mTmpPrevBounds)) {
+        final boolean shouldStartChangeTransition = shouldStartChangeTransition(mTmpPrevBounds);
+        if (shouldStartChangeTransition) {
             initializeChangeTransition(mTmpPrevBounds);
-        } else if (mTaskFragmentOrganizer != null) {
-            // Update the surface here instead of in the organizer so that we can make sure
-            // it can be synced with the surface freezer.
-            final SurfaceControl.Transaction t = getSyncTransaction();
-            updateSurfacePosition(t);
-            updateOrganizedTaskFragmentSurfaceSize(t, false /* forceUpdate */);
+        }
+        if (mTaskFragmentOrganizer != null) {
+            if (mTransitionController.isShellTransitionsEnabled()
+                    && !mTransitionController.isCollecting(this)) {
+                // TaskFragmentOrganizer doesn't have access to the surface for security reasons, so
+                // update the surface here if it is not collected by Shell transition.
+                updateOrganizedTaskFragmentSurface();
+            } else if (!mTransitionController.isShellTransitionsEnabled()
+                    && !shouldStartChangeTransition) {
+                // Update the surface here instead of in the organizer so that we can make sure
+                // it can be synced with the surface freezer for legacy app transition.
+                updateOrganizedTaskFragmentSurface();
+            }
         }
 
         sendTaskFragmentInfoChanged();
+    }
+
+    private void updateOrganizedTaskFragmentSurface() {
+        final SurfaceControl.Transaction t = getSyncTransaction();
+        updateSurfacePosition(t);
+        updateOrganizedTaskFragmentSurfaceSize(t, false /* forceUpdate */);
     }
 
     /** Updates the surface size so that the sub windows cannot be shown out of bounds. */
@@ -2379,33 +2388,16 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                 || endBounds.height() != startBounds.height();
     }
 
-    boolean canHaveEmbeddingActivityTransition(@NonNull ActivityRecord child) {
-        if (!isOrganizedTaskFragment() || !mTransitionController.isShellTransitionsEnabled()) {
-            return false;
-        }
-        // The activity should request open transition when it is becoming visible.
-        return child.isVisibleRequested();
-    }
-
-    void collectEmbeddedTaskFragmentIfNeeded() {
-        if (!isOrganizedTaskFragment() || mTransitionController.isCollecting(this)) {
-            return;
-        }
-        if (getChildCount() == 0) {
-            // The TaskFragment is new created, and just becoming non-empty.
-            mTransitionController.collectExistenceChange(this);
-        } else {
-            mTransitionController.collect(this);
-        }
+    @Override
+    boolean isSyncFinished() {
+        return super.isSyncFinished() && isReadyToTransit();
     }
 
     @Override
     void setSurfaceControl(SurfaceControl sc) {
         super.setSurfaceControl(sc);
         if (mTaskFragmentOrganizer != null) {
-            final SurfaceControl.Transaction t = getSyncTransaction();
-            updateSurfacePosition(t);
-            updateOrganizedTaskFragmentSurfaceSize(t, false /* forceUpdate */);
+            updateOrganizedTaskFragmentSurface();
             // If the TaskFragmentOrganizer was set before we created the SurfaceControl, we need to
             // emit the callbacks now.
             sendTaskFragmentAppeared();

@@ -40,6 +40,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.LauncherApps;
+import android.content.pm.ShortcutInfo;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.RemoteException;
@@ -212,12 +213,16 @@ public class SplitScreenController implements DragAndDropPolicy.Starter,
         mShellController.addKeyguardChangeListener(this);
         if (mStageCoordinator == null) {
             // TODO: Multi-display
-            mStageCoordinator = new StageCoordinator(mContext, DEFAULT_DISPLAY, mSyncQueue,
-                    mTaskOrganizer, mDisplayController, mDisplayImeController,
-                    mDisplayInsetsController, mTransitions, mTransactionPool, mLogger,
-                    mIconProvider, mMainExecutor, mRecentTasksOptional);
+            mStageCoordinator = createStageCoordinator();
         }
         mDragAndDropController.setSplitScreenController(this);
+    }
+
+    protected StageCoordinator createStageCoordinator() {
+        return new StageCoordinator(mContext, DEFAULT_DISPLAY, mSyncQueue,
+                mTaskOrganizer, mDisplayController, mDisplayImeController,
+                mDisplayInsetsController, mTransitions, mTransactionPool, mLogger,
+                mIconProvider, mMainExecutor, mRecentTasksOptional);
     }
 
     @Override
@@ -785,6 +790,17 @@ public class SplitScreenController implements DragAndDropPolicy.Starter,
                             controller.mStageCoordinator.startIntentAndTaskWithLegacyTransition(
                                     pendingIntent, fillInIntent, taskId, mainOptions, sideOptions,
                                     sidePosition, splitRatio, adapter));
+        }
+
+        @Override
+        public void startShortcutAndTaskWithLegacyTransition(ShortcutInfo shortcutInfo,
+                int taskId, @Nullable Bundle mainOptions, @Nullable Bundle sideOptions,
+                @SplitPosition int sidePosition, float splitRatio, RemoteAnimationAdapter adapter) {
+            executeRemoteCallWithTaskPermission(mController,
+                    "startShortcutAndTaskWithLegacyTransition", (controller) ->
+                            controller.mStageCoordinator.startShortcutAndTaskWithLegacyTransition(
+                                    shortcutInfo, taskId, mainOptions, sideOptions, sidePosition,
+                                    splitRatio, adapter));
         }
 
         @Override

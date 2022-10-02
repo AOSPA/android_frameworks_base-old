@@ -71,7 +71,8 @@ final class Vibration {
         IGNORED_FOR_POWER(VibrationProto.IGNORED_FOR_POWER),
         IGNORED_FOR_RINGER_MODE(VibrationProto.IGNORED_FOR_RINGER_MODE),
         IGNORED_FOR_SETTINGS(VibrationProto.IGNORED_FOR_SETTINGS),
-        IGNORED_SUPERSEDED(VibrationProto.IGNORED_SUPERSEDED);
+        IGNORED_SUPERSEDED(VibrationProto.IGNORED_SUPERSEDED),
+        IGNORED_FROM_VIRTUAL_DEVICE(VibrationProto.IGNORED_FROM_VIRTUAL_DEVICE);
 
         private final int mProtoEnumValue;
 
@@ -87,6 +88,7 @@ final class Vibration {
     public final VibrationAttributes attrs;
     public final long id;
     public final int uid;
+    public final int displayId;
     public final String opPkg;
     public final String reason;
     public final IBinder token;
@@ -113,12 +115,13 @@ final class Vibration {
     private final CountDownLatch mCompletionLatch = new CountDownLatch(1);
 
     Vibration(IBinder token, int id, CombinedVibration effect,
-            VibrationAttributes attrs, int uid, String opPkg, String reason) {
+            VibrationAttributes attrs, int uid, int displayId, String opPkg, String reason) {
         this.token = token;
         this.mEffect = effect;
         this.id = id;
         this.attrs = attrs;
         this.uid = uid;
+        this.displayId = displayId;
         this.opPkg = opPkg;
         this.reason = reason;
         mStatus = Vibration.Status.RUNNING;
@@ -236,7 +239,7 @@ final class Vibration {
     /** Return {@link Vibration.DebugInfo} with read-only debug information about this vibration. */
     public Vibration.DebugInfo getDebugInfo() {
         return new Vibration.DebugInfo(mStatus, mStats, mEffect, mOriginalEffect, /* scale= */ 0,
-                attrs, uid, opPkg, reason);
+                attrs, uid, displayId, opPkg, reason);
     }
 
     /** Return {@link VibrationStats.StatsInfo} with read-only metrics about this vibration. */
@@ -246,6 +249,20 @@ final class Vibration {
                 : FrameworkStatsLog.VIBRATION_REPORTED__VIBRATION_TYPE__SINGLE;
         return new VibrationStats.StatsInfo(
                 uid, vibrationType, attrs.getUsage(), mStatus, mStats, completionUptimeMillis);
+    }
+
+    /**
+     * Returns true if this vibration can pipeline with the specified one.
+     *
+     * <p>Note that currently, repeating vibrations can't pipeline with following vibrations,
+     * because the cancel() call to stop the repetition will cancel a pending vibration too. This
+     * can be changed if we have a use-case to reason around behavior for. It may also be nice to
+     * pipeline very short vibrations together, regardless of the flag.
+     */
+    public boolean canPipelineWith(Vibration vib) {
+        return uid == vib.uid && attrs.isFlagSet(VibrationAttributes.FLAG_PIPELINED_EFFECT)
+                && vib.attrs.isFlagSet(VibrationAttributes.FLAG_PIPELINED_EFFECT)
+                && !isRepeating();
     }
 
     /** Immutable info passed as a signal to end a vibration. */
@@ -304,13 +321,14 @@ final class Vibration {
         private final float mScale;
         private final VibrationAttributes mAttrs;
         private final int mUid;
+        private final int mDisplayId;
         private final String mOpPkg;
         private final String mReason;
         private final Status mStatus;
 
         DebugInfo(Status status, VibrationStats stats, @Nullable CombinedVibration effect,
                 @Nullable CombinedVibration originalEffect, float scale, VibrationAttributes attrs,
-                int uid, String opPkg, String reason) {
+                int uid, int displayId, String opPkg, String reason) {
             mCreateTime = stats.getCreateTimeDebug();
             mStartTime = stats.getStartTimeDebug();
             mEndTime = stats.getEndTimeDebug();
@@ -320,6 +338,7 @@ final class Vibration {
             mScale = scale;
             mAttrs = attrs;
             mUid = uid;
+            mDisplayId = displayId;
             mOpPkg = opPkg;
             mReason = reason;
             mStatus = status;
@@ -349,6 +368,8 @@ final class Vibration {
                     .append(mAttrs)
                     .append(", uid: ")
                     .append(mUid)
+                    .append(", displayId: ")
+                    .append(mDisplayId)
                     .append(", opPkg: ")
                     .append(mOpPkg)
                     .append(", reason: ")

@@ -288,6 +288,18 @@ public class TaskFragmentContainerTest {
     }
 
     @Test
+    public void testIsAbove() {
+        final TaskContainer taskContainer = new TaskContainer(TASK_ID);
+        final TaskFragmentContainer container0 = new TaskFragmentContainer(null /* activity */,
+                mIntent, taskContainer, mController);
+        final TaskFragmentContainer container1 = new TaskFragmentContainer(null /* activity */,
+                mIntent, taskContainer, mController);
+
+        assertTrue(container1.isAbove(container0));
+        assertFalse(container0.isAbove(container1));
+    }
+
+    @Test
     public void testGetBottomMostActivity() {
         final TaskContainer taskContainer = new TaskContainer(TASK_ID);
         final TaskFragmentContainer container = new TaskFragmentContainer(null /* activity */,
@@ -302,6 +314,25 @@ public class TaskFragmentContainerTest {
         container.setInfo(mTransaction, mInfo);
 
         assertEquals(activity, container.getBottomMostActivity());
+    }
+
+    @Test
+    public void testOnActivityDestroyed() {
+        final TaskContainer taskContainer = new TaskContainer(TASK_ID);
+        final TaskFragmentContainer container = new TaskFragmentContainer(null /* activity */,
+                mIntent, taskContainer, mController);
+        container.addPendingAppearedActivity(mActivity);
+        final List<IBinder> activities = new ArrayList<>();
+        activities.add(mActivity.getActivityToken());
+        doReturn(activities).when(mInfo).getActivities();
+        container.setInfo(mTransaction, mInfo);
+
+        assertTrue(container.hasActivity(mActivity.getActivityToken()));
+
+        taskContainer.onActivityDestroyed(mActivity);
+
+        // It should not contain the destroyed Activity.
+        assertFalse(container.hasActivity(mActivity.getActivityToken()));
     }
 
     /** Creates a mock activity in the organizer process. */

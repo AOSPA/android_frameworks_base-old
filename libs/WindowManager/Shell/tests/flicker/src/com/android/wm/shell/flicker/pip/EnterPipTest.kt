@@ -130,7 +130,7 @@ open class EnterPipTest(testSpec: FlickerTestParameter) : PipTransition(testSpec
         testSpec.assertLayers {
             val pipLayerList = this.layers { pipApp.layerMatchesAnyOf(it) && it.isVisible }
             pipLayerList.zipWithNext { previous, current ->
-                current.visibleRegion.coversAtMost(previous.visibleRegion.region)
+                current.visibleRegion.notBiggerThan(previous.visibleRegion.region)
             }
         }
     }
@@ -185,8 +185,7 @@ open class EnterPipTest(testSpec: FlickerTestParameter) : PipTransition(testSpec
         fun getParams(): List<FlickerTestParameter> {
             return FlickerTestParameterFactory.getInstance()
                 .getConfigNonRotationTests(
-                    supportedRotations = listOf(Surface.ROTATION_0),
-                    repetitions = 3
+                    supportedRotations = listOf(Surface.ROTATION_0)
                 )
         }
     }
