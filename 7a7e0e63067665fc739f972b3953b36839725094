@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "b9c66e14_c2ebe355",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 6
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2022-10-03T16:47:28Z",
+      "side": 1,
+      "message": "Merged by LOS, works fine here too.",
+      "revId": "7a7e0e63067665fc739f972b3953b36839725094",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
