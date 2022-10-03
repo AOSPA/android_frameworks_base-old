@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "fbcdcd33_6bfcb4af",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 7
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000469
+      },
+      "writtenOn": "2022-10-03T23:05:32Z",
+      "side": 1,
+      "message": "20954: SystemUI: Enable statusbar burn-in protection by default | https://gerrit.aospa.co/c/AOSPA/android_frameworks_base/+/20954",
+      "revId": "f20f4e5a77deacfc8fb23e40718fd0293a2d7e5a",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
