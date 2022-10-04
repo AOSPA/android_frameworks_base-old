@@ -33,6 +33,24 @@
       "message": "no, also kill https://github.com/ThankYouMario/android_vendor_google_pixel/commit/a3a7e76fcc6e7f6910f08900cbce5c76530eeac1 again.",
       "revId": "ecee88ed28ebe6ed1535de472157e32b94773e52",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "e98feb85_85db43a5",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 3
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2022-10-04T12:43:34Z",
+      "side": 1,
+      "message": "the xml isn\u0027t doing any harm as it is",
+      "parentUuid": "a8f39a2e_71b79696",
+      "revId": "ecee88ed28ebe6ed1535de472157e32b94773e52",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
