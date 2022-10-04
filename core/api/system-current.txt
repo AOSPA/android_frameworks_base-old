@@ -1318,6 +1318,7 @@ package android.app.ambientcontext {
     method @NonNull public java.time.Instant getStartTime();
     method public void writeToParcel(@NonNull android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.app.ambientcontext.AmbientContextEvent> CREATOR;
+    field public static final int EVENT_BACK_DOUBLE_TAP = 3; // 0x3
     field public static final int EVENT_COUGH = 1; // 0x1
     field public static final int EVENT_SNORE = 2; // 0x2
     field public static final int EVENT_UNKNOWN = 0; // 0x0
@@ -2803,6 +2804,7 @@ package android.companion.virtual {
     method @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE) public void close();
     method @NonNull @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE) public android.companion.virtual.audio.VirtualAudioDevice createVirtualAudioDevice(@NonNull android.hardware.display.VirtualDisplay, @Nullable java.util.concurrent.Executor, @Nullable android.companion.virtual.audio.VirtualAudioDevice.AudioConfigurationChangeCallback);
     method @Nullable public android.hardware.display.VirtualDisplay createVirtualDisplay(@IntRange(from=1) int, @IntRange(from=1) int, @IntRange(from=1) int, @Nullable android.view.Surface, int, @Nullable java.util.concurrent.Executor, @Nullable android.hardware.display.VirtualDisplay.Callback);
+    method @NonNull @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE) public android.hardware.input.VirtualDpad createVirtualDpad(@NonNull android.hardware.display.VirtualDisplay, @NonNull String, int, int);
     method @NonNull @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE) public android.hardware.input.VirtualKeyboard createVirtualKeyboard(@NonNull android.hardware.display.VirtualDisplay, @NonNull String, int, int);
     method @NonNull @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE) public android.hardware.input.VirtualMouse createVirtualMouse(@NonNull android.hardware.display.VirtualDisplay, @NonNull String, int, int);
     method @NonNull @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE) public android.hardware.input.VirtualTouchscreen createVirtualTouchscreen(@NonNull android.hardware.display.VirtualDisplay, @NonNull String, int, int);
@@ -4371,6 +4373,11 @@ package android.hardware.hdmi {
 }
 
 package android.hardware.input {
+
+  public class VirtualDpad implements java.io.Closeable {
+    method @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE) public void close();
+    method @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE) public void sendKeyEvent(@NonNull android.hardware.input.VirtualKeyEvent);
+  }
 
   public final class VirtualKeyEvent implements android.os.Parcelable {
     method public int describeContents();
@@ -6661,6 +6668,15 @@ package android.media.musicrecognition {
     method @NonNull public android.media.musicrecognition.RecognitionRequest.Builder setCaptureSession(int);
     method @NonNull public android.media.musicrecognition.RecognitionRequest.Builder setIgnoreBeginningFrames(int);
     method @NonNull public android.media.musicrecognition.RecognitionRequest.Builder setMaxAudioLengthSeconds(int);
+  }
+
+}
+
+package android.media.projection {
+
+  public class MediaProjectionGlobal {
+    method @Nullable public android.hardware.display.VirtualDisplay createVirtualDisplay(@NonNull String, int, int, int, @Nullable android.view.Surface);
+    method @NonNull public static android.media.projection.MediaProjectionGlobal getInstance();
   }
 
 }
@@ -10347,6 +10363,7 @@ package android.provider {
     field public static final String NAMESPACE_APP_HIBERNATION = "app_hibernation";
     field public static final String NAMESPACE_ATTENTION_MANAGER_SERVICE = "attention_manager_service";
     field public static final String NAMESPACE_AUTOFILL = "autofill";
+    field public static final String NAMESPACE_BACKUP_AND_RESTORE = "backup_and_restore";
     field public static final String NAMESPACE_BATTERY_SAVER = "battery_saver";
     field public static final String NAMESPACE_BIOMETRICS = "biometrics";
     field public static final String NAMESPACE_BLOBSTORE = "blobstore";
@@ -10364,6 +10381,7 @@ package android.provider {
     field public static final String NAMESPACE_LOCATION = "location";
     field public static final String NAMESPACE_MEDIA = "media";
     field public static final String NAMESPACE_MEDIA_NATIVE = "media_native";
+    field public static final String NAMESPACE_NEARBY = "nearby";
     field public static final String NAMESPACE_NETD_NATIVE = "netd_native";
     field public static final String NAMESPACE_NNAPI_NATIVE = "nnapi_native";
     field public static final String NAMESPACE_ON_DEVICE_PERSONALIZATION = "on_device_personalization";
@@ -10393,6 +10411,7 @@ package android.provider {
     field public static final String NAMESPACE_TELEPHONY = "telephony";
     field public static final String NAMESPACE_TETHERING = "tethering";
     field public static final String NAMESPACE_TEXTCLASSIFIER = "textclassifier";
+    field public static final String NAMESPACE_TRANSPARENCY_METADATA = "transparency_metadata";
     field public static final String NAMESPACE_UWB = "uwb";
     field public static final String NAMESPACE_WINDOW_MANAGER_NATIVE_BOOT = "window_manager_native_boot";
   }

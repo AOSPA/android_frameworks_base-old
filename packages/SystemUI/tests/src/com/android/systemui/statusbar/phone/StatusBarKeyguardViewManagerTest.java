@@ -26,6 +26,7 @@ import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -51,6 +52,7 @@ import com.android.systemui.shade.NotificationPanelViewController;
 import com.android.systemui.shade.ShadeController;
 import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
+import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.phone.panelstate.PanelExpansionChangeEvent;
 import com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManager;
@@ -277,6 +279,17 @@ public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
     }
 
     @Test
+    public void onPanelExpansionChanged_neverTranslatesBouncerWhenShadeLocked() {
+        when(mStatusBarStateController.getState()).thenReturn(StatusBarState.SHADE_LOCKED);
+        mStatusBarKeyguardViewManager.onPanelExpansionChanged(
+                expansionEvent(
+                        /* fraction= */ KeyguardBouncer.EXPANSION_VISIBLE,
+                        /* expanded= */ true,
+                        /* tracking= */ false));
+        verify(mBouncer, never()).setExpansion(anyFloat());
+    }
+
+    @Test
     public void setOccluded_animatesPanelExpansion_onlyIfBouncerHidden() {
         mStatusBarKeyguardViewManager.setOccluded(false /* occluded */, true /* animated */);
         verify(mCentralSurfaces).animateKeyguardUnoccluding();
@@ -492,5 +505,22 @@ public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
         when(mDreamOverlayStateController.isOverlayActive()).thenReturn(true);
         mBouncerExpansionCallback.onVisibilityChanged(false);
         verify(mCentralSurfaces).setBouncerShowingOverDream(false);
+    }
+
+    @Test
+    public void testSetDozing_Dozing() {
+        clearInvocations(mBouncer);
+        mStatusBarKeyguardViewManager.onDozingChanged(true);
+        // Once when shown and once with dozing changed.
+        verify(mBouncer, times(1)).hide(false);
+    }
+
+    @Test
+    public void testSetDozing_notDozing() {
+        mStatusBarKeyguardViewManager.onDozingChanged(true);
+        clearInvocations(mBouncer);
+        mStatusBarKeyguardViewManager.onDozingChanged(false);
+        // Once when shown and twice with dozing changed.
+        verify(mBouncer, times(1)).hide(false);
     }
 }

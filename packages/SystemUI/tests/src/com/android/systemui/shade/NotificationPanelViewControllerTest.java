@@ -42,7 +42,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.annotation.IdRes;
-import android.app.ActivityManager;
 import android.content.ContentResolver;
 import android.content.res.Configuration;
 import android.content.res.Resources;
@@ -57,6 +56,7 @@ import android.util.DisplayMetrics;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.view.ViewPropertyAnimator;
 import android.view.ViewStub;
@@ -108,6 +108,7 @@ import com.android.systemui.navigationbar.NavigationModeController;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.qs.QS;
 import com.android.systemui.qrcodescanner.controller.QRCodeScannerController;
+import com.android.systemui.qs.QSFragment;
 import com.android.systemui.screenrecord.RecordingController;
 import com.android.systemui.shade.transition.ShadeTransitionController;
 import com.android.systemui.statusbar.CommandQueue;
@@ -161,8 +162,6 @@ import com.android.systemui.statusbar.policy.KeyguardUserSwitcherController;
 import com.android.systemui.statusbar.policy.KeyguardUserSwitcherView;
 import com.android.systemui.statusbar.window.StatusBarWindowStateController;
 import com.android.systemui.unfold.SysUIUnfoldComponent;
-import com.android.systemui.util.concurrency.FakeExecutor;
-import com.android.systemui.util.settings.SecureSettings;
 import com.android.systemui.util.time.FakeSystemClock;
 import com.android.systemui.util.time.SystemClock;
 import com.android.systemui.wallet.controller.QuickAccessWalletController;
@@ -185,228 +184,137 @@ import java.util.Optional;
 @TestableLooper.RunWithLooper
 public class NotificationPanelViewControllerTest extends SysuiTestCase {
 
+    private static final int SPLIT_SHADE_FULL_TRANSITION_DISTANCE = 400;
     private static final int NOTIFICATION_SCRIM_TOP_PADDING_IN_SPLIT_SHADE = 50;
+    private static final int PANEL_WIDTH = 500; // Random value just for the test.
 
-    @Mock
-    private CentralSurfaces mCentralSurfaces;
-    @Mock
-    private NotificationStackScrollLayout mNotificationStackScrollLayout;
-    @Mock
-    private KeyguardBottomAreaView mKeyguardBottomArea;
-    @Mock
-    private KeyguardBottomAreaViewController mKeyguardBottomAreaViewController;
-    @Mock
-    private KeyguardBottomAreaView mQsFrame;
-    private KeyguardStatusView mKeyguardStatusView;
-    @Mock
-    private NotificationIconAreaController mNotificationAreaController;
-    @Mock
-    private HeadsUpManagerPhone mHeadsUpManager;
-    @Mock
-    private NotificationShelfController mNotificationShelfController;
-    @Mock
-    private KeyguardStatusBarView mKeyguardStatusBar;
-    @Mock
-    private KeyguardUserSwitcherView mUserSwitcherView;
-    @Mock
-    private ViewStub mUserSwitcherStubView;
-    @Mock
-    private HeadsUpTouchHelper.Callback mHeadsUpCallback;
-    @Mock
-    private KeyguardUpdateMonitor mUpdateMonitor;
-    @Mock
-    private KeyguardBypassController mKeyguardBypassController;
-    @Mock
-    private DozeParameters mDozeParameters;
-    @Mock
-    private ScreenOffAnimationController mScreenOffAnimationController;
-    @Mock
-    private NotificationPanelView mView;
-    @Mock
-    private LayoutInflater mLayoutInflater;
-    @Mock
-    private FeatureFlags mFeatureFlags;
-    @Mock
-    private DynamicPrivacyController mDynamicPrivacyController;
-    @Mock
-    private StatusBarTouchableRegionManager mStatusBarTouchableRegionManager;
-    @Mock
-    private KeyguardStateController mKeyguardStateController;
-    @Mock
-    private DozeLog mDozeLog;
-    @Mock
-    private ShadeLogger mShadeLog;
-    @Mock
-    private CommandQueue mCommandQueue;
-    @Mock
-    private VibratorHelper mVibratorHelper;
-    @Mock
-    private LatencyTracker mLatencyTracker;
-    @Mock
-    private PowerManager mPowerManager;
-    @Mock
-    private AccessibilityManager mAccessibilityManager;
-    @Mock
-    private MetricsLogger mMetricsLogger;
-    @Mock
-    private ActivityManager mActivityManager;
-    @Mock
-    private Resources mResources;
-    @Mock
-    private Configuration mConfiguration;
-    private DisplayMetrics mDisplayMetrics = new DisplayMetrics();
-    @Mock
-    private KeyguardClockSwitch mKeyguardClockSwitch;
-    private NotificationPanelViewController.TouchHandler mTouchHandler;
-    private ConfigurationController mConfigurationController;
-    @Mock
-    private MediaHierarchyManager mMediaHiearchyManager;
-    @Mock
-    private ConversationNotificationManager mConversationNotificationManager;
-    @Mock
-    private StatusBarKeyguardViewManager mStatusBarKeyguardViewManager;
-    @Mock
-    private KeyguardStatusViewComponent.Factory mKeyguardStatusViewComponentFactory;
-    @Mock
-    private KeyguardQsUserSwitchComponent.Factory mKeyguardQsUserSwitchComponentFactory;
-    @Mock
-    private KeyguardQsUserSwitchComponent mKeyguardQsUserSwitchComponent;
-    @Mock
-    private KeyguardQsUserSwitchController mKeyguardQsUserSwitchController;
-    @Mock
-    private KeyguardUserSwitcherComponent.Factory mKeyguardUserSwitcherComponentFactory;
-    @Mock
-    private KeyguardUserSwitcherComponent mKeyguardUserSwitcherComponent;
-    @Mock
-    private KeyguardUserSwitcherController mKeyguardUserSwitcherController;
-    @Mock
-    private KeyguardStatusViewComponent mKeyguardStatusViewComponent;
-    @Mock
-    private KeyguardStatusBarViewComponent.Factory mKeyguardStatusBarViewComponentFactory;
-    @Mock
-    private KeyguardStatusBarViewComponent mKeyguardStatusBarViewComponent;
-    @Mock
-    private KeyguardClockSwitchController mKeyguardClockSwitchController;
-    @Mock
-    private KeyguardStatusViewController mKeyguardStatusViewController;
-    @Mock
-    private KeyguardStatusBarViewController mKeyguardStatusBarViewController;
-    @Mock
-    private NotificationStackScrollLayoutController mNotificationStackScrollLayoutController;
-    @Mock
-    private NotificationShadeDepthController mNotificationShadeDepthController;
-    @Mock
-    private LockscreenShadeTransitionController mLockscreenShadeTransitionController;
-    @Mock
-    private AuthController mAuthController;
-    @Mock
-    private ScrimController mScrimController;
-    @Mock
-    private MediaDataManager mMediaDataManager;
-    @Mock
-    private AmbientState mAmbientState;
-    @Mock
-    private UserManager mUserManager;
-    @Mock
-    private UiEventLogger mUiEventLogger;
-    @Mock
-    private LockIconViewController mLockIconViewController;
-    @Mock
-    private KeyguardMediaController mKeyguardMediaController;
-    @Mock
-    private PrivacyDotViewController mPrivacyDotViewController;
-    @Mock
-    private NavigationModeController mNavigationModeController;
-    @Mock
-    private SecureSettings mSecureSettings;
-    @Mock
-    private LargeScreenShadeHeaderController mLargeScreenShadeHeaderController;
-    @Mock
-    private ContentResolver mContentResolver;
-    @Mock
-    private TapAgainViewController mTapAgainViewController;
-    @Mock
-    private KeyguardIndicationController mKeyguardIndicationController;
-    @Mock
-    private FragmentService mFragmentService;
-    @Mock
-    private FragmentHostManager mFragmentHostManager;
-    @Mock
-    private QuickAccessWalletController mQuickAccessWalletController;
-    @Mock
-    private QRCodeScannerController mQrCodeScannerController;
-    @Mock
-    private EmergencyButtonController.Factory mEmergencyButtonControllerFactory;
-    @Mock
-    private NotificationRemoteInputManager mNotificationRemoteInputManager;
-    @Mock
-    private RecordingController mRecordingController;
-    @Mock
-    private ControlsComponent mControlsComponent;
-    @Mock
-    private LockscreenGestureLogger mLockscreenGestureLogger;
-    @Mock
-    private DumpManager mDumpManager;
-    @Mock
-    private InteractionJankMonitor mInteractionJankMonitor;
-    @Mock
-    private NotificationsQSContainerController mNotificationsQSContainerController;
-    @Mock
-    private QsFrameTranslateController mQsFrameTranslateController;
-    @Mock
-    private StatusBarWindowStateController mStatusBarWindowStateController;
-    @Mock
-    private KeyguardUnlockAnimationController mKeyguardUnlockAnimationController;
-    @Mock
-    private NotificationShadeWindowController mNotificationShadeWindowController;
-    @Mock
-    private SysUiState mSysUiState;
-    @Mock
-    private NotificationListContainer mNotificationListContainer;
-    @Mock
-    private NotificationStackSizeCalculator mNotificationStackSizeCalculator;
-    @Mock
-    private UnlockedScreenOffAnimationController mUnlockedScreenOffAnimationController;
-    @Mock
-    private ShadeTransitionController mShadeTransitionController;
-    @Mock
-    private QS mQs;
-    @Mock
-    private View mQsHeader;
-    @Mock
-    private ViewParent mViewParent;
-    @Mock
-    private ViewTreeObserver mViewTreeObserver;
+    @Mock private CentralSurfaces mCentralSurfaces;
+    @Mock private NotificationStackScrollLayout mNotificationStackScrollLayout;
+    @Mock private KeyguardBottomAreaView mKeyguardBottomArea;
+    @Mock private KeyguardBottomAreaViewController mKeyguardBottomAreaViewController;
+    @Mock private KeyguardBottomAreaView mQsFrame;
+    @Mock private NotificationIconAreaController mNotificationAreaController;
+    @Mock private HeadsUpManagerPhone mHeadsUpManager;
+    @Mock private NotificationShelfController mNotificationShelfController;
+    @Mock private KeyguardStatusBarView mKeyguardStatusBar;
+    @Mock private KeyguardUserSwitcherView mUserSwitcherView;
+    @Mock private ViewStub mUserSwitcherStubView;
+    @Mock private HeadsUpTouchHelper.Callback mHeadsUpCallback;
+    @Mock private KeyguardUpdateMonitor mUpdateMonitor;
+    @Mock private KeyguardBypassController mKeyguardBypassController;
+    @Mock private DozeParameters mDozeParameters;
+    @Mock private ScreenOffAnimationController mScreenOffAnimationController;
+    @Mock private NotificationPanelView mView;
+    @Mock private LayoutInflater mLayoutInflater;
+    @Mock private FeatureFlags mFeatureFlags;
+    @Mock private DynamicPrivacyController mDynamicPrivacyController;
+    @Mock private StatusBarTouchableRegionManager mStatusBarTouchableRegionManager;
+    @Mock private KeyguardStateController mKeyguardStateController;
+    @Mock private DozeLog mDozeLog;
+    @Mock private ShadeLogger mShadeLog;
+    @Mock private CommandQueue mCommandQueue;
+    @Mock private VibratorHelper mVibratorHelper;
+    @Mock private LatencyTracker mLatencyTracker;
+    @Mock private PowerManager mPowerManager;
+    @Mock private AccessibilityManager mAccessibilityManager;
+    @Mock private MetricsLogger mMetricsLogger;
+    @Mock private Resources mResources;
+    @Mock private Configuration mConfiguration;
+    @Mock private KeyguardClockSwitch mKeyguardClockSwitch;
+    @Mock private MediaHierarchyManager mMediaHiearchyManager;
+    @Mock private ConversationNotificationManager mConversationNotificationManager;
+    @Mock private StatusBarKeyguardViewManager mStatusBarKeyguardViewManager;
+    @Mock private KeyguardStatusViewComponent.Factory mKeyguardStatusViewComponentFactory;
+    @Mock private KeyguardQsUserSwitchComponent.Factory mKeyguardQsUserSwitchComponentFactory;
+    @Mock private KeyguardQsUserSwitchComponent mKeyguardQsUserSwitchComponent;
+    @Mock private KeyguardQsUserSwitchController mKeyguardQsUserSwitchController;
+    @Mock private KeyguardUserSwitcherComponent.Factory mKeyguardUserSwitcherComponentFactory;
+    @Mock private KeyguardUserSwitcherComponent mKeyguardUserSwitcherComponent;
+    @Mock private KeyguardUserSwitcherController mKeyguardUserSwitcherController;
+    @Mock private KeyguardStatusViewComponent mKeyguardStatusViewComponent;
+    @Mock private KeyguardStatusBarViewComponent.Factory mKeyguardStatusBarViewComponentFactory;
+    @Mock private KeyguardStatusBarViewComponent mKeyguardStatusBarViewComponent;
+    @Mock private KeyguardClockSwitchController mKeyguardClockSwitchController;
+    @Mock private KeyguardStatusViewController mKeyguardStatusViewController;
+    @Mock private KeyguardStatusBarViewController mKeyguardStatusBarViewController;
+    @Mock private NotificationStackScrollLayoutController mNotificationStackScrollLayoutController;
+    @Mock private NotificationShadeDepthController mNotificationShadeDepthController;
+    @Mock private LockscreenShadeTransitionController mLockscreenShadeTransitionController;
+    @Mock private AuthController mAuthController;
+    @Mock private ScrimController mScrimController;
+    @Mock private MediaDataManager mMediaDataManager;
+    @Mock private AmbientState mAmbientState;
+    @Mock private UserManager mUserManager;
+    @Mock private UiEventLogger mUiEventLogger;
+    @Mock private LockIconViewController mLockIconViewController;
+    @Mock private KeyguardMediaController mKeyguardMediaController;
+    @Mock private PrivacyDotViewController mPrivacyDotViewController;
+    @Mock private NavigationModeController mNavigationModeController;
+    @Mock private LargeScreenShadeHeaderController mLargeScreenShadeHeaderController;
+    @Mock private ContentResolver mContentResolver;
+    @Mock private TapAgainViewController mTapAgainViewController;
+    @Mock private KeyguardIndicationController mKeyguardIndicationController;
+    @Mock private FragmentService mFragmentService;
+    @Mock private FragmentHostManager mFragmentHostManager;
+    @Mock private QuickAccessWalletController mQuickAccessWalletController;
+    @Mock private QRCodeScannerController mQrCodeScannerController;
+    @Mock private EmergencyButtonController.Factory mEmergencyButtonControllerFactory;
+    @Mock private NotificationRemoteInputManager mNotificationRemoteInputManager;
+    @Mock private RecordingController mRecordingController;
+    @Mock private ControlsComponent mControlsComponent;
+    @Mock private LockscreenGestureLogger mLockscreenGestureLogger;
+    @Mock private DumpManager mDumpManager;
+    @Mock private InteractionJankMonitor mInteractionJankMonitor;
+    @Mock private NotificationsQSContainerController mNotificationsQSContainerController;
+    @Mock private QsFrameTranslateController mQsFrameTranslateController;
+    @Mock private StatusBarWindowStateController mStatusBarWindowStateController;
+    @Mock private KeyguardUnlockAnimationController mKeyguardUnlockAnimationController;
+    @Mock private NotificationShadeWindowController mNotificationShadeWindowController;
+    @Mock private SysUiState mSysUiState;
+    @Mock private NotificationListContainer mNotificationListContainer;
+    @Mock private NotificationStackSizeCalculator mNotificationStackSizeCalculator;
+    @Mock private UnlockedScreenOffAnimationController mUnlockedScreenOffAnimationController;
+    @Mock private ShadeTransitionController mShadeTransitionController;
+    @Mock private QS mQs;
+    @Mock private QSFragment mQSFragment;
+    @Mock private ViewGroup mQsHeader;
+    @Mock private ViewParent mViewParent;
+    @Mock private ViewTreeObserver mViewTreeObserver;
     @Mock private KeyguardBottomAreaViewModel mKeyguardBottomAreaViewModel;
     @Mock private KeyguardBottomAreaInteractor mKeyguardBottomAreaInteractor;
-    private NotificationPanelViewController.PanelEventsEmitter mPanelEventsEmitter;
-    private Optional<SysUIUnfoldComponent> mSysUIUnfoldComponent = Optional.empty();
+
+    private NotificationPanelViewController.TouchHandler mTouchHandler;
+    private ConfigurationController mConfigurationController;
     private SysuiStatusBarStateController mStatusBarStateController;
     private NotificationPanelViewController mNotificationPanelViewController;
     private View.AccessibilityDelegate mAccessibiltyDelegate;
     private NotificationsQuickSettingsContainer mNotificationContainerParent;
     private List<View.OnAttachStateChangeListener> mOnAttachStateChangeListeners;
-    private FalsingManagerFake mFalsingManager = new FalsingManagerFake();
-    private FakeExecutor mExecutor = new FakeExecutor(new FakeSystemClock());
     private Handler mMainHandler;
+    private View.OnLayoutChangeListener mLayoutChangeListener;
+
+    private final FalsingManagerFake mFalsingManager = new FalsingManagerFake();
+    private final Optional<SysUIUnfoldComponent> mSysUIUnfoldComponent = Optional.empty();
+    private final DisplayMetrics mDisplayMetrics = new DisplayMetrics();
     private final PanelExpansionStateManager mPanelExpansionStateManager =
             new PanelExpansionStateManager();
-    private SystemClock mSystemClock;
+    private FragmentHostManager.FragmentListener mFragmentListener;
 
     @Before
     public void setup() {
         MockitoAnnotations.initMocks(this);
-        mSystemClock = new FakeSystemClock();
+        SystemClock systemClock = new FakeSystemClock();
         mStatusBarStateController = new StatusBarStateControllerImpl(mUiEventLogger, mDumpManager,
                 mInteractionJankMonitor);
 
-        mKeyguardStatusView = new KeyguardStatusView(mContext);
-        mKeyguardStatusView.setId(R.id.keyguard_status_view);
+        KeyguardStatusView keyguardStatusView = new KeyguardStatusView(mContext);
+        keyguardStatusView.setId(R.id.keyguard_status_view);
         DejankUtils.setImmediate(true);
 
         when(mAuthController.isUdfpsEnrolled(anyInt())).thenReturn(false);
         when(mHeadsUpCallback.getContext()).thenReturn(mContext);
         when(mView.getResources()).thenReturn(mResources);
+        when(mView.getWidth()).thenReturn(PANEL_WIDTH);
         when(mResources.getConfiguration()).thenReturn(mConfiguration);
         mConfiguration.orientation = ORIENTATION_PORTRAIT;
         when(mResources.getDisplayMetrics()).thenReturn(mDisplayMetrics);
@@ -416,6 +324,8 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
                 .thenReturn(NOTIFICATION_SCRIM_TOP_PADDING_IN_SPLIT_SHADE);
         when(mResources.getDimensionPixelSize(R.dimen.notification_panel_margin_horizontal))
                 .thenReturn(10);
+        when(mResources.getDimensionPixelSize(R.dimen.split_shade_full_transition_distance))
+                .thenReturn(SPLIT_SHADE_FULL_TRANSITION_DISTANCE);
         when(mView.getContext()).thenReturn(getContext());
         when(mView.findViewById(R.id.keyguard_header)).thenReturn(mKeyguardStatusBar);
         when(mView.findViewById(R.id.keyguard_user_switcher_view)).thenReturn(mUserSwitcherView);
@@ -434,7 +344,7 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
         when(mView.findViewById(R.id.keyguard_status_view))
                 .thenReturn(mock(KeyguardStatusView.class));
         mNotificationContainerParent = new NotificationsQuickSettingsContainer(getContext(), null);
-        mNotificationContainerParent.addView(mKeyguardStatusView);
+        mNotificationContainerParent.addView(keyguardStatusView);
         mNotificationContainerParent.onFinishInflate();
         when(mView.findViewById(R.id.notification_container_parent))
                 .thenReturn(mNotificationContainerParent);
@@ -450,7 +360,12 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
         when(mKeyguardUserSwitcherComponent.getKeyguardUserSwitcherController())
                 .thenReturn(mKeyguardUserSwitcherController);
         when(mScreenOffAnimationController.shouldAnimateClockChange()).thenReturn(true);
-
+        when(mQs.getView()).thenReturn(mView);
+        when(mQSFragment.getView()).thenReturn(mView);
+        doAnswer(invocation -> {
+            mFragmentListener = invocation.getArgument(1);
+            return null;
+        }).when(mFragmentHostManager).addTagListener(eq(QS.TAG), any());
         doAnswer((Answer<Void>) invocation -> {
             mTouchHandler = invocation.getArgument(0);
             return null;
@@ -487,7 +402,7 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
         when(mKeyguardStatusBarViewComponent.getKeyguardStatusBarViewController())
                 .thenReturn(mKeyguardStatusBarViewController);
         when(mLayoutInflater.inflate(eq(R.layout.keyguard_status_view), any(), anyBoolean()))
-                .thenReturn(mKeyguardStatusView);
+                .thenReturn(keyguardStatusView);
         when(mLayoutInflater.inflate(eq(R.layout.keyguard_user_switcher), any(), anyBoolean()))
                 .thenReturn(mUserSwitcherView);
         when(mLayoutInflater.inflate(eq(R.layout.keyguard_bottom_area), any(), anyBoolean()))
@@ -502,13 +417,18 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
             ((Runnable) invocation.getArgument(0)).run();
             return null;
         }).when(mNotificationShadeWindowController).batchApplyWindowLayoutParams(any());
+        doAnswer(invocation -> {
+            mLayoutChangeListener = invocation.getArgument(0);
+            return null;
+        }).when(mView).addOnLayoutChangeListener(any());
 
         when(mView.getViewTreeObserver()).thenReturn(mViewTreeObserver);
         when(mView.getParent()).thenReturn(mViewParent);
         when(mQs.getHeader()).thenReturn(mQsHeader);
 
         mMainHandler = new Handler(Looper.getMainLooper());
-        mPanelEventsEmitter = new NotificationPanelViewController.PanelEventsEmitter();
+        NotificationPanelViewController.PanelEventsEmitter panelEventsEmitter =
+                new NotificationPanelViewController.PanelEventsEmitter();
 
         mNotificationPanelViewController = new NotificationPanelViewController(
                 mView,
@@ -550,8 +470,6 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
                 mNavigationModeController,
                 mFragmentService,
                 mContentResolver,
-                mQuickAccessWalletController,
-                mQrCodeScannerController,
                 mRecordingController,
                 mLargeScreenShadeHeaderController,
                 mScreenOffAnimationController,
@@ -559,21 +477,20 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
                 mPanelExpansionStateManager,
                 mNotificationRemoteInputManager,
                 mSysUIUnfoldComponent,
-                mControlsComponent,
                 mInteractionJankMonitor,
                 mQsFrameTranslateController,
                 mSysUiState,
                 () -> mKeyguardBottomAreaViewController,
                 mKeyguardUnlockAnimationController,
                 mNotificationListContainer,
-                mPanelEventsEmitter,
+                panelEventsEmitter,
                 mNotificationStackSizeCalculator,
                 mUnlockedScreenOffAnimationController,
                 mShadeTransitionController,
-                mSystemClock,
+                systemClock,
                 mock(CameraGestureHelper.class),
-                () -> mKeyguardBottomAreaViewModel,
-                () -> mKeyguardBottomAreaInteractor,
+                mKeyguardBottomAreaViewModel,
+                mKeyguardBottomAreaInteractor,
                 mEmergencyButtonControllerFactory);
         mNotificationPanelViewController.initDependencies(
                 mCentralSurfaces,
@@ -755,8 +672,9 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     }
 
     @Test
-    public void testSetPanelScrimMinFraction() {
-        mNotificationPanelViewController.setPanelScrimMinFraction(0.5f);
+    public void testSetPanelScrimMinFractionWhenHeadsUpIsDragged() {
+        mNotificationPanelViewController.setHeadsUpDraggingStartingHeight(
+                mNotificationPanelViewController.getMaxPanelHeight() / 2);
         verify(mNotificationShadeDepthController).setPanelPullDownMinFraction(eq(0.5f));
     }
 
@@ -1107,7 +1025,7 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
         FalsingManager.FalsingTapListener listener = getFalsingTapListener();
         mStatusBarStateController.setState(KEYGUARD);
 
-        listener.onDoubleTapRequired();
+        listener.onAdditionalTapRequired();
 
         verify(mKeyguardIndicationController).showTransientIndication(anyInt());
     }
@@ -1117,7 +1035,7 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
         FalsingManager.FalsingTapListener listener = getFalsingTapListener();
         mStatusBarStateController.setState(SHADE_LOCKED);
 
-        listener.onDoubleTapRequired();
+        listener.onAdditionalTapRequired();
 
         verify(mTapAgainViewController).show();
     }
@@ -1452,40 +1370,137 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     }
 
     @Test
-    public void getMaxPanelHeight_expanding_inSplitShade_returnsSplitShadeFullTransitionDistance() {
-        int splitShadeFullTransitionDistance = 123456;
+    public void getMaxPanelTransitionDistance_expanding_inSplitShade_returnsSplitShadeFullTransitionDistance() {
         enableSplitShade(true);
-        setSplitShadeFullTransitionDistance(splitShadeFullTransitionDistance);
         mNotificationPanelViewController.expandWithQs();
 
-        int maxPanelHeight = mNotificationPanelViewController.getMaxPanelHeight();
+        int maxDistance = mNotificationPanelViewController.getMaxPanelTransitionDistance();
 
-        assertThat(maxPanelHeight).isEqualTo(splitShadeFullTransitionDistance);
+        assertThat(maxDistance).isEqualTo(SPLIT_SHADE_FULL_TRANSITION_DISTANCE);
     }
 
     @Test
-    public void getMaxPanelHeight_expandingSplitShade_keyguard_returnsNonSplitShadeValue() {
+    public void getMaxPanelTransitionDistance_inSplitShade_withHeadsUp_returnsBiggerValue() {
+        enableSplitShade(true);
+        mNotificationPanelViewController.expandWithQs();
+        when(mHeadsUpManager.isTrackingHeadsUp()).thenReturn(true);
+        mNotificationPanelViewController.setHeadsUpDraggingStartingHeight(
+                SPLIT_SHADE_FULL_TRANSITION_DISTANCE);
+
+        int maxDistance = mNotificationPanelViewController.getMaxPanelTransitionDistance();
+
+        assertThat(maxDistance).isGreaterThan(SPLIT_SHADE_FULL_TRANSITION_DISTANCE);
+    }
+
+    @Test
+    public void getMaxPanelTransitionDistance_expandingSplitShade_keyguard_returnsNonSplitShadeValue() {
         mStatusBarStateController.setState(KEYGUARD);
-        int splitShadeFullTransitionDistance = 123456;
         enableSplitShade(true);
-        setSplitShadeFullTransitionDistance(splitShadeFullTransitionDistance);
         mNotificationPanelViewController.expandWithQs();
 
-        int maxPanelHeight = mNotificationPanelViewController.getMaxPanelHeight();
+        int maxDistance = mNotificationPanelViewController.getMaxPanelTransitionDistance();
 
-        assertThat(maxPanelHeight).isNotEqualTo(splitShadeFullTransitionDistance);
+        assertThat(maxDistance).isNotEqualTo(SPLIT_SHADE_FULL_TRANSITION_DISTANCE);
     }
 
     @Test
-    public void getMaxPanelHeight_expanding_notSplitShade_returnsNonSplitShadeValue() {
-        int splitShadeFullTransitionDistance = 123456;
+    public void getMaxPanelTransitionDistance_expanding_notSplitShade_returnsNonSplitShadeValue() {
         enableSplitShade(false);
-        setSplitShadeFullTransitionDistance(splitShadeFullTransitionDistance);
         mNotificationPanelViewController.expandWithQs();
 
-        int maxPanelHeight = mNotificationPanelViewController.getMaxPanelHeight();
+        int maxDistance = mNotificationPanelViewController.getMaxPanelTransitionDistance();
 
-        assertThat(maxPanelHeight).isNotEqualTo(splitShadeFullTransitionDistance);
+        assertThat(maxDistance).isNotEqualTo(SPLIT_SHADE_FULL_TRANSITION_DISTANCE);
+    }
+
+    @Test
+    public void onLayoutChange_fullWidth_updatesQSWithFullWithTrue() {
+        mNotificationPanelViewController.mQs = mQs;
+
+        setIsFullWidth(true);
+
+        verify(mQs).setIsNotificationPanelFullWidth(true);
+    }
+
+    @Test
+    public void onLayoutChange_notFullWidth_updatesQSWithFullWithFalse() {
+        mNotificationPanelViewController.mQs = mQs;
+
+        setIsFullWidth(false);
+
+        verify(mQs).setIsNotificationPanelFullWidth(false);
+    }
+
+    @Test
+    public void onLayoutChange_qsNotSet_doesNotCrash() {
+        mNotificationPanelViewController.mQs = null;
+
+        triggerLayoutChange();
+    }
+
+    @Test
+    public void onQsFragmentAttached_fullWidth_setsFullWidthTrueOnQS() {
+        setIsFullWidth(true);
+        givenViewAttached();
+        mFragmentListener.onFragmentViewCreated(QS.TAG, mQSFragment);
+
+        verify(mQSFragment).setIsNotificationPanelFullWidth(true);
+    }
+
+    @Test
+    public void onQsFragmentAttached_notFullWidth_setsFullWidthFalseOnQS() {
+        setIsFullWidth(false);
+        givenViewAttached();
+        mFragmentListener.onFragmentViewCreated(QS.TAG, mQSFragment);
+
+        verify(mQSFragment).setIsNotificationPanelFullWidth(false);
+    }
+
+    @Test
+    public void setQsExpansion_lockscreenShadeTransitionInProgress_usesLockscreenSquishiness() {
+        float squishinessFraction = 0.456f;
+        mNotificationPanelViewController.mQs = mQs;
+        when(mLockscreenShadeTransitionController.getQsSquishTransitionFraction())
+                .thenReturn(squishinessFraction);
+        when(mNotificationStackScrollLayoutController.getNotificationSquishinessFraction())
+                .thenReturn(0.987f);
+        // Call setTransitionToFullShadeAmount to get into the full shade transition in progress
+        // state.
+        mNotificationPanelViewController.setTransitionToFullShadeAmount(
+                /* pxAmount= */ 234,
+                /* animate= */ false,
+                /* delay= */ 0
+        );
+
+        mNotificationPanelViewController.setQsExpansion(/* height= */ 123);
+
+        // First for setTransitionToFullShadeAmount and then setQsExpansion
+        verify(mQs, times(2)).setQsExpansion(
+                /* expansion= */ anyFloat(),
+                /* panelExpansionFraction= */ anyFloat(),
+                /* proposedTranslation= */ anyFloat(),
+                eq(squishinessFraction)
+        );
+    }
+
+    @Test
+    public void setQsExpansion_lockscreenShadeTransitionNotInProgress_usesStandardSquishiness() {
+        float lsSquishinessFraction = 0.456f;
+        float nsslSquishinessFraction = 0.987f;
+        mNotificationPanelViewController.mQs = mQs;
+        when(mLockscreenShadeTransitionController.getQsSquishTransitionFraction())
+                .thenReturn(lsSquishinessFraction);
+        when(mNotificationStackScrollLayoutController.getNotificationSquishinessFraction())
+                .thenReturn(nsslSquishinessFraction);
+
+        mNotificationPanelViewController.setQsExpansion(/* height= */ 123);
+
+        verify(mQs).setQsExpansion(
+                /* expansion= */ anyFloat(),
+                /* panelExpansionFraction= */ anyFloat(),
+                /* proposedTranslation= */ anyFloat(),
+                eq(nsslSquishinessFraction)
+        );
     }
 
     private static MotionEvent createMotionEvent(int x, int y, int action) {
@@ -1508,12 +1523,6 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     private void givenViewAttached() {
         for (View.OnAttachStateChangeListener listener : mOnAttachStateChangeListeners) {
             listener.onViewAttachedToWindow(mView);
-        }
-    }
-
-    private void givenViewDetached() {
-        for (View.OnAttachStateChangeListener listener : mOnAttachStateChangeListeners) {
-            listener.onViewDetachedFromWindow(mView);
         }
     }
 
@@ -1548,12 +1557,6 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
         mTouchHandler.onTouch(mView, ev);
     }
 
-    private void setSplitShadeFullTransitionDistance(int splitShadeFullTransitionDistance) {
-        when(mResources.getDimensionPixelSize(R.dimen.split_shade_full_transition_distance))
-                .thenReturn(splitShadeFullTransitionDistance);
-        mNotificationPanelViewController.updateResources();
-    }
-
     private void setDozing(boolean dozing, boolean dozingAlwaysOn) {
         when(mDozeParameters.getAlwaysOn()).thenReturn(dozingAlwaysOn);
         mNotificationPanelViewController.setDozing(
@@ -1572,5 +1575,25 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
         mNotificationPanelViewController.updateResources();
         assertThat(getConstraintSetLayout(R.id.keyguard_status_view).endToEnd).isEqualTo(
                 R.id.qs_edge_guideline);
+    }
+
+    private void setIsFullWidth(boolean fullWidth) {
+        float nsslWidth = fullWidth ? PANEL_WIDTH : PANEL_WIDTH / 2f;
+        when(mNotificationStackScrollLayoutController.getWidth()).thenReturn(nsslWidth);
+        triggerLayoutChange();
+    }
+
+    private void triggerLayoutChange() {
+        mLayoutChangeListener.onLayoutChange(
+                mView,
+                /* left= */ 0,
+                /* top= */ 0,
+                /* right= */ 0,
+                /* bottom= */ 0,
+                /* oldLeft= */ 0,
+                /* oldTop= */ 0,
+                /* oldRight= */ 0,
+                /* oldBottom= */ 0
+        );
     }
 }

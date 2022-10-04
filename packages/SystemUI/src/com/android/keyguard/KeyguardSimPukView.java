@@ -19,14 +19,9 @@ package com.android.keyguard;
 import static com.android.systemui.util.PluralMessageFormaterKt.icuMessageFormat;
 
 import android.content.Context;
-import android.content.res.TypedArray;
-import android.graphics.drawable.Drawable;
 import android.telephony.SubscriptionInfo;
 import android.util.AttributeSet;
 import android.util.Log;
-import android.widget.ImageView;
-
-import androidx.core.graphics.drawable.DrawableCompat;
 
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
@@ -37,8 +32,7 @@ import java.util.Map;
 /**
  * Displays a PIN pad for entering a PUK (Pin Unlock Kode) provided by a carrier.
  */
-public class KeyguardSimPukView extends KeyguardPinBasedInputView {
-    private ImageView mSimImageView;
+public class KeyguardSimPukView extends KeyguardSimInputView {
     private static final boolean DEBUG = KeyguardConstants.DEBUG;
     public static final String TAG = "KeyguardSimPukView";
     private Map<String, String> mWrongPukCodeMessageMap =  new HashMap<>(4);
@@ -125,7 +119,6 @@ public class KeyguardSimPukView extends KeyguardPinBasedInputView {
 
     @Override
     protected void onFinishInflate() {
-        mSimImageView = findViewById(R.id.keyguard_sim);
         super.onFinishInflate();
 
         if (mEcaView instanceof EmergencyCarrierArea) {
@@ -143,18 +136,4 @@ public class KeyguardSimPukView extends KeyguardPinBasedInputView {
         return getContext().getString(
                 com.android.internal.R.string.keyguard_accessibility_sim_puk_unlock);
     }
-
-    @Override
-    public void reloadColors() {
-        super.reloadColors();
-
-        int[] customAttrs = {android.R.attr.textColorSecondary};
-        TypedArray a = getContext().obtainStyledAttributes(customAttrs);
-        int imageColor = a.getColor(0, 0);
-        a.recycle();
-        Drawable wrappedDrawable = DrawableCompat.wrap(mSimImageView.getDrawable());
-        DrawableCompat.setTint(wrappedDrawable, imageColor);
-    }
 }
-
-

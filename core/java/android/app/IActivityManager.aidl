@@ -522,9 +522,6 @@ interface IActivityManager {
     @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     boolean stopBinderTrackingAndDump(in ParcelFileDescriptor fd);
 
-    /** Enables server-side binder tracing for the calling uid. */
-    void enableBinderTracing();
-
     @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     void suppressResizeConfigChanges(boolean suppress);
     @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
@@ -769,6 +766,8 @@ interface IActivityManager {
      *
      * <p>Typically used only by automotive builds when the vehicle has multiple displays.
      */
+    @JavaPassthrough(annotation=
+            "@android.annotation.RequiresPermission(anyOf = {android.Manifest.permission.MANAGE_USERS, android.Manifest.permission.CREATE_USERS}, conditional = true)")
     boolean startUserInBackgroundOnSecondaryDisplay(int userid, int displayId);
 
 }

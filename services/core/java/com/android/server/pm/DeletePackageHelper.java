@@ -61,8 +61,8 @@ import android.util.SparseBooleanArray;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.Preconditions;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.permission.PermissionManagerServiceInternal;
+import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.PackageStateInternal;
 import com.android.server.pm.pkg.PackageUserState;
 import com.android.server.wm.ActivityTaskManagerInternal;
@@ -272,7 +272,8 @@ final class DeletePackageHelper {
         // other processes clean up before deleting resources.
         synchronized (mPm.mInstallLock) {
             if (info.mArgs != null) {
-                mRemovePackageHelper.cleanUpResources(info.mArgs);
+                mRemovePackageHelper.cleanUpResources(info.mArgs.mCodeFile,
+                        info.mArgs.mInstructionSets);
             }
 
             boolean reEnableStub = false;
@@ -583,7 +584,7 @@ final class DeletePackageHelper {
         if (deleteCodeAndResources && (outInfo != null)) {
             outInfo.mArgs = new InstallArgs(
                     ps.getPathString(), getAppDexInstructionSets(
-                            ps.getPrimaryCpuAbi(), ps.getSecondaryCpuAbi()), mPm);
+                            ps.getPrimaryCpuAbi(), ps.getSecondaryCpuAbi()));
             if (DEBUG_SD_INSTALL) Slog.i(TAG, "args=" + outInfo.mArgs);
         }
     }
@@ -683,6 +684,18 @@ final class DeletePackageHelper {
 
         final String packageName = versionedPackage.getPackageName();
         final long versionCode = versionedPackage.getLongVersionCode();
+
+        if (mPm.mProtectedPackages.isPackageDataProtected(userId, packageName)) {
+            mPm.mHandler.post(() -> {
+                try {
+                    Slog.w(TAG, "Attempted to delete protected package: " + packageName);
+                    observer.onPackageDeleted(packageName,
+                            PackageManager.DELETE_FAILED_INTERNAL_ERROR, null);
+                } catch (RemoteException re) {
+                }
+            });
+            return;
+        }
 
         try {
             if (mPm.mInjector.getLocalService(ActivityTaskManagerInternal.class)

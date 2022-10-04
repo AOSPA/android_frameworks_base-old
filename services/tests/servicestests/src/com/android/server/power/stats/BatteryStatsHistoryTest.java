@@ -26,6 +26,7 @@ import static org.mockito.Mockito.when;
 import android.content.Context;
 import android.os.BatteryManager;
 import android.os.BatteryStats;
+import android.os.BatteryStats.HistoryItem;
 import android.os.BatteryStats.MeasuredEnergyDetails;
 import android.os.Parcel;
 import android.util.Log;
@@ -40,7 +41,9 @@ import com.android.internal.os.Clock;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 import java.io.File;
@@ -63,6 +66,8 @@ public class BatteryStatsHistoryTest {
     private final Clock mClock = new MockClock();
     private BatteryStatsHistory mHistory;
     @Mock
+    private BatteryStatsHistory.TraceDelegate mTracer;
+    @Mock
     private BatteryStatsHistory.HistoryStepDetailsCalculator mStepDetailsCalculator;
 
     @Before
@@ -79,10 +84,86 @@ public class BatteryStatsHistoryTest {
         }
         mHistoryDir.delete();
         mHistory = new BatteryStatsHistory(mHistoryBuffer, mSystemDir, 32, 1024,
-                mStepDetailsCalculator, mClock);
+                mStepDetailsCalculator, mClock, mTracer);
 
         when(mStepDetailsCalculator.getHistoryStepDetails())
                 .thenReturn(new BatteryStats.HistoryStepDetails());
+    }
+
+    @Test
+    public void testAtraceBinaryState1() {
+        mHistory.forceRecordAllHistory();
+
+        InOrder inOrder = Mockito.inOrder(mTracer);
+        Mockito.when(mTracer.tracingEnabled()).thenReturn(true);
+
+        mHistory.recordStateStartEvent(mClock.elapsedRealtime(),
+                mClock.uptimeMillis(), HistoryItem.STATE_MOBILE_RADIO_ACTIVE_FLAG);
+        mHistory.recordStateStopEvent(mClock.elapsedRealtime(),
+                mClock.uptimeMillis(), HistoryItem.STATE_MOBILE_RADIO_ACTIVE_FLAG);
+        mHistory.recordStateStartEvent(mClock.elapsedRealtime(),
+                mClock.uptimeMillis(), HistoryItem.STATE_MOBILE_RADIO_ACTIVE_FLAG);
+
+        inOrder.verify(mTracer).traceCounter("battery_stats.mobile_radio", 1);
+        inOrder.verify(mTracer).traceCounter("battery_stats.mobile_radio", 0);
+        inOrder.verify(mTracer).traceCounter("battery_stats.mobile_radio", 1);
+    }
+
+    @Test
+    public void testAtraceBinaryState2() {
+        mHistory.forceRecordAllHistory();
+
+        InOrder inOrder = Mockito.inOrder(mTracer);
+        Mockito.when(mTracer.tracingEnabled()).thenReturn(true);
+
+        mHistory.recordState2StartEvent(mClock.elapsedRealtime(),
+                mClock.uptimeMillis(), HistoryItem.STATE2_WIFI_ON_FLAG);
+        mHistory.recordState2StopEvent(mClock.elapsedRealtime(),
+                mClock.uptimeMillis(), HistoryItem.STATE2_WIFI_ON_FLAG);
+        mHistory.recordState2StartEvent(mClock.elapsedRealtime(),
+                mClock.uptimeMillis(), HistoryItem.STATE2_WIFI_ON_FLAG);
+
+        inOrder.verify(mTracer).traceCounter("battery_stats.wifi", 1);
+        inOrder.verify(mTracer).traceCounter("battery_stats.wifi", 0);
+        inOrder.verify(mTracer).traceCounter("battery_stats.wifi", 1);
+    }
+
+    @Test
+    public void testAtraceNumericalState() {
+        mHistory.forceRecordAllHistory();
+
+        InOrder inOrder = Mockito.inOrder(mTracer);
+        Mockito.when(mTracer.tracingEnabled()).thenReturn(true);
+
+        mHistory.recordDataConnectionTypeChangeEvent(mClock.elapsedRealtime(),
+                mClock.uptimeMillis(), 1);
+        mHistory.recordDataConnectionTypeChangeEvent(mClock.elapsedRealtime(),
+                mClock.uptimeMillis(), 2);
+        mHistory.recordDataConnectionTypeChangeEvent(mClock.elapsedRealtime(),
+                mClock.uptimeMillis(), 3);
+
+        inOrder.verify(mTracer).traceCounter("battery_stats.data_conn", 1);
+        inOrder.verify(mTracer).traceCounter("battery_stats.data_conn", 2);
+        inOrder.verify(mTracer).traceCounter("battery_stats.data_conn", 3);
+    }
+
+    @Test
+    public void testAtraceInstantEvent() {
+        mHistory.forceRecordAllHistory();
+
+        InOrder inOrder = Mockito.inOrder(mTracer);
+        Mockito.when(mTracer.tracingEnabled()).thenReturn(true);
+
+        mHistory.recordEvent(mClock.elapsedRealtime(), mClock.uptimeMillis(),
+                HistoryItem.EVENT_WAKEUP_AP, "", 1234);
+        mHistory.recordEvent(mClock.elapsedRealtime(), mClock.uptimeMillis(),
+                HistoryItem.EVENT_JOB_START, "jobname", 2468);
+        mHistory.recordEvent(mClock.elapsedRealtime(), mClock.uptimeMillis(),
+                HistoryItem.EVENT_JOB_FINISH, "jobname", 2468);
+
+        inOrder.verify(mTracer).traceInstantEvent("battery_stats.wakeupap", "wakeupap=1234:\"\"");
+        inOrder.verify(mTracer).traceInstantEvent("battery_stats.job", "+job=2468:\"jobname\"");
+        inOrder.verify(mTracer).traceInstantEvent("battery_stats.job", "-job=2468:\"jobname\"");
     }
 
     @Test
@@ -131,7 +212,7 @@ public class BatteryStatsHistoryTest {
 
         // create a new BatteryStatsHistory object, it will pick up existing history files.
         BatteryStatsHistory history2 = new BatteryStatsHistory(mHistoryBuffer, mSystemDir, 32, 1024,
-                null, mClock);
+                null, mClock, mTracer);
         // verify constructor can pick up all files from file system.
         verifyFileNumbers(history2, fileList);
         verifyActiveFile(history2, "33.bin");

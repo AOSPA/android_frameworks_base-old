@@ -22,11 +22,16 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.android.settingslib.spa.R
+import com.android.settingslib.spa.framework.common.ROOT_PAGE_NAME
 import com.android.settingslib.spa.framework.common.SettingsPageProviderRepository
 import com.android.settingslib.spa.framework.compose.localNavController
 import com.android.settingslib.spa.framework.theme.SettingsTheme
@@ -48,27 +53,40 @@ open class BrowseActivity(
 
     @Composable
     private fun MainContent() {
-        val destination = intent?.getStringExtra(KEY_DESTINATION)
-
         val navController = rememberNavController()
         CompositionLocalProvider(navController.localNavController()) {
-            NavHost(navController, sppRepository.getDefaultStartPageName()) {
+            NavHost(navController, ROOT_PAGE_NAME) {
+                composable(ROOT_PAGE_NAME) {}
                 for (page in sppRepository.getAllProviders()) {
                     composable(
-                        route = page.name + page.parameter.navRoute(),
-                        arguments = page.parameter,
+                        route = page.name + page.parameter.navRoute() +
+                            "?$HIGHLIGHT_ENTRY_PARAM_NAME={$HIGHLIGHT_ENTRY_PARAM_NAME}",
+                        arguments = page.parameter + listOf(
+                            // add optional parameters
+                            navArgument(HIGHLIGHT_ENTRY_PARAM_NAME) { defaultValue = "null" }
+                        ),
                     ) { navBackStackEntry ->
                         page.Page(navBackStackEntry.arguments)
                     }
                 }
             }
+        }
 
-            if (!destination.isNullOrEmpty()) {
-                LaunchedEffect(Unit) {
-                    navController.navigate(destination) {
-                        popUpTo(navController.graph.findStartDestination().id) {
-                            inclusive = true
-                        }
+        InitialDestinationNavigator(navController)
+    }
+
+    @Composable
+    private fun InitialDestinationNavigator(navController: NavHostController) {
+        val destinationNavigated = rememberSaveable { mutableStateOf(false) }
+        if (destinationNavigated.value) return
+        destinationNavigated.value = true
+        LaunchedEffect(Unit) {
+            val destination =
+                intent?.getStringExtra(KEY_DESTINATION) ?: sppRepository.getDefaultStartPageName()
+            if (destination.isNotEmpty()) {
+                navController.navigate(destination) {
+                    popUpTo(navController.graph.findStartDestination().id) {
+                        inclusive = true
                     }
                 }
             }
@@ -77,5 +95,6 @@ open class BrowseActivity(
 
     companion object {
         const val KEY_DESTINATION = "spa:SpaActivity:destination"
+        const val HIGHLIGHT_ENTRY_PARAM_NAME = "highlightEntry"
     }
 }

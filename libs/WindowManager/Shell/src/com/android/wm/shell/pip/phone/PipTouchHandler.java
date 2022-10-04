@@ -34,6 +34,7 @@ import android.content.res.Resources;
 import android.graphics.Point;
 import android.graphics.PointF;
 import android.graphics.Rect;
+import android.os.SystemProperties;
 import android.provider.DeviceConfig;
 import android.util.Size;
 import android.view.DisplayCutout;
@@ -69,6 +70,9 @@ public class PipTouchHandler {
 
     private static final String TAG = "PipTouchHandler";
     private static final float DEFAULT_STASH_VELOCITY_THRESHOLD = 18000.f;
+
+    private static final boolean ENABLE_PIP_KEEP_CLEAR_ALGORITHM =
+            SystemProperties.getBoolean("persist.wm.debug.enable_pip_keep_clear_algorithm", false);
 
     // Allow PIP to resize to a slightly bigger state upon touch
     private boolean mEnableResize;
@@ -426,6 +430,9 @@ public class PipTouchHandler {
             if (mTouchState.isUserInteracting()) {
                 // Defer the update of the current movement bounds until after the user finishes
                 // touching the screen
+            } else if (ENABLE_PIP_KEEP_CLEAR_ALGORITHM) {
+                // Ignore moving PiP if keep clear algorithm is enabled, since IME and shelf height
+                // now are accounted for in the keep clear algorithm calculations
             } else {
                 final boolean isExpanded = mMenuState == MENU_STATE_FULL && willResizeMenu();
                 final Rect toMovementBounds = new Rect();
@@ -929,9 +936,18 @@ public class PipTouchHandler {
                     if (mMenuController.isMenuVisible()) {
                         mMenuController.hideMenu(ANIM_TYPE_NONE, false /* resize */);
                     }
-                    if (toExpand) {
+
+                    // the size to toggle to after a double tap
+                    int nextSize = PipDoubleTapHelper
+                            .nextSizeSpec(mPipBoundsState, getUserResizeBounds());
+
+                    // actually toggle to the size chosen
+                    if (nextSize == PipDoubleTapHelper.SIZE_SPEC_MAX) {
                         mPipResizeGestureHandler.setUserResizeBounds(mPipBoundsState.getBounds());
                         animateToMaximizedState(null);
+                    } else if (nextSize == PipDoubleTapHelper.SIZE_SPEC_DEFAULT) {
+                        mPipResizeGestureHandler.setUserResizeBounds(mPipBoundsState.getBounds());
+                        animateToNormalSize(null);
                     } else {
                         animateToUnexpandedState(getUserResizeBounds());
                     }

@@ -55,12 +55,13 @@ public abstract class EconomicPolicy {
     static final int TYPE_ACTION = 1 << SHIFT_TYPE;
     static final int TYPE_REWARD = 2 << SHIFT_TYPE;
 
-    private static final int SHIFT_POLICY = 29;
-    static final int MASK_POLICY = 0b1 << SHIFT_POLICY;
-    static final int POLICY_AM = 0 << SHIFT_POLICY;
-    static final int POLICY_JS = 1 << SHIFT_POLICY;
+    private static final int SHIFT_POLICY = 28;
+    static final int MASK_POLICY = 0b11 << SHIFT_POLICY;
+    // Reserve 0 for the base/common policy.
+    static final int POLICY_AM = 1 << SHIFT_POLICY;
+    static final int POLICY_JS = 2 << SHIFT_POLICY;
 
-    static final int MASK_EVENT = ~0 - (0b111 << SHIFT_POLICY);
+    static final int MASK_EVENT = -1 ^ (MASK_TYPE | MASK_POLICY);
 
     static final int REGULATION_BASIC_INCOME = TYPE_REGULATION | 0;
     static final int REGULATION_BIRTHRIGHT = TYPE_REGULATION | 1;
@@ -70,6 +71,7 @@ public abstract class EconomicPolicy {
     /** App is fully restricted from running in the background. */
     static final int REGULATION_BG_RESTRICTED = TYPE_REGULATION | 5;
     static final int REGULATION_BG_UNRESTRICTED = TYPE_REGULATION | 6;
+    static final int REGULATION_FORCE_STOP = TYPE_REGULATION | 8;
 
     static final int REWARD_NOTIFICATION_SEEN = TYPE_REWARD | 0;
     static final int REWARD_NOTIFICATION_INTERACTION = TYPE_REWARD | 1;
@@ -118,6 +120,7 @@ public abstract class EconomicPolicy {
             REWARD_NOTIFICATION_INTERACTION,
             REWARD_WIDGET_INTERACTION,
             REWARD_OTHER_USER_INTERACTION,
+            JobSchedulerEconomicPolicy.REWARD_APP_INSTALL,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface UtilityReward {
@@ -409,6 +412,8 @@ public abstract class EconomicPolicy {
                 return "BG_RESTRICTED";
             case REGULATION_BG_UNRESTRICTED:
                 return "BG_UNRESTRICTED";
+            case REGULATION_FORCE_STOP:
+                return "FORCE_STOP";
         }
         return "UNKNOWN_REGULATION:" + Integer.toHexString(eventId);
     }
@@ -426,6 +431,8 @@ public abstract class EconomicPolicy {
                 return "REWARD_WIDGET_INTERACTION";
             case REWARD_OTHER_USER_INTERACTION:
                 return "REWARD_OTHER_USER_INTERACTION";
+            case JobSchedulerEconomicPolicy.REWARD_APP_INSTALL:
+                return "REWARD_JOB_APP_INSTALL";
         }
         return "UNKNOWN_REWARD:" + Integer.toHexString(eventId);
     }

@@ -16,7 +16,6 @@
 
 package com.android.wm.shell.flicker.pip
 
-import android.platform.test.annotations.FlakyTest
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import androidx.test.filters.RequiresDevice
@@ -57,18 +56,14 @@ open class PipKeyboardTest(testSpec: FlickerTestParameter) : PipTransition(testS
 
     /** {@inheritDoc}  */
     override val transition: FlickerBuilder.() -> Unit
-        get() = buildTransition(eachRun = false) {
+        get() = buildTransition {
             setup {
-                test {
-                    imeApp.launchViaIntent(wmHelper)
-                    setRotation(testSpec.startRotation)
-                }
+                imeApp.launchViaIntent(wmHelper)
+                setRotation(testSpec.startRotation)
             }
             teardown {
-                test {
-                    imeApp.exit(wmHelper)
-                    setRotation(Surface.ROTATION_0)
-                }
+                imeApp.exit(wmHelper)
+                setRotation(Surface.ROTATION_0)
             }
             transitions {
                 // open the soft keyboard
@@ -79,12 +74,6 @@ open class PipKeyboardTest(testSpec: FlickerTestParameter) : PipTransition(testS
                 imeApp.closeIME(wmHelper)
             }
         }
-
-    /** {@inheritDoc}  */
-    @FlakyTest(bugId = 206753786)
-    @Test
-    override fun statusBarLayerPositionAtStartAndEnd() =
-        super.statusBarLayerPositionAtStartAndEnd()
 
     /**
      * Ensure the pip window remains visible throughout any keyboard interactions

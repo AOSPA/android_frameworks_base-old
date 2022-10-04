@@ -26,6 +26,8 @@ import com.android.systemui.Dumpable
 import com.android.systemui.dock.DockManager
 import com.android.systemui.dump.DumpManager
 import com.android.systemui.plugins.FalsingManager
+import com.android.systemui.plugins.FalsingManager.LOW_PENALTY
+import com.android.systemui.plugins.statusbar.StatusBarStateController
 import com.android.systemui.statusbar.phone.CentralSurfaces
 import com.android.systemui.statusbar.phone.dagger.CentralSurfacesComponent
 import com.android.systemui.tuner.TunerService
@@ -35,12 +37,12 @@ import javax.inject.Inject
 
 /**
  * If tap and/or double tap to wake is enabled, this gestureListener will wake the display on
- * tap/double tap when the device is pulsing (AoD 2). Taps are gated by the proximity sensor and
- * falsing manager.
+ * tap/double tap when the device is pulsing (AoD2) or transitioning to AoD. Taps are gated by the
+ * proximity sensor and falsing manager.
  *
- * Touches go through the [NotificationShadeWindowViewController] when the device is pulsing.
- * Otherwise, if the device is dozing and NOT pulsing, wake-ups are handled by
- * [com.android.systemui.doze.DozeSensors].
+ * Touches go through the [NotificationShadeWindowViewController] when the device is dozing but the
+ * screen is still ON and not in the true AoD display state. When the device is in the true AoD
+ * display state, wake-ups are handled by [com.android.systemui.doze.DozeSensors].
  */
 @CentralSurfacesComponent.CentralSurfacesScope
 class PulsingGestureListener @Inject constructor(
@@ -49,6 +51,7 @@ class PulsingGestureListener @Inject constructor(
         private val dockManager: DockManager,
         private val centralSurfaces: CentralSurfaces,
         private val ambientDisplayConfiguration: AmbientDisplayConfiguration,
+        private val statusBarStateController: StatusBarStateController,
         tunerService: TunerService,
         dumpManager: DumpManager
 ) : GestureDetector.SimpleOnGestureListener(), Dumpable {
@@ -73,11 +76,12 @@ class PulsingGestureListener @Inject constructor(
         dumpManager.registerDumpable(this)
     }
 
-    override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-        if (singleTapEnabled &&
+    override fun onSingleTapUp(e: MotionEvent): Boolean {
+        if (statusBarStateController.isDozing &&
+                singleTapEnabled &&
                 !dockManager.isDocked &&
                 !falsingManager.isProximityNear &&
-                !falsingManager.isFalseTap(FalsingManager.MODERATE_PENALTY)
+                !falsingManager.isFalseTap(LOW_PENALTY)
         ) {
             centralSurfaces.wakeUpIfDozing(
                     SystemClock.uptimeMillis(),
@@ -88,8 +92,16 @@ class PulsingGestureListener @Inject constructor(
         return false
     }
 
-    override fun onDoubleTap(e: MotionEvent): Boolean {
-        if ((doubleTapEnabled || singleTapEnabled) &&
+    /**
+     * Receives [MotionEvent.ACTION_DOWN], [MotionEvent.ACTION_MOVE], and [MotionEvent.ACTION_UP]
+     * motion events for a double tap.
+     */
+    override fun onDoubleTapEvent(e: MotionEvent): Boolean {
+        // React to the [MotionEvent.ACTION_UP] event after double tap is detected. Falsing
+        // checks MUST be on the ACTION_UP event.
+        if (e.actionMasked == MotionEvent.ACTION_UP &&
+                statusBarStateController.isDozing &&
+                (doubleTapEnabled || singleTapEnabled) &&
                 !falsingManager.isProximityNear &&
                 !falsingManager.isFalseDoubleTap
         ) {

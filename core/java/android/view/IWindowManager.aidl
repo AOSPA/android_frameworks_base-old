@@ -67,6 +67,7 @@ import android.view.SurfaceControl;
 import android.view.displayhash.DisplayHash;
 import android.view.displayhash.VerifiedDisplayHash;
 import android.window.ITaskFpsCallback;
+import android.window.ScreenCapture;
 
 /**
  * System private interface to the window manager.
@@ -114,6 +115,7 @@ interface IWindowManager
     @UnsupportedAppUsage
     int getInitialDisplayDensity(int displayId);
     int getBaseDisplayDensity(int displayId);
+    int getDisplayIdByUniqueId(String uniqueId);
     void setForcedDisplayDensityForUser(int displayId, int density, int userId);
     void clearForcedDisplayDensityForUser(int displayId, int userId);
     void setForcedDisplayScalingMode(int displayId, int mode); // 0 = auto, 1 = disable
@@ -967,4 +969,7 @@ interface IWindowManager
      * treatment.
      */
     boolean isLetterboxBackgroundMultiColored();
+
+    oneway void captureDisplay(int displayId, in @nullable ScreenCapture.CaptureArgs captureArgs,
+            in ScreenCapture.ScreenCaptureListener listener);
 }

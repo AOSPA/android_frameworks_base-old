@@ -82,7 +82,6 @@ import android.content.pm.IDexModuleRegisterCallback;
 import android.content.pm.IOnChecksumsReadyListener;
 import android.content.pm.IPackageDataObserver;
 import android.content.pm.IPackageDeleteObserver2;
-import android.content.pm.IPackageInstallObserver2;
 import android.content.pm.IPackageLoadingProgressCallback;
 import android.content.pm.IPackageManager;
 import android.content.pm.IPackageMoveObserver;
@@ -204,13 +203,14 @@ import com.android.server.pm.dex.DexManager;
 import com.android.server.pm.dex.ViewCompiler;
 import com.android.server.pm.parsing.PackageInfoUtils;
 import com.android.server.pm.parsing.PackageParser2;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
+import com.android.server.pm.parsing.pkg.AndroidPackageInternal;
 import com.android.server.pm.parsing.pkg.AndroidPackageUtils;
 import com.android.server.pm.parsing.pkg.ParsedPackage;
 import com.android.server.pm.permission.LegacyPermissionManagerInternal;
 import com.android.server.pm.permission.LegacyPermissionManagerService;
 import com.android.server.pm.permission.PermissionManagerService;
 import com.android.server.pm.permission.PermissionManagerServiceInternal;
+import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.PackageStateInternal;
 import com.android.server.pm.pkg.PackageUserState;
 import com.android.server.pm.pkg.PackageUserStateInternal;
@@ -826,10 +826,10 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
     @Watched(manual = true)
     private final ResolveInfo mInstantAppInstallerInfo = new ResolveInfo();
 
-    private final Map<String, Pair<PackageInstalledInfo, IPackageInstallObserver2>>
+    private final Map<String, InstallRequest>
             mNoKillInstallObservers = Collections.synchronizedMap(new HashMap<>());
 
-    private final Map<String, Pair<PackageInstalledInfo, IPackageInstallObserver2>>
+    private final Map<String, InstallRequest>
             mPendingKillInstallObservers = Collections.synchronizedMap(new HashMap<>());
 
     // Internal interface for permission manager
@@ -908,7 +908,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
     // Stores a list of users whose package restrictions file needs to be updated
     final ArraySet<Integer> mDirtyUsers = new ArraySet<>();
 
-    final SparseArray<PostInstallData> mRunningInstalls = new SparseArray<>();
+    final SparseArray<InstallRequest> mRunningInstalls = new SparseArray<>();
     int mNextInstallToken = 1;  // nonzero; will be wrapped back to 1 when ++ overflows
 
     final @NonNull String[] mRequiredVerifierPackages;
@@ -1156,32 +1156,30 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
     }
 
     void notifyInstallObserver(String packageName, boolean killApp) {
-        final Pair<PackageInstalledInfo, IPackageInstallObserver2> pair =
+        final InstallRequest installRequest =
                 killApp ? mPendingKillInstallObservers.remove(packageName)
                         : mNoKillInstallObservers.remove(packageName);
 
-        if (pair != null) {
-            notifyInstallObserver(pair.first, pair.second);
+        if (installRequest != null) {
+            notifyInstallObserver(installRequest);
         }
     }
 
-    void notifyInstallObserver(PackageInstalledInfo info,
-            IPackageInstallObserver2 installObserver) {
-        if (installObserver != null) {
+    void notifyInstallObserver(InstallRequest request) {
+        if (request.getObserver() != null) {
             try {
-                Bundle extras = extrasForInstallResult(info);
-                installObserver.onPackageInstalled(info.mName, info.mReturnCode,
-                        info.mReturnMsg, extras);
+                Bundle extras = extrasForInstallResult(request);
+                request.getObserver().onPackageInstalled(request.getName(),
+                        request.getReturnCode(), request.getReturnMsg(), extras);
             } catch (RemoteException e) {
                 Slog.i(TAG, "Observer no longer exists.");
             }
         }
     }
 
-    void scheduleDeferredNoKillInstallObserver(PackageInstalledInfo info,
-            IPackageInstallObserver2 observer) {
-        String packageName = info.mPkg.getPackageName();
-        mNoKillInstallObservers.put(packageName, Pair.create(info, observer));
+    void scheduleDeferredNoKillInstallObserver(InstallRequest request) {
+        String packageName = request.getPkg().getPackageName();
+        mNoKillInstallObservers.put(packageName, request);
         Message message = mHandler.obtainMessage(DEFERRED_NO_KILL_INSTALL_OBSERVER, packageName);
         mHandler.sendMessageDelayed(message, DEFERRED_NO_KILL_INSTALL_OBSERVER_DELAY_MS);
     }
@@ -1197,10 +1195,9 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                 delay ? getPruneUnusedSharedLibrariesDelay() : 0);
     }
 
-    void scheduleDeferredPendingKillInstallObserver(PackageInstalledInfo info,
-            IPackageInstallObserver2 observer) {
-        final String packageName = info.mPkg.getPackageName();
-        mPendingKillInstallObservers.put(packageName, Pair.create(info, observer));
+    void scheduleDeferredPendingKillInstallObserver(InstallRequest request) {
+        final String packageName = request.getPkg().getPackageName();
+        mPendingKillInstallObservers.put(packageName, request);
         final Message message = mHandler.obtainMessage(DEFERRED_PENDING_KILL_INSTALL_OBSERVER,
                 packageName);
         mHandler.sendMessageDelayed(message, DEFERRED_PENDING_KILL_INSTALL_OBSERVER_DELAY_MS);
@@ -1313,21 +1310,22 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         }
     }
 
-    private static Bundle extrasForInstallResult(PackageInstalledInfo res) {
+    private static Bundle extrasForInstallResult(InstallRequest request) {
         Bundle extras = null;
-        switch (res.mReturnCode) {
+        switch (request.getReturnCode()) {
             case PackageManager.INSTALL_FAILED_DUPLICATE_PERMISSION: {
                 extras = new Bundle();
                 extras.putString(PackageManager.EXTRA_FAILURE_EXISTING_PERMISSION,
-                        res.mOrigPermission);
+                        request.getOrigPermission());
                 extras.putString(PackageManager.EXTRA_FAILURE_EXISTING_PACKAGE,
-                        res.mOrigPackage);
+                        request.getOrigPackage());
                 break;
             }
             case PackageManager.INSTALL_SUCCEEDED: {
                 extras = new Bundle();
                 extras.putBoolean(Intent.EXTRA_REPLACING,
-                        res.mRemovedInfo != null && res.mRemovedInfo.mRemovedPackage != null);
+                        request.getRemovedInfo() != null
+                                && request.getRemovedInfo().mRemovedPackage != null);
                 break;
             }
         }
@@ -3134,14 +3132,14 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         // state for observers to see the FIRST_LAUNCH signal.
         mHandler.post(() -> {
             for (int i = 0; i < mRunningInstalls.size(); i++) {
-                final PostInstallData data = mRunningInstalls.valueAt(i);
-                if (data.res.mReturnCode != PackageManager.INSTALL_SUCCEEDED) {
+                final InstallRequest installRequest = mRunningInstalls.valueAt(i);
+                if (installRequest.getReturnCode() != PackageManager.INSTALL_SUCCEEDED) {
                     continue;
                 }
-                if (packageName.equals(data.res.mPkg.getPackageName())) {
+                if (packageName.equals(installRequest.getPkg().getPackageName())) {
                     // right package; but is it for the right user?
-                    for (int uIndex = 0; uIndex < data.res.mNewUsers.length; uIndex++) {
-                        if (userId == data.res.mNewUsers[uIndex]) {
+                    for (int uIndex = 0; uIndex < installRequest.getNewUsers().length; uIndex++) {
+                        if (userId == installRequest.getNewUsers()[uIndex]) {
                             if (DEBUG_BACKUP) {
                                 Slog.i(TAG, "Package " + packageName
                                         + " being restored so deferring FIRST_LAUNCH");
@@ -6730,6 +6728,19 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
     }
 
     void forEachPackage(@NonNull Computer snapshot, Consumer<AndroidPackage> consumer) {
+        final ArrayMap<String, ? extends PackageStateInternal> packageStates =
+                snapshot.getPackageStates();
+        int size = packageStates.size();
+        for (int index = 0; index < size; index++) {
+            PackageStateInternal packageState = packageStates.valueAt(index);
+            if (packageState.getPkg() != null) {
+                consumer.accept(packageState.getPkg());
+            }
+        }
+    }
+
+    void forEachPackageInternal(@NonNull Computer snapshot,
+            @NonNull Consumer<AndroidPackageInternal> consumer) {
         final ArrayMap<String, ? extends PackageStateInternal> packageStates =
                 snapshot.getPackageStates();
         int size = packageStates.size();

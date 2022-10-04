@@ -458,6 +458,7 @@ class MediaCarouselController @Inject constructor(
         val existingPlayer = MediaPlayerData.getMediaPlayer(key)
         val curVisibleMediaKey = MediaPlayerData.playerKeys()
                 .elementAtOrNull(mediaCarouselScrollHandler.visibleMediaIndex)
+        val isCurVisibleMediaPlaying = curVisibleMediaKey?.data?.isPlaying
         if (existingPlayer == null) {
             val newPlayer = mediaControlPanelFactory.get()
             newPlayer.attachPlayer(MediaViewHolder.create(
@@ -472,13 +473,23 @@ class MediaCarouselController @Inject constructor(
                 key, data, newPlayer, systemClock, isSsReactivated, debugLogger
             )
             updatePlayerToState(newPlayer, noAnimation = true)
-            reorderAllPlayers(curVisibleMediaKey)
+            if (data.active) {
+                reorderAllPlayers(curVisibleMediaKey)
+            } else {
+                needsReordering = true
+            }
         } else {
             existingPlayer.bindPlayer(data, key)
             MediaPlayerData.addMediaPlayer(
                 key, data, existingPlayer, systemClock, isSsReactivated, debugLogger
             )
-            if (isReorderingAllowed || shouldScrollToActivePlayer) {
+            // Check the playing status of both current visible and new media players
+            // To make sure we scroll to the active playing media card.
+            if (isReorderingAllowed ||
+                    shouldScrollToActivePlayer &&
+                    data.isPlaying == true &&
+                    isCurVisibleMediaPlaying == false
+            ) {
                 reorderAllPlayers(curVisibleMediaKey)
             } else {
                 needsReordering = true

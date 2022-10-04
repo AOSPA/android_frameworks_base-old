@@ -40,8 +40,9 @@ import static android.view.WindowManager.TransitionFlags;
 import static android.view.WindowManager.TransitionType;
 import static android.view.WindowManager.transitTypeToString;
 import static android.window.TransitionInfo.FLAG_DISPLAY_HAS_ALERT_WINDOWS;
+import static android.window.TransitionInfo.FLAG_FILLS_TASK;
+import static android.window.TransitionInfo.FLAG_IN_TASK_WITH_EMBEDDED_ACTIVITY;
 import static android.window.TransitionInfo.FLAG_IS_DISPLAY;
-import static android.window.TransitionInfo.FLAG_IS_EMBEDDED;
 import static android.window.TransitionInfo.FLAG_IS_INPUT_METHOD;
 import static android.window.TransitionInfo.FLAG_IS_VOICE_INTERACTION;
 import static android.window.TransitionInfo.FLAG_IS_WALLPAPER;
@@ -77,6 +78,7 @@ import android.view.Display;
 import android.view.SurfaceControl;
 import android.view.WindowManager;
 import android.window.RemoteTransition;
+import android.window.ScreenCapture;
 import android.window.TransitionInfo;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -569,17 +571,16 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
                 t.setLayer(targetLeash, target.getLastLayer());
                 target.getRelativePosition(tmpPos);
                 t.setPosition(targetLeash, tmpPos.x, tmpPos.y);
-                final Rect clipRect;
                 // No need to clip the display in case seeing the clipped content when during the
                 // display rotation. No need to clip activities because they rely on clipping on
                 // task layers.
                 if (target.asDisplayContent() != null || target.asActivityRecord() != null) {
-                    clipRect = null;
+                    t.setCrop(targetLeash, null /* crop */);
                 } else {
-                    clipRect = target.getRequestedOverrideBounds();
-                    clipRect.offset(-tmpPos.x, -tmpPos.y);
+                    // Crop to the requested bounds.
+                    final Rect clipRect = target.getRequestedOverrideBounds();
+                    t.setWindowCrop(targetLeash, clipRect.width(), clipRect.height());
                 }
-                t.setCrop(targetLeash, clipRect);
                 t.setCornerRadius(targetLeash, 0);
                 t.setShadowRadius(targetLeash, 0);
                 t.setMatrix(targetLeash, 1, 0, 0, 1);
@@ -1839,13 +1840,35 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
                     flags |= FLAG_WILL_IME_SHOWN;
                 }
             }
+            Task parentTask = null;
             final ActivityRecord record = wc.asActivityRecord();
             if (record != null) {
+                parentTask = record.getTask();
                 if (record.mUseTransferredAnimation) {
                     flags |= FLAG_STARTING_WINDOW_TRANSFER_RECIPIENT;
                 }
                 if (record.mVoiceInteraction) {
                     flags |= FLAG_IS_VOICE_INTERACTION;
+                }
+            }
+            final TaskFragment taskFragment = wc.asTaskFragment();
+            if (taskFragment != null && task == null) {
+                parentTask = taskFragment.getTask();
+            }
+            if (parentTask != null) {
+                if (parentTask.forAllLeafTaskFragments(TaskFragment::isEmbedded)) {
+                    // Whether this is in a Task with embedded activity.
+                    flags |= FLAG_IN_TASK_WITH_EMBEDDED_ACTIVITY;
+                }
+                final Rect taskBounds = parentTask.getBounds();
+                final Rect startBounds = mAbsoluteBounds;
+                final Rect endBounds = wc.getBounds();
+                if (taskBounds.width() == startBounds.width()
+                        && taskBounds.height() == startBounds.height()
+                        && taskBounds.width() == endBounds.width()
+                        && taskBounds.height() == endBounds.height()) {
+                    // Whether the container fills the Task bounds before and after the transition.
+                    flags |= FLAG_FILLS_TASK;
                 }
             }
             final DisplayContent dc = wc.asDisplayContent();
@@ -1863,9 +1886,6 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
             }
             if (occludesKeyguard(wc)) {
                 flags |= FLAG_OCCLUDES_KEYGUARD;
-            }
-            if (wc.isEmbedded()) {
-                flags |= FLAG_IS_EMBEDDED;
             }
             return flags;
         }
@@ -2106,14 +2126,14 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
 
             Rect cropBounds = new Rect(bounds);
             cropBounds.offsetTo(0, 0);
-            SurfaceControl.LayerCaptureArgs captureArgs =
-                    new SurfaceControl.LayerCaptureArgs.Builder(wc.getSurfaceControl())
+            ScreenCapture.LayerCaptureArgs captureArgs =
+                    new ScreenCapture.LayerCaptureArgs.Builder(wc.getSurfaceControl())
                             .setSourceCrop(cropBounds)
                             .setCaptureSecureLayers(true)
                             .setAllowProtected(true)
                             .build();
-            SurfaceControl.ScreenshotHardwareBuffer screenshotBuffer =
-                    SurfaceControl.captureLayers(captureArgs);
+            ScreenCapture.ScreenshotHardwareBuffer screenshotBuffer =
+                    ScreenCapture.captureLayers(captureArgs);
             final HardwareBuffer buffer = screenshotBuffer == null ? null
                     : screenshotBuffer.getHardwareBuffer();
             if (buffer == null || buffer.getWidth() <= 1 || buffer.getHeight() <= 1) {
@@ -2121,8 +2141,12 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
                 Slog.w(TAG, "Failed to capture screenshot for " + wc);
                 return false;
             }
+            final boolean isDisplayRotation = wc.asDisplayContent() != null
+                    && wc.asDisplayContent().isRotationChanging();
+            // Some tests may check the name "RotationLayer" to detect display rotation.
+            final String name = isDisplayRotation ? "RotationLayer" : "transition snapshot: " + wc;
             SurfaceControl snapshotSurface = wc.makeAnimationLeash()
-                    .setName("transition snapshot: " + wc.toString())
+                    .setName(name)
                     .setOpaque(true)
                     .setParent(wc.getSurfaceControl())
                     .setSecure(screenshotBuffer.containsSecureLayers())
@@ -2132,9 +2156,8 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
             mFrozen.add(wc);
             final ChangeInfo changeInfo = Objects.requireNonNull(mChanges.get(wc));
             changeInfo.mSnapshot = snapshotSurface;
-            if (wc.asDisplayContent() != null) {
-                // This isn't cheap, so only do it for rotations: assume display-level is rotate
-                // since most of the time it is.
+            if (isDisplayRotation) {
+                // This isn't cheap, so only do it for display rotations.
                 changeInfo.mSnapshotLuma = RotationAnimationUtils.getMedianBorderLuma(
                         screenshotBuffer.getHardwareBuffer(), screenshotBuffer.getColorSpace());
             }

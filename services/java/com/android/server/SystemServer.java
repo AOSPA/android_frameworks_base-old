@@ -931,6 +931,9 @@ public final class SystemServer implements Dumpable {
             startCoreServices(t);
             startOtherServices(t);
             startApexServices(t);
+            // Only update the timeout after starting all the services so that we use
+            // the default timeout to start system server.
+            updateWatchdogTimeout(t);
         } catch (Throwable ex) {
             Slog.e("System", "******************************************");
             Slog.e("System", "************ Failure starting system services", ex);
@@ -1502,10 +1505,6 @@ public final class SystemServer implements Dumpable {
             mActivityManagerService.getContentProviderHelper().installSystemProviders();
             // Now that SettingsProvider is ready, reactivate SQLiteCompatibilityWalFlags
             SQLiteCompatibilityWalFlags.reset();
-            t.traceEnd();
-
-            t.traceBegin("UpdateWatchdogTimeout");
-            Watchdog.getInstance().registerSettingsObserver(context);
             t.traceEnd();
 
             // Records errors and logs, for example wtf()
@@ -3106,6 +3105,12 @@ public final class SystemServer implements Dumpable {
         mSystemServiceManager.sealStartedServices();
 
         t.traceEnd(); // startApexServices
+    }
+
+    private void updateWatchdogTimeout(@NonNull TimingsTraceAndSlog t) {
+        t.traceBegin("UpdateWatchdogTimeout");
+        Watchdog.getInstance().registerSettingsObserver(mSystemContext);
+        t.traceEnd();
     }
 
     private boolean deviceHasConfigString(@NonNull Context context, @StringRes int resId) {

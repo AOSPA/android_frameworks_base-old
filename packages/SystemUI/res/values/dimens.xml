@@ -520,7 +520,7 @@
     <dimen name="qs_tile_margin_vertical">@dimen/qs_tile_margin_horizontal</dimen>
     <dimen name="qs_tile_margin_top_bottom">4dp</dimen>
     <dimen name="qs_brightness_margin_top">8dp</dimen>
-    <dimen name="qs_brightness_margin_bottom">24dp</dimen>
+    <dimen name="qs_brightness_margin_bottom">16dp</dimen>
     <dimen name="qqs_layout_margin_top">16dp</dimen>
     <dimen name="qqs_layout_padding_bottom">24dp</dimen>
 
@@ -945,6 +945,8 @@
     <dimen name="biometric_dialog_medium_to_large_translation_offset">100dp</dimen>
     <!-- Y translation for credential contents when animating in -->
     <dimen name="biometric_dialog_credential_translation_offset">60dp</dimen>
+    <dimen name="biometric_dialog_width">240dp</dimen>
+    <dimen name="biometric_dialog_height">240dp</dimen>
 
     <!-- Biometric Auth Credential values -->
     <dimen name="biometric_auth_icon_size">48dp</dimen>
@@ -1223,6 +1225,17 @@
          fade and expand. -->
     <dimen name="lockscreen_shade_qs_transition_distance">@dimen/lockscreen_shade_full_transition_distance</dimen>
 
+    <!-- Distance delay for the QS transition to start during the lockscreen shade expansion. -->
+    <dimen name="lockscreen_shade_qs_transition_delay">0dp</dimen>
+
+    <!-- Distance that it takes to complete the QS "squish" transition during the lockscreen shade
+         expansion. -->
+    <dimen name="lockscreen_shade_qs_squish_transition_distance">@dimen/lockscreen_shade_qs_transition_distance</dimen>
+
+    <!-- The fraction at which the QS "squish" transition should start during the lockscreen shade
+         expansion. 0 is fully collapsed, 1 is fully expanded. -->
+    <item type="dimen" format="float" name="lockscreen_shade_qs_squish_start_fraction">0</item>
+
     <!-- Distance that the full shade transition takes in order for depth of the wallpaper to fully
          change.  -->
     <dimen name="lockscreen_shade_depth_controller_transition_distance">@dimen/lockscreen_shade_full_transition_distance</dimen>
@@ -1464,7 +1477,7 @@
     <dimen name="dream_overlay_camera_mic_off_indicator_size">8dp</dimen>
     <dimen name="dream_overlay_notification_indicator_size">6dp</dimen>
     <dimen name="dream_overlay_grey_chip_width">56dp</dimen>
-    <dimen name="dream_overlay_status_bar_extra_margin">16dp</dimen>
+    <dimen name="dream_overlay_status_bar_extra_margin">8dp</dimen>
 
     <!-- Dream overlay complications related dimensions -->
     <dimen name="dream_overlay_complication_clock_time_text_size">86sp</dimen>
@@ -1547,10 +1560,20 @@
     <dimen name="broadcast_dialog_btn_text_size">16sp</dimen>
     <dimen name="broadcast_dialog_btn_minHeight">44dp</dimen>
     <dimen name="broadcast_dialog_margin">16dp</dimen>
+
+    <!-- Shadow for dream overlay clock complication -->
     <dimen name="dream_overlay_clock_key_text_shadow_dx">0dp</dimen>
     <dimen name="dream_overlay_clock_key_text_shadow_dy">0dp</dimen>
-    <dimen name="dream_overlay_clock_key_text_shadow_radius">5dp</dimen>
+    <dimen name="dream_overlay_clock_key_text_shadow_radius">3dp</dimen>
     <dimen name="dream_overlay_clock_ambient_text_shadow_dx">0dp</dimen>
     <dimen name="dream_overlay_clock_ambient_text_shadow_dy">0dp</dimen>
     <dimen name="dream_overlay_clock_ambient_text_shadow_radius">1dp</dimen>
+
+    <!-- Shadow for dream overlay status bar complications -->
+    <dimen name="dream_overlay_status_bar_key_text_shadow_dx">0.5dp</dimen>
+    <dimen name="dream_overlay_status_bar_key_text_shadow_dy">0.5dp</dimen>
+    <dimen name="dream_overlay_status_bar_key_text_shadow_radius">1dp</dimen>
+    <dimen name="dream_overlay_status_bar_ambient_text_shadow_dx">0.5dp</dimen>
+    <dimen name="dream_overlay_status_bar_ambient_text_shadow_dy">0.5dp</dimen>
+    <dimen name="dream_overlay_status_bar_ambient_text_shadow_radius">2dp</dimen>
 </resources>

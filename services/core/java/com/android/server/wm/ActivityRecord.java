@@ -1534,8 +1534,17 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         this.task = newTask;
 
         if (shouldStartChangeTransition(newParent, oldParent)) {
-            // Animate change transition on TaskFragment level to get the correct window crop.
-            newParent.initializeChangeTransition(getBounds(), getSurfaceControl());
+            if (mTransitionController.isShellTransitionsEnabled()) {
+                // For Shell transition, call #initializeChangeTransition directly to take the
+                // screenshot at the Activity level. And Shell will be in charge of handling the
+                // surface reparent and crop.
+                initializeChangeTransition(getBounds());
+            } else {
+                // For legacy app transition, we want to take a screenshot of the Activity surface,
+                // but animate the change transition on TaskFragment level to get the correct window
+                // crop.
+                newParent.initializeChangeTransition(getBounds(), getSurfaceControl());
+            }
         }
 
         super.onParentChanged(newParent, oldParent);
@@ -2135,7 +2144,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
         mActivityRecordInputSink = new ActivityRecordInputSink(this, sourceRecord);
 
-        updateEnterpriseThumbnailDrawable(mAtmService.mUiContext);
+        updateEnterpriseThumbnailDrawable(mAtmService.getUiContext());
 
         if (mPerf == null)
             mPerf = new BoostFramework();
@@ -2765,6 +2774,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
 
         final StartingSurfaceController.StartingSurface surface;
+        final WindowState startingWindow = mStartingWindow;
         final boolean animate;
         if (mStartingData != null) {
             animate = prepareAnimation && mStartingData.needRevealAnimation()
@@ -2789,7 +2799,19 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             return;
         }
 
-        surface.remove(animate);
+        if (animate && mTransitionController.inCollectingTransition(startingWindow)
+                && startingWindow.cancelAndRedraw()) {
+            // Defer remove starting window after transition start.
+            // If splash screen window was in collecting, the client side is unable to draw because
+            // of Session#cancelDraw, which will blocking the remove animation.
+            startingWindow.mSyncTransaction.addTransactionCommittedListener(Runnable::run, () -> {
+                synchronized (mAtmService.mGlobalLock) {
+                    surface.remove(true);
+                }
+            });
+        } else {
+            surface.remove(animate);
+        }
     }
 
     /**
@@ -7548,7 +7570,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
         final Rect frame = win.getRelativeFrame();
         final Drawable thumbnailDrawable = task.mUserId == mWmService.mCurrentUserId
-                ? mAtmService.mUiContext.getDrawable(R.drawable.ic_account_circle)
+                ? mAtmService.getUiContext().getDrawable(R.drawable.ic_account_circle)
                 : mEnterpriseThumbnailDrawable;
         final HardwareBuffer thumbnail = getDisplayContent().mAppTransition
                 .createCrossProfileAppsThumbnail(thumbnailDrawable, frame);
@@ -8148,11 +8170,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // Horizontal position
         int offsetX = 0;
         if (parentBounds.width() != screenResolvedBounds.width()) {
-            if (screenResolvedBounds.width() >= parentAppBounds.width()) {
-                // If resolved bounds overlap with insets, center within app bounds.
-                offsetX = getCenterOffset(
-                        parentAppBounds.width(), screenResolvedBounds.width());
-            } else {
+            if (screenResolvedBounds.width() <= parentAppBounds.width()) {
                 float positionMultiplier =
                         mLetterboxUiController.getHorizontalPositionMultiplier(
                                 newParentConfiguration);
@@ -8164,11 +8182,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // Vertical position
         int offsetY = 0;
         if (parentBounds.height() != screenResolvedBounds.height()) {
-            if (screenResolvedBounds.height() >= parentAppBounds.height()) {
-                // If resolved bounds overlap with insets, center within app bounds.
-                offsetY = getCenterOffset(
-                        parentAppBounds.height(), screenResolvedBounds.height());
-            } else {
+            if (screenResolvedBounds.height() <= parentAppBounds.height()) {
                 float positionMultiplier =
                         mLetterboxUiController.getVerticalPositionMultiplier(
                                 newParentConfiguration);
@@ -8184,6 +8198,15 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             offsetBounds(resolvedConfig, dx, dy);
         } else {
             offsetBounds(resolvedConfig, offsetX, offsetY);
+        }
+
+        // If the top is aligned with parentAppBounds add the vertical insets back so that the app
+        // content aligns with the status bar
+        if (resolvedConfig.windowConfiguration.getAppBounds().top == parentAppBounds.top) {
+            resolvedConfig.windowConfiguration.getBounds().top = parentBounds.top;
+            if (mSizeCompatBounds != null) {
+                mSizeCompatBounds.top = parentBounds.top;
+            }
         }
 
         // Since bounds has changed, the configuration needs to be computed accordingly.
@@ -8563,7 +8586,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // Above coordinates are in "@" space, now place "*" and "#" to screen space.
         final boolean fillContainer = resolvedBounds.equals(containingBounds);
         final int screenPosX = fillContainer ? containerBounds.left : containerAppBounds.left;
-        final int screenPosY  = fillContainer ? containerBounds.top : containerAppBounds.top;
+        final int screenPosY = fillContainer ? containerBounds.top : containerAppBounds.top;
 
         if (screenPosX != 0 || screenPosY != 0) {
             if (mSizeCompatBounds != null) {
@@ -8909,24 +8932,22 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // Also account for the insets (e.g. display cutouts, navigation bar), which will be
         // clipped away later in {@link Task#computeConfigResourceOverrides()}, i.e., the out
         // bounds are the app bounds restricted by aspect ratio + clippable insets. Otherwise,
-        // the app bounds would end up too small.
+        // the app bounds would end up too small. To achieve this we will also add clippable insets
+        // when the corresponding dimension fully fills the parent
+
         int right = activityWidth + containingAppBounds.left;
+        int left = containingAppBounds.left;
         if (right >= containingAppBounds.right) {
-            right += containingBounds.right - containingAppBounds.right;
+            right = containingBounds.right;
+            left = containingBounds.left;
         }
         int bottom = activityHeight + containingAppBounds.top;
+        int top = containingAppBounds.top;
         if (bottom >= containingAppBounds.bottom) {
-            bottom += containingBounds.bottom - containingAppBounds.bottom;
+            bottom = containingBounds.bottom;
+            top = containingBounds.top;
         }
-        outBounds.set(containingBounds.left, containingBounds.top, right, bottom);
-
-        // If the bounds are restricted by fixed aspect ratio, then out bounds should be put in the
-        // container app bounds. Otherwise the entire container bounds are available.
-        if (!outBounds.equals(containingBounds)) {
-            // The horizontal position should not cover insets (e.g. display cutout).
-            outBounds.left = containingAppBounds.left;
-        }
-
+        outBounds.set(left, top, right, bottom);
         return true;
     }
 

@@ -40,12 +40,12 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
 import org.junit.runners.Parameterized
+
 /**
  * Test dismiss split screen by dragging the divider bar.
  *
  * To run this test: `atest WMShellFlickerTests:DismissSplitScreenByDivider`
  */
-@IwTest(focusArea = "sysui")
 @RequiresDevice
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
@@ -57,9 +57,7 @@ class DismissSplitScreenByDivider (testSpec: FlickerTestParameter) : SplitScreen
         get() = {
             super.transition(this)
             setup {
-                eachRun {
-                    SplitScreenHelper.enterSplit(wmHelper, tapl, primaryApp, secondaryApp)
-                }
+                SplitScreenHelper.enterSplit(wmHelper, tapl, primaryApp, secondaryApp)
             }
             transitions {
                 if (tapl.isTablet) {
@@ -75,23 +73,28 @@ class DismissSplitScreenByDivider (testSpec: FlickerTestParameter) : SplitScreen
             }
         }
 
+    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun splitScreenDividerBecomesInvisible() = testSpec.splitScreenDividerBecomesInvisible()
 
+    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun primaryAppLayerBecomesInvisible() = testSpec.layerBecomesInvisible(primaryApp)
 
+    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun secondaryAppLayerIsVisibleAtEnd() = testSpec.layerIsVisibleAtEnd(secondaryApp)
 
+    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun primaryAppBoundsBecomesInvisible() = testSpec.splitAppLayerBoundsBecomesInvisible(
         primaryApp, landscapePosLeft = tapl.isTablet, portraitPosTop = false)
 
+    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun secondaryAppBoundsIsFullscreenAtEnd() {
@@ -114,10 +117,12 @@ class DismissSplitScreenByDivider (testSpec: FlickerTestParameter) : SplitScreen
         }
     }
 
+    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun primaryAppWindowBecomesInvisible() = testSpec.appWindowBecomesInvisible(primaryApp)
 
+    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun secondaryAppWindowIsVisibleAtEnd() = testSpec.appWindowIsVisibleAtEnd(secondaryApp)

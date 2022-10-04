@@ -203,6 +203,15 @@ public final class DeviceConfig {
     @SystemApi
     public static final String NAMESPACE_TETHERING = "tethering";
 
+
+    /**
+     * Namespace for Nearby module.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String NAMESPACE_NEARBY = "nearby";
+
     /**
      * Namespace for content capture feature used by on-device machine intelligence
      * to provide suggestions in a privacy-safe manner.
@@ -774,6 +783,30 @@ public final class DeviceConfig {
      * @hide
      */
     public static final String NAMESPACE_WEAR = "wear";
+
+    /**
+     * Namespace for features relating to MBA transparency metadata.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String NAMESPACE_TRANSPARENCY_METADATA = "transparency_metadata";
+
+    /**
+     * Namespace for the input method manager platform features.
+     *
+     * @hide
+     */
+    @TestApi
+    public static final String NAMESPACE_INPUT_METHOD_MANAGER = "input_method_manager";
+
+    /**
+     * Namespace for backup and restore service related features.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String NAMESPACE_BACKUP_AND_RESTORE = "backup_and_restore";
 
     private static final Object sLock = new Object();
     @GuardedBy("sLock")

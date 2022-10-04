@@ -51,7 +51,7 @@ import com.android.server.pm.PackageManagerException;
 import com.android.server.pm.UserManagerService;
 import com.android.server.pm.UserNeedsBadgingCache;
 import com.android.server.pm.parsing.PackageInfoUtils;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
+import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.PackageStateInternal;
 import com.android.server.pm.pkg.PackageStateUtils;
 import com.android.server.pm.pkg.PackageUserStateInternal;
@@ -930,12 +930,14 @@ public class ComponentResolver extends ComponentResolverLocked implements
         }
 
         @Override
-        protected boolean isFilterStopped(@Nullable PackageStateInternal packageState,
+        protected boolean isFilterStopped(@NonNull Computer computer, F filter,
                 @UserIdInt int userId) {
             if (!mUserManager.exists(userId)) {
                 return true;
             }
 
+            final PackageStateInternal packageState = computer.getPackageStateInternal(
+                    filter.first.getPackageName());
             if (packageState == null || packageState.getPkg() == null) {
                 return false;
             }

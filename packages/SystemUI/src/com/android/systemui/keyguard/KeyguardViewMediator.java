@@ -835,7 +835,7 @@ public class KeyguardViewMediator extends CoreStartable implements Dumpable,
                 public void onLaunchAnimationStart(boolean isExpandingFullyAbove) {}
 
                 @Override
-                public void onLaunchAnimationCancelled() {
+                public void onLaunchAnimationCancelled(@Nullable Boolean newKeyguardOccludedState) {
                     Log.d(TAG, "Occlude launch animation cancelled. Occluded state is now: "
                             + mOccluded);
                 }
@@ -890,6 +890,86 @@ public class KeyguardViewMediator extends CoreStartable implements Dumpable,
 
     private IRemoteAnimationRunner mOccludeAnimationRunner =
             new OccludeActivityLaunchRemoteAnimationRunner(mOccludeAnimationController);
+
+    private final IRemoteAnimationRunner mOccludeByDreamAnimationRunner =
+            new IRemoteAnimationRunner.Stub() {
+                @Nullable private ValueAnimator mOccludeByDreamAnimator;
+
+                @Override
+                public void onAnimationCancelled(boolean isKeyguardOccluded) {
+                    if (mOccludeByDreamAnimator != null) {
+                        mOccludeByDreamAnimator.cancel();
+                    }
+                    setOccluded(isKeyguardOccluded /* isOccluded */, false /* animate */);
+                    if (DEBUG) {
+                        Log.d(TAG, "Occlude by Dream animation cancelled. Occluded state is now: "
+                                + mOccluded);
+                    }
+                }
+
+                @Override
+                public void onAnimationStart(int transit, RemoteAnimationTarget[] apps,
+                        RemoteAnimationTarget[] wallpapers, RemoteAnimationTarget[] nonApps,
+                        IRemoteAnimationFinishedCallback finishedCallback) throws RemoteException {
+                    setOccluded(true /* isOccluded */, true /* animate */);
+
+                    if (apps == null || apps.length == 0 || apps[0] == null) {
+                        if (DEBUG) {
+                            Log.d(TAG, "No apps provided to the OccludeByDream runner; "
+                                    + "skipping occluding animation.");
+                        }
+                        finishedCallback.onAnimationFinished();
+                        return;
+                    }
+
+                    final RemoteAnimationTarget primary = apps[0];
+                    final boolean isDream = (apps[0].taskInfo.topActivityType
+                            == WindowConfiguration.ACTIVITY_TYPE_DREAM);
+                    if (!isDream) {
+                        Log.w(TAG, "The occluding app isn't Dream; "
+                                + "finishing up. Please check that the config is correct.");
+                        finishedCallback.onAnimationFinished();
+                        return;
+                    }
+
+                    final SyncRtSurfaceTransactionApplier applier =
+                            new SyncRtSurfaceTransactionApplier(
+                                    mKeyguardViewControllerLazy.get().getViewRootImpl().getView());
+
+                    mContext.getMainExecutor().execute(() -> {
+                        if (mOccludeByDreamAnimator != null) {
+                            mOccludeByDreamAnimator.cancel();
+                        }
+
+                        mOccludeByDreamAnimator = ValueAnimator.ofFloat(0f, 1f);
+                        // Use the same duration as for the UNOCCLUDE.
+                        mOccludeByDreamAnimator.setDuration(UNOCCLUDE_ANIMATION_DURATION);
+                        mOccludeByDreamAnimator.setInterpolator(Interpolators.LINEAR);
+                        mOccludeByDreamAnimator.addUpdateListener(
+                                animation -> {
+                                    SyncRtSurfaceTransactionApplier.SurfaceParams.Builder
+                                            paramsBuilder =
+                                            new SyncRtSurfaceTransactionApplier.SurfaceParams
+                                                    .Builder(primary.leash)
+                                                    .withAlpha(animation.getAnimatedFraction());
+                                    applier.scheduleApply(paramsBuilder.build());
+                                });
+                        mOccludeByDreamAnimator.addListener(new AnimatorListenerAdapter() {
+                            @Override
+                            public void onAnimationEnd(Animator animation) {
+                                try {
+                                    finishedCallback.onAnimationFinished();
+                                    mOccludeByDreamAnimator = null;
+                                } catch (RemoteException e) {
+                                    e.printStackTrace();
+                                }
+                            }
+                        });
+
+                        mOccludeByDreamAnimator.start();
+                    });
+                }
+            };
 
     /**
      * Animation controller for activities that unocclude the keyguard. This does not use the
@@ -1681,6 +1761,10 @@ public class KeyguardViewMediator extends CoreStartable implements Dumpable,
 
     public IRemoteAnimationRunner getOccludeAnimationRunner() {
         return mOccludeAnimationRunner;
+    }
+
+    public IRemoteAnimationRunner getOccludeByDreamAnimationRunner() {
+        return mOccludeByDreamAnimationRunner;
     }
 
     public IRemoteAnimationRunner getUnoccludeAnimationRunner() {
@@ -2502,18 +2586,10 @@ public class KeyguardViewMediator extends CoreStartable implements Dumpable,
                 mInteractionJankMonitor.begin(
                         createInteractionJankMonitorConf("DismissPanel"));
 
-                // Apply the opening animation on root task if exists
-                RemoteAnimationTarget aniTarget = apps[0];
-                for (RemoteAnimationTarget tmpTarget : apps) {
-                    if (tmpTarget.taskId != -1 && !tmpTarget.hasAnimatingParent) {
-                        aniTarget = tmpTarget;
-                        break;
-                    }
-                }
                 // Pass the surface and metadata to the unlock animation controller.
                 mKeyguardUnlockAnimationControllerLazy.get()
                         .notifyStartSurfaceBehindRemoteAnimation(
-                                aniTarget, startTime, mSurfaceBehindRemoteAnimationRequested);
+                                apps, startTime, mSurfaceBehindRemoteAnimationRequested);
             } else {
                 mInteractionJankMonitor.begin(
                         createInteractionJankMonitorConf("RemoteAnimationDisabled"));

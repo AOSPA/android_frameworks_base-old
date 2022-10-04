@@ -118,6 +118,7 @@ extern int register_android_util_MemoryIntArray(JNIEnv* env);
 extern int register_android_content_StringBlock(JNIEnv* env);
 extern int register_android_content_XmlBlock(JNIEnv* env);
 extern int register_android_content_res_ApkAssets(JNIEnv* env);
+extern int register_android_content_res_ResourceTimer(JNIEnv* env);
 extern int register_android_graphics_BLASTBufferQueue(JNIEnv* env);
 extern int register_android_graphics_SurfaceTexture(JNIEnv* env);
 extern int register_android_view_DisplayEventReceiver(JNIEnv* env);
@@ -212,6 +213,8 @@ extern int register_com_android_internal_os_ZygoteInit(JNIEnv *env);
 extern int register_com_android_internal_security_VerityUtils(JNIEnv* env);
 extern int register_com_android_internal_util_VirtualRefBasePtr(JNIEnv *env);
 extern int register_android_window_WindowInfosListener(JNIEnv* env);
+extern int register_android_window_ScreenCapture(JNIEnv* env);
+extern int register_jni_common(JNIEnv* env);
 extern int register_com_android_internal_app_ActivityTrigger(JNIEnv *env);
 
 // Namespace for Android Runtime flags applied during boot time.
@@ -1507,6 +1510,7 @@ static const RegJNIRec gRegJNI[] = {
         REG_JNI(register_android_content_StringBlock),
         REG_JNI(register_android_content_XmlBlock),
         REG_JNI(register_android_content_res_ApkAssets),
+        REG_JNI(register_android_content_res_ResourceTimer),
         REG_JNI(register_android_text_AndroidCharacter),
         REG_JNI(register_android_text_Hyphenator),
         REG_JNI(register_android_view_InputDevice),
@@ -1649,6 +1653,8 @@ static const RegJNIRec gRegJNI[] = {
         REG_JNI(register_com_android_internal_os_KernelSingleUidTimeReader),
 
         REG_JNI(register_android_window_WindowInfosListener),
+        REG_JNI(register_android_window_ScreenCapture),
+        REG_JNI(register_jni_common),
         REG_JNI(register_com_android_internal_app_ActivityTrigger),
         REG_JNI(register_com_android_internal_os_KernelSingleProcessCpuThreadReader),
 };

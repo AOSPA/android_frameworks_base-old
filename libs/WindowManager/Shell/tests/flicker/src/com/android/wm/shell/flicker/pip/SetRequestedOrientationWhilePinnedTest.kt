@@ -61,33 +61,26 @@ open class SetRequestedOrientationWhilePinnedTest(
     override val transition: FlickerBuilder.() -> Unit
         get() = {
             setup {
-                test {
-                    removeAllTasksButHome()
-                    device.wakeUpAndGoToHomeScreen()
-                }
-                eachRun {
-                    // Launch the PiP activity fixed as landscape.
-                    pipApp.launchViaIntent(wmHelper, stringExtras = mapOf(
-                        EXTRA_FIXED_ORIENTATION to ORIENTATION_LANDSCAPE.toString()))
-                    // Enter PiP.
-                    broadcastActionTrigger.doAction(Components.PipActivity.ACTION_ENTER_PIP)
-                    // System bar may fade out during fixed rotation.
-                    wmHelper.StateSyncBuilder()
-                        .withPipShown()
-                        .withRotation(Surface.ROTATION_0)
-                        .withNavOrTaskBarVisible()
-                        .withStatusBarVisible()
-                        .waitForAndVerify()
-                }
+                removeAllTasksButHome()
+                device.wakeUpAndGoToHomeScreen()
+
+                // Launch the PiP activity fixed as landscape.
+                pipApp.launchViaIntent(wmHelper, stringExtras = mapOf(
+                    EXTRA_FIXED_ORIENTATION to ORIENTATION_LANDSCAPE.toString()))
+                // Enter PiP.
+                broadcastActionTrigger.doAction(Components.PipActivity.ACTION_ENTER_PIP)
+                // System bar may fade out during fixed rotation.
+                wmHelper.StateSyncBuilder()
+                    .withPipShown()
+                    .withRotation(Surface.ROTATION_0)
+                    .withNavOrTaskBarVisible()
+                    .withStatusBarVisible()
+                    .waitForAndVerify()
             }
             teardown {
-                eachRun {
-                    pipApp.exit(wmHelper)
-                    setRotation(Surface.ROTATION_0)
-                }
-                test {
-                    removeAllTasksButHome()
-                }
+                pipApp.exit(wmHelper)
+                setRotation(Surface.ROTATION_0)
+                removeAllTasksButHome()
             }
             transitions {
                 // Launch the activity back into fullscreen and ensure that it is now in landscape
@@ -178,18 +171,6 @@ open class SetRequestedOrientationWhilePinnedTest(
     /** {@inheritDoc}  */
     @Postsubmit
     @Test
-    override fun visibleWindowsShownMoreThanOneConsecutiveEntry() =
-        super.visibleWindowsShownMoreThanOneConsecutiveEntry()
-
-    /** {@inheritDoc}  */
-    @Postsubmit
-    @Test
-    override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
-        super.visibleLayersShownMoreThanOneConsecutiveEntry()
-
-    /** {@inheritDoc}  */
-    @Postsubmit
-    @Test
     override fun taskBarLayerIsVisibleAtStartAndEnd() = super.taskBarLayerIsVisibleAtStartAndEnd()
 
     /** {@inheritDoc}  */
@@ -200,24 +181,7 @@ open class SetRequestedOrientationWhilePinnedTest(
     /** {@inheritDoc}  */
     @Postsubmit
     @Test
-    override fun statusBarLayerPositionAtStartAndEnd() =
-        super.statusBarLayerPositionAtStartAndEnd()
-
-    /** {@inheritDoc}  */
-    @Postsubmit
-    @Test
     override fun entireScreenCovered() = super.entireScreenCovered()
-
-    /** {@inheritDoc}  */
-    @Postsubmit
-    @Test
-    override fun navBarWindowIsAlwaysVisible() =
-        super.navBarWindowIsAlwaysVisible()
-
-    /** {@inheritDoc}  */
-    @Postsubmit
-    @Test
-    override fun statusBarWindowIsAlwaysVisible() = super.statusBarWindowIsAlwaysVisible()
 
     companion object {
         @Parameterized.Parameters(name = "{0}")

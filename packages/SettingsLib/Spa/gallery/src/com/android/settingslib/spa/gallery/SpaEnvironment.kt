@@ -19,6 +19,7 @@ package com.android.settingslib.spa.gallery
 import com.android.settingslib.spa.framework.common.SettingsEntryRepository
 import com.android.settingslib.spa.framework.common.SettingsPage
 import com.android.settingslib.spa.framework.common.SettingsPageProviderRepository
+import com.android.settingslib.spa.gallery.button.ActionButtonPageProvider
 import com.android.settingslib.spa.gallery.home.HomePageProvider
 import com.android.settingslib.spa.gallery.page.ArgumentPageProvider
 import com.android.settingslib.spa.gallery.page.FooterPageProvider
@@ -30,6 +31,7 @@ import com.android.settingslib.spa.gallery.preference.PreferenceMainPageProvider
 import com.android.settingslib.spa.gallery.preference.PreferencePageProvider
 import com.android.settingslib.spa.gallery.preference.SwitchPreferencePageProvider
 import com.android.settingslib.spa.gallery.preference.TwoTargetSwitchPreferencePageProvider
+import com.android.settingslib.spa.gallery.ui.CategoryPageProvider
 import com.android.settingslib.spa.gallery.ui.SpinnerPageProvider
 
 object SpaEnvironment {
@@ -49,10 +51,12 @@ object SpaEnvironment {
                 SettingsPagerPageProvider,
                 FooterPageProvider,
                 IllustrationPageProvider,
+                CategoryPageProvider,
+                ActionButtonPageProvider,
             ),
             rootPages = listOf(
-                SettingsPage(HomePageProvider.name)
-            ) + ArgumentPageProvider.buildRootPages()
+                SettingsPage.create(HomePageProvider.name)
+            )
         )
     }
 

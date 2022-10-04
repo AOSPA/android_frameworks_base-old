@@ -16,6 +16,7 @@
 
 package com.android.server.input;
 
+import android.annotation.Nullable;
 import android.hardware.display.DisplayViewport;
 import android.hardware.input.InputSensorInfo;
 import android.hardware.lights.Light;
@@ -28,16 +29,13 @@ import android.view.InputEvent;
 import android.view.PointerIcon;
 import android.view.VerifiedInputEvent;
 
-import com.android.internal.annotations.VisibleForTesting;
-
 import java.util.List;
 
 /**
  * An interface for the native methods of InputManagerService. We use a public interface so that
  * this can be mocked for testing by Mockito.
  */
-@VisibleForTesting
-public interface NativeInputManagerService {
+interface NativeInputManagerService {
 
     void start();
 
@@ -140,6 +138,13 @@ public interface NativeInputManagerService {
     int getBatteryCapacity(int deviceId);
 
     int getBatteryStatus(int deviceId);
+
+    /**
+     * Get the device path of the battery for an input device.
+     * @return the path for the input device battery, or null if there is none.
+     */
+    @Nullable
+    String getBatteryDevicePath(int deviceId);
 
     List<Light> getLights(int deviceId);
 
@@ -325,6 +330,9 @@ public interface NativeInputManagerService {
 
         @Override
         public native int getBatteryStatus(int deviceId);
+
+        @Override
+        public native String getBatteryDevicePath(int deviceId);
 
         @Override
         public native List<Light> getLights(int deviceId);
