@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "8cce12a4_9b8f4f35",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2022-10-05T07:56:36Z",
+      "side": 1,
+      "message": "ready, merge before qssi for clean merge",
+      "revId": "eac38ffc8d710aa31c30d0ee67fa28eb43bf71a8",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
