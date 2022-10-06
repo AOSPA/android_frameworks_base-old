@@ -66,6 +66,10 @@ public class Flags {
     public static final UnreleasedFlag FSI_REQUIRES_KEYGUARD =
             new UnreleasedFlag(110, true);
 
+    public static final UnreleasedFlag INSTANT_VOICE_REPLY = new UnreleasedFlag(111, true);
+
+    // next id: 112
+
     /***************************************/
     // 200 - keyguard/lockscreen
 
@@ -88,19 +92,13 @@ public class Flags {
     public static final ResourceBooleanFlag FACE_SCANNING_ANIM =
             new ResourceBooleanFlag(205, R.bool.config_enableFaceScanningAnimation);
 
-    /**
-     * Whether the KeyguardBottomArea(View|Controller) should use the modern architecture or the old
-     * one.
-     */
-    public static final ReleasedFlag MODERN_BOTTOM_AREA = new ReleasedFlag(206, true);
-
     public static final UnreleasedFlag LOCKSCREEN_CUSTOM_CLOCKS = new UnreleasedFlag(207);
   
     /**
      * Flag to enable the usage of the new bouncer data source. This is a refactor of and
      * eventual replacement of KeyguardBouncer.java.
      */
-    public static final ReleasedFlag MODERN_BOUNCER = new ReleasedFlag(208);
+    public static final UnreleasedFlag MODERN_BOUNCER = new UnreleasedFlag(208);
 
     /** Whether UserSwitcherActivity should use modern architecture. */
     public static final UnreleasedFlag MODERN_USER_SWITCHER_ACTIVITY =
@@ -188,6 +186,9 @@ public class Flags {
 
     // 802 - wallpaper rendering
     public static final UnreleasedFlag USE_CANVAS_RENDERER = new UnreleasedFlag(802);
+
+    // 803 - screen contents translation
+    public static final UnreleasedFlag SCREEN_CONTENTS_TRANSLATION = new UnreleasedFlag(803);
 
     /***************************************/
     // 900 - media

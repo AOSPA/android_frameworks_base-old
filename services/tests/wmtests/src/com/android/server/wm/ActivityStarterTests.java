@@ -102,7 +102,7 @@ import android.window.TaskFragmentOrganizerToken;
 
 import androidx.test.filters.SmallTest;
 
-import com.android.server.pm.parsing.pkg.AndroidPackage;
+import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.wm.LaunchParamsController.LaunchParamsModifier;
 import com.android.server.wm.utils.MockTracker;
 
@@ -380,6 +380,8 @@ public class ActivityStarterTests extends WindowTestsBase {
         doReturn(false).when(mMockPackageManager).isInstantAppInstallerComponent(any());
         doReturn(null).when(mMockPackageManager).resolveIntent(any(), any(), anyLong(), anyLong(),
                 anyInt(), anyBoolean(), anyInt());
+        doReturn(null).when(mMockPackageManager).resolveIntentExported(any(), any(),
+                anyLong(), anyLong(), anyInt(), anyBoolean(), anyInt());
         doReturn(new ComponentName("", "")).when(mMockPackageManager).getSystemUiServiceComponent();
 
         // Never review permissions

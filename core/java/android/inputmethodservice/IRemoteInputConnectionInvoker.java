@@ -27,13 +27,17 @@ import android.view.KeyEvent;
 import android.view.inputmethod.CompletionInfo;
 import android.view.inputmethod.CorrectionInfo;
 import android.view.inputmethod.DeleteGesture;
+import android.view.inputmethod.DeleteRangeGesture;
 import android.view.inputmethod.ExtractedText;
 import android.view.inputmethod.ExtractedTextRequest;
 import android.view.inputmethod.HandwritingGesture;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputContentInfo;
 import android.view.inputmethod.InsertGesture;
+import android.view.inputmethod.JoinOrSplitGesture;
+import android.view.inputmethod.RemoveSpaceGesture;
 import android.view.inputmethod.SelectGesture;
+import android.view.inputmethod.SelectRangeGesture;
 import android.view.inputmethod.SurroundingText;
 import android.view.inputmethod.TextAttribute;
 
@@ -633,16 +637,13 @@ final class IRemoteInputConnectionInvoker {
     }
 
     /**
-     * Invokes one of {@link IRemoteInputConnection#performHandwritingSelectGesture(
-     * InputConnectionCommandHeader, SelectGesture, AndroidFuture)},
-     * {@link IRemoteInputConnection#performHandwritingDeleteGesture(InputConnectionCommandHeader,
-     * DeleteGesture, AndroidFuture)},
-     * {@link IRemoteInputConnection#performHandwritingInsertGesture(InputConnectionCommandHeader,
-     * InsertGesture, AndroidFuture)}
-     *
-     * @param {@code gesture} parameter {@link HandwritingGesture}.
-     * @return {@link AndroidFuture<Integer>} that can be used to retrieve the invocation
-     *         result. {@link RemoteException} will be treated as an error.
+     * Invokes one of {@link IRemoteInputConnection#performHandwritingSelectGesture},
+     * {@link IRemoteInputConnection#performHandwritingSelectRangeGesture},
+     * {@link IRemoteInputConnection#performHandwritingDeleteGesture},
+     * {@link IRemoteInputConnection#performHandwritingDeleteRangeGesture},
+     * {@link IRemoteInputConnection#performHandwritingInsertGesture},
+     * {@link IRemoteInputConnection#performHandwritingRemoveSpaceGesture},
+     * {@link IRemoteInputConnection#performHandwritingJoinOrSplitGesture}.
      */
     @AnyThread
     public void performHandwritingGesture(
@@ -658,12 +659,24 @@ final class IRemoteInputConnectionInvoker {
             if (gesture instanceof SelectGesture) {
                 mConnection.performHandwritingSelectGesture(
                         createHeader(), (SelectGesture) gesture, resultReceiver);
+            } else if (gesture instanceof SelectRangeGesture) {
+                mConnection.performHandwritingSelectRangeGesture(
+                        createHeader(), (SelectRangeGesture) gesture, resultReceiver);
             } else if (gesture instanceof InsertGesture) {
                 mConnection.performHandwritingInsertGesture(
                         createHeader(), (InsertGesture) gesture, resultReceiver);
             } else if (gesture instanceof DeleteGesture) {
                 mConnection.performHandwritingDeleteGesture(
                         createHeader(), (DeleteGesture) gesture, resultReceiver);
+            } else if (gesture instanceof DeleteRangeGesture) {
+                mConnection.performHandwritingDeleteRangeGesture(
+                        createHeader(), (DeleteRangeGesture) gesture, resultReceiver);
+            } else if (gesture instanceof RemoveSpaceGesture) {
+                mConnection.performHandwritingRemoveSpaceGesture(
+                        createHeader(), (RemoveSpaceGesture) gesture, resultReceiver);
+            } else if (gesture instanceof JoinOrSplitGesture) {
+                mConnection.performHandwritingJoinOrSplitGesture(
+                        createHeader(), (JoinOrSplitGesture) gesture, resultReceiver);
             } else if (consumer != null && executor != null) {
                 executor.execute(()
                         -> consumer.accept(InputConnection.HANDWRITING_GESTURE_RESULT_UNSUPPORTED));

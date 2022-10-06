@@ -131,9 +131,8 @@ import com.android.server.pm.KnownPackages;
 import com.android.server.pm.UserManagerInternal;
 import com.android.server.pm.UserManagerService;
 import com.android.server.pm.parsing.PackageInfoUtils;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.parsing.pkg.AndroidPackageUtils;
-import com.android.server.pm.pkg.AndroidPackageApi;
+import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.PackageStateInternal;
 import com.android.server.pm.pkg.component.ComponentMutateUtils;
 import com.android.server.pm.pkg.component.ParsedPermission;
@@ -168,7 +167,7 @@ import java.util.concurrent.TimeoutException;
  */
 public class PermissionManagerServiceImpl implements PermissionManagerServiceInterface {
 
-    private static final String TAG = "PackageManager";
+    private static final String TAG = "PermissionManager";
     private static final String LOG_TAG = PermissionManagerServiceImpl.class.getSimpleName();
 
     private static final String SKIP_KILL_APP_REASON_NOTIFICATION_TEST = "skip permission revoke "
@@ -2612,7 +2611,7 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
                     mPackageManagerInt.getSharedUserPackages(ps.getSharedUserAppId());
             int packagesSize = packages.size();
             for (int i = 0; i < packagesSize; i++) {
-                AndroidPackageApi sharedUserPackage =
+                AndroidPackage sharedUserPackage =
                         packages.valueAt(i).getAndroidPackage();
                 if (sharedUserPackage == null) {
                     continue;

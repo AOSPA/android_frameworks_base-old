@@ -178,7 +178,7 @@ public class BatteryStatsImpl extends BatteryStats {
     // TODO: remove "tcp" from network methods, since we measure total stats.
 
     // Current on-disk Parcel version. Must be updated when the format of the parcelable changes
-    public static final int VERSION = 209;
+    public static final int VERSION = 210;
 
     // The maximum number of names wakelocks we will keep track of
     // per uid; once the limit is reached, we batch the remaining wakelocks
@@ -5413,7 +5413,8 @@ public class BatteryStatsImpl extends BatteryStats {
     }
 
     @GuardedBy("this")
-    public void noteUserActivityLocked(int uid, int event, long elapsedRealtimeMs, long uptimeMs) {
+    public void noteUserActivityLocked(int uid, @PowerManager.UserActivityEvent int event,
+            long elapsedRealtimeMs, long uptimeMs) {
         if (mOnBatteryInternal) {
             uid = mapUid(uid);
             getUidStatsLocked(uid, elapsedRealtimeMs, uptimeMs).noteUserActivityLocked(event);
@@ -8846,14 +8847,14 @@ public class BatteryStatsImpl extends BatteryStats {
         }
 
         @Override
-        public void noteUserActivityLocked(int type) {
+        public void noteUserActivityLocked(@PowerManager.UserActivityEvent int event) {
             if (mUserActivityCounters == null) {
                 initUserActivityLocked();
             }
-            if (type >= 0 && type < NUM_USER_ACTIVITY_TYPES) {
-                mUserActivityCounters[type].stepAtomic();
+            if (event >= 0 && event < NUM_USER_ACTIVITY_TYPES) {
+                mUserActivityCounters[event].stepAtomic();
             } else {
-                Slog.w(TAG, "Unknown user activity type " + type + " was specified.",
+                Slog.w(TAG, "Unknown user activity type " + event + " was specified.",
                         new Throwable());
             }
         }
@@ -14965,6 +14966,18 @@ public class BatteryStatsImpl extends BatteryStats {
         }
     }
 
+    @GuardedBy("this")
+    private void dumpCpuPowerBracketsLocked(PrintWriter pw) {
+        pw.println("CPU power brackets; cluster/freq in MHz(avg current in mA):");
+        final int bracketCount = mPowerProfile.getCpuPowerBracketCount();
+        for (int bracket = 0; bracket < bracketCount; bracket++) {
+            pw.print("    ");
+            pw.print(bracket);
+            pw.print(": ");
+            pw.println(mPowerProfile.getCpuPowerBracketDescription(bracket));
+        }
+    }
+
     /**
      * Dump measured charge stats
      */
@@ -16295,6 +16308,9 @@ public class BatteryStatsImpl extends BatteryStats {
 
         pw.println();
         dumpConstantsLocked(pw);
+
+        pw.println();
+        dumpCpuPowerBracketsLocked(pw);
 
         pw.println();
         dumpMeasuredEnergyStatsLocked(pw);

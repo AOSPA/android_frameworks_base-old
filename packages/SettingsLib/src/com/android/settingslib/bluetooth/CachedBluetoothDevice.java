@@ -87,6 +87,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     private long mHiSyncId;
     // Need this since there is no method for getting RSSI
     short mRssi;
+
     // mProfiles and mRemovedProfiles does not do swap() between main and sub device. It is
     // because current sub device is only for HearingAid and its profile is the same.
     private final Collection<LocalBluetoothProfile> mProfiles = new CopyOnWriteArrayList<>();
@@ -463,6 +464,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     * @param id the group id from the CSIP.
     */
     public void setGroupId(int id) {
+        Log.d(TAG, this.getDevice().getAnonymizedAddress() + " set GroupId " + id);
         mGroupId = id;
     }
 

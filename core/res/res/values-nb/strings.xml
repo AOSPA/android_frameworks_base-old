@@ -605,8 +605,7 @@
     <string name="fingerprint_error_canceled" msgid="540026881380070750">"Fingeravtrykk-operasjonen ble avbrutt."</string>
     <string name="fingerprint_error_user_canceled" msgid="7685676229281231614">"Fingeravtrykk-operasjonen ble avbrutt av brukeren."</string>
     <string name="fingerprint_error_lockout" msgid="7853461265604738671">"For mange forsøk. Prøv på nytt senere."</string>
-    <!-- no translation found for fingerprint_error_lockout_permanent (9060651300306264843) -->
-    <skip />
+    <string name="fingerprint_error_lockout_permanent" msgid="9060651300306264843">"For mange forsøk. Bruk skjermlås i stedet."</string>
     <string name="fingerprint_error_unable_to_process" msgid="1148553603490048742">"Prøv på nytt."</string>
     <string name="fingerprint_error_no_fingerprints" msgid="8671811719699072411">"Ingen fingeravtrykk er registrert."</string>
     <string name="fingerprint_error_hw_not_present" msgid="578914350967423382">"Denne enheten har ikke fingeravtrykkssensor."</string>
@@ -635,7 +634,8 @@
     <string name="fingerprint_recalibrate_notification_content" msgid="8519935717822194943">"Gå til en reparasjonsleverandør."</string>
     <string name="face_acquired_insufficient" msgid="6889245852748492218">"Kan ikke lage ansiktsmodell. Prøv på nytt."</string>
     <string name="face_acquired_too_bright" msgid="8070756048978079164">"For lyst. Prøv svakere belysning."</string>
-    <string name="face_acquired_too_dark" msgid="7919016380747701228">"Prøv sterkere belysning"</string>
+    <!-- no translation found for face_acquired_too_dark (8539853432479385326) -->
+    <skip />
     <string name="face_acquired_too_close" msgid="4453646176196302462">"Flytt telefonen lengre unna"</string>
     <string name="face_acquired_too_far" msgid="2922278214231064859">"Flytt telefonen nærmere"</string>
     <string name="face_acquired_too_high" msgid="8278815780046368576">"Flytt telefonen høyere"</string>
@@ -1611,7 +1611,7 @@
     <string name="default_audio_route_name" product="tv" msgid="4908971385068087367">"Google TV"</string>
     <string name="default_audio_route_name" product="default" msgid="9213546147739983977">"Telefon"</string>
     <string name="default_audio_route_name_dock_speakers" msgid="1551166029093995289">"Dokkhøyttalere"</string>
-    <string name="default_audio_route_name_hdmi" msgid="5474470558160717850">"HDMI"</string>
+    <string name="default_audio_route_name_external_device" msgid="5474470558160717850">"HDMI"</string>
     <string name="default_audio_route_name_headphones" msgid="6954070994792640762">"Hodetelefoner"</string>
     <string name="default_audio_route_name_usb" msgid="895668743163316932">"USB"</string>
     <string name="default_audio_route_category_name" msgid="5241740395748134483">"System"</string>

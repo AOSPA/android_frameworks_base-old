@@ -93,6 +93,7 @@ import android.view.WindowLayout;
 import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
 import android.window.ClientWindowFrames;
+import android.window.ScreenCapture;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.os.HandlerCaller;
@@ -518,7 +519,7 @@ public abstract class WallpaperService extends Service {
          * {@link #addLocalColorsAreas(List)}
          * {@link #removeLocalColorsAreas(List)}
          * When local colors change, call {@link #notifyLocalColorsChanged(List, List)}
-         * See {@link com.android.systemui.ImageWallpaper} for an example
+         * See {@link com.android.systemui.wallpapers.ImageWallpaper} for an example
          * @hide
          */
         public boolean supportsLocalColorExtraction() {
@@ -1989,9 +1990,9 @@ public abstract class WallpaperService extends Service {
                 cleanUpScreenshotSurfaceControl();
             }
 
-            SurfaceControl.ScreenshotHardwareBuffer screenshotBuffer =
-                    SurfaceControl.captureLayers(
-                            new SurfaceControl.LayerCaptureArgs.Builder(mSurfaceControl)
+            ScreenCapture.ScreenshotHardwareBuffer screenshotBuffer =
+                    ScreenCapture.captureLayers(
+                            new ScreenCapture.LayerCaptureArgs.Builder(mSurfaceControl)
                                     // Needed because SurfaceFlinger#validateScreenshotPermissions
                                     // uses this parameter to check whether a caller only attempts
                                     // to screenshot itself when call doesn't come from the system.

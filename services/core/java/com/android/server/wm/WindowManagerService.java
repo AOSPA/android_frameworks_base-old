@@ -290,6 +290,7 @@ import android.view.displayhash.DisplayHash;
 import android.view.displayhash.VerifiedDisplayHash;
 import android.window.ClientWindowFrames;
 import android.window.ITaskFpsCallback;
+import android.window.ScreenCapture;
 import android.window.TaskSnapshot;
 import android.window.WindowContainerToken;
 
@@ -4001,7 +4002,7 @@ public class WindowManagerService extends IWindowManager.Stub
      * Generates and returns an up-to-date {@link Bitmap} for the specified taskId.
      *
      * @param taskId                  The task ID of the task for which a Bitmap is requested.
-     * @param layerCaptureArgsBuilder A {@link SurfaceControl.LayerCaptureArgs.Builder} with
+     * @param layerCaptureArgsBuilder A {@link ScreenCapture.LayerCaptureArgs.Builder} with
      *                                arguments for how to capture the Bitmap. The caller can
      *                                specify any arguments, but this method will ensure that the
      *                                specified task's SurfaceControl is used and the crop is set to
@@ -4011,7 +4012,7 @@ public class WindowManagerService extends IWindowManager.Stub
      */
     @Nullable
     public Bitmap captureTaskBitmap(int taskId,
-            @NonNull SurfaceControl.LayerCaptureArgs.Builder layerCaptureArgsBuilder) {
+            @NonNull ScreenCapture.LayerCaptureArgs.Builder layerCaptureArgsBuilder) {
         if (mTaskSnapshotController.shouldDisableSnapshots()) {
             return null;
         }
@@ -4030,7 +4031,7 @@ public class WindowManagerService extends IWindowManager.Stub
             mTmpRect.offsetTo(0, 0);
 
             final SurfaceControl sc = task.getSurfaceControl();
-            final SurfaceControl.ScreenshotHardwareBuffer buffer = SurfaceControl.captureLayers(
+            final ScreenCapture.ScreenshotHardwareBuffer buffer = ScreenCapture.captureLayers(
                     layerCaptureArgsBuilder.setLayer(sc).setSourceCrop(mTmpRect).build());
             if (buffer == null) {
                 Slog.w(TAG, "Could not get screenshot buffer for taskId: " + taskId);
@@ -5826,6 +5827,21 @@ public class WindowManagerService extends IWindowManager.Stub
             final DisplayContent displayContent = mRoot.getDisplayContent(displayId);
             if (displayContent != null && displayContent.hasAccess(Binder.getCallingUid())) {
                 return displayContent.mBaseDisplayDensity;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Return the display Id that has the given uniqueId. Unique ID is defined in
+     * {@link DisplayInfo#uniqueId}.
+     */
+    @Override
+    public int getDisplayIdByUniqueId(String uniqueId) {
+        synchronized (mGlobalLock) {
+            final DisplayContent displayContent = mRoot.getDisplayContent(uniqueId);
+            if (displayContent != null && displayContent.hasAccess(Binder.getCallingUid())) {
+                return displayContent.mDisplayId;
             }
         }
         return -1;
@@ -9115,8 +9131,8 @@ public class WindowManagerService extends IWindowManager.Stub
         // be covering it with the same uid. We want to make sure we include content that's
         // covering to ensure we get as close as possible to what the user sees
         final int uid = session.mUid;
-        SurfaceControl.LayerCaptureArgs.Builder args =
-                new SurfaceControl.LayerCaptureArgs.Builder(displaySurfaceControl)
+        ScreenCapture.LayerCaptureArgs.Builder args =
+                new ScreenCapture.LayerCaptureArgs.Builder(displaySurfaceControl)
                         .setUid(uid)
                         .setSourceCrop(boundsInDisplay);
 
@@ -9290,5 +9306,39 @@ public class WindowManagerService extends IWindowManager.Stub
                 throw new AssertionError(
                         "Unexpected letterbox background type: " + letterboxBackgroundType);
         }
+    }
+
+    @Override
+    public void captureDisplay(int displayId, @Nullable ScreenCapture.CaptureArgs captureArgs,
+            ScreenCapture.ScreenCaptureListener listener) {
+        Slog.d(TAG, "captureDisplay");
+        if (!checkCallingPermission(READ_FRAME_BUFFER, "captureDisplay()")) {
+            throw new SecurityException("Requires READ_FRAME_BUFFER permission");
+        }
+
+        final SurfaceControl displaySurfaceControl;
+        synchronized (mGlobalLock) {
+            DisplayContent displayContent = mRoot.getDisplayContent(displayId);
+            if (displayContent == null) {
+                throw new IllegalArgumentException("Trying to screenshot and invalid display: "
+                        + displayId);
+            }
+
+            displaySurfaceControl = displayContent.getSurfaceControl();
+
+            if (captureArgs == null) {
+                displayContent.getBounds(mTmpRect);
+                mTmpRect.offsetTo(0, 0);
+                captureArgs = new ScreenCapture.CaptureArgs.Builder<>()
+                        .setSourceCrop(mTmpRect)
+                        .build();
+            }
+        }
+
+        ScreenCapture.LayerCaptureArgs args =
+                new ScreenCapture.LayerCaptureArgs.Builder(displaySurfaceControl, captureArgs)
+                        .build();
+
+        ScreenCapture.captureLayers(args, listener);
     }
 }

@@ -610,7 +610,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
      * @hide
      */
     public boolean isZOrderedOnTop() {
-        return mSubLayer > 0;
+        return mRequestedSubLayer > 0;
     }
 
     /**
@@ -1634,8 +1634,11 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
          */
         @Override
         public void unlockCanvasAndPost(Canvas canvas) {
-            mSurface.unlockCanvasAndPost(canvas);
-            mSurfaceLock.unlock();
+            try {
+                mSurface.unlockCanvasAndPost(canvas);
+            } finally {
+                mSurfaceLock.unlock();
+            }
         }
 
         @Override

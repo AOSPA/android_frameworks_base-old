@@ -17,12 +17,17 @@
 package com.android.wm.shell.flicker.pip
 
 import android.platform.test.annotations.FlakyTest
-import android.platform.test.annotations.Postsubmit
+import android.platform.test.annotations.Presubmit
+import android.view.Surface
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.annotation.Group3
 import com.android.server.wm.flicker.dsl.FlickerBuilder
+import com.android.server.wm.flicker.helpers.setRotation
+import com.android.server.wm.flicker.helpers.wakeUpAndGoToHomeScreen
+import com.android.server.wm.flicker.rules.RemoveAllTasksButHomeRule
+import com.android.server.wm.flicker.rules.RemoveAllTasksButHomeRule.Companion.removeAllTasksButHome
 import org.junit.Assume
 import org.junit.FixMethodOrder
 import org.junit.Test
@@ -59,25 +64,26 @@ class AutoEnterPipOnGoToHomeTest(testSpec: FlickerTestParameter) : EnterPipTest(
      */
     override val transition: FlickerBuilder.() -> Unit
         get() = {
-            setupAndTeardown(this)
             setup {
-                eachRun {
-                    pipApp.launchViaIntent(wmHelper)
-                    pipApp.enableAutoEnterForPipActivity()
-                }
+                removeAllTasksButHome()
+                device.wakeUpAndGoToHomeScreen()
+                pipApp.launchViaIntent(wmHelper)
+                pipApp.enableAutoEnterForPipActivity()
             }
             teardown {
-                eachRun {
-                    // close gracefully so that onActivityUnpinned() can be called before force exit
-                    pipApp.closePipWindow(wmHelper)
-                    pipApp.exit(wmHelper)
-                }
+                // close gracefully so that onActivityUnpinned() can be called before force exit
+                pipApp.closePipWindow(wmHelper)
+
+                setRotation(Surface.ROTATION_0)
+                RemoveAllTasksButHomeRule.removeAllTasksButHome()
+                pipApp.exit(wmHelper)
             }
             transitions {
                 tapl.goHome()
             }
         }
 
+    @FlakyTest
     @Test
     override fun pipLayerReduces() {
         testSpec.assertLayers {
@@ -91,6 +97,7 @@ class AutoEnterPipOnGoToHomeTest(testSpec: FlickerTestParameter) : EnterPipTest(
     /**
      * Checks that [pipApp] window is animated towards default position in right bottom corner
      */
+    @Presubmit
     @Test
     fun pipLayerMovesTowardsRightBottomCorner() {
         // in gestural nav the swipe makes PiP first go upwards
@@ -106,66 +113,11 @@ class AutoEnterPipOnGoToHomeTest(testSpec: FlickerTestParameter) : EnterPipTest(
         }
     }
 
+    @Presubmit
     @Test
     override fun focusChanges() {
         // in gestural nav the focus goes to different activity on swipe up
         Assume.assumeFalse(testSpec.isGesturalNavigation)
         super.focusChanges()
     }
-
-    @Postsubmit
-    @Test
-    override fun entireScreenCovered() = super.entireScreenCovered()
-
-    @Postsubmit
-    @Test
-    override fun navBarLayerIsVisibleAtStartAndEnd() = super.navBarLayerIsVisibleAtStartAndEnd()
-
-    @Postsubmit
-    @Test
-    override fun navBarLayerPositionAtStartAndEnd() = super.navBarLayerPositionAtStartAndEnd()
-
-    @Postsubmit
-    @Test
-    override fun navBarWindowIsAlwaysVisible() = super.navBarWindowIsAlwaysVisible()
-
-    @Postsubmit
-    @Test
-    override fun pipAppLayerAlwaysVisible() = super.pipAppLayerAlwaysVisible()
-
-    @Postsubmit
-    @Test
-    override fun pipLayerRemainInsideVisibleBounds() = super.pipLayerRemainInsideVisibleBounds()
-
-    @Postsubmit
-    @Test
-    override fun statusBarLayerIsVisibleAtStartAndEnd() =
-        super.statusBarLayerIsVisibleAtStartAndEnd()
-
-    @Postsubmit
-    @Test
-    override fun statusBarLayerPositionAtStartAndEnd() =
-        super.statusBarLayerPositionAtStartAndEnd()
-
-    @Postsubmit
-    @Test
-    override fun statusBarWindowIsAlwaysVisible() = super.statusBarWindowIsAlwaysVisible()
-
-    @Postsubmit
-    @Test
-    override fun taskBarLayerIsVisibleAtStartAndEnd() = super.taskBarLayerIsVisibleAtStartAndEnd()
-
-    @Postsubmit
-    @Test
-    override fun taskBarWindowIsAlwaysVisible() = super.taskBarWindowIsAlwaysVisible()
-
-    @Postsubmit
-    @Test
-    override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
-        super.visibleLayersShownMoreThanOneConsecutiveEntry()
-
-    @Postsubmit
-    @Test
-    override fun visibleWindowsShownMoreThanOneConsecutiveEntry() =
-        super.visibleWindowsShownMoreThanOneConsecutiveEntry()
 }

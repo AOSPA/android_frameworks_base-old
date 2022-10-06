@@ -23,6 +23,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.tooling.preview.Preview
+import com.android.settingslib.spa.framework.common.SettingsEntryBuilder
+import com.android.settingslib.spa.framework.common.SettingsPage
 import com.android.settingslib.spa.framework.common.SettingsPageProvider
 import com.android.settingslib.spa.framework.compose.navigator
 import com.android.settingslib.spa.framework.theme.SettingsTheme
@@ -36,33 +38,33 @@ private const val TITLE = "Sample Spinner"
 object SpinnerPageProvider : SettingsPageProvider {
     override val name = "Spinner"
 
+    fun buildInjectEntry(): SettingsEntryBuilder {
+        return SettingsEntryBuilder.createInject(owner = SettingsPage.create(name))
+            .setIsAllowSearch(true)
+            .setUiLayoutFn {
+                Preference(object : PreferenceModel {
+                    override val title = TITLE
+                    override val onClick = navigator(name)
+                })
+            }
+    }
+
     @Composable
     override fun Page(arguments: Bundle?) {
-        SpinnerPage()
-    }
-
-    @Composable
-    fun EntryItem() {
-        Preference(object : PreferenceModel {
-            override val title = TITLE
-            override val onClick = navigator(name)
-        })
-    }
-}
-
-@Composable
-private fun SpinnerPage() {
-    RegularScaffold(title = TITLE) {
-        val selectedIndex = rememberSaveable { mutableStateOf(0) }
-        Spinner(
-            options = (1..3).map { "Option $it" },
-            selectedIndex = selectedIndex.value,
-            setIndex = { selectedIndex.value = it },
-        )
-        Preference(object : PreferenceModel {
-            override val title = "Selected index"
-            override val summary = remember { derivedStateOf { selectedIndex.value.toString() } }
-        })
+        RegularScaffold(title = TITLE) {
+            val selectedIndex = rememberSaveable { mutableStateOf(0) }
+            Spinner(
+                options = (1..3).map { "Option $it" },
+                selectedIndex = selectedIndex.value,
+                setIndex = { selectedIndex.value = it },
+            )
+            Preference(object : PreferenceModel {
+                override val title = "Selected index"
+                override val summary = remember {
+                    derivedStateOf { selectedIndex.value.toString() }
+                }
+            })
+        }
     }
 }
 
@@ -70,6 +72,6 @@ private fun SpinnerPage() {
 @Composable
 private fun SpinnerPagePreview() {
     SettingsTheme {
-        SpinnerPage()
+        SpinnerPageProvider.Page(null)
     }
 }

@@ -16,8 +16,6 @@
 
 package com.android.wm.shell.fullscreen;
 
-import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
-
 import static com.android.wm.shell.ShellTaskOrganizer.TASK_LISTENER_TYPE_FULLSCREEN;
 import static com.android.wm.shell.ShellTaskOrganizer.taskListenerTypeToString;
 
@@ -107,13 +105,14 @@ public class FullscreenTaskListener<T extends AutoCloseable>
 
         if (Transitions.ENABLE_SHELL_TRANSITIONS) return;
         updateRecentsForVisibleFullscreenTask(taskInfo);
-        if (shouldShowWindowDecor(taskInfo) && mWindowDecorViewModelOptional.isPresent()) {
+        if (mWindowDecorViewModelOptional.isPresent()) {
             SurfaceControl.Transaction t = new SurfaceControl.Transaction();
             state.mWindowDecoration =
                     mWindowDecorViewModelOptional.get().createWindowDecoration(taskInfo,
                             leash, t, t);
             t.apply();
-        } else {
+        }
+        if (state.mWindowDecoration == null) {
             mSyncQueue.runInSync(t -> {
                 // Reset several properties back to fullscreen (PiP, for example, leaves all these
                 // properties in a bad state).
@@ -174,17 +173,23 @@ public class FullscreenTaskListener<T extends AutoCloseable>
      *
      * @param change the change of this task transition that needs to have the task layer as the
      *               leash
+     * @return {@code true} if a decoration was actually created.
      */
-    public void createWindowDecoration(TransitionInfo.Change change,
+    public boolean createWindowDecoration(TransitionInfo.Change change,
             SurfaceControl.Transaction startT, SurfaceControl.Transaction finishT) {
         final State<T> state = createOrUpdateTaskState(change.getTaskInfo(), change.getLeash());
-        if (!mWindowDecorViewModelOptional.isPresent()
-                || !shouldShowWindowDecor(state.mTaskInfo)) {
-            return;
+        if (!mWindowDecorViewModelOptional.isPresent()) return false;
+        if (state.mWindowDecoration != null) {
+            // Already has a decoration.
+            return false;
         }
-
-        state.mWindowDecoration = mWindowDecorViewModelOptional.get().createWindowDecoration(
+        T newWindowDecor = mWindowDecorViewModelOptional.get().createWindowDecoration(
                 state.mTaskInfo, state.mLeash, startT, finishT);
+        if (newWindowDecor != null) {
+            state.mWindowDecoration = newWindowDecor;
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -202,8 +207,7 @@ public class FullscreenTaskListener<T extends AutoCloseable>
             SurfaceControl.Transaction startT,
             SurfaceControl.Transaction finishT,
             @Nullable AutoCloseable windowDecor) {
-        if (!mWindowDecorViewModelOptional.isPresent()
-                || !shouldShowWindowDecor(change.getTaskInfo())) {
+        if (!mWindowDecorViewModelOptional.isPresent()) {
             return false;
         }
         final State<T> state = createOrUpdateTaskState(change.getTaskInfo(), change.getLeash());
@@ -214,8 +218,11 @@ public class FullscreenTaskListener<T extends AutoCloseable>
                     state.mTaskInfo, startT, finishT, state.mWindowDecoration);
             return true;
         } else {
-            state.mWindowDecoration = mWindowDecorViewModelOptional.get().createWindowDecoration(
+            T newWindowDecor = mWindowDecorViewModelOptional.get().createWindowDecoration(
                     state.mTaskInfo, state.mLeash, startT, finishT);
+            if (newWindowDecor != null) {
+                state.mWindowDecoration = newWindowDecor;
+            }
             return false;
         }
     }
@@ -256,7 +263,7 @@ public class FullscreenTaskListener<T extends AutoCloseable>
             windowDecor =
                     mWindowDecorOfVanishedTasks.removeReturnOld(taskInfo.taskId);
         }
-        if (mWindowDecorViewModelOptional.isPresent()) {
+        if (mWindowDecorViewModelOptional.isPresent() && windowDecor != null) {
             mWindowDecorViewModelOptional.get().setupWindowDecorationForTransition(
                     taskInfo, startT, finishT, windowDecor);
         }
@@ -334,11 +341,6 @@ public class FullscreenTaskListener<T extends AutoCloseable>
     @Override
     public String toString() {
         return TAG + ":" + taskListenerTypeToString(TASK_LISTENER_TYPE_FULLSCREEN);
-    }
-
-    private static boolean shouldShowWindowDecor(RunningTaskInfo taskInfo) {
-        return taskInfo.getConfiguration().windowConfiguration.getDisplayWindowingMode()
-                == WINDOWING_MODE_FREEFORM;
     }
 
 

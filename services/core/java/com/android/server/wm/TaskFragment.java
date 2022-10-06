@@ -90,6 +90,7 @@ import android.view.DisplayInfo;
 import android.view.RemoteAnimationTarget;
 import android.view.SurfaceControl;
 import android.window.ITaskFragmentOrganizer;
+import android.window.ScreenCapture;
 import android.window.TaskFragmentInfo;
 import android.window.TaskFragmentOrganizerToken;
 
@@ -99,7 +100,7 @@ import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.internal.util.function.pooled.PooledPredicate;
 import com.android.server.am.HostingRecord;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
+import com.android.server.pm.pkg.AndroidPackage;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -312,7 +313,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
     //TODO(b/207481538) Remove once the infrastructure to support per-activity screenshot is
     // implemented
-    HashMap<String, SurfaceControl.ScreenshotHardwareBuffer> mBackScreenshots = new HashMap<>();
+    HashMap<String, ScreenCapture.ScreenshotHardwareBuffer> mBackScreenshots = new HashMap<>();
 
     private final EnsureActivitiesVisibleHelper mEnsureActivitiesVisibleHelper =
             new EnsureActivitiesVisibleHelper(this);
@@ -1627,12 +1628,14 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         boolean pauseImmediately = false;
         boolean shouldAutoPip = false;
         if (resuming != null) {
+            // We do not want to trigger auto-PiP upon launch of a translucent activity.
+            final boolean resumingOccludesParent = resuming.occludesParent();
             // Resuming the new resume activity only if the previous activity can't go into Pip
             // since we want to give Pip activities a chance to enter Pip before resuming the
             // next activity.
             final boolean lastResumedCanPip = prev.checkEnterPictureInPictureState(
                     "shouldAutoPipWhilePausing", userLeaving);
-            if (userLeaving && lastResumedCanPip
+            if (userLeaving && resumingOccludesParent && lastResumedCanPip
                     && prev.pictureInPictureArgs.isAutoEnterEnabled()) {
                 shouldAutoPip = true;
             } else if (!lastResumedCanPip) {
@@ -1891,7 +1894,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                 ProtoLog.v(WM_DEBUG_BACK_PREVIEW, "Screenshotting Activity %s",
                         r.mActivityComponent.flattenToString());
                 Rect outBounds = r.getBounds();
-                SurfaceControl.ScreenshotHardwareBuffer backBuffer = SurfaceControl.captureLayers(
+                ScreenCapture.ScreenshotHardwareBuffer backBuffer = ScreenCapture.captureLayers(
                         r.mSurfaceControl,
                         new Rect(0, 0, outBounds.width(), outBounds.height()),
                         1f);

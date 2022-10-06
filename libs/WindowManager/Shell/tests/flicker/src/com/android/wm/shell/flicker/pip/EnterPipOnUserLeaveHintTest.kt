@@ -17,14 +17,17 @@
 package com.android.wm.shell.flicker.pip
 
 import android.platform.test.annotations.FlakyTest
-import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
+import android.view.Surface
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.annotation.Group3
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.isShellTransitionsEnabled
+import com.android.server.wm.flicker.helpers.setRotation
+import com.android.server.wm.flicker.helpers.wakeUpAndGoToHomeScreen
+import com.android.server.wm.flicker.rules.RemoveAllTasksButHomeRule
 import org.junit.Assume
 import org.junit.FixMethodOrder
 import org.junit.Test
@@ -60,24 +63,24 @@ class EnterPipOnUserLeaveHintTest(testSpec: FlickerTestParameter) : EnterPipTest
      */
     override val transition: FlickerBuilder.() -> Unit
         get() = {
-            setupAndTeardown(this)
             setup {
-                eachRun {
-                    pipApp.launchViaIntent(wmHelper)
-                    pipApp.enableEnterPipOnUserLeaveHint()
-                }
+                RemoveAllTasksButHomeRule.removeAllTasksButHome()
+                device.wakeUpAndGoToHomeScreen()
+                device.wakeUpAndGoToHomeScreen()
+                pipApp.launchViaIntent(wmHelper)
+                pipApp.enableEnterPipOnUserLeaveHint()
             }
             teardown {
-                eachRun {
-                    pipApp.exit(wmHelper)
-                }
+                setRotation(Surface.ROTATION_0)
+                RemoveAllTasksButHomeRule.removeAllTasksButHome()
+                pipApp.exit(wmHelper)
             }
             transitions {
                 tapl.goHome()
             }
         }
 
-    @Postsubmit
+    @Presubmit
     @Test
     override fun pipAppLayerAlwaysVisible() {
         if (!testSpec.isGesturalNavigation) super.pipAppLayerAlwaysVisible() else {
@@ -90,7 +93,7 @@ class EnterPipOnUserLeaveHintTest(testSpec: FlickerTestParameter) : EnterPipTest
         }
     }
 
-    @Postsubmit
+    @Presubmit
     @Test
     override fun pipLayerReduces() {
         // in gestural nav the pip enters through alpha animation
@@ -98,18 +101,13 @@ class EnterPipOnUserLeaveHintTest(testSpec: FlickerTestParameter) : EnterPipTest
         super.pipLayerReduces()
     }
 
-    @Postsubmit
+    @Presubmit
     @Test
     override fun focusChanges() {
         // in gestural nav the focus goes to different activity on swipe up
         Assume.assumeFalse(testSpec.isGesturalNavigation)
         super.focusChanges()
     }
-
-    /** {@inheritDoc}  */
-    @Postsubmit
-    @Test
-    override fun pipAppWindowAlwaysVisible() = super.pipAppWindowAlwaysVisible()
 
     @Presubmit
     @Test
@@ -125,7 +123,7 @@ class EnterPipOnUserLeaveHintTest(testSpec: FlickerTestParameter) : EnterPipTest
         super.entireScreenCovered()
     }
 
-    @Postsubmit
+    @Presubmit
     @Test
     override fun pipLayerRemainInsideVisibleBounds() {
         if (!testSpec.isGesturalNavigation) super.pipLayerRemainInsideVisibleBounds() else {

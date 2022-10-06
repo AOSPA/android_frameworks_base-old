@@ -3099,7 +3099,7 @@ public class SubscriptionManager {
     @SystemApi
     public boolean canManageSubscription(@NonNull SubscriptionInfo info,
             @NonNull String packageName) {
-        if (info == null || info.getAllAccessRules() == null || packageName == null) {
+        if (info == null || info.getAccessRules() == null || packageName == null) {
             return false;
         }
         PackageManager packageManager = mContext.getPackageManager();
@@ -3111,7 +3111,7 @@ public class SubscriptionManager {
             logd("Unknown package: " + packageName);
             return false;
         }
-        for (UiccAccessRule rule : info.getAllAccessRules()) {
+        for (UiccAccessRule rule : info.getAccessRules()) {
             if (rule.getCarrierPrivilegeStatus(packageInfo)
                     == TelephonyManager.CARRIER_PRIVILEGE_STATUS_HAS_ACCESS) {
                 return true;
@@ -3456,9 +3456,19 @@ public class SubscriptionManager {
      * Get subscriptionInfo list of subscriptions that are in the same group of given subId.
      * See {@link #createSubscriptionGroup(List)} for more details.
      *
-     * Caller will either have {@link android.Manifest.permission#READ_PHONE_STATE}
-     * permission or had carrier privilege permission on the subscription.
+     * Caller must have {@link android.Manifest.permission#READ_PHONE_STATE}
+     * or carrier privilege permission on the subscription.
      * {@link TelephonyManager#hasCarrierPrivileges()}
+     *
+     * <p>Starting with API level 33, the caller also needs permission to access device identifiers
+     * to get the list of subscriptions associated with a group UUID.
+     * This method can be invoked if one of the following requirements is met:
+     * <ul>
+     *     <li>If the app has carrier privilege permission.
+     *     {@link TelephonyManager#hasCarrierPrivileges()}
+     *     <li>If the app has {@link android.Manifest.permission#READ_PHONE_STATE} permission and
+     *     access to device identifiers.
+     * </ul>
      *
      * @throws IllegalStateException if Telephony service is in bad state.
      * @throws SecurityException if the caller doesn't meet the requirements

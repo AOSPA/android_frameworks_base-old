@@ -51,7 +51,6 @@ import android.util.Log;
 import android.view.Choreographer;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
-import android.view.SurfaceControl;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
@@ -64,6 +63,7 @@ import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.window.ScreenCapture;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -244,7 +244,7 @@ public class BubbleStackView extends FrameLayout
      * Buffer containing a screenshot of the animating-out bubble. This is drawn into the
      * SurfaceView during animations.
      */
-    private SurfaceControl.ScreenshotHardwareBuffer mAnimatingOutBubbleBuffer;
+    private ScreenCapture.ScreenshotHardwareBuffer mAnimatingOutBubbleBuffer;
 
     private BubbleFlyoutView mFlyout;
     /** Runnable that fades out the flyout and then sets it to GONE. */
@@ -1270,7 +1270,7 @@ public class BubbleStackView extends FrameLayout
         }
         final boolean seen = getPrefBoolean(ManageEducationViewKt.PREF_MANAGED_EDUCATION);
         final boolean shouldShow = (!seen || BubbleDebugConfig.forceShowUserEducation(mContext))
-                && mExpandedBubble != null;
+                && mExpandedBubble != null && mExpandedBubble.getExpandedView() != null;
         if (BubbleDebugConfig.DEBUG_USER_EDUCATION) {
             Log.d(TAG, "Show manage edu: " + shouldShow);
         }

@@ -43,7 +43,6 @@ import org.junit.runners.Parameterized
  *
  * To run this test: `atest WMShellFlickerTests:DragDividerToResize`
  */
-@IwTest(focusArea = "sysui")
 @RequiresDevice
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
@@ -55,23 +54,24 @@ class DragDividerToResize (testSpec: FlickerTestParameter) : SplitScreenBase(tes
         get() = {
             super.transition(this)
             setup {
-                eachRun {
-                    SplitScreenHelper.enterSplit(wmHelper, tapl, primaryApp, secondaryApp)
-                }
+                SplitScreenHelper.enterSplit(wmHelper, tapl, primaryApp, secondaryApp)
             }
             transitions {
                 SplitScreenHelper.dragDividerToResizeAndWait(device, wmHelper)
             }
         }
 
+    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun splitScreenDividerKeepVisible() = testSpec.layerKeepVisible(SPLIT_SCREEN_DIVIDER_COMPONENT)
 
+    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun primaryAppLayerKeepVisible() = testSpec.layerKeepVisible(primaryApp)
 
+    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun secondaryAppLayerVisibilityChanges() {
@@ -84,19 +84,23 @@ class DragDividerToResize (testSpec: FlickerTestParameter) : SplitScreenBase(tes
         }
     }
 
+    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun primaryAppWindowKeepVisible() = testSpec.appWindowKeepVisible(primaryApp)
 
+    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun secondaryAppWindowKeepVisible() = testSpec.appWindowKeepVisible(secondaryApp)
 
+    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun primaryAppBoundsChanges() = testSpec.splitAppLayerBoundsChanges(
         primaryApp, landscapePosLeft = true, portraitPosTop = false)
 
+    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun secondaryAppBoundsChanges() = testSpec.splitAppLayerBoundsChanges(

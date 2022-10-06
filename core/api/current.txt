@@ -636,6 +636,7 @@ package android {
     field public static final int ellipsize = 16842923; // 0x10100ab
     field public static final int ems = 16843096; // 0x1010158
     field public static final int enableOnBackInvokedCallback = 16844396; // 0x101066c
+    field public static final int enableTextStylingShortcuts;
     field public static final int enableVrMode = 16844069; // 0x1010525
     field public static final int enabled = 16842766; // 0x101000e
     field public static final int end = 16843996; // 0x10104dc
@@ -2113,6 +2114,7 @@ package android {
     field public static final int addToDictionary = 16908330; // 0x102002a
     field public static final int autofill = 16908355; // 0x1020043
     field public static final int background = 16908288; // 0x1020000
+    field public static final int bold;
     field public static final int button1 = 16908313; // 0x1020019
     field public static final int button2 = 16908314; // 0x102001a
     field public static final int button3 = 16908315; // 0x102001b
@@ -2138,6 +2140,7 @@ package android {
     field public static final int inputExtractAccessories = 16908378; // 0x102005a
     field public static final int inputExtractAction = 16908377; // 0x1020059
     field public static final int inputExtractEditText = 16908325; // 0x1020025
+    field public static final int italic;
     field @Deprecated public static final int keyboardView = 16908326; // 0x1020026
     field public static final int list = 16908298; // 0x102000a
     field public static final int list_container = 16908351; // 0x102003f
@@ -2169,6 +2172,7 @@ package android {
     field public static final int textAssist = 16908353; // 0x1020041
     field public static final int title = 16908310; // 0x1020016
     field public static final int toggle = 16908311; // 0x1020017
+    field public static final int underline;
     field public static final int undo = 16908338; // 0x1020032
     field public static final int widget_frame = 16908312; // 0x1020018
   }
@@ -5929,6 +5933,7 @@ package android.app {
     field public static final String EXTRA_BIG_TEXT = "android.bigText";
     field public static final String EXTRA_CALL_IS_VIDEO = "android.callIsVideo";
     field public static final String EXTRA_CALL_PERSON = "android.callPerson";
+    field public static final String EXTRA_CALL_TYPE = "android.callType";
     field public static final String EXTRA_CHANNEL_GROUP_ID = "android.intent.extra.CHANNEL_GROUP_ID";
     field public static final String EXTRA_CHANNEL_ID = "android.intent.extra.CHANNEL_ID";
     field public static final String EXTRA_CHRONOMETER_COUNT_DOWN = "android.chronometerCountDown";
@@ -6236,6 +6241,10 @@ package android.app {
     method @NonNull public android.app.Notification.CallStyle setIsVideo(boolean);
     method @NonNull public android.app.Notification.CallStyle setVerificationIcon(@Nullable android.graphics.drawable.Icon);
     method @NonNull public android.app.Notification.CallStyle setVerificationText(@Nullable CharSequence);
+    field public static final int CALL_TYPE_INCOMING = 1; // 0x1
+    field public static final int CALL_TYPE_ONGOING = 2; // 0x2
+    field public static final int CALL_TYPE_SCREENING = 3; // 0x3
+    field public static final int CALL_TYPE_UNKNOWN = 0; // 0x0
   }
 
   public static final class Notification.CarExtender implements android.app.Notification.Extender {
@@ -15124,7 +15133,7 @@ package android.graphics {
     field @NonNull public static final android.os.Parcelable.Creator<android.graphics.ParcelableColorSpace> CREATOR;
   }
 
-  public class Path implements java.lang.Iterable<android.graphics.PathIterator.Segment> {
+  public class Path {
     ctor public Path();
     ctor public Path(@Nullable android.graphics.Path);
     method public void addArc(@NonNull android.graphics.RectF, float, float);
@@ -15151,6 +15160,7 @@ package android.graphics {
     method public void cubicTo(float, float, float, float, float, float);
     method @NonNull public android.graphics.Path.FillType getFillType();
     method public int getGenerationId();
+    method @NonNull public android.graphics.PathIterator getPathIterator();
     method public void incReserve(int);
     method public boolean interpolate(@NonNull android.graphics.Path, float, @NonNull android.graphics.Path);
     method @Deprecated public boolean isConvex();
@@ -15158,7 +15168,6 @@ package android.graphics {
     method public boolean isInterpolatable(@NonNull android.graphics.Path);
     method public boolean isInverseFillType();
     method public boolean isRect(@Nullable android.graphics.RectF);
-    method @NonNull public android.graphics.PathIterator iterator();
     method public void lineTo(float, float);
     method public void moveTo(float, float);
     method public void offset(float, float, @Nullable android.graphics.Path);
@@ -16892,6 +16901,7 @@ package android.hardware {
     field public static final int DATASPACE_DEPTH = 4096; // 0x1000
     field public static final int DATASPACE_DISPLAY_P3 = 143261696; // 0x88a0000
     field public static final int DATASPACE_DYNAMIC_DEPTH = 4098; // 0x1002
+    field public static final int DATASPACE_HEIF = 4100; // 0x1004
     field public static final int DATASPACE_JFIF = 146931712; // 0x8c20000
     field public static final int DATASPACE_SCRGB = 411107328; // 0x18810000
     field public static final int DATASPACE_SCRGB_LINEAR = 406913024; // 0x18410000
@@ -18914,8 +18924,8 @@ package android.inputmethodservice {
     method public android.view.View onCreateCandidatesView();
     method public android.view.View onCreateExtractTextView();
     method @Nullable public android.view.inputmethod.InlineSuggestionsRequest onCreateInlineSuggestionsRequest(@NonNull android.os.Bundle);
-    method public android.inputmethodservice.AbstractInputMethodService.AbstractInputMethodImpl onCreateInputMethodInterface();
-    method public android.inputmethodservice.AbstractInputMethodService.AbstractInputMethodSessionImpl onCreateInputMethodSessionInterface();
+    method @Deprecated public android.inputmethodservice.AbstractInputMethodService.AbstractInputMethodImpl onCreateInputMethodInterface();
+    method @Deprecated public android.inputmethodservice.AbstractInputMethodService.AbstractInputMethodSessionImpl onCreateInputMethodSessionInterface();
     method public android.view.View onCreateInputView();
     method protected void onCurrentInputMethodSubtypeChanged(android.view.inputmethod.InputMethodSubtype);
     method public void onDisplayCompletions(android.view.inputmethod.CompletionInfo[]);
@@ -41567,7 +41577,7 @@ package android.telephony {
     field public static final String KEY_SHOW_SIGNAL_STRENGTH_IN_SIM_STATUS_BOOL = "show_signal_strength_in_sim_status_bool";
     field public static final String KEY_SHOW_VIDEO_CALL_CHARGES_ALERT_DIALOG_BOOL = "show_video_call_charges_alert_dialog_bool";
     field public static final String KEY_SHOW_WFC_LOCATION_PRIVACY_POLICY_BOOL = "show_wfc_location_privacy_policy_bool";
-    field public static final String KEY_SIMPLIFIED_NETWORK_SETTINGS_BOOL = "simplified_network_settings_bool";
+    field @Deprecated public static final String KEY_SIMPLIFIED_NETWORK_SETTINGS_BOOL = "simplified_network_settings_bool";
     field public static final String KEY_SIM_NETWORK_UNLOCK_ALLOW_DISMISS_BOOL = "sim_network_unlock_allow_dismiss_bool";
     field public static final String KEY_SMDP_SERVER_ADDRESS_STRING = "smdp_server_address_string";
     field public static final String KEY_SMS_REQUIRES_DESTINATION_NUMBER_CONVERSION_BOOL = "sms_requires_destination_number_conversion_bool";
@@ -48662,6 +48672,9 @@ package android.view {
     field public static final int KEYCODE_K = 39; // 0x27
     field public static final int KEYCODE_KANA = 218; // 0xda
     field public static final int KEYCODE_KATAKANA_HIRAGANA = 215; // 0xd7
+    field public static final int KEYCODE_KEYBOARD_BACKLIGHT_DOWN = 305; // 0x131
+    field public static final int KEYCODE_KEYBOARD_BACKLIGHT_TOGGLE = 307; // 0x133
+    field public static final int KEYCODE_KEYBOARD_BACKLIGHT_UP = 306; // 0x132
     field public static final int KEYCODE_L = 40; // 0x28
     field public static final int KEYCODE_LANGUAGE_SWITCH = 204; // 0xcc
     field public static final int KEYCODE_LAST_CHANNEL = 229; // 0xe5
@@ -48763,6 +48776,10 @@ package android.view {
     field public static final int KEYCODE_STEM_2 = 266; // 0x10a
     field public static final int KEYCODE_STEM_3 = 267; // 0x10b
     field public static final int KEYCODE_STEM_PRIMARY = 264; // 0x108
+    field public static final int KEYCODE_STYLUS_BUTTON_PRIMARY = 308; // 0x134
+    field public static final int KEYCODE_STYLUS_BUTTON_SECONDARY = 309; // 0x135
+    field public static final int KEYCODE_STYLUS_BUTTON_TAIL = 311; // 0x137
+    field public static final int KEYCODE_STYLUS_BUTTON_TERTIARY = 310; // 0x136
     field public static final int KEYCODE_SWITCH_CHARSET = 95; // 0x5f
     field public static final int KEYCODE_SYM = 63; // 0x3f
     field public static final int KEYCODE_SYSRQ = 120; // 0x78
@@ -51841,6 +51858,7 @@ package android.view.accessibility {
     field public static final int CONTENT_CHANGE_TYPE_DRAG_CANCELLED = 512; // 0x200
     field public static final int CONTENT_CHANGE_TYPE_DRAG_DROPPED = 256; // 0x100
     field public static final int CONTENT_CHANGE_TYPE_DRAG_STARTED = 128; // 0x80
+    field public static final int CONTENT_CHANGE_TYPE_INVALID = 1024; // 0x400
     field public static final int CONTENT_CHANGE_TYPE_PANE_APPEARED = 16; // 0x10
     field public static final int CONTENT_CHANGE_TYPE_PANE_DISAPPEARED = 32; // 0x20
     field public static final int CONTENT_CHANGE_TYPE_PANE_TITLE = 8; // 0x8
@@ -52942,7 +52960,7 @@ package android.view.displayhash {
 package android.view.inputmethod {
 
   public class BaseInputConnection implements android.view.inputmethod.InputConnection {
-    ctor public BaseInputConnection(android.view.View, boolean);
+    ctor public BaseInputConnection(@NonNull android.view.View, boolean);
     method public boolean beginBatchEdit();
     method public boolean clearMetaKeyStates(int);
     method @CallSuper public void closeConnection();
@@ -52954,24 +52972,24 @@ package android.view.inputmethod {
     method public boolean deleteSurroundingTextInCodePoints(int, int);
     method public boolean endBatchEdit();
     method public boolean finishComposingText();
-    method public static int getComposingSpanEnd(android.text.Spannable);
-    method public static int getComposingSpanStart(android.text.Spannable);
+    method public static int getComposingSpanEnd(@NonNull android.text.Spannable);
+    method public static int getComposingSpanStart(@NonNull android.text.Spannable);
     method public int getCursorCapsMode(int);
-    method public android.text.Editable getEditable();
-    method public android.view.inputmethod.ExtractedText getExtractedText(android.view.inputmethod.ExtractedTextRequest, int);
-    method public android.os.Handler getHandler();
-    method public CharSequence getSelectedText(int);
+    method @Nullable public android.text.Editable getEditable();
+    method @Nullable public android.view.inputmethod.ExtractedText getExtractedText(android.view.inputmethod.ExtractedTextRequest, int);
+    method @Nullable public android.os.Handler getHandler();
+    method @Nullable public CharSequence getSelectedText(int);
     method @Nullable public CharSequence getTextAfterCursor(@IntRange(from=0) int, int);
     method @Nullable public CharSequence getTextBeforeCursor(@IntRange(from=0) int, int);
     method public boolean performContextMenuAction(int);
     method public boolean performEditorAction(int);
     method public boolean performPrivateCommand(String, android.os.Bundle);
-    method public static final void removeComposingSpans(android.text.Spannable);
+    method public static final void removeComposingSpans(@NonNull android.text.Spannable);
     method public boolean reportFullscreenMode(boolean);
     method public boolean requestCursorUpdates(int);
     method public boolean sendKeyEvent(android.view.KeyEvent);
     method public boolean setComposingRegion(int, int);
-    method public static void setComposingSpans(android.text.Spannable);
+    method public static void setComposingSpans(@NonNull android.text.Spannable);
     method public boolean setComposingText(CharSequence, int);
     method public boolean setSelection(int, int);
   }
@@ -53050,6 +53068,24 @@ package android.view.inputmethod {
     method @NonNull public android.view.inputmethod.DeleteGesture.Builder setDeletionArea(@NonNull android.graphics.RectF);
     method @NonNull public android.view.inputmethod.DeleteGesture.Builder setFallbackText(@Nullable String);
     method @NonNull public android.view.inputmethod.DeleteGesture.Builder setGranularity(int);
+  }
+
+  public final class DeleteRangeGesture extends android.view.inputmethod.HandwritingGesture implements android.os.Parcelable {
+    method public int describeContents();
+    method @NonNull public android.graphics.RectF getDeletionEndArea();
+    method @NonNull public android.graphics.RectF getDeletionStartArea();
+    method public int getGranularity();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.view.inputmethod.DeleteRangeGesture> CREATOR;
+  }
+
+  public static final class DeleteRangeGesture.Builder {
+    ctor public DeleteRangeGesture.Builder();
+    method @NonNull public android.view.inputmethod.DeleteRangeGesture build();
+    method @NonNull public android.view.inputmethod.DeleteRangeGesture.Builder setDeletionEndArea(@NonNull android.graphics.RectF);
+    method @NonNull public android.view.inputmethod.DeleteRangeGesture.Builder setDeletionStartArea(@NonNull android.graphics.RectF);
+    method @NonNull public android.view.inputmethod.DeleteRangeGesture.Builder setFallbackText(@Nullable String);
+    method @NonNull public android.view.inputmethod.DeleteRangeGesture.Builder setGranularity(int);
   }
 
   public final class EditorBoundsInfo implements android.os.Parcelable {
@@ -53151,9 +53187,13 @@ package android.view.inputmethod {
   public abstract class HandwritingGesture {
     method @Nullable public String getFallbackText();
     field public static final int GESTURE_TYPE_DELETE = 4; // 0x4
+    field public static final int GESTURE_TYPE_DELETE_RANGE = 64; // 0x40
     field public static final int GESTURE_TYPE_INSERT = 2; // 0x2
+    field public static final int GESTURE_TYPE_JOIN_OR_SPLIT = 16; // 0x10
     field public static final int GESTURE_TYPE_NONE = 0; // 0x0
+    field public static final int GESTURE_TYPE_REMOVE_SPACE = 8; // 0x8
     field public static final int GESTURE_TYPE_SELECT = 1; // 0x1
+    field public static final int GESTURE_TYPE_SELECT_RANGE = 32; // 0x20
     field public static final int GRANULARITY_CHARACTER = 2; // 0x2
     field public static final int GRANULARITY_WORD = 1; // 0x1
   }
@@ -53493,6 +53533,35 @@ package android.view.inputmethod {
     method @NonNull public android.view.inputmethod.InsertGesture.Builder setTextToInsert(@NonNull String);
   }
 
+  public final class JoinOrSplitGesture extends android.view.inputmethod.HandwritingGesture implements android.os.Parcelable {
+    method public int describeContents();
+    method @NonNull public android.graphics.PointF getJoinOrSplitPoint();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.view.inputmethod.JoinOrSplitGesture> CREATOR;
+  }
+
+  public static final class JoinOrSplitGesture.Builder {
+    ctor public JoinOrSplitGesture.Builder();
+    method @NonNull public android.view.inputmethod.JoinOrSplitGesture build();
+    method @NonNull public android.view.inputmethod.JoinOrSplitGesture.Builder setFallbackText(@Nullable String);
+    method @NonNull public android.view.inputmethod.JoinOrSplitGesture.Builder setJoinOrSplitPoint(@NonNull android.graphics.PointF);
+  }
+
+  public final class RemoveSpaceGesture extends android.view.inputmethod.HandwritingGesture implements android.os.Parcelable {
+    method public int describeContents();
+    method @NonNull public android.graphics.PointF getEndPoint();
+    method @NonNull public android.graphics.PointF getStartPoint();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.view.inputmethod.RemoveSpaceGesture> CREATOR;
+  }
+
+  public static final class RemoveSpaceGesture.Builder {
+    ctor public RemoveSpaceGesture.Builder();
+    method @NonNull public android.view.inputmethod.RemoveSpaceGesture build();
+    method @NonNull public android.view.inputmethod.RemoveSpaceGesture.Builder setFallbackText(@Nullable String);
+    method @NonNull public android.view.inputmethod.RemoveSpaceGesture.Builder setPoints(@NonNull android.graphics.PointF, @NonNull android.graphics.PointF);
+  }
+
   public final class SelectGesture extends android.view.inputmethod.HandwritingGesture implements android.os.Parcelable {
     method public int describeContents();
     method public int getGranularity();
@@ -53507,6 +53576,24 @@ package android.view.inputmethod {
     method @NonNull public android.view.inputmethod.SelectGesture.Builder setFallbackText(@Nullable String);
     method @NonNull public android.view.inputmethod.SelectGesture.Builder setGranularity(int);
     method @NonNull public android.view.inputmethod.SelectGesture.Builder setSelectionArea(@NonNull android.graphics.RectF);
+  }
+
+  public final class SelectRangeGesture extends android.view.inputmethod.HandwritingGesture implements android.os.Parcelable {
+    method public int describeContents();
+    method public int getGranularity();
+    method @NonNull public android.graphics.RectF getSelectionEndArea();
+    method @NonNull public android.graphics.RectF getSelectionStartArea();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.view.inputmethod.SelectRangeGesture> CREATOR;
+  }
+
+  public static final class SelectRangeGesture.Builder {
+    ctor public SelectRangeGesture.Builder();
+    method @NonNull public android.view.inputmethod.SelectRangeGesture build();
+    method @NonNull public android.view.inputmethod.SelectRangeGesture.Builder setFallbackText(@Nullable String);
+    method @NonNull public android.view.inputmethod.SelectRangeGesture.Builder setGranularity(int);
+    method @NonNull public android.view.inputmethod.SelectRangeGesture.Builder setSelectionEndArea(@NonNull android.graphics.RectF);
+    method @NonNull public android.view.inputmethod.SelectRangeGesture.Builder setSelectionStartArea(@NonNull android.graphics.RectF);
   }
 
   public final class SurroundingText implements android.os.Parcelable {
@@ -55992,9 +56079,11 @@ package android.widget {
     ctor public EditText(android.content.Context, android.util.AttributeSet, int, int);
     method public void extendSelection(int);
     method public android.text.Editable getText();
+    method public boolean isStyleShortcutEnabled();
     method public void selectAll();
     method public void setSelection(int, int);
     method public void setSelection(int);
+    method public void setStyleShortcutsEnabled(boolean);
   }
 
   public interface ExpandableListAdapter {

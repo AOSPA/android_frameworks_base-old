@@ -34,6 +34,7 @@ import static android.view.WindowManager.TRANSIT_OLD_DREAM_ACTIVITY_OPEN;
 import static android.view.WindowManager.TRANSIT_OLD_KEYGUARD_GOING_AWAY;
 import static android.view.WindowManager.TRANSIT_OLD_KEYGUARD_GOING_AWAY_ON_WALLPAPER;
 import static android.view.WindowManager.TRANSIT_OLD_KEYGUARD_OCCLUDE;
+import static android.view.WindowManager.TRANSIT_OLD_KEYGUARD_OCCLUDE_BY_DREAM;
 import static android.view.WindowManager.TRANSIT_OLD_KEYGUARD_UNOCCLUDE;
 import static android.view.WindowManager.TRANSIT_OLD_NONE;
 import static android.view.WindowManager.TRANSIT_OLD_TASK_CHANGE_WINDOWING_MODE;
@@ -357,8 +358,14 @@ public class AppTransitionController {
                 // When there is a closing app, the keyguard has already been occluded by an
                 // activity, and another activity has started on top of that activity, so normal
                 // app transition animation should be used.
-                return closingApps.isEmpty() ? TRANSIT_OLD_KEYGUARD_OCCLUDE
-                        : TRANSIT_OLD_ACTIVITY_OPEN;
+                if (!closingApps.isEmpty()) {
+                    return TRANSIT_OLD_ACTIVITY_OPEN;
+                }
+                if (!openingApps.isEmpty() && openingApps.valueAt(0).getActivityType()
+                        == ACTIVITY_TYPE_DREAM) {
+                    return TRANSIT_OLD_KEYGUARD_OCCLUDE_BY_DREAM;
+                }
+                return TRANSIT_OLD_KEYGUARD_OCCLUDE;
             case TRANSIT_KEYGUARD_UNOCCLUDE:
                 return TRANSIT_OLD_KEYGUARD_UNOCCLUDE;
         }
@@ -460,16 +467,6 @@ public class AppTransitionController {
             return TRANSIT_OLD_WALLPAPER_OPEN;
         }
 
-        // Some devices don't show a wallpaper. In that case we should still trigger wallpaper
-        // transitions when animating to/from the home activity
-        if (wallpaperTarget == null) {
-            if (topOpeningApp != null && topOpeningApp.isActivityTypeHome()) {
-                return TRANSIT_OLD_WALLPAPER_OPEN;
-            } else if (topClosingApp != null && topClosingApp.isActivityTypeHome()) {
-                return TRANSIT_OLD_WALLPAPER_CLOSE;
-            }
-        }
-
         final ArraySet<WindowContainer> openingWcs = getAnimationTargets(
                 openingApps, closingApps, true /* visible */);
         final ArraySet<WindowContainer> closingWcs = getAnimationTargets(
@@ -481,6 +478,11 @@ public class AppTransitionController {
         @TransitContainerType int openingType = getTransitContainerType(openingContainer);
         @TransitContainerType int closingType = getTransitContainerType(closingContainer);
         if (appTransition.containsTransitRequest(TRANSIT_TO_FRONT) && openingType == TYPE_TASK) {
+            if (topOpeningApp != null && topOpeningApp.isActivityTypeHome()) {
+                // If we are opening the home task, we want to play an animation as if
+                // the task on top is being brought to back.
+                return TRANSIT_OLD_TASK_TO_BACK;
+            }
             return TRANSIT_OLD_TASK_TO_FRONT;
         }
         if (appTransition.containsTransitRequest(TRANSIT_TO_BACK) && closingType == TYPE_TASK) {

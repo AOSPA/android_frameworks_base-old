@@ -25,9 +25,12 @@ fun List<NamedNavArgument>.navRoute(): String {
 }
 
 fun List<NamedNavArgument>.navLink(arguments: Bundle? = null): String {
-    if (arguments == null) return ""
     val argsArray = mutableListOf<String>()
     for (navArg in this) {
+        if (arguments == null || !arguments.containsKey(navArg.name)) {
+            argsArray.add("[rt]")
+            continue
+        }
         when (navArg.argument.type) {
             NavType.StringType -> {
                 argsArray.add(arguments.getString(navArg.name, ""))
@@ -38,29 +41,6 @@ fun List<NamedNavArgument>.navLink(arguments: Bundle? = null): String {
         }
     }
     return argsArray.joinToString("") { arg -> "/$arg" }
-}
-
-fun List<NamedNavArgument>.normalize(arguments: Bundle? = null): Bundle? {
-    if (this.isEmpty()) return null
-    val normArgs = Bundle()
-    for (navArg in this) {
-        when (navArg.argument.type) {
-            NavType.StringType -> {
-                val value = arguments?.getString(navArg.name)
-                if (value != null)
-                    normArgs.putString(navArg.name, value)
-                else
-                    normArgs.putString("unset_" + navArg.name, null)
-            }
-            NavType.IntType -> {
-                if (arguments != null && arguments.containsKey(navArg.name))
-                    normArgs.putInt(navArg.name, arguments.getInt(navArg.name))
-                else
-                    normArgs.putString("unset_" + navArg.name, null)
-            }
-        }
-    }
-    return normArgs
 }
 
 fun List<NamedNavArgument>.getStringArg(name: String, arguments: Bundle? = null): String? {

@@ -80,9 +80,7 @@ class ChangeAppRotationTest(
         get() = {
             super.transition(this)
             setup {
-                test {
-                    testApp.launchViaIntent(wmHelper)
-                }
+                testApp.launchViaIntent(wmHelper)
             }
         }
 
@@ -128,12 +126,6 @@ class ChangeAppRotationTest(
     @Test
     override fun navBarLayerPositionAtStartAndEnd() =
         super.navBarLayerPositionAtStartAndEnd()
-
-    /** {@inheritDoc} */
-    @FlakyTest
-    @Test
-    override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
-        super.visibleLayersShownMoreThanOneConsecutiveEntry()
 
     companion object {
         /**

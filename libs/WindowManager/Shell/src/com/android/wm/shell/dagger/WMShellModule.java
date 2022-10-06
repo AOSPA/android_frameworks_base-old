@@ -51,6 +51,7 @@ import com.android.wm.shell.common.annotations.ShellBackgroundThread;
 import com.android.wm.shell.common.annotations.ShellMainThread;
 import com.android.wm.shell.desktopmode.DesktopMode;
 import com.android.wm.shell.desktopmode.DesktopModeController;
+import com.android.wm.shell.desktopmode.DesktopModeTaskRepository;
 import com.android.wm.shell.draganddrop.DragAndDropController;
 import com.android.wm.shell.freeform.FreeformComponents;
 import com.android.wm.shell.freeform.FreeformTaskListener;
@@ -82,7 +83,7 @@ import com.android.wm.shell.splitscreen.SplitScreenController;
 import com.android.wm.shell.sysui.ShellCommandHandler;
 import com.android.wm.shell.sysui.ShellController;
 import com.android.wm.shell.sysui.ShellInit;
-import com.android.wm.shell.transition.SplitscreenPipMixedHandler;
+import com.android.wm.shell.transition.DefaultMixedHandler;
 import com.android.wm.shell.transition.Transitions;
 import com.android.wm.shell.unfold.ShellUnfoldProgressProvider;
 import com.android.wm.shell.unfold.UnfoldAnimationController;
@@ -220,14 +221,14 @@ public abstract class WMShellModule {
             Context context,
             ShellInit shellInit,
             ShellTaskOrganizer shellTaskOrganizer,
-            Optional<RecentTasksController> recentTasksController,
+            Optional<DesktopModeTaskRepository> desktopModeTaskRepository,
             WindowDecorViewModel<?> windowDecorViewModel) {
         // TODO(b/238217847): Temporarily add this check here until we can remove the dynamic
         //                    override for this controller from the base module
         ShellInit init = FreeformComponents.isFreeformEnabled(context)
                 ? shellInit
                 : null;
-        return new FreeformTaskListener<>(init, shellTaskOrganizer, recentTasksController,
+        return new FreeformTaskListener<>(init, shellTaskOrganizer, desktopModeTaskRepository,
                 windowDecorViewModel);
     }
 
@@ -333,6 +334,7 @@ public abstract class WMShellModule {
             WindowManagerShellWrapper windowManagerShellWrapper,
             TaskStackListenerImpl taskStackListener,
             PipParamsChangedForwarder pipParamsChangedForwarder,
+            DisplayInsetsController displayInsetsController,
             Optional<OneHandedController> oneHandedController,
             @ShellMainThread ShellExecutor mainExecutor) {
         return Optional.ofNullable(PipController.create(
@@ -341,7 +343,7 @@ public abstract class WMShellModule {
                 pipBoundsState, pipMotionHelper, pipMediaController, phonePipMenuController,
                 pipTaskOrganizer, pipTransitionState, pipTouchHandler, pipTransitionController,
                 windowManagerShellWrapper, taskStackListener, pipParamsChangedForwarder,
-                oneHandedController, mainExecutor));
+                displayInsetsController, oneHandedController, mainExecutor));
     }
 
     @WMSingleton
@@ -484,13 +486,13 @@ public abstract class WMShellModule {
 
     @WMSingleton
     @Provides
-    static SplitscreenPipMixedHandler provideSplitscreenPipMixedHandler(
+    static DefaultMixedHandler provideDefaultMixedHandler(
             ShellInit shellInit,
             Optional<SplitScreenController> splitScreenOptional,
             Optional<PipTouchHandler> pipTouchHandlerOptional,
             Transitions transitions) {
-        return new SplitscreenPipMixedHandler(shellInit, splitScreenOptional,
-                pipTouchHandlerOptional, transitions);
+        return new DefaultMixedHandler(shellInit, transitions, splitScreenOptional,
+                pipTouchHandlerOptional);
     }
 
     //
@@ -598,15 +600,22 @@ public abstract class WMShellModule {
             Context context, ShellInit shellInit,
             ShellTaskOrganizer shellTaskOrganizer,
             RootDisplayAreaOrganizer rootDisplayAreaOrganizer,
-            @ShellMainThread Handler mainHandler
+            @ShellMainThread Handler mainHandler,
+            Transitions transitions
     ) {
         if (DesktopMode.IS_SUPPORTED) {
             return Optional.of(new DesktopModeController(context, shellInit, shellTaskOrganizer,
-                    rootDisplayAreaOrganizer,
-                    mainHandler));
+                    rootDisplayAreaOrganizer, mainHandler, transitions));
         } else {
             return Optional.empty();
         }
+    }
+
+    @WMSingleton
+    @Provides
+    @DynamicOverride
+    static DesktopModeTaskRepository provideDesktopModeTaskRepository() {
+        return new DesktopModeTaskRepository();
     }
 
     //
@@ -619,7 +628,7 @@ public abstract class WMShellModule {
     @ShellCreateTriggerOverride
     @Provides
     static Object provideIndependentShellComponentsToCreate(
-            SplitscreenPipMixedHandler splitscreenPipMixedHandler,
+            DefaultMixedHandler defaultMixedHandler,
             Optional<DesktopModeController> desktopModeController) {
         return new Object();
     }

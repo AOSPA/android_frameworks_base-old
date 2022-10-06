@@ -56,7 +56,7 @@ import org.junit.runners.Parameterized
 @Group3
 class ExpandPipOnDoubleClickTest(testSpec: FlickerTestParameter) : PipTransition(testSpec) {
     override val transition: FlickerBuilder.() -> Unit
-        get() = buildTransition(eachRun = true) {
+        get() = buildTransition {
             transitions {
                 pipApp.doubleClickPipWindow(wmHelper)
             }
@@ -111,7 +111,7 @@ class ExpandPipOnDoubleClickTest(testSpec: FlickerTestParameter) : PipTransition
     /**
      * Checks that the visible region of [pipApp] always expands during the animation
      */
-    @FlakyTest(bugId = 228012337)
+    @Presubmit
     @Test
     fun pipLayerExpands() {
         testSpec.assertLayers {

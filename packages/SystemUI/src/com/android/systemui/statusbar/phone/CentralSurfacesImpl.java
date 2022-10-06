@@ -99,11 +99,14 @@ import android.view.MotionEvent;
 import android.view.ThreadedRenderer;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewRootImpl;
 import android.view.WindowInsetsController.Appearance;
 import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
 import android.view.accessibility.AccessibilityManager;
 import android.widget.DateTimeView;
+import android.window.OnBackInvokedCallback;
+import android.window.OnBackInvokedDispatcher;
 
 import androidx.annotation.NonNull;
 import androidx.lifecycle.Lifecycle;
@@ -119,6 +122,7 @@ import com.android.internal.logging.UiEventLoggerImpl;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.statusbar.RegisterStatusBarResult;
+import com.android.keyguard.AuthKeyguardMessageArea;
 import com.android.keyguard.FaceAuthApiRequestReason;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.KeyguardUpdateMonitorCallback;
@@ -508,9 +512,16 @@ public class CentralSurfacesImpl extends CoreStartable implements
     private CentralSurfacesComponent mCentralSurfacesComponent;
 
     // Flags for disabling the status bar
-    // Two variables becaseu the first one evidently ran out of room for new flags.
+    // Two variables because the first one evidently ran out of room for new flags.
     private int mDisabled1 = 0;
     private int mDisabled2 = 0;
+
+    /**
+     * This keeps track of whether we have (or haven't) registered the predictive back callback.
+     * Since we can have visible -> visible transitions, we need to avoid
+     * double-registering (or double-unregistering) our callback.
+     */
+    private boolean mIsBackCallbackRegistered = false;
 
     /** @see android.view.WindowInsetsController#setSystemBarsAppearance(int, int) */
     private @Appearance int mAppearance;
@@ -635,6 +646,12 @@ public class CentralSurfacesImpl extends CoreStartable implements
 
     private final InteractionJankMonitor mJankMonitor;
 
+    private final OnBackInvokedCallback mOnBackInvokedCallback = () -> {
+        if (DEBUG) {
+            Log.d(TAG, "mOnBackInvokedCallback() called");
+        }
+        onBackPressed();
+    };
 
     /**
      * Public constructor for CentralSurfaces.
@@ -1565,6 +1582,11 @@ public class CentralSurfacesImpl extends CoreStartable implements
     }
 
     @Override
+    public AuthKeyguardMessageArea getKeyguardMessageArea() {
+        return mNotificationShadeWindowViewController.getKeyguardMessageArea();
+    }
+
+    @Override
     public int getStatusBarHeight() {
         return mStatusBarWindowController.getStatusBarHeight();
     }
@@ -1697,13 +1719,18 @@ public class CentralSurfacesImpl extends CoreStartable implements
                 }
 
                 @Override
-                public void onLaunchAnimationCancelled() {
+                public void onLaunchAnimationCancelled(@Nullable Boolean newKeyguardOccludedState) {
+                    if (newKeyguardOccludedState != null) {
+                        mKeyguardViewMediator.setOccluded(
+                                newKeyguardOccludedState, false /* animate */);
+                    }
+
                     // Set mIsLaunchingActivityOverLockscreen to false before actually finishing the
                     // animation so that we can assume that mIsLaunchingActivityOverLockscreen
                     // being true means that we will collapse the shade (or at least run the
                     // post collapse runnables) later on.
                     CentralSurfacesImpl.this.mIsLaunchingActivityOverLockscreen = false;
-                    getDelegate().onLaunchAnimationCancelled();
+                    getDelegate().onLaunchAnimationCancelled(newKeyguardOccludedState);
                 }
             };
         } else if (dismissShade) {
@@ -2725,9 +2752,38 @@ public class CentralSurfacesImpl extends CoreStartable implements
         if (visibleToUser) {
             handleVisibleToUserChangedImpl(visibleToUser);
             mNotificationLogger.startNotificationLogging();
+
+            if (!mIsBackCallbackRegistered) {
+                ViewRootImpl viewRootImpl = getViewRootImpl();
+                if (viewRootImpl != null) {
+                    viewRootImpl.getOnBackInvokedDispatcher()
+                            .registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                                    mOnBackInvokedCallback);
+                    mIsBackCallbackRegistered = true;
+                    if (DEBUG) Log.d(TAG, "is now VISIBLE to user AND callback registered");
+                }
+            } else {
+                if (DEBUG) Log.d(TAG, "is now VISIBLE to user, BUT callback ALREADY unregistered");
+            }
         } else {
             mNotificationLogger.stopNotificationLogging();
             handleVisibleToUserChangedImpl(visibleToUser);
+
+            if (mIsBackCallbackRegistered) {
+                ViewRootImpl viewRootImpl = getViewRootImpl();
+                if (viewRootImpl != null) {
+                    viewRootImpl.getOnBackInvokedDispatcher()
+                            .unregisterOnBackInvokedCallback(mOnBackInvokedCallback);
+                    mIsBackCallbackRegistered = false;
+                    if (DEBUG) Log.d(TAG, "is NOT VISIBLE to user, AND callback unregistered");
+                }
+            } else {
+                if (DEBUG) {
+                    Log.d(TAG,
+                            "is NOT VISIBLE to user, BUT NO callback (or callback ALREADY "
+                                    + "unregistered)");
+                }
+            }
         }
     }
 
@@ -2996,19 +3052,6 @@ public class CentralSurfacesImpl extends CoreStartable implements
         }
         mLaunchTransitionEndRunnable = null;
         mLaunchTransitionCancelRunnable = null;
-    }
-
-    /**
-     * Fades the content of the Keyguard while we are dozing and makes it invisible when finished
-     * fading.
-     */
-    @Override
-    public void fadeKeyguardWhilePulsing() {
-        mNotificationPanelViewController.fadeOut(0, FADE_KEYGUARD_DURATION_PULSING,
-                ()-> {
-                hideKeyguard();
-                mStatusBarKeyguardViewManager.onKeyguardFadedAway();
-            }).start();
     }
 
     /**
@@ -3300,14 +3343,12 @@ public class CentralSurfacesImpl extends CoreStartable implements
         // show the bouncer/lockscreen.
         if (!mKeyguardViewMediator.isHiding()
                 && !mKeyguardUnlockAnimationController.isPlayingCannedUnlockAnimation()) {
-            if (mState == StatusBarState.SHADE_LOCKED
-                    && mKeyguardUpdateMonitor.isUdfpsEnrolled()) {
+            if (mState == StatusBarState.SHADE_LOCKED) {
                 // shade is showing while locked on the keyguard, so go back to showing the
                 // lock screen where users can use the UDFPS affordance to enter the device
                 mStatusBarKeyguardViewManager.reset(true);
-            } else if ((mState == StatusBarState.KEYGUARD
-                    && !mStatusBarKeyguardViewManager.bouncerIsOrWillBeShowing())
-                    || mState == StatusBarState.SHADE_LOCKED) {
+            } else if (mState == StatusBarState.KEYGUARD
+                    && !mStatusBarKeyguardViewManager.bouncerIsOrWillBeShowing()) {
                 mStatusBarKeyguardViewManager.showGenericBouncer(true /* scrimmed */);
             }
         }
@@ -3453,6 +3494,12 @@ public class CentralSurfacesImpl extends CoreStartable implements
         return mNotificationPanelViewController.getKeyguardBottomAreaView();
     }
 
+    protected ViewRootImpl getViewRootImpl()  {
+        NotificationShadeWindowView nswv = getNotificationShadeWindowView();
+        if (nswv != null) return nswv.getViewRootImpl();
+
+        return null;
+    }
     /**
      * Propagation of the bouncer state, indicating that it's fully visible.
      */
@@ -3561,6 +3608,7 @@ public class CentralSurfacesImpl extends CoreStartable implements
             dismissVolumeDialog();
             mWakeUpCoordinator.setFullyAwake(false);
             mKeyguardBypassController.onStartedGoingToSleep();
+            mStatusBarTouchableRegionManager.updateTouchableRegion();
 
             // The unlocked screen off and fold to aod animations might use our LightRevealScrim -
             // we need to be expanded for it to be visible.
@@ -3589,6 +3637,7 @@ public class CentralSurfacesImpl extends CoreStartable implements
                 // once we fully woke up.
                 updateRevealEffect(true /* wakingUp */);
                 updateNotificationPanelTouchState();
+                mStatusBarTouchableRegionManager.updateTouchableRegion();
 
                 // If we are waking up during the screen off animation, we should undo making the
                 // expanded visible (we did that so the LightRevealScrim would be visible).
@@ -3769,6 +3818,12 @@ public class CentralSurfacesImpl extends CoreStartable implements
     public void notifyBiometricAuthModeChanged() {
         mDozeServiceHost.updateDozing();
         updateScrimController();
+    }
+
+    @VisibleForTesting
+    public void setNotificationShadeWindowViewController(
+            NotificationShadeWindowViewController nswvc) {
+        mNotificationShadeWindowViewController = nswvc;
     }
 
     /**

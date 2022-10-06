@@ -19,10 +19,13 @@ package com.android.settingslib.spa.framework.common
 import android.os.Bundle
 import androidx.compose.runtime.Composable
 import androidx.navigation.NamedNavArgument
-import com.android.settingslib.spa.framework.util.normalize
+import androidx.navigation.NavType
+import com.android.settingslib.spa.framework.BrowseActivity
+import com.android.settingslib.spa.framework.util.navLink
 
 const val INJECT_ENTRY_NAME = "INJECT"
 const val ROOT_ENTRY_NAME = "ROOT"
+const val ROOT_PAGE_NAME = "Root"
 
 /**
  * Defines data of one Settings entry for Settings search.
@@ -37,20 +40,50 @@ data class UiData(val title: String = "")
 /**
  * Defines data to identify a Settings page.
  */
-data class SettingsPage(val name: String = "", val arguments: Bundle? = null) {
-    override fun toString(): String {
-        val argsStr = arguments?.toString()?.removeRange(0, 6) ?: ""
-        return name + argsStr
-    }
+data class SettingsPage(
+    // The unique id of this page, which is computed by name + normalized(arguments)
+    val id: Int,
 
+    // The name of the page, which is used to compute the unique id, and need to be stable.
+    val name: String,
+
+    // Defined parameters of this page.
+    val parameter: List<NamedNavArgument> = emptyList(),
+
+    // The arguments of this page.
+    val arguments: Bundle? = null,
+) {
     companion object {
         fun create(
             name: String,
             parameter: List<NamedNavArgument> = emptyList(),
             arguments: Bundle? = null
         ): SettingsPage {
-            return SettingsPage(name, parameter.normalize(arguments))
+            return SettingsPageBuilder(name, parameter).setArguments(arguments).build()
         }
+    }
+
+    fun formatArguments(): String {
+        val normalizedArguments = parameter.normalize(arguments)
+        if (normalizedArguments == null || normalizedArguments.isEmpty) return "[No arguments]"
+        return normalizedArguments.toString().removeRange(0, 6)
+    }
+
+    fun formatAll(): String {
+        return "$name ${formatArguments()}"
+    }
+
+    fun buildRoute(highlightEntryName: String? = null): String {
+        val highlightParam =
+            if (highlightEntryName == null)
+                ""
+            else
+                "?${BrowseActivity.HIGHLIGHT_ENTRY_PARAM_NAME}=$highlightEntryName"
+        return name + parameter.navLink(arguments) + highlightParam
+    }
+
+    fun hasRuntimeParam(): Boolean {
+        return parameter.hasRuntimeParam(arguments)
     }
 }
 
@@ -58,15 +91,13 @@ data class SettingsPage(val name: String = "", val arguments: Bundle? = null) {
  * Defines data of a Settings entry.
  */
 data class SettingsEntry(
-    // The unique id of this entry.
-    // By default, it is computed by name + owner + fromPage + toPage
-    val id: String,
+    // The unique id of this entry, which is computed by name + owner + fromPage + toPage.
+    val id: Int,
 
-    // The display name of this entry, which is used to be shown in hierarchy.
-    // By default, it is computed by name + owner
-    val displayName: String,
-
+    // The name of the page, which is used to compute the unique id, and need to be stable.
     val name: String,
+
+    // The owner page of this entry.
     val owner: SettingsPage,
 
     // Defines linking of Settings entries
@@ -104,10 +135,68 @@ data class SettingsEntry(
      * injected entry. In the long term, we may deprecate the @Composable Page() API in SPP, and
      * use each entries' UI rendering function in the page instead.
      */
-    val uiLayout: (@Composable () -> Unit) = {},
+    val uiLayoutImpl: (@Composable (arguments: Bundle?) -> Unit) = {},
 ) {
-    override fun toString(): String {
-        return displayName + "(${fromPage?.toString()}->${toPage?.toString()})"
+    fun formatAll(): String {
+        val content = listOf(
+            "owner = ${owner.formatAll()}",
+            "linkFrom = ${fromPage?.formatAll()}",
+            "linkTo = ${toPage?.formatAll()}",
+        )
+        return content.joinToString("\n")
+    }
+
+    // The display name of the entry, for better readability.
+    fun displayName(): String {
+        return "${owner.name}:$name"
+    }
+
+    private fun getDisplayPage(): SettingsPage {
+        // Display the entry on its from-page, or on its owner page if the from-page is unset.
+        return fromPage ?: owner
+    }
+
+    fun buildRoute(): String {
+        return getDisplayPage().buildRoute(name)
+    }
+
+    fun hasRuntimeParam(): Boolean {
+        return getDisplayPage().hasRuntimeParam()
+    }
+
+    @Composable
+    fun UiLayout(runtimeArguments: Bundle? = null) {
+        val arguments = Bundle()
+        if (owner.arguments != null) arguments.putAll(owner.arguments)
+        if (runtimeArguments != null) arguments.putAll(runtimeArguments)
+        uiLayoutImpl(arguments)
+    }
+}
+
+data class SettingsPageWithEntry(
+    val page: SettingsPage,
+    val entries: List<SettingsEntry>,
+)
+
+class SettingsPageBuilder(
+    private val name: String,
+    private val parameter: List<NamedNavArgument> = emptyList()
+) {
+    private var arguments: Bundle? = null
+
+    fun build(): SettingsPage {
+        val normArguments = parameter.normalize(arguments)
+        return SettingsPage(
+            id = "$name:${normArguments?.toString()}".toUniqueId(),
+            name = name,
+            parameter = parameter,
+            arguments = arguments,
+        )
+    }
+
+    fun setArguments(arguments: Bundle?): SettingsPageBuilder {
+        this.arguments = arguments
+        return this
     }
 }
 
@@ -115,19 +204,16 @@ data class SettingsEntry(
  * The helper to build a Settings Entry instance.
  */
 class SettingsEntryBuilder(private val name: String, private val owner: SettingsPage) {
-    private var uniqueId: String? = null
-    private var displayName: String? = null
     private var fromPage: SettingsPage? = null
     private var toPage: SettingsPage? = null
     private var isAllowSearch: Boolean? = null
 
     private var searchDataFn: () -> SearchData? = { null }
-    private var uiLayoutFn: (@Composable () -> Unit) = {}
+    private var uiLayoutFn: (@Composable (arguments: Bundle?) -> Unit) = {}
 
     fun build(): SettingsEntry {
         return SettingsEntry(
-            id = computeUniqueId(),
-            displayName = computeDisplayName(),
+            id = "$name:${owner.id}(${fromPage?.id}-${toPage?.id})".toUniqueId(),
             name = name,
             owner = owner,
 
@@ -136,11 +222,11 @@ class SettingsEntryBuilder(private val name: String, private val owner: Settings
             toPage = toPage,
 
             // attributes
-            isAllowSearch = computeSearchable(),
+            isAllowSearch = getIsSearchable(),
 
             // functions
             searchData = searchDataFn,
-            uiLayout = uiLayoutFn,
+            uiLayoutImpl = uiLayoutFn,
         )
     }
 
@@ -163,17 +249,12 @@ class SettingsEntryBuilder(private val name: String, private val owner: Settings
         return this
     }
 
-    fun setUiLayoutFn(fn: @Composable () -> Unit): SettingsEntryBuilder {
+    fun setUiLayoutFn(fn: @Composable (arguments: Bundle?) -> Unit): SettingsEntryBuilder {
         this.uiLayoutFn = fn
         return this
     }
 
-    private fun computeUniqueId(): String =
-        uniqueId ?: "$owner:$name" + fromPage?.toString() + toPage?.toString()
-
-    private fun computeDisplayName(): String = displayName ?: "$owner:$name"
-
-    private fun computeSearchable(): Boolean = isAllowSearch ?: false
+    private fun getIsSearchable(): Boolean = isAllowSearch ?: false
 
     companion object {
         fun create(entryName: String, owner: SettingsPage): SettingsEntryBuilder {
@@ -188,12 +269,48 @@ class SettingsEntryBuilder(private val name: String, private val owner: Settings
             return create(entryName, owner).setLink(toPage = owner)
         }
 
-        fun createInject(owner: SettingsPage): SettingsEntryBuilder {
-            return createLinkTo(INJECT_ENTRY_NAME, owner)
+        fun createInject(owner: SettingsPage, entryName: String? = null): SettingsEntryBuilder {
+            val name = entryName ?: "${INJECT_ENTRY_NAME}_${owner.name}"
+            return createLinkTo(name, owner)
         }
 
-        fun createRoot(page: SettingsPage): SettingsEntryBuilder {
-            return createLinkTo(ROOT_ENTRY_NAME, page)
+        fun createRoot(owner: SettingsPage, entryName: String? = null): SettingsEntryBuilder {
+            val name = entryName ?: "${ROOT_ENTRY_NAME}_${owner.name}"
+            return createLinkTo(name, owner)
         }
     }
+}
+
+private fun String.toUniqueId(): Int {
+    return this.hashCode()
+}
+
+private fun List<NamedNavArgument>.normalize(arguments: Bundle? = null): Bundle? {
+    if (this.isEmpty()) return null
+    val normArgs = Bundle()
+    for (navArg in this) {
+        when (navArg.argument.type) {
+            NavType.StringType -> {
+                val value = arguments?.getString(navArg.name)
+                if (value != null)
+                    normArgs.putString(navArg.name, value)
+                else
+                    normArgs.putString("unset_" + navArg.name, null)
+            }
+            NavType.IntType -> {
+                if (arguments != null && arguments.containsKey(navArg.name))
+                    normArgs.putInt(navArg.name, arguments.getInt(navArg.name))
+                else
+                    normArgs.putString("unset_" + navArg.name, null)
+            }
+        }
+    }
+    return normArgs
+}
+
+private fun List<NamedNavArgument>.hasRuntimeParam(arguments: Bundle? = null): Boolean {
+    for (navArg in this) {
+        if (arguments == null || !arguments.containsKey(navArg.name)) return true
+    }
+    return false
 }

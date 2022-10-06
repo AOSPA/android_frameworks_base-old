@@ -97,6 +97,7 @@ import android.view.View;
 import android.view.WindowManager;
 import android.view.WindowManager.DisplayImePolicy;
 import android.window.ITransitionPlayer;
+import android.window.ScreenCapture;
 import android.window.StartingWindowInfo;
 import android.window.StartingWindowRemovalInfo;
 import android.window.TaskFragmentOrganizer;
@@ -241,7 +242,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
         // Ensure letterbox vertical position multiplier is not overridden on any device target.
         // {@link com.android.internal.R.dimen.config_letterboxHorizontalPositionMultiplier},
         // may be set on some device form factors.
-        mAtm.mWindowManager.mLetterboxConfiguration.setLetterboxVerticalPositionMultiplier(0.5f);
+        mAtm.mWindowManager.mLetterboxConfiguration.setLetterboxVerticalPositionMultiplier(0.0f);
         // Ensure letterbox horizontal reachability treatment isn't overridden on any device target.
         // {@link com.android.internal.R.bool.config_letterboxIsHorizontalReachabilityEnabled},
         // may be set on some device form factors.
@@ -946,8 +947,8 @@ class WindowTestsBase extends SystemServiceTestsBase {
 
     /** Mocks the behavior of taking a snapshot. */
     void mockSurfaceFreezerSnapshot(SurfaceFreezer surfaceFreezer) {
-        final SurfaceControl.ScreenshotHardwareBuffer screenshotBuffer =
-                mock(SurfaceControl.ScreenshotHardwareBuffer.class);
+        final ScreenCapture.ScreenshotHardwareBuffer screenshotBuffer =
+                mock(ScreenCapture.ScreenshotHardwareBuffer.class);
         final HardwareBuffer hardwareBuffer = mock(HardwareBuffer.class);
         spyOn(surfaceFreezer);
         doReturn(screenshotBuffer).when(surfaceFreezer)

@@ -97,8 +97,6 @@ public class StageCoordinatorTests extends ShellTestCase {
     @Mock
     private TransactionPool mTransactionPool;
     @Mock
-    private SplitscreenEventLogger mLogger;
-    @Mock
     private ShellExecutor mMainExecutor;
 
     private final Rect mBounds1 = new Rect(10, 20, 30, 40);
@@ -115,7 +113,7 @@ public class StageCoordinatorTests extends ShellTestCase {
         MockitoAnnotations.initMocks(this);
         mStageCoordinator = spy(new StageCoordinator(mContext, DEFAULT_DISPLAY, mSyncQueue,
                 mTaskOrganizer, mMainStage, mSideStage, mDisplayController, mDisplayImeController,
-                mDisplayInsetsController, mSplitLayout, mTransitions, mTransactionPool, mLogger,
+                mDisplayInsetsController, mSplitLayout, mTransitions, mTransactionPool,
                 mMainExecutor, Optional.empty()));
         doNothing().when(mStageCoordinator).updateActivityOptions(any(), anyInt());
 
@@ -227,7 +225,6 @@ public class StageCoordinatorTests extends ShellTestCase {
         mStageCoordinator.exitSplitScreen(testTaskId, EXIT_REASON_RETURN_HOME);
         verify(mMainStage).reorderChild(eq(testTaskId), eq(true),
                 any(WindowContainerTransaction.class));
-        verify(mSideStage).dismiss(any(WindowContainerTransaction.class), eq(false));
         verify(mMainStage).resetBounds(any(WindowContainerTransaction.class));
     }
 
@@ -241,7 +238,6 @@ public class StageCoordinatorTests extends ShellTestCase {
         verify(mSideStage).reorderChild(eq(testTaskId), eq(true),
                 any(WindowContainerTransaction.class));
         verify(mSideStage).resetBounds(any(WindowContainerTransaction.class));
-        verify(mMainStage).dismiss(any(WindowContainerTransaction.class), eq(false));
     }
 
     @Test

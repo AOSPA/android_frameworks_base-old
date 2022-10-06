@@ -1733,7 +1733,7 @@
     <item name="default_lock_wallpaper" type="drawable">@null</item>
 
     <!-- Component name of the built in wallpaper used to display bitmap wallpapers. This must not be null. -->
-    <string name="image_wallpaper_component" translatable="false">com.android.systemui/com.android.systemui.ImageWallpaper</string>
+    <string name="image_wallpaper_component" translatable="false">com.android.systemui/com.android.systemui.wallpapers.ImageWallpaper</string>
 
     <!-- True if WallpaperService is enabled -->
     <bool name="config_enableWallpaperService">true</bool>
@@ -4869,9 +4869,6 @@
         -->
     </array>
 
-    <!-- How long it takes for the HW to start illuminating after the illumination is requested. -->
-    <integer name="config_udfps_illumination_transition_ms">50</integer>
-
     <!-- Indicates whether device has a power button fingerprint sensor. -->
     <bool name="config_is_powerbutton_fps" translatable="false" >false</bool>
 
@@ -5210,7 +5207,7 @@
     <!-- Vertical position of a center of the letterboxed app window.
         0 corresponds to the upper side of the screen and 1 to the lower side. If given value < 0
         or > 1, it is ignored and central position is used (0.5). -->
-    <item name="config_letterboxVerticalPositionMultiplier" format="float" type="dimen">0.5</item>
+    <item name="config_letterboxVerticalPositionMultiplier" format="float" type="dimen">0.0</item>
 
     <!-- Whether horizontal reachability repositioning is allowed for letterboxed fullscreen apps.
     -->

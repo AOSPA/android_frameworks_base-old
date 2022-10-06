@@ -23,6 +23,9 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.tooling.preview.Preview
+import com.android.settingslib.spa.framework.common.SettingsEntry
+import com.android.settingslib.spa.framework.common.SettingsEntryBuilder
+import com.android.settingslib.spa.framework.common.SettingsPage
 import com.android.settingslib.spa.framework.common.SettingsPageProvider
 import com.android.settingslib.spa.framework.compose.navigator
 import com.android.settingslib.spa.framework.compose.stateOf
@@ -39,27 +42,59 @@ private const val TITLE = "Sample TwoTargetSwitchPreference"
 object TwoTargetSwitchPreferencePageProvider : SettingsPageProvider {
     override val name = "TwoTargetSwitchPreference"
 
+    override fun buildEntry(arguments: Bundle?): List<SettingsEntry> {
+        val owner = SettingsPage.create(name)
+        val entryList = mutableListOf<SettingsEntry>()
+        entryList.add(
+            SettingsEntryBuilder.create( "TwoTargetSwitchPreference", owner)
+                .setIsAllowSearch(true)
+                .setUiLayoutFn {
+                    SampleTwoTargetSwitchPreference()
+                }.build()
+        )
+        entryList.add(
+            SettingsEntryBuilder.create( "TwoTargetSwitchPreference with summary", owner)
+                .setIsAllowSearch(true)
+                .setUiLayoutFn {
+                    SampleTwoTargetSwitchPreferenceWithSummary()
+                }.build()
+        )
+        entryList.add(
+            SettingsEntryBuilder.create( "TwoTargetSwitchPreference with async summary", owner)
+                .setIsAllowSearch(true)
+                .setUiLayoutFn {
+                    SampleTwoTargetSwitchPreferenceWithAsyncSummary()
+                }.build()
+        )
+        entryList.add(
+            SettingsEntryBuilder.create( "TwoTargetSwitchPreference not changeable", owner)
+                .setIsAllowSearch(true)
+                .setUiLayoutFn {
+                    SampleNotChangeableTwoTargetSwitchPreference()
+                }.build()
+        )
+
+        return entryList
+    }
+
+    fun buildInjectEntry(): SettingsEntryBuilder {
+        return SettingsEntryBuilder.createInject(owner = SettingsPage.create(name))
+            .setIsAllowSearch(true)
+            .setUiLayoutFn {
+                Preference(object : PreferenceModel {
+                    override val title = TITLE
+                    override val onClick = navigator(name)
+                })
+            }
+    }
+
     @Composable
     override fun Page(arguments: Bundle?) {
-        TwoTargetSwitchPreferencePage()
-    }
-
-    @Composable
-    fun EntryItem() {
-        Preference(object : PreferenceModel {
-            override val title = TITLE
-            override val onClick = navigator(name)
-        })
-    }
-}
-
-@Composable
-private fun TwoTargetSwitchPreferencePage() {
-    RegularScaffold(title = TITLE) {
-        SampleTwoTargetSwitchPreference()
-        SampleTwoTargetSwitchPreferenceWithSummary()
-        SampleTwoTargetSwitchPreferenceWithAsyncSummary()
-        SampleNotChangeableTwoTargetSwitchPreference()
+        RegularScaffold(title = TITLE) {
+            for (entry in buildEntry(arguments)) {
+                entry.UiLayout()
+            }
+        }
     }
 }
 
@@ -123,6 +158,6 @@ private fun SampleNotChangeableTwoTargetSwitchPreference() {
 @Composable
 private fun TwoTargetSwitchPreferencePagePreview() {
     SettingsTheme {
-        TwoTargetSwitchPreferencePage()
+        TwoTargetSwitchPreferencePageProvider.Page(null)
     }
 }

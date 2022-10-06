@@ -62,6 +62,7 @@ import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.Intent;
 import android.content.res.ColorStateList;
+import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
@@ -3094,7 +3095,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * <p>
      * Accessibility interactions from services without {@code isAccessibilityTool} set to true are
      * disallowed for any of the following conditions:
-     * <li>this view's window sets {@link WindowManager.LayoutParams#FLAG_SECURE}.</li>
      * <li>this view sets {@link #getFilterTouchesWhenObscured()}.</li>
      * <li>any parent of this view returns true from {@link #isAccessibilityDataPrivate()}.</li>
      * </p>
@@ -8325,10 +8325,17 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
     /**
      * Visually distinct portion of a window with window-like semantics are considered panes for
-     * accessibility purposes. One example is the content view of a fragment that is replaced.
+     * accessibility purposes. One example is the content view of a large fragment that is replaced.
      * In order for accessibility services to understand a pane's window-like behavior, panes
-     * should have descriptive titles. Views with pane titles produce {@link AccessibilityEvent}s
-     * when they appear, disappear, or change title.
+     * should have descriptive titles. Views with pane titles produce
+     * {@link AccessibilityEvent#TYPE_WINDOW_STATE_CHANGED}s when they appear, disappear, or change
+     * title.
+     *
+     * <p>
+     * When transitioning from one Activity to another, instead of using
+     * setAccessibilityPaneTitle(), set a descriptive title for its window by using android:label
+     * for the matching <activity> entry in your application’s manifest or updating the title at
+     * runtime with{@link android.app.Activity#setTitle(CharSequence)}.
      *
      * @param accessibilityPaneTitle The pane's title. Setting to {@code null} indicates that this
      *                               View is not a pane.
@@ -10994,8 +11001,19 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * description. An image of a floppy disk that is used to save a file may
      * use "Save".
      *
+     * <p>
+     * This should omit role or state. Role refers to the kind of user-interface element the View
+     * is, such as a Button or Checkbox. State refers to a frequently changing property of the View,
+     * such as an On/Off state of a button or the audio level of a volume slider.
+     *
+     * <p>
+     * Content description updates are not frequent, and are used when the semantic content - not
+     * the state - of the element changes. For example, a Play button might change to a Pause
+     * button during music playback.
+     *
      * @param contentDescription The content description.
      * @see #getContentDescription()
+     * @see #setStateDescription(CharSequence)} for state changes.
      * @attr ref android.R.styleable#View_contentDescription
      */
     @RemotableViewMethod
@@ -12889,7 +12907,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         if (mViewTranslationCallback != null) {
             mViewTranslationCallback.onClearTranslation(this);
         }
-        clearViewTranslationCallback();
         clearViewTranslationResponse();
         if (hasTranslationTransientState()) {
             setHasTransientState(false);
@@ -13897,6 +13914,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * See also {@link #focusSearch(int)}, which is what you call to say that you
      * have focus, and you want your parent to look for the next one.
      *
+     * <p>
+     * <b>Note:</b> Avoid setting accessibility focus. This is intended to be controlled by screen
+     * readers. Apps changing focus can confuse screen readers, so the resulting behavior can vary
+     * by device and screen reader version.
+     *
      * @return Whether this view actually took accessibility focus.
      *
      * @hide
@@ -14508,9 +14530,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         // Use the explicit value if set.
         if (mExplicitAccessibilityDataPrivate != ACCESSIBILITY_DATA_PRIVATE_AUTO) {
             mInferredAccessibilityDataPrivate = mExplicitAccessibilityDataPrivate;
-        } else if (mAttachInfo != null && mAttachInfo.mWindowSecure) {
-            // Views inside FLAG_SECURE windows default to accessibilityDataPrivate.
-            mInferredAccessibilityDataPrivate = ACCESSIBILITY_DATA_PRIVATE_YES;
         } else if (getFilterTouchesWhenObscured()) {
             // Views that set filterTouchesWhenObscured default to accessibilityDataPrivate.
             mInferredAccessibilityDataPrivate = ACCESSIBILITY_DATA_PRIVATE_YES;
@@ -14734,6 +14753,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * {@link AccessibilityNodeInfo#ACTION_SCROLL_BACKWARD} and
      * {@link AccessibilityNodeInfo#ACTION_SCROLL_FORWARD} to nested scrolling parents if
      * {@link #isNestedScrollingEnabled() nested scrolling is enabled} on this view.</p>
+     *
+     * <p>
+     * <b>Note:</b> Avoid setting accessibility focus with
+     * {@link AccessibilityNodeInfo#ACTION_ACCESSIBILITY_FOCUS}. This is intended to be controlled
+     * by screen readers. Apps changing focus can confuse screen readers, so the resulting behavior
+     * can vary by device and screen reader version.
      *
      * @param action The action to perform.
      * @param arguments Optional action arguments.
@@ -27550,6 +27575,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 || (shadowTouchPoint.x < 0) || (shadowTouchPoint.y < 0)) {
             throw new IllegalStateException("Drag shadow dimensions must not be negative");
         }
+        final float overrideInvScale = CompatibilityInfo.getOverrideInvertedScale();
+        if (overrideInvScale != 1f) {
+            shadowTouchPoint.x = (int) (shadowTouchPoint.x / overrideInvScale);
+            shadowTouchPoint.y = (int) (shadowTouchPoint.y / overrideInvScale);
+        }
 
         // Create 1x1 surface when zero surface size is specified because SurfaceControl.Builder
         // does not accept zero size surface.
@@ -27574,6 +27604,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 .setFormat(PixelFormat.TRANSLUCENT)
                 .setCallsite("View.startDragAndDrop")
                 .build();
+        if (overrideInvScale != 1f) {
+            final SurfaceControl.Transaction transaction = new SurfaceControl.Transaction();
+            transaction.setMatrix(surfaceControl, 1 / overrideInvScale, 0, 0, 1 / overrideInvScale)
+                    .apply();
+        }
         final Surface surface = new Surface();
         surface.copyFrom(surfaceControl);
         IBinder token = null;
@@ -30224,11 +30259,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
          * The current visibility of the window.
          */
         int mWindowVisibility;
-
-        /**
-         * Indicates whether the view's window sets {@link WindowManager.LayoutParams#FLAG_SECURE}.
-         */
-        boolean mWindowSecure;
 
         /**
          * Indicates the time at which drawing started to occur.

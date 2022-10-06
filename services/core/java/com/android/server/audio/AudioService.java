@@ -3400,8 +3400,7 @@ public class AudioService extends IAudioService.Stub
                 dispatchAbsoluteVolumeChanged(streamType, info, newIndex);
             }
 
-            if ((device == AudioSystem.DEVICE_OUT_BLE_HEADSET
-                    || device == AudioSystem.DEVICE_OUT_BLE_BROADCAST)
+            if (AudioSystem.isLeAudioDeviceType(device)
                     && streamType == getBluetoothContextualVolumeStream()
                     && (flags & AudioManager.FLAG_BLUETOOTH_ABS_VOLUME) == 0) {
                 if (DEBUG_VOL) {
@@ -4158,8 +4157,7 @@ public class AudioService extends IAudioService.Stub
                 dispatchAbsoluteVolumeChanged(streamType, info, index);
             }
 
-            if ((device == AudioSystem.DEVICE_OUT_BLE_HEADSET
-                    || device == AudioSystem.DEVICE_OUT_BLE_BROADCAST)
+            if (AudioSystem.isLeAudioDeviceType(device)
                     && streamType == getBluetoothContextualVolumeStream()
                     && (flags & AudioManager.FLAG_BLUETOOTH_ABS_VOLUME) == 0) {
                 if (DEBUG_VOL) {
@@ -5273,16 +5271,17 @@ public class AudioService extends IAudioService.Stub
     }
 
     /**
-     * Return the pid of the current audio mode owner
+     * Return information on the current audio mode owner
      * @return 0 if nobody owns the mode
      */
     @GuardedBy("mDeviceBroker.mSetModeLock")
-    /*package*/ int getModeOwnerPid() {
+    /*package*/ AudioDeviceBroker.AudioModeInfo getAudioModeOwner() {
         SetModeDeathHandler hdlr = getAudioModeOwnerHandler();
         if (hdlr != null) {
-            return hdlr.getPid();
+            return new AudioDeviceBroker.AudioModeInfo(
+                    hdlr.getMode(), hdlr.getPid(), hdlr.getUid());
         }
-        return 0;
+        return new AudioDeviceBroker.AudioModeInfo(AudioSystem.MODE_NORMAL, 0 , 0);
     }
 
     /**
@@ -5468,7 +5467,7 @@ public class AudioService extends IAudioService.Stub
 
                 // when entering RINGTONE, IN_CALL or IN_COMMUNICATION mode, clear all SCO
                 // connections not started by the application changing the mode when pid changes
-                mDeviceBroker.postSetModeOwnerPid(pid, mode);
+                mDeviceBroker.postSetModeOwner(mode, pid, uid);
             } else {
                 Log.w(TAG, "onUpdateAudioMode: failed to set audio mode to: " + mode);
             }
@@ -5796,7 +5795,10 @@ public class AudioService extends IAudioService.Stub
         }
         return deviceIds.stream().mapToInt(Integer::intValue).toArray();
     }
-        /** @see AudioManager#setCommunicationDevice(int) */
+        /**
+         * @see AudioManager#setCommunicationDevice(int)
+         * @see AudioManager#clearCommunicationDevice()
+         */
     public boolean setCommunicationDevice(IBinder cb, int portId) {
         final int uid = Binder.getCallingUid();
         final int pid = Binder.getCallingPid();
@@ -5811,7 +5813,8 @@ public class AudioService extends IAudioService.Stub
                 throw new IllegalArgumentException("invalid device type " + device.getType());
             }
         }
-        final String eventSource = new StringBuilder("setCommunicationDevice(")
+        final String eventSource = new StringBuilder()
+                .append(device == null ? "clearCommunicationDevice(" : "setCommunicationDevice(")
                 .append(") from u/pid:").append(uid).append("/")
                 .append(pid).toString();
 
@@ -7015,7 +7018,8 @@ public class AudioService extends IAudioService.Stub
             return AudioManager.DEVICE_VOLUME_BEHAVIOR_ABSOLUTE_MULTI_MODE;
         }
         if (isAbsoluteVolumeDevice(audioSystemDeviceOut)
-                || isA2dpAbsoluteVolumeDevice(audioSystemDeviceOut)) {
+                || isA2dpAbsoluteVolumeDevice(audioSystemDeviceOut)
+                || AudioSystem.isLeAudioDeviceType(audioSystemDeviceOut)) {
             return AudioManager.DEVICE_VOLUME_BEHAVIOR_ABSOLUTE;
         }
         return AudioManager.DEVICE_VOLUME_BEHAVIOR_VARIABLE;
@@ -7803,7 +7807,9 @@ public class AudioService extends IAudioService.Stub
             int index;
             if (isFullyMuted()) {
                 index = 0;
-            } else if (isAbsoluteVolumeDevice(device) || isA2dpAbsoluteVolumeDevice(device)) {
+            } else if (isAbsoluteVolumeDevice(device)
+                    || isA2dpAbsoluteVolumeDevice(device)
+                    || AudioSystem.isLeAudioDeviceType(device)) {
                 index = getAbsoluteVolumeIndex((getIndex(device) + 5)/10);
             } else if (isFullVolumeDevice(device)) {
                 index = (mIndexMax + 5)/10;
@@ -7825,7 +7831,8 @@ public class AudioService extends IAudioService.Stub
                         if (isFullyMuted()) {
                             index = 0;
                         } else if (isAbsoluteVolumeDevice(device)
-                                || isA2dpAbsoluteVolumeDevice(device)) {
+                                || isA2dpAbsoluteVolumeDevice(device)
+                                || AudioSystem.isLeAudioDeviceType(device)) {
                             index = getAbsoluteVolumeIndex((getIndex(device) + 5)/10);
                         } else if (isFullVolumeDevice(device)) {
                             index = (mIndexMax + 5)/10;
@@ -8246,7 +8253,8 @@ public class AudioService extends IAudioService.Stub
                     int streamDevice = getDeviceForStream(streamType);
                     if ((device != streamDevice)
                             && (isAbsoluteVolumeDevice(device)
-                            || isA2dpAbsoluteVolumeDevice(device))) {
+                                || isA2dpAbsoluteVolumeDevice(device)
+                                || AudioSystem.isLeAudioDeviceType(device))) {
                         mStreamStates[streamType].applyDeviceVolume_syncVSS(device);
                     }
                     mStreamStates[streamType].applyDeviceVolume_syncVSS(streamDevice);

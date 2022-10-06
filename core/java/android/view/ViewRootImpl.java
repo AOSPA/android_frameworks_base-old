@@ -2061,6 +2061,7 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     private void invalidateRectOnScreen(Rect dirty) {
+        if (DEBUG_DRAW) Log.v(mTag, "invalidateRectOnScreen: " + dirty);
         final Rect localDirty = mDirty;
 
         // Add the new dirty rect to the current one
@@ -2840,7 +2841,6 @@ public final class ViewRootImpl implements ViewParent,
             // However, windows are now always 32 bits by default, so choose 32 bits
             mAttachInfo.mUse32BitDrawingCache = true;
             mAttachInfo.mWindowVisibility = viewVisibility;
-            mAttachInfo.mWindowSecure = (lp.flags & WindowManager.LayoutParams.FLAG_SECURE) != 0;
             mAttachInfo.mRecomputeGlobalAttributes = false;
             mLastConfigurationFromResources.setTo(config);
             mLastSystemUiVisibility = mAttachInfo.mSystemUiVisibility;
@@ -3101,7 +3101,8 @@ public final class ViewRootImpl implements ViewParent,
                 // WindowManagerService has reported back a frame from a configuration not yet
                 // handled by the client. In this case, we need to accept the configuration so we
                 // do not lay out and draw with the wrong configuration.
-                if (!mPendingMergedConfiguration.equals(mLastReportedMergedConfiguration)) {
+                if (mRelayoutRequested
+                        && !mPendingMergedConfiguration.equals(mLastReportedMergedConfiguration)) {
                     if (DEBUG_CONFIGURATION) Log.v(mTag, "Visible with new config: "
                             + mPendingMergedConfiguration.getMergedConfiguration());
                     performConfigurationChange(new MergedConfiguration(mPendingMergedConfiguration),
@@ -4755,25 +4756,8 @@ public final class ViewRootImpl implements ViewParent,
         // Draw with software renderer.
         final Canvas canvas;
 
-        // We already have the offset of surfaceInsets in xoff, yoff and dirty region,
-        // therefore we need to add it back when moving the dirty region.
-        int dirtyXOffset = xoff;
-        int dirtyYOffset = yoff;
-        if (surfaceInsets != null) {
-            dirtyXOffset += surfaceInsets.left;
-            dirtyYOffset += surfaceInsets.top;
-        }
-
         try {
-            dirty.offset(-dirtyXOffset, -dirtyYOffset);
-            final int left = dirty.left;
-            final int top = dirty.top;
-            final int right = dirty.right;
-            final int bottom = dirty.bottom;
-
             canvas = mSurface.lockCanvas(dirty);
-
-            // TODO: Do this in native
             canvas.setDensity(mDensity);
         } catch (Surface.OutOfResourcesException e) {
             handleOutOfResourcesException(e);
@@ -4785,14 +4769,13 @@ public final class ViewRootImpl implements ViewParent,
             // kill stuff (or ourself) for no reason.
             mLayoutRequested = true;    // ask wm for a new surface next time.
             return false;
-        } finally {
-            dirty.offset(dirtyXOffset, dirtyYOffset);  // Reset to the original value.
         }
 
         try {
             if (DEBUG_ORIENTATION || DEBUG_DRAW) {
                 Log.v(mTag, "Surface " + surface + " drawing to bitmap w="
-                        + canvas.getWidth() + ", h=" + canvas.getHeight());
+                        + canvas.getWidth() + ", h=" + canvas.getHeight() + ", dirty: " + dirty
+                        + ", xOff=" + xoff + ", yOff=" + yoff);
                 //canvas.drawARGB(255, 255, 0, 0);
             }
 
@@ -8170,7 +8153,8 @@ public final class ViewRootImpl implements ViewParent,
         final int measuredWidth = mView.getMeasuredWidth();
         final int measuredHeight = mView.getMeasuredHeight();
         final boolean relayoutAsync;
-        if (LOCAL_LAYOUT && !mFirst && viewVisibility == mViewVisibility
+        if (LOCAL_LAYOUT
+                && (mViewFrameInfo.flags & FrameInfo.FLAG_WINDOW_VISIBILITY_CHANGED) == 0
                 && mWindowAttributes.type != TYPE_APPLICATION_STARTING
                 && mSyncSeqId <= mLastSyncSeqId
                 && winConfigFromAm.diff(winConfigFromWm, false /* compareUndefined */) == 0) {
@@ -8237,6 +8221,7 @@ public final class ViewRootImpl implements ViewParent,
                     mLastSyncSeqId, mTmpFrames, mPendingMergedConfiguration, mSurfaceControl,
                     mTempInsets, mTempControls, mRelayoutBundle);
             mRelayoutRequested = true;
+
             final int maybeSyncSeqId = mRelayoutBundle.getInt("seqid");
             if (maybeSyncSeqId > 0) {
                 mSyncSeqId = maybeSyncSeqId;
@@ -8275,6 +8260,12 @@ public final class ViewRootImpl implements ViewParent,
                 // to resume them
                 mDirty.set(0, 0, mWidth, mHeight);
             }
+        }
+
+        if (mSurfaceControl.isValid() && !HardwareRenderer.isDrawingEnabled()) {
+            // When drawing is disabled the window layer won't have a valid buffer.
+            // Set a window crop so input can get delivered to the window.
+            mTransaction.setWindowCrop(mSurfaceControl, mSurfaceSize.x, mSurfaceSize.y).apply();
         }
 
         mLastTransformHint = transformHint;
