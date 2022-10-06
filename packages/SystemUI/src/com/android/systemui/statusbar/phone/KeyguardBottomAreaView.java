@@ -341,6 +341,7 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         updateWalletVisibility();
         updateQRCodeButtonVisibility();
         updateControlsVisibility();
+        setEmergencyCarrierAreaVisibility(VISIBLE);
     }
 
     /**
@@ -945,10 +946,10 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
 
         if (dozing) {
             mOverlayContainer.setVisibility(INVISIBLE);
-            mEmergencyCarrierArea.setVisibility(INVISIBLE);
+            setEmergencyCarrierAreaVisibility(INVISIBLE);
         } else {
             mOverlayContainer.setVisibility(VISIBLE);
-            mEmergencyCarrierArea.setVisibility(VISIBLE);
+            setEmergencyCarrierAreaVisibility(VISIBLE);
             if (animate) {
                 startFinishDozeAnimation();
             }
@@ -1220,5 +1221,11 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
                 updateAffordanceColors();
             });
         }
+    }
+
+    private void setEmergencyCarrierAreaVisibility(int visibility) {
+        boolean showEmergencyButton = mContext.getResources().getBoolean(
+                R.bool.config_showEmergencyButton);
+        mEmergencyCarrierArea.setVisibility(showEmergencyButton ? visibility : GONE);
     }
 }
