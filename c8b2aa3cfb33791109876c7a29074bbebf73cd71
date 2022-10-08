@@ -16,6 +16,24 @@
       "message": "Reverts without an explanation get rejected.",
       "revId": "c8b2aa3cfb33791109876c7a29074bbebf73cd71",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "8fc70f71_cf578a78",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 7
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000055
+      },
+      "writtenOn": "2022-10-08T19:03:57Z",
+      "side": 1,
+      "message": "True. Anyway, this is just to enable haptic feedback on unlocking in UDFPS.",
+      "parentUuid": "47104a88_45c0786e",
+      "revId": "c8b2aa3cfb33791109876c7a29074bbebf73cd71",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
