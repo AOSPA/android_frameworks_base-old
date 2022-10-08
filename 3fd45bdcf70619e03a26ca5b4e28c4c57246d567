@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "5e42a4f5_670d3ab3",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 3
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000055
+      },
+      "writtenOn": "2022-10-08T18:56:09Z",
+      "side": 1,
+      "message": "Let\u0027s go the Settings schedule route for this, seems more complete and UI/UX friendly.",
+      "revId": "3fd45bdcf70619e03a26ca5b4e28c4c57246d567",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
