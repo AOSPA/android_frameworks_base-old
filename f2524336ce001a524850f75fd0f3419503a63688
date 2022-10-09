@@ -34,6 +34,24 @@
       "parentUuid": "7449b2fa_b2611ac1",
       "revId": "f2524336ce001a524850f75fd0f3419503a63688",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "9844a669_ec13cc3f",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 8
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2022-10-09T16:43:20Z",
+      "side": 1,
+      "message": "yes it depends on touchExplorationEnabled",
+      "parentUuid": "73e9eb2a_55b5e597",
+      "revId": "f2524336ce001a524850f75fd0f3419503a63688",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
