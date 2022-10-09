@@ -16,6 +16,24 @@
       "message": "enable touch haptics if you want vibration while unlocking, do not enforce it ",
       "revId": "f2524336ce001a524850f75fd0f3419503a63688",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "73e9eb2a_55b5e597",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 8
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2022-10-09T08:30:29Z",
+      "side": 1,
+      "message": "this is for onPress, not unlock - there\u0027s no option to turn it on in settings",
+      "parentUuid": "7449b2fa_b2611ac1",
+      "revId": "f2524336ce001a524850f75fd0f3419503a63688",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
