@@ -494,6 +494,11 @@ public class Utils {
 
         if (showX) return SHOW_X_WIFI_PIE[level];
 
+        final boolean showNetworkStandard = Resources.getSystem().getBoolean(
+                com.android.internal.R.bool.config_show_network_standard);
+
+        if (!showNetworkStandard) return WIFI_PIE[level];
+
         switch (standard) {
             case 4:
                 return WIFI_4_PIE[level];
