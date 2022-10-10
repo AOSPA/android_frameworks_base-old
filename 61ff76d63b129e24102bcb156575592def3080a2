@@ -34,6 +34,24 @@
       "parentUuid": "8d4ec225_c9ea7d37",
       "revId": "61ff76d63b129e24102bcb156575592def3080a2",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "8788b524_6ff5917e",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000737
+      },
+      "writtenOn": "2022-10-10T11:15:04Z",
+      "side": 1,
+      "message": "Sounds like a good idea, it was like that in A11, however I think because of the new design of the volume panel, it was implemented that way in A12",
+      "parentUuid": "97773606_b096c1cb",
+      "revId": "61ff76d63b129e24102bcb156575592def3080a2",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
