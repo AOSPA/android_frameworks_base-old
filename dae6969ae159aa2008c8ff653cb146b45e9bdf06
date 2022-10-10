@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "52de85a7_206f4255",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2022-10-10T11:13:13Z",
+      "side": 1,
+      "message": "fine as is IMO, combined tile leading to combined settings",
+      "revId": "dae6969ae159aa2008c8ff653cb146b45e9bdf06",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
