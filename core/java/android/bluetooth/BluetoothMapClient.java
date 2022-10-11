@@ -13,6 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+ /*
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ *
+*/
 
 package android.bluetooth;
 
@@ -620,6 +626,41 @@ public final class BluetoothMapClient implements BluetoothProfile {
             (status == READ || status == UNREAD || status == UNDELETED  || status == DELETED)) {
             try {
                 return service.setMessageStatus(device, handle, status, mAttributionSource);
+            } catch (RemoteException e) {
+                Log.e(TAG, Log.getStackTraceString(new Throwable()));
+                return false;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Send a Image message.
+     *
+     * Send an Image message to either the contacts primary number or the telephone number specified.
+     *
+     * @param device Bluetooth device
+     * @param contacts Uri[] of the contacts
+     * @param ImagePath Path of Image
+     * @param sentIntent intent issued when message is sent
+     * @param deliveredIntent intent issued when message is delivered
+     * @return true if the message is enqueued, false on error
+     * @hide
+     */
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.SEND_SMS,
+    })
+    public boolean sendImage(@NonNull BluetoothDevice device, @NonNull Uri[] contacts,
+            @NonNull String ImagePath, @Nullable PendingIntent sentIntent,
+            @Nullable PendingIntent deliveredIntent) {
+        if (DBG) Log.d(TAG, "send Image(" + device + ", " + contacts + ", " + ImagePath);
+        final IBluetoothMapClient service = getService();
+        if (service != null && isEnabled() && isValidDevice(device)) {
+            try {
+                return service.sendImage(device, contacts, ImagePath, sentIntent, deliveredIntent,
+                        mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, Log.getStackTraceString(new Throwable()));
                 return false;
