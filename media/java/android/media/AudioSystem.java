@@ -252,6 +252,8 @@ public class AudioSystem
     public static final int AUDIO_FORMAT_APTX_ADAPTIVE  = 0x27000000;
     /** @hide */
     public static final int AUDIO_FORMAT_APTX_TWSP      = 0x2A000000;
+    /** @hide */
+    public static final int VX_AUDIO_FORMAT_APTX_ADAPTIVE_QLEA       = 0x30000000;
 
     /** @hide */
     @IntDef(flag = false, prefix = "AUDIO_FORMAT_", value = {
@@ -303,6 +305,8 @@ public class AudioSystem
                      return BluetoothCodecConfig.SOURCE_CODEC_TYPE_APTX_TWSP;
             case AUDIO_FORMAT_LC3: return BluetoothCodecConfig.SOURCE_CODEC_TYPE_LC3;
             case AUDIO_FORMAT_OPUS: return BluetoothCodecConfig.SOURCE_CODEC_TYPE_OPUS;
+            case VX_AUDIO_FORMAT_APTX_ADAPTIVE_QLEA:
+                 return BluetoothLeAudioCodecConfig.SOURCE_CODEC_TYPE_APTX_ADAPTIVE_LE;
             default:
                 Log.e(TAG, "Unknown audio format 0x" + Integer.toHexString(audioFormat)
                         + " for conversion to BT codec");
@@ -318,6 +322,8 @@ public class AudioSystem
             @AudioFormatNativeEnumForBtLeAudioCodec int audioFormat) {
         switch (audioFormat) {
             case AUDIO_FORMAT_LC3: return BluetoothLeAudioCodecConfig.SOURCE_CODEC_TYPE_LC3;
+            case VX_AUDIO_FORMAT_APTX_ADAPTIVE_QLEA:
+                   return BluetoothLeAudioCodecConfig.SOURCE_CODEC_TYPE_APTX_ADAPTIVE_LE;
             default:
                 Log.e(TAG, "Unknown audio format 0x" + Integer.toHexString(audioFormat)
                         + " for conversion to BT LE audio codec");
@@ -455,6 +461,8 @@ public class AudioSystem
                 return "AUDIO_FORMAT_APTX_TWSP";
             case /* AUDIO_FORMAT_LC3             */ 0x2B000000:
                 return "AUDIO_FORMAT_LC3";
+            case /* VX_AUDIO_FORMAT_APTX_ADAPTIVE_QLEA */ 0x30000000:
+                return "VX_AUDIO_FORMAT_APTX_ADAPTIVE_QLEA";
 
             /* Aliases */
             case /* AUDIO_FORMAT_PCM_16_BIT        */ 0x1:

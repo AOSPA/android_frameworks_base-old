@@ -896,6 +896,11 @@ public final class Choreographer {
                 mLastVsyncEventData = vsyncEventData;
             }
 
+            if (frameIntervalNanos > 0 && (Math.abs(frameIntervalNanos - mFrameIntervalNanos)
+                    > TimeUtils.NANOS_PER_MS)) {
+                mFrameIntervalNanos = frameIntervalNanos;
+                ScrollOptimizer.setFrameInterval(mFrameIntervalNanos);
+            }
             ScrollOptimizer.setUITaskStatus(true);
             AnimationUtils.lockAnimationClock(frameTimeNanos / TimeUtils.NANOS_PER_MS);
 

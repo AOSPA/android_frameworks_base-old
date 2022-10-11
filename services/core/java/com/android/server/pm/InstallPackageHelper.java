@@ -147,6 +147,7 @@ import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
+import android.util.BoostFramework;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.content.F2fsUtils;
@@ -1108,6 +1109,16 @@ final class InstallPackageHelper {
                     // on the device; we should replace it.
                     replace = true;
                     if (DEBUG_INSTALL) Slog.d(TAG, "Replace existing package: " + pkgName);
+                    if (pkgName != null) {
+                        BoostFramework mPerf = new BoostFramework();
+                        if (mPerf != null) {
+                            if (mPerf.board_first_api_lvl < BoostFramework.VENDOR_T_API_LEVEL &&
+                                mPerf.board_api_lvl < BoostFramework.VENDOR_T_API_LEVEL) {
+                                mPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_PKG_INSTALL, 0, pkgName, 1);
+                            }
+                            mPerf.perfEvent(BoostFramework.VENDOR_HINT_APP_UPDATE, pkgName, 2, 0, -1);
+                        }
+                    }
                 }
 
                 if (replace) {
@@ -2016,6 +2027,17 @@ final class InstallPackageHelper {
         final String installerPackageName = installRequest.getSourceInstallerPackageName();
 
         if (DEBUG_INSTALL) Slog.d(TAG, "New package installed in " + pkg.getPath());
+        if (pkgName != null) {
+            BoostFramework mPerf = new BoostFramework();
+            if (mPerf != null) {
+                if (mPerf.board_first_api_lvl < BoostFramework.VENDOR_T_API_LEVEL &&
+                    mPerf.board_api_lvl < BoostFramework.VENDOR_T_API_LEVEL) {
+                    mPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_PKG_INSTALL, 0, pkgName, 0);
+                } else {
+                    mPerf.perfEvent(BoostFramework.VENDOR_HINT_PKG_INSTALL, pkgName, 2, 0, 0);
+                }
+            }
+        }
         synchronized (mPm.mLock) {
             // For system-bundled packages, we assume that installing an upgraded version
             // of the package implies that the user actually wants to run that new code,

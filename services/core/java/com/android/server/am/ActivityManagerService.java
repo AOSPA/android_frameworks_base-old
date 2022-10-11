@@ -3428,7 +3428,10 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
 
             if (mUxPerf != null && !mForceStopKill && !app.mErrorState.isNotResponding() && !app.mErrorState.isCrashing()) {
-                mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_KILL, 0, app.processName, 0);
+                if (mUxPerf.board_first_api_lvl < BoostFramework.VENDOR_T_API_LEVEL &&
+                    mUxPerf.board_api_lvl < BoostFramework.VENDOR_T_API_LEVEL) {
+                    mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_KILL, 0, app.processName, 0);
+                }
                 mUxPerf.perfEvent(BoostFramework.VENDOR_HINT_KILL, app.processName, 2, 0, pid);
             }
 
@@ -4536,6 +4539,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         // A specific subset of the work done in forceStopPackageLocked(), because we are
         // intentionally not rendering the app nonfunctional; we're just halting its current
         // execution.
+        mForceStopKill = true;
         final int appId = UserHandle.getAppId(uid);
         synchronized (this) {
             synchronized (mProcLock) {

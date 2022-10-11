@@ -786,7 +786,8 @@ final class WifiDisplayController implements DumpUtils.Dump {
         *R2 source - R2 sink ->3*/
         if(WFDR2Info==2 || WFDR2Info==3){
             WifiP2pWfdInfo wfdInfo = mThisDevice.getWfdInfo();
-            mWifiP2pManager.setWFDR2Info(mWifiP2pChannel, wfdInfo, new ActionListener() {
+            wfdInfo.setR2DeviceType(WifiP2pWfdInfo.DEVICE_TYPE_WFD_SOURCE);
+            mWifiP2pManager.setWfdInfo(mWifiP2pChannel, wfdInfo, new ActionListener() {
                     @Override
                     public void onSuccess() {
                         if (DEBUG) {
@@ -822,7 +823,9 @@ final class WifiDisplayController implements DumpUtils.Dump {
             config.wps = wps;
             config.deviceAddress = mConnectingDevice.deviceAddress;
             // Helps with STA & P2P concurrency
-            config.groupOwnerIntent = WifiP2pConfig.GROUP_OWNER_INTENT_MIN;
+            int WFDGoIntent = SystemProperties.getInt("persist.vendor.sys.debug.wfd.gointent", WifiP2pConfig.GROUP_OWNER_INTENT_MIN);
+            config.groupOwnerIntent = WFDGoIntent;
+            Slog.i(TAG, "WFD P2P GO Intent value: " + config.groupOwnerIntent);
 
             WifiDisplay display = createWifiDisplay(mConnectingDevice);
             advertiseDisplay(display, null, 0, 0, 0);
