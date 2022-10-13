@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "34ad24ff_d6699dc0",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2022-10-13T02:50:02Z",
+      "side": 1,
+      "message": "seems like confusing UX to change from Google here.",
+      "revId": "e57d2a03eb0e09ddd4d05fc739a7138ab603a328",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
