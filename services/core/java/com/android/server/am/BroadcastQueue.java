@@ -22,6 +22,7 @@ import android.content.ContentResolver;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
+import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.annotations.GuardedBy;
@@ -39,30 +40,36 @@ public abstract class BroadcastQueue {
 
     final @NonNull ActivityManagerService mService;
     final @NonNull Handler mHandler;
-    final @NonNull BroadcastConstants mConstants;
     final @NonNull BroadcastSkipPolicy mSkipPolicy;
     final @NonNull BroadcastHistory mHistory;
     final @NonNull String mQueueName;
 
     BroadcastQueue(@NonNull ActivityManagerService service, @NonNull Handler handler,
-            @NonNull String name, @NonNull BroadcastConstants constants,
-            @NonNull BroadcastSkipPolicy skipPolicy, @NonNull BroadcastHistory history) {
+            @NonNull String name, @NonNull BroadcastSkipPolicy skipPolicy,
+            @NonNull BroadcastHistory history) {
         mService = Objects.requireNonNull(service);
         mHandler = Objects.requireNonNull(handler);
         mQueueName = Objects.requireNonNull(name);
-        mConstants = Objects.requireNonNull(constants);
         mSkipPolicy = Objects.requireNonNull(skipPolicy);
         mHistory = Objects.requireNonNull(history);
     }
 
-    void start(@NonNull ContentResolver resolver) {
-        mConstants.startObserving(mHandler, resolver);
+    static void checkState(boolean state, String msg) {
+        if (!state) {
+            Slog.wtf(TAG, msg, new Throwable());
+        }
+    }
+
+    static void logv(String msg) {
+        Slog.v(TAG, msg);
     }
 
     @Override
     public String toString() {
         return mQueueName;
     }
+
+    public abstract void start(@NonNull ContentResolver resolver);
 
     public abstract boolean isDelayBehindServices();
 
@@ -74,6 +81,7 @@ public abstract class BroadcastQueue {
      *         otherwise {@link ProcessList#SCHED_GROUP_UNDEFINED} if this queue
      *         has no opinion.
      */
+    @GuardedBy("mService")
     public abstract int getPreferredSchedulingGroupLocked(@NonNull ProcessRecord app);
 
     /**
@@ -106,6 +114,9 @@ public abstract class BroadcastQueue {
     /**
      * Signal from OS internals that the given process has just been actively
      * attached, and is ready to begin receiving broadcasts.
+     *
+     * @return if the queue performed an action on the given process, such as
+     *         dispatching a pending broadcast
      */
     @GuardedBy("mService")
     public abstract boolean onApplicationAttachedLocked(@NonNull ProcessRecord app);
@@ -115,7 +126,7 @@ public abstract class BroadcastQueue {
      * an attempted start and attachment.
      */
     @GuardedBy("mService")
-    public abstract boolean onApplicationTimeoutLocked(@NonNull ProcessRecord app);
+    public abstract void onApplicationTimeoutLocked(@NonNull ProcessRecord app);
 
     /**
      * Signal from OS internals that the given process, which had already been
@@ -123,14 +134,14 @@ public abstract class BroadcastQueue {
      * not responding.
      */
     @GuardedBy("mService")
-    public abstract boolean onApplicationProblemLocked(@NonNull ProcessRecord app);
+    public abstract void onApplicationProblemLocked(@NonNull ProcessRecord app);
 
     /**
      * Signal from OS internals that the given process has been killed, and is
      * no longer actively running.
      */
     @GuardedBy("mService")
-    public abstract boolean onApplicationCleanupLocked(@NonNull ProcessRecord app);
+    public abstract void onApplicationCleanupLocked(@NonNull ProcessRecord app);
 
     /**
      * Signal from OS internals that the given package (or some subset of that
@@ -139,7 +150,7 @@ public abstract class BroadcastQueue {
      */
     @GuardedBy("mService")
     public abstract boolean cleanupDisabledPackageReceiversLocked(@Nullable String packageName,
-            @Nullable Set<String> filterByClasses, int userId, boolean doit);
+            @Nullable Set<String> filterByClasses, int userId);
 
     /**
      * Quickly determine if this queue has broadcasts that are still waiting to

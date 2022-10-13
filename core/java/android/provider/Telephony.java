@@ -4367,11 +4367,23 @@ public final class Telephony {
          * subscription and while is in voice call.
          *
          * Default value is empty string.
-         *
+         * @deprecated This column is no longer supported. Use
+         * {@link #COLUMN_ENABLED_MOBILE_DATA_POLICIES} instead.
          * @hide
          */
+        @Deprecated
         public static final String COLUMN_DATA_ENABLED_OVERRIDE_RULES =
                 "data_enabled_override_rules";
+
+        /**
+         * TelephonyProvider column name enabled_mobile_data_policies.
+         * A list of mobile data policies, each of which represented by an integer and joint by ",".
+         *
+         * Default value is empty string.
+         * @hide
+         */
+        public static final String COLUMN_ENABLED_MOBILE_DATA_POLICIES =
+                "enabled_mobile_data_policies";
 
         /**
          * TelephonyProvider column name for user displayed name.
@@ -4871,5 +4883,12 @@ public final class Telephony {
          * @hide
          */
         public static final String COLUMN_USAGE_SETTING = "usage_setting";
+
+        /**
+         * TelephonyProvider column name for user handle associated with this sim.
+         *
+         * @hide
+         */
+        public static final String COLUMN_USER_HANDLE = "user_handle";
     }
 }

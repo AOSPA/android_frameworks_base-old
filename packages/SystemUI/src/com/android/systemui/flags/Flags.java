@@ -101,8 +101,12 @@ public class Flags {
     public static final UnreleasedFlag MODERN_BOUNCER = new UnreleasedFlag(208);
 
     /** Whether UserSwitcherActivity should use modern architecture. */
-    public static final UnreleasedFlag MODERN_USER_SWITCHER_ACTIVITY =
-            new UnreleasedFlag(209, true);
+    public static final ReleasedFlag MODERN_USER_SWITCHER_ACTIVITY =
+            new ReleasedFlag(209, true);
+
+    /** Whether the new implementation of UserSwitcherController should be used. */
+    public static final UnreleasedFlag REFACTORED_USER_SWITCHER_CONTROLLER =
+            new UnreleasedFlag(210, false);
 
     /***************************************/
     // 300 - power menu
@@ -192,11 +196,12 @@ public class Flags {
 
     /***************************************/
     // 900 - media
-    public static final ReleasedFlag MEDIA_TAP_TO_TRANSFER = new ReleasedFlag(900);
+    public static final UnreleasedFlag MEDIA_TAP_TO_TRANSFER = new UnreleasedFlag(900);
     public static final UnreleasedFlag MEDIA_SESSION_ACTIONS = new UnreleasedFlag(901);
     public static final ReleasedFlag MEDIA_NEARBY_DEVICES = new ReleasedFlag(903);
     public static final ReleasedFlag MEDIA_MUTE_AWAIT = new ReleasedFlag(904);
-    public static final UnreleasedFlag MEDIA_DREAM_COMPLICATION = new UnreleasedFlag(905);
+    public static final UnreleasedFlag DREAM_MEDIA_COMPLICATION = new UnreleasedFlag(905);
+    public static final UnreleasedFlag DREAM_MEDIA_TAP_TO_OPEN = new UnreleasedFlag(906);
 
     // 1000 - dock
     public static final ReleasedFlag SIMULATE_DOCK_THROUGH_CHARGING =
@@ -233,6 +238,14 @@ public class Flags {
     @Keep
     public static final SysPropBooleanFlag WM_CAPTION_ON_SHELL =
             new SysPropBooleanFlag(1105, "persist.wm.debug.caption_on_shell", false);
+
+    @Keep
+    public static final SysPropBooleanFlag FLOATING_TASKS_ENABLED =
+            new SysPropBooleanFlag(1106, "persist.wm.debug.floating_tasks", false);
+
+    @Keep
+    public static final SysPropBooleanFlag SHOW_FLOATING_TASKS_AS_BUBBLES =
+            new SysPropBooleanFlag(1107, "persist.wm.debug.floating_tasks_as_bubbles", false);
 
     // 1200 - predictive back
     @Keep

@@ -28,9 +28,9 @@ import com.android.server.wm.flicker.FlickerTestParameterFactory
 import com.android.server.wm.flicker.annotation.Group1
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.wm.shell.flicker.appWindowBecomesInvisible
-import com.android.wm.shell.flicker.helpers.SplitScreenHelper
 import com.android.wm.shell.flicker.layerBecomesInvisible
 import com.android.wm.shell.flicker.splitAppLayerBoundsBecomesInvisible
+import com.android.wm.shell.flicker.splitScreenDismissed
 import com.android.wm.shell.flicker.splitScreenDividerBecomesInvisible
 import org.junit.FixMethodOrder
 import org.junit.Test
@@ -56,7 +56,7 @@ class DismissSplitScreenByGoHome(
         get() = {
             super.transition(this)
             setup {
-                SplitScreenHelper.enterSplit(wmHelper, tapl, primaryApp, secondaryApp)
+                SplitScreenUtils.enterSplit(wmHelper, tapl, primaryApp, secondaryApp)
             }
             transitions {
                 tapl.goHome()
@@ -65,13 +65,15 @@ class DismissSplitScreenByGoHome(
                     .waitForAndVerify()
             }
         }
-
     @IwTest(focusArea = "sysui")
+    @Presubmit
+    @Test
+    fun cujCompleted() = testSpec.splitScreenDismissed(primaryApp, secondaryApp, toHome = true)
+
     @Presubmit
     @Test
     fun splitScreenDividerBecomesInvisible() = testSpec.splitScreenDividerBecomesInvisible()
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun primaryAppLayerBecomesInvisible() = testSpec.layerBecomesInvisible(primaryApp)
@@ -87,18 +89,15 @@ class DismissSplitScreenByGoHome(
     fun primaryAppBoundsBecomesInvisible() = testSpec.splitAppLayerBoundsBecomesInvisible(
         primaryApp, landscapePosLeft = tapl.isTablet, portraitPosTop = false)
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun secondaryAppBoundsBecomesInvisible() = testSpec.splitAppLayerBoundsBecomesInvisible(
         secondaryApp, landscapePosLeft = !tapl.isTablet, portraitPosTop = true)
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun primaryAppWindowBecomesInvisible() = testSpec.appWindowBecomesInvisible(primaryApp)
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun secondaryAppWindowBecomesInvisible() = testSpec.appWindowBecomesInvisible(secondaryApp)

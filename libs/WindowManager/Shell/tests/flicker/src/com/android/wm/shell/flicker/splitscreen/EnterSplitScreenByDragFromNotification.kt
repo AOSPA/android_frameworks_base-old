@@ -21,8 +21,6 @@ import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
 import android.view.WindowManagerPolicyConstants
 import androidx.test.filters.RequiresDevice
-import androidx.test.uiautomator.By
-import androidx.test.uiautomator.Until
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
@@ -31,12 +29,12 @@ import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.isShellTransitionsEnabled
 import com.android.wm.shell.flicker.SPLIT_SCREEN_DIVIDER_COMPONENT
 import com.android.wm.shell.flicker.appWindowIsVisibleAtEnd
-import com.android.wm.shell.flicker.helpers.SplitScreenHelper
 import com.android.wm.shell.flicker.layerBecomesVisible
 import com.android.wm.shell.flicker.layerIsVisibleAtEnd
 import com.android.wm.shell.flicker.splitAppLayerBoundsBecomesVisibleByDrag
 import com.android.wm.shell.flicker.splitAppLayerBoundsIsVisibleAtEnd
 import com.android.wm.shell.flicker.splitScreenDividerBecomesVisible
+import com.android.wm.shell.flicker.splitScreenEntered
 import org.junit.Assume
 import org.junit.Before
 import org.junit.FixMethodOrder
@@ -60,7 +58,7 @@ class EnterSplitScreenByDragFromNotification(
     testSpec: FlickerTestParameter
 ) : SplitScreenBase(testSpec) {
 
-    private val sendNotificationApp = SplitScreenHelper.getSendNotification(instrumentation)
+    private val sendNotificationApp = SplitScreenUtils.getSendNotification(instrumentation)
 
     @Before
     fun before() {
@@ -74,18 +72,13 @@ class EnterSplitScreenByDragFromNotification(
             setup {
                 // Send a notification
                 sendNotificationApp.launchViaIntent(wmHelper)
-                val sendNotification = device.wait(
-                    Until.findObject(By.text("Send Notification")),
-                    SplitScreenHelper.TIMEOUT_MS
-                )
-                sendNotification?.click() ?: error("Send notification button not found")
-
+                sendNotificationApp.postNotification(wmHelper)
                 tapl.goHome()
                 primaryApp.launchViaIntent(wmHelper)
             }
             transitions {
-                SplitScreenHelper.dragFromNotificationToSplit(instrumentation, device, wmHelper)
-                SplitScreenHelper.waitForSplitComplete(wmHelper, primaryApp, sendNotificationApp)
+                SplitScreenUtils.dragFromNotificationToSplit(instrumentation, device, wmHelper)
+                SplitScreenUtils.waitForSplitComplete(wmHelper, primaryApp, sendNotificationApp)
             }
             teardown {
                 sendNotificationApp.exit(wmHelper)
@@ -95,13 +88,16 @@ class EnterSplitScreenByDragFromNotification(
     @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
+    fun cujCompleted() = testSpec.splitScreenEntered(primaryApp, secondaryApp, fromOtherApp = false)
+
+    @Presubmit
+    @Test
     fun splitScreenDividerBecomesVisible() {
         Assume.assumeFalse(isShellTransitionsEnabled)
         testSpec.splitScreenDividerBecomesVisible()
     }
 
     // TODO(b/245472831): Back to splitScreenDividerBecomesVisible after shell transition ready.
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun splitScreenDividerIsVisibleAtEnd_ShellTransit() {
@@ -111,12 +107,10 @@ class EnterSplitScreenByDragFromNotification(
         }
     }
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun primaryAppLayerIsVisibleAtEnd() = testSpec.layerIsVisibleAtEnd(primaryApp)
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun secondaryAppLayerBecomesVisible() {
@@ -140,24 +134,20 @@ class EnterSplitScreenByDragFromNotification(
         testSpec.layerBecomesVisible(sendNotificationApp)
     }
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun primaryAppBoundsIsVisibleAtEnd() = testSpec.splitAppLayerBoundsIsVisibleAtEnd(
         primaryApp, landscapePosLeft = false, portraitPosTop = false)
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun secondaryAppBoundsBecomesVisible() = testSpec.splitAppLayerBoundsBecomesVisibleByDrag(
         sendNotificationApp)
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun primaryAppWindowIsVisibleAtEnd() = testSpec.appWindowIsVisibleAtEnd(primaryApp)
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun secondaryAppWindowIsVisibleAtEnd() = testSpec.appWindowIsVisibleAtEnd(sendNotificationApp)

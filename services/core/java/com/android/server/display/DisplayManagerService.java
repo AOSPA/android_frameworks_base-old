@@ -80,7 +80,6 @@ import android.hardware.display.IVirtualDisplayCallback;
 import android.hardware.display.VirtualDisplayConfig;
 import android.hardware.display.WifiDisplayStatus;
 import android.hardware.graphics.common.DisplayDecorationSupport;
-import android.hardware.input.InputManagerInternal;
 import android.media.projection.IMediaProjection;
 import android.media.projection.IMediaProjectionManager;
 import android.net.Uri;
@@ -135,6 +134,7 @@ import com.android.server.UiThread;
 import com.android.server.companion.virtual.VirtualDeviceManagerInternal;
 import com.android.server.display.DisplayDeviceConfig.SensorData;
 import com.android.server.display.utils.SensorUtils;
+import com.android.server.input.InputManagerInternal;
 import com.android.server.wm.SurfaceAnimationThread;
 import com.android.server.wm.WindowManagerInternal;
 
@@ -2584,10 +2584,10 @@ public final class DisplayManagerService extends SystemService {
 
         final BrightnessSetting brightnessSetting = new BrightnessSetting(mPersistentDataStore,
                 display, mSyncRoot);
-        final DisplayPowerController displayPowerController;
+        final DisplayPowerControllerInterface displayPowerController;
 
         if (SystemProperties.getInt(PROP_USE_NEW_DISPLAY_POWER_CONTROLLER, 0) == 1) {
-            displayPowerController = new DisplayPowerController(
+            displayPowerController = new DisplayPowerController2(
                     mContext, /* injector= */ null, mDisplayPowerCallbacks, mPowerHandler,
                     mSensorManager, mDisplayBlanker, display, mBrightnessTracker, brightnessSetting,
                     () -> handleBrightnessChange(display));
@@ -3020,6 +3020,19 @@ public final class DisplayManagerService extends SystemService {
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
+        }
+
+        @Override
+        public void overrideHdrTypes(int displayId, int[] modes) {
+            IBinder displayToken;
+            synchronized (mSyncRoot) {
+                displayToken = getDisplayToken(displayId);
+                if (displayToken == null) {
+                    throw new IllegalArgumentException("Invalid display: " + displayId);
+                }
+            }
+
+            DisplayControl.overrideHdrTypes(displayToken, modes);
         }
 
         @Override // Binder call
@@ -3905,6 +3918,19 @@ public final class DisplayManagerService extends SystemService {
                 }
                 return displayIdToMirror;
             }
+        }
+
+        @Override
+        public SurfaceControl.DisplayPrimaries getDisplayNativePrimaries(int displayId) {
+            IBinder displayToken;
+            synchronized (mSyncRoot) {
+                displayToken = getDisplayToken(displayId);
+                if (displayToken == null) {
+                    throw new IllegalArgumentException("Invalid displayId=" + displayId);
+                }
+            }
+
+            return SurfaceControl.getDisplayNativePrimaries(displayToken);
         }
     }
 

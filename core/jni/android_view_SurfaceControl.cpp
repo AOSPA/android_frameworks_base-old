@@ -28,6 +28,7 @@
 #include <android_runtime/android_graphics_GraphicBuffer.h>
 #include <android_runtime/android_hardware_HardwareBuffer.h>
 #include <android_runtime/android_view_Surface.h>
+#include <android_runtime/android_view_SurfaceControl.h>
 #include <android_runtime/android_view_SurfaceSession.h>
 #include <gui/ISurfaceComposer.h>
 #include <gui/Surface.h>
@@ -221,8 +222,14 @@ static struct {
 
 static struct {
     jclass clazz;
+    jfieldID mNativeObject;
+} gTransactionClassInfo;
+
+static struct {
+    jclass clazz;
+    jfieldID mNativeObject;
     jmethodID invokeReleaseCallback;
-} gInvokeReleaseCallback;
+} gSurfaceControlClassInfo;
 
 constexpr ui::Dataspace pickDataspaceFromColorMode(const ui::ColorMode colorMode) {
     switch (colorMode) {
@@ -511,10 +518,11 @@ static ReleaseBufferCallback genReleaseCallback(JNIEnv* env, jobject releaseCall
         if (fenceCopy) {
             fenceCopy->incStrong(0);
         }
-        globalCallbackRef->env()->CallStaticVoidMethod(gInvokeReleaseCallback.clazz,
-                                                       gInvokeReleaseCallback.invokeReleaseCallback,
-                                                       globalCallbackRef->object(),
-                                                       reinterpret_cast<jlong>(fenceCopy));
+        globalCallbackRef->env()
+                ->CallStaticVoidMethod(gSurfaceControlClassInfo.clazz,
+                                       gSurfaceControlClassInfo.invokeReleaseCallback,
+                                       globalCallbackRef->object(),
+                                       reinterpret_cast<jlong>(fenceCopy));
     };
 }
 
@@ -1520,27 +1528,6 @@ static void nativeReparent(JNIEnv* env, jclass clazz, jlong transactionObj,
     transaction->reparent(ctrl, newParent);
 }
 
-static void nativeOverrideHdrTypes(JNIEnv* env, jclass clazz, jobject tokenObject,
-                                   jintArray jHdrTypes) {
-    sp<IBinder> token(ibinderForJavaObject(env, tokenObject));
-    if (token == nullptr || jHdrTypes == nullptr) return;
-
-    int* hdrTypes = env->GetIntArrayElements(jHdrTypes, 0);
-    int numHdrTypes = env->GetArrayLength(jHdrTypes);
-
-    std::vector<ui::Hdr> hdrTypesVector;
-    for (int i = 0; i < numHdrTypes; i++) {
-        hdrTypesVector.push_back(static_cast<ui::Hdr>(hdrTypes[i]));
-    }
-    env->ReleaseIntArrayElements(jHdrTypes, hdrTypes, 0);
-
-    status_t error = SurfaceComposerClient::overrideHdrTypes(token, hdrTypesVector);
-    if (error != NO_ERROR) {
-        jniThrowExceptionFmt(env, "java/lang/SecurityException",
-                             "ACCESS_SURFACE_FLINGER is missing");
-    }
-}
-
 static jboolean nativeGetBootDisplayModeSupport(JNIEnv* env, jclass clazz) {
     bool isBootDisplayModeSupported = false;
     SurfaceComposerClient::getBootDisplayModeSupport(&isBootDisplayModeSupported);
@@ -1906,6 +1893,28 @@ static jobject nativeGetDefaultApplyToken(JNIEnv* env, jclass clazz) {
 
 // ----------------------------------------------------------------------------
 
+SurfaceControl* android_view_SurfaceControl_getNativeSurfaceControl(JNIEnv* env,
+                                                                    jobject surfaceControlObj) {
+    if (!!surfaceControlObj &&
+        env->IsInstanceOf(surfaceControlObj, gSurfaceControlClassInfo.clazz)) {
+        return reinterpret_cast<SurfaceControl*>(
+                env->GetLongField(surfaceControlObj, gSurfaceControlClassInfo.mNativeObject));
+    } else {
+        return nullptr;
+    }
+}
+
+SurfaceComposerClient::Transaction* android_view_SurfaceTransaction_getNativeSurfaceTransaction(
+        JNIEnv* env, jobject surfaceTransactionObj) {
+    if (!!surfaceTransactionObj &&
+        env->IsInstanceOf(surfaceTransactionObj, gTransactionClassInfo.clazz)) {
+        return reinterpret_cast<SurfaceComposerClient::Transaction*>(
+                env->GetLongField(surfaceTransactionObj, gTransactionClassInfo.mNativeObject));
+    } else {
+        return nullptr;
+    }
+}
+
 static const JNINativeMethod sSurfaceControlMethods[] = {
         // clang-format off
     {"nativeCreate", "(Landroid/view/SurfaceSession;Ljava/lang/String;IIIIJLandroid/os/Parcel;)J",
@@ -2026,8 +2035,6 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeSetGameContentType },
     {"nativeGetCompositionDataspaces", "()[I",
             (void*)nativeGetCompositionDataspaces},
-    {"nativeOverrideHdrTypes", "(Landroid/os/IBinder;[I)V",
-                (void*)nativeOverrideHdrTypes },
     {"nativeClearContentFrameStats", "(J)Z",
             (void*)nativeClearContentFrameStats },
     {"nativeGetContentFrameStats", "(JLandroid/view/WindowContentFrameStats;)Z",
@@ -2306,10 +2313,17 @@ int register_android_view_SurfaceControl(JNIEnv* env)
             GetFieldIDOrDie(env, displayDecorationSupportClazz, "alphaInterpretation", "I");
 
     jclass surfaceControlClazz = FindClassOrDie(env, "android/view/SurfaceControl");
-    gInvokeReleaseCallback.clazz = MakeGlobalRefOrDie(env, surfaceControlClazz);
-    gInvokeReleaseCallback.invokeReleaseCallback =
+    gSurfaceControlClassInfo.clazz = MakeGlobalRefOrDie(env, surfaceControlClazz);
+    gSurfaceControlClassInfo.mNativeObject =
+            GetFieldIDOrDie(env, gSurfaceControlClassInfo.clazz, "mNativeObject", "J");
+    gSurfaceControlClassInfo.invokeReleaseCallback =
             GetStaticMethodIDOrDie(env, surfaceControlClazz, "invokeReleaseCallback",
                                    "(Ljava/util/function/Consumer;J)V");
+
+    jclass surfaceTransactionClazz = FindClassOrDie(env, "android/view/SurfaceControl$Transaction");
+    gTransactionClassInfo.clazz = MakeGlobalRefOrDie(env, surfaceTransactionClazz);
+    gTransactionClassInfo.mNativeObject =
+            GetFieldIDOrDie(env, gTransactionClassInfo.clazz, "mNativeObject", "J");
 
     return err;
 }

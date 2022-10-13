@@ -4426,6 +4426,7 @@ package android.app {
     method public void readFromParcel(android.os.Parcel);
     method public void writeToParcel(android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.app.ActivityManager.MemoryInfo> CREATOR;
+    field public long advertisedMem;
     field public long availMem;
     field public boolean lowMemory;
     field public long threshold;
@@ -11612,6 +11613,25 @@ package android.content.pm {
     field public static final int STATUS_SUCCESS = 0; // 0x0
   }
 
+  public static final class PackageInstaller.PreapprovalDetails implements android.os.Parcelable {
+    method public int describeContents();
+    method @Nullable public android.graphics.Bitmap getIcon();
+    method @NonNull public String getLabel();
+    method @NonNull public android.icu.util.ULocale getLocale();
+    method @NonNull public String getPackageName();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.content.pm.PackageInstaller.PreapprovalDetails> CREATOR;
+  }
+
+  public static final class PackageInstaller.PreapprovalDetails.Builder {
+    ctor public PackageInstaller.PreapprovalDetails.Builder();
+    method @NonNull public android.content.pm.PackageInstaller.PreapprovalDetails build();
+    method @NonNull public android.content.pm.PackageInstaller.PreapprovalDetails.Builder setIcon(@NonNull android.graphics.Bitmap);
+    method @NonNull public android.content.pm.PackageInstaller.PreapprovalDetails.Builder setLabel(@NonNull String);
+    method @NonNull public android.content.pm.PackageInstaller.PreapprovalDetails.Builder setLocale(@NonNull android.icu.util.ULocale);
+    method @NonNull public android.content.pm.PackageInstaller.PreapprovalDetails.Builder setPackageName(@NonNull String);
+  }
+
   public static class PackageInstaller.Session implements java.io.Closeable {
     method public void abandon();
     method public void addChildSessionId(int);
@@ -11941,6 +11961,7 @@ package android.content.pm {
     field @Deprecated public static final String FEATURE_CONNECTION_SERVICE = "android.software.connectionservice";
     field public static final String FEATURE_CONSUMER_IR = "android.hardware.consumerir";
     field public static final String FEATURE_CONTROLS = "android.software.controls";
+    field public static final String FEATURE_CREDENTIALS = "android.software.credentials";
     field public static final String FEATURE_DEVICE_ADMIN = "android.software.device_admin";
     field public static final String FEATURE_EMBEDDED = "android.hardware.type.embedded";
     field public static final String FEATURE_ETHERNET = "android.hardware.ethernet";
@@ -15684,6 +15705,7 @@ package android.graphics {
     method public static android.graphics.Typeface createFromFile(@Nullable String);
     method public static android.graphics.Typeface defaultFromStyle(int);
     method public int getStyle();
+    method @Nullable public final String getSystemFontFamilyName();
     method @IntRange(from=0, to=1000) public int getWeight();
     method public final boolean isBold();
     method public final boolean isItalic();
@@ -18643,8 +18665,10 @@ package android.hardware.lights {
     method public void writeToParcel(@NonNull android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.hardware.lights.Light> CREATOR;
     field public static final int LIGHT_CAPABILITY_BRIGHTNESS = 1; // 0x1
-    field public static final int LIGHT_CAPABILITY_RGB = 0; // 0x0
+    field public static final int LIGHT_CAPABILITY_COLOR_RGB = 2; // 0x2
+    field @Deprecated public static final int LIGHT_CAPABILITY_RGB = 0; // 0x0
     field public static final int LIGHT_TYPE_INPUT = 10001; // 0x2711
+    field public static final int LIGHT_TYPE_KEYBOARD_BACKLIGHT = 10003; // 0x2713
     field public static final int LIGHT_TYPE_MICROPHONE = 8; // 0x8
     field public static final int LIGHT_TYPE_PLAYER_ID = 10002; // 0x2712
   }
@@ -20062,6 +20086,7 @@ package android.media {
     field public static final int CHANNEL_OUT_5POINT1 = 252; // 0xfc
     field public static final int CHANNEL_OUT_5POINT1POINT2 = 3145980; // 0x3000fc
     field public static final int CHANNEL_OUT_5POINT1POINT4 = 737532; // 0xb40fc
+    field public static final int CHANNEL_OUT_6POINT1 = 1276; // 0x4fc
     field @Deprecated public static final int CHANNEL_OUT_7POINT1 = 1020; // 0x3fc
     field public static final int CHANNEL_OUT_7POINT1POINT2 = 3152124; // 0x3018fc
     field public static final int CHANNEL_OUT_7POINT1POINT4 = 743676; // 0xb58fc
@@ -22432,6 +22457,7 @@ package android.media {
     field public static final String MIMETYPE_AUDIO_SCRAMBLED = "audio/scrambled";
     field public static final String MIMETYPE_AUDIO_VORBIS = "audio/vorbis";
     field public static final String MIMETYPE_IMAGE_ANDROID_HEIC = "image/vnd.android.heic";
+    field public static final String MIMETYPE_IMAGE_AVIF = "image/avif";
     field public static final String MIMETYPE_TEXT_CEA_608 = "text/cea-608";
     field public static final String MIMETYPE_TEXT_CEA_708 = "text/cea-708";
     field public static final String MIMETYPE_TEXT_SUBRIP = "application/x-subrip";
@@ -41550,6 +41576,10 @@ package android.telephony {
     field public static final String KEY_OPPORTUNISTIC_NETWORK_PING_PONG_TIME_LONG = "opportunistic_network_ping_pong_time_long";
     field public static final String KEY_PING_TEST_BEFORE_DATA_SWITCH_BOOL = "ping_test_before_data_switch_bool";
     field public static final String KEY_PREFER_2G_BOOL = "prefer_2g_bool";
+    field public static final String KEY_PREMIUM_CAPABILITY_NOTIFICATION_BACKOFF_HYSTERESIS_TIME_MILLIS_LONG = "premium_capability_notification_backoff_hysteresis_time_millis_long";
+    field public static final String KEY_PREMIUM_CAPABILITY_NOTIFICATION_DISPLAY_TIMEOUT_MILLIS_LONG = "premium_capability_notification_display_timeout_millis_long";
+    field public static final String KEY_PREMIUM_CAPABILITY_PURCHASE_CONDITION_BACKOFF_HYSTERESIS_TIME_MILLIS_LONG = "premium_capability_purchase_condition_backoff_hysteresis_time_millis_long";
+    field public static final String KEY_PREMIUM_CAPABILITY_PURCHASE_URL_STRING = "premium_capability_purchase_url_string";
     field public static final String KEY_PREVENT_CLIR_ACTIVATION_AND_DEACTIVATION_CODE_BOOL = "prevent_clir_activation_and_deactivation_code_bool";
     field public static final String KEY_RADIO_RESTART_FAILURE_CAUSES_INT_ARRAY = "radio_restart_failure_causes_int_array";
     field public static final String KEY_RCS_CONFIG_SERVER_URL_STRING = "rcs_config_server_url_string";
@@ -41582,6 +41612,7 @@ package android.telephony {
     field public static final String KEY_SMDP_SERVER_ADDRESS_STRING = "smdp_server_address_string";
     field public static final String KEY_SMS_REQUIRES_DESTINATION_NUMBER_CONVERSION_BOOL = "sms_requires_destination_number_conversion_bool";
     field public static final String KEY_SUBSCRIPTION_GROUP_UUID_STRING = "subscription_group_uuid_string";
+    field public static final String KEY_SUPPORTED_PREMIUM_CAPABILITIES_INT_ARRAY = "supported_premium_capabilities_int_array";
     field public static final String KEY_SUPPORTS_CALL_COMPOSER_BOOL = "supports_call_composer_bool";
     field public static final String KEY_SUPPORTS_DEVICE_TO_DEVICE_COMMUNICATION_USING_DTMF_BOOL = "supports_device_to_device_communication_using_dtmf_bool";
     field public static final String KEY_SUPPORTS_DEVICE_TO_DEVICE_COMMUNICATION_USING_RTP_BOOL = "supports_device_to_device_communication_using_rtp_bool";
@@ -43073,6 +43104,7 @@ package android.telephony {
     method @NonNull public int[] getThresholds();
     method public void writeToParcel(@NonNull android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.telephony.SignalThresholdInfo> CREATOR;
+    field public static final int SIGNAL_MEASUREMENT_TYPE_ECNO = 9; // 0x9
     field public static final int SIGNAL_MEASUREMENT_TYPE_RSCP = 2; // 0x2
     field public static final int SIGNAL_MEASUREMENT_TYPE_RSRP = 3; // 0x3
     field public static final int SIGNAL_MEASUREMENT_TYPE_RSRQ = 4; // 0x4
@@ -43645,6 +43677,7 @@ package android.telephony {
     method @RequiresPermission(anyOf={android.Manifest.permission.READ_PHONE_STATE, "android.permission.READ_PRIVILEGED_PHONE_STATE"}) public boolean isModemEnabledForSlot(int);
     method @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE) public int isMultiSimSupported();
     method public boolean isNetworkRoaming();
+    method @RequiresPermission(android.Manifest.permission.READ_BASIC_PHONE_STATE) public boolean isPremiumCapabilityAvailableForPurchase(int);
     method public boolean isRadioInterfaceCapabilitySupported(@NonNull String);
     method public boolean isRttSupported();
     method public boolean isSmsCapable();
@@ -43653,6 +43686,7 @@ package android.telephony {
     method public boolean isVoicemailVibrationEnabled(android.telecom.PhoneAccountHandle);
     method public boolean isWorldPhone();
     method @Deprecated public void listen(android.telephony.PhoneStateListener, int);
+    method @RequiresPermission(android.Manifest.permission.READ_BASIC_PHONE_STATE) public void purchasePremiumCapability(int, @NonNull java.util.concurrent.Executor, @NonNull java.util.function.Consumer<java.lang.Integer>);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void rebootModem();
     method public void registerTelephonyCallback(@NonNull java.util.concurrent.Executor, @NonNull android.telephony.TelephonyCallback);
     method public void registerTelephonyCallback(int, @NonNull java.util.concurrent.Executor, @NonNull android.telephony.TelephonyCallback);
@@ -43822,6 +43856,20 @@ package android.telephony {
     field public static final int PHONE_TYPE_GSM = 1; // 0x1
     field public static final int PHONE_TYPE_NONE = 0; // 0x0
     field public static final int PHONE_TYPE_SIP = 3; // 0x3
+    field public static final int PREMIUM_CAPABILITY_REALTIME_INTERACTIVE_TRAFFIC = 1; // 0x1
+    field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_ALREADY_IN_PROGRESS = 4; // 0x4
+    field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_ALREADY_PURCHASED = 3; // 0x3
+    field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_CARRIER_DISABLED = 7; // 0x7
+    field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_CARRIER_ERROR = 8; // 0x8
+    field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_FEATURE_NOT_SUPPORTED = 10; // 0xa
+    field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_NETWORK_CONGESTED = 13; // 0xd
+    field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_NETWORK_NOT_AVAILABLE = 12; // 0xc
+    field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_REQUEST_FAILED = 11; // 0xb
+    field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_SUCCESS = 1; // 0x1
+    field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_THROTTLED = 2; // 0x2
+    field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_TIMEOUT = 9; // 0x9
+    field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_USER_CANCELED = 6; // 0x6
+    field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_USER_DISABLED = 5; // 0x5
     field public static final int SET_OPPORTUNISTIC_SUB_INACTIVE_SUBSCRIPTION = 2; // 0x2
     field public static final int SET_OPPORTUNISTIC_SUB_NO_OPPORTUNISTIC_SUB_AVAILABLE = 3; // 0x3
     field public static final int SET_OPPORTUNISTIC_SUB_REMOTE_SERVICE_EXCEPTION = 4; // 0x4
@@ -45170,6 +45218,7 @@ package android.text {
     method public final int getLineAscent(int);
     method public final int getLineBaseline(int);
     method public final int getLineBottom(int);
+    method public int getLineBottom(int, boolean);
     method public int getLineBounds(int, android.graphics.Rect);
     method public abstract boolean getLineContainsTab(int);
     method public abstract int getLineCount();
@@ -49231,6 +49280,7 @@ package android.view {
     field public static final int CLASSIFICATION_AMBIGUOUS_GESTURE = 1; // 0x1
     field public static final int CLASSIFICATION_DEEP_PRESS = 2; // 0x2
     field public static final int CLASSIFICATION_NONE = 0; // 0x0
+    field public static final int CLASSIFICATION_TWO_FINGER_SWIPE = 3; // 0x3
     field @NonNull public static final android.os.Parcelable.Creator<android.view.MotionEvent> CREATOR;
     field public static final int EDGE_BOTTOM = 2; // 0x2
     field public static final int EDGE_LEFT = 4; // 0x4
@@ -51855,10 +51905,11 @@ package android.view.accessibility {
     method public void setSpeechStateChangeTypes(int);
     method public void writeToParcel(android.os.Parcel, int);
     field public static final int CONTENT_CHANGE_TYPE_CONTENT_DESCRIPTION = 4; // 0x4
+    field public static final int CONTENT_CHANGE_TYPE_CONTENT_INVALID = 1024; // 0x400
     field public static final int CONTENT_CHANGE_TYPE_DRAG_CANCELLED = 512; // 0x200
     field public static final int CONTENT_CHANGE_TYPE_DRAG_DROPPED = 256; // 0x100
     field public static final int CONTENT_CHANGE_TYPE_DRAG_STARTED = 128; // 0x80
-    field public static final int CONTENT_CHANGE_TYPE_INVALID = 1024; // 0x400
+    field public static final int CONTENT_CHANGE_TYPE_ERROR = 2048; // 0x800
     field public static final int CONTENT_CHANGE_TYPE_PANE_APPEARED = 16; // 0x10
     field public static final int CONTENT_CHANGE_TYPE_PANE_DISAPPEARED = 32; // 0x20
     field public static final int CONTENT_CHANGE_TYPE_PANE_TITLE = 8; // 0x8
@@ -53291,6 +53342,7 @@ package android.view.inputmethod {
     method public default void performHandwritingGesture(@NonNull android.view.inputmethod.HandwritingGesture, @Nullable java.util.concurrent.Executor, @Nullable java.util.function.IntConsumer);
     method public boolean performPrivateCommand(String, android.os.Bundle);
     method public default boolean performSpellCheck();
+    method public default boolean replaceText(@IntRange(from=0) int, @IntRange(from=0) int, @NonNull CharSequence, int, @Nullable android.view.inputmethod.TextAttribute);
     method public boolean reportFullscreenMode(boolean);
     method public boolean requestCursorUpdates(int);
     method public default boolean requestCursorUpdates(int, int);
@@ -53519,8 +53571,8 @@ package android.view.inputmethod {
 
   public final class InsertGesture extends android.view.inputmethod.HandwritingGesture implements android.os.Parcelable {
     method public int describeContents();
-    method @Nullable public android.graphics.PointF getInsertionPoint();
-    method @Nullable public String getTextToInsert();
+    method @NonNull public android.graphics.PointF getInsertionPoint();
+    method @NonNull public String getTextToInsert();
     method public void writeToParcel(@NonNull android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.view.inputmethod.InsertGesture> CREATOR;
   }

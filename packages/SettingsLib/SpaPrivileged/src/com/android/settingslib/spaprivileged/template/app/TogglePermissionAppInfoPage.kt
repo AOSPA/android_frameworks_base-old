@@ -63,7 +63,7 @@ internal class TogglePermissionAppInfoPageProvider(
     override val parameter = PAGE_PARAMETER
 
     override fun buildEntry(arguments: Bundle?): List<SettingsEntry> {
-        val owner = SettingsPage.create(name, parameter, arguments)
+        val owner = SettingsPage.create(name, parameter = parameter, arguments = arguments)
         val entryList = mutableListOf<SettingsEntry>()
         entryList.add(
             SettingsEntryBuilder.create(ENTRY_NAME, owner).setIsAllowSearch(false).build()
@@ -108,7 +108,10 @@ internal class TogglePermissionAppInfoPageProvider(
 
         fun buildPageData(permissionType: String): SettingsPage {
             return SettingsPage.create(
-                PAGE_NAME, PAGE_PARAMETER, bundleOf(PERMISSION to permissionType))
+                name = PAGE_NAME,
+                parameter = PAGE_PARAMETER,
+                arguments = bundleOf(PERMISSION to permissionType)
+            )
         }
     }
 }
@@ -125,7 +128,7 @@ private fun TogglePermissionAppInfoPage(
         userId = userId,
         footerText = stringResource(listModel.footerResId),
     ) {
-        val model = createSwitchModel(listModel, packageName, userId)
+        val model = createSwitchModel(listModel, packageName, userId) ?: return@AppInfoPage
         LaunchedEffect(model, Dispatchers.Default) {
             model.initState()
         }
@@ -138,9 +141,9 @@ private fun <T : AppRecord> createSwitchModel(
     listModel: TogglePermissionAppListModel<T>,
     packageName: String,
     userId: Int,
-): TogglePermissionSwitchModel<T> {
+): TogglePermissionSwitchModel<T>? {
     val record = remember {
-        val app = PackageManagers.getApplicationInfoAsUser(packageName, userId)
+        val app = PackageManagers.getApplicationInfoAsUser(packageName, userId) ?: return null
         listModel.transformItem(app)
     }
     val context = LocalContext.current

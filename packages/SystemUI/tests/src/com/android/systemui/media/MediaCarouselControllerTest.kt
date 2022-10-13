@@ -16,6 +16,7 @@
 
 package com.android.systemui.media
 
+import android.app.PendingIntent
 import android.testing.AndroidTestingRunner
 import android.testing.TestableLooper
 import androidx.test.filters.SmallTest
@@ -26,9 +27,9 @@ import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.dump.DumpManager
 import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.plugins.FalsingManager
+import com.android.systemui.statusbar.notification.collection.provider.OnReorderingAllowedListener
 import com.android.systemui.statusbar.notification.collection.provider.VisualStabilityProvider
 import com.android.systemui.statusbar.policy.ConfigurationController
-import com.android.systemui.util.animation.TransitionLayout
 import com.android.systemui.util.concurrency.DelayableExecutor
 import com.android.systemui.util.mockito.capture
 import com.android.systemui.util.mockito.eq
@@ -42,8 +43,8 @@ import org.junit.runner.RunWith
 import org.mockito.ArgumentCaptor
 import org.mockito.Captor
 import org.mockito.Mock
+import org.mockito.Mockito.mock
 import org.mockito.Mockito.verify
-import org.mockito.Mockito.verifyNoMoreInteractions
 import org.mockito.Mockito.`when` as whenever
 import org.mockito.MockitoAnnotations
 
@@ -70,14 +71,11 @@ class MediaCarouselControllerTest : SysuiTestCase() {
     @Mock lateinit var dumpManager: DumpManager
     @Mock lateinit var logger: MediaUiEventLogger
     @Mock lateinit var debugLogger: MediaCarouselControllerLogger
-    @Mock lateinit var mediaViewHolder: MediaViewHolder
-    @Mock lateinit var player: TransitionLayout
-    @Mock lateinit var recommendationViewHolder: RecommendationViewHolder
-    @Mock lateinit var recommendations: TransitionLayout
     @Mock lateinit var mediaPlayer: MediaControlPanel
     @Mock lateinit var mediaViewController: MediaViewController
     @Mock lateinit var smartspaceMediaData: SmartspaceMediaData
     @Captor lateinit var listener: ArgumentCaptor<MediaDataManager.Listener>
+    @Captor lateinit var visualStabilityCallback: ArgumentCaptor<OnReorderingAllowedListener>
 
     private val clock = FakeSystemClock()
     private lateinit var mediaCarouselController: MediaCarouselController
@@ -102,6 +100,8 @@ class MediaCarouselControllerTest : SysuiTestCase() {
             debugLogger
         )
         verify(mediaDataManager).addListener(capture(listener))
+        verify(visualStabilityProvider)
+            .addPersistentReorderingAllowedListener(capture(visualStabilityCallback))
         whenever(mediaControlPanelFactory.get()).thenReturn(mediaPlayer)
         whenever(mediaPlayer.mediaViewController).thenReturn(mediaViewController)
         whenever(mediaDataManager.smartspaceMediaData).thenReturn(smartspaceMediaData)
@@ -276,46 +276,6 @@ class MediaCarouselControllerTest : SysuiTestCase() {
         verify(logger).logRecommendationRemoved(eq(packageName), eq(instanceId!!))
     }
 
-    @Test
-    fun testSetSquishinessFractionForMedia_setPlayerBottom() {
-        whenever(panel.mediaViewHolder).thenReturn(mediaViewHolder)
-        whenever(mediaViewHolder.player).thenReturn(player)
-        whenever(player.measuredHeight).thenReturn(100)
-
-        val playingLocal = Triple("playing local",
-                DATA.copy(active = true, isPlaying = true,
-                        playbackLocation = MediaData.PLAYBACK_LOCAL, resumption = false),
-                4500L)
-        MediaPlayerData.addMediaPlayer(playingLocal.first, playingLocal.second, panel, clock,
-                false, debugLogger)
-
-        mediaCarouselController.squishinessFraction = 0.0f
-        verify(player).bottom = 50
-        verifyNoMoreInteractions(recommendationViewHolder)
-
-        mediaCarouselController.squishinessFraction = 0.5f
-        verify(player).bottom = 75
-        verifyNoMoreInteractions(recommendationViewHolder)
-    }
-
-    @Test
-    fun testSetSquishinessFractionForRecommendation_setPlayerBottom() {
-        whenever(panel.recommendationViewHolder).thenReturn(recommendationViewHolder)
-        whenever(recommendationViewHolder.recommendations).thenReturn(recommendations)
-        whenever(recommendations.measuredHeight).thenReturn(100)
-
-        MediaPlayerData.addMediaRecommendation(SMARTSPACE_KEY, EMPTY_SMARTSPACE_MEDIA_DATA, panel,
-                false, clock)
-
-        mediaCarouselController.squishinessFraction = 0.0f
-        verifyNoMoreInteractions(mediaViewHolder)
-        verify(recommendationViewHolder.recommendations).bottom = 50
-
-        mediaCarouselController.squishinessFraction = 0.5f
-        verifyNoMoreInteractions(mediaViewHolder)
-        verify(recommendationViewHolder.recommendations).bottom = 75
-    }
-
     fun testMediaLoaded_ScrollToActivePlayer() {
         listener.value.onMediaDataLoaded("playing local",
                 null,
@@ -362,7 +322,7 @@ class MediaCarouselControllerTest : SysuiTestCase() {
                 playerIndex,
                 mediaCarouselController.mediaCarouselScrollHandler.visibleMediaIndex
         )
-        assertEquals( playerIndex, 0)
+        assertEquals(playerIndex, 0)
 
         // Replaying the same media player one more time.
         // And check that the card stays in its position.
@@ -373,5 +333,69 @@ class MediaCarouselControllerTest : SysuiTestCase() {
         )
         playerIndex = MediaPlayerData.getMediaPlayerIndex("playing local")
         assertEquals(playerIndex, 0)
+    }
+
+    @Test
+    fun testRecommendationRemovedWhileNotVisible_updateHostVisibility() {
+        var result = false
+        mediaCarouselController.updateHostVisibility = { result = true }
+
+        whenever(visualStabilityProvider.isReorderingAllowed).thenReturn(true)
+        listener.value.onSmartspaceMediaDataRemoved(SMARTSPACE_KEY, false)
+
+        assertEquals(true, result)
+    }
+
+    @Test
+    fun testRecommendationRemovedWhileVisible_thenReorders_updateHostVisibility() {
+        var result = false
+        mediaCarouselController.updateHostVisibility = { result = true }
+
+        whenever(visualStabilityProvider.isReorderingAllowed).thenReturn(false)
+        listener.value.onSmartspaceMediaDataRemoved(SMARTSPACE_KEY, false)
+        assertEquals(false, result)
+
+        visualStabilityCallback.value.onReorderingAllowed()
+        assertEquals(true, result)
+    }
+
+    @Test
+    fun testGetCurrentVisibleMediaContentIntent() {
+        val clickIntent1 = mock(PendingIntent::class.java)
+        val player1 = Triple("player1",
+                DATA.copy(clickIntent = clickIntent1),
+                1000L)
+        clock.setCurrentTimeMillis(player1.third)
+        MediaPlayerData.addMediaPlayer(player1.first,
+                player1.second.copy(notificationKey = player1.first),
+                panel, clock, isSsReactivated = false)
+
+        assertEquals(mediaCarouselController.getCurrentVisibleMediaContentIntent(), clickIntent1)
+
+        val clickIntent2 = mock(PendingIntent::class.java)
+        val player2 = Triple("player2",
+                DATA.copy(clickIntent = clickIntent2),
+                2000L)
+        clock.setCurrentTimeMillis(player2.third)
+        MediaPlayerData.addMediaPlayer(player2.first,
+                player2.second.copy(notificationKey = player2.first),
+                panel, clock, isSsReactivated = false)
+
+        // mediaCarouselScrollHandler.visibleMediaIndex is unchanged (= 0), and the new player is
+        // added to the front because it was active more recently.
+        assertEquals(mediaCarouselController.getCurrentVisibleMediaContentIntent(), clickIntent2)
+
+        val clickIntent3 = mock(PendingIntent::class.java)
+        val player3 = Triple("player3",
+                DATA.copy(clickIntent = clickIntent3),
+                500L)
+        clock.setCurrentTimeMillis(player3.third)
+        MediaPlayerData.addMediaPlayer(player3.first,
+                player3.second.copy(notificationKey = player3.first),
+                panel, clock, isSsReactivated = false)
+
+        // mediaCarouselScrollHandler.visibleMediaIndex is unchanged (= 0), and the new player is
+        // added to the end because it was active less recently.
+        assertEquals(mediaCarouselController.getCurrentVisibleMediaContentIntent(), clickIntent2)
     }
 }

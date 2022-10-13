@@ -477,7 +477,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             }
             mLocalInsetsSourceProviders.remove(insetsTypes[i]);
         }
-        mDisplayContent.getInsetsStateController().updateAboveInsetsState(true);
+        // Update insets if this window is attached.
+        if (mDisplayContent != null) {
+            mDisplayContent.getInsetsStateController().updateAboveInsetsState(true);
+        }
     }
 
     /**
@@ -2193,6 +2196,17 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
         return wc.getTask(
                 callback, boundary, includeBoundary, traverseTopToBottom, boundaryFound);
+    }
+
+    @Nullable
+    TaskFragment getTaskFragment(Predicate<TaskFragment> callback) {
+        for (int i = mChildren.size() - 1; i >= 0; --i) {
+            final TaskFragment tf = mChildren.get(i).getTaskFragment(callback);
+            if (tf != null) {
+                return tf;
+            }
+        }
+        return null;
     }
 
     WindowState getWindow(Predicate<WindowState> callback) {

@@ -896,9 +896,10 @@ class ActivityStarter {
 
         final int userId = aInfo != null && aInfo.applicationInfo != null
                 ? UserHandle.getUserId(aInfo.applicationInfo.uid) : 0;
+        final int launchMode = aInfo != null ? aInfo.launchMode : 0;
         if (err == ActivityManager.START_SUCCESS) {
             Slog.i(TAG, "START u" + userId + " {" + intent.toShortString(true, true, true, false)
-                    + "} from uid " + callingUid);
+                    + "} with " + launchModeToString(launchMode) + " from uid " + callingUid);
         }
 
         ActivityRecord sourceRecord = null;
@@ -1851,7 +1852,7 @@ class ActivityStarter {
             ActivityRecord targetTopActivity =
                     targetTask != null ? targetTask.getTopNonFinishingActivity() : null;
             boolean passesAsmChecks = newTask
-                    ? mRootWindowContainer.hasResumedActivity(callerUid)
+                    ? mService.mVisibleActivityProcessTracker.hasResumedActivity(callerUid)
                     : targetTopActivity != null && targetTopActivity.getUid() == callerUid;
 
             if (!passesAsmChecks) {

@@ -22,6 +22,7 @@ import static android.net.NetworkCapabilities.TRANSPORT_TEST;
 import static com.android.server.job.JobSchedulerService.sElapsedRealtimeClock;
 import static com.android.server.job.JobSchedulerService.sSystemClock;
 
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.job.JobInfo;
 import android.content.ComponentName;
@@ -32,7 +33,6 @@ import android.os.Handler;
 import android.os.PersistableBundle;
 import android.os.Process;
 import android.os.SystemClock;
-import android.os.UserHandle;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
 import android.util.ArraySet;
@@ -287,19 +287,29 @@ public final class JobStore {
     }
 
     /**
-     * @param userHandle User for whom we are querying the list of jobs.
-     * @return A list of all the jobs scheduled for the provided user. Never null.
+     * @param sourceUid Uid of the source app.
+     * @return A list of all the jobs scheduled for the source app. Never null.
      */
-    public List<JobStatus> getJobsByUser(int userHandle) {
-        return mJobSet.getJobsByUser(userHandle);
+    @NonNull
+    public List<JobStatus> getJobsBySourceUid(int sourceUid) {
+        return mJobSet.getJobsBySourceUid(sourceUid);
+    }
+
+    public void getJobsBySourceUid(int sourceUid, @NonNull List<JobStatus> insertInto) {
+        mJobSet.getJobsBySourceUid(sourceUid, insertInto);
     }
 
     /**
      * @param uid Uid of the requesting app.
      * @return All JobStatus objects for a given uid from the master list. Never null.
      */
+    @NonNull
     public List<JobStatus> getJobsByUid(int uid) {
         return mJobSet.getJobsByUid(uid);
+    }
+
+    public void getJobsByUid(int uid, @NonNull List<JobStatus> insertInto) {
+        mJobSet.getJobsByUid(uid, insertInto);
     }
 
     /**
@@ -307,6 +317,7 @@ public final class JobStore {
      * @param jobId Job id, specified at schedule-time.
      * @return the JobStatus that matches the provided uId and jobId, or null if none found.
      */
+    @Nullable
     public JobStatus getJobByUidAndJobId(int uid, int jobId) {
         return mJobSet.get(uid, jobId);
     }
@@ -742,6 +753,10 @@ public final class JobStore {
                 }
             } catch (XmlPullParserException | IOException e) {
                 Slog.wtf(TAG, "Error jobstore xml.", e);
+            } catch (Exception e) {
+                // Crashing at this point would result in a boot loop, so live with a general
+                // Exception for system stability's sake.
+                Slog.wtf(TAG, "Unexpected exception", e);
             } finally {
                 if (mPersistInfo.countAllJobsLoaded < 0) { // Only set them once.
                     mPersistInfo.countAllJobsLoaded = numJobs;
@@ -890,6 +905,9 @@ public final class JobStore {
             } catch (IOException e) {
                 Slog.d(TAG, "Error I/O Exception.", e);
                 return null;
+            } catch (IllegalArgumentException e) {
+                Slog.e(TAG, "Constraints contained invalid data", e);
+                return null;
             }
 
             parser.next(); // Consume </constraints>
@@ -986,8 +1004,14 @@ public final class JobStore {
                 return null;
             }
 
-            PersistableBundle extras = PersistableBundle.restoreFromXml(parser);
-            jobBuilder.setExtras(extras);
+            final PersistableBundle extras;
+            try {
+                extras = PersistableBundle.restoreFromXml(parser);
+                jobBuilder.setExtras(extras);
+            } catch (IllegalArgumentException e) {
+                Slog.e(TAG, "Persisted extras contained invalid data", e);
+                return null;
+            }
             parser.nextTag(); // Consume </extras>
 
             final JobInfo builtJob;
@@ -1207,25 +1231,29 @@ public final class JobStore {
 
         public List<JobStatus> getJobsByUid(int uid) {
             ArrayList<JobStatus> matchingJobs = new ArrayList<JobStatus>();
-            ArraySet<JobStatus> jobs = mJobs.get(uid);
-            if (jobs != null) {
-                matchingJobs.addAll(jobs);
-            }
+            getJobsByUid(uid, matchingJobs);
             return matchingJobs;
         }
 
-        // By user, not by uid, so we need to traverse by key and check
-        public List<JobStatus> getJobsByUser(int userId) {
-            final ArrayList<JobStatus> result = new ArrayList<JobStatus>();
-            for (int i = mJobsPerSourceUid.size() - 1; i >= 0; i--) {
-                if (UserHandle.getUserId(mJobsPerSourceUid.keyAt(i)) == userId) {
-                    final ArraySet<JobStatus> jobs = mJobsPerSourceUid.valueAt(i);
-                    if (jobs != null) {
-                        result.addAll(jobs);
-                    }
-                }
+        public void getJobsByUid(int uid, List<JobStatus> insertInto) {
+            ArraySet<JobStatus> jobs = mJobs.get(uid);
+            if (jobs != null) {
+                insertInto.addAll(jobs);
             }
+        }
+
+        @NonNull
+        public List<JobStatus> getJobsBySourceUid(int sourceUid) {
+            final ArrayList<JobStatus> result = new ArrayList<JobStatus>();
+            getJobsBySourceUid(sourceUid, result);
             return result;
+        }
+
+        public void getJobsBySourceUid(int sourceUid, List<JobStatus> insertInto) {
+            final ArraySet<JobStatus> jobs = mJobsPerSourceUid.get(sourceUid);
+            if (jobs != null) {
+                insertInto.addAll(jobs);
+            }
         }
 
         public boolean add(JobStatus job) {
@@ -1369,7 +1397,7 @@ public final class JobStore {
         }
 
         public void forEachJob(@Nullable Predicate<JobStatus> filterPredicate,
-                Consumer<JobStatus> functor) {
+                @NonNull Consumer<JobStatus> functor) {
             for (int uidIndex = mJobs.size() - 1; uidIndex >= 0; uidIndex--) {
                 ArraySet<JobStatus> jobs = mJobs.valueAt(uidIndex);
                 if (jobs != null) {

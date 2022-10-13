@@ -27,7 +27,6 @@ import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.logging.UiEventLogger;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.launcher3.icons.IconProvider;
-import com.android.wm.shell.RootDisplayAreaOrganizer;
 import com.android.wm.shell.RootTaskDisplayAreaOrganizer;
 import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.TaskViewTransitions;
@@ -49,7 +48,6 @@ import com.android.wm.shell.common.TaskStackListenerImpl;
 import com.android.wm.shell.common.TransactionPool;
 import com.android.wm.shell.common.annotations.ShellBackgroundThread;
 import com.android.wm.shell.common.annotations.ShellMainThread;
-import com.android.wm.shell.desktopmode.DesktopMode;
 import com.android.wm.shell.desktopmode.DesktopModeController;
 import com.android.wm.shell.desktopmode.DesktopModeTaskRepository;
 import com.android.wm.shell.draganddrop.DragAndDropController;
@@ -190,14 +188,16 @@ public abstract class WMShellModule {
             @ShellMainThread Choreographer mainChoreographer,
             ShellTaskOrganizer taskOrganizer,
             DisplayController displayController,
-            SyncTransactionQueue syncQueue) {
+            SyncTransactionQueue syncQueue,
+            @DynamicOverride DesktopModeController desktopModeController) {
         return new CaptionWindowDecorViewModel(
                         context,
                         mainHandler,
                         mainChoreographer,
                         taskOrganizer,
                         displayController,
-                        syncQueue);
+                        syncQueue,
+                        desktopModeController);
     }
 
     //
@@ -320,6 +320,7 @@ public abstract class WMShellModule {
             ShellCommandHandler shellCommandHandler,
             ShellController shellController,
             DisplayController displayController,
+            PipAnimationController pipAnimationController,
             PipAppOpsListener pipAppOpsListener,
             PipBoundsAlgorithm pipBoundsAlgorithm,
             PhonePipKeepClearAlgorithm pipKeepClearAlgorithm,
@@ -339,11 +340,12 @@ public abstract class WMShellModule {
             @ShellMainThread ShellExecutor mainExecutor) {
         return Optional.ofNullable(PipController.create(
                 context, shellInit, shellCommandHandler, shellController,
-                displayController, pipAppOpsListener, pipBoundsAlgorithm, pipKeepClearAlgorithm,
-                pipBoundsState, pipMotionHelper, pipMediaController, phonePipMenuController,
-                pipTaskOrganizer, pipTransitionState, pipTouchHandler, pipTransitionController,
-                windowManagerShellWrapper, taskStackListener, pipParamsChangedForwarder,
-                displayInsetsController, oneHandedController, mainExecutor));
+                displayController, pipAnimationController, pipAppOpsListener, pipBoundsAlgorithm,
+                pipKeepClearAlgorithm, pipBoundsState, pipMotionHelper, pipMediaController,
+                phonePipMenuController, pipTaskOrganizer, pipTransitionState, pipTouchHandler,
+                pipTransitionController, windowManagerShellWrapper, taskStackListener,
+                pipParamsChangedForwarder, displayInsetsController, oneHandedController,
+                mainExecutor));
     }
 
     @WMSingleton
@@ -596,19 +598,18 @@ public abstract class WMShellModule {
 
     @WMSingleton
     @Provides
-    static Optional<DesktopModeController> provideDesktopModeController(
-            Context context, ShellInit shellInit,
+    @DynamicOverride
+    static DesktopModeController provideDesktopModeController(Context context, ShellInit shellInit,
             ShellTaskOrganizer shellTaskOrganizer,
-            RootDisplayAreaOrganizer rootDisplayAreaOrganizer,
+            RootTaskDisplayAreaOrganizer rootTaskDisplayAreaOrganizer,
+            Transitions transitions,
+            @DynamicOverride DesktopModeTaskRepository desktopModeTaskRepository,
             @ShellMainThread Handler mainHandler,
-            Transitions transitions
+            @ShellMainThread ShellExecutor mainExecutor
     ) {
-        if (DesktopMode.IS_SUPPORTED) {
-            return Optional.of(new DesktopModeController(context, shellInit, shellTaskOrganizer,
-                    rootDisplayAreaOrganizer, mainHandler, transitions));
-        } else {
-            return Optional.empty();
-        }
+        return new DesktopModeController(context, shellInit, shellTaskOrganizer,
+                rootTaskDisplayAreaOrganizer, transitions, desktopModeTaskRepository, mainHandler,
+                mainExecutor);
     }
 
     @WMSingleton

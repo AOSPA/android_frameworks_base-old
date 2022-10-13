@@ -29,7 +29,9 @@ import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_IN
 import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LAUNCHER_APP_LAUNCH_FROM_WIDGET;
 import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LAUNCHER_OPEN_ALL_APPS;
 import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LAUNCHER_QUICK_SWITCH;
+import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LAUNCHER_UNLOCK_ENTRANCE_ANIMATION;
 import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LOCKSCREEN_LAUNCH_CAMERA;
+import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LOCKSCREEN_OCCLUSION;
 import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LOCKSCREEN_PASSWORD_APPEAR;
 import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LOCKSCREEN_PASSWORD_DISAPPEAR;
 import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LOCKSCREEN_PATTERN_APPEAR;
@@ -220,6 +222,8 @@ public class InteractionJankMonitor {
     public static final int CUJ_TASKBAR_EXPAND = 60;
     public static final int CUJ_TASKBAR_COLLAPSE = 61;
     public static final int CUJ_SHADE_CLEAR_ALL = 62;
+    public static final int CUJ_LAUNCHER_UNLOCK_ENTRANCE_ANIMATION = 63;
+    public static final int CUJ_LOCKSCREEN_OCCLUSION = 64;
 
     private static final int NO_STATSD_LOGGING = -1;
 
@@ -291,6 +295,8 @@ public class InteractionJankMonitor {
             UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__TASKBAR_EXPAND,
             UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__TASKBAR_COLLAPSE,
             UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__SHADE_CLEAR_ALL,
+            UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LAUNCHER_UNLOCK_ENTRANCE_ANIMATION,
+            UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__LOCKSCREEN_OCCLUSION,
     };
 
     private static class InstanceHolder {
@@ -377,7 +383,9 @@ public class InteractionJankMonitor {
             CUJ_USER_DIALOG_OPEN,
             CUJ_TASKBAR_EXPAND,
             CUJ_TASKBAR_COLLAPSE,
-            CUJ_SHADE_CLEAR_ALL
+            CUJ_SHADE_CLEAR_ALL,
+            CUJ_LAUNCHER_UNLOCK_ENTRANCE_ANIMATION,
+            CUJ_LOCKSCREEN_OCCLUSION
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface CujType {
@@ -434,6 +442,22 @@ public class InteractionJankMonitor {
     @VisibleForTesting
     public FrameTracker createFrameTracker(Configuration config, Session session) {
         final View view = config.mView;
+
+        if (!config.hasValidView()) {
+            boolean attached = false;
+            boolean hasViewRoot = false;
+            boolean hasRenderer = false;
+            if (view != null) {
+                attached = view.isAttachedToWindow();
+                hasViewRoot = view.getViewRootImpl() != null;
+                hasRenderer = view.getThreadedRenderer() != null;
+            }
+            Log.d(TAG, "create FrameTracker fails: view=" + view
+                    + ", attached=" + attached + ", hasViewRoot=" + hasViewRoot
+                    + ", hasRenderer=" + hasRenderer, new Throwable());
+            return null;
+        }
+
         final ThreadedRendererWrapper threadedRenderer =
                 view == null ? null : new ThreadedRendererWrapper(view.getThreadedRenderer());
         final ViewRootWrapper viewRoot =
@@ -517,6 +541,7 @@ public class InteractionJankMonitor {
     public boolean begin(@NonNull Configuration.Builder builder) {
         try {
             final Configuration config = builder.build();
+            EventLogTags.writeJankCujEventsBeginRequest(config.mCujType);
             final TrackerResult result = new TrackerResult();
             final boolean success = config.getHandler().runWithScissors(
                     () -> result.mResult = beginInternal(config), EXECUTOR_TASK_TIMEOUT);
@@ -541,6 +566,7 @@ public class InteractionJankMonitor {
 
         // begin a new trace session.
         tracker = createFrameTracker(conf, new Session(cujType, conf.mTag));
+        if (tracker == null) return false;
         putTracker(cujType, tracker);
         tracker.begin();
 
@@ -589,6 +615,7 @@ public class InteractionJankMonitor {
      * @return boolean true if the tracker is ended successfully, false otherwise.
      */
     public boolean end(@CujType int cujType) {
+        EventLogTags.writeJankCujEventsEndRequest(cujType);
         FrameTracker tracker = getTracker(cujType);
         // Skip this call since we haven't started a trace yet.
         if (tracker == null) return false;
@@ -626,6 +653,7 @@ public class InteractionJankMonitor {
      * @return boolean true if the tracker is cancelled successfully, false otherwise.
      */
     public boolean cancel(@CujType int cujType) {
+        EventLogTags.writeJankCujEventsCancelRequest(cujType);
         return cancel(cujType, REASON_CANCEL_NORMAL);
     }
 
@@ -868,6 +896,10 @@ public class InteractionJankMonitor {
                 return "TASKBAR_COLLAPSE";
             case CUJ_SHADE_CLEAR_ALL:
                 return "SHADE_CLEAR_ALL";
+            case CUJ_LAUNCHER_UNLOCK_ENTRANCE_ANIMATION:
+                return "LAUNCHER_UNLOCK_ENTRANCE_ANIMATION";
+            case CUJ_LOCKSCREEN_OCCLUSION:
+                return "LOCKSCREEN_OCCLUSION";
         }
         return "UNKNOWN";
     }
@@ -1058,14 +1090,30 @@ public class InteractionJankMonitor {
                     msg.append("Must pass in a valid surface control if only instrument surface; ");
                 }
             } else {
-                if (mView == null || !mView.isAttachedToWindow()) {
+                if (!hasValidView()) {
                     shouldThrow = true;
-                    msg.append("Null view or unattached view while instrumenting view; ");
+                    boolean attached = false;
+                    boolean hasViewRoot = false;
+                    boolean hasRenderer = false;
+                    if (mView != null) {
+                        attached = mView.isAttachedToWindow();
+                        hasViewRoot = mView.getViewRootImpl() != null;
+                        hasRenderer = mView.getThreadedRenderer() != null;
+                    }
+                    String err = "invalid view: view=" + mView + ", attached=" + attached
+                            + ", hasViewRoot=" + hasViewRoot + ", hasRenderer=" + hasRenderer;
+                    msg.append(err);
                 }
             }
             if (shouldThrow) {
                 throw new IllegalArgumentException(msg.toString());
             }
+        }
+
+        boolean hasValidView() {
+            return mSurfaceOnly
+                    || (mView != null && mView.isAttachedToWindow()
+                    && mView.getViewRootImpl() != null && mView.getThreadedRenderer() != null);
         }
 
         /**

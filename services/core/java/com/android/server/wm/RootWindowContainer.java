@@ -1495,8 +1495,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             } else {
                 final String resolvedType =
                         homeIntent.resolveTypeIfNeeded(mService.mContext.getContentResolver());
-                final ResolveInfo info = AppGlobals.getPackageManager()
-                        .resolveIntent(homeIntent, resolvedType, flags, userId);
+                final ResolveInfo info = mTaskSupervisor.resolveIntent(homeIntent, resolvedType,
+                        userId, flags, Binder.getCallingUid());
                 if (info != null) {
                     aInfo = info.activityInfo;
                 }
@@ -1805,10 +1805,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         // The top focused root task might not have a resumed activity yet - look on all displays in
         // focus order.
         return getItemFromTaskDisplayAreas(TaskDisplayArea::getFocusedActivity);
-    }
-
-    boolean hasResumedActivity(int uid) {
-        return forAllActivities(ar -> ar.isState(RESUMED) && ar.getUid() == uid);
     }
 
     boolean isTopDisplayFocusedRootTask(Task task) {
@@ -3217,9 +3213,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     void finishVoiceTask(IVoiceInteractionSession session) {
-        forAllRootTasks(rootTask -> {
-            rootTask.finishVoiceTask(session);
-        });
+        final IBinder binder = session.asBinder();
+        forAllLeafTasks(t -> t.finishIfVoiceTask(binder), true /* traverseTopToBottom */);
     }
 
     /**

@@ -901,7 +901,7 @@ public class Watchdog implements Dumpable {
             // We've waited half the deadlock-detection interval.  Pull a stack
             // trace and wait another half.
             initialStack = ActivityManagerService.dumpStackTraces(pids, null, null,
-                    nativePids, null, subject, criticalEvents);
+                    nativePids, null, subject, criticalEvents, /* latencyTracker= */null);
             if (initialStack != null){
                 SmartTraceUtils.dumpStackTraces(Process.myPid(), pids,
                     nativePids, initialStack);
@@ -924,7 +924,7 @@ public class Watchdog implements Dumpable {
         StringWriter tracesFileException = new StringWriter();
         final File finalStack = ActivityManagerService.dumpStackTraces(
                 pids, processCpuTracker, new SparseArray<>(), getInterestingNativePids(),
-                tracesFileException, subject, criticalEvents);
+                tracesFileException, subject, criticalEvents, /* latencyTracker= */null);
         if (finalStack != null){
             SmartTraceUtils.dumpStackTraces(Process.myPid(), pids, nativePids, finalStack);
         }

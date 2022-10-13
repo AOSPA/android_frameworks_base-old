@@ -27,12 +27,16 @@ import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
 import com.android.server.wm.flicker.annotation.Group1
 import com.android.server.wm.flicker.dsl.FlickerBuilder
+import com.android.server.wm.flicker.helpers.isRotated
+import com.android.server.wm.traces.parser.windowmanager.WindowManagerStateHelper
 import com.android.wm.shell.flicker.SPLIT_SCREEN_DIVIDER_COMPONENT
 import com.android.wm.shell.flicker.appWindowIsVisibleAtEnd
-import com.android.wm.shell.flicker.helpers.SplitScreenHelper
+import com.android.wm.shell.flicker.appWindowIsVisibleAtStart
 import com.android.wm.shell.flicker.layerIsVisibleAtEnd
 import com.android.wm.shell.flicker.layerKeepVisible
 import com.android.wm.shell.flicker.splitAppLayerBoundsIsVisibleAtEnd
+import com.android.wm.shell.flicker.splitScreenDividerIsVisibleAtEnd
+import com.android.wm.shell.flicker.splitScreenDividerIsVisibleAtStart
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -49,38 +53,92 @@ import org.junit.runners.Parameterized
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @Group1
-class SwitchAppByDoubleTapDivider (testSpec: FlickerTestParameter) : SplitScreenBase(testSpec) {
+class SwitchAppByDoubleTapDivider(testSpec: FlickerTestParameter) : SplitScreenBase(testSpec) {
 
     override val transition: FlickerBuilder.() -> Unit
         get() = {
             super.transition(this)
             setup {
-                SplitScreenHelper.enterSplit(wmHelper, tapl, primaryApp, secondaryApp)
+                SplitScreenUtils.enterSplit(wmHelper, tapl, primaryApp, secondaryApp)
             }
             transitions {
-                SplitScreenHelper.doubleTapDividerToSwitch(device)
+                SplitScreenUtils.doubleTapDividerToSwitch(device)
                 wmHelper.StateSyncBuilder()
                     .withAppTransitionIdle()
                     .waitForAndVerify()
+
+                waitForLayersToSwitch(wmHelper)
+                waitForWindowsToSwitch(wmHelper)
             }
         }
 
+    private fun waitForWindowsToSwitch(wmHelper: WindowManagerStateHelper) {
+        wmHelper.StateSyncBuilder().add("appWindowsSwitched") {
+            val primaryAppWindow = it.wmState.visibleWindows.firstOrNull { window ->
+                primaryApp.windowMatchesAnyOf(window)
+            } ?: return@add false
+            val secondaryAppWindow = it.wmState.visibleWindows.firstOrNull { window ->
+                secondaryApp.windowMatchesAnyOf(window)
+            } ?: return@add false
+
+            if (testSpec.startRotation.isRotated()) {
+                return@add primaryAppWindow.frame.right <= secondaryAppWindow.frame.left
+            } else {
+                return@add primaryAppWindow.frame.bottom <= secondaryAppWindow.frame.top
+            }
+        }.waitForAndVerify()
+    }
+
+    private fun waitForLayersToSwitch(wmHelper: WindowManagerStateHelper) {
+        wmHelper.StateSyncBuilder().add("appLayersSwitched") {
+            val primaryAppLayer = it.layerState.visibleLayers.firstOrNull { window ->
+                primaryApp.layerMatchesAnyOf(window)
+            } ?: return@add false
+            val secondaryAppLayer = it.layerState.visibleLayers.firstOrNull { window ->
+                secondaryApp.layerMatchesAnyOf(window)
+            } ?: return@add false
+
+            val primaryVisibleRegion = primaryAppLayer.visibleRegion?.bounds
+                    ?: return@add false
+            val secondaryVisibleRegion = secondaryAppLayer.visibleRegion?.bounds
+                    ?: return@add false
+
+            if (testSpec.startRotation.isRotated()) {
+                return@add primaryVisibleRegion.right <= secondaryVisibleRegion.left
+            } else {
+                return@add primaryVisibleRegion.bottom <= secondaryVisibleRegion.top
+            }
+        }.waitForAndVerify()
+    }
+
     @IwTest(focusArea = "sysui")
+    @Presubmit
+    @Test
+    fun cujCompleted() {
+        testSpec.appWindowIsVisibleAtStart(primaryApp)
+        testSpec.appWindowIsVisibleAtStart(secondaryApp)
+        testSpec.splitScreenDividerIsVisibleAtStart()
+
+        testSpec.appWindowIsVisibleAtEnd(primaryApp)
+        testSpec.appWindowIsVisibleAtEnd(secondaryApp)
+        testSpec.splitScreenDividerIsVisibleAtEnd()
+
+        // TODO(b/246490534): Add validation for switched app after withAppTransitionIdle is
+        // robust enough to get the correct end state.
+    }
+
     @Presubmit
     @Test
     fun splitScreenDividerKeepVisible() = testSpec.layerKeepVisible(SPLIT_SCREEN_DIVIDER_COMPONENT)
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun primaryAppLayerIsVisibleAtEnd() = testSpec.layerIsVisibleAtEnd(primaryApp)
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun secondaryAppLayerIsVisibleAtEnd() = testSpec.layerIsVisibleAtEnd(secondaryApp)
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun primaryAppBoundsIsVisibleAtEnd() = testSpec.splitAppLayerBoundsIsVisibleAtEnd(
@@ -93,12 +151,10 @@ class SwitchAppByDoubleTapDivider (testSpec: FlickerTestParameter) : SplitScreen
     fun secondaryAppBoundsIsVisibleAtEnd() = testSpec.splitAppLayerBoundsIsVisibleAtEnd(
         secondaryApp, landscapePosLeft = tapl.isTablet, portraitPosTop = false)
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun primaryAppWindowIsVisibleAtEnd() = testSpec.appWindowIsVisibleAtEnd(primaryApp)
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun secondaryAppWindowIsVisibleAtEnd() = testSpec.appWindowIsVisibleAtEnd(secondaryApp)
