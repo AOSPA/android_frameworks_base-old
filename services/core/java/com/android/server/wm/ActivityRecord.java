@@ -1370,10 +1370,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         return true;
     }
 
-    void setAppTimeTracker(AppTimeTracker att) {
-        appTimeTracker = att;
-    }
-
     /** Update the saved state of an activity. */
     void setSavedState(@Nullable Bundle savedState) {
         mIcicle = savedState;
@@ -1602,11 +1598,19 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
         if (oldParent != null) {
             oldParent.cleanUpActivityReferences(this);
+            // Update isVisibleRequested value of parent TaskFragment and send the callback to the
+            // client side if needed.
+            oldParent.onActivityVisibleRequestedChanged();
         }
 
-        if (newParent != null && isState(RESUMED)) {
-            newParent.setResumedActivity(this, "onParentChanged");
-            mImeInsetsFrozenUntilStartInput = false;
+        if (newParent != null) {
+            // Update isVisibleRequested value of parent TaskFragment and send the callback to the
+            // client side if needed.
+            newParent.onActivityVisibleRequestedChanged();
+            if (isState(RESUMED)) {
+                newParent.setResumedActivity(this, "onParentChanged");
+                mImeInsetsFrozenUntilStartInput = false;
+            }
         }
 
         if (rootTask != null && rootTask.topRunningActivity() == this) {
@@ -5126,6 +5130,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             return;
         }
         mVisibleRequested = visible;
+        final TaskFragment taskFragment = getTaskFragment();
+        if (taskFragment != null) {
+            taskFragment.onActivityVisibleRequestedChanged();
+        }
         setInsetsFrozen(!visible);
         if (app != null) {
             mTaskSupervisor.onProcessActivityStateChanged(app, false /* forceBatch */);
@@ -6669,7 +6677,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     }
 
     /** Called when the windows associated app window container are drawn. */
-    private void onWindowsDrawn(long timestampNs) {
+    private void onWindowsDrawn() {
         if (mPerf != null && perfActivityBoostHandler > 0) {
             mPerf.perfLockReleaseHandler(perfActivityBoostHandler);
             perfActivityBoostHandler = -1;
@@ -6677,7 +6685,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             Slog.w(TAG, "activity boost didn't release as expected");
         }
         final TransitionInfoSnapshot info = mTaskSupervisor
-                .getActivityMetricsLogger().notifyWindowsDrawn(this, timestampNs);
+                .getActivityMetricsLogger().notifyWindowsDrawn(this);
         final boolean validInfo = info != null;
         final int windowsDrawnDelayMs = validInfo ? info.windowsDrawnDelayMs : INVALID_DELAY;
         final @WaitResult.LaunchState int launchState =
@@ -6806,7 +6814,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 + numInteresting + " visible=" + numVisible);
         if (nowDrawn != mReportedDrawn) {
             if (nowDrawn) {
-                onWindowsDrawn(SystemClock.elapsedRealtimeNanos());
+                onWindowsDrawn();
             }
             mReportedDrawn = nowDrawn;
         }
@@ -6917,27 +6925,37 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      * @return True if input dispatching should be aborted.
      */
     public boolean inputDispatchingTimedOut(TimeoutRecord timeoutRecord, int windowPid) {
-        ActivityRecord anrActivity;
-        WindowProcessController anrApp;
-        boolean blameActivityProcess;
-        synchronized (mAtmService.mGlobalLock) {
-            anrActivity = getWaitingHistoryRecordLocked();
-            anrApp = app;
-            blameActivityProcess =  hasProcess()
-                    && (app.getPid() == windowPid || windowPid == INVALID_PID);
+        try {
+            Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
+                    "ActivityRecord#inputDispatchingTimedOut()");
+            ActivityRecord anrActivity;
+            WindowProcessController anrApp;
+            boolean blameActivityProcess;
+            timeoutRecord.mLatencyTracker.waitingOnGlobalLockStarted();
+            synchronized (mAtmService.mGlobalLock) {
+                timeoutRecord.mLatencyTracker.waitingOnGlobalLockEnded();
+                anrActivity = getWaitingHistoryRecordLocked();
+                anrApp = app;
+                blameActivityProcess =  hasProcess()
+                        && (app.getPid() == windowPid || windowPid == INVALID_PID);
+            }
+
+            if (blameActivityProcess) {
+                return mAtmService.mAmInternal.inputDispatchingTimedOut(anrApp.mOwner,
+                        anrActivity.shortComponentName, anrActivity.info.applicationInfo,
+                        shortComponentName, app, false, timeoutRecord);
+            } else {
+                // In this case another process added windows using this activity token.
+                // So, we call the generic service input dispatch timed out method so
+                // that the right process is blamed.
+                long timeoutMillis = mAtmService.mAmInternal.inputDispatchingTimedOut(
+                        windowPid, false /* aboveSystem */, timeoutRecord);
+                return timeoutMillis <= 0;
+            }
+        } finally {
+            Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
         }
 
-        if (blameActivityProcess) {
-            return mAtmService.mAmInternal.inputDispatchingTimedOut(anrApp.mOwner,
-                    anrActivity.shortComponentName, anrActivity.info.applicationInfo,
-                    shortComponentName, app, false, timeoutRecord);
-        } else {
-            // In this case another process added windows using this activity token. So, we call the
-            // generic service input dispatch timed out method so that the right process is blamed.
-            long timeoutMillis = mAtmService.mAmInternal.inputDispatchingTimedOut(
-                    windowPid, false /* aboveSystem */, timeoutRecord);
-            return timeoutMillis <= 0;
-        }
     }
 
     private ActivityRecord getWaitingHistoryRecordLocked() {
@@ -9679,7 +9697,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     @Override
     boolean showToCurrentUser() {
-        return mShowForAllUsers || mWmService.isCurrentProfile(mUserId);
+        return mShowForAllUsers || mWmService.isUserVisible(mUserId);
     }
 
     @Override

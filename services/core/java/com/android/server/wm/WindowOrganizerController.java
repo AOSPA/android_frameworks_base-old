@@ -25,6 +25,7 @@ import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_CHILDREN_TASKS_REPARENT;
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_CREATE_TASK_FRAGMENT;
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_DELETE_TASK_FRAGMENT;
+import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_FINISH_ACTIVITY;
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_LAUNCH_TASK;
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_PENDING_INTENT;
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_REMOVE_INSETS_PROVIDER;
@@ -90,8 +91,6 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.protolog.ProtoLogGroup;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.ArrayUtils;
-import com.android.internal.util.function.pooled.PooledConsumer;
-import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.LocalServices;
 import com.android.server.pm.LauncherAppsService.LauncherAppsServiceInternal;
 
@@ -481,7 +480,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
             }
             final List<WindowContainerTransaction.HierarchyOp> hops = t.getHierarchyOps();
             final int hopSize = hops.size();
-            ArraySet<WindowContainer> haveConfigChanges = new ArraySet<>();
+            final ArraySet<WindowContainer<?>> haveConfigChanges = new ArraySet<>();
             Iterator<Map.Entry<IBinder, WindowContainerTransaction.Change>> entries =
                     t.getChanges().entrySet().iterator();
             while (entries.hasNext()) {
@@ -591,16 +590,10 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                 mService.mRootWindowContainer.ensureActivitiesVisible(null, 0, PRESERVE_WINDOWS);
                 mService.mRootWindowContainer.resumeFocusedTasksTopActivities();
             } else if ((effects & TRANSACT_EFFECTS_CLIENT_CONFIG) != 0) {
-                final PooledConsumer f = PooledLambda.obtainConsumer(
-                        ActivityRecord::ensureActivityConfiguration,
-                        PooledLambda.__(ActivityRecord.class), 0,
-                        true /* preserveWindow */);
-                try {
-                    for (int i = haveConfigChanges.size() - 1; i >= 0; --i) {
-                        haveConfigChanges.valueAt(i).forAllActivities(f);
-                    }
-                } finally {
-                    f.recycle();
+                for (int i = haveConfigChanges.size() - 1; i >= 0; --i) {
+                    haveConfigChanges.valueAt(i).forAllActivities(r -> {
+                        r.ensureActivityConfiguration(0, PRESERVE_WINDOWS);
+                    });
                 }
             }
 
@@ -715,7 +708,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
 
         final int childWindowingMode = c.getActivityWindowingMode();
         if (childWindowingMode > -1) {
-            tr.setActivityWindowingMode(childWindowingMode);
+            tr.forAllActivities(a -> { a.setWindowingMode(childWindowingMode); });
         }
 
         if (t != null) {
@@ -1005,6 +998,20 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
             case HIERARCHY_OP_TYPE_CHILDREN_TASKS_REPARENT: {
                 effects |= reparentChildrenTasksHierarchyOp(hop, transition, syncId,
                         isInLockTaskMode);
+                break;
+            }
+            case HIERARCHY_OP_TYPE_FINISH_ACTIVITY: {
+                final ActivityRecord activity = ActivityRecord.forTokenLocked(hop.getContainer());
+                if (activity == null || activity.finishing) {
+                    break;
+                }
+                if (activity.isVisible()) {
+                    // Prevent the transition from being executed too early if the activity is
+                    // visible.
+                    activity.finishIfPossible("finish-activity-op", false /* oomAdj */);
+                } else {
+                    activity.destroyIfPossible("finish-activity-op");
+                }
                 break;
             }
             case HIERARCHY_OP_TYPE_LAUNCH_TASK: {
@@ -1619,6 +1626,9 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                                 WindowContainer.fromBinder(hop.getNewParent()),
                                 organizer);
                     }
+                    break;
+                case HIERARCHY_OP_TYPE_FINISH_ACTIVITY:
+                    // Allow finish activity if it has the activity token.
                     break;
                 default:
                     // Other types of hierarchy changes are not allowed.

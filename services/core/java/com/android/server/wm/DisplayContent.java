@@ -196,6 +196,7 @@ import android.util.ArraySet;
 import android.util.DisplayMetrics;
 import android.util.DisplayUtils;
 import android.util.IntArray;
+import android.util.Pair;
 import android.util.RotationUtils;
 import android.util.Size;
 import android.util.Slog;
@@ -241,7 +242,6 @@ import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.ToBooleanFunction;
 import com.android.internal.util.function.TriConsumer;
-import com.android.internal.util.function.pooled.PooledConsumer;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.internal.util.function.pooled.PooledPredicate;
 import com.android.server.inputmethod.InputMethodManagerInternal;
@@ -3075,18 +3075,13 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      */
     boolean pointWithinAppWindow(int x, int y) {
         final int[] targetWindowType = {-1};
-        final PooledConsumer fn = PooledLambda.obtainConsumer((w, nonArg) -> {
-            if (targetWindowType[0] != -1) {
-                return;
-            }
-
+        forAllWindows(w -> {
             if (w.isOnScreen() && w.isVisible() && w.getFrame().contains(x, y)) {
                 targetWindowType[0] = w.mAttrs.type;
-                return;
+                return true;
             }
-        }, PooledLambda.__(WindowState.class), mTmpRect);
-        forAllWindows(fn, true /* traverseTopToBottom */);
-        fn.recycle();
+            return false;
+        }, true /* traverseTopToBottom */);
         return FIRST_APPLICATION_WINDOW <= targetWindowType[0]
                 && targetWindowType[0] <= LAST_APPLICATION_WINDOW;
     }
@@ -3112,11 +3107,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             mTmpRect.setEmpty();
             mTmpRect2.setEmpty();
 
-            final PooledConsumer c = PooledLambda.obtainConsumer(
-                    DisplayContent::processTaskForTouchExcludeRegion, this,
-                    PooledLambda.__(Task.class), focusedTask, delta);
-            forAllTasks(c);
-            c.recycle();
+            forAllTasks(t -> { processTaskForTouchExcludeRegion(t, focusedTask, delta); });
 
             // If we removed the focused task above, add it back and only leave its
             // outside touch area in the exclusion. TapDetector is not interested in
@@ -4171,10 +4162,10 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         // is not organized (see FEATURE_IME and updateImeParent).
         if (target != null && !mImeWindowsContainer.isOrganized()) {
             RootDisplayArea targetRoot = target.getRootDisplayArea();
-            if (targetRoot != null && targetRoot != mImeWindowsContainer.getRootDisplayArea()) {
-                // Reposition the IME container to the target root to get the correct bounds and
-                // config.
-                targetRoot.placeImeContainer(mImeWindowsContainer);
+            if (targetRoot != null && targetRoot != mImeWindowsContainer.getRootDisplayArea()
+                    // Try reparent the IME container to the target root to get the bounds and
+                    // config that match the target window.
+                    && targetRoot.placeImeContainer(mImeWindowsContainer)) {
                 // Directly hide the IME window so it doesn't flash immediately after reparenting.
                 // InsetsController will make IME visible again before animating it.
                 if (mInputMethodWindow != null) {
@@ -4897,20 +4888,19 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             return null;
         }
 
-        final ScreenRotationAnimation screenRotationAnimation =
-                mWmService.mRoot.getDisplayContent(DEFAULT_DISPLAY).getRotationAnimation();
-        final boolean inRotation = screenRotationAnimation != null &&
-                screenRotationAnimation.isAnimating();
-        if (DEBUG_SCREENSHOT && inRotation) Slog.v(TAG_WM, "Taking screenshot while rotating");
+        Pair<ScreenCapture.ScreenCaptureListener, ScreenCapture.ScreenshotSync> syncScreenCapture =
+                ScreenCapture.createSyncCaptureListener();
 
-        // Send invalid rect and no width and height since it will screenshot the entire display.
-        final IBinder displayToken = SurfaceControl.getInternalDisplayToken();
-        final ScreenCapture.DisplayCaptureArgs captureArgs =
-                new ScreenCapture.DisplayCaptureArgs.Builder(displayToken)
-                        .setUseIdentityTransform(inRotation)
-                        .build();
+        getBounds(mTmpRect);
+        mTmpRect.offsetTo(0, 0);
+        ScreenCapture.LayerCaptureArgs args =
+                new ScreenCapture.LayerCaptureArgs.Builder(getSurfaceControl())
+                        .setSourceCrop(mTmpRect).build();
+
+        ScreenCapture.captureLayers(args, syncScreenCapture.first);
+
         final ScreenCapture.ScreenshotHardwareBuffer screenshotBuffer =
-                ScreenCapture.captureDisplay(captureArgs);
+                syncScreenCapture.second.get();
         final Bitmap bitmap = screenshotBuffer == null ? null : screenshotBuffer.asBitmap();
         if (bitmap == null) {
             Slog.w(TAG_WM, "Failed to take screenshot");
@@ -6184,15 +6174,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     /** Update and get all UIDs that are present on the display and have access to it. */
     IntArray getPresentUIDs() {
         mDisplayAccessUIDs.clear();
-        final PooledConsumer c = PooledLambda.obtainConsumer(DisplayContent::addActivityUid,
-                PooledLambda.__(ActivityRecord.class), mDisplayAccessUIDs);
-        mDisplayContent.forAllActivities(c);
-        c.recycle();
+        mDisplayContent.forAllActivities(r -> { mDisplayAccessUIDs.add(r.getUid()); });
         return mDisplayAccessUIDs;
-    }
-
-    private static void addActivityUid(ActivityRecord r, IntArray uids) {
-        uids.add(r.getUid());
     }
 
     @VisibleForTesting

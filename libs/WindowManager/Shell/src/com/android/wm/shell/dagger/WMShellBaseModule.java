@@ -24,6 +24,7 @@ import android.content.pm.PackageManager;
 import android.os.Handler;
 import android.os.SystemProperties;
 import android.view.IWindowManager;
+import android.view.WindowManager;
 
 import com.android.internal.logging.UiEventLogger;
 import com.android.launcher3.icons.IconProvider;
@@ -56,10 +57,14 @@ import com.android.wm.shell.common.annotations.ShellMainThread;
 import com.android.wm.shell.common.annotations.ShellSplashscreenThread;
 import com.android.wm.shell.compatui.CompatUIController;
 import com.android.wm.shell.desktopmode.DesktopMode;
+import com.android.wm.shell.desktopmode.DesktopModeController;
+import com.android.wm.shell.desktopmode.DesktopModeStatus;
 import com.android.wm.shell.desktopmode.DesktopModeTaskRepository;
 import com.android.wm.shell.displayareahelper.DisplayAreaHelper;
 import com.android.wm.shell.displayareahelper.DisplayAreaHelperController;
 import com.android.wm.shell.draganddrop.DragAndDropController;
+import com.android.wm.shell.floating.FloatingTasks;
+import com.android.wm.shell.floating.FloatingTasksController;
 import com.android.wm.shell.freeform.FreeformComponents;
 import com.android.wm.shell.fullscreen.FullscreenTaskListener;
 import com.android.wm.shell.hidedisplaycutout.HideDisplayCutoutController;
@@ -479,12 +484,14 @@ public abstract class WMShellBaseModule {
             ShellInit shellInit,
             ShellCommandHandler shellCommandHandler,
             TaskStackListenerImpl taskStackListener,
+            ActivityTaskManager activityTaskManager,
             Optional<DesktopModeTaskRepository> desktopModeTaskRepository,
             @ShellMainThread ShellExecutor mainExecutor
     ) {
         return Optional.ofNullable(
                 RecentTasksController.create(context, shellInit, shellCommandHandler,
-                        taskStackListener, desktopModeTaskRepository, mainExecutor));
+                        taskStackListener, activityTaskManager, desktopModeTaskRepository,
+                        mainExecutor));
     }
 
     //
@@ -569,6 +576,47 @@ public abstract class WMShellBaseModule {
             return splitscreenController;
         }
         return Optional.empty();
+    }
+
+    //
+    // Floating tasks
+    //
+
+    @WMSingleton
+    @Provides
+    static Optional<FloatingTasks> provideFloatingTasks(
+            Optional<FloatingTasksController> floatingTaskController) {
+        return floatingTaskController.map((controller) -> controller.asFloatingTasks());
+    }
+
+    @WMSingleton
+    @Provides
+    static Optional<FloatingTasksController> provideFloatingTasksController(Context context,
+            ShellInit shellInit,
+            ShellController shellController,
+            ShellCommandHandler shellCommandHandler,
+            Optional<BubbleController> bubbleController,
+            WindowManager windowManager,
+            ShellTaskOrganizer organizer,
+            TaskViewTransitions taskViewTransitions,
+            @ShellMainThread ShellExecutor mainExecutor,
+            @ShellBackgroundThread ShellExecutor bgExecutor,
+            SyncTransactionQueue syncQueue) {
+        if (FloatingTasksController.FLOATING_TASKS_ENABLED) {
+            return Optional.of(new FloatingTasksController(context,
+                    shellInit,
+                    shellController,
+                    shellCommandHandler,
+                    bubbleController,
+                    windowManager,
+                    organizer,
+                    taskViewTransitions,
+                    mainExecutor,
+                    bgExecutor,
+                    syncQueue));
+        } else {
+            return Optional.empty();
+        }
     }
 
     //
@@ -672,15 +720,36 @@ public abstract class WMShellBaseModule {
     // Desktop mode (optional feature)
     //
 
+    @WMSingleton
+    @Provides
+    static Optional<DesktopMode> provideDesktopMode(
+            Optional<DesktopModeController> desktopModeController) {
+        return desktopModeController.map(DesktopModeController::asDesktopMode);
+    }
+
+    @BindsOptionalOf
+    @DynamicOverride
+    abstract DesktopModeController optionalDesktopModeController();
+
+    @WMSingleton
+    @Provides
+    static Optional<DesktopModeController> providesDesktopModeController(
+            @DynamicOverride Optional<DesktopModeController> desktopModeController) {
+        if (DesktopModeStatus.IS_SUPPORTED) {
+            return desktopModeController;
+        }
+        return Optional.empty();
+    }
+
     @BindsOptionalOf
     @DynamicOverride
     abstract DesktopModeTaskRepository optionalDesktopModeTaskRepository();
 
     @WMSingleton
     @Provides
-    static Optional<DesktopModeTaskRepository> providesDesktopModeTaskRepository(
+    static Optional<DesktopModeTaskRepository> providesDesktopTaskRepository(
             @DynamicOverride Optional<DesktopModeTaskRepository> desktopModeTaskRepository) {
-        if (DesktopMode.IS_SUPPORTED) {
+        if (DesktopModeStatus.IS_SUPPORTED) {
             return desktopModeTaskRepository;
         }
         return Optional.empty();

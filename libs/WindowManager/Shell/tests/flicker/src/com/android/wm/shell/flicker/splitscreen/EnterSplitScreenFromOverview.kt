@@ -26,12 +26,12 @@ import com.android.server.wm.flicker.FlickerTestParameterFactory
 import com.android.server.wm.flicker.annotation.Group1
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.wm.shell.flicker.appWindowBecomesVisible
-import com.android.wm.shell.flicker.helpers.SplitScreenHelper
 import com.android.wm.shell.flicker.layerBecomesVisible
 import com.android.wm.shell.flicker.layerIsVisibleAtEnd
 import com.android.wm.shell.flicker.splitAppLayerBoundsBecomesVisible
 import com.android.wm.shell.flicker.splitAppLayerBoundsIsVisibleAtEnd
 import com.android.wm.shell.flicker.splitScreenDividerBecomesVisible
+import com.android.wm.shell.flicker.splitScreenEntered
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -64,44 +64,42 @@ class EnterSplitScreenFromOverview(testSpec: FlickerTestParameter) : SplitScreen
                     .waitForAndVerify()
             }
             transitions {
-                SplitScreenHelper.splitFromOverview(tapl)
-                SplitScreenHelper.waitForSplitComplete(wmHelper, primaryApp, secondaryApp)
+                SplitScreenUtils.splitFromOverview(tapl)
+                SplitScreenUtils.waitForSplitComplete(wmHelper, primaryApp, secondaryApp)
             }
         }
 
     @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
+    fun cujCompleted() = testSpec.splitScreenEntered(primaryApp, secondaryApp, fromOtherApp = true)
+
+    @Presubmit
+    @Test
     fun splitScreenDividerBecomesVisible() = testSpec.splitScreenDividerBecomesVisible()
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun primaryAppLayerIsVisibleAtEnd() = testSpec.layerIsVisibleAtEnd(primaryApp)
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun secondaryAppLayerBecomesVisible() = testSpec.layerBecomesVisible(secondaryApp)
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun primaryAppBoundsIsVisibleAtEnd() = testSpec.splitAppLayerBoundsIsVisibleAtEnd(
         primaryApp, landscapePosLeft = tapl.isTablet, portraitPosTop = false)
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun secondaryAppBoundsBecomesVisible() = testSpec.splitAppLayerBoundsBecomesVisible(
         secondaryApp, landscapePosLeft = !tapl.isTablet, portraitPosTop = true)
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun primaryAppWindowBecomesVisible() = testSpec.appWindowBecomesVisible(primaryApp)
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun secondaryAppWindowBecomesVisible() = testSpec.appWindowBecomesVisible(secondaryApp)

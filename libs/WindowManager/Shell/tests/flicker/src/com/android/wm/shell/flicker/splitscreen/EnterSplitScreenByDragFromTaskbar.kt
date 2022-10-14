@@ -30,12 +30,12 @@ import com.android.server.wm.flicker.helpers.isShellTransitionsEnabled
 import com.android.wm.shell.flicker.SPLIT_SCREEN_DIVIDER_COMPONENT
 import com.android.wm.shell.flicker.appWindowBecomesVisible
 import com.android.wm.shell.flicker.appWindowIsVisibleAtEnd
-import com.android.wm.shell.flicker.helpers.SplitScreenHelper
 import com.android.wm.shell.flicker.layerBecomesVisible
 import com.android.wm.shell.flicker.layerIsVisibleAtEnd
 import com.android.wm.shell.flicker.splitAppLayerBoundsBecomesVisibleByDrag
 import com.android.wm.shell.flicker.splitAppLayerBoundsIsVisibleAtEnd
 import com.android.wm.shell.flicker.splitScreenDividerBecomesVisible
+import com.android.wm.shell.flicker.splitScreenEntered
 import org.junit.Assume
 import org.junit.Before
 import org.junit.FixMethodOrder
@@ -70,7 +70,7 @@ class EnterSplitScreenByDragFromTaskbar(
             super.transition(this)
             setup {
                 tapl.goHome()
-                SplitScreenHelper.createShortcutOnHotseatIfNotExist(
+                SplitScreenUtils.createShortcutOnHotseatIfNotExist(
                     tapl, secondaryApp.appName
                 )
                 primaryApp.launchViaIntent(wmHelper)
@@ -79,11 +79,15 @@ class EnterSplitScreenByDragFromTaskbar(
                 tapl.launchedAppState.taskbar
                     .getAppIcon(secondaryApp.appName)
                     .dragToSplitscreen(secondaryApp.`package`, primaryApp.`package`)
-                SplitScreenHelper.waitForSplitComplete(wmHelper, primaryApp, secondaryApp)
+                SplitScreenUtils.waitForSplitComplete(wmHelper, primaryApp, secondaryApp)
             }
         }
 
     @IwTest(focusArea = "sysui")
+    @Presubmit
+    @Test
+    fun cujCompleted() = testSpec.splitScreenEntered(primaryApp, secondaryApp, fromOtherApp = false)
+
     @Presubmit
     @Test
     fun splitScreenDividerBecomesVisible() {
@@ -92,7 +96,6 @@ class EnterSplitScreenByDragFromTaskbar(
     }
 
     // TODO(b/245472831): Back to splitScreenDividerBecomesVisible after shell transition ready.
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun splitScreenDividerIsVisibleAtEnd_ShellTransit() {
@@ -102,12 +105,10 @@ class EnterSplitScreenByDragFromTaskbar(
         }
     }
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun primaryAppLayerIsVisibleAtEnd() = testSpec.layerIsVisibleAtEnd(primaryApp)
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun secondaryAppLayerBecomesVisible() {
@@ -131,24 +132,20 @@ class EnterSplitScreenByDragFromTaskbar(
         testSpec.layerBecomesVisible(secondaryApp)
     }
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun primaryAppBoundsIsVisibleAtEnd() = testSpec.splitAppLayerBoundsIsVisibleAtEnd(
         primaryApp, landscapePosLeft = false, portraitPosTop = false)
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun secondaryAppBoundsBecomesVisible() = testSpec.splitAppLayerBoundsBecomesVisibleByDrag(
         secondaryApp)
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun primaryAppWindowIsVisibleAtEnd() = testSpec.appWindowIsVisibleAtEnd(primaryApp)
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun secondaryAppWindowBecomesVisible() = testSpec.appWindowBecomesVisible(secondaryApp)

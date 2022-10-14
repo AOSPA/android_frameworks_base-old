@@ -41,9 +41,9 @@ import android.hardware.HardwareBuffer;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.platform.test.annotations.Presubmit;
+import android.util.Pair;
 import android.view.IWindowManager;
 import android.view.PointerIcon;
 import android.view.SurfaceControl;
@@ -51,7 +51,9 @@ import android.view.cts.surfacevalidator.BitmapPixelChecker;
 import android.view.cts.surfacevalidator.PixelColor;
 import android.view.cts.surfacevalidator.SaveBitmapHelper;
 import android.window.ScreenCapture;
-import android.window.ScreenCapture.SyncScreenCaptureListener;
+import android.window.ScreenCapture.ScreenCaptureListener;
+import android.window.ScreenCapture.ScreenshotHardwareBuffer;
+import android.window.ScreenCapture.ScreenshotSync;
 
 import androidx.annotation.Nullable;
 import androidx.test.filters.SmallTest;
@@ -141,7 +143,7 @@ public class ScreenshotTests {
     }
 
     @Test
-    public void testCaptureDisplay() throws RemoteException {
+    public void testCaptureDisplay() throws Exception {
         IWindowManager windowManager = IWindowManager.Stub.asInterface(
                 ServiceManager.getService(Context.WINDOW_SERVICE));
         SurfaceControl sc = new SurfaceControl.Builder()
@@ -168,9 +170,10 @@ public class ScreenshotTests {
                 .setPosition(sc, point.x, point.y)
                 .apply(true);
 
-        SyncScreenCaptureListener listener = new SyncScreenCaptureListener();
-        windowManager.captureDisplay(DEFAULT_DISPLAY, null, listener.getScreenCaptureListener());
-        ScreenCapture.ScreenshotHardwareBuffer hardwareBuffer = listener.waitForScreenshot();
+        Pair<ScreenCaptureListener, ScreenshotSync> syncScreenCapture =
+                ScreenCapture.createSyncCaptureListener();
+        windowManager.captureDisplay(DEFAULT_DISPLAY, null, syncScreenCapture.first);
+        ScreenshotHardwareBuffer hardwareBuffer = syncScreenCapture.second.get();
         assertNotNull(hardwareBuffer);
 
         Bitmap screenshot = hardwareBuffer.asBitmap();

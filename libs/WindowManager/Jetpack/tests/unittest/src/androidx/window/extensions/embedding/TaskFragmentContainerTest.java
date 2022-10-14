@@ -16,8 +16,8 @@
 
 package androidx.window.extensions.embedding;
 
-import static androidx.window.extensions.embedding.EmbeddingTestUtils.TASK_ID;
 import static androidx.window.extensions.embedding.EmbeddingTestUtils.createMockTaskFragmentInfo;
+import static androidx.window.extensions.embedding.EmbeddingTestUtils.createTestTaskContainer;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
@@ -90,7 +90,7 @@ public class TaskFragmentContainerTest {
 
     @Test
     public void testNewContainer() {
-        final TaskContainer taskContainer = new TaskContainer(TASK_ID);
+        final TaskContainer taskContainer = createTestTaskContainer();
 
         // One of the activity and the intent must be non-null
         assertThrows(IllegalArgumentException.class,
@@ -103,40 +103,39 @@ public class TaskFragmentContainerTest {
 
     @Test
     public void testFinish() {
-        final TaskContainer taskContainer = new TaskContainer(TASK_ID);
+        final TaskContainer taskContainer = createTestTaskContainer();
         final TaskFragmentContainer container = new TaskFragmentContainer(mActivity,
                 null /* pendingAppearedIntent */, taskContainer, mController);
         doReturn(container).when(mController).getContainerWithActivity(mActivity);
-        final WindowContainerTransaction wct = new WindowContainerTransaction();
 
         // Only remove the activity, but not clear the reference until appeared.
-        container.finish(true /* shouldFinishDependent */, mPresenter, wct, mController);
+        container.finish(true /* shouldFinishDependent */, mPresenter, mTransaction, mController);
 
-        verify(mActivity).finish();
+        verify(mTransaction).finishActivity(mActivity.getActivityToken());
         verify(mPresenter, never()).deleteTaskFragment(any(), any());
         verify(mController, never()).removeContainer(any());
 
         // Calling twice should not finish activity again.
-        clearInvocations(mActivity);
-        container.finish(true /* shouldFinishDependent */, mPresenter, wct, mController);
+        clearInvocations(mTransaction);
+        container.finish(true /* shouldFinishDependent */, mPresenter, mTransaction, mController);
 
-        verify(mActivity, never()).finish();
+        verify(mTransaction, never()).finishActivity(any());
         verify(mPresenter, never()).deleteTaskFragment(any(), any());
         verify(mController, never()).removeContainer(any());
 
         // Remove all references after the container has appeared in server.
         doReturn(new ArrayList<>()).when(mInfo).getActivities();
         container.setInfo(mTransaction, mInfo);
-        container.finish(true /* shouldFinishDependent */, mPresenter, wct, mController);
+        container.finish(true /* shouldFinishDependent */, mPresenter, mTransaction, mController);
 
-        verify(mActivity, never()).finish();
-        verify(mPresenter).deleteTaskFragment(wct, container.getTaskFragmentToken());
+        verify(mTransaction, never()).finishActivity(any());
+        verify(mPresenter).deleteTaskFragment(mTransaction, container.getTaskFragmentToken());
         verify(mController).removeContainer(container);
     }
 
     @Test
     public void testFinish_notFinishActivityThatIsReparenting() {
-        final TaskContainer taskContainer = new TaskContainer(TASK_ID);
+        final TaskContainer taskContainer = createTestTaskContainer();
         final TaskFragmentContainer container0 = new TaskFragmentContainer(mActivity,
                 null /* pendingAppearedIntent */, taskContainer, mController);
         final TaskFragmentInfo info = createMockTaskFragmentInfo(container0, mActivity);
@@ -150,14 +149,14 @@ public class TaskFragmentContainerTest {
         // The activity is requested to be reparented, so don't finish it.
         container0.finish(true /* shouldFinishDependent */, mPresenter, wct, mController);
 
-        verify(mActivity, never()).finish();
+        verify(mTransaction, never()).finishActivity(any());
         verify(mPresenter).deleteTaskFragment(wct, container0.getTaskFragmentToken());
         verify(mController).removeContainer(container0);
     }
 
     @Test
     public void testSetInfo() {
-        final TaskContainer taskContainer = new TaskContainer(TASK_ID);
+        final TaskContainer taskContainer = createTestTaskContainer();
         // Pending activity should be cleared when it has appeared on server side.
         final TaskFragmentContainer pendingActivityContainer = new TaskFragmentContainer(mActivity,
                 null /* pendingAppearedIntent */, taskContainer, mController);
@@ -185,7 +184,7 @@ public class TaskFragmentContainerTest {
 
     @Test
     public void testIsWaitingActivityAppear() {
-        final TaskContainer taskContainer = new TaskContainer(TASK_ID);
+        final TaskContainer taskContainer = createTestTaskContainer();
         final TaskFragmentContainer container = new TaskFragmentContainer(null /* activity */,
                 mIntent, taskContainer, mController);
 
@@ -207,7 +206,7 @@ public class TaskFragmentContainerTest {
     @Test
     public void testAppearEmptyTimeout() {
         doNothing().when(mController).onTaskFragmentAppearEmptyTimeout(any(), any());
-        final TaskContainer taskContainer = new TaskContainer(TASK_ID);
+        final TaskContainer taskContainer = createTestTaskContainer();
         final TaskFragmentContainer container = new TaskFragmentContainer(null /* activity */,
                 mIntent, taskContainer, mController);
 
@@ -247,7 +246,7 @@ public class TaskFragmentContainerTest {
 
     @Test
     public void testCollectNonFinishingActivities() {
-        final TaskContainer taskContainer = new TaskContainer(TASK_ID);
+        final TaskContainer taskContainer = createTestTaskContainer();
         final TaskFragmentContainer container = new TaskFragmentContainer(null /* activity */,
                 mIntent, taskContainer, mController);
         List<Activity> activities = container.collectNonFinishingActivities();
@@ -275,7 +274,7 @@ public class TaskFragmentContainerTest {
 
     @Test
     public void testAddPendingActivity() {
-        final TaskContainer taskContainer = new TaskContainer(TASK_ID);
+        final TaskContainer taskContainer = createTestTaskContainer();
         final TaskFragmentContainer container = new TaskFragmentContainer(null /* activity */,
                 mIntent, taskContainer, mController);
         container.addPendingAppearedActivity(mActivity);
@@ -289,7 +288,7 @@ public class TaskFragmentContainerTest {
 
     @Test
     public void testIsAbove() {
-        final TaskContainer taskContainer = new TaskContainer(TASK_ID);
+        final TaskContainer taskContainer = createTestTaskContainer();
         final TaskFragmentContainer container0 = new TaskFragmentContainer(null /* activity */,
                 mIntent, taskContainer, mController);
         final TaskFragmentContainer container1 = new TaskFragmentContainer(null /* activity */,
@@ -301,7 +300,7 @@ public class TaskFragmentContainerTest {
 
     @Test
     public void testGetBottomMostActivity() {
-        final TaskContainer taskContainer = new TaskContainer(TASK_ID);
+        final TaskContainer taskContainer = createTestTaskContainer();
         final TaskFragmentContainer container = new TaskFragmentContainer(null /* activity */,
                 mIntent, taskContainer, mController);
         container.addPendingAppearedActivity(mActivity);
@@ -318,7 +317,7 @@ public class TaskFragmentContainerTest {
 
     @Test
     public void testOnActivityDestroyed() {
-        final TaskContainer taskContainer = new TaskContainer(TASK_ID);
+        final TaskContainer taskContainer = createTestTaskContainer();
         final TaskFragmentContainer container = new TaskFragmentContainer(null /* activity */,
                 mIntent, taskContainer, mController);
         container.addPendingAppearedActivity(mActivity);

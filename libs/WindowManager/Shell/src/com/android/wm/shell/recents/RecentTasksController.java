@@ -24,6 +24,7 @@ import static com.android.wm.shell.common.ExecutorUtils.executeRemoteCallWithTas
 import android.app.ActivityManager;
 import android.app.ActivityTaskManager;
 import android.app.TaskInfo;
+import android.content.ComponentName;
 import android.content.Context;
 import android.os.RemoteException;
 import android.util.Slog;
@@ -43,7 +44,7 @@ import com.android.wm.shell.common.TaskStackListenerCallback;
 import com.android.wm.shell.common.TaskStackListenerImpl;
 import com.android.wm.shell.common.annotations.ExternalThread;
 import com.android.wm.shell.common.annotations.ShellMainThread;
-import com.android.wm.shell.desktopmode.DesktopMode;
+import com.android.wm.shell.desktopmode.DesktopModeStatus;
 import com.android.wm.shell.desktopmode.DesktopModeTaskRepository;
 import com.android.wm.shell.protolog.ShellProtoLogGroup;
 import com.android.wm.shell.sysui.ShellCommandHandler;
@@ -57,6 +58,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Executor;
+import java.util.function.Consumer;
 
 /**
  * Manages the recent task list from the system, caching it as necessary.
@@ -71,6 +74,7 @@ public class RecentTasksController implements TaskStackListenerCallback,
     private final ShellExecutor mMainExecutor;
     private final TaskStackListenerImpl mTaskStackListener;
     private final RecentTasks mImpl = new RecentTasksImpl();
+    private final ActivityTaskManager mActivityTaskManager;
     private IRecentTasksListener mListener;
     private final boolean mIsDesktopMode;
 
@@ -95,6 +99,7 @@ public class RecentTasksController implements TaskStackListenerCallback,
             ShellInit shellInit,
             ShellCommandHandler shellCommandHandler,
             TaskStackListenerImpl taskStackListener,
+            ActivityTaskManager activityTaskManager,
             Optional<DesktopModeTaskRepository> desktopModeTaskRepository,
             @ShellMainThread ShellExecutor mainExecutor
     ) {
@@ -102,17 +107,19 @@ public class RecentTasksController implements TaskStackListenerCallback,
             return null;
         }
         return new RecentTasksController(context, shellInit, shellCommandHandler, taskStackListener,
-                desktopModeTaskRepository, mainExecutor);
+                activityTaskManager, desktopModeTaskRepository, mainExecutor);
     }
 
     RecentTasksController(Context context,
             ShellInit shellInit,
             ShellCommandHandler shellCommandHandler,
             TaskStackListenerImpl taskStackListener,
+            ActivityTaskManager activityTaskManager,
             Optional<DesktopModeTaskRepository> desktopModeTaskRepository,
             ShellExecutor mainExecutor) {
         mContext = context;
         mShellCommandHandler = shellCommandHandler;
+        mActivityTaskManager = activityTaskManager;
         mIsDesktopMode = mContext.getPackageManager().hasSystemFeature(FEATURE_PC);
         mTaskStackListener = taskStackListener;
         mDesktopModeTaskRepository = desktopModeTaskRepository;
@@ -269,15 +276,10 @@ public class RecentTasksController implements TaskStackListenerCallback,
     }
 
     @VisibleForTesting
-    List<ActivityManager.RecentTaskInfo> getRawRecentTasks(int maxNum, int flags, int userId) {
-        return ActivityTaskManager.getInstance().getRecentTasks(maxNum, flags, userId);
-    }
-
-    @VisibleForTesting
     ArrayList<GroupedRecentTaskInfo> getRecentTasks(int maxNum, int flags, int userId) {
         // Note: the returned task list is from the most-recent to least-recent order
-        final List<ActivityManager.RecentTaskInfo> rawList = getRawRecentTasks(maxNum, flags,
-                userId);
+        final List<ActivityManager.RecentTaskInfo> rawList = mActivityTaskManager.getRecentTasks(
+                maxNum, flags, userId);
 
         // Make a mapping of task id -> task info
         final SparseArray<ActivityManager.RecentTaskInfo> rawMapping = new SparseArray<>();
@@ -286,7 +288,7 @@ public class RecentTasksController implements TaskStackListenerCallback,
             rawMapping.put(taskInfo.taskId, taskInfo);
         }
 
-        boolean desktopModeActive = DesktopMode.isActive(mContext);
+        boolean desktopModeActive = DesktopModeStatus.isActive(mContext);
         ArrayList<ActivityManager.RecentTaskInfo> freeformTasks = new ArrayList<>();
 
         // Pull out the pairs as we iterate back in the list
@@ -319,12 +321,34 @@ public class RecentTasksController implements TaskStackListenerCallback,
 
         // Add a special entry for freeform tasks
         if (!freeformTasks.isEmpty()) {
-            // First task is added separately
             recentTasks.add(0, GroupedRecentTaskInfo.forFreeformTasks(
                     freeformTasks.toArray(new ActivityManager.RecentTaskInfo[0])));
         }
 
         return recentTasks;
+    }
+
+    /**
+     * Find the background task that match the given component.
+     */
+    @Nullable
+    public ActivityManager.RecentTaskInfo findTaskInBackground(ComponentName componentName) {
+        if (componentName == null) {
+            return null;
+        }
+        List<ActivityManager.RecentTaskInfo> tasks = mActivityTaskManager.getRecentTasks(
+                Integer.MAX_VALUE, ActivityManager.RECENT_IGNORE_UNAVAILABLE,
+                ActivityManager.getCurrentUser());
+        for (int i = 0; i < tasks.size(); i++) {
+            final ActivityManager.RecentTaskInfo task = tasks.get(i);
+            if (task.isVisible) {
+                continue;
+            }
+            if (componentName.equals(task.baseIntent.getComponent())) {
+                return task;
+            }
+        }
+        return null;
     }
 
     public void dump(@NonNull PrintWriter pw, String prefix) {
@@ -351,6 +375,16 @@ public class RecentTasksController implements TaskStackListenerCallback,
             }
             mIRecentTasks = new IRecentTasksImpl(RecentTasksController.this);
             return mIRecentTasks;
+        }
+
+        @Override
+        public void getRecentTasks(int maxNum, int flags, int userId, Executor executor,
+                Consumer<List<GroupedRecentTaskInfo>> callback) {
+            mMainExecutor.execute(() -> {
+                List<GroupedRecentTaskInfo> tasks =
+                        RecentTasksController.this.getRecentTasks(maxNum, flags, userId);
+                executor.execute(() -> callback.accept(tasks));
+            });
         }
     }
 

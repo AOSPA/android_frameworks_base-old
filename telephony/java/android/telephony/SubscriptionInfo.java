@@ -775,7 +775,7 @@ public class SubscriptionInfo implements Parcelable {
     public List<UiccAccessRule> getAccessRules() {
         List<UiccAccessRule> merged = new ArrayList<>();
         if (mNativeAccessRules != null) {
-            merged.addAll(getAccessRules());
+            merged.addAll(Arrays.asList(mNativeAccessRules));
         }
         if (mCarrierConfigAccessRules != null) {
             merged.addAll(Arrays.asList(mCarrierConfigAccessRules));

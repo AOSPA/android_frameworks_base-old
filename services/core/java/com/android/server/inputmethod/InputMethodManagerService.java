@@ -92,7 +92,6 @@ import android.database.ContentObserver;
 import android.graphics.Matrix;
 import android.hardware.display.DisplayManagerInternal;
 import android.hardware.input.InputManager;
-import android.hardware.input.InputManagerInternal;
 import android.inputmethodservice.InputMethodService;
 import android.media.AudioManagerInternal;
 import android.net.Uri;
@@ -188,6 +187,7 @@ import com.android.server.LocalServices;
 import com.android.server.ServiceThread;
 import com.android.server.SystemServerInitThreadPool;
 import com.android.server.SystemService;
+import com.android.server.input.InputManagerInternal;
 import com.android.server.inputmethod.InputMethodManagerInternal.InputMethodListListener;
 import com.android.server.inputmethod.InputMethodSubtypeSwitchingController.ImeSubtypeListItem;
 import com.android.server.inputmethod.InputMethodUtils.InputMethodSettings;
@@ -2963,9 +2963,12 @@ public final class InputMethodManagerService extends IInputMethodManager.Stub
                     try {
                         // Use PackageManager to load label
                         final PackageManager packageManager = mContext.getPackageManager();
-                        contentDescription = packageManager.getApplicationLabel(
-                                mIPackageManager.getApplicationInfo(packageName, 0,
-                                        mSettings.getCurrentUserId()));
+                        final ApplicationInfo applicationInfo = mIPackageManager
+                                .getApplicationInfo(packageName, 0, mSettings.getCurrentUserId());
+                        if (applicationInfo != null) {
+                            contentDescription = packageManager
+                                    .getApplicationLabel(applicationInfo);
+                        }
                     } catch (RemoteException e) {
                         /* ignore */
                     }

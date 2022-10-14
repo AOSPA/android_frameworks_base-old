@@ -373,12 +373,6 @@
       "group": "WM_DEBUG_WINDOW_TRANSITIONS",
       "at": "com\/android\/server\/wm\/TransitionController.java"
     },
-    "-1750384749": {
-      "message": "Launch on display check: allow launch on public display",
-      "level": "DEBUG",
-      "group": "WM_DEBUG_TASKS",
-      "at": "com\/android\/server\/wm\/ActivityTaskSupervisor.java"
-    },
     "-1750206390": {
       "message": "Exception thrown when creating surface for client %s (%s). %s",
       "level": "WARN",
@@ -906,6 +900,12 @@
       "level": "INFO",
       "group": "WM_DEBUG_BOOT",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
+    },
+    "-1253056469": {
+      "message": "Launch on display check: %s launch for userId=%d on displayId=%d",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_TASKS",
+      "at": "com\/android\/server\/wm\/ActivityTaskSupervisor.java"
     },
     "-1248645819": {
       "message": "\tAdd container=%s",
@@ -3127,6 +3127,12 @@
       "group": "WM_DEBUG_STARTING_WINDOW",
       "at": "com\/android\/server\/wm\/WindowStateAnimator.java"
     },
+    "829869827": {
+      "message": "Cannot launch dream activity due to invalid state. dreaming: %b packageName: %s",
+      "level": "ERROR",
+      "group": "WM_DEBUG_DREAM",
+      "at": "com\/android\/server\/wm\/ActivityTaskManagerService.java"
+    },
     "835814848": {
       "message": "%s",
       "level": "INFO",
@@ -4171,6 +4177,12 @@
       "group": "WM_DEBUG_WINDOW_ORGANIZER",
       "at": "com\/android\/server\/wm\/TaskOrganizerController.java"
     },
+    "1918771553": {
+      "message": "Dream packageName does not match active dream. Package %s does not match %s or %s",
+      "level": "ERROR",
+      "group": "WM_DEBUG_DREAM",
+      "at": "com\/android\/server\/wm\/ActivityTaskManagerService.java"
+    },
     "1921821199": {
       "message": "Preserving %s until the new one is added",
       "level": "VERBOSE",
@@ -4411,6 +4423,9 @@
       "tag": "WindowManager"
     },
     "WM_DEBUG_DRAW": {
+      "tag": "WindowManager"
+    },
+    "WM_DEBUG_DREAM": {
       "tag": "WindowManager"
     },
     "WM_DEBUG_FOCUS": {

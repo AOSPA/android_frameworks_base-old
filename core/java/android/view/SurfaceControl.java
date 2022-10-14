@@ -57,7 +57,6 @@ import android.hardware.display.IDisplayManager;
 import android.hardware.display.IVirtualDisplayCallback;
 import android.hardware.display.VirtualDisplay;
 import android.hardware.graphics.common.DisplayDecorationSupport;
-import android.media.projection.MediaProjectionGlobal;
 import android.opengl.EGLDisplay;
 import android.opengl.EGLSync;
 import android.os.Build;
@@ -224,8 +223,6 @@ public final class SurfaceControl implements Parcelable {
             Region region);
     private static native void nativeSetDimmingEnabled(long transactionObj, long nativeObject,
             boolean dimmingEnabled);
-
-    private static native void nativeOverrideHdrTypes(IBinder displayToken, int[] modes);
 
     private static native void nativeSetInputWindowInfo(long transactionObj, long nativeObject,
             InputWindowHandle handle);
@@ -449,6 +446,7 @@ public final class SurfaceControl implements Parcelable {
     private String mName;
 
      /**
+     * Note: do not rename, this field is used by native code.
      * @hide
      */
     public long mNativeObject;
@@ -2019,8 +2017,8 @@ public final class SurfaceControl implements Parcelable {
         }
 
         // We don't have a size yet so pass in 1 for width and height since 0 is invalid
-        VirtualDisplay vd = MediaProjectionGlobal.getInstance().createVirtualDisplay(name,
-                1 /* width */, 1 /* height */, INVALID_DISPLAY, null /* Surface */);
+        VirtualDisplay vd = DisplayManager.createVirtualDisplay(name, 1 /* width */, 1 /* height */,
+                INVALID_DISPLAY, null /* Surface */);
         return vd == null ? null : vd.getToken().asBinder();
     }
 
@@ -2037,18 +2035,6 @@ public final class SurfaceControl implements Parcelable {
 
         DisplayManagerGlobal.getInstance().releaseVirtualDisplay(
                 IVirtualDisplayCallback.Stub.asInterface(displayToken));
-    }
-
-    /**
-     * Overrides HDR modes for a display device.
-     *
-     * If the caller does not have ACCESS_SURFACE_FLINGER permission, this will throw a Security
-     * Exception.
-     * @hide
-     */
-    @TestApi
-    public static void overrideHdrTypes(@NonNull IBinder displayToken, @NonNull int[] modes) {
-        nativeOverrideHdrTypes(displayToken, modes);
     }
 
     /**

@@ -57,6 +57,8 @@ import com.android.internal.util.Parcelling;
 import com.android.internal.util.Parcelling.BuiltIn.ForInternedString;
 import com.android.server.pm.parsing.PackageInfoUtils;
 import com.android.server.pm.pkg.AndroidPackage;
+import com.android.server.pm.pkg.AndroidPackageSplit;
+import com.android.server.pm.pkg.AndroidPackageSplitImpl;
 import com.android.server.pm.pkg.SELinuxUtil;
 import com.android.server.pm.pkg.component.ComponentMutateUtils;
 import com.android.server.pm.pkg.component.ParsedActivity;
@@ -90,6 +92,7 @@ import libcore.util.EmptyArray;
 
 import java.io.File;
 import java.security.PublicKey;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -235,11 +238,11 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     private Map<String, String> overlayables = emptyMap();
     @Nullable
     @DataClass.ParcelWith(ForInternedString.class)
-    private String sdkLibName;
+    private String sdkLibraryName;
     private int sdkLibVersionMajor;
     @Nullable
     @DataClass.ParcelWith(ForInternedString.class)
-    private String staticSharedLibName;
+    private String staticSharedLibraryName;
     private long staticSharedLibVersion;
     @NonNull
     @DataClass.ParcelWith(Parcelling.BuiltIn.ForInternedStringList.class)
@@ -385,19 +388,21 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     @Nullable
     @DataClass.ParcelWith(Parcelling.BuiltIn.ForBoolean.class)
     private Boolean requestRawExternalStorageAccess;
-    // TODO(chiuwinson): Non-null
-    @Nullable
-    private ArraySet<String> mimeGroups;
+    @NonNull
+    @DataClass.ParcelWith(Parcelling.BuiltIn.ForInternedStringSet.class)
+    private Set<String> mimeGroups = emptySet();
     // Usually there's code to set enabled to true during parsing, but it's possible to install
     // an APK targeting <R that doesn't contain an <application> tag. That code would be skipped
     // and never assign this, so initialize this to true for those cases.
     private long mBooleans = Booleans.ENABLED;
     private long mBooleans2;
-    @Nullable
-    private Set<String> mKnownActivityEmbeddingCerts;
+    @NonNull
+    private Set<String> mKnownActivityEmbeddingCerts = emptySet();
     // Derived fields
     private long mLongVersionCode;
     private int mLocaleConfigRes;
+
+    private List<AndroidPackageSplit> mSplits;
 
     @NonNull
     public static PackageImpl forParsing(@NonNull String packageName, @NonNull String baseCodePath,
@@ -549,7 +554,7 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
                 if (mimeGroups != null && mimeGroups.size() > 500) {
                     throw new IllegalStateException("Max limit on number of MIME Groups reached");
                 }
-                mimeGroups = ArrayUtils.add(mimeGroups, filter.getMimeGroup(groupIndex));
+                mimeGroups = CollectionUtils.add(mimeGroups, filter.getMimeGroup(groupIndex));
             }
         }
     }
@@ -775,6 +780,51 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     }
 
     @Override
+    public List<AndroidPackageSplit> getSplits() {
+        if (mSplits == null) {
+            var splits = new ArrayList<AndroidPackageSplit>();
+            splits.add(new AndroidPackageSplitImpl(
+                    null,
+                    getBaseApkPath(),
+                    getBaseRevisionCode(),
+                    isHasCode() ? ApplicationInfo.FLAG_HAS_CODE : 0,
+                    getClassLoaderName()
+            ));
+
+            if (splitNames != null) {
+                for (int index = 0; index < splitNames.length; index++) {
+                    splits.add(new AndroidPackageSplitImpl(
+                            splitNames[index],
+                            splitCodePaths[index],
+                            splitRevisionCodes[index],
+                            splitFlags[index],
+                            splitClassLoaderNames[index]
+                    ));
+                }
+            }
+
+            if (splitDependencies != null) {
+                for (int index = 0; index < splitDependencies.size(); index++) {
+                    var splitIndex = splitDependencies.keyAt(index);
+                    var dependenciesByIndex = splitDependencies.valueAt(index);
+                    var dependencies = new ArrayList<AndroidPackageSplit>();
+                    for (int dependencyIndex : dependenciesByIndex) {
+                        // Legacy holdover, base dependencies are an array of -1 rather than empty
+                        if (dependencyIndex >= 0) {
+                            dependencies.add(splits.get(dependencyIndex));
+                        }
+                    }
+                    ((AndroidPackageSplitImpl) splits.get(splitIndex))
+                            .fillDependencies(Collections.unmodifiableList(dependencies));
+                }
+            }
+
+            mSplits = Collections.unmodifiableList(splits);
+        }
+        return mSplits;
+    }
+
+    @Override
     public String toString() {
         return "Package{"
                 + Integer.toHexString(System.identityHashCode(this))
@@ -935,8 +985,7 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     @NonNull
     @Override
     public Set<String> getKnownActivityEmbeddingCerts() {
-        return mKnownActivityEmbeddingCerts == null ? Collections.emptySet()
-                : mKnownActivityEmbeddingCerts;
+        return mKnownActivityEmbeddingCerts;
     }
 
     @Override
@@ -1210,8 +1259,8 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
 
     @Nullable
     @Override
-    public String getSdkLibName() {
-        return sdkLibName;
+    public String getSdkLibraryName() {
+        return sdkLibraryName;
     }
 
     @Override
@@ -1280,8 +1329,8 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
 
     @Nullable
     @Override
-    public String getStaticSharedLibName() {
-        return staticSharedLibName;
+    public String getStaticSharedLibraryName() {
+        return staticSharedLibraryName;
     }
 
     @Override
@@ -1949,8 +1998,7 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     }
 
     @Override
-    public ParsingPackage setKnownActivityEmbeddingCerts(
-            @Nullable Set<String> knownEmbeddingCerts) {
+    public ParsingPackage setKnownActivityEmbeddingCerts(@NonNull Set<String> knownEmbeddingCerts) {
         mKnownActivityEmbeddingCerts = knownEmbeddingCerts;
         return this;
     }
@@ -2220,8 +2268,8 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     }
 
     @Override
-    public PackageImpl setSdkLibName(String sdkLibName) {
-        this.sdkLibName = TextUtils.safeIntern(sdkLibName);
+    public PackageImpl setSdkLibraryName(String sdkLibraryName) {
+        this.sdkLibraryName = TextUtils.safeIntern(sdkLibraryName);
         return this;
     }
 
@@ -2263,8 +2311,8 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     }
 
     @Override
-    public PackageImpl setStaticSharedLibName(String staticSharedLibName) {
-        this.staticSharedLibName = TextUtils.safeIntern(staticSharedLibName);
+    public PackageImpl setStaticSharedLibraryName(String staticSharedLibraryName) {
+        this.staticSharedLibraryName = TextUtils.safeIntern(staticSharedLibraryName);
         return this;
     }
 
@@ -2516,7 +2564,7 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
         appInfo.setVersionCode(mLongVersionCode);
         appInfo.setAppClassNamesByProcess(buildAppClassNamesByProcess());
         appInfo.setLocaleConfigRes(mLocaleConfigRes);
-        if (mKnownActivityEmbeddingCerts != null) {
+        if (!mKnownActivityEmbeddingCerts.isEmpty()) {
             appInfo.setKnownActivityEmbeddingCerts(mKnownActivityEmbeddingCerts);
         }
 
@@ -2593,11 +2641,11 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
 
     @Override
     public AndroidPackageInternal hideAsFinal() {
-        // TODO(b/135203078): Lock as immutable
         if (mStorageUuid == null) {
             assignDerivedFields();
         }
         assignDerivedFields2();
+        makeImmutable();
         return this;
     }
 
@@ -2611,6 +2659,48 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
                 baseAppDataDir + Environment.DIR_USER_CE + systemUserSuffix);
         mBaseAppDataDeviceProtectedDirForSystemUser = TextUtils.safeIntern(
                 baseAppDataDir + Environment.DIR_USER_DE + systemUserSuffix);
+    }
+
+    private void makeImmutable() {
+        usesLibraries = Collections.unmodifiableList(usesLibraries);
+        usesOptionalLibraries = Collections.unmodifiableList(usesOptionalLibraries);
+        usesNativeLibraries = Collections.unmodifiableList(usesNativeLibraries);
+        usesOptionalNativeLibraries = Collections.unmodifiableList(usesOptionalNativeLibraries);
+        originalPackages = Collections.unmodifiableList(originalPackages);
+        adoptPermissions = Collections.unmodifiableList(adoptPermissions);
+        requestedPermissions = Collections.unmodifiableList(requestedPermissions);
+        protectedBroadcasts = Collections.unmodifiableList(protectedBroadcasts);
+        apexSystemServices = Collections.unmodifiableList(apexSystemServices);
+
+        activities = Collections.unmodifiableList(activities);
+        receivers = Collections.unmodifiableList(receivers);
+        services = Collections.unmodifiableList(services);
+        providers = Collections.unmodifiableList(providers);
+        permissions = Collections.unmodifiableList(permissions);
+        permissionGroups = Collections.unmodifiableList(permissionGroups);
+        instrumentations = Collections.unmodifiableList(instrumentations);
+
+        overlayables = Collections.unmodifiableMap(overlayables);
+        libraryNames = Collections.unmodifiableList(libraryNames);
+        usesStaticLibraries = Collections.unmodifiableList(usesStaticLibraries);
+        usesSdkLibraries = Collections.unmodifiableList(usesSdkLibraries);
+        configPreferences = Collections.unmodifiableList(configPreferences);
+        reqFeatures = Collections.unmodifiableList(reqFeatures);
+        featureGroups = Collections.unmodifiableList(featureGroups);
+        usesPermissions = Collections.unmodifiableList(usesPermissions);
+        usesSdkLibraries = Collections.unmodifiableList(usesSdkLibraries);
+        implicitPermissions = Collections.unmodifiableList(implicitPermissions);
+        upgradeKeySets = Collections.unmodifiableSet(upgradeKeySets);
+        keySetMapping = Collections.unmodifiableMap(keySetMapping);
+        attributions = Collections.unmodifiableList(attributions);
+        preferredActivityFilters = Collections.unmodifiableList(preferredActivityFilters);
+        processes = Collections.unmodifiableMap(processes);
+        mProperties = Collections.unmodifiableMap(mProperties);
+        queriesIntents = Collections.unmodifiableList(queriesIntents);
+        queriesPackages = Collections.unmodifiableList(queriesPackages);
+        queriesProviders = Collections.unmodifiableSet(queriesProviders);
+        mimeGroups = Collections.unmodifiableSet(mimeGroups);
+        mKnownActivityEmbeddingCerts = Collections.unmodifiableSet(mKnownActivityEmbeddingCerts);
     }
 
     @Override
@@ -2937,9 +3027,9 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
         dest.writeString(this.overlayCategory);
         dest.writeInt(this.overlayPriority);
         sForInternedStringValueMap.parcel(this.overlayables, dest, flags);
-        sForInternedString.parcel(this.sdkLibName, dest, flags);
+        sForInternedString.parcel(this.sdkLibraryName, dest, flags);
         dest.writeInt(this.sdkLibVersionMajor);
-        sForInternedString.parcel(this.staticSharedLibName, dest, flags);
+        sForInternedString.parcel(this.staticSharedLibraryName, dest, flags);
         dest.writeLong(this.staticSharedLibVersion);
         sForInternedStringList.parcel(this.libraryNames, dest, flags);
         sForInternedStringList.parcel(this.usesLibraries, dest, flags);
@@ -3041,7 +3131,7 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
         dest.writeIntArray(this.splitRevisionCodes);
         sForBoolean.parcel(this.resizeableActivity, dest, flags);
         dest.writeInt(this.autoRevokePermissions);
-        dest.writeArraySet(this.mimeGroups);
+        sForInternedStringSet.parcel(this.mimeGroups, dest, flags);
         dest.writeInt(this.gwpAsanMode);
         dest.writeSparseIntArray(this.minExtensionVersions);
         dest.writeMap(this.mProperties);
@@ -3087,9 +3177,9 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
         this.overlayCategory = in.readString();
         this.overlayPriority = in.readInt();
         this.overlayables = sForInternedStringValueMap.unparcel(in);
-        this.sdkLibName = sForInternedString.unparcel(in);
+        this.sdkLibraryName = sForInternedString.unparcel(in);
         this.sdkLibVersionMajor = in.readInt();
-        this.staticSharedLibName = sForInternedString.unparcel(in);
+        this.staticSharedLibraryName = sForInternedString.unparcel(in);
         this.staticSharedLibVersion = in.readLong();
         this.libraryNames = sForInternedStringList.unparcel(in);
         this.usesLibraries = sForInternedStringList.unparcel(in);
@@ -3201,7 +3291,7 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
         this.resizeableActivity = sForBoolean.unparcel(in);
 
         this.autoRevokePermissions = in.readInt();
-        this.mimeGroups = (ArraySet<String>) in.readArraySet(boot);
+        this.mimeGroups = sForInternedStringSet.unparcel(in);
         this.gwpAsanMode = in.readInt();
         this.minExtensionVersions = in.readSparseIntArray();
         this.mProperties = in.readHashMap(boot);
@@ -3224,6 +3314,9 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
 
         assignDerivedFields();
         assignDerivedFields2();
+
+        // Do not call makeImmutable here as cached parsing will need
+        // to mutate this instance before it's finalized.
     }
 
     @NonNull

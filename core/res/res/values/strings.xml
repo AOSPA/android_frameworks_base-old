@@ -5514,7 +5514,7 @@
     <string name="app_streaming_blocked_message_for_settings_dialog" product="default">This can’t be accessed on your <xliff:g id="device" example="Chromebook">%1$s</xliff:g>. Try on your phone instead.</string>
 
     <!-- Message displayed in dialog when app is too old to run on this verison of android. [CHAR LIMIT=NONE] -->
-    <string name="deprecated_target_sdk_message">This app was built for an older version of Android and may not work properly. Try checking for updates, or contact the developer.</string>
+    <string name="deprecated_target_sdk_message">This app was built for an older version of Android. It might not work properly and doesn\'t include the latest security and privacy protections. Check for an update, or contact the app\'s developer.</string>
     <!-- Title for button to see application detail in app store which it came from - it may allow user to update to newer version. [CHAR LIMIT=50] -->
     <string name="deprecated_target_sdk_app_store">Check for update</string>
 
@@ -5762,9 +5762,20 @@
     <string name="log_access_confirmation_deny">Don\u2019t allow</string>
 
     <!-- Content for the log access confirmation dialog. [CHAR LIMIT=NONE]-->
-    <string name="log_access_confirmation_body">Device logs record what happens on your device. Apps can use these logs to find and fix issues.\n\nSome logs may contain sensitive info, so only allow apps you trust to access all device logs.
+    <string name="log_access_confirmation_body" product="default">Device logs record what happens on your device. Apps can use these logs to find and fix issues.\n\nSome logs may contain sensitive info, so only allow apps you trust to access all device logs.
         \n\nIf you don’t allow this app to access all device logs, it can still access its own logs. Your device manufacturer may still be able to access some logs or info on your device.
     </string>
+
+    <!-- Content for the log access confirmation dialog. [CHAR LIMIT=NONE]-->
+    <string name="log_access_confirmation_body" product="tv">Device logs record what happens on your device. Apps can use these logs to find and fix issues.\n\nSome logs may contain sensitive info, so only allow apps you trust to access all device logs.
+        \n\nIf you don’t allow this app to access all device logs, it can still access its own logs. Your device manufacturer may still be able to access some logs or info on your device.\n\nLearn more at g.co/android/devicelogs.
+    </string>
+
+    <!-- Learn more URL for the log access confirmation dialog. [DO NOT TRANSLATE]-->
+    <string name="log_access_confirmation_learn_more" product="default" translatable="false">&lt;a href="https://support.google.com/android?p=system_logs#topic=7313011"&gt;Learn more&lt;/a&gt;</string>
+
+    <!-- Learn more URL for the log access confirmation dialog. [DO NOT TRANSLATE]-->
+    <string name="log_access_confirmation_learn_more" product="tv" translatable="false"></string>
 
     <!-- Privacy notice do not show [CHAR LIMIT=20] -->
     <string name="log_access_do_not_show_again">Don\u2019t show again</string>

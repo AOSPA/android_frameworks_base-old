@@ -62,8 +62,6 @@ import android.window.TaskSnapshot;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.protolog.common.ProtoLog;
-import com.android.internal.util.function.pooled.PooledConsumer;
-import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.LocalServices;
 import com.android.server.inputmethod.InputMethodManagerInternal;
 import com.android.server.statusbar.StatusBarManagerInternal;
@@ -116,7 +114,7 @@ public class RecentsAnimationController implements DeathRecipient {
     private boolean mWillFinishToHome = false;
     private final Runnable mFailsafeRunnable = this::onFailsafe;
 
-    // The recents component app token that is shown behind the visibile tasks
+    // The recents component app token that is shown behind the visible tasks
     private ActivityRecord mTargetActivityRecord;
     private DisplayContent mDisplayContent;
     private int mTargetActivityType;
@@ -403,11 +401,11 @@ public class RecentsAnimationController implements DeathRecipient {
         final Task targetRootTask = mDisplayContent.getDefaultTaskDisplayArea()
                 .getRootTask(WINDOWING_MODE_UNDEFINED, targetActivityType);
         if (targetRootTask != null) {
-            final PooledConsumer c = PooledLambda.obtainConsumer((t, outList) ->
-	            { if (!outList.contains(t)) outList.add(t); }, PooledLambda.__(Task.class),
-                    visibleTasks);
-            targetRootTask.forAllLeafTasks(c, true /* traverseTopToBottom */);
-            c.recycle();
+            targetRootTask.forAllLeafTasks(t -> {
+                if (!visibleTasks.contains(t)) {
+                    visibleTasks.add(t);
+                }
+            }, true /* traverseTopToBottom */);
         }
 
         final int taskCount = visibleTasks.size();
@@ -456,6 +454,22 @@ public class RecentsAnimationController implements DeathRecipient {
         }
     }
 
+    /**
+     * Return whether the given window should still be considered interesting for the all-drawn
+     * state.  This is only interesting for the target app, which may have child windows that are
+     * not actually visible and should not be considered interesting and waited upon.
+     */
+    protected boolean isInterestingForAllDrawn(WindowState window) {
+        if (isTargetApp(window.getActivityRecord())) {
+            if (window.getWindowType() != TYPE_BASE_APPLICATION
+                    && window.getAttrs().alpha == 0f) {
+                // If there is a cihld window that is alpha 0, then ignore that window
+                return false;
+            }
+        }
+        // By default all windows are still interesting for all drawn purposes
+        return true;
+    }
 
     /**
      * Whether a task should be filtered from the recents animation. This can be true for tasks

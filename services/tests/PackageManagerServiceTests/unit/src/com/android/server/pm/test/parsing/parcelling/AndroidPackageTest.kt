@@ -17,13 +17,7 @@
 package com.android.server.pm.test.parsing.parcelling
 
 import android.content.Intent
-import android.content.pm.ApplicationInfo
-import android.content.pm.ConfigurationInfo
-import android.content.pm.FeatureGroupInfo
-import android.content.pm.FeatureInfo
-import android.content.pm.PackageManager
-import android.content.pm.SigningDetails
-import com.android.server.pm.pkg.parsing.ParsingPackage
+import android.content.pm.*
 import android.net.Uri
 import android.os.Bundle
 import android.os.Parcelable
@@ -33,18 +27,7 @@ import android.util.SparseIntArray
 import com.android.internal.R
 import com.android.server.pm.parsing.pkg.PackageImpl
 import com.android.server.pm.pkg.AndroidPackage
-import com.android.server.pm.pkg.component.ParsedActivityImpl
-import com.android.server.pm.pkg.component.ParsedApexSystemServiceImpl
-import com.android.server.pm.pkg.component.ParsedAttributionImpl
-import com.android.server.pm.pkg.component.ParsedComponentImpl
-import com.android.server.pm.pkg.component.ParsedInstrumentationImpl
-import com.android.server.pm.pkg.component.ParsedIntentInfoImpl
-import com.android.server.pm.pkg.component.ParsedPermissionGroupImpl
-import com.android.server.pm.pkg.component.ParsedPermissionImpl
-import com.android.server.pm.pkg.component.ParsedProcessImpl
-import com.android.server.pm.pkg.component.ParsedProviderImpl
-import com.android.server.pm.pkg.component.ParsedServiceImpl
-import com.android.server.pm.pkg.component.ParsedUsesPermissionImpl
+import com.android.server.pm.pkg.component.*
 import com.android.server.testutils.mockThrowOnUnmocked
 import com.android.server.testutils.whenever
 import java.security.KeyPairGenerator
@@ -65,6 +48,7 @@ class AndroidPackageTest : ParcelableComponentTest(AndroidPackage::class, Packag
         "addMimeGroupsFromComponent",
         "assignDerivedFields",
         "assignDerivedFields2",
+        "makeImmutable",
         "buildFakeForDeletion",
         "buildAppClassNamesByProcess",
         "capPermissionPriorities",
@@ -103,6 +87,7 @@ class AndroidPackageTest : ParcelableComponentTest(AndroidPackage::class, Packag
         "getRequestedPermissions",
         // Tested through asSplit
         "asSplit",
+        "getSplits",
         "getSplitNames",
         "getSplitCodePaths",
         "getSplitRevisionCodes",
@@ -175,9 +160,9 @@ class AndroidPackageTest : ParcelableComponentTest(AndroidPackage::class, Packag
         AndroidPackage::getSecondaryNativeLibraryDir,
         AndroidPackage::getSharedUserId,
         AndroidPackage::getSharedUserLabel,
-        AndroidPackage::getSdkLibName,
+        AndroidPackage::getSdkLibraryName,
         AndroidPackage::getSdkLibVersionMajor,
-        AndroidPackage::getStaticSharedLibName,
+        AndroidPackage::getStaticSharedLibraryName,
         AndroidPackage::getStaticSharedLibVersion,
         AndroidPackage::getTargetSandboxVersion,
         AndroidPackage::getTargetSdkVersion,
@@ -219,6 +204,7 @@ class AndroidPackageTest : ParcelableComponentTest(AndroidPackage::class, Packag
         AndroidPackage::isNativeLibraryRootRequiresIsa,
         AndroidPackage::isOdm,
         AndroidPackage::isOem,
+        AndroidPackage::isOnBackInvokedCallbackEnabled,
         AndroidPackage::isOverlay,
         AndroidPackage::isOverlayIsStatic,
         AndroidPackage::isPartiallyDirectBootAware,
@@ -279,7 +265,7 @@ class AndroidPackageTest : ParcelableComponentTest(AndroidPackage::class, Packag
         adder(AndroidPackage::getUsesOptionalNativeLibraries, "testUsesOptionalNativeLibrary"),
         getSetByValue(
             AndroidPackage::areAttributionsUserVisible,
-            ParsingPackage::setAttributionsAreUserVisible,
+            PackageImpl::setAttributionsAreUserVisible,
             true
         ),
         getSetByValue2(
@@ -513,11 +499,6 @@ class AndroidPackageTest : ParcelableComponentTest(AndroidPackage::class, Packag
             }
         ),
         getter(AndroidPackage::getKnownActivityEmbeddingCerts, setOf("TESTEMBEDDINGCERT")),
-        getSetByValue(
-            AndroidPackage::isOnBackInvokedCallbackEnabled,
-            ParsingPackage::setOnBackInvokedCallbackEnabled,
-            true
-        )
     )
 
     override fun initialObject() = PackageImpl.forParsing(
@@ -554,15 +535,19 @@ class AndroidPackageTest : ParcelableComponentTest(AndroidPackage::class, Packag
             SparseArray<IntArray>().apply {
                 put(0, intArrayOf(-1))
                 put(1, intArrayOf(0))
+                put(2, intArrayOf(1))
             }
         )
         .setSplitHasCode(0, true)
         .setSplitHasCode(1, false)
         .setSplitClassLoaderName(0, "testSplitClassLoaderNameZero")
         .setSplitClassLoaderName(1, "testSplitClassLoaderNameOne")
-
         .addUsesSdkLibrary("testSdk", 2L, arrayOf("testCertDigest1"))
         .addUsesStaticLibrary("testStatic", 3L, arrayOf("testCertDigest2"))
+
+    override fun finalizeObject(parcelable: Parcelable) {
+        (parcelable as PackageImpl).hideAsParsed().hideAsFinal()
+    }
 
     override fun extraAssertions(before: Parcelable, after: Parcelable) {
         super.extraAssertions(before, after)
@@ -600,9 +585,10 @@ class AndroidPackageTest : ParcelableComponentTest(AndroidPackage::class, Packag
 
         expect.that(after.splitDependencies).isNotNull()
         after.splitDependencies?.let {
-            expect.that(it.size()).isEqualTo(2)
+            expect.that(it.size()).isEqualTo(3)
             expect.that(it.get(0)).asList().containsExactly(-1)
             expect.that(it.get(1)).asList().containsExactly(0)
+            expect.that(it.get(2)).asList().containsExactly(1)
         }
 
         expect.that(after.usesSdkLibraries).containsExactly("testSdk")

@@ -16,6 +16,7 @@
 
 package com.android.wm.shell.windowdecor;
 
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
@@ -36,7 +37,8 @@ import com.android.wm.shell.R;
 import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.common.DisplayController;
 import com.android.wm.shell.common.SyncTransactionQueue;
-import com.android.wm.shell.desktopmode.DesktopMode;
+import com.android.wm.shell.desktopmode.DesktopModeController;
+import com.android.wm.shell.desktopmode.DesktopModeStatus;
 import com.android.wm.shell.freeform.FreeformTaskTransitionStarter;
 import com.android.wm.shell.transition.Transitions;
 
@@ -53,6 +55,7 @@ public class CaptionWindowDecorViewModel implements WindowDecorViewModel<Caption
     private final DisplayController mDisplayController;
     private final SyncTransactionQueue mSyncQueue;
     private FreeformTaskTransitionStarter mTransitionStarter;
+    private DesktopModeController mDesktopModeController;
 
     public CaptionWindowDecorViewModel(
             Context context,
@@ -60,7 +63,8 @@ public class CaptionWindowDecorViewModel implements WindowDecorViewModel<Caption
             Choreographer mainChoreographer,
             ShellTaskOrganizer taskOrganizer,
             DisplayController displayController,
-            SyncTransactionQueue syncQueue) {
+            SyncTransactionQueue syncQueue,
+            DesktopModeController desktopModeController) {
         mContext = context;
         mMainHandler = mainHandler;
         mMainChoreographer = mainChoreographer;
@@ -68,6 +72,7 @@ public class CaptionWindowDecorViewModel implements WindowDecorViewModel<Caption
         mTaskOrganizer = taskOrganizer;
         mDisplayController = displayController;
         mSyncQueue = syncQueue;
+        mDesktopModeController = desktopModeController;
     }
 
     @Override
@@ -210,8 +215,10 @@ public class CaptionWindowDecorViewModel implements WindowDecorViewModel<Caption
         }
 
         private void handleEventForMove(MotionEvent e) {
-            if (mTaskOrganizer.getRunningTaskInfo(mTaskId).getWindowingMode()
-                    == WINDOWING_MODE_FULLSCREEN) {
+            RunningTaskInfo taskInfo = mTaskOrganizer.getRunningTaskInfo(mTaskId);
+            int windowingMode =  mDesktopModeController
+                    .getDisplayAreaWindowingMode(taskInfo.displayId);
+            if (windowingMode == WINDOWING_MODE_FULLSCREEN) {
                 return;
             }
             switch (e.getActionMasked()) {
@@ -229,8 +236,14 @@ public class CaptionWindowDecorViewModel implements WindowDecorViewModel<Caption
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL: {
                     int dragPointerIdx = e.findPointerIndex(mDragPointerId);
+                    int statusBarHeight = mDisplayController.getDisplayLayout(taskInfo.displayId)
+                            .stableInsets().top;
                     mDragResizeCallback.onDragResizeEnd(
                             e.getRawX(dragPointerIdx), e.getRawY(dragPointerIdx));
+                    if (e.getRawY(dragPointerIdx) <= statusBarHeight
+                            && windowingMode == WINDOWING_MODE_FREEFORM) {
+                        mDesktopModeController.setDesktopModeActive(false);
+                    }
                     break;
                 }
             }
@@ -239,7 +252,8 @@ public class CaptionWindowDecorViewModel implements WindowDecorViewModel<Caption
 
     private boolean shouldShowWindowDecor(RunningTaskInfo taskInfo) {
         if (taskInfo.getWindowingMode() == WINDOWING_MODE_FREEFORM) return true;
-        return DesktopMode.IS_SUPPORTED
+        return DesktopModeStatus.IS_SUPPORTED
+                && taskInfo.getActivityType() == ACTIVITY_TYPE_STANDARD
                 && mDisplayController.getDisplayContext(taskInfo.displayId)
                 .getResources().getConfiguration().smallestScreenWidthDp >= 600;
     }

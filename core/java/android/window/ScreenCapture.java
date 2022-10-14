@@ -27,6 +27,7 @@ import android.os.IBinder;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.util.Log;
+import android.util.Pair;
 import android.view.SurfaceControl;
 
 import libcore.util.NativeAllocationRegistry;
@@ -42,6 +43,7 @@ import java.util.function.Consumer;
  */
 public class ScreenCapture {
     private static final String TAG = "ScreenCapture";
+    private static final int SCREENSHOT_WAIT_TIME_S = 1;
 
     private static native int nativeCaptureDisplay(DisplayCaptureArgs captureArgs,
             long captureListener);
@@ -71,13 +73,17 @@ public class ScreenCapture {
      */
     public static ScreenshotHardwareBuffer captureDisplay(
             DisplayCaptureArgs captureArgs) {
-        SyncScreenCaptureListener screenCaptureListener = new SyncScreenCaptureListener();
-        int status = captureDisplay(captureArgs, screenCaptureListener.getScreenCaptureListener());
+        Pair<ScreenCaptureListener, ScreenshotSync> syncScreenCapture = createSyncCaptureListener();
+        int status = captureDisplay(captureArgs, syncScreenCapture.first);
         if (status != 0) {
             return null;
         }
 
-        return screenCaptureListener.waitForScreenshot();
+        try {
+            return syncScreenCapture.second.get();
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /**
@@ -126,16 +132,18 @@ public class ScreenCapture {
     /**
      * @hide
      */
-    public static ScreenshotHardwareBuffer captureLayers(
-            LayerCaptureArgs captureArgs) {
-        SyncScreenCaptureListener screenCaptureListener = new SyncScreenCaptureListener();
-
-        int status = captureLayers(captureArgs, screenCaptureListener.getScreenCaptureListener());
+    public static ScreenshotHardwareBuffer captureLayers(LayerCaptureArgs captureArgs) {
+        Pair<ScreenCaptureListener, ScreenshotSync> syncScreenCapture = createSyncCaptureListener();
+        int status = captureLayers(captureArgs, syncScreenCapture.first);
         if (status != 0) {
             return null;
         }
 
-        return screenCaptureListener.waitForScreenshot();
+        try {
+            return syncScreenCapture.second.get();
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /**
@@ -255,14 +263,14 @@ public class ScreenCapture {
      * @hide
      */
     public static class CaptureArgs implements Parcelable {
-        private final int mPixelFormat;
-        private final Rect mSourceCrop = new Rect();
-        private final float mFrameScaleX;
-        private final float mFrameScaleY;
-        private final boolean mCaptureSecureLayers;
-        private final boolean mAllowProtected;
-        private final long mUid;
-        private final boolean mGrayscale;
+        public final int mPixelFormat;
+        public final Rect mSourceCrop = new Rect();
+        public final float mFrameScaleX;
+        public final float mFrameScaleY;
+        public final boolean mCaptureSecureLayers;
+        public final boolean mAllowProtected;
+        public final long mUid;
+        public final boolean mGrayscale;
 
         private CaptureArgs(CaptureArgs.Builder<? extends CaptureArgs.Builder<?>> builder) {
             mPixelFormat = builder.mPixelFormat;
@@ -609,6 +617,8 @@ public class ScreenCapture {
      * The object used to receive the results when invoking screen capture requests via
      * {@link #captureDisplay(DisplayCaptureArgs, ScreenCaptureListener)} or
      * {@link #captureLayers(LayerCaptureArgs, ScreenCaptureListener)}
+     *
+     * This listener can only be used for a single call to capture content call.
      */
     public static class ScreenCaptureListener implements Parcelable {
         private final long mNativeObject;
@@ -663,45 +673,46 @@ public class ScreenCapture {
     }
 
     /**
-     * A helper class to handle the async screencapture callbacks synchronously. This should only
+     * A helper method to handle the async screencapture callbacks synchronously. This should only
      * be used if the screencapture caller doesn't care that it blocks waiting for a screenshot.
+     *
+     * @return a Pair that holds the {@link ScreenCaptureListener} that should be used for capture
+     * calls into SurfaceFlinger and a {@link ScreenshotSync} object to retrieve the results.
      */
-    public static class SyncScreenCaptureListener {
-        private static final int SCREENSHOT_WAIT_TIME_S = 1;
-        private ScreenshotHardwareBuffer mScreenshotHardwareBuffer;
+    public static Pair<ScreenCaptureListener, ScreenshotSync> createSyncCaptureListener() {
+        final ScreenshotSync screenshotSync = new ScreenshotSync();
+        final ScreenCaptureListener screenCaptureListener = new ScreenCaptureListener(
+                screenshotSync::setScreenshotHardwareBuffer);
+        return new Pair<>(screenCaptureListener, screenshotSync);
+    }
+
+    /**
+     * Helper class to synchronously get the {@link ScreenshotHardwareBuffer} when calling
+     * {@link #captureLayers(LayerCaptureArgs, ScreenCaptureListener)} or
+     * {@link #captureDisplay(DisplayCaptureArgs, ScreenCaptureListener)}
+     */
+    public static class ScreenshotSync {
         private final CountDownLatch mCountDownLatch = new CountDownLatch(1);
-        private final ScreenCaptureListener mScreenCaptureListener;
+        private ScreenshotHardwareBuffer mScreenshotHardwareBuffer;
 
-        public SyncScreenCaptureListener() {
-            mScreenCaptureListener = new ScreenCaptureListener(screenshotHardwareBuffer -> {
-                mScreenshotHardwareBuffer = screenshotHardwareBuffer;
-                mCountDownLatch.countDown();
-            });
+        private void setScreenshotHardwareBuffer(
+                ScreenshotHardwareBuffer screenshotHardwareBuffer) {
+            mScreenshotHardwareBuffer = screenshotHardwareBuffer;
+            mCountDownLatch.countDown();
         }
 
         /**
-         * @return The underlying {@link ScreenCaptureListener}
+         * Get the {@link ScreenshotHardwareBuffer} synchronously. This can be null if the
+         * screenshot failed or if there was no callback in {@link #SCREENSHOT_WAIT_TIME_S} seconds.
          */
-        public ScreenCaptureListener getScreenCaptureListener() {
-            return mScreenCaptureListener;
-        }
-
-        /**
-         * Waits until the screenshot callback has been invoked and the screenshot is ready. This
-         * can return {@code null} if the screenshot callback wasn't invoked after
-         * {@link #SCREENSHOT_WAIT_TIME_S} or the screencapture request resulted in an error
-         *
-         * @return A ScreenshotHardwareBuffer for the content that was captured.
-         */
-        @Nullable
-        public ScreenshotHardwareBuffer waitForScreenshot() {
+        public ScreenshotHardwareBuffer get() {
             try {
                 mCountDownLatch.await(SCREENSHOT_WAIT_TIME_S, TimeUnit.SECONDS);
+                return mScreenshotHardwareBuffer;
             } catch (Exception e) {
                 Log.e(TAG, "Failed to wait for screen capture result", e);
+                return null;
             }
-
-            return mScreenshotHardwareBuffer;
         }
     }
 }

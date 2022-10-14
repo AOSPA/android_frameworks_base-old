@@ -2042,9 +2042,13 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      * it must be drawn before allDrawn can become true.
      */
     boolean isInteresting() {
+        final RecentsAnimationController recentsAnimationController =
+                mWmService.getRecentsAnimationController();
         return mActivityRecord != null && !mAppDied
                 && (!mActivityRecord.isFreezingScreen() || !mAppFreezing)
-                && mViewVisibility == View.VISIBLE;
+                && mViewVisibility == View.VISIBLE
+                && (recentsAnimationController == null
+                         || recentsAnimationController.isInterestingForAllDrawn(this));
     }
 
     /**
@@ -2622,11 +2626,19 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 }
             }
 
+            // Check if window provides non decor insets before clearing its provided insets.
+            final boolean windowProvidesNonDecorInsets = providesNonDecorInsets();
+
             removeImmediately();
             // Removing a visible window may affect the display orientation so just update it if
             // needed. Also recompute configuration if it provides screen decor insets.
-            if ((wasVisible && displayContent.updateOrientation())
-                    || displayContent.getDisplayPolicy().updateDecorInsetsInfoIfNeeded(this)) {
+            boolean needToSendNewConfiguration = wasVisible && displayContent.updateOrientation();
+            if (windowProvidesNonDecorInsets) {
+                needToSendNewConfiguration |=
+                        displayContent.getDisplayPolicy().updateDecorInsetsInfo();
+            }
+
+            if (needToSendNewConfiguration) {
                 displayContent.sendNewConfiguration();
             }
             mWmService.updateFocusedWindowLocked(isFocused()
@@ -3467,7 +3479,13 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                     "Setting visibility of " + this + ": " + clientVisible);
             mClient.dispatchAppVisibility(clientVisible);
         } catch (RemoteException e) {
+            // The remote client fails to process the visibility message. That means it is in a
+            // wrong state. E.g. the binder buffer is running out or the binder threads are dead.
+            // The window visibility is out-of-sync that may cause blank content or left over, so
+            // just kill it. And if it is a window of foreground activity, the activity can be
+            // restarted automatically if needed.
             Slog.w(TAG, "Exception thrown during dispatchAppVisibility " + this, e);
+            android.os.Process.killProcess(mSession.mPid);
         }
     }
 
@@ -3684,7 +3702,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
 
         return win.showForAllUsers()
-                || mWmService.isCurrentProfile(win.mShowUserId);
+                || mWmService.isUserVisible(win.mShowUserId);
     }
 
     private static void applyInsets(Region outRegion, Rect frame, Rect inset) {
@@ -4562,7 +4580,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     float translateToWindowX(float x) {
         float winX = x - mWindowFrames.mFrame.left;
         if (mGlobalScale != 1f) {
-            winX *= mGlobalScale;
+            winX *= mInvGlobalScale;
         }
         return winX;
     }
@@ -4570,7 +4588,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     float translateToWindowY(float y) {
         float winY = y - mWindowFrames.mFrame.top;
         if (mGlobalScale != 1f) {
-            winY *= mGlobalScale;
+            winY *= mInvGlobalScale;
         }
         return winY;
     }

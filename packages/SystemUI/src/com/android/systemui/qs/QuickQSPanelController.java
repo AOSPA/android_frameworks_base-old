@@ -26,7 +26,6 @@ import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.UiEventLogger;
 import com.android.systemui.R;
 import com.android.systemui.dump.DumpManager;
-import com.android.systemui.media.MediaCarouselController;
 import com.android.systemui.media.MediaHierarchyManager;
 import com.android.systemui.media.MediaHost;
 import com.android.systemui.plugins.qs.QSTile;
@@ -46,14 +45,6 @@ import javax.inject.Provider;
 @QSScope
 public class QuickQSPanelController extends QSPanelControllerBase<QuickQSPanel> {
 
-    private final QSPanel.OnConfigurationChangedListener mOnConfigurationChangedListener =
-            newConfig -> {
-                int newMaxTiles = getResources().getInteger(R.integer.quick_qs_panel_max_tiles);
-                if (newMaxTiles != mView.getNumQuickTiles()) {
-                    setMaxTiles(newMaxTiles);
-                }
-            };
-
     private final Provider<Boolean> mUsingCollapsedLandscapeMediaProvider;
 
     @Inject
@@ -64,10 +55,10 @@ public class QuickQSPanelController extends QSPanelControllerBase<QuickQSPanel> 
             @Named(QS_USING_COLLAPSED_LANDSCAPE_MEDIA)
                     Provider<Boolean> usingCollapsedLandscapeMediaProvider,
             MetricsLogger metricsLogger, UiEventLogger uiEventLogger, QSLogger qsLogger,
-            DumpManager dumpManager, MediaCarouselController mediaCarouselController
+            DumpManager dumpManager
     ) {
         super(view, qsTileHost, qsCustomizerController, usingMediaPlayer, mediaHost, metricsLogger,
-                uiEventLogger, qsLogger, dumpManager, mediaCarouselController);
+                uiEventLogger, qsLogger, dumpManager);
         mUsingCollapsedLandscapeMediaProvider = usingCollapsedLandscapeMediaProvider;
     }
 
@@ -99,13 +90,11 @@ public class QuickQSPanelController extends QSPanelControllerBase<QuickQSPanel> 
     @Override
     protected void onViewAttached() {
         super.onViewAttached();
-        mView.addOnConfigurationChangedListener(mOnConfigurationChangedListener);
     }
 
     @Override
     protected void onViewDetached() {
         super.onViewDetached();
-        mView.removeOnConfigurationChangedListener(mOnConfigurationChangedListener);
     }
 
     private void setMaxTiles(int parseNumTiles) {
@@ -115,6 +104,10 @@ public class QuickQSPanelController extends QSPanelControllerBase<QuickQSPanel> 
 
     @Override
     protected void onConfigurationChanged() {
+        int newMaxTiles = getResources().getInteger(R.integer.quick_qs_panel_max_tiles);
+        if (newMaxTiles != mView.getNumQuickTiles()) {
+            setMaxTiles(newMaxTiles);
+        }
         updateMediaExpansion();
     }
 

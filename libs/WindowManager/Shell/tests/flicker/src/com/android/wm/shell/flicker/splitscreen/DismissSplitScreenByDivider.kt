@@ -30,10 +30,10 @@ import com.android.server.wm.flicker.helpers.WindowUtils
 import com.android.wm.shell.flicker.SPLIT_SCREEN_DIVIDER_COMPONENT
 import com.android.wm.shell.flicker.appWindowBecomesInvisible
 import com.android.wm.shell.flicker.appWindowIsVisibleAtEnd
-import com.android.wm.shell.flicker.helpers.SplitScreenHelper
 import com.android.wm.shell.flicker.layerBecomesInvisible
 import com.android.wm.shell.flicker.layerIsVisibleAtEnd
 import com.android.wm.shell.flicker.splitAppLayerBoundsBecomesInvisible
+import com.android.wm.shell.flicker.splitScreenDismissed
 import com.android.wm.shell.flicker.splitScreenDividerBecomesInvisible
 import org.junit.FixMethodOrder
 import org.junit.Test
@@ -57,14 +57,14 @@ class DismissSplitScreenByDivider (testSpec: FlickerTestParameter) : SplitScreen
         get() = {
             super.transition(this)
             setup {
-                SplitScreenHelper.enterSplit(wmHelper, tapl, primaryApp, secondaryApp)
+                SplitScreenUtils.enterSplit(wmHelper, tapl, primaryApp, secondaryApp)
             }
             transitions {
                 if (tapl.isTablet) {
-                    SplitScreenHelper.dragDividerToDismissSplit(device, wmHelper,
+                    SplitScreenUtils.dragDividerToDismissSplit(device, wmHelper,
                         dragToRight = false, dragToBottom = true)
                 } else {
-                    SplitScreenHelper.dragDividerToDismissSplit(device, wmHelper,
+                    SplitScreenUtils.dragDividerToDismissSplit(device, wmHelper,
                         dragToRight = true, dragToBottom = true)
                 }
                 wmHelper.StateSyncBuilder()
@@ -76,25 +76,25 @@ class DismissSplitScreenByDivider (testSpec: FlickerTestParameter) : SplitScreen
     @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
+    fun cujCompleted() = testSpec.splitScreenDismissed(primaryApp, secondaryApp, toHome = false)
+
+    @Presubmit
+    @Test
     fun splitScreenDividerBecomesInvisible() = testSpec.splitScreenDividerBecomesInvisible()
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun primaryAppLayerBecomesInvisible() = testSpec.layerBecomesInvisible(primaryApp)
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun secondaryAppLayerIsVisibleAtEnd() = testSpec.layerIsVisibleAtEnd(secondaryApp)
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun primaryAppBoundsBecomesInvisible() = testSpec.splitAppLayerBoundsBecomesInvisible(
         primaryApp, landscapePosLeft = tapl.isTablet, portraitPosTop = false)
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun secondaryAppBoundsIsFullscreenAtEnd() {
@@ -117,12 +117,10 @@ class DismissSplitScreenByDivider (testSpec: FlickerTestParameter) : SplitScreen
         }
     }
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun primaryAppWindowBecomesInvisible() = testSpec.appWindowBecomesInvisible(primaryApp)
 
-    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
     fun secondaryAppWindowIsVisibleAtEnd() = testSpec.appWindowIsVisibleAtEnd(secondaryApp)

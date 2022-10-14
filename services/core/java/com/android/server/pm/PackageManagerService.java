@@ -5514,19 +5514,19 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                 AndroidPackage pkg = packageState.getPkg();
                 if (pkg != null) {
                     // Cannot hide SDK libs as they are controlled by SDK manager.
-                    if (pkg.getSdkLibName() != null) {
+                    if (pkg.getSdkLibraryName() != null) {
                         Slog.w(TAG, "Cannot hide package: " + packageName
                                 + " providing SDK library: "
-                                + pkg.getSdkLibName());
+                                + pkg.getSdkLibraryName());
                         return false;
                     }
                     // Cannot hide static shared libs as they are considered
                     // a part of the using app (emulating static linking). Also
                     // static libs are installed always on internal storage.
-                    if (pkg.getStaticSharedLibName() != null) {
+                    if (pkg.getStaticSharedLibraryName() != null) {
                         Slog.w(TAG, "Cannot hide package: " + packageName
                                 + " providing static shared library: "
-                                + pkg.getStaticSharedLibName());
+                                + pkg.getStaticSharedLibraryName());
                         return false;
                     }
                 }
@@ -5569,17 +5569,17 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
             if (packageState != null && packageState.getPkg() != null) {
                 AndroidPackage pkg = packageState.getPkg();
                 // Cannot block uninstall SDK libs as they are controlled by SDK manager.
-                if (pkg.getSdkLibName() != null) {
+                if (pkg.getSdkLibraryName() != null) {
                     Slog.w(PackageManagerService.TAG, "Cannot block uninstall of package: " + packageName
-                            + " providing SDK library: " + pkg.getSdkLibName());
+                            + " providing SDK library: " + pkg.getSdkLibraryName());
                     return false;
                 }
                 // Cannot block uninstall of static shared libs as they are
                 // considered a part of the using app (emulating static linking).
                 // Also static libs are installed always on internal storage.
-                if (pkg.getStaticSharedLibName() != null) {
+                if (pkg.getStaticSharedLibraryName() != null) {
                     Slog.w(PackageManagerService.TAG, "Cannot block uninstall of package: " + packageName
-                            + " providing static shared library: " + pkg.getStaticSharedLibName());
+                            + " providing static shared library: " + pkg.getStaticSharedLibraryName());
                     return false;
                 }
             }
@@ -6564,7 +6564,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                             if (dependentState == null) {
                                 continue;
                             }
-                            if (!Objects.equals(dependentState.getUserStateOrDefault(userId)
+                            if (canSetOverlayPaths(dependentState.getUserStateOrDefault(userId)
                                     .getSharedLibraryOverlayPaths()
                                     .get(libName), newOverlayPaths)) {
                                 String dependentPackageName = dependent.getPackageName();
@@ -6588,7 +6588,10 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                     }
                 }
 
-                outUpdatedPackageNames.add(targetPackageName);
+                if (canSetOverlayPaths(packageState.getUserStateOrDefault(userId).getOverlayPaths(),
+                        newOverlayPaths)) {
+                    outUpdatedPackageNames.add(targetPackageName);
+                }
             }
 
             commitPackageStateMutation(null, mutator -> {
@@ -6637,6 +6640,17 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         }
 
         invalidatePackageInfoCache();
+    }
+
+    private boolean canSetOverlayPaths(OverlayPaths origPaths, OverlayPaths newPaths) {
+        if (Objects.equals(origPaths, newPaths)) {
+            return false;
+        }
+        if ((origPaths == null && newPaths.isEmpty())
+                || (newPaths == null && origPaths.isEmpty())) {
+            return false;
+        }
+        return true;
     }
 
     private void maybeUpdateSystemOverlays(String targetPackageName, OverlayPaths newOverlayPaths) {

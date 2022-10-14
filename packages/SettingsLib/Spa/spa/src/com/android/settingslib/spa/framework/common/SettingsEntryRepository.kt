@@ -21,15 +21,20 @@ import java.util.LinkedList
 
 private const val MAX_ENTRY_SIZE = 5000
 
+data class SettingsPageWithEntry(
+    val page: SettingsPage,
+    val entries: List<SettingsEntry>,
+)
+
 /**
  * The repository to maintain all Settings entries
  */
 class SettingsEntryRepository(sppRepository: SettingsPageProviderRepository) {
     // Map of entry unique Id to entry
-    private val entryMap: Map<Int, SettingsEntry>
+    private val entryMap: Map<String, SettingsEntry>
 
     // Map of Settings page to its contained entries.
-    private val pageWithEntryMap: Map<Int, SettingsPageWithEntry>
+    private val pageWithEntryMap: Map<String, SettingsPageWithEntry>
 
     init {
         logMsg("Initialize")
@@ -67,7 +72,7 @@ class SettingsEntryRepository(sppRepository: SettingsPageProviderRepository) {
         return pageWithEntryMap.values
     }
 
-    fun getPageWithEntry(pageId: Int): SettingsPageWithEntry? {
+    fun getPageWithEntry(pageId: String): SettingsPageWithEntry? {
         return pageWithEntryMap[pageId]
     }
 
@@ -75,7 +80,7 @@ class SettingsEntryRepository(sppRepository: SettingsPageProviderRepository) {
         return entryMap.values
     }
 
-    fun getEntry(entryId: Int): SettingsEntry? {
+    fun getEntry(entryId: String): SettingsEntry? {
         return entryMap[entryId]
     }
 }
