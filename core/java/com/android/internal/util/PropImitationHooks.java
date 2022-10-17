@@ -66,10 +66,10 @@ public class PropImitationHooks {
          * Set Stock Fingerprint for ARCore
          */
         if (!sCertifiedFp.isEmpty() && sIsGms) {
-            dlog("Spoofing buid for GMS");
+            dlog("Setting certified fingerprint for GMS");
             setPropValue("FINGERPRINT", sCertifiedFp);
             setPropValue("MODEL", Build.MODEL + "\u200b");
-        } else if (!sCertifiedFp.isEmpty() && (sIsVelvet)) {
+        } else if (!sCertifiedFp.isEmpty() && !sCertifiedModel.isEmpty() && sIsVelvet) {
             dlog("Setting certified fingerprint and model for: " + packageName);
             setPropValue("FINGERPRINT", sCertifiedFp);
             setPropValue("MODEL", sCertifiedModel);
