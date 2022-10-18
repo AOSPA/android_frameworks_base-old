@@ -42,6 +42,9 @@ public class PropImitationHooks {
     private static final String TAG = "PropImitationHooks";
     private static final boolean DEBUG = false;
 
+    private static final Boolean sEnablePropImitation =
+            Resources.getSystem().getBoolean(R.bool.config_enablePropImitation);
+
     private static final String PACKAGE_ARCORE = "com.google.ar.core";
     private static final String PACKAGE_FINSKY = "com.android.vending";
     private static final String PACKAGE_GMS = "com.google.android.gms";
@@ -72,6 +75,11 @@ public class PropImitationHooks {
     private static volatile boolean sIsPixelDevice, sIsGms, sIsFinsky, sIsPhotos;
 
     public static void setProps(Context context) {
+        if (!sEnablePropImitation) {
+            dlog("Prop imitation is disabled by config");
+            return;
+        }
+
         final String packageName = context.getPackageName();
         final String processName = Application.getProcessName();
 
