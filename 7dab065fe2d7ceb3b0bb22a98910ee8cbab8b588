@@ -16,6 +16,24 @@
       "message": "while i don\u0027t mind this, you still need it to pass safetynet\nsetting stock build fingerprint globally will build upgrade detection which is a big no no",
       "revId": "7dab065fe2d7ceb3b0bb22a98910ee8cbab8b588",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "bf98b2c4_db9bfba4",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 3
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2022-10-18T17:43:14Z",
+      "side": 1,
+      "message": "also an except\n`heads-up for people here\nif ro.product.first_api_level is 33, its forced to use HW attestation even though your safteynet checker app shows BASIC, setting it to 32 allows for software attestation and passing CTS`",
+      "parentUuid": "00f58f01_bf6996b1",
+      "revId": "7dab065fe2d7ceb3b0bb22a98910ee8cbab8b588",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
