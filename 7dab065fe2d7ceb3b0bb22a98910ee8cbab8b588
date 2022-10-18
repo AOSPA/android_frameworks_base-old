@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "00f58f01_bf6996b1",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 3
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2022-10-18T17:42:23Z",
+      "side": 1,
+      "message": "while i don\u0027t mind this, you still need it to pass safetynet\nsetting stock build fingerprint globally will build upgrade detection which is a big no no",
+      "revId": "7dab065fe2d7ceb3b0bb22a98910ee8cbab8b588",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
