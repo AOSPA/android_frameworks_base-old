@@ -19,6 +19,7 @@ package com.android.internal.util;
 import android.app.Application;
 import android.content.res.Resources;
 import android.os.Build;
+import android.os.SystemProperties;
 import android.util.Log;
 
 import com.android.internal.R;
@@ -45,6 +46,9 @@ public class PropImitationHooks {
     private static final String PACKAGE_VELVET = "com.google.android.googlequicksearchbox";
     private static final String PACKAGE_GMS = "com.google.android.gms";
     private static final String PROCESS_GMS_UNSTABLE = PACKAGE_GMS + ".unstable";
+	
+    private static final String PROP_DEVICE_MANUFACTURER = "ro.product.vendor.manufacturer";
+    private static final String MANUFACTURER_GOOGLE = "Google";
 
     private static volatile boolean sIsGms = false;
     private static volatile boolean sIsFinsky = false;
@@ -53,6 +57,12 @@ public class PropImitationHooks {
     public static void setProps(Application app) {
         final String packageName = app.getPackageName();
         final String processName = app.getProcessName();
+
+        String manufacturer = SystemProperties.get(PROP_DEVICE_MANUFACTURER);
+        if (manufacturer.equals(MANUFACTURER_GOOGLE)) {
+            dlog("Manufacturer is " + MANUFACTURER_GOOGLE + ", ignoring prop imitation");
+            return;
+        }
 
         if (packageName == null || processName == null) {
             return;
