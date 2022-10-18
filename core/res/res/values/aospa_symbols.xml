@@ -70,6 +70,9 @@
     <!-- Whether to to intercept inputs on screen off. -->
     <java-symbol type="bool" name="config_enableKeyHandler" />
 
+    <!-- Whether prop imitation is enabled -->
+    <java-symbol type="bool" name="config_enablePropImitation" />
+
     <!-- Cycle through ringer modes -->
     <java-symbol type="string" name="volume_dialog_ringer_guidance_normal" />
 
