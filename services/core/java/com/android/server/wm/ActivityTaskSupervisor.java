@@ -469,7 +469,9 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     }
 
     public IServicetracker getServicetrackerInstance() {
-        if (mServicetracker == null) {
+        int tryForTrackerCount;
+        if (mServicetracker == null && tryForTrackerCount < 3) {
+            tryForTrackerCount++;
             try {
                 mServicetracker = IServicetracker.getService(false);
             } catch (java.util.NoSuchElementException e) {

@@ -610,7 +610,9 @@ public final class ActiveServices {
     }
 
     private boolean getServicetrackerInstance() {
-        if (mServicetracker == null ) {
+        int tryForTrackerCount;
+        if (mServicetracker == null && tryForTrackerCount < 3) {
+            tryForTrackerCount++;
             try {
                 mServicetracker = IServicetracker.getService(false);
             } catch (java.util.NoSuchElementException e) {
@@ -623,6 +625,9 @@ public final class ActiveServices {
                 if (DEBUG_SERVICE) Slog.w(TAG, "servicetracker HIDL not available");
                 return false;
             }
+        } else {
+            if (DEBUG_SERVICE) Slog.e(TAG, "Finished trying to get servicetracker HIDL", e);
+            return false;
         }
         return true;
     }
