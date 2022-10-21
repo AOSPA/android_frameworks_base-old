@@ -232,7 +232,7 @@ android_library {
         "metrics-helper-lib",
         "hamcrest-library",
         "androidx.test.rules",
-        "androidx.test.uiautomator",
+        "androidx.test.uiautomator_uiautomator",
         "mockito-target-extended-minus-junit4",
         "testables",
         "truth-prebuilt",
@@ -320,5 +320,6 @@ android_app {
     dxflags: ["--multi-dex"],
     required: [
         "privapp_whitelist_com.android.systemui",
+        "wmshell.protolog.json.gz",
     ],
 }

@@ -28,6 +28,9 @@ import static com.android.systemui.animation.Interpolators.EMPHASIZED_ACCELERATE
 import static com.android.systemui.animation.Interpolators.EMPHASIZED_DECELERATE;
 import static com.android.systemui.classifier.Classifier.QS_COLLAPSE;
 import static com.android.systemui.classifier.Classifier.QUICK_SETTINGS;
+import static com.android.systemui.shade.ShadeExpansionStateManagerKt.STATE_CLOSED;
+import static com.android.systemui.shade.ShadeExpansionStateManagerKt.STATE_OPEN;
+import static com.android.systemui.shade.ShadeExpansionStateManagerKt.STATE_OPENING;
 import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_NOTIFICATION_PANEL_EXPANDED;
 import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_QUICK_SETTINGS_EXPANDED;
 import static com.android.systemui.statusbar.StatusBarState.KEYGUARD;
@@ -36,9 +39,6 @@ import static com.android.systemui.statusbar.StatusBarState.SHADE_LOCKED;
 import static com.android.systemui.statusbar.VibratorHelper.TOUCH_VIBRATION_ATTRIBUTES;
 import static com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout.ROWS_ALL;
 import static com.android.systemui.statusbar.notification.stack.StackStateAnimator.ANIMATION_DURATION_FOLD_TO_AOD;
-import static com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManagerKt.STATE_CLOSED;
-import static com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManagerKt.STATE_OPEN;
-import static com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManagerKt.STATE_OPENING;
 import static com.android.systemui.util.DumpUtilsKt.asIndenting;
 
 import android.animation.Animator;
@@ -204,8 +204,6 @@ import com.android.systemui.statusbar.phone.TapAgainViewController;
 import com.android.systemui.statusbar.phone.UnlockedScreenOffAnimationController;
 import com.android.systemui.statusbar.phone.dagger.CentralSurfacesComponent;
 import com.android.systemui.statusbar.phone.fragment.CollapsedStatusBarFragment;
-import com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManager;
-import com.android.systemui.statusbar.phone.panelstate.PanelState;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardQsUserSwitchController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
@@ -430,11 +428,10 @@ public final class NotificationPanelViewController extends PanelViewController {
             new KeyguardClockPositionAlgorithm.Result();
     private boolean mIsExpanding;
 
-    private boolean mBlockTouches;
-
     /**
      * Determines if QS should be already expanded when expanding shade.
      * Used for split shade, two finger gesture as well as accessibility shortcut to QS.
+     * It needs to be set when movement starts as it resets at the end of expansion/collapse.
      */
     @VisibleForTesting
     boolean mQsExpandImmediate;
@@ -766,7 +763,7 @@ public final class NotificationPanelViewController extends PanelViewController {
             LargeScreenShadeHeaderController largeScreenShadeHeaderController,
             ScreenOffAnimationController screenOffAnimationController,
             LockscreenGestureLogger lockscreenGestureLogger,
-            PanelExpansionStateManager panelExpansionStateManager,
+            ShadeExpansionStateManager shadeExpansionStateManager,
             NotificationRemoteInputManager remoteInputManager,
             Optional<SysUIUnfoldComponent> unfoldComponent,
             InteractionJankMonitor interactionJankMonitor,
@@ -796,7 +793,7 @@ public final class NotificationPanelViewController extends PanelViewController {
                 flingAnimationUtilsBuilder.get(),
                 statusBarTouchableRegionManager,
                 lockscreenGestureLogger,
-                panelExpansionStateManager,
+                shadeExpansionStateManager,
                 ambientState,
                 interactionJankMonitor,
                 shadeLogger,
@@ -868,7 +865,7 @@ public final class NotificationPanelViewController extends PanelViewController {
                 new DynamicPrivacyControlListener();
         dynamicPrivacyController.addListener(dynamicPrivacyControlListener);
 
-        panelExpansionStateManager.addStateListener(this::onPanelStateChanged);
+        shadeExpansionStateManager.addStateListener(this::onPanelStateChanged);
 
         mBottomAreaShadeAlphaAnimator = ValueAnimator.ofFloat(1f, 0);
         mBottomAreaShadeAlphaAnimator.addUpdateListener(animation -> {
@@ -1703,7 +1700,6 @@ public final class NotificationPanelViewController extends PanelViewController {
 
     public void resetViews(boolean animate) {
         mIsLaunchTransitionFinished = false;
-        mBlockTouches = false;
         mCentralSurfaces.getGutsManager().closeAndSaveGuts(true /* leavebehind */, true /* force */,
                 true /* controls */, -1 /* x */, -1 /* y */, true /* resetMenu */);
         if (animate && !isFullyCollapsed()) {
@@ -1748,8 +1744,10 @@ public final class NotificationPanelViewController extends PanelViewController {
     }
 
     private void setQsExpandImmediate(boolean expandImmediate) {
-        mQsExpandImmediate = expandImmediate;
-        mPanelEventsEmitter.notifyExpandImmediateChange(expandImmediate);
+        if (expandImmediate != mQsExpandImmediate) {
+            mQsExpandImmediate = expandImmediate;
+            mPanelEventsEmitter.notifyExpandImmediateChange(expandImmediate);
+        }
     }
 
     private void setShowShelfOnly(boolean shelfOnly) {
@@ -2490,15 +2488,21 @@ public final class NotificationPanelViewController extends PanelViewController {
         mDepthController.setQsPanelExpansion(qsExpansionFraction);
         mStatusBarKeyguardViewManager.setQsExpansion(qsExpansionFraction);
 
-        // updateQsExpansion will get called whenever mTransitionToFullShadeProgress or
-        // mLockscreenShadeTransitionController.getDragProgress change.
-        // When in lockscreen, getDragProgress indicates the true expanded fraction of QS
-        float shadeExpandedFraction = mTransitioningToFullShadeProgress > 0
-                ? mLockscreenShadeTransitionController.getQSDragProgress()
+        float shadeExpandedFraction = isOnKeyguard()
+                ? getLockscreenShadeDragProgress()
                 : getExpandedFraction();
         mLargeScreenShadeHeaderController.setShadeExpandedFraction(shadeExpandedFraction);
         mLargeScreenShadeHeaderController.setQsExpandedFraction(qsExpansionFraction);
         mLargeScreenShadeHeaderController.setQsVisible(mQsVisible);
+    }
+
+    private float getLockscreenShadeDragProgress() {
+        // mTransitioningToFullShadeProgress > 0 means we're doing regular lockscreen to shade
+        // transition. If that's not the case we should follow QS expansion fraction for when
+        // user is pulling from the same top to go directly to expanded QS
+        return mTransitioningToFullShadeProgress > 0
+                ? mLockscreenShadeTransitionController.getQSDragProgress()
+                : computeQsExpansionFraction();
     }
 
     private void onStackYChanged(boolean shouldAnimate) {
@@ -3135,26 +3139,24 @@ public final class NotificationPanelViewController extends PanelViewController {
         }
         if (mQsExpandImmediate || (mQsExpanded && !mQsTracking && mQsExpansionAnimator == null
                 && !mQsExpansionFromOverscroll)) {
-            float t;
-            if (mKeyguardShowing) {
-
+            float qsExpansionFraction;
+            if (mSplitShadeEnabled) {
+                qsExpansionFraction = 1;
+            } else if (mKeyguardShowing) {
                 // On Keyguard, interpolate the QS expansion linearly to the panel expansion
-                t = expandedHeight / (getMaxPanelHeight());
+                qsExpansionFraction = expandedHeight / (getMaxPanelHeight());
             } else {
                 // In Shade, interpolate linearly such that QS is closed whenever panel height is
                 // minimum QS expansion + minStackHeight
-                float
-                        panelHeightQsCollapsed =
+                float panelHeightQsCollapsed =
                         mNotificationStackScrollLayoutController.getIntrinsicPadding()
                                 + mNotificationStackScrollLayoutController.getLayoutMinHeight();
                 float panelHeightQsExpanded = calculatePanelHeightQsExpanded();
-                t =
-                        (expandedHeight - panelHeightQsCollapsed) / (panelHeightQsExpanded
-                                - panelHeightQsCollapsed);
+                qsExpansionFraction = (expandedHeight - panelHeightQsCollapsed)
+                        / (panelHeightQsExpanded - panelHeightQsCollapsed);
             }
-            float
-                    targetHeight =
-                    mQsMinExpansionHeight + t * (mQsMaxExpansionHeight - mQsMinExpansionHeight);
+            float targetHeight = mQsMinExpansionHeight
+                    + qsExpansionFraction * (mQsMaxExpansionHeight - mQsMinExpansionHeight);
             setQsExpansion(targetHeight);
         }
         updateExpandedHeight(expandedHeight);
@@ -3340,7 +3342,11 @@ public final class NotificationPanelViewController extends PanelViewController {
         } else {
             setListening(true);
         }
-        setQsExpandImmediate(false);
+        if (mBarState != SHADE) {
+            // updating qsExpandImmediate is done in onPanelStateChanged for unlocked shade but
+            // on keyguard panel state is always OPEN so we need to have that extra update
+            setQsExpandImmediate(false);
+        }
         setShowShelfOnly(false);
         mTwoFingerQsExpandPossible = false;
         updateTrackingHeadsUp(null);
@@ -4198,7 +4204,7 @@ public final class NotificationPanelViewController extends PanelViewController {
                             "NPVC onInterceptTouchEvent (" + event.getId() + "): (" + event.getX()
                                     + "," + event.getY() + ")");
                 }
-                if (mBlockTouches || mQs.disallowPanelTouches()) {
+                if (mQs.disallowPanelTouches()) {
                     return false;
                 }
                 initDownStates(event);
@@ -4241,8 +4247,7 @@ public final class NotificationPanelViewController extends PanelViewController {
                 }
 
 
-                if (mBlockTouches || (mQsFullyExpanded && mQs != null
-                        && mQs.disallowPanelTouches())) {
+                if (mQsFullyExpanded && mQs != null && mQs.disallowPanelTouches()) {
                     return false;
                 }
 
@@ -4293,7 +4298,7 @@ public final class NotificationPanelViewController extends PanelViewController {
                 }
 
                 if (event.getActionMasked() == MotionEvent.ACTION_DOWN && isFullyExpanded()
-                        && mStatusBarKeyguardViewManager.isShowing()) {
+                        && mKeyguardStateController.isShowing()) {
                     mStatusBarKeyguardViewManager.updateKeyguardPosition(event.getX());
                 }
 
@@ -4411,7 +4416,7 @@ public final class NotificationPanelViewController extends PanelViewController {
         }
         mSysUiState.setFlag(SYSUI_STATE_NOTIFICATION_PANEL_EXPANDED,
                         isFullyExpanded() && !isInSettings())
-                .setFlag(SYSUI_STATE_QUICK_SETTINGS_EXPANDED, isInSettings())
+                .setFlag(SYSUI_STATE_QUICK_SETTINGS_EXPANDED, isFullyExpanded() && isInSettings())
                 .commitUpdate(mDisplayId);
     }
 
@@ -4689,12 +4694,19 @@ public final class NotificationPanelViewController extends PanelViewController {
                     }
                 }
             } else {
+                // this else branch means we are doing one of:
+                //  - from KEYGUARD and SHADE (but not expanded shade)
+                //  - from SHADE to KEYGUARD
+                //  - from SHADE_LOCKED to SHADE
+                //  - getting notified again about the current SHADE or KEYGUARD state
                 final boolean animatingUnlockedShadeToKeyguard = oldState == SHADE
                         && statusBarState == KEYGUARD
                         && mScreenOffAnimationController.isKeyguardShowDelayed();
                 if (!animatingUnlockedShadeToKeyguard) {
                     // Only make the status bar visible if we're not animating the screen off, since
                     // we only want to be showing the clock/notifications during the animation.
+                    mShadeLog.v("Updating keyguard status bar state to "
+                            + (keyguardShowing ? "visible" : "invisible"));
                     mKeyguardStatusBarViewController.updateViewState(
                             /* alpha= */ 1f,
                             keyguardShowing ? View.VISIBLE : View.INVISIBLE);
@@ -4760,9 +4772,7 @@ public final class NotificationPanelViewController extends PanelViewController {
 
                 @Override
                 public float getLockscreenShadeDragProgress() {
-                    return mTransitioningToFullShadeProgress > 0
-                            ? mLockscreenShadeTransitionController.getQSDragProgress()
-                            : computeQsExpansionFraction();
+                    return NotificationPanelViewController.this.getLockscreenShadeDragProgress();
                 }
             };
 
@@ -4999,6 +5009,7 @@ public final class NotificationPanelViewController extends PanelViewController {
         updateQSExpansionEnabledAmbient();
 
         if (state == STATE_OPEN && mCurrentPanelState != state) {
+            setQsExpandImmediate(false);
             mView.sendAccessibilityEvent(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED);
         }
         if (state == STATE_OPENING) {
@@ -5011,6 +5022,7 @@ public final class NotificationPanelViewController extends PanelViewController {
             mCentralSurfaces.makeExpandedVisible(false);
         }
         if (state == STATE_CLOSED) {
+            setQsExpandImmediate(false);
             // Close the status bar in the next frame so we can show the end of the
             // animation.
             mView.post(mMaybeHideExpandedRunnable);

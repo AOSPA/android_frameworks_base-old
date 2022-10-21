@@ -19,9 +19,9 @@ package com.android.server.timedetector;
 import static com.android.server.timedetector.TimeDetectorStrategy.ORIGIN_NETWORK;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -31,13 +31,17 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import android.app.time.ExternalTimeSuggestion;
 import android.app.time.ITimeDetectorListener;
+import android.app.time.TimeCapabilitiesAndConfig;
 import android.app.time.TimeConfiguration;
+import android.app.time.TimeState;
+import android.app.time.UnixEpochTime;
 import android.app.timedetector.ManualTimeSuggestion;
 import android.app.timedetector.TelephonyTimeSuggestion;
 import android.app.timedetector.TimePoint;
@@ -46,7 +50,6 @@ import android.content.pm.PackageManager;
 import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.ParcelableException;
-import android.os.TimestampedValue;
 import android.util.NtpTrustedTime;
 
 import androidx.test.runner.AndroidJUnit4;
@@ -76,14 +79,14 @@ public class TimeDetectorServiceTest {
 
     private Context mMockContext;
 
-    private TimeDetectorService mTimeDetectorService;
     private HandlerThread mHandlerThread;
     private TestHandler mTestHandler;
     private TestCallerIdentityInjector mTestCallerIdentityInjector;
-    private FakeServiceConfigAccessor mFakeServiceConfigAccessor;
-    private NtpTrustedTime mMockNtpTrustedTime;
-    private FakeTimeDetectorStrategy mFakeTimeDetectorStrategy;
+    private FakeServiceConfigAccessor mFakeServiceConfigAccessorSpy;
+    private FakeTimeDetectorStrategy mFakeTimeDetectorStrategySpy;
 
+    private NtpTrustedTime mMockNtpTrustedTime;
+    private TimeDetectorService mTimeDetectorService;
 
     @Before
     public void setUp() {
@@ -97,13 +100,13 @@ public class TimeDetectorServiceTest {
         mTestCallerIdentityInjector = new TestCallerIdentityInjector();
         mTestCallerIdentityInjector.initializeCallingUserId(ARBITRARY_USER_ID);
 
-        mFakeTimeDetectorStrategy = new FakeTimeDetectorStrategy();
-        mFakeServiceConfigAccessor = new FakeServiceConfigAccessor();
+        mFakeServiceConfigAccessorSpy = spy(new FakeServiceConfigAccessor());
+        mFakeTimeDetectorStrategySpy = spy(new FakeTimeDetectorStrategy());
         mMockNtpTrustedTime = mock(NtpTrustedTime.class);
 
         mTimeDetectorService = new TimeDetectorService(
-                mMockContext, mTestHandler, mFakeServiceConfigAccessor,
-                mFakeTimeDetectorStrategy, mTestCallerIdentityInjector, mMockNtpTrustedTime);
+                mMockContext, mTestHandler, mTestCallerIdentityInjector,
+                mFakeServiceConfigAccessorSpy, mFakeTimeDetectorStrategySpy, mMockNtpTrustedTime);
     }
 
     @After
@@ -112,19 +115,14 @@ public class TimeDetectorServiceTest {
         mHandlerThread.join();
     }
 
-    @Test(expected = SecurityException.class)
+    @Test
     public void testGetCapabilitiesAndConfig_withoutPermission() {
         doThrow(new SecurityException("Mock"))
                 .when(mMockContext).enforceCallingPermission(anyString(), any());
 
-        try {
-            mTimeDetectorService.getCapabilitiesAndConfig();
-            fail("Expected SecurityException");
-        } finally {
-            verify(mMockContext).enforceCallingPermission(
-                    eq(android.Manifest.permission.MANAGE_TIME_AND_ZONE_DETECTION),
-                    anyString());
-        }
+        assertThrows(SecurityException.class, mTimeDetectorService::getCapabilitiesAndConfig);
+        verify(mMockContext).enforceCallingPermission(
+                eq(android.Manifest.permission.MANAGE_TIME_AND_ZONE_DETECTION), anyString());
     }
 
     @Test
@@ -133,53 +131,49 @@ public class TimeDetectorServiceTest {
 
         ConfigurationInternal configuration =
                 createConfigurationInternal(true /* autoDetectionEnabled*/);
-        mFakeServiceConfigAccessor.initializeConfiguration(configuration);
+        mFakeServiceConfigAccessorSpy.initializeConfiguration(configuration);
 
-        assertEquals(configuration.capabilitiesAndConfig(),
-                mTimeDetectorService.getCapabilitiesAndConfig());
-
+        TimeCapabilitiesAndConfig actualCapabilitiesAndConfig =
+                mTimeDetectorService.getCapabilitiesAndConfig();
         verify(mMockContext).enforceCallingPermission(
-                eq(android.Manifest.permission.MANAGE_TIME_AND_ZONE_DETECTION),
-                anyString());
+                eq(android.Manifest.permission.MANAGE_TIME_AND_ZONE_DETECTION), anyString());
+        int expectedUserId = mTestCallerIdentityInjector.getCallingUserId();
+        verify(mFakeServiceConfigAccessorSpy).getConfigurationInternal(expectedUserId);
+
+        boolean bypassUserPolicyChecks = false;
+        TimeCapabilitiesAndConfig expectedCapabilitiesAndConfig =
+                configuration.createCapabilitiesAndConfig(bypassUserPolicyChecks);
+        assertEquals(expectedCapabilitiesAndConfig, actualCapabilitiesAndConfig);
     }
 
-    @Test(expected = SecurityException.class)
+    @Test
     public void testAddListener_withoutPermission() {
         doThrow(new SecurityException("Mock"))
                 .when(mMockContext).enforceCallingPermission(anyString(), any());
 
         ITimeDetectorListener mockListener = mock(ITimeDetectorListener.class);
-        try {
-            mTimeDetectorService.addListener(mockListener);
-            fail("Expected SecurityException");
-        } finally {
-            verify(mMockContext).enforceCallingPermission(
-                    eq(android.Manifest.permission.MANAGE_TIME_AND_ZONE_DETECTION),
-                    anyString());
-        }
+        assertThrows(SecurityException.class, () -> mTimeDetectorService.addListener(mockListener));
+        verify(mMockContext).enforceCallingPermission(
+                eq(android.Manifest.permission.MANAGE_TIME_AND_ZONE_DETECTION), anyString());
     }
 
-    @Test(expected = SecurityException.class)
+    @Test
     public void testRemoveListener_withoutPermission() {
         doThrow(new SecurityException("Mock"))
                 .when(mMockContext).enforceCallingPermission(anyString(), any());
 
         ITimeDetectorListener mockListener = mock(ITimeDetectorListener.class);
-        try {
-            mTimeDetectorService.removeListener(mockListener);
-            fail("Expected a SecurityException");
-        } finally {
-            verify(mMockContext).enforceCallingPermission(
-                    eq(android.Manifest.permission.MANAGE_TIME_AND_ZONE_DETECTION),
-                    anyString());
-        }
+        assertThrows(SecurityException.class,
+                () -> mTimeDetectorService.removeListener(mockListener));
+        verify(mMockContext).enforceCallingPermission(
+                eq(android.Manifest.permission.MANAGE_TIME_AND_ZONE_DETECTION), anyString());
     }
 
     @Test
     public void testListenerRegistrationAndCallbacks() throws Exception {
         ConfigurationInternal initialConfiguration =
                 createConfigurationInternal(false /* autoDetectionEnabled */);
-        mFakeServiceConfigAccessor.initializeConfiguration(initialConfiguration);
+        mFakeServiceConfigAccessorSpy.initializeConfiguration(initialConfiguration);
 
         IBinder mockListenerBinder = mock(IBinder.class);
         ITimeDetectorListener mockListener = mock(ITimeDetectorListener.class);
@@ -191,8 +185,7 @@ public class TimeDetectorServiceTest {
             mTimeDetectorService.addListener(mockListener);
 
             verify(mMockContext).enforceCallingPermission(
-                    eq(android.Manifest.permission.MANAGE_TIME_AND_ZONE_DETECTION),
-                    anyString());
+                    eq(android.Manifest.permission.MANAGE_TIME_AND_ZONE_DETECTION), anyString());
             verify(mockListener).asBinder();
             verify(mockListenerBinder).linkToDeath(any(), anyInt());
             verifyNoMoreInteractions(mockListenerBinder, mockListener, mMockContext);
@@ -211,8 +204,7 @@ public class TimeDetectorServiceTest {
             mTestHandler.waitForMessagesToBeProcessed();
 
             verify(mMockContext).enforceCallingPermission(
-                    eq(android.Manifest.permission.MANAGE_TIME_AND_ZONE_DETECTION),
-                    anyString());
+                    eq(android.Manifest.permission.MANAGE_TIME_AND_ZONE_DETECTION), anyString());
             verify(mockListener).onChange();
             verifyNoMoreInteractions(mockListenerBinder, mockListener, mMockContext);
             reset(mockListenerBinder, mockListener, mMockContext);
@@ -228,8 +220,7 @@ public class TimeDetectorServiceTest {
             mTimeDetectorService.removeListener(mockListener);
 
             verify(mMockContext).enforceCallingPermission(
-                    eq(android.Manifest.permission.MANAGE_TIME_AND_ZONE_DETECTION),
-                    anyString());
+                    eq(android.Manifest.permission.MANAGE_TIME_AND_ZONE_DETECTION), anyString());
             verify(mockListener).asBinder();
             verify(mockListenerBinder).unlinkToDeath(any(), eq(0));
             verifyNoMoreInteractions(mockListenerBinder, mockListener, mMockContext);
@@ -244,28 +235,23 @@ public class TimeDetectorServiceTest {
             mTimeDetectorService.updateConfiguration(autoDetectDisabledConfiguration);
 
             verify(mMockContext).enforceCallingPermission(
-                    eq(android.Manifest.permission.MANAGE_TIME_AND_ZONE_DETECTION),
-                    anyString());
+                    eq(android.Manifest.permission.MANAGE_TIME_AND_ZONE_DETECTION), anyString());
             verify(mockListener, never()).onChange();
             verifyNoMoreInteractions(mockListenerBinder, mockListener, mMockContext);
             reset(mockListenerBinder, mockListener, mMockContext);
         }
     }
 
-    @Test(expected = SecurityException.class)
+    @Test
     public void testSuggestTelephonyTime_withoutPermission() {
         doThrow(new SecurityException("Mock"))
                 .when(mMockContext).enforceCallingPermission(anyString(), any());
         TelephonyTimeSuggestion timeSuggestion = createTelephonyTimeSuggestion();
 
-        try {
-            mTimeDetectorService.suggestTelephonyTime(timeSuggestion);
-            fail();
-        } finally {
-            verify(mMockContext).enforceCallingPermission(
-                    eq(android.Manifest.permission.SUGGEST_TELEPHONY_TIME_AND_ZONE),
-                    anyString());
-        }
+        assertThrows(SecurityException.class,
+                () -> mTimeDetectorService.suggestTelephonyTime(timeSuggestion));
+        verify(mMockContext).enforceCallingPermission(
+                eq(android.Manifest.permission.SUGGEST_TELEPHONY_TIME_AND_ZONE), anyString());
     }
 
     @Test
@@ -277,118 +263,105 @@ public class TimeDetectorServiceTest {
         mTestHandler.assertTotalMessagesEnqueued(1);
 
         verify(mMockContext).enforceCallingPermission(
-                eq(android.Manifest.permission.SUGGEST_TELEPHONY_TIME_AND_ZONE),
-                anyString());
+                eq(android.Manifest.permission.SUGGEST_TELEPHONY_TIME_AND_ZONE), anyString());
 
         mTestHandler.waitForMessagesToBeProcessed();
-        mFakeTimeDetectorStrategy.verifySuggestTelephonyTimeCalled(timeSuggestion);
+        verify(mFakeTimeDetectorStrategySpy).suggestTelephonyTime(timeSuggestion);
     }
 
-    @Test(expected = SecurityException.class)
+    @Test
     public void testSuggestManualTime_withoutPermission() {
         doThrow(new SecurityException("Mock"))
-                .when(mMockContext).enforceCallingOrSelfPermission(anyString(), any());
+                .when(mMockContext).enforceCallingPermission(anyString(), any());
         ManualTimeSuggestion manualTimeSuggestion = createManualTimeSuggestion();
 
-        try {
-            mTimeDetectorService.suggestManualTime(manualTimeSuggestion);
-            fail();
-        } finally {
-            verify(mMockContext).enforceCallingOrSelfPermission(
-                    eq(android.Manifest.permission.SUGGEST_MANUAL_TIME_AND_ZONE),
-                    anyString());
-        }
+        assertThrows(SecurityException.class,
+                () -> mTimeDetectorService.suggestManualTime(manualTimeSuggestion));
+        verify(mMockContext).enforceCallingPermission(
+                eq(android.Manifest.permission.SUGGEST_MANUAL_TIME_AND_ZONE), anyString());
     }
 
     @Test
     public void testSuggestManualTime() throws Exception {
-        doNothing().when(mMockContext).enforceCallingOrSelfPermission(anyString(), any());
+        doNothing().when(mMockContext).enforceCallingPermission(anyString(), any());
 
         ManualTimeSuggestion manualTimeSuggestion = createManualTimeSuggestion();
 
         assertTrue(mTimeDetectorService.suggestManualTime(manualTimeSuggestion));
-        mFakeTimeDetectorStrategy.verifySuggestManualTimeCalled(
-                mTestCallerIdentityInjector.getCallingUserId(), manualTimeSuggestion);
+        int expectedUserId = mTestCallerIdentityInjector.getCallingUserId();
+        boolean expectedBypassUserPolicyChecks = false;
+        verify(mFakeTimeDetectorStrategySpy).suggestManualTime(
+                expectedUserId, manualTimeSuggestion, expectedBypassUserPolicyChecks);
 
-        verify(mMockContext).enforceCallingOrSelfPermission(
-                eq(android.Manifest.permission.SUGGEST_MANUAL_TIME_AND_ZONE),
-                anyString());
+        verify(mMockContext).enforceCallingPermission(
+                eq(android.Manifest.permission.SUGGEST_MANUAL_TIME_AND_ZONE), anyString());
 
     }
 
-    @Test(expected = SecurityException.class)
+    @Test
     public void testSuggestNetworkTime_withoutPermission() {
         doThrow(new SecurityException("Mock"))
-                .when(mMockContext).enforceCallingOrSelfPermission(anyString(), any());
+                .when(mMockContext).enforceCallingPermission(anyString(), any());
         NetworkTimeSuggestion networkTimeSuggestion = createNetworkTimeSuggestion();
 
-        try {
-            mTimeDetectorService.suggestNetworkTime(networkTimeSuggestion);
-            fail();
-        } finally {
-            verify(mMockContext).enforceCallingOrSelfPermission(
-                    eq(android.Manifest.permission.SET_TIME), anyString());
-        }
+        assertThrows(SecurityException.class,
+                () -> mTimeDetectorService.suggestNetworkTime(networkTimeSuggestion));
+        verify(mMockContext).enforceCallingPermission(
+                eq(android.Manifest.permission.SET_TIME), anyString());
     }
 
     @Test
     public void testSuggestNetworkTime() throws Exception {
-        doNothing().when(mMockContext).enforceCallingOrSelfPermission(anyString(), any());
+        doNothing().when(mMockContext).enforceCallingPermission(anyString(), any());
 
         NetworkTimeSuggestion networkTimeSuggestion = createNetworkTimeSuggestion();
         mTimeDetectorService.suggestNetworkTime(networkTimeSuggestion);
         mTestHandler.assertTotalMessagesEnqueued(1);
 
-        verify(mMockContext).enforceCallingOrSelfPermission(
+        verify(mMockContext).enforceCallingPermission(
                 eq(android.Manifest.permission.SET_TIME), anyString());
 
         mTestHandler.waitForMessagesToBeProcessed();
-        mFakeTimeDetectorStrategy.verifySuggestNetworkTimeCalled(networkTimeSuggestion);
+        verify(mFakeTimeDetectorStrategySpy).suggestNetworkTime(networkTimeSuggestion);
     }
 
-    @Test(expected = SecurityException.class)
+    @Test
     public void testSuggestGnssTime_withoutPermission() {
         doThrow(new SecurityException("Mock"))
-                .when(mMockContext).enforceCallingOrSelfPermission(anyString(), any());
+                .when(mMockContext).enforceCallingPermission(anyString(), any());
         GnssTimeSuggestion gnssTimeSuggestion = createGnssTimeSuggestion();
 
-        try {
-            mTimeDetectorService.suggestGnssTime(gnssTimeSuggestion);
-            fail();
-        } finally {
-            verify(mMockContext).enforceCallingOrSelfPermission(
-                    eq(android.Manifest.permission.SET_TIME), anyString());
-        }
+        assertThrows(SecurityException.class,
+                () -> mTimeDetectorService.suggestGnssTime(gnssTimeSuggestion));
+        verify(mMockContext).enforceCallingPermission(
+                eq(android.Manifest.permission.SET_TIME), anyString());
     }
 
     @Test
     public void testSuggestGnssTime() throws Exception {
-        doNothing().when(mMockContext).enforceCallingOrSelfPermission(anyString(), any());
+        doNothing().when(mMockContext).enforceCallingPermission(anyString(), any());
 
         GnssTimeSuggestion gnssTimeSuggestion = createGnssTimeSuggestion();
         mTimeDetectorService.suggestGnssTime(gnssTimeSuggestion);
         mTestHandler.assertTotalMessagesEnqueued(1);
 
-        verify(mMockContext).enforceCallingOrSelfPermission(
+        verify(mMockContext).enforceCallingPermission(
                 eq(android.Manifest.permission.SET_TIME), anyString());
 
         mTestHandler.waitForMessagesToBeProcessed();
-        mFakeTimeDetectorStrategy.verifySuggestGnssTimeCalled(gnssTimeSuggestion);
+        verify(mFakeTimeDetectorStrategySpy).suggestGnssTime(gnssTimeSuggestion);
     }
 
-    @Test(expected = SecurityException.class)
+    @Test
     public void testSuggestExternalTime_withoutPermission() {
         doThrow(new SecurityException("Mock"))
                 .when(mMockContext).enforceCallingPermission(anyString(), any());
         ExternalTimeSuggestion externalTimeSuggestion = createExternalTimeSuggestion();
 
-        try {
-            mTimeDetectorService.suggestExternalTime(externalTimeSuggestion);
-            fail();
-        } finally {
-            verify(mMockContext).enforceCallingPermission(
-                    eq(android.Manifest.permission.SUGGEST_EXTERNAL_TIME), anyString());
-        }
+        assertThrows(SecurityException.class,
+                () -> mTimeDetectorService.suggestExternalTime(externalTimeSuggestion));
+        verify(mMockContext).enforceCallingPermission(
+                eq(android.Manifest.permission.SUGGEST_EXTERNAL_TIME), anyString());
     }
 
     @Test
@@ -403,7 +376,7 @@ public class TimeDetectorServiceTest {
                 eq(android.Manifest.permission.SUGGEST_EXTERNAL_TIME), anyString());
 
         mTestHandler.waitForMessagesToBeProcessed();
-        mFakeTimeDetectorStrategy.verifySuggestExternalTimeCalled(externalTimeSuggestion);
+        verify(mFakeTimeDetectorStrategySpy).suggestExternalTime(externalTimeSuggestion);
     }
 
     @Test
@@ -424,6 +397,108 @@ public class TimeDetectorServiceTest {
     }
 
     @Test
+    public void testGetTimeState() {
+        doNothing().when(mMockContext).enforceCallingPermission(anyString(), any());
+        TimeState fakeState = new TimeState(new UnixEpochTime(12345L, 98765L), true);
+        mFakeTimeDetectorStrategySpy.setTimeState(fakeState);
+
+        TimeState actualState = mTimeDetectorService.getTimeState();
+
+        verify(mMockContext).enforceCallingPermission(
+                eq(android.Manifest.permission.MANAGE_TIME_AND_ZONE_DETECTION), anyString());
+        assertEquals(actualState, fakeState);
+    }
+
+    @Test
+    public void testGetTimeState_withoutPermission() {
+        doThrow(new SecurityException("Mock"))
+                .when(mMockContext).enforceCallingPermission(anyString(), any());
+
+        assertThrows(SecurityException.class, mTimeDetectorService::getTimeState);
+        verify(mMockContext).enforceCallingPermission(
+                eq(android.Manifest.permission.MANAGE_TIME_AND_ZONE_DETECTION), anyString());
+    }
+
+    @Test
+    public void testSetTimeState() {
+        doNothing().when(mMockContext).enforceCallingPermission(anyString(), any());
+
+        TimeState state = new TimeState(new UnixEpochTime(12345L, 98765L), true);
+        mTimeDetectorService.setTimeState(state);
+
+        verify(mMockContext).enforceCallingPermission(
+                eq(android.Manifest.permission.MANAGE_TIME_AND_ZONE_DETECTION), anyString());
+        assertEquals(mFakeTimeDetectorStrategySpy.getTimeState(), state);
+    }
+
+    @Test
+    public void testSetTimeState_withoutPermission() {
+        doThrow(new SecurityException("Mock"))
+                .when(mMockContext).enforceCallingPermission(anyString(), any());
+
+        TimeState state = new TimeState(new UnixEpochTime(12345L, 98765L), true);
+        assertThrows(SecurityException.class, () -> mTimeDetectorService.setTimeState(state));
+        verify(mMockContext).enforceCallingPermission(
+                eq(android.Manifest.permission.MANAGE_TIME_AND_ZONE_DETECTION), anyString());
+    }
+
+    @Test
+    public void testConfirmTime() {
+        doNothing().when(mMockContext).enforceCallingPermission(anyString(), any());
+
+        UnixEpochTime confirmationTime = new UnixEpochTime(12345L, 98765L);
+        // The fake strategy always returns false.
+        assertFalse(mTimeDetectorService.confirmTime(confirmationTime));
+
+        verify(mMockContext).enforceCallingPermission(
+                eq(android.Manifest.permission.MANAGE_TIME_AND_ZONE_DETECTION), anyString());
+        verify(mFakeTimeDetectorStrategySpy).confirmTime(confirmationTime);
+    }
+
+    @Test
+    public void testConfirmTime_withoutPermission() {
+        doThrow(new SecurityException("Mock"))
+                .when(mMockContext).enforceCallingPermission(anyString(), any());
+
+        assertThrows(SecurityException.class,
+                () -> mTimeDetectorService.confirmTime(new UnixEpochTime(12345L, 98765L)));
+        verify(mMockContext).enforceCallingPermission(
+                eq(android.Manifest.permission.MANAGE_TIME_AND_ZONE_DETECTION), anyString());
+    }
+
+    @Test
+    public void testSetManualTime() {
+        doNothing().when(mMockContext).enforceCallingPermission(anyString(), any());
+
+        ManualTimeSuggestion timeSuggestion = createManualTimeSuggestion();
+
+        boolean expectedResult = true; // The test strategy always returns true.
+        assertEquals(expectedResult,
+                mTimeDetectorService.setManualTime(timeSuggestion));
+
+        // The service calls "suggestManualTime()" because the logic is the same.
+        int expectedUserId = mTestCallerIdentityInjector.getCallingUserId();
+        boolean expectedBypassUserPolicyChecks = false;
+        verify(mFakeTimeDetectorStrategySpy).suggestManualTime(
+                expectedUserId, timeSuggestion, expectedBypassUserPolicyChecks);
+
+        verify(mMockContext).enforceCallingPermission(
+                eq(android.Manifest.permission.MANAGE_TIME_AND_ZONE_DETECTION), anyString());
+    }
+
+    @Test
+    public void testSetManualTime_withoutPermission() {
+        doThrow(new SecurityException("Mock"))
+                .when(mMockContext).enforceCallingPermission(anyString(), any());
+        ManualTimeSuggestion timeSuggestion = createManualTimeSuggestion();
+
+        assertThrows(SecurityException.class,
+                () -> mTimeDetectorService.setManualTime(timeSuggestion));
+        verify(mMockContext).enforceCallingPermission(
+                eq(android.Manifest.permission.MANAGE_TIME_AND_ZONE_DETECTION), anyString());
+    }
+
+    @Test
     public void testDump() {
         when(mMockContext.checkCallingOrSelfPermission(android.Manifest.permission.DUMP))
                 .thenReturn(PackageManager.PERMISSION_GRANTED);
@@ -432,7 +507,7 @@ public class TimeDetectorServiceTest {
         mTimeDetectorService.dump(null, pw, null);
 
         verify(mMockContext).checkCallingOrSelfPermission(eq(android.Manifest.permission.DUMP));
-        mFakeTimeDetectorStrategy.verifyDumpCalled();
+        verify(mFakeTimeDetectorStrategySpy).dump(any(), any());
     }
 
     private static TimeConfiguration createTimeConfiguration(boolean autoDetectionEnabled) {
@@ -441,7 +516,7 @@ public class TimeDetectorServiceTest {
                 .build();
     }
 
-    private static ConfigurationInternal createConfigurationInternal(boolean autoDetectionEnabled) {
+    static ConfigurationInternal createConfigurationInternal(boolean autoDetectionEnabled) {
         return new ConfigurationInternal.Builder(ARBITRARY_USER_ID)
                 .setUserConfigAllowed(true)
                 .setAutoDetectionSupported(true)
@@ -456,24 +531,24 @@ public class TimeDetectorServiceTest {
 
     private static TelephonyTimeSuggestion createTelephonyTimeSuggestion() {
         int slotIndex = 1234;
-        TimestampedValue<Long> timeValue = new TimestampedValue<>(100L, 1_000_000L);
+        UnixEpochTime timeValue = new UnixEpochTime(100L, 1_000_000L);
         return new TelephonyTimeSuggestion.Builder(slotIndex)
                 .setUnixEpochTime(timeValue)
                 .build();
     }
 
     private static ManualTimeSuggestion createManualTimeSuggestion() {
-        TimestampedValue<Long> timeValue = new TimestampedValue<>(100L, 1_000_000L);
+        UnixEpochTime timeValue = new UnixEpochTime(100L, 1_000_000L);
         return new ManualTimeSuggestion(timeValue);
     }
 
     private static NetworkTimeSuggestion createNetworkTimeSuggestion() {
-        TimestampedValue<Long> timeValue = new TimestampedValue<>(100L, 1_000_000L);
+        UnixEpochTime timeValue = new UnixEpochTime(100L, 1_000_000L);
         return new NetworkTimeSuggestion(timeValue, 123);
     }
 
     private static GnssTimeSuggestion createGnssTimeSuggestion() {
-        TimestampedValue<Long> timeValue = new TimestampedValue<>(100L, 1_000_000L);
+        UnixEpochTime timeValue = new UnixEpochTime(100L, 1_000_000L);
         return new GnssTimeSuggestion(timeValue);
     }
 

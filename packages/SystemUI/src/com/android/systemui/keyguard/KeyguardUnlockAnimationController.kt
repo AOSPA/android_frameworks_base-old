@@ -285,6 +285,14 @@ class KeyguardUnlockAnimationController @Inject constructor(
     var willUnlockWithInWindowLauncherAnimations: Boolean = false
 
     /**
+     * Whether we called [ILauncherUnlockAnimationController.prepareForUnlock], but have not yet
+     * called [ILauncherUnlockAnimationController.playUnlockAnimation]. This is used exclusively for
+     * logging purposes to help track down bugs where the Launcher surface is prepared for unlock
+     * but then never animated.
+     */
+    private var launcherPreparedForUnlock = false
+
+    /**
      * Whether we decided in [prepareForInWindowLauncherAnimations] that we are able to and want to
      * play the smartspace shared element animation. If true,
      * [willUnlockWithInWindowLauncherAnimations] will also always be true since in-window
@@ -376,6 +384,20 @@ class KeyguardUnlockAnimationController @Inject constructor(
     }
 
     /**
+     * Logging helper to log the conditions under which we decide to perform the in-window
+     * animations. This is used if we prepare to unlock but then somehow decide later to not play
+     * the animation, which would leave Launcher in a bad state.
+     */
+    private fun logInWindowAnimationConditions() {
+        Log.wtf(TAG, "canPerformInWindowLauncherAnimations expected all of these to be true: ")
+        Log.wtf(TAG, "  isNexusLauncherUnderneath: ${isNexusLauncherUnderneath()}")
+        Log.wtf(TAG, "  !notificationShadeWindowController.isLaunchingActivity: " +
+                "${!notificationShadeWindowController.isLaunchingActivity}")
+        Log.wtf(TAG, "  launcherUnlockController != null: ${launcherUnlockController != null}")
+        Log.wtf(TAG, "  !isFoldable(context): ${!isFoldable(context)}")
+    }
+
+    /**
      * Called from [KeyguardStateController] to let us know that the keyguard going away state has
      * changed.
      */
@@ -383,6 +405,15 @@ class KeyguardUnlockAnimationController @Inject constructor(
         if (keyguardStateController.isKeyguardGoingAway &&
                 !statusBarStateController.leaveOpenOnKeyguardHide()) {
             prepareForInWindowLauncherAnimations()
+        }
+
+        // If the keyguard is no longer going away and we were unlocking with in-window animations,
+        // make sure that we've left the launcher at 100% unlocked. This is a fail-safe to prevent
+        // against "tiny launcher" and similar states where the launcher is left in the prepared to
+        // animate state.
+        if (!keyguardStateController.isKeyguardGoingAway &&
+                willUnlockWithInWindowLauncherAnimations) {
+            launcherUnlockController?.setUnlockAmount(1f, true /* forceIfAnimating */)
         }
     }
 
@@ -437,6 +468,8 @@ class KeyguardUnlockAnimationController @Inject constructor(
                 lockscreenSmartspaceBounds, /* lockscreenSmartspaceBounds */
                 selectedPage /* selectedPage */
             )
+
+            launcherPreparedForUnlock = true
         } catch (e: RemoteException) {
             Log.e(TAG, "Remote exception in prepareForInWindowUnlockAnimations.", e)
         }
@@ -495,6 +528,8 @@ class KeyguardUnlockAnimationController @Inject constructor(
                         true,
                         UNLOCK_ANIMATION_DURATION_MS + CANNED_UNLOCK_START_DELAY,
                         0 /* startDelay */)
+
+                launcherPreparedForUnlock = false
             } else {
                 // Otherwise, we're swiping in an app and should just fade it in. The swipe gesture
                 // will translate it until the end of the swipe gesture.
@@ -554,6 +589,12 @@ class KeyguardUnlockAnimationController @Inject constructor(
                 surfaceBehindEntryAnimator.start()
             }
         }
+
+        if (launcherPreparedForUnlock && !willUnlockWithInWindowLauncherAnimations) {
+            Log.wtf(TAG, "Launcher is prepared for unlock, so we should have started the " +
+                    "in-window animation, however we apparently did not.")
+            logInWindowAnimationConditions()
+        }
     }
 
     /**
@@ -568,6 +609,8 @@ class KeyguardUnlockAnimationController @Inject constructor(
             true /* unlocked */,
             LAUNCHER_ICONS_ANIMATION_DURATION_MS /* duration */,
             CANNED_UNLOCK_START_DELAY /* startDelay */)
+
+        launcherPreparedForUnlock = false
 
         // Now that the Launcher surface (with its smartspace positioned identically to ours) is
         // visible, hide our smartspace.
@@ -619,7 +662,7 @@ class KeyguardUnlockAnimationController @Inject constructor(
     }
 
     override fun onKeyguardDismissAmountChanged() {
-        if (keyguardViewController.isShowing && !playingCannedUnlockAnimation) {
+        if (keyguardStateController.isShowing && !playingCannedUnlockAnimation) {
             showOrHideSurfaceIfDismissAmountThresholdsReached()
 
             // If the surface is visible or it's about to be, start updating its appearance to
@@ -678,7 +721,7 @@ class KeyguardUnlockAnimationController @Inject constructor(
      */
     private fun finishKeyguardExitRemoteAnimationIfReachThreshold() {
         // no-op if keyguard is not showing or animation is not enabled.
-        if (!keyguardViewController.isShowing) {
+        if (!keyguardStateController.isShowing) {
             return
         }
 
@@ -801,7 +844,7 @@ class KeyguardUnlockAnimationController @Inject constructor(
      * animation.
      */
     fun hideKeyguardViewAfterRemoteAnimation() {
-        if (keyguardViewController.isShowing) {
+        if (keyguardStateController.isShowing) {
             // Hide the keyguard, with no fade out since we animated it away during the unlock.
 
             keyguardViewController.hide(

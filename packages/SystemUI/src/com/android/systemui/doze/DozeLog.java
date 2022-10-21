@@ -280,8 +280,8 @@ public class DozeLog implements Dumpable {
     /**
      * Appends pulse dropped event to logs
      */
-    public void tracePulseDropped(boolean pulsePending, DozeMachine.State state, boolean blocked) {
-        mLogger.logPulseDropped(pulsePending, state, blocked);
+    public void tracePulseDropped(String from, DozeMachine.State state) {
+        mLogger.logPulseDropped(from, state);
     }
 
     /**
@@ -289,6 +289,13 @@ public class DozeLog implements Dumpable {
      */
     public void traceSensorEventDropped(int sensorEvent, String reason) {
         mLogger.logSensorEventDropped(sensorEvent, reason);
+    }
+
+    /**
+     * Appends pulsing event to logs.
+     */
+    public void tracePulseEvent(String pulseEvent, boolean dozing, int pulseReason) {
+        mLogger.logPulseEvent(pulseEvent, dozing, DozeLog.reasonToString(pulseReason));
     }
 
     /**
@@ -424,8 +431,8 @@ public class DozeLog implements Dumpable {
         }
 
         @Override
-        public void onKeyguardVisibilityChanged(boolean showing) {
-            traceKeyguard(showing);
+        public void onKeyguardVisibilityChanged(boolean visible) {
+            traceKeyguard(visible);
         }
     };
 

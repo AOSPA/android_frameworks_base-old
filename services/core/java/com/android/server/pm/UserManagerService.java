@@ -88,8 +88,6 @@ import android.os.UserManager.QuietModeFlag;
 import android.os.storage.StorageManager;
 import android.os.storage.StorageManagerInternal;
 import android.provider.Settings;
-import android.security.GateKeeper;
-import android.service.gatekeeper.IGateKeeperService;
 import android.service.voice.VoiceInteractionManagerInternal;
 import android.stats.devicepolicy.DevicePolicyEnums;
 import android.text.TextUtils;
@@ -4664,6 +4662,10 @@ public class UserManagerService extends IUserManager.Stub {
                     StorageManager.FLAG_STORAGE_DE | StorageManager.FLAG_STORAGE_CE);
             t.traceEnd();
 
+            t.traceBegin("LSS.createNewUser");
+            mLockPatternUtils.createNewUser(userId, userInfo.serialNumber);
+            t.traceEnd();
+
             final Set<String> userTypeInstallablePackages =
                     mSystemPackageInstaller.getInstallablePackagesForUserType(userType);
             t.traceBegin("PM.createNewUser");
@@ -5199,8 +5201,9 @@ public class UserManagerService extends IUserManager.Stub {
     }
 
     /**
-     * Removes a user and all data directories created for that user. This method should be called
-     * after the user's processes have been terminated.
+     * Removes a user and its profiles along with all data directories created for that user
+     * and its profile.
+     * This method should be called after the user's processes have been terminated.
      * @param userId the user's id
      */
     @Override
@@ -5213,13 +5216,52 @@ public class UserManagerService extends IUserManager.Stub {
             Slog.w(LOG_TAG, "Cannot remove user. " + restriction + " is enabled.");
             return false;
         }
+        return removeUserWithProfilesUnchecked(userId);
+    }
+
+    private boolean removeUserWithProfilesUnchecked(@UserIdInt int userId) {
+        UserInfo userInfo = getUserInfoNoChecks(userId);
+
+        if (userInfo == null) {
+            Slog.e(LOG_TAG, TextUtils.formatSimple(
+                    "Cannot remove user %d, invalid user id provided.", userId));
+            return false;
+        }
+
+        if (!userInfo.isProfile()) {
+            int[] profileIds = getProfileIds(userId, false);
+            for (int profileId : profileIds) {
+                if (profileId == userId) {
+                    //Remove the associated profiles first and then remove the user
+                    continue;
+                }
+                Slog.i(LOG_TAG, "removing profile:" + profileId
+                        + "associated with user:" + userId);
+                if (!removeUserUnchecked(profileId)) {
+                    // If the profile was not immediately removed, make sure it is marked as
+                    // ephemeral. Don't mark as disabled since, per UserInfo.FLAG_DISABLED
+                    // documentation, an ephemeral user should only be marked as disabled
+                    // when its removal is in progress.
+                    Slog.i(LOG_TAG, "Unable to immediately remove profile " + profileId
+                            + "associated with user " + userId + ". User is set as ephemeral "
+                            + "and will be removed on user switch or reboot.");
+                    synchronized (mPackagesLock) {
+                        UserData profileData = getUserDataNoChecks(userId);
+                        profileData.info.flags |= UserInfo.FLAG_EPHEMERAL;
+
+                        writeUserLP(profileData);
+                    }
+                }
+            }
+        }
+
         return removeUserUnchecked(userId);
     }
 
     @Override
     public boolean removeUserEvenWhenDisallowed(@UserIdInt int userId) {
         checkCreateUsersPermission("Only the system can remove users");
-        return removeUserUnchecked(userId);
+        return removeUserWithProfilesUnchecked(userId);
     }
 
     /**
@@ -5255,13 +5297,13 @@ public class UserManagerService extends IUserManager.Stub {
                     }
 
                     if (userData == null) {
-                        Slog.e(LOG_TAG, String.format(
+                        Slog.e(LOG_TAG, TextUtils.formatSimple(
                                 "Cannot remove user %d, invalid user id provided.", userId));
                         return false;
                     }
 
                     if (mRemovingUserIds.get(userId)) {
-                        Slog.e(LOG_TAG, String.format(
+                        Slog.e(LOG_TAG, TextUtils.formatSimple(
                                 "User %d is already scheduled for removal.", userId));
                         return false;
                     }
@@ -5372,7 +5414,7 @@ public class UserManagerService extends IUserManager.Stub {
                 final int currentUser = getCurrentUserId();
                 if (currentUser != userId) {
                     // Attempt to remove the user. This will fail if the user is the current user
-                    if (removeUserUnchecked(userId)) {
+                    if (removeUserWithProfilesUnchecked(userId)) {
                         return UserManager.REMOVE_RESULT_REMOVED;
                     }
                 }
@@ -5460,15 +5502,8 @@ public class UserManagerService extends IUserManager.Stub {
             Slog.i(LOG_TAG, "Destroying key for user " + userId + " failed, continuing anyway", e);
         }
 
-        // Cleanup gatekeeper secure user id
-        try {
-            final IGateKeeperService gk = GateKeeper.getService();
-            if (gk != null) {
-                gk.clearSecureUserId(userId);
-            }
-        } catch (Exception ex) {
-            Slog.w(LOG_TAG, "unable to clear GK secure user id");
-        }
+        // Cleanup lock settings
+        mLockPatternUtils.removeUser(userId);
 
         // Cleanup package manager settings
         mPm.cleanUpUser(this, userId);
@@ -6618,7 +6653,7 @@ public class UserManagerService extends IUserManager.Stub {
 
         @Override
         public boolean removeUserEvenWhenDisallowed(@UserIdInt int userId) {
-            return removeUserUnchecked(userId);
+            return removeUserWithProfilesUnchecked(userId);
         }
 
         @Override
@@ -6662,6 +6697,13 @@ public class UserManagerService extends IUserManager.Stub {
                 boolean excludePreCreated) {
             return UserManagerService.this.getUsersInternal(excludePartial, excludeDying,
                     excludePreCreated);
+        }
+
+        @Override
+        public @NonNull int[] getProfileIds(@UserIdInt int userId, boolean enabledOnly) {
+            synchronized (mUsersLock) {
+                return getProfileIdsLU(userId, null /* userType */, enabledOnly).toArray();
+            }
         }
 
         @Override

@@ -43,7 +43,7 @@ public class LogModule {
     @SysUISingleton
     @DozeLog
     public static LogBuffer provideDozeLogBuffer(LogBufferFactory factory) {
-        return factory.create("DozeLog", 100);
+        return factory.create("DozeLog", 120);
     }
 
     /** Provides a logging buffer for all logs related to the data layer of notifications. */
@@ -322,7 +322,7 @@ public class LogModule {
     @SysUISingleton
     @KeyguardUpdateMonitorLog
     public static LogBuffer provideKeyguardUpdateMonitorLogBuffer(LogBufferFactory factory) {
-        return factory.create("KeyguardUpdateMonitorLog", 200);
+        return factory.create("KeyguardUpdateMonitorLog", 400);
     }
 
     /**
@@ -333,5 +333,25 @@ public class LogModule {
     @BluetoothLog
     public static LogBuffer providerBluetoothLogBuffer(LogBufferFactory factory) {
         return factory.create("BluetoothLog", 50);
+    }
+
+    /**
+     * Provides a {@link LogBuffer} for Udfps logs.
+     */
+    @Provides
+    @SysUISingleton
+    @UdfpsLog
+    public static LogBuffer provideUdfpsLogBuffer(LogBufferFactory factory) {
+        return factory.create("UdfpsLog", 1000);
+    }
+
+    /**
+     * Provides a {@link LogBuffer} for general keyguard-related logs.
+     */
+    @Provides
+    @SysUISingleton
+    @KeyguardLog
+    public static LogBuffer provideKeyguardLogBuffer(LogBufferFactory factory) {
+        return factory.create("KeyguardLog", 250);
     }
 }

@@ -27,7 +27,6 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Until
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
-import com.android.server.wm.flicker.annotation.Group4
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -39,12 +38,13 @@ import org.junit.runners.Parameterized
  * To run this test: `atest WMShellFlickerTests:DismissBubbleScreen`
  *
  * Actions:
+ * ```
  *     Dismiss a bubble notification
+ * ```
  */
 @RequiresDevice
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
-@Group4
 open class DismissBubbleScreen(testSpec: FlickerTestParameter) : BaseBubbleScreen(testSpec) {
 
     private val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -60,11 +60,11 @@ open class DismissBubbleScreen(testSpec: FlickerTestParameter) : BaseBubbleScree
             transitions {
                 wm.run { wm.defaultDisplay.getMetrics(displaySize) }
                 val dist = Point((displaySize.widthPixels / 2), displaySize.heightPixels)
-                val showBubble = device.wait(
-                    Until.findObject(
-                        By.res(SYSTEM_UI_PACKAGE, BUBBLE_RES_NAME)
-                    ), FIND_OBJECT_TIMEOUT
-                )
+                val showBubble =
+                    device.wait(
+                        Until.findObject(By.res(SYSTEM_UI_PACKAGE, BUBBLE_RES_NAME)),
+                        FIND_OBJECT_TIMEOUT
+                    )
                 showBubble?.run { drag(dist, 1000) } ?: error("Show bubble not found")
             }
         }
@@ -72,22 +72,18 @@ open class DismissBubbleScreen(testSpec: FlickerTestParameter) : BaseBubbleScree
     @Presubmit
     @Test
     open fun testAppIsAlwaysVisible() {
-        testSpec.assertLayers {
-            this.isVisible(testApp)
-        }
+        testSpec.assertLayers { this.isVisible(testApp) }
     }
 
     /** {@inheritDoc} */
     @Postsubmit
     @Test
-    override fun taskBarLayerIsVisibleAtStartAndEnd() =
-        super.taskBarLayerIsVisibleAtStartAndEnd()
+    override fun taskBarLayerIsVisibleAtStartAndEnd() = super.taskBarLayerIsVisibleAtStartAndEnd()
 
     /** {@inheritDoc} */
     @Postsubmit
     @Test
-    override fun taskBarWindowIsAlwaysVisible() =
-        super.taskBarWindowIsAlwaysVisible()
+    override fun taskBarWindowIsAlwaysVisible() = super.taskBarWindowIsAlwaysVisible()
 
     /** {@inheritDoc} */
     @Postsubmit

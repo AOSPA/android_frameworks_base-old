@@ -55,6 +55,7 @@ import android.app.ActivityManagerInternal;
 import android.app.AppOpsManager;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.companion.AssociatedDevice;
 import android.companion.AssociationInfo;
 import android.companion.AssociationRequest;
 import android.companion.DeviceNotAssociatedException;
@@ -549,6 +550,18 @@ public class CompanionDeviceManagerService extends SystemService {
         }
 
         @Override
+        public PendingIntent buildAssociationCancellationIntent(String packageName,
+                int userId) throws RemoteException {
+            Slog.i(TAG, "buildAssociationCancellationIntent() "
+                    + "package=u" + userId + "/" + packageName);
+            enforceCallerCanManageAssociationsForPackage(getContext(), userId, packageName,
+                    "build association cancellation intent");
+
+            return mAssociationRequestsProcessor.buildAssociationCancellationIntent(
+                    packageName, userId);
+        }
+
+        @Override
         public List<AssociationInfo> getAssociations(String packageName, int userId) {
             enforceCallerCanManageAssociationsForPackage(getContext(), userId, packageName,
                     "get associations");
@@ -860,23 +873,25 @@ public class CompanionDeviceManagerService extends SystemService {
 
     /**
      * @deprecated use
-     * {@link #createAssociation(int, String, MacAddress, CharSequence, String, boolean)}
+     * {@link #createAssociation(int, String, MacAddress, CharSequence, String, AssociatedDevice,
+     * boolean)}
      */
     @Deprecated
     void legacyCreateAssociation(@UserIdInt int userId, @NonNull String deviceMacAddress,
             @NonNull String packageName, @Nullable String deviceProfile) {
         final MacAddress macAddress = MacAddress.fromString(deviceMacAddress);
-        createAssociation(userId, packageName, macAddress, null, deviceProfile, false);
+        createAssociation(userId, packageName, macAddress, null, deviceProfile, null, false);
     }
 
     AssociationInfo createAssociation(@UserIdInt int userId, @NonNull String packageName,
             @Nullable MacAddress macAddress, @Nullable CharSequence displayName,
-            @Nullable String deviceProfile, boolean selfManaged) {
+            @Nullable String deviceProfile, @Nullable AssociatedDevice associatedDevice,
+            boolean selfManaged) {
         final int id = getNewAssociationIdForPackage(userId, packageName);
         final long timestamp = System.currentTimeMillis();
 
         final AssociationInfo association = new AssociationInfo(id, userId, packageName,
-                macAddress, displayName, deviceProfile, selfManaged,
+                macAddress, displayName, deviceProfile, associatedDevice, selfManaged,
                 /* notifyOnDeviceNearby */ false, /* revoked */ false, timestamp, Long.MAX_VALUE);
         Slog.i(TAG, "New CDM association created=" + association);
         mAssociationStore.addAssociation(association);
@@ -1163,6 +1178,9 @@ public class CompanionDeviceManagerService extends SystemService {
     }
 
     private void updateSpecialAccessPermissionAsSystem(PackageInfo packageInfo) {
+        if (packageInfo == null) {
+            return;
+        }
         if (containsEither(packageInfo.requestedPermissions,
                 android.Manifest.permission.RUN_IN_BACKGROUND,
                 android.Manifest.permission.REQUEST_COMPANION_RUN_IN_BACKGROUND)) {

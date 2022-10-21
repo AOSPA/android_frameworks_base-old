@@ -36,8 +36,10 @@ import static com.android.internal.inputmethod.StartInputReason.BOUND_TO_IMMS;
 import static com.android.internal.inputmethod.StartInputReason.WINDOW_FOCUS_GAIN_REPORT_WITHOUT_CONNECTION;
 import static com.android.internal.inputmethod.StartInputReason.WINDOW_FOCUS_GAIN_REPORT_WITH_CONNECTION;
 
+import android.Manifest;
 import android.annotation.DisplayContext;
 import android.annotation.DrawableRes;
+import android.annotation.DurationMillisLong;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresFeature;
@@ -108,7 +110,6 @@ import com.android.internal.inputmethod.ImeTracing;
 import com.android.internal.inputmethod.InputBindResult;
 import com.android.internal.inputmethod.InputMethodDebug;
 import com.android.internal.inputmethod.InputMethodPrivilegedOperationsRegistry;
-import com.android.internal.inputmethod.RemoteInputConnectionImpl;
 import com.android.internal.inputmethod.SoftInputShowHideReason;
 import com.android.internal.inputmethod.StartInputFlags;
 import com.android.internal.inputmethod.StartInputReason;
@@ -267,6 +268,12 @@ import java.util.function.Consumer;
  * they can switch to it, to confirm with the system that they know about it
  * and want to make it available for use.</p>
  * </ul>
+ *
+ * <p>If your app targets Android 11 (API level 30) or higher, the methods in
+ * this class each return a filtered result by the rules of
+ * <a href="/training/basics/intents/package-visibility">package visibility</a>,
+ * except for the currently connected IME. Apps having a query for the
+ * {@link InputMethod#SERVICE_INTERFACE} see all IMEs.</p>
  */
 @SystemService(Context.INPUT_METHOD_SERVICE)
 @RequiresFeature(PackageManager.FEATURE_INPUT_METHODS)
@@ -556,7 +563,10 @@ public final class InputMethodManager {
      */
     @Deprecated
     @GuardedBy("mH")
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(trackingBug = 236937383,
+            maxTargetSdk = Build.VERSION_CODES.UPSIDE_DOWN_CAKE,
+            publicAlternatives = "Apps should not change behavior based on the currently connected"
+                    + " IME. If absolutely needed, use {@link InputMethodInfo#getId()} instead.")
     String mCurId;
 
     /**
@@ -567,7 +577,9 @@ public final class InputMethodManager {
     @Deprecated
     @GuardedBy("mH")
     @Nullable
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(trackingBug = 236937383,
+            maxTargetSdk = Build.VERSION_CODES.UPSIDE_DOWN_CAKE,
+            publicAlternatives = "Use methods on {@link InputMethodManager} instead.")
     IInputMethodSession mCurMethod;
 
     /**
@@ -738,15 +750,8 @@ public final class InputMethodManager {
             if (IME_BOOST_ENABLED == true && mPerfBoost != null) {
                 mPerfBoost.perfEvent(BoostFramework.VENDOR_HINT_IME_LAUNCH_EVENT, null);
             }
-
-            synchronized (mH) {
-                mCurrentEditorInfo = null;
-                mCompletions = null;
-                mServedConnecting = true;
-            }
-            return startInputInner(startInputReason,
-                    focusedView != null ? focusedView.getWindowToken() : null, startInputFlags,
-                    softInputMode, windowFlags);
+            return startInputOnWindowFocusGainInternal(startInputReason, focusedView,
+                    startInputFlags, softInputMode, windowFlags);
         }
 
         /**
@@ -821,7 +826,7 @@ public final class InputMethodManager {
                 // should be done in conjunction with telling the system service
                 // about the window gaining focus, to help make the transition
                 // smooth.
-                if (startInput(StartInputReason.WINDOW_FOCUS_GAIN,
+                if (startInputOnWindowFocusGainInternal(StartInputReason.WINDOW_FOCUS_GAIN,
                         focusedView, startInputFlags, softInputMode, windowFlags)) {
                     return;
                 }
@@ -943,6 +948,19 @@ public final class InputMethodManager {
                     && mServedInputConnection.isActive()
                     && mServedInputConnection.getServedView() == view;
         }
+    }
+
+    private boolean startInputOnWindowFocusGainInternal(@StartInputReason int startInputReason,
+            View focusedView, @StartInputFlags int startInputFlags,
+            @SoftInputModeFlags int softInputMode, int windowFlags) {
+        synchronized (mH) {
+            mCurrentEditorInfo = null;
+            mCompletions = null;
+            mServedConnecting = true;
+        }
+        return startInputInner(startInputReason,
+                focusedView != null ? focusedView.getWindowToken() : null, startInputFlags,
+                softInputMode, windowFlags);
     }
 
     @GuardedBy("mH")
@@ -1157,7 +1175,7 @@ public final class InputMethodManager {
                                     .checkFocus(mRestartOnNextWindowFocus, false)) {
                                 final int reason = active ? StartInputReason.ACTIVATED_BY_IMMS
                                         : StartInputReason.DEACTIVATED_BY_IMMS;
-                                mDelegate.startInput(reason, null, 0, 0, 0);
+                                startInputOnWindowFocusGainInternal(reason, null, 0, 0, 0);
                             }
                         }
                     }
@@ -1598,16 +1616,16 @@ public final class InputMethodManager {
      *
      * @param imi The {@link InputMethodInfo} whose subtypes list will be returned. If {@code null},
      * returns enabled subtypes for the currently selected {@link InputMethodInfo}.
-     * @param allowsImplicitlySelectedSubtypes A boolean flag to allow to return the implicitly
-     * selected subtypes. If an input method info doesn't have enabled subtypes, the framework
+     * @param allowsImplicitlyEnabledSubtypes A boolean flag to allow to return the implicitly
+     * enabled subtypes. If an input method info doesn't have enabled subtypes, the framework
      * will implicitly enable subtypes according to the current system language.
      */
     @NonNull
     public List<InputMethodSubtype> getEnabledInputMethodSubtypeList(@Nullable InputMethodInfo imi,
-            boolean allowsImplicitlySelectedSubtypes) {
+            boolean allowsImplicitlyEnabledSubtypes) {
         return mServiceInvoker.getEnabledInputMethodSubtypeList(
                 imi == null ? null : imi.getId(),
-                allowsImplicitlySelectedSubtypes,
+                allowsImplicitlyEnabledSubtypes,
                 UserHandle.myUserId());
     }
 
@@ -2378,7 +2396,7 @@ public final class InputMethodManager {
             // The view is running on a different thread than our own, so
             // we need to reschedule our work for over there.
             if (DEBUG) Log.v(TAG, "Starting input: reschedule to view thread");
-            vh.post(() -> mDelegate.startInput(startInputReason, null, 0, 0, 0));
+            vh.post(() -> startInputOnWindowFocusGainInternal(startInputReason, null, 0, 0, 0));
             return false;
         }
 
@@ -2592,6 +2610,20 @@ public final class InputMethodManager {
     public void addVirtualStylusIdForTestSession() {
         synchronized (mH) {
             mServiceInvoker.addVirtualStylusIdForTestSession(mClient);
+        }
+    }
+
+    /**
+     * Set a stylus idle-timeout after which handwriting {@code InkWindow} will be removed.
+     * <p> This API is for tests only.</p>
+     * @param timeout to set in milliseconds. To reset to default, use a value <= zero.
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.TEST_INPUT_METHOD)
+    @TestApi
+    public void setStylusWindowIdleTimeoutForTest(@DurationMillisLong long timeout) {
+        synchronized (mH) {
+            mServiceInvoker.setStylusWindowIdleTimeoutForTest(mClient, timeout);
         }
     }
 
@@ -3650,6 +3682,56 @@ public final class InputMethodManager {
     public void setAdditionalInputMethodSubtypes(@NonNull String imiId,
             @NonNull InputMethodSubtype[] subtypes) {
         mServiceInvoker.setAdditionalInputMethodSubtypes(imiId, subtypes, UserHandle.myUserId());
+    }
+
+    /**
+     * Updates the list of explicitly enabled {@link InputMethodSubtype} for a given IME owned by
+     * the calling process.
+     *
+     * <p>By default each IME has no explicitly enabled {@link InputMethodSubtype}.  In this state
+     * the system will decide what {@link InputMethodSubtype} should be enabled by using information
+     * available at runtime as per-user language settings.  Users can, however, manually pick up one
+     * or more {@link InputMethodSubtype} to be enabled on an Activity shown by
+     * {@link #showInputMethodAndSubtypeEnabler(String)}. Such a manual change is stored in
+     * {@link Settings.Secure#ENABLED_INPUT_METHODS} so that the change can persist across reboots.
+     * {@link Settings.Secure#ENABLED_INPUT_METHODS} stores {@link InputMethodSubtype#hashCode()} as
+     * the identifier of {@link InputMethodSubtype} for historical reasons.</p>
+     *
+     * <p>This API provides a safe and managed way for IME developers to modify what
+     * {@link InputMethodSubtype} are referenced in {@link Settings.Secure#ENABLED_INPUT_METHODS}
+     * for their own IME.  One use case is when IME developers want to use their own Activity for
+     * users to pick up {@link InputMethodSubtype}. Another use case is for IME developers to fix up
+     * any stale and/or invalid value stored in {@link Settings.Secure#ENABLED_INPUT_METHODS}
+     * without bothering users. Passing an empty {@code subtypeHashCodes} is guaranteed to reset
+     * the state to default.</p>
+     *
+     * <h3>To control the return value of {@link InputMethodSubtype#hashCode()}</h3>
+     * <p>{@link android.R.attr#subtypeId} and {@link
+     * android.view.inputmethod.InputMethodSubtype.InputMethodSubtypeBuilder#setSubtypeId(int)} are
+     * available for IME developers to control the return value of
+     * {@link InputMethodSubtype#hashCode()}. Beware that {@code -1} is not a valid value of
+     * {@link InputMethodSubtype#hashCode()} for historical reasons.</p>
+     *
+     * <h3>Note for Direct Boot support</h3>
+     * <p>While IME developers can call this API even before
+     * {@link android.os.UserManager#isUserUnlocked()} becomes {@code true}, such a change is
+     * volatile thus remains effective only until {@link android.os.UserManager#isUserUnlocked()}
+     * becomes {@code true} or the device is rebooted. To make the change persistent IME developers
+     * need to call this API again after receiving {@link Intent#ACTION_USER_UNLOCKED}.</p>
+     *
+     * @param imiId IME ID. The specified IME and the calling process need to belong to the same
+     *              package.  Otherwise {@link SecurityException} will be thrown.
+     * @param subtypeHashCodes An arrays of {@link InputMethodSubtype#hashCode()} to be explicitly
+     *                         enabled. Entries that are found in the specified IME will be silently
+     *                         ignored. Pass an empty array to reset the state to default.
+     * @throws NullPointerException if {@code subtypeHashCodes} is {@code null}.
+     * @throws SecurityException if the specified IME and the calling process do not belong to the
+     *                           same package.
+     */
+    public void setExplicitlyEnabledInputMethodSubtypes(@NonNull String imiId,
+            @NonNull int[] subtypeHashCodes) {
+        mServiceInvoker.setExplicitlyEnabledInputMethodSubtypes(imiId, subtypeHashCodes,
+                UserHandle.myUserId());
     }
 
     /**

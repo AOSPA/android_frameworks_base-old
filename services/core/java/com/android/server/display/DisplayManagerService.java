@@ -786,18 +786,24 @@ public final class DisplayManagerService extends SystemService {
                 return; // Display no longer exists or no change.
             }
 
-            traceMessage = "requestDisplayStateInternal("
-                    + displayId + ", "
-                    + Display.stateToString(state)
-                    + ", brightness=" + brightnessState
-                    + ", sdrBrightness=" + sdrBrightnessState + ")";
-            Trace.asyncTraceBegin(Trace.TRACE_TAG_POWER, traceMessage, displayId);
+            if (Trace.isTagEnabled(Trace.TRACE_TAG_POWER)) {
+                traceMessage = Display.stateToString(state)
+                           + ", brightness=" + brightnessState
+                           + ", sdrBrightness=" + sdrBrightnessState;
+                Trace.asyncTraceForTrackBegin(Trace.TRACE_TAG_POWER,
+                        "requestDisplayStateInternal:" + displayId,
+                        traceMessage, displayId);
+            }
 
             mDisplayStates.setValueAt(index, state);
             brightnessPair.brightness = brightnessState;
             brightnessPair.sdrBrightness = sdrBrightnessState;
             runnable = updateDisplayStateLocked(mLogicalDisplayMapper.getDisplayLocked(displayId)
                     .getPrimaryDisplayDeviceLocked());
+            if (Trace.isTagEnabled(Trace.TRACE_TAG_POWER)) {
+                Trace.asyncTraceForTrackEnd(Trace.TRACE_TAG_POWER,
+                        "requestDisplayStateInternal:" + displayId, displayId);
+            }
         }
 
         // Setting the display power state can take hundreds of milliseconds
@@ -807,7 +813,6 @@ public final class DisplayManagerService extends SystemService {
         if (runnable != null) {
             runnable.run();
         }
-        Trace.asyncTraceEnd(Trace.TRACE_TAG_POWER, traceMessage, displayId);
     }
 
     private class SettingsObserver extends ContentObserver {
@@ -1467,8 +1472,8 @@ public final class DisplayManagerService extends SystemService {
         // Register default display adapters.
         synchronized (mSyncRoot) {
             // main display adapter
-            registerDisplayAdapterLocked(new LocalDisplayAdapter(
-                    mSyncRoot, mContext, mHandler, mDisplayDeviceRepo));
+            registerDisplayAdapterLocked(mInjector.getLocalDisplayAdapter(mSyncRoot, mContext,
+                    mHandler, mDisplayDeviceRepo));
 
             // Standalone VR devices rely on a virtual display as their primary display for
             // 2D UI. We register virtual display adapter along side the main display adapter
@@ -2535,6 +2540,11 @@ public final class DisplayManagerService extends SystemService {
         VirtualDisplayAdapter getVirtualDisplayAdapter(SyncRoot syncRoot, Context context,
                 Handler handler, DisplayAdapter.Listener displayAdapterListener) {
             return new VirtualDisplayAdapter(syncRoot, context, handler, displayAdapterListener);
+        }
+
+        LocalDisplayAdapter getLocalDisplayAdapter(SyncRoot syncRoot, Context context,
+                Handler handler, DisplayAdapter.Listener displayAdapterListener) {
+            return new LocalDisplayAdapter(syncRoot, context, handler, displayAdapterListener);
         }
 
         long getDefaultDisplayDelayTimeout() {

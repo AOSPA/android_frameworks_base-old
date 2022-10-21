@@ -60,8 +60,16 @@ platform_bootclasspath {
             module: "art-bootclasspath-fragment",
         },
         {
+            apex: "com.android.configinfrastructure",
+            module: "com.android.configinfrastructure-bootclasspath-fragment",
+        },
+        {
             apex: "com.android.conscrypt",
             module: "com.android.conscrypt-bootclasspath-fragment",
+        },
+        {
+            apex: "com.android.federatedcompute",
+            module: "com.android.federatedcompute-bootclasspath-fragment",
         },
         {
             apex: "com.android.healthconnect",

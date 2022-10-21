@@ -68,7 +68,12 @@ public class Flags {
 
     public static final UnreleasedFlag INSTANT_VOICE_REPLY = new UnreleasedFlag(111, true);
 
-    // next id: 112
+    public static final UnreleasedFlag NOTIFICATION_MEMORY_MONITOR_ENABLED = new UnreleasedFlag(112,
+            false);
+
+    public static final UnreleasedFlag NOTIFICATION_DISMISSAL_FADE = new UnreleasedFlag(113, true);
+
+    // next id: 114
 
     /***************************************/
     // 200 - keyguard/lockscreen
@@ -104,9 +109,25 @@ public class Flags {
     public static final ReleasedFlag MODERN_USER_SWITCHER_ACTIVITY =
             new ReleasedFlag(209, true);
 
-    /** Whether the new implementation of UserSwitcherController should be used. */
-    public static final UnreleasedFlag REFACTORED_USER_SWITCHER_CONTROLLER =
-            new UnreleasedFlag(210, false);
+    /**
+     * Whether the user interactor and repository should use `UserSwitcherController`.
+     *
+     * <p>If this is {@code false}, the interactor and repo skip the controller and directly access
+     * the framework APIs.
+     */
+    public static final UnreleasedFlag USER_INTERACTOR_AND_REPO_USE_CONTROLLER =
+            new UnreleasedFlag(210);
+
+    /**
+     * Whether `UserSwitcherController` should use the user interactor.
+     *
+     * <p>When this is {@code true}, the controller does not directly access framework APIs.
+     * Instead, it goes through the interactor.
+     *
+     * <p>Note: do not set this to true if {@link #USER_INTERACTOR_AND_REPO_USE_CONTROLLER} is
+     * {@code true} as it would created a cycle between controller -> interactor -> controller.
+     */
+    public static final ReleasedFlag USER_CONTROLLER_USES_INTERACTOR = new ReleasedFlag(211);
 
     /***************************************/
     // 300 - power menu
@@ -152,7 +173,7 @@ public class Flags {
     public static final ResourceBooleanFlag FULL_SCREEN_USER_SWITCHER =
             new ResourceBooleanFlag(506, R.bool.config_enableFullscreenUserSwitcher);
 
-    public static final UnreleasedFlag NEW_FOOTER_ACTIONS = new UnreleasedFlag(507, true);
+    public static final ReleasedFlag NEW_FOOTER_ACTIONS = new ReleasedFlag(507);
 
     /***************************************/
     // 600- status bar
@@ -189,14 +210,14 @@ public class Flags {
     public static final UnreleasedFlag REGION_SAMPLING = new UnreleasedFlag(801);
 
     // 802 - wallpaper rendering
-    public static final UnreleasedFlag USE_CANVAS_RENDERER = new UnreleasedFlag(802);
+    public static final UnreleasedFlag USE_CANVAS_RENDERER = new UnreleasedFlag(802, true);
 
     // 803 - screen contents translation
     public static final UnreleasedFlag SCREEN_CONTENTS_TRANSLATION = new UnreleasedFlag(803);
 
     /***************************************/
     // 900 - media
-    public static final UnreleasedFlag MEDIA_TAP_TO_TRANSFER = new UnreleasedFlag(900);
+    public static final ReleasedFlag MEDIA_TAP_TO_TRANSFER = new ReleasedFlag(900);
     public static final UnreleasedFlag MEDIA_SESSION_ACTIONS = new UnreleasedFlag(901);
     public static final ReleasedFlag MEDIA_NEARBY_DEVICES = new ReleasedFlag(903);
     public static final ReleasedFlag MEDIA_MUTE_AWAIT = new ReleasedFlag(904);
@@ -208,7 +229,8 @@ public class Flags {
             new ReleasedFlag(1000);
     public static final ReleasedFlag DOCK_SETUP_ENABLED = new ReleasedFlag(1001);
 
-    public static final UnreleasedFlag ROUNDED_BOX_RIPPLE = new UnreleasedFlag(1002, false);
+    public static final UnreleasedFlag ROUNDED_BOX_RIPPLE =
+            new UnreleasedFlag(1002, /* teamfood= */ true);
 
     // 1100 - windowing
     @Keep
@@ -247,6 +269,17 @@ public class Flags {
     public static final SysPropBooleanFlag SHOW_FLOATING_TASKS_AS_BUBBLES =
             new SysPropBooleanFlag(1107, "persist.wm.debug.floating_tasks_as_bubbles", false);
 
+    @Keep
+    public static final SysPropBooleanFlag ENABLE_FLING_TO_DISMISS_BUBBLE =
+            new SysPropBooleanFlag(1108, "persist.wm.debug.fling_to_dismiss_bubble", true);
+    @Keep
+    public static final SysPropBooleanFlag ENABLE_FLING_TO_DISMISS_PIP =
+            new SysPropBooleanFlag(1109, "persist.wm.debug.fling_to_dismiss_pip", true);
+
+    @Keep
+    public static final SysPropBooleanFlag ENABLE_PIP_KEEP_CLEAR_ALGORITHM =
+            new SysPropBooleanFlag(1110, "persist.wm.debug.enable_pip_keep_clear_algorithm", false);
+
     // 1200 - predictive back
     @Keep
     public static final SysPropBooleanFlag WM_ENABLE_PREDICTIVE_BACK = new SysPropBooleanFlag(
@@ -266,11 +299,15 @@ public class Flags {
     public static final UnreleasedFlag SCREENSHOT_REQUEST_PROCESSOR = new UnreleasedFlag(1300);
     public static final UnreleasedFlag SCREENSHOT_WORK_PROFILE_POLICY = new UnreleasedFlag(1301);
 
-    // 1400 - columbus, b/242800729
-    public static final UnreleasedFlag QUICK_TAP_IN_PCC = new UnreleasedFlag(1400);
+    // 1400 - columbus
+    public static final ReleasedFlag QUICK_TAP_IN_PCC = new ReleasedFlag(1400);
 
     // 1500 - chooser
     public static final UnreleasedFlag CHOOSER_UNBUNDLED = new UnreleasedFlag(1500);
+
+    // 1600 - accessibility
+    public static final UnreleasedFlag A11Y_FLOATING_MENU_FLING_SPRING_ANIMATIONS =
+            new UnreleasedFlag(1600);
 
     // Pay no attention to the reflection behind the curtain.
     // ========================== Curtain ==========================

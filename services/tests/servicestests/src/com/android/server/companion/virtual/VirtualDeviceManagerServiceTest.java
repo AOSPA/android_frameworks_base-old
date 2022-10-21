@@ -226,7 +226,7 @@ public class VirtualDeviceManagerServiceTest {
                 mContext.getSystemService(WindowManager.class), threadVerifier);
 
         mAssociationInfo = new AssociationInfo(1, 0, null,
-                MacAddress.BROADCAST_ADDRESS, "", null, true, false, false, 0, 0);
+                MacAddress.BROADCAST_ADDRESS, "", null, null, true, false, false, 0, 0);
 
         mVdms = new VirtualDeviceManagerService(mContext);
         mLocalService = mVdms.getLocalServiceInstance();
@@ -236,10 +236,9 @@ public class VirtualDeviceManagerServiceTest {
                 .setBlockedActivities(getBlockedActivities())
                 .build();
         mDeviceImpl = new VirtualDeviceImpl(mContext,
-                mAssociationInfo, new Binder(), /* uid */ 0, mInputController,
-                (int associationId) -> {
-                }, mPendingTrampolineCallback, mActivityListener, mRunningAppsChangedCallback,
-                params);
+                mAssociationInfo, new Binder(), /* ownerUid */ 0, /* uniqueId */ 1,
+                mInputController, (int associationId) -> {}, mPendingTrampolineCallback,
+                mActivityListener, mRunningAppsChangedCallback, params);
     }
 
     @Test

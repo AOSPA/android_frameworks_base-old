@@ -215,8 +215,8 @@ import android.app.usage.UsageStatsManagerInternal;
 import android.appwidget.AppWidgetManager;
 import android.appwidget.AppWidgetManagerInternal;
 import android.compat.annotation.ChangeId;
-import android.compat.annotation.Disabled;
 import android.compat.annotation.EnabledAfter;
+import android.compat.annotation.EnabledSince;
 import android.content.AttributionSource;
 import android.content.AutofillOptions;
 import android.content.BroadcastReceiver;
@@ -247,6 +247,7 @@ import android.content.pm.PackageManagerInternal;
 import android.content.pm.ParceledListSlice;
 import android.content.pm.PermissionInfo;
 import android.content.pm.PermissionMethod;
+import android.content.pm.PermissionName;
 import android.content.pm.ProcessInfo;
 import android.content.pm.ProviderInfo;
 import android.content.pm.ProviderInfoList;
@@ -598,7 +599,7 @@ public class ActivityManagerService extends IActivityManager.Stub
      * unprotected broadcast in code.
      */
     @ChangeId
-    @Disabled
+    @EnabledSince(targetSdkVersion = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     private static final long DYNAMIC_RECEIVER_EXPLICIT_EXPORT_REQUIRED = 161145287L;
 
     /**
@@ -2462,8 +2463,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         mEnableOffloadQueue = SystemProperties.getBoolean(
                 "persist.device_config.activity_manager_native_boot.offload_queue_enabled", true);
-        mEnableModernQueue = SystemProperties.getBoolean(
-                "persist.device_config.activity_manager_native_boot.modern_queue_enabled", false);
+        mEnableModernQueue = foreConstants.MODERN_QUEUE_ENABLED;
 
         if (mEnableModernQueue) {
             mBroadcastQueues = new BroadcastQueue[1];
@@ -2957,10 +2957,13 @@ public class ActivityManagerService extends IActivityManager.Stub
                 || event == Event.ACTIVITY_DESTROYED)) {
             contentCaptureService.notifyActivityEvent(userId, activity, event);
         }
-        // TODO(b/201234353): Move the logic to client side.
-        if (mVoiceInteractionManagerProvider != null && (event == Event.ACTIVITY_PAUSED
-                || event == Event.ACTIVITY_RESUMED || event == Event.ACTIVITY_STOPPED)) {
-            mVoiceInteractionManagerProvider.notifyActivityEventChanged();
+        // Currently we have move most of logic to the client side. When the activity lifecycle
+        // event changed, the client side will notify the VoiceInteractionManagerService. But
+        // when the application process died, the VoiceInteractionManagerService will miss the
+        // activity lifecycle event changed, so we still need ACTIVITY_DESTROYED event here to
+        // know if the activity has been destroyed.
+        if (mVoiceInteractionManagerProvider != null && event == Event.ACTIVITY_DESTROYED) {
+            mVoiceInteractionManagerProvider.notifyActivityDestroyed(appToken);
         }
     }
 
@@ -3599,7 +3602,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             if (subject != null || criticalEventSection != null) {
                 appendtoANRFile(tracesFile.getAbsolutePath(),
                         (subject != null ? "Subject: " + subject + "\n\n" : "")
-                        + criticalEventSection != null ? criticalEventSection : "");
+                        + (criticalEventSection != null ? criticalEventSection : ""));
             }
 
             Pair<Long, Long> offsets = dumpStackTraces(
@@ -4234,6 +4237,12 @@ public class ActivityManagerService extends IActivityManager.Stub
         int callingPid = Binder.getCallingPid();
         if (callingPid == myPid()) {
             //  Yeah, um, no.
+            return;
+        }
+        final int callingUid = Binder.getCallingUid();
+        final int callingUserId = UserHandle.getUserId(callingUid);
+        if (getPackageManagerInternal().filterAppAccess(packageName, callingUid, callingUserId)) {
+            Slog.w(TAG, "Failed trying to add dependency on non-existing package: " + packageName);
             return;
         }
         ProcessRecord proc;
@@ -5363,7 +5372,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             // Tell anyone interested that we are done booting!
             SystemProperties.set("sys.boot_completed", "1");
             SystemProperties.set("dev.bootcomplete", "1");
-            mUserController.sendBootCompleted(
+            mUserController.onBootComplete(
                     new IIntentReceiver.Stub() {
                         @Override
                         public void performReceive(Intent intent, int resultCode,
@@ -5417,7 +5426,14 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     private void showMteOverrideNotificationIfActive() {
-        if (!SystemProperties.getBoolean("ro.arm64.memtag.bootctl_supported", false)
+        String bootctl = SystemProperties.get("arm64.memtag.bootctl");
+        // If MTE is on, there is one in three cases:
+        // * a fullmte build: ro.arm64.memtag.bootctl_supported is not set
+        // * memtag: arm64.memtag.bootctl contains "memtag"
+        // * memtag-once
+        // In the condition below we detect memtag-once by exclusion.
+        if (Arrays.asList(bootctl.split(",")).contains("memtag")
+            || !SystemProperties.getBoolean("ro.arm64.memtag.bootctl_supported", false)
             || !com.android.internal.os.Zygote.nativeSupportsMemoryTagging()) {
             return;
         }
@@ -6062,8 +6078,9 @@ public class ActivityManagerService extends IActivityManager.Stub
      * provided non-{@code null} {@code permission} before. Otherwise calls into
      * {@link ActivityManager#checkComponentPermission(String, int, int, boolean)}.
      */
+    @PackageManager.PermissionResult
     @PermissionMethod
-    public static int checkComponentPermission(String permission, int pid, int uid,
+    public static int checkComponentPermission(@PermissionName String permission, int pid, int uid,
             int owningUid, boolean exported) {
         if (pid == MY_PID) {
             return PackageManager.PERMISSION_GRANTED;
@@ -6109,8 +6126,9 @@ public class ActivityManagerService extends IActivityManager.Stub
      * This can be called with or without the global lock held.
      */
     @Override
+    @PackageManager.PermissionResult
     @PermissionMethod
-    public int checkPermission(String permission, int pid, int uid) {
+    public int checkPermission(@PermissionName String permission, int pid, int uid) {
         if (permission == null) {
             return PackageManager.PERMISSION_DENIED;
         }
@@ -6121,8 +6139,9 @@ public class ActivityManagerService extends IActivityManager.Stub
      * Binder IPC calls go through the public entry point.
      * This can be called with or without the global lock held.
      */
+    @PackageManager.PermissionResult
     @PermissionMethod
-    int checkCallingPermission(String permission) {
+    int checkCallingPermission(@PermissionName String permission) {
         return checkPermission(permission,
                 Binder.getCallingPid(),
                 Binder.getCallingUid());
@@ -6132,7 +6151,7 @@ public class ActivityManagerService extends IActivityManager.Stub
      * This can be called with or without the global lock held.
      */
     @PermissionMethod
-    void enforceCallingPermission(String permission, String func) {
+    void enforceCallingPermission(@PermissionName String permission, String func) {
         if (checkCallingPermission(permission)
                 == PackageManager.PERMISSION_GRANTED) {
             return;
@@ -6149,7 +6168,6 @@ public class ActivityManagerService extends IActivityManager.Stub
     /**
      * This can be called with or without the global lock held.
      */
-    @PermissionMethod
     private void enforceCallingHasAtLeastOnePermission(String func, String... permissions) {
         for (String permission : permissions) {
             if (checkCallingPermission(permission) == PackageManager.PERMISSION_GRANTED) {
@@ -6168,7 +6186,8 @@ public class ActivityManagerService extends IActivityManager.Stub
     /**
      * This can be called with or without the global lock held.
      */
-    void enforcePermission(String permission, int pid, int uid, String func) {
+    @PermissionMethod
+    void enforcePermission(@PermissionName String permission, int pid, int uid, String func) {
         if (checkPermission(permission, pid, uid) == PackageManager.PERMISSION_GRANTED) {
             return;
         }
@@ -10765,8 +10784,11 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
     }
 
+    @NeverCompile
     void dumpBroadcastsLocked(FileDescriptor fd, PrintWriter pw, String[] args,
             int opti, boolean dumpAll, String dumpPackage) {
+        boolean dumpConstants = true;
+        boolean dumpHistory = true;
         boolean needSep = false;
         boolean onlyHistory = false;
         boolean printedAnything = false;
@@ -10851,7 +10873,8 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         if (!onlyReceivers) {
             for (BroadcastQueue q : mBroadcastQueues) {
-                needSep = q.dumpLocked(fd, pw, args, opti, dumpAll, dumpPackage, needSep);
+                needSep = q.dumpLocked(fd, pw, args, opti,
+                        dumpConstants, dumpHistory, dumpAll, dumpPackage, needSep);
                 printedAnything |= needSep;
             }
         }
@@ -10909,6 +10932,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
     }
 
+    @NeverCompile
     void dumpBroadcastStatsLocked(FileDescriptor fd, PrintWriter pw, String[] args,
             int opti, boolean dumpAll, String dumpPackage) {
         if (mCurBroadcastStats == null) {
@@ -10942,6 +10966,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
     }
 
+    @NeverCompile
     void dumpBroadcastStatsCheckinLocked(FileDescriptor fd, PrintWriter pw, String[] args,
             int opti, boolean fullCheckin, String dumpPackage) {
         if (mCurBroadcastStats == null) {
@@ -13533,7 +13558,8 @@ public class ActivityManagerService extends IActivityManager.Stub
             // broadcasts, or the receiver is null (a sticky broadcast). Sticky broadcasts should
             // not be used generally, so we will be marking them as exported by default
             final boolean requireExplicitFlagForDynamicReceivers = CompatChanges.isChangeEnabled(
-                    DYNAMIC_RECEIVER_EXPLICIT_EXPORT_REQUIRED, callingUid);
+                    DYNAMIC_RECEIVER_EXPLICIT_EXPORT_REQUIRED, callingUid)
+                    && mConstants.mEnforceReceiverExportedFlagRequirement;
             if (!onlyProtectedBroadcasts) {
                 if (receiver == null && !explicitExportStateDefined) {
                     // sticky broadcast, no flag specified (flag isn't required)
@@ -16496,23 +16522,17 @@ public class ActivityManagerService extends IActivityManager.Stub
         return mInjector.getSecondaryDisplayIdsForStartingBackgroundUsers();
     }
 
-    /**
-     * Unlocks the given user.
-     *
-     * @param userId The ID of the user to unlock.
-     * @param token No longer used.  (This parameter cannot be removed because
-     *              this method is marked with UnsupportedAppUsage, so its
-     *              signature might not be safe to change.)
-     * @param secret The secret needed to unlock the user's credential-encrypted
-     *               storage, or null if no secret is needed.
-     * @param listener An optional progress listener.
-     *
-     * @return true if the user was successfully unlocked, otherwise false.
-     */
+    /** @deprecated see the AIDL documentation {@inheritDoc} */
     @Override
-    public boolean unlockUser(int userId, @Nullable byte[] token, @Nullable byte[] secret,
-            @Nullable IProgressListener listener) {
-        return mUserController.unlockUser(userId, secret, listener);
+    @Deprecated
+    public boolean unlockUser(@UserIdInt int userId, @Nullable byte[] token,
+            @Nullable byte[] secret, @Nullable IProgressListener listener) {
+        return mUserController.unlockUser(userId, listener);
+    }
+
+    @Override
+    public boolean unlockUser2(@UserIdInt int userId, @Nullable IProgressListener listener) {
+        return mUserController.unlockUser(userId, listener);
     }
 
     @Override

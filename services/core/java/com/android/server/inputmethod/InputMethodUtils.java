@@ -20,21 +20,21 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserHandleAware;
 import android.annotation.UserIdInt;
-import android.app.AppOpsManager;
+import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
-import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
+import android.content.pm.PackageManagerInternal;
+import android.content.pm.ResolveInfo;
 import android.content.res.Resources;
-import android.os.Binder;
 import android.os.Build;
-import android.os.RemoteException;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
+import android.util.IntArray;
 import android.util.Pair;
 import android.util.Printer;
 import android.util.Slog;
@@ -42,8 +42,8 @@ import android.view.inputmethod.InputMethodInfo;
 import android.view.inputmethod.InputMethodSubtype;
 import android.view.textservice.SpellCheckerInfo;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.inputmethod.StartInputFlags;
-import com.android.internal.util.ArrayUtils;
 import com.android.server.LocalServices;
 import com.android.server.pm.UserManagerInternal;
 import com.android.server.textservices.TextServicesManagerInternal;
@@ -77,29 +77,6 @@ final class InputMethodUtils {
         // This utility class is not publicly instantiable.
     }
 
-    // ----------------------------------------------------------------------
-    // Utilities for debug
-    static String getApiCallStack() {
-        String apiCallStack = "";
-        try {
-            throw new RuntimeException();
-        } catch (RuntimeException e) {
-            final StackTraceElement[] frames = e.getStackTrace();
-            for (int j = 1; j < frames.length; ++j) {
-                final String tempCallStack = frames[j].toString();
-                if (TextUtils.isEmpty(apiCallStack)) {
-                    // Overwrite apiCallStack if it's empty
-                    apiCallStack = tempCallStack;
-                } else if (tempCallStack.indexOf("Transact(") < 0) {
-                    // Overwrite apiCallStack if it's not a binder call
-                    apiCallStack = tempCallStack;
-                } else {
-                    break;
-                }
-            }
-        }
-        return apiCallStack;
-    }
     // ----------------------------------------------------------------------
 
     static boolean canAddToLastInputMethod(InputMethodSubtype subtype) {
@@ -208,28 +185,27 @@ final class InputMethodUtils {
         return subtype != null
                 ? TextUtils.concat(subtype.getDisplayName(context,
                         imi.getPackageName(), imi.getServiceInfo().applicationInfo),
-                                (TextUtils.isEmpty(imiLabel) ?
-                                        "" : " - " + imiLabel))
+                                (TextUtils.isEmpty(imiLabel) ? "" : " - " + imiLabel))
                 : imiLabel;
     }
 
     /**
      * Returns true if a package name belongs to a UID.
      *
-     * <p>This is a simple wrapper of {@link AppOpsManager#checkPackage(int, String)}.</p>
-     * @param appOpsManager the {@link AppOpsManager} object to be used for the validation.
+     * <p>This is a simple wrapper of
+     * {@link PackageManagerInternal#getPackageUid(String, long, int)}.</p>
+     * @param packageManagerInternal the {@link PackageManagerInternal} object to be used for the
+     *                               validation.
      * @param uid the UID to be validated.
      * @param packageName the package name.
      * @return {@code true} if the package name belongs to the UID.
      */
-    static boolean checkIfPackageBelongsToUid(AppOpsManager appOpsManager,
-            @UserIdInt int uid, String packageName) {
-        try {
-            appOpsManager.checkPackage(uid, packageName);
-            return true;
-        } catch (SecurityException e) {
-            return false;
-        }
+    static boolean checkIfPackageBelongsToUid(PackageManagerInternal packageManagerInternal,
+            int uid, String packageName) {
+        // PackageManagerInternal#getPackageUid() doesn't check MATCH_INSTANT/MATCH_APEX as of
+        // writing. So setting 0 should be fine.
+        return packageManagerInternal.getPackageUid(packageName, 0 /* flags */,
+                UserHandle.getUserId(uid)) == uid;
     }
 
     /**
@@ -415,10 +391,10 @@ final class InputMethodUtils {
         }
 
         List<InputMethodSubtype> getEnabledInputMethodSubtypeListLocked(
-                InputMethodInfo imi, boolean allowsImplicitlySelectedSubtypes) {
+                InputMethodInfo imi, boolean allowsImplicitlyEnabledSubtypes) {
             List<InputMethodSubtype> enabledSubtypes =
                     getEnabledInputMethodSubtypeListLocked(imi);
-            if (allowsImplicitlySelectedSubtypes && enabledSubtypes.isEmpty()) {
+            if (allowsImplicitlyEnabledSubtypes && enabledSubtypes.isEmpty()) {
                 enabledSubtypes = SubtypeUtils.getImplicitlyApplicableSubtypesLocked(mRes, imi);
             }
             return InputMethodSubtype.sort(imi, enabledSubtypes);
@@ -669,15 +645,13 @@ final class InputMethodUtils {
                         // If IME is enabled and no subtypes are enabled, applicable subtypes
                         // are enabled implicitly, so needs to treat them to be enabled.
                         if (imi != null && imi.getSubtypeCount() > 0) {
-                            List<InputMethodSubtype> implicitlySelectedSubtypes =
+                            List<InputMethodSubtype> implicitlyEnabledSubtypes =
                                     SubtypeUtils.getImplicitlyApplicableSubtypesLocked(mRes, imi);
-                            if (implicitlySelectedSubtypes != null) {
-                                final int N = implicitlySelectedSubtypes.size();
-                                for (int i = 0; i < N; ++i) {
-                                    final InputMethodSubtype st = implicitlySelectedSubtypes.get(i);
-                                    if (String.valueOf(st.hashCode()).equals(subtypeHashCode)) {
-                                        return subtypeHashCode;
-                                    }
+                            final int numSubtypes = implicitlyEnabledSubtypes.size();
+                            for (int i = 0; i < numSubtypes; ++i) {
+                                final InputMethodSubtype st = implicitlyEnabledSubtypes.get(i);
+                                if (String.valueOf(st.hashCode()).equals(subtypeHashCode)) {
+                                    return subtypeHashCode;
                                 }
                             }
                         }
@@ -875,20 +849,13 @@ final class InputMethodUtils {
         boolean setAdditionalInputMethodSubtypes(@NonNull String imeId,
                 @NonNull ArrayList<InputMethodSubtype> subtypes,
                 @NonNull ArrayMap<String, List<InputMethodSubtype>> additionalSubtypeMap,
-                @NonNull IPackageManager packageManager) {
+                @NonNull PackageManagerInternal packageManagerInternal, int callingUid) {
             final InputMethodInfo imi = mMethodMap.get(imeId);
             if (imi == null) {
                 return false;
             }
-            final String[] packageInfos;
-            try {
-                packageInfos = packageManager.getPackagesForUid(Binder.getCallingUid());
-            } catch (RemoteException e) {
-                Slog.e(TAG, "Failed to get package infos");
-                return false;
-            }
-            if (ArrayUtils.find(packageInfos,
-                    packageInfo -> TextUtils.equals(packageInfo, imi.getPackageName())) == null) {
+            if (!InputMethodUtils.checkIfPackageBelongsToUid(packageManagerInternal, callingUid,
+                    imi.getPackageName())) {
                 return false;
             }
 
@@ -899,6 +866,72 @@ final class InputMethodUtils {
             }
             AdditionalSubtypeUtils.save(additionalSubtypeMap, mMethodMap, getCurrentUserId());
             return true;
+        }
+
+        boolean setEnabledInputMethodSubtypes(@NonNull String imeId,
+                @NonNull int[] subtypeHashCodes) {
+            final InputMethodInfo imi = mMethodMap.get(imeId);
+            if (imi == null) {
+                return false;
+            }
+
+            final IntArray validSubtypeHashCodes = new IntArray(subtypeHashCodes.length);
+            for (int subtypeHashCode : subtypeHashCodes) {
+                if (subtypeHashCode == NOT_A_SUBTYPE_ID) {
+                    continue;  // NOT_A_SUBTYPE_ID must not be saved
+                }
+                if (!SubtypeUtils.isValidSubtypeId(imi, subtypeHashCode)) {
+                    continue;  // this subtype does not exist in InputMethodInfo.
+                }
+                if (validSubtypeHashCodes.indexOf(subtypeHashCode) >= 0) {
+                    continue;  // The entry is already added.  No need to add anymore.
+                }
+                validSubtypeHashCodes.add(subtypeHashCode);
+            }
+
+            final String originalEnabledImesString = getEnabledInputMethodsStr();
+            final String updatedEnabledImesString = updateEnabledImeString(
+                    originalEnabledImesString, imi.getId(), validSubtypeHashCodes);
+            if (TextUtils.equals(originalEnabledImesString, updatedEnabledImesString)) {
+                return false;
+            }
+
+            putEnabledInputMethodsStr(updatedEnabledImesString);
+            return true;
+        }
+
+        @VisibleForTesting(visibility = VisibleForTesting.Visibility.PRIVATE)
+        static String updateEnabledImeString(@NonNull String enabledImesString,
+                @NonNull String imeId, @NonNull IntArray enabledSubtypeHashCodes) {
+            final TextUtils.SimpleStringSplitter imeSplitter =
+                    new TextUtils.SimpleStringSplitter(INPUT_METHOD_SEPARATOR);
+            final TextUtils.SimpleStringSplitter imeSubtypeSplitter =
+                    new TextUtils.SimpleStringSplitter(INPUT_METHOD_SUBTYPE_SEPARATOR);
+
+            final StringBuilder sb = new StringBuilder();
+
+            imeSplitter.setString(enabledImesString);
+            boolean needsImeSeparator = false;
+            while (imeSplitter.hasNext()) {
+                final String nextImsStr = imeSplitter.next();
+                imeSubtypeSplitter.setString(nextImsStr);
+                if (imeSubtypeSplitter.hasNext()) {
+                    if (needsImeSeparator) {
+                        sb.append(INPUT_METHOD_SEPARATOR);
+                    }
+                    if (TextUtils.equals(imeId, imeSubtypeSplitter.next())) {
+                        sb.append(imeId);
+                        for (int i = 0; i < enabledSubtypeHashCodes.size(); ++i) {
+                            sb.append(INPUT_METHOD_SUBTYPE_SEPARATOR);
+                            sb.append(enabledSubtypeHashCodes.get(i));
+                        }
+                    } else {
+                        sb.append(nextImsStr);
+                    }
+                    needsImeSeparator = true;
+                }
+            }
+            return sb.toString();
         }
 
         public void dumpLocked(final Printer pw, final String prefix) {
@@ -966,5 +999,17 @@ final class InputMethodUtils {
             return new int[]{};
         }
         return new int[]{sourceUserId};
+    }
+
+    /**
+     * Convert the input method ID to a component name
+     *
+     * @param id A unique ID for this input method.
+     * @return The component name of the input method.
+     * @see InputMethodInfo#computeId(ResolveInfo)
+     */
+    @Nullable
+    public static ComponentName convertIdToComponentName(@NonNull String id) {
+        return ComponentName.unflattenFromString(id);
     }
 }

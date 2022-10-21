@@ -16,6 +16,8 @@
 
 package com.android.systemui.statusbar.phone;
 
+import static com.android.systemui.flags.Flags.MODERN_BOUNCER;
+
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -26,7 +28,7 @@ import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
-import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -34,6 +36,10 @@ import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewRootImpl;
+import android.window.OnBackInvokedCallback;
+import android.window.OnBackInvokedDispatcher;
+import android.window.WindowOnBackInvokedDispatcher;
 
 import androidx.test.filters.SmallTest;
 
@@ -56,14 +62,13 @@ import com.android.systemui.navigationbar.NavigationModeController;
 import com.android.systemui.plugins.ActivityStarter.OnDismissAction;
 import com.android.systemui.shade.NotificationPanelViewController;
 import com.android.systemui.shade.ShadeController;
+import com.android.systemui.shade.ShadeExpansionChangeEvent;
+import com.android.systemui.shade.ShadeExpansionStateManager;
 import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
-import com.android.systemui.statusbar.phone.panelstate.PanelExpansionChangeEvent;
-import com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManager;
 import com.android.systemui.statusbar.policy.ConfigurationController;
-import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.unfold.SysUIUnfoldComponent;
 
 import com.google.common.truth.Truth;
@@ -72,6 +77,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
@@ -83,12 +89,11 @@ import java.util.Optional;
 @TestableLooper.RunWithLooper
 public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
 
-    private static final PanelExpansionChangeEvent EXPANSION_EVENT =
+    private static final ShadeExpansionChangeEvent EXPANSION_EVENT =
             expansionEvent(/* fraction= */ 0.5f, /* expanded= */ false, /* tracking= */ true);
 
     @Mock private ViewMediatorCallback mViewMediatorCallback;
     @Mock private LockPatternUtils mLockPatternUtils;
-    @Mock private KeyguardStateController mKeyguardStateController;
     @Mock private CentralSurfaces mCentralSurfaces;
     @Mock private ViewGroup mContainer;
     @Mock private NotificationPanelViewController mNotificationPanelView;
@@ -117,6 +122,14 @@ public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
 
     private StatusBarKeyguardViewManager mStatusBarKeyguardViewManager;
     private KeyguardBouncer.BouncerExpansionCallback mBouncerExpansionCallback;
+    private FakeKeyguardStateController mKeyguardStateController =
+            spy(new FakeKeyguardStateController());
+
+    @Mock private ViewRootImpl mViewRootImpl;
+    @Mock private WindowOnBackInvokedDispatcher mOnBackInvokedDispatcher;
+    @Captor
+    private ArgumentCaptor<OnBackInvokedCallback> mOnBackInvokedCallback;
+
 
     @Before
     public void setUp() {
@@ -153,15 +166,21 @@ public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
                         mFeatureFlags,
                         mBouncerCallbackInteractor,
                         mBouncerInteractor,
-                        mBouncerView);
+                        mBouncerView) {
+                    @Override
+                    public ViewRootImpl getViewRootImpl() {
+                        return mViewRootImpl;
+                    }
+                };
+        when(mViewRootImpl.getOnBackInvokedDispatcher())
+                .thenReturn(mOnBackInvokedDispatcher);
         mStatusBarKeyguardViewManager.registerCentralSurfaces(
                 mCentralSurfaces,
                 mNotificationPanelView,
-                new PanelExpansionStateManager(),
+                new ShadeExpansionStateManager(),
                 mBiometricUnlockController,
                 mNotificationContainer,
                 mBypassController);
-        when(mKeyguardStateController.isOccluded()).thenReturn(false);
         mStatusBarKeyguardViewManager.show(null);
         ArgumentCaptor<KeyguardBouncer.BouncerExpansionCallback> callbackArgumentCaptor =
                 ArgumentCaptor.forClass(KeyguardBouncer.BouncerExpansionCallback.class);
@@ -234,7 +253,7 @@ public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
 
     @Test
     public void onPanelExpansionChanged_showsBouncerWhenSwiping() {
-        when(mKeyguardStateController.canDismissLockScreen()).thenReturn(false);
+        mKeyguardStateController.setCanDismissLockScreen(false);
         mStatusBarKeyguardViewManager.onPanelExpansionChanged(EXPANSION_EVENT);
         verify(mBouncer).show(eq(false), eq(false));
 
@@ -321,13 +340,12 @@ public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
     }
 
     @Test
-    public void setOccluded_onKeyguardOccludedChangedCalledCorrectly() {
+    public void setOccluded_onKeyguardOccludedChangedCalled() {
         clearInvocations(mKeyguardStateController);
         clearInvocations(mKeyguardUpdateMonitor);
 
-        // Should be false to start, so no invocations
         mStatusBarKeyguardViewManager.setOccluded(false /* occluded */, false /* animated */);
-        verify(mKeyguardStateController, never()).notifyKeyguardState(anyBoolean(), anyBoolean());
+        verify(mKeyguardStateController).notifyKeyguardState(true, false);
 
         clearInvocations(mKeyguardUpdateMonitor);
         clearInvocations(mKeyguardStateController);
@@ -338,8 +356,8 @@ public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
         clearInvocations(mKeyguardUpdateMonitor);
         clearInvocations(mKeyguardStateController);
 
-        mStatusBarKeyguardViewManager.setOccluded(true /* occluded */, false /* animated */);
-        verify(mKeyguardStateController, never()).notifyKeyguardState(anyBoolean(), anyBoolean());
+        mStatusBarKeyguardViewManager.setOccluded(false /* occluded */, false /* animated */);
+        verify(mKeyguardStateController).notifyKeyguardState(true, false);
     }
 
     @Test
@@ -407,7 +425,7 @@ public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
         when(mAlternateAuthInterceptor.isShowingAlternateAuthBouncer()).thenReturn(true);
         assertTrue(
                 "Is showing not accurate when alternative auth showing",
-                mStatusBarKeyguardViewManager.isShowing());
+                mStatusBarKeyguardViewManager.isBouncerShowing());
     }
 
     @Test
@@ -501,10 +519,41 @@ public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
         Truth.assertThat(mStatusBarKeyguardViewManager.isBouncerInTransit()).isFalse();
     }
 
-    private static PanelExpansionChangeEvent expansionEvent(
+    private static ShadeExpansionChangeEvent expansionEvent(
             float fraction, boolean expanded, boolean tracking) {
-        return new PanelExpansionChangeEvent(
+        return new ShadeExpansionChangeEvent(
                 fraction, expanded, tracking, /* dragDownPxAmount= */ 0f);
+    }
+
+    @Test
+    public void testPredictiveBackCallback_registration() {
+        /* verify that a predictive back callback is registered when the bouncer becomes visible */
+        mBouncerExpansionCallback.onVisibilityChanged(true);
+        verify(mOnBackInvokedDispatcher).registerOnBackInvokedCallback(
+                eq(OnBackInvokedDispatcher.PRIORITY_OVERLAY),
+                mOnBackInvokedCallback.capture());
+
+        /* verify that the same callback is unregistered when the bouncer becomes invisible */
+        mBouncerExpansionCallback.onVisibilityChanged(false);
+        verify(mOnBackInvokedDispatcher).unregisterOnBackInvokedCallback(
+                eq(mOnBackInvokedCallback.getValue()));
+    }
+
+    @Test
+    public void testPredictiveBackCallback_invocationHidesBouncer() {
+        mBouncerExpansionCallback.onVisibilityChanged(true);
+        /* capture the predictive back callback during registration */
+        verify(mOnBackInvokedDispatcher).registerOnBackInvokedCallback(
+                eq(OnBackInvokedDispatcher.PRIORITY_OVERLAY),
+                mOnBackInvokedCallback.capture());
+
+        when(mBouncer.isShowing()).thenReturn(true);
+        when(mCentralSurfaces.shouldKeyguardHideImmediately()).thenReturn(true);
+        /* invoke the back callback directly */
+        mOnBackInvokedCallback.getValue().onBackInvoked();
+
+        /* verify that the bouncer will be hidden as a result of the invocation */
+        verify(mCentralSurfaces).setBouncerShowing(eq(false));
     }
 
     @Test
@@ -528,19 +577,9 @@ public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
     }
 
     @Test
-    public void testSetDozing_Dozing() {
-        clearInvocations(mBouncer);
-        mStatusBarKeyguardViewManager.onDozingChanged(true);
-        // Once when shown and once with dozing changed.
-        verify(mBouncer, times(1)).hide(false);
-    }
-
-    @Test
-    public void testSetDozing_notDozing() {
-        mStatusBarKeyguardViewManager.onDozingChanged(true);
-        clearInvocations(mBouncer);
-        mStatusBarKeyguardViewManager.onDozingChanged(false);
-        // Once when shown and twice with dozing changed.
-        verify(mBouncer, times(1)).hide(false);
+    public void flag_off_DoesNotCallBouncerInteractor() {
+        when(mFeatureFlags.isEnabled(MODERN_BOUNCER)).thenReturn(false);
+        mStatusBarKeyguardViewManager.hideBouncer(false);
+        verify(mBouncerInteractor, never()).hide();
     }
 }

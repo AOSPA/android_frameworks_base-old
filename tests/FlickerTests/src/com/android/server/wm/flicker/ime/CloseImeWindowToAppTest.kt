@@ -23,7 +23,6 @@ import com.android.server.wm.flicker.BaseTest
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
-import com.android.server.wm.flicker.annotation.Group2
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.ImeAppHelper
 import com.android.server.wm.flicker.navBarLayerPositionAtStartAndEnd
@@ -36,14 +35,13 @@ import org.junit.runners.MethodSorters
 import org.junit.runners.Parameterized
 
 /**
- * Test IME window closing back to app window transitions.
- * To run this test: `atest FlickerTests:CloseImeWindowToAppTest`
+ * Test IME window closing back to app window transitions. To run this test: `atest
+ * FlickerTests:CloseImeWindowToAppTest`
  */
 @RequiresDevice
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-@Group2
 class CloseImeWindowToAppTest(testSpec: FlickerTestParameter) : BaseTest(testSpec) {
     private val testApp = ImeAppHelper(instrumentation)
 
@@ -53,12 +51,8 @@ class CloseImeWindowToAppTest(testSpec: FlickerTestParameter) : BaseTest(testSpe
             testApp.launchViaIntent(wmHelper)
             testApp.openIME(wmHelper)
         }
-        teardown {
-            testApp.exit(wmHelper)
-        }
-        transitions {
-            testApp.closeIME(wmHelper)
-        }
+        teardown { testApp.exit(wmHelper) }
+        transitions { testApp.closeIME(wmHelper) }
     }
 
     /** {@inheritDoc} */
@@ -66,10 +60,13 @@ class CloseImeWindowToAppTest(testSpec: FlickerTestParameter) : BaseTest(testSpe
     @Test
     override fun visibleWindowsShownMoreThanOneConsecutiveEntry() {
         testSpec.assertWm {
-            this.visibleWindowsShownMoreThanOneConsecutiveEntry(listOf(
-                ComponentNameMatcher.IME,
-                ComponentNameMatcher.SPLASH_SCREEN,
-                ComponentNameMatcher.SNAPSHOT))
+            this.visibleWindowsShownMoreThanOneConsecutiveEntry(
+                listOf(
+                    ComponentNameMatcher.IME,
+                    ComponentNameMatcher.SPLASH_SCREEN,
+                    ComponentNameMatcher.SNAPSHOT
+                )
+            )
         }
     }
 
@@ -90,32 +87,25 @@ class CloseImeWindowToAppTest(testSpec: FlickerTestParameter) : BaseTest(testSpe
         testSpec.navBarLayerPositionAtStartAndEnd()
     }
 
-    @Presubmit
-    @Test
-    fun imeLayerBecomesInvisible() = testSpec.imeLayerBecomesInvisible()
+    @Presubmit @Test fun imeLayerBecomesInvisible() = testSpec.imeLayerBecomesInvisible()
 
     @Presubmit
     @Test
     fun imeAppLayerIsAlwaysVisible() {
-        testSpec.assertLayers {
-            this.isVisible(testApp)
-        }
+        testSpec.assertLayers { this.isVisible(testApp) }
     }
 
     @Presubmit
     @Test
     fun imeAppWindowIsAlwaysVisible() {
-        testSpec.assertWm {
-            this.isAppWindowOnTop(testApp)
-        }
+        testSpec.assertWm { this.isAppWindowOnTop(testApp) }
     }
 
     companion object {
         @Parameterized.Parameters(name = "{0}")
         @JvmStatic
         fun getParams(): Collection<FlickerTestParameter> {
-            return FlickerTestParameterFactory.getInstance()
-                .getConfigNonRotationTests()
+            return FlickerTestParameterFactory.getInstance().getConfigNonRotationTests()
         }
     }
 }

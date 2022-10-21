@@ -30,6 +30,7 @@ import android.annotation.UserHandleAware;
 import android.app.Activity;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.ComponentName;
 import android.content.Context;
@@ -144,7 +145,7 @@ public final class CompanionDeviceManager {
      *     <li>for WiFi - {@link android.net.wifi.ScanResult}</li>
      * </ul>
      *
-     * @deprecated use {@link #EXTRA_ASSOCIATION} instead.
+     * @deprecated use {@link AssociationInfo#getAssociatedDevice()} instead.
      */
     @Deprecated
     public static final String EXTRA_DEVICE = "android.companion.extra.DEVICE";
@@ -367,6 +368,10 @@ public final class CompanionDeviceManager {
      * recommended to do when an association is no longer relevant to avoid unnecessary battery
      * and/or data drain resulting from special privileges that the association provides</p>
      *
+     * <p>Note that if you use this api to associate with a Bluetooth device, please make sure
+     * to cancel your own Bluetooth discovery before calling this api, otherwise the callback
+     * may fail to return the desired device.</p>
+     *
      * <p>Calling this API requires a uses-feature
      * {@link PackageManager#FEATURE_COMPANION_DEVICE_SETUP} declaration in the manifest</p>
      **
@@ -377,6 +382,7 @@ public final class CompanionDeviceManager {
      * @see AssociationRequest.Builder
      * @see #getMyAssociations()
      * @see #disassociate(int)
+     * @see BluetoothAdapter#cancelDiscovery()
      */
     @UserHandleAware
     @RequiresPermission(anyOf = {
@@ -401,6 +407,34 @@ public final class CompanionDeviceManager {
             throw e.rethrowFromSystemServer();
         }
     }
+
+    /**
+     * Cancel the current association activity.
+     *
+     * <p>The app should launch the returned {@code intentSender} by calling
+     * {@link Activity#startIntentSenderForResult(IntentSender, int, Intent, int, int, int)} to
+     * cancel the current association activity</p>
+     *
+     * <p>Calling this API requires a uses-feature
+     * {@link PackageManager#FEATURE_COMPANION_DEVICE_SETUP} declaration in the manifest</p>
+     *
+     * @return An {@link IntentSender} that the app should use to launch in order to cancel the
+     * current association activity
+     */
+    @UserHandleAware
+    @Nullable
+    public IntentSender buildAssociationCancellationIntent() {
+        if (!checkFeaturePresent()) return null;
+
+        try {
+            PendingIntent pendingIntent = mService.buildAssociationCancellationIntent(
+                    mContext.getOpPackageName(), mContext.getUserId());
+            return pendingIntent.getIntentSender();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
 
     /**
      * <p>Calling this API requires a uses-feature
@@ -450,7 +484,8 @@ public final class CompanionDeviceManager {
      * <p>Calling this API requires a uses-feature
      * {@link PackageManager#FEATURE_COMPANION_DEVICE_SETUP} declaration in the manifest</p>
      *
-     * @param deviceMacAddress the MAC address of device to disassociate from this app
+     * @param deviceMacAddress the MAC address of device to disassociate from this app. Device
+     * address is case-sensitive in API level &lt; 33.
      *
      * @deprecated use {@link #disassociate(int)}
      */

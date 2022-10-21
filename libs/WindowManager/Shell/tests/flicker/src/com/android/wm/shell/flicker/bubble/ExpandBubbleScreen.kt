@@ -22,7 +22,6 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Until
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
-import com.android.server.wm.flicker.annotation.Group4
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -34,14 +33,15 @@ import org.junit.runners.Parameterized
  * To run this test: `atest WMShellFlickerTests:ExpandBubbleScreen`
  *
  * Actions:
+ * ```
  *     Launch an app and enable app's bubble notification
  *     Send a bubble notification
  *     The activity for the bubble is launched
+ * ```
  */
 @RequiresDevice
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
-@Group4
 open class ExpandBubbleScreen(testSpec: FlickerTestParameter) : BaseBubbleScreen(testSpec) {
 
     /** {@inheritDoc} */
@@ -52,11 +52,11 @@ open class ExpandBubbleScreen(testSpec: FlickerTestParameter) : BaseBubbleScreen
                 addBubbleBtn?.click() ?: error("Add Bubble not found")
             }
             transitions {
-                val showBubble = device.wait(
-                    Until.findObject(
-                        By.res("com.android.systemui", "bubble_view")
-                    ), FIND_OBJECT_TIMEOUT
-                )
+                val showBubble =
+                    device.wait(
+                        Until.findObject(By.res("com.android.systemui", "bubble_view")),
+                        FIND_OBJECT_TIMEOUT
+                    )
                 showBubble?.run { showBubble.click() } ?: error("Bubble notify not found")
             }
         }
@@ -64,8 +64,6 @@ open class ExpandBubbleScreen(testSpec: FlickerTestParameter) : BaseBubbleScreen
     @Presubmit
     @Test
     open fun testAppIsAlwaysVisible() {
-        testSpec.assertLayers {
-            this.isVisible(testApp)
-        }
+        testSpec.assertLayers { this.isVisible(testApp) }
     }
 }

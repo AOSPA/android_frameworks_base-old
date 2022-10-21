@@ -22,7 +22,6 @@ import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
-import com.android.server.wm.flicker.annotation.Group4
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.ImeAppHelper
 import com.android.server.wm.flicker.helpers.WindowUtils
@@ -37,15 +36,11 @@ import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
 import org.junit.runners.Parameterized
 
-/**
- * Test Pip launch.
- * To run this test: `atest WMShellFlickerTests:PipKeyboardTest`
- */
+/** Test Pip launch. To run this test: `atest WMShellFlickerTests:PipKeyboardTest` */
 @RequiresDevice
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-@Group4
 open class PipKeyboardTest(testSpec: FlickerTestParameter) : PipTransition(testSpec) {
     private val imeApp = ImeAppHelper(instrumentation)
 
@@ -54,7 +49,7 @@ open class PipKeyboardTest(testSpec: FlickerTestParameter) : PipTransition(testS
         assumeFalse(isShellTransitionsEnabled)
     }
 
-    /** {@inheritDoc}  */
+    /** {@inheritDoc} */
     override val transition: FlickerBuilder.() -> Unit
         get() = buildTransition {
             setup {
@@ -75,9 +70,7 @@ open class PipKeyboardTest(testSpec: FlickerTestParameter) : PipTransition(testS
             }
         }
 
-    /**
-     * Ensure the pip window remains visible throughout any keyboard interactions
-     */
+    /** Ensure the pip window remains visible throughout any keyboard interactions */
     @Presubmit
     @Test
     open fun pipInVisibleBounds() {
@@ -87,15 +80,11 @@ open class PipKeyboardTest(testSpec: FlickerTestParameter) : PipTransition(testS
         }
     }
 
-    /**
-     * Ensure that the pip window does not obscure the keyboard
-     */
+    /** Ensure that the pip window does not obscure the keyboard */
     @Presubmit
     @Test
     open fun pipIsAboveAppWindow() {
-        testSpec.assertWmTag(TAG_IME_VISIBLE) {
-            isAboveWindow(ComponentNameMatcher.IME, pipApp)
-        }
+        testSpec.assertWmTag(TAG_IME_VISIBLE) { isAboveWindow(ComponentNameMatcher.IME, pipApp) }
     }
 
     companion object {

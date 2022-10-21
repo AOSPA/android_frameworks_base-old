@@ -377,6 +377,14 @@ public final class DeviceConfig {
     public static final String NAMESPACE_REBOOT_READINESS = "reboot_readiness";
 
     /**
+     * Namespace for Remote Key Provisioning related features.
+     *
+     * @hide
+     */
+    public static final String NAMESPACE_REMOTE_KEY_PROVISIONING_NATIVE =
+            "remote_key_provisioning_native";
+
+    /**
      * Namespace for Rollback flags that are applied immediately.
      *
      * @hide
@@ -807,6 +815,13 @@ public final class DeviceConfig {
      */
     @SystemApi
     public static final String NAMESPACE_BACKUP_AND_RESTORE = "backup_and_restore";
+
+    /**
+     * Namespace for ARC App Compat related features.
+     *
+     * @hide
+     */
+    public static final String NAMESPACE_ARC_APP_COMPAT = "arc_app_compat";
 
     private static final Object sLock = new Object();
     @GuardedBy("sLock")

@@ -1942,7 +1942,7 @@
     <string name="app_blocked_title" msgid="7353262160455028160">"L\'app non è disponibile"</string>
     <string name="app_blocked_message" msgid="542972921087873023">"L\'app <xliff:g id="APP_NAME">%1$s</xliff:g> non è al momento disponibile."</string>
     <string name="app_streaming_blocked_title" msgid="6090945835898766139">"<xliff:g id="ACTIVITY">%1$s</xliff:g> non disponibile"</string>
-    <string name="app_streaming_blocked_title_for_permission_dialog" msgid="4483161748582966785">"È necessaria l\'autorizzazione"</string>
+    <string name="app_streaming_blocked_title_for_permission_dialog" msgid="4483161748582966785">"Autorizzazione necessaria"</string>
     <string name="app_streaming_blocked_title_for_camera_dialog" msgid="3935701653713853065">"Fotocamera non disponibile"</string>
     <string name="app_streaming_blocked_title_for_fingerprint_dialog" msgid="3516853717714141951">"Continua sul telefono"</string>
     <string name="app_streaming_blocked_title_for_microphone_dialog" msgid="544822455127171206">"Microfono non disponibile"</string>
@@ -1959,7 +1959,7 @@
     <string name="app_streaming_blocked_message_for_settings_dialog" product="tv" msgid="820334666354451145">"Non è possibile accedere a questa impostazione su <xliff:g id="DEVICE">%1$s</xliff:g>. Prova a usare il dispositivo Android TV."</string>
     <string name="app_streaming_blocked_message_for_settings_dialog" product="tablet" msgid="3286849551133045896">"Non è possibile accedere a questa impostazione su <xliff:g id="DEVICE">%1$s</xliff:g>. Prova a usare il tablet."</string>
     <string name="app_streaming_blocked_message_for_settings_dialog" product="default" msgid="6264287556598916295">"Non è possibile accedere a questa impostazione su <xliff:g id="DEVICE">%1$s</xliff:g>. Prova a usare il telefono."</string>
-    <string name="deprecated_target_sdk_message" msgid="5203207875657579953">"Questa app è stata realizzata per una versione precedente di Android e potrebbe non funzionare correttamente. Prova a verificare la disponibilità di aggiornamenti o contatta lo sviluppatore."</string>
+    <string name="deprecated_target_sdk_message" msgid="5246906284426844596">"Questa app è stata progettata per una versione precedente di Android. Potrebbe non funzionare correttamente e non include le protezioni della sicurezza e della privacy più recenti. Verifica la presenza di un aggiornamento o contatta lo sviluppatore dell\'app."</string>
     <string name="deprecated_target_sdk_app_store" msgid="8456784048558808909">"Cerca aggiornamenti"</string>
     <string name="new_sms_notification_title" msgid="6528758221319927107">"Hai nuovi messaggi"</string>
     <string name="new_sms_notification_content" msgid="3197949934153460639">"Apri l\'app SMS per la visualizzazione"</string>
@@ -2051,7 +2051,8 @@
     <string name="log_access_confirmation_title" msgid="2343578467290592708">"Consentire all\'app <xliff:g id="LOG_ACCESS_APP_NAME">%s</xliff:g> di accedere a tutti i log del dispositivo?"</string>
     <string name="log_access_confirmation_allow" msgid="5302517782599389507">"Consenti accesso una tantum"</string>
     <string name="log_access_confirmation_deny" msgid="7685790957455099845">"Non consentire"</string>
-    <string name="log_access_confirmation_body" msgid="1806692062668620735">"I log del dispositivo registrano tutto ciò che succede sul tuo dispositivo. Le app possono usare questi log per individuare problemi e correggerli.\n\nAlcuni log potrebbero contenere informazioni sensibili, quindi concedi l\'accesso a tutti i log del dispositivo soltanto alle app attendibili. \n\nSe le neghi l\'accesso a tutti i log del dispositivo, questa app può comunque accedere ai propri log. Il produttore del tuo dispositivo potrebbe essere comunque in grado di accedere ad alcuni log o informazioni sul dispositivo."</string>
+    <string name="log_access_confirmation_body" product="default" msgid="1806692062668620735">"I log del dispositivo registrano tutto ciò che succede sul tuo dispositivo. Le app possono usare questi log per individuare problemi e correggerli.\n\nAlcuni log potrebbero contenere informazioni sensibili, quindi concedi l\'accesso a tutti i log del dispositivo soltanto alle app attendibili. \n\nSe le neghi l\'accesso a tutti i log del dispositivo, questa app può comunque accedere ai propri log. Il produttore del tuo dispositivo potrebbe essere comunque in grado di accedere ad alcuni log o informazioni sul dispositivo."</string>
+    <string name="log_access_confirmation_body" product="tv" msgid="7379536536425265262">"I log del dispositivo registrano tutto ciò che succede sul tuo dispositivo. Le app possono usare questi log per individuare problemi e correggerli.\n\nAlcuni log potrebbero contenere informazioni sensibili, quindi concedi l\'accesso a tutti i log del dispositivo soltanto alle app attendibili. \n\nSe le neghi l\'accesso a tutti i log del dispositivo, questa app può comunque accedere ai propri log. Il produttore del tuo dispositivo potrebbe essere comunque in grado di accedere ad alcuni log o informazioni sul dispositivo.\n\nScopri di più all\'indirizzo g.co/android/devicelogs."</string>
     <string name="log_access_do_not_show_again" msgid="1058690599083091552">"Non mostrare più"</string>
     <string name="slices_permission_request" msgid="3677129866636153406">"L\'app <xliff:g id="APP_0">%1$s</xliff:g> vuole mostrare porzioni dell\'app <xliff:g id="APP_2">%2$s</xliff:g>"</string>
     <string name="screenshot_edit" msgid="7408934887203689207">"Modifica"</string>

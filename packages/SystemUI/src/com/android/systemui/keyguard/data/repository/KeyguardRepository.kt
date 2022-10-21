@@ -85,6 +85,15 @@ interface KeyguardRepository {
      */
     val dozeAmount: Flow<Float>
 
+    /**
+     * Returns `true` if the keyguard is showing; `false` otherwise.
+     *
+     * Note: this is also `true` when the lock-screen is occluded with an `Activity` "above" it in
+     * the z-order (which is not really above the system UI window, but rather - the lock-screen
+     * becomes invisible to reveal the "occluding activity").
+     */
+    fun isKeyguardShowing(): Boolean
+
     /** Sets whether the bottom area UI should animate the transition out of doze state. */
     fun setAnimateDozingTransitions(animate: Boolean)
 
@@ -103,7 +112,7 @@ class KeyguardRepositoryImpl
 @Inject
 constructor(
     statusBarStateController: StatusBarStateController,
-    keyguardStateController: KeyguardStateController,
+    private val keyguardStateController: KeyguardStateController,
     dozeHost: DozeHost,
 ) : KeyguardRepository {
     private val _animateBottomAreaDozingTransitions = MutableStateFlow(false)
@@ -148,7 +157,11 @@ constructor(
                         }
                     }
                 dozeHost.addCallback(callback)
-                trySendWithFailureLogging(false, TAG, "initial isDozing: false")
+                trySendWithFailureLogging(
+                    statusBarStateController.isDozing,
+                    TAG,
+                    "initial isDozing",
+                )
 
                 awaitClose { dozeHost.removeCallback(callback) }
             }
@@ -166,6 +179,10 @@ constructor(
         trySendWithFailureLogging(statusBarStateController.dozeAmount, TAG, "initial dozeAmount")
 
         awaitClose { statusBarStateController.removeCallback(callback) }
+    }
+
+    override fun isKeyguardShowing(): Boolean {
+        return keyguardStateController.isShowing
     }
 
     override fun setAnimateDozingTransitions(animate: Boolean) {

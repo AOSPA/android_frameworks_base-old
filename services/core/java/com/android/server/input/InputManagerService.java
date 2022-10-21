@@ -49,6 +49,7 @@ import android.hardware.SensorPrivacyManagerInternal;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.DisplayViewport;
 import android.hardware.input.IInputDeviceBatteryListener;
+import android.hardware.input.IInputDeviceBatteryState;
 import android.hardware.input.IInputDevicesChangedListener;
 import android.hardware.input.IInputManager;
 import android.hardware.input.IInputSensorEventListener;
@@ -311,6 +312,9 @@ public class InputManagerService extends IInputManager.Stub
     // Manages battery state for input devices.
     private final BatteryController mBatteryController;
 
+    // Manages Keyboard backlight
+    private final KeyboardBacklightController mKeyboardBacklightController;
+
     // Maximum number of milliseconds to wait for input event injection.
     private static final int INJECTION_TIMEOUT_MILLIS = 30 * 1000;
 
@@ -421,6 +425,8 @@ public class InputManagerService extends IInputManager.Stub
         mHandler = new InputManagerHandler(injector.getLooper());
         mNative = injector.getNativeService(this);
         mBatteryController = new BatteryController(mContext, mNative, injector.getLooper());
+        mKeyboardBacklightController = new KeyboardBacklightController(mContext, mNative,
+                mDataStore, injector.getLooper());
 
         mUseDevInputEventForAudioJack =
                 mContext.getResources().getBoolean(R.bool.config_useDevInputEventForAudioJack);
@@ -562,6 +568,7 @@ public class InputManagerService extends IInputManager.Stub
         }
 
         mBatteryController.systemRunning();
+        mKeyboardBacklightController.systemRunning();
     }
 
     private void reloadKeyboardLayouts() {
@@ -2305,14 +2312,8 @@ public class InputManagerService extends IInputManager.Stub
 
     // Binder call
     @Override
-    public int getBatteryStatus(int deviceId) {
-        return mNative.getBatteryStatus(deviceId);
-    }
-
-    // Binder call
-    @Override
-    public int getBatteryCapacity(int deviceId) {
-        return mNative.getBatteryCapacity(deviceId);
+    public IInputDeviceBatteryState getBatteryState(int deviceId) {
+        return mBatteryController.getBatteryState(deviceId);
     }
 
     // Binder call
@@ -2685,6 +2686,7 @@ public class InputManagerService extends IInputManager.Stub
         dumpSpyWindowGestureMonitors(pw, "  " /*prefix*/);
         dumpDisplayInputPropertiesValues(pw, "  " /*prefix*/);
         mBatteryController.dump(pw, "  " /*prefix*/);
+        mKeyboardBacklightController.dump(pw, "  " /*prefix*/);
     }
 
     private void dumpAssociations(PrintWriter pw, String prefix) {
@@ -3761,6 +3763,16 @@ public class InputManagerService extends IInputManager.Stub
         @Override
         public void pilferPointers(IBinder token) {
             mNative.pilferPointers(token);
+        }
+
+        @Override
+        public void incrementKeyboardBacklight(int deviceId) {
+            mKeyboardBacklightController.incrementKeyboardBacklight(deviceId);
+        }
+
+        @Override
+        public void decrementKeyboardBacklight(int deviceId) {
+            mKeyboardBacklightController.decrementKeyboardBacklight(deviceId);
         }
     }
 

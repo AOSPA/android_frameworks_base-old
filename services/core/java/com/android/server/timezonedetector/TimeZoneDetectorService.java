@@ -23,6 +23,7 @@ import android.app.ActivityManager;
 import android.app.time.ITimeZoneDetectorListener;
 import android.app.time.TimeZoneCapabilitiesAndConfig;
 import android.app.time.TimeZoneConfiguration;
+import android.app.time.TimeZoneState;
 import android.app.timezonedetector.ITimeZoneDetectorService;
 import android.app.timezonedetector.ManualTimeZoneSuggestion;
 import android.app.timezonedetector.TelephonyTimeZoneSuggestion;
@@ -95,14 +96,19 @@ public final class TimeZoneDetectorService extends ITimeZoneDetectorService.Stub
             });
 
             // Create and publish the local service for use by internal callers.
-            TimeZoneDetectorInternal internal =
-                    new TimeZoneDetectorInternalImpl(context, handler, timeZoneDetectorStrategy);
+            CurrentUserIdentityInjector currentUserIdentityInjector =
+                    CurrentUserIdentityInjector.REAL;
+            TimeZoneDetectorInternal internal = new TimeZoneDetectorInternalImpl(
+                    context, handler, currentUserIdentityInjector, serviceConfigAccessor,
+                    timeZoneDetectorStrategy);
             publishLocalService(TimeZoneDetectorInternal.class, internal);
 
             // Publish the binder service so it can be accessed from other (appropriately
             // permissioned) processes.
-            TimeZoneDetectorService service = TimeZoneDetectorService.create(
-                    context, handler, serviceConfigAccessor, timeZoneDetectorStrategy);
+            CallerIdentityInjector callerIdentityInjector = CallerIdentityInjector.REAL;
+            TimeZoneDetectorService service = new TimeZoneDetectorService(
+                    context, handler, callerIdentityInjector, serviceConfigAccessor,
+                    timeZoneDetectorStrategy);
 
             // Dump the device activity monitor when the service is dumped.
             service.addDumpable(deviceActivityMonitor);
@@ -141,16 +147,6 @@ public final class TimeZoneDetectorService extends ITimeZoneDetectorService.Stub
     @GuardedBy("mDumpables")
     private final List<Dumpable> mDumpables = new ArrayList<>();
 
-    private static TimeZoneDetectorService create(
-            @NonNull Context context, @NonNull Handler handler,
-            @NonNull ServiceConfigAccessor serviceConfigAccessor,
-            @NonNull TimeZoneDetectorStrategy timeZoneDetectorStrategy) {
-
-        CallerIdentityInjector callerIdentityInjector = CallerIdentityInjector.REAL;
-        return new TimeZoneDetectorService(context, handler, callerIdentityInjector,
-                serviceConfigAccessor, timeZoneDetectorStrategy);
-    }
-
     @VisibleForTesting
     public TimeZoneDetectorService(@NonNull Context context, @NonNull Handler handler,
             @NonNull CallerIdentityInjector callerIdentityInjector,
@@ -182,7 +178,8 @@ public final class TimeZoneDetectorService extends ITimeZoneDetectorService.Stub
         try {
             ConfigurationInternal configurationInternal =
                     mServiceConfigAccessor.getConfigurationInternal(userId);
-            return configurationInternal.createCapabilitiesAndConfig();
+            final boolean bypassUserPolicyChecks = false;
+            return configurationInternal.createCapabilitiesAndConfig(bypassUserPolicyChecks);
         } finally {
             mCallerIdentityInjector.restoreCallingIdentity(token);
         }
@@ -206,7 +203,9 @@ public final class TimeZoneDetectorService extends ITimeZoneDetectorService.Stub
 
         final long token = mCallerIdentityInjector.clearCallingIdentity();
         try {
-            return mServiceConfigAccessor.updateConfiguration(resolvedUserId, configuration);
+            final boolean bypassUserPolicyChecks = false;
+            return mServiceConfigAccessor.updateConfiguration(
+                    resolvedUserId, configuration, bypassUserPolicyChecks);
         } finally {
             mCallerIdentityInjector.restoreCallingIdentity(token);
         }
@@ -313,6 +312,59 @@ public final class TimeZoneDetectorService extends ITimeZoneDetectorService.Stub
     }
 
     @Override
+    @NonNull
+    public TimeZoneState getTimeZoneState() {
+        enforceManageTimeZoneDetectorPermission();
+
+        final long token = mCallerIdentityInjector.clearCallingIdentity();
+        try {
+            return mTimeZoneDetectorStrategy.getTimeZoneState();
+        } finally {
+            mCallerIdentityInjector.restoreCallingIdentity(token);
+        }
+    }
+
+    void setTimeZoneState(@NonNull TimeZoneState timeZoneState) {
+        enforceManageTimeZoneDetectorPermission();
+
+        final long token = mCallerIdentityInjector.clearCallingIdentity();
+        try {
+            mTimeZoneDetectorStrategy.setTimeZoneState(timeZoneState);
+        } finally {
+            mCallerIdentityInjector.restoreCallingIdentity(token);
+        }
+    }
+
+    @Override
+    public boolean confirmTimeZone(@NonNull String timeZoneId) {
+        enforceManageTimeZoneDetectorPermission();
+
+        final long token = mCallerIdentityInjector.clearCallingIdentity();
+        try {
+            return mTimeZoneDetectorStrategy.confirmTimeZone(timeZoneId);
+        } finally {
+            mCallerIdentityInjector.restoreCallingIdentity(token);
+        }
+    }
+
+    @Override
+    public boolean setManualTimeZone(@NonNull ManualTimeZoneSuggestion timeZoneSuggestion) {
+        enforceManageTimeZoneDetectorPermission();
+
+        // This calls suggestManualTimeZone() as the logic is identical, it only differs in the
+        // permission required, which is handled on the line above.
+        int userId = mCallerIdentityInjector.getCallingUserId();
+        final long token = mCallerIdentityInjector.clearCallingIdentity();
+        try {
+            final boolean bypassUserPolicyChecks = false;
+            return mTimeZoneDetectorStrategy.suggestManualTimeZone(
+                    userId, timeZoneSuggestion, bypassUserPolicyChecks);
+        } finally {
+            mCallerIdentityInjector.restoreCallingIdentity(token);
+        }
+    }
+
+    @Override
     public boolean suggestManualTimeZone(@NonNull ManualTimeZoneSuggestion timeZoneSuggestion) {
         enforceSuggestManualTimeZonePermission();
         Objects.requireNonNull(timeZoneSuggestion);
@@ -320,7 +372,9 @@ public final class TimeZoneDetectorService extends ITimeZoneDetectorService.Stub
         int userId = mCallerIdentityInjector.getCallingUserId();
         final long token = mCallerIdentityInjector.clearCallingIdentity();
         try {
-            return mTimeZoneDetectorStrategy.suggestManualTimeZone(userId, timeZoneSuggestion);
+            final boolean bypassUserPolicyChecks = false;
+            return mTimeZoneDetectorStrategy.suggestManualTimeZone(
+                    userId, timeZoneSuggestion, bypassUserPolicyChecks);
         } finally {
             mCallerIdentityInjector.restoreCallingIdentity(token);
         }
@@ -405,7 +459,7 @@ public final class TimeZoneDetectorService extends ITimeZoneDetectorService.Stub
     private void enforceSuggestGeolocationTimeZonePermission() {
         // The associated method is only used for the shell command interface, it's not possible to
         // call it via Binder, and Shell currently can set the time zone directly anyway.
-        mContext.enforceCallingOrSelfPermission(
+        mContext.enforceCallingPermission(
                 android.Manifest.permission.SET_TIME_ZONE,
                 "suggest geolocation time zone");
     }
@@ -417,7 +471,7 @@ public final class TimeZoneDetectorService extends ITimeZoneDetectorService.Stub
     }
 
     private void enforceSuggestManualTimeZonePermission() {
-        mContext.enforceCallingOrSelfPermission(
+        mContext.enforceCallingPermission(
                 android.Manifest.permission.SUGGEST_MANUAL_TIME_AND_ZONE,
                 "suggest manual time and time zone");
     }

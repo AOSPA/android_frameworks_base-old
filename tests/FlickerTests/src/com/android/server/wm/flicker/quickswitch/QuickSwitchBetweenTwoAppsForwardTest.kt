@@ -24,7 +24,6 @@ import com.android.server.wm.flicker.BaseTest
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
-import com.android.server.wm.flicker.annotation.Group1
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.NonResizeableAppHelper
 import com.android.server.wm.flicker.helpers.SimpleAppHelper
@@ -45,19 +44,19 @@ import org.junit.runners.Parameterized
  * To run this test: `atest FlickerTests:QuickSwitchBetweenTwoAppsForwardTest`
  *
  * Actions:
+ * ```
  *     Launch an app [testApp1]
  *     Launch another app [testApp2]
  *     Swipe right from the bottom of the screen to quick switch back to the first app [testApp1]
  *     Swipe left from the bottom of the screen to quick switch forward to the second app [testApp2]
+ * ```
  */
 @RequiresDevice
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-@Group1
-open class QuickSwitchBetweenTwoAppsForwardTest(
-    testSpec: FlickerTestParameter
-) : BaseTest(testSpec) {
+open class QuickSwitchBetweenTwoAppsForwardTest(testSpec: FlickerTestParameter) :
+    BaseTest(testSpec) {
     private val testApp1 = SimpleAppHelper(instrumentation)
     private val testApp2 = NonResizeableAppHelper(instrumentation)
 
@@ -69,22 +68,24 @@ open class QuickSwitchBetweenTwoAppsForwardTest(
     /** {@inheritDoc} */
     override val transition: FlickerBuilder.() -> Unit = {
         setup {
-                tapl.setExpectedRotation(testSpec.startRotation)
+            tapl.setExpectedRotation(testSpec.startRotation)
 
-                testApp1.launchViaIntent(wmHelper)
-                testApp2.launchViaIntent(wmHelper)
-                tapl.launchedAppState.quickSwitchToPreviousApp()
-                wmHelper.StateSyncBuilder()
-                    .withFullScreenApp(testApp1)
-                    .withNavOrTaskBarVisible()
-                    .withStatusBarVisible()
-                    .waitForAndVerify()
-                startDisplayBounds = wmHelper.currentState.layerState
-                    .physicalDisplayBounds ?: error("Display not found")
+            testApp1.launchViaIntent(wmHelper)
+            testApp2.launchViaIntent(wmHelper)
+            tapl.launchedAppState.quickSwitchToPreviousApp()
+            wmHelper
+                .StateSyncBuilder()
+                .withFullScreenApp(testApp1)
+                .withNavOrTaskBarVisible()
+                .withStatusBarVisible()
+                .waitForAndVerify()
+            startDisplayBounds =
+                wmHelper.currentState.layerState.physicalDisplayBounds ?: error("Display not found")
         }
         transitions {
             tapl.launchedAppState.quickSwitchToPreviousAppSwipeLeft()
-            wmHelper.StateSyncBuilder()
+            wmHelper
+                .StateSyncBuilder()
                 .withFullScreenApp(testApp2)
                 .withNavOrTaskBarVisible()
                 .withStatusBarVisible()
@@ -122,15 +123,11 @@ open class QuickSwitchBetweenTwoAppsForwardTest(
         }
     }
 
-    /**
-     * Checks that the transition starts with [testApp1] being the top window.
-     */
+    /** Checks that the transition starts with [testApp1] being the top window. */
     @Presubmit
     @Test
     open fun startsWithApp1WindowBeingOnTop() {
-        testSpec.assertWmStart {
-            this.isAppWindowOnTop(testApp1)
-        }
+        testSpec.assertWmStart { this.isAppWindowOnTop(testApp1) }
     }
 
     /**
@@ -140,9 +137,7 @@ open class QuickSwitchBetweenTwoAppsForwardTest(
     @Presubmit
     @Test
     open fun endsWithApp2WindowsCoveringFullScreen() {
-        testSpec.assertWmEnd {
-            this.visibleRegion(testApp2).coversExactly(startDisplayBounds)
-        }
+        testSpec.assertWmEnd { this.visibleRegion(testApp2).coversExactly(startDisplayBounds) }
     }
 
     /**
@@ -165,9 +160,7 @@ open class QuickSwitchBetweenTwoAppsForwardTest(
     @Presubmit
     @Test
     open fun endsWithApp2BeingOnTop() {
-        testSpec.assertWmEnd {
-            this.isAppWindowOnTop(testApp2)
-        }
+        testSpec.assertWmEnd { this.isAppWindowOnTop(testApp2) }
     }
 
     /**
@@ -179,10 +172,10 @@ open class QuickSwitchBetweenTwoAppsForwardTest(
     open fun app2WindowBecomesAndStaysVisible() {
         testSpec.assertWm {
             this.isAppWindowInvisible(testApp2)
-                    .then()
-                    .isAppWindowVisible(ComponentNameMatcher.SNAPSHOT, isOptional = true)
-                    .then()
-                    .isAppWindowVisible(testApp2)
+                .then()
+                .isAppWindowVisible(ComponentNameMatcher.SNAPSHOT, isOptional = true)
+                .then()
+                .isAppWindowVisible(testApp2)
         }
     }
 
@@ -193,11 +186,7 @@ open class QuickSwitchBetweenTwoAppsForwardTest(
     @Presubmit
     @Test
     open fun app2LayerBecomesAndStaysVisible() {
-        testSpec.assertLayers {
-            this.isInvisible(testApp2)
-                    .then()
-                    .isVisible(testApp2)
-        }
+        testSpec.assertLayers { this.isInvisible(testApp2).then().isVisible(testApp2) }
     }
 
     /**
@@ -208,9 +197,7 @@ open class QuickSwitchBetweenTwoAppsForwardTest(
     @Test
     open fun app1WindowBecomesAndStaysInvisible() {
         testSpec.assertWm {
-            this.isAppWindowVisible(testApp1)
-                    .then()
-                    .isAppWindowInvisible(testApp1)
+            this.isAppWindowVisible(testApp1).then().isAppWindowInvisible(testApp1)
         }
     }
 
@@ -221,11 +208,7 @@ open class QuickSwitchBetweenTwoAppsForwardTest(
     @Presubmit
     @Test
     open fun app1LayerBecomesAndStaysInvisible() {
-        testSpec.assertLayers {
-            this.isVisible(testApp1)
-                    .then()
-                    .isInvisible(testApp1)
-        }
+        testSpec.assertLayers { this.isVisible(testApp1).then().isInvisible(testApp1) }
     }
 
     /**
@@ -238,12 +221,12 @@ open class QuickSwitchBetweenTwoAppsForwardTest(
     open fun app2WindowIsVisibleOnceApp1WindowIsInvisible() {
         testSpec.assertWm {
             this.isAppWindowVisible(testApp1)
-                    .then()
-                    .isAppWindowVisible(ComponentNameMatcher.LAUNCHER, isOptional = true)
-                    .then()
-                    .isAppWindowVisible(ComponentNameMatcher.SNAPSHOT, isOptional = true)
-                    .then()
-                    .isAppWindowVisible(testApp2)
+                .then()
+                .isAppWindowVisible(ComponentNameMatcher.LAUNCHER, isOptional = true)
+                .then()
+                .isAppWindowVisible(ComponentNameMatcher.SNAPSHOT, isOptional = true)
+                .then()
+                .isAppWindowVisible(testApp2)
         }
     }
 
@@ -257,12 +240,12 @@ open class QuickSwitchBetweenTwoAppsForwardTest(
     open fun app2LayerIsVisibleOnceApp1LayerIsInvisible() {
         testSpec.assertLayers {
             this.isVisible(testApp1)
-                    .then()
-                    .isVisible(ComponentNameMatcher.LAUNCHER, isOptional = true)
-                    .then()
-                    .isVisible(ComponentNameMatcher.SNAPSHOT, isOptional = true)
-                    .then()
-                    .isVisible(testApp2)
+                .then()
+                .isVisible(ComponentNameMatcher.LAUNCHER, isOptional = true)
+                .then()
+                .isVisible(ComponentNameMatcher.SNAPSHOT, isOptional = true)
+                .then()
+                .isVisible(testApp2)
         }
     }
 
@@ -278,12 +261,11 @@ open class QuickSwitchBetweenTwoAppsForwardTest(
         @JvmStatic
         fun getParams(): Collection<FlickerTestParameter> {
             return FlickerTestParameterFactory.getInstance()
-                    .getConfigNonRotationTests(
-                                                        supportedNavigationModes = listOf(
-                                    WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL_OVERLAY
-                            ),
-                            supportedRotations = listOf(Surface.ROTATION_0, Surface.ROTATION_90)
-                    )
+                .getConfigNonRotationTests(
+                    supportedNavigationModes =
+                        listOf(WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL_OVERLAY),
+                    supportedRotations = listOf(Surface.ROTATION_0, Surface.ROTATION_90)
+                )
         }
     }
 }

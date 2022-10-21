@@ -17,7 +17,9 @@
 package com.android.systemui.temporarydisplay
 
 import android.content.Context
+import android.graphics.Rect
 import android.os.PowerManager
+import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityManager
@@ -60,6 +62,8 @@ class TemporaryViewDisplayControllerTest : SysuiTestCase() {
     private lateinit var windowManager: WindowManager
     @Mock
     private lateinit var powerManager: PowerManager
+
+    private var shouldIgnoreViewRemoval: Boolean = false
 
     @Before
     fun setUp() {
@@ -205,6 +209,26 @@ class TemporaryViewDisplayControllerTest : SysuiTestCase() {
         verify(windowManager, never()).removeView(any())
     }
 
+    @Test
+    fun removeView_shouldIgnoreRemovalFalse_viewRemoved() {
+        shouldIgnoreViewRemoval = false
+        underTest.displayView(getState())
+
+        underTest.removeView("reason")
+
+        verify(windowManager).removeView(any())
+    }
+
+    @Test
+    fun removeView_shouldIgnoreRemovalTrue_viewNotRemoved() {
+        shouldIgnoreViewRemoval = true
+        underTest.displayView(getState())
+
+        underTest.removeView("reason")
+
+        verify(windowManager, never()).removeView(any())
+    }
+
     private fun getState(name: String = "name") = ViewInfo(name)
 
     private fun getConfigurationListener(): ConfigurationListener {
@@ -236,9 +260,19 @@ class TemporaryViewDisplayControllerTest : SysuiTestCase() {
         var mostRecentViewInfo: ViewInfo? = null
 
         override val windowLayoutParams = commonWindowLayoutParams
+
+        override fun start() {}
+
         override fun updateView(newInfo: ViewInfo, currentView: ViewGroup) {
-            super.updateView(newInfo, currentView)
             mostRecentViewInfo = newInfo
+        }
+
+        override fun shouldIgnoreViewRemoval(info: ViewInfo, removalReason: String): Boolean {
+            return shouldIgnoreViewRemoval
+        }
+
+        override fun getTouchableRegion(view: View, outRect: Rect) {
+            outRect.setEmpty()
         }
     }
 

@@ -48,7 +48,7 @@ interface IInputMethodManager {
     @JavaPassthrough(annotation="@android.annotation.RequiresPermission(value = "
             + "android.Manifest.permission.INTERACT_ACROSS_USERS_FULL, conditional = true)")
     List<InputMethodSubtype> getEnabledInputMethodSubtypeList(in @nullable String imiId,
-            boolean allowsImplicitlySelectedSubtypes, int userId);
+            boolean allowsImplicitlyEnabledSubtypes, int userId);
 
     @JavaPassthrough(annotation="@android.annotation.RequiresPermission(value = "
             + "android.Manifest.permission.INTERACT_ACROSS_USERS_FULL, conditional = true)")
@@ -84,6 +84,7 @@ interface IInputMethodManager {
     void showInputMethodPickerFromSystem(in IInputMethodClient client,
             int auxiliarySubtypeMode, int displayId);
 
+    @EnforcePermission("TEST_INPUT_METHOD")
     @JavaPassthrough(annotation="@android.annotation.RequiresPermission(value = "
             + "android.Manifest.permission.TEST_INPUT_METHOD)")
     boolean isInputMethodPickerShownForTest();
@@ -95,6 +96,11 @@ interface IInputMethodManager {
     @JavaPassthrough(annotation="@android.annotation.RequiresPermission(value = "
             + "android.Manifest.permission.INTERACT_ACROSS_USERS_FULL, conditional = true)")
     void setAdditionalInputMethodSubtypes(String id, in InputMethodSubtype[] subtypes,
+            int userId);
+
+    @JavaPassthrough(annotation="@android.annotation.RequiresPermission(value = "
+            + "android.Manifest.permission.INTERACT_ACROSS_USERS_FULL, conditional = true)")
+    void setExplicitlyEnabledInputMethodSubtypes(String imeId, in int[] subtypeHashCodes,
             int userId);
 
     // This is kept due to @UnsupportedAppUsage.
@@ -144,4 +150,10 @@ interface IInputMethodManager {
     @JavaPassthrough(annotation="@android.annotation.RequiresPermission(value = "
             + "android.Manifest.permission.INJECT_EVENTS)")
     void addVirtualStylusIdForTestSession(in IInputMethodClient client);
+
+    /** Set a stylus idle-timeout after which handwriting {@code InkWindow} will be removed. */
+    @EnforcePermission("TEST_INPUT_METHOD")
+    @JavaPassthrough(annotation="@android.annotation.RequiresPermission(value = "
+            + "android.Manifest.permission.TEST_INPUT_METHOD)")
+    void setStylusWindowIdleTimeoutForTest(in IInputMethodClient client, long timeout);
 }

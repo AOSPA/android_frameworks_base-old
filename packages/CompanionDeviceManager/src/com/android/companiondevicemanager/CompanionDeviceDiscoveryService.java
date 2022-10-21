@@ -29,6 +29,7 @@ import static java.util.Objects.requireNonNull;
 import android.annotation.MainThread;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.SuppressLint;
 import android.app.Service;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
@@ -68,6 +69,7 @@ import java.util.Objects;
 /**
  *  A CompanionDevice service response for scanning nearby devices
  */
+@SuppressLint("LongLogTag")
 public class CompanionDeviceDiscoveryService extends Service {
     private static final boolean DEBUG = false;
     private static final String TAG = "CDM_CompanionDeviceDiscoveryService";
@@ -103,7 +105,7 @@ public class CompanionDeviceDiscoveryService extends Service {
 
     private final Runnable mTimeoutRunnable = this::timeout;
 
-    private boolean mStopAfterFirstMatch;;
+    private boolean mStopAfterFirstMatch;
 
     /**
      * A state enum for devices' discovery.

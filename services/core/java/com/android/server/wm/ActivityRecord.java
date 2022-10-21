@@ -120,6 +120,8 @@ import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
 import static android.view.WindowManager.TRANSIT_CLOSE;
 import static android.view.WindowManager.TRANSIT_FLAG_OPEN_BEHIND;
 import static android.view.WindowManager.TRANSIT_OLD_UNSET;
+import static android.window.TransitionInfo.FLAG_IS_OCCLUDED;
+import static android.window.TransitionInfo.FLAG_STARTING_WINDOW_TRANSFER_RECIPIENT;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ADD_REMOVE;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ANIM;
@@ -673,7 +675,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     private final WindowState.UpdateReportedVisibilityResults mReportedVisibilityResults =
             new WindowState.UpdateReportedVisibilityResults();
 
-    boolean mUseTransferredAnimation;
+    int mTransitionChangeFlags;
 
     /** Whether we need to setup the animation to animate only within the letterbox. */
     private boolean mNeedsLetterboxedAnimation;
@@ -4416,10 +4418,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                     // When transferring an animation, we no longer need to apply an animation to
                     // the token we transfer the animation over. Thus, set this flag to indicate
                     // we've transferred the animation.
-                    mUseTransferredAnimation = true;
+                    mTransitionChangeFlags |= FLAG_STARTING_WINDOW_TRANSFER_RECIPIENT;
                 } else if (mTransitionController.getTransitionPlayer() != null) {
                     // In the new transit system, just set this every time we transfer the window
-                    mUseTransferredAnimation = true;
+                    mTransitionChangeFlags |= FLAG_STARTING_WINDOW_TRANSFER_RECIPIENT;
                 }
                 // Post cleanup after the visibility and animation are transferred.
                 fromActivity.postWindowRemoveStartingWindowCleanup(tStartingWindow);
@@ -5268,6 +5270,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
         // If in a transition, defer commits for activities that are going invisible
         if (!visible && inTransition()) {
+            if (mTransitionController.inPlayingTransition(this)
+                    && mTransitionController.isCollecting(this)) {
+                mTransitionChangeFlags |= FLAG_IS_OCCLUDED;
+            }
             return;
         }
         // If we are preparing an app transition, then delay changing
@@ -5318,7 +5324,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     @Override
     boolean applyAnimation(LayoutParams lp, @TransitionOldType int transit, boolean enter,
             boolean isVoiceInteraction, @Nullable ArrayList<WindowContainer> sources) {
-        if (mUseTransferredAnimation) {
+        if ((mTransitionChangeFlags & FLAG_STARTING_WINDOW_TRANSFER_RECIPIENT) != 0) {
             return false;
         }
         // If it was set to true, reset the last request to force the transition.
@@ -5391,7 +5397,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             mWmService.mWindowPlacerLocked.performSurfacePlacement();
         }
         displayContent.getInputMonitor().updateInputWindowsLw(false /*force*/);
-        mUseTransferredAnimation = false;
+        mTransitionChangeFlags = 0;
 
         postApplyAnimation(visible, fromTransition);
     }
@@ -5908,8 +5914,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // in untrusted mode. Traverse bottom to top with boundary so that it will only check
         // activities above this activity.
         final ActivityRecord differentUidOverlayActivity = getTask().getActivity(
-                a -> a.getUid() != getUid(), this /* boundary */, false /* includeBoundary */,
-                false /* traverseTopToBottom */);
+                a -> !a.finishing && a.getUid() != getUid(), this /* boundary */,
+                false /* includeBoundary */, false /* traverseTopToBottom */);
         return differentUidOverlayActivity != null;
     }
 

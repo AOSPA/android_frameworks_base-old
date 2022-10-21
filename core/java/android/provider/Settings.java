@@ -393,6 +393,21 @@ public final class Settings {
             "android.settings.ACCESSIBILITY_DETAILS_SETTINGS";
 
     /**
+     * Activity Action: Show settings to allow configuration of accessibility color and motion.
+     * <p>
+     * In some cases, a matching Activity may not exist, so ensure you
+     * safeguard against this.
+     * <p>
+     * Input: Nothing.
+     * <p>
+     * Output: Nothing.
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_ACCESSIBILITY_COLOR_MOTION_SETTINGS =
+            "android.settings.ACCESSIBILITY_COLOR_MOTION_SETTINGS";
+
+    /**
      * Activity Action: Show settings to allow configuration of Reduce Bright Colors.
      * <p>
      * In some cases, a matching Activity may not exist, so ensure you
@@ -436,6 +451,21 @@ public final class Settings {
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_COLOR_INVERSION_SETTINGS =
             "android.settings.COLOR_INVERSION_SETTINGS";
+
+    /**
+     * Activity Action: Show settings to allow configuration of text reading.
+     * <p>
+     * In some cases, a matching Activity may not exist, so ensure you
+     * safeguard against this.
+     * <p>
+     * Input: Nothing.
+     * <p>
+     * Output: Nothing.
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_TEXT_READING_SETTINGS =
+            "android.settings.TEXT_READING_SETTINGS";
 
     /**
      * Activity Action: Show settings to control access to usage information.
@@ -10883,23 +10913,6 @@ public final class Settings {
          */
         public static final String ACCESSIBILITY_SOFTWARE_CURSOR_ENABLED =
                 "accessibility_software_cursor_enabled";
-
-        /**
-         * Software Cursor settings that specifies whether trigger hints are enabled.
-         *
-         * @hide
-         */
-        public static final String ACCESSIBILITY_SOFTWARE_CURSOR_TRIGGER_HINTS_ENABLED =
-                "accessibility_software_cursor_trigger_hints_enabled";
-
-        /**
-         * Software Cursor settings that specifies whether triggers are shifted when the keyboard
-         * is shown.
-         *
-         * @hide
-         */
-        public static final String ACCESSIBILITY_SOFTWARE_CURSOR_KEYBOARD_SHIFT_ENABLED =
-                "accessibility_software_cursor_keyboard_shift_enabled";
 
         /**
          * Whether the Adaptive connectivity option is enabled.

@@ -17,6 +17,7 @@
 package android.view.inputmethod;
 
 import android.annotation.AnyThread;
+import android.annotation.DurationMillisLong;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
@@ -90,10 +91,10 @@ final class IInputMethodManagerInvoker {
     @AnyThread
     @NonNull
     List<InputMethodSubtype> getEnabledInputMethodSubtypeList(@Nullable String imiId,
-            boolean allowsImplicitlySelectedSubtypes, @UserIdInt int userId) {
+            boolean allowsImplicitlyEnabledSubtypes, @UserIdInt int userId) {
         try {
             return mTarget.getEnabledInputMethodSubtypeList(imiId,
-                    allowsImplicitlySelectedSubtypes, userId);
+                    allowsImplicitlyEnabledSubtypes, userId);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -202,6 +203,16 @@ final class IInputMethodManagerInvoker {
     }
 
     @AnyThread
+    void setExplicitlyEnabledInputMethodSubtypes(@NonNull String imeId,
+            @NonNull int[] subtypeHashCodes, @UserIdInt int userId) {
+        try {
+            mTarget.setExplicitlyEnabledInputMethodSubtypes(imeId, subtypeHashCodes, userId);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    @AnyThread
     int getInputMethodWindowVisibleHeight(@NonNull IInputMethodClient client) {
         try {
             return mTarget.getInputMethodWindowVisibleHeight(client);
@@ -260,6 +271,16 @@ final class IInputMethodManagerInvoker {
     void addVirtualStylusIdForTestSession(IInputMethodClient client) {
         try {
             mTarget.addVirtualStylusIdForTestSession(client);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    @AnyThread
+    void setStylusWindowIdleTimeoutForTest(
+            IInputMethodClient client, @DurationMillisLong long timeout) {
+        try {
+            mTarget.setStylusWindowIdleTimeoutForTest(client, timeout);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

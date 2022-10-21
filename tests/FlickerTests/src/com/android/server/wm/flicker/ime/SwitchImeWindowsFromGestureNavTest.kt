@@ -16,6 +16,7 @@
 
 package com.android.server.wm.flicker.ime
 
+import android.platform.test.annotations.FlakyTest
 import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
@@ -25,7 +26,6 @@ import com.android.server.wm.flicker.BaseTest
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
-import com.android.server.wm.flicker.annotation.Group4
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.ImeAppAutoFocusHelper
 import com.android.server.wm.flicker.helpers.SimpleAppHelper
@@ -41,18 +41,15 @@ import org.junit.runners.MethodSorters
 import org.junit.runners.Parameterized
 
 /**
- * Test IME windows switching with 2-Buttons or gestural navigation.
- * To run this test: `atest FlickerTests:SwitchImeWindowsFromGestureNavTest`
+ * Test IME windows switching with 2-Buttons or gestural navigation. To run this test: `atest
+ * FlickerTests:SwitchImeWindowsFromGestureNavTest`
  */
 @RequiresDevice
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-@Group4
 @Presubmit
-open class SwitchImeWindowsFromGestureNavTest(
-    testSpec: FlickerTestParameter
-) : BaseTest(testSpec) {
+open class SwitchImeWindowsFromGestureNavTest(testSpec: FlickerTestParameter) : BaseTest(testSpec) {
     private val testApp = SimpleAppHelper(instrumentation)
     private val imeTestApp = ImeAppAutoFocusHelper(instrumentation, testSpec.startRotation)
 
@@ -65,42 +62,35 @@ open class SwitchImeWindowsFromGestureNavTest(
     override val transition: FlickerBuilder.() -> Unit = {
         setup {
             tapl.setExpectedRotationCheckEnabled(false)
+            tapl.setIgnoreTaskbarVisibility(true)
             this.setRotation(testSpec.startRotation)
             testApp.launchViaIntent(wmHelper)
-            wmHelper.StateSyncBuilder()
-                .withFullScreenApp(testApp)
-                .waitForAndVerify()
+            wmHelper.StateSyncBuilder().withFullScreenApp(testApp).waitForAndVerify()
 
             imeTestApp.launchViaIntent(wmHelper)
-            wmHelper.StateSyncBuilder()
-                .withFullScreenApp(imeTestApp)
-                .waitForAndVerify()
+            wmHelper.StateSyncBuilder().withFullScreenApp(imeTestApp).waitForAndVerify()
 
             imeTestApp.openIME(wmHelper)
         }
         teardown {
             tapl.goHome()
-            wmHelper.StateSyncBuilder()
-                .withHomeActivityVisible()
-                .waitForAndVerify()
+            wmHelper.StateSyncBuilder().withHomeActivityVisible().waitForAndVerify()
             testApp.exit(wmHelper)
             imeTestApp.exit(wmHelper)
         }
         transitions {
-            // [Step1]: Swipe right from imeTestApp to testApp task
+            // [Step1]: Swipe right from testApp task to imeTestApp
             createTag(TAG_IME_VISIBLE)
+            // Expect taskBar invisible when switching to imeTestApp on the large screen device.
             tapl.launchedAppState.quickSwitchToPreviousApp()
-            wmHelper.StateSyncBuilder()
-                .withFullScreenApp(testApp)
-                .waitForAndVerify()
+            wmHelper.StateSyncBuilder().withFullScreenApp(testApp).waitForAndVerify()
             createTag(TAG_IME_INVISIBLE)
         }
         transitions {
-            // [Step2]: Swipe left to back to imeTestApp task
+            // [Step2]: Swipe left to back to testApp task
+            // Expect taskBar visible when switching to testApp on the large screen device.
             tapl.launchedAppState.quickSwitchToPreviousAppSwipeLeft()
-            wmHelper.StateSyncBuilder()
-                .withFullScreenApp(imeTestApp)
-                .waitForAndVerify()
+            wmHelper.StateSyncBuilder().withFullScreenApp(imeTestApp).waitForAndVerify()
         }
     }
 
@@ -110,9 +100,7 @@ open class SwitchImeWindowsFromGestureNavTest(
     override fun statusBarWindowIsAlwaysVisible() = super.statusBarWindowIsAlwaysVisible()
 
     /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun entireScreenCovered() = super.entireScreenCovered()
+    @Postsubmit @Test override fun entireScreenCovered() = super.entireScreenCovered()
 
     /** {@inheritDoc} */
     @Postsubmit
@@ -138,8 +126,7 @@ open class SwitchImeWindowsFromGestureNavTest(
     /** {@inheritDoc} */
     @Postsubmit
     @Test
-    override fun statusBarLayerPositionAtStartAndEnd() =
-        super.statusBarLayerPositionAtStartAndEnd()
+    override fun statusBarLayerPositionAtStartAndEnd() = super.statusBarLayerPositionAtStartAndEnd()
 
     /** {@inheritDoc} */
     @Postsubmit
@@ -153,6 +140,7 @@ open class SwitchImeWindowsFromGestureNavTest(
     override fun visibleWindowsShownMoreThanOneConsecutiveEntry() =
         super.visibleWindowsShownMoreThanOneConsecutiveEntry()
 
+    @Presubmit
     @Test
     fun imeAppWindowVisibility() {
         testSpec.assertWm {
@@ -168,24 +156,18 @@ open class SwitchImeWindowsFromGestureNavTest(
         }
     }
 
+    @FlakyTest(bugId = 244414110)
     @Test
     open fun imeLayerIsVisibleWhenSwitchingToImeApp() {
-        testSpec.assertLayersStart {
-            isVisible(ComponentNameMatcher.IME)
-        }
-        testSpec.assertLayersTag(TAG_IME_VISIBLE) {
-            isVisible(ComponentNameMatcher.IME)
-        }
-        testSpec.assertLayersEnd {
-            isVisible(ComponentNameMatcher.IME)
-        }
+        testSpec.assertLayersStart { isVisible(ComponentNameMatcher.IME) }
+        testSpec.assertLayersTag(TAG_IME_VISIBLE) { isVisible(ComponentNameMatcher.IME) }
+        testSpec.assertLayersEnd { isVisible(ComponentNameMatcher.IME) }
     }
 
+    @Presubmit
     @Test
     fun imeLayerIsInvisibleWhenSwitchingToTestApp() {
-        testSpec.assertLayersTag(TAG_IME_INVISIBLE) {
-            isInvisible(ComponentNameMatcher.IME)
-        }
+        testSpec.assertLayersTag(TAG_IME_INVISIBLE) { isInvisible(ComponentNameMatcher.IME) }
     }
 
     companion object {
@@ -194,9 +176,8 @@ open class SwitchImeWindowsFromGestureNavTest(
         fun getParams(): Collection<FlickerTestParameter> {
             return FlickerTestParameterFactory.getInstance()
                 .getConfigNonRotationTests(
-                                        supportedNavigationModes = listOf(
-                        WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL_OVERLAY
-                    ),
+                    supportedNavigationModes =
+                        listOf(WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL_OVERLAY),
                     supportedRotations = listOf(Surface.ROTATION_0)
                 )
         }
