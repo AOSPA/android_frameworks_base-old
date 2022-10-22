@@ -269,6 +269,7 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     private AppOpsManager mAppOpsManager;
 
     private IServicetracker mServicetracker;
+    private int mTryForTrackerCount = 0;
 
     /** Common synchronization logic used to save things to disks. */
     PersisterQueue mPersisterQueue;
@@ -469,7 +470,8 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     }
 
     public IServicetracker getServicetrackerInstance() {
-        if (mServicetracker == null) {
+        if (mServicetracker == null && mTryForTrackerCount < 3) {
+            mTryForTrackerCount++;
             try {
                 mServicetracker = IServicetracker.getService(false);
             } catch (java.util.NoSuchElementException e) {

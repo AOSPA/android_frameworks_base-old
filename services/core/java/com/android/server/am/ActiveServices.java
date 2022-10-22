@@ -336,6 +336,7 @@ public final class ActiveServices {
     static final int LAST_ANR_LIFETIME_DURATION_MSECS = 2 * 60 * 60 * 1000; // Two hours
 
     private IServicetracker mServicetracker;
+    private int mTryForTrackerCount = 0;
 
     private final boolean isLowRamDevice =
             SystemProperties.getBoolean("ro.config.low_ram", false);
@@ -610,7 +611,8 @@ public final class ActiveServices {
     }
 
     private boolean getServicetrackerInstance() {
-        if (mServicetracker == null ) {
+        if (mServicetracker == null && mTryForTrackerCount < 3) {
+            mTryForTrackerCount++;
             try {
                 mServicetracker = IServicetracker.getService(false);
             } catch (java.util.NoSuchElementException e) {
@@ -623,6 +625,9 @@ public final class ActiveServices {
                 if (DEBUG_SERVICE) Slog.w(TAG, "servicetracker HIDL not available");
                 return false;
             }
+        } else {
+            if (DEBUG_SERVICE) Slog.e(TAG, "Finished trying to get servicetracker HIDL");
+            return false;
         }
         return true;
     }
