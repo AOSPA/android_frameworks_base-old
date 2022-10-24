@@ -118,6 +118,11 @@ class PackageVerificationState {
                 default:
                     mRequiredVerificationPassed = false;
             }
+
+            mUnrespondedRequiredVerifierUids.delete(uid);
+            if (mUnrespondedRequiredVerifierUids.size() == 0) {
+                mRequiredVerificationComplete = true;
+            }
             return true;
         } else if (mHasOptionalVerifier && uid == mOptionalVerifierUid) {
             mOptionalVerificationComplete = true;
@@ -127,11 +132,6 @@ class PackageVerificationState {
                     break;
                 default:
                     mOptionalVerificationPassed = false;
-            }
-
-            mUnrespondedRequiredVerifierUids.delete(uid);
-            if (mUnrespondedRequiredVerifierUids.size() == 0) {
-                mRequiredVerificationComplete = true;
             }
             return true;
         } else if (mSufficientVerifierUids.get(uid)) {
