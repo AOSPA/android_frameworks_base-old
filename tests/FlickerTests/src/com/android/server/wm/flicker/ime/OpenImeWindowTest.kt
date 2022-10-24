@@ -24,7 +24,6 @@ import com.android.server.wm.flicker.BaseTest
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
-import com.android.server.wm.flicker.annotation.Group2
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.ImeAppHelper
 import org.junit.FixMethodOrder
@@ -33,54 +32,38 @@ import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
 import org.junit.runners.Parameterized
 
-/**
- * Test IME window opening transitions.
- * To run this test: `atest FlickerTests:OpenImeWindowTest`
- */
+/** Test IME window opening transitions. To run this test: `atest FlickerTests:OpenImeWindowTest` */
 @RequiresDevice
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-@Group2
 class OpenImeWindowTest(testSpec: FlickerTestParameter) : BaseTest(testSpec) {
     private val testApp = ImeAppHelper(instrumentation)
 
     /** {@inheritDoc} */
     override val transition: FlickerBuilder.() -> Unit = {
-        setup {
-            testApp.launchViaIntent(wmHelper)
-        }
-        transitions {
-            testApp.openIME(wmHelper)
-        }
+        setup { testApp.launchViaIntent(wmHelper) }
+        transitions { testApp.openIME(wmHelper) }
         teardown {
             testApp.closeIME(wmHelper)
             testApp.exit(wmHelper)
         }
     }
 
-    @Presubmit
-    @Test
-    fun imeWindowBecomesVisible() = testSpec.imeWindowBecomesVisible()
+    @Presubmit @Test fun imeWindowBecomesVisible() = testSpec.imeWindowBecomesVisible()
 
     @Presubmit
     @Test
     fun appWindowAlwaysVisibleOnTop() {
-        testSpec.assertWm {
-            this.isAppWindowOnTop(testApp)
-        }
+        testSpec.assertWm { this.isAppWindowOnTop(testApp) }
     }
 
-    @Presubmit
-    @Test
-    fun imeLayerBecomesVisible() = testSpec.imeLayerBecomesVisible()
+    @Presubmit @Test fun imeLayerBecomesVisible() = testSpec.imeLayerBecomesVisible()
 
     @Presubmit
     @Test
     fun layerAlwaysVisible() {
-        testSpec.assertLayers {
-            this.isVisible(testApp)
-        }
+        testSpec.assertLayers { this.isVisible(testApp) }
     }
 
     companion object {
@@ -89,11 +72,12 @@ class OpenImeWindowTest(testSpec: FlickerTestParameter) : BaseTest(testSpec) {
         fun getParams(): Collection<FlickerTestParameter> {
             return FlickerTestParameterFactory.getInstance()
                 .getConfigNonRotationTests(
-                                        supportedRotations = listOf(Surface.ROTATION_0),
-                    supportedNavigationModes = listOf(
-                        WindowManagerPolicyConstants.NAV_BAR_MODE_3BUTTON_OVERLAY,
-                        WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL_OVERLAY
-                    )
+                    supportedRotations = listOf(Surface.ROTATION_0),
+                    supportedNavigationModes =
+                        listOf(
+                            WindowManagerPolicyConstants.NAV_BAR_MODE_3BUTTON_OVERLAY,
+                            WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL_OVERLAY
+                        )
                 )
         }
     }

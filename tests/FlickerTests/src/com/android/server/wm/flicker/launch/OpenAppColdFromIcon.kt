@@ -16,13 +16,12 @@
 
 package com.android.server.wm.flicker.launch
 
-import android.platform.test.annotations.Postsubmit
+import android.platform.test.annotations.FlakyTest
 import android.platform.test.annotations.RequiresDevice
 import android.view.Surface
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
-import com.android.server.wm.flicker.annotation.Group1
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.setRotation
 import com.android.server.wm.flicker.rules.RemoveAllTasksButHomeRule
@@ -38,25 +37,26 @@ import org.junit.runners.Parameterized
  * To run this test: `atest FlickerTests:OpenAppColdFromIcon`
  *
  * Actions:
+ * ```
  *     Make sure no apps are running on the device
  *     Launch an app [testApp] by clicking it's icon on all apps and wait animation to complete
- *
+ * ```
  * Notes:
+ * ```
  *     1. Some default assertions (e.g., nav bar, status bar and screen covered)
  *        are inherited [OpenAppTransition]
  *     2. Part of the test setup occurs automatically via
  *        [com.android.server.wm.flicker.TransitionRunnerWithRules],
  *        including configuring navigation mode, initial orientation and ensuring no
  *        apps are running before setup
+ * ```
  */
 @RequiresDevice
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-@Group1
-class OpenAppColdFromIcon(
-    testSpec: FlickerTestParameter
-) : OpenAppFromLauncherTransition(testSpec) {
+class OpenAppColdFromIcon(testSpec: FlickerTestParameter) :
+    OpenAppFromLauncherTransition(testSpec) {
     /** {@inheritDoc} */
     override val transition: FlickerBuilder.() -> Unit
         get() = {
@@ -71,115 +71,109 @@ class OpenAppColdFromIcon(
                 this.setRotation(testSpec.startRotation)
             }
             transitions {
-                tapl.goHome()
+                tapl
+                    .goHome()
                     .switchToAllApps()
                     .getAppIcon(testApp.launcherName)
                     .launch(testApp.`package`)
             }
-            teardown {
-                testApp.exit(wmHelper)
-            }
+            teardown { testApp.exit(wmHelper) }
         }
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @FlakyTest(bugId = 240916028)
     @Test
-    override fun appWindowAsTopWindowAtEnd() =
-        super.appWindowAsTopWindowAtEnd()
+    override fun appWindowAsTopWindowAtEnd() = super.appWindowAsTopWindowAtEnd()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @FlakyTest(bugId = 240916028)
     @Test
     override fun appWindowReplacesLauncherAsTopWindow() =
         super.appWindowReplacesLauncherAsTopWindow()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @FlakyTest(bugId = 240916028)
     @Test
-    override fun appLayerBecomesVisible() =
-        super.appLayerBecomesVisible()
+    override fun appLayerBecomesVisible() = super.appLayerBecomesVisible()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @FlakyTest(bugId = 240916028)
     @Test
     override fun appLayerReplacesLauncher() = super.appLayerReplacesLauncher()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @FlakyTest(bugId = 240916028)
     @Test
     override fun appWindowBecomesTopWindow() = super.appWindowBecomesTopWindow()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @FlakyTest(bugId = 240916028)
     @Test
     override fun appWindowBecomesVisible() = super.appWindowBecomesVisible()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @FlakyTest(bugId = 240916028)
     @Test
     override fun entireScreenCovered() = super.entireScreenCovered()
 
     /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun focusChanges() = super.focusChanges()
+    @FlakyTest(bugId = 240916028) @Test override fun focusChanges() = super.focusChanges()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @FlakyTest(bugId = 240916028)
     @Test
     override fun navBarLayerIsVisibleAtStartAndEnd() = super.navBarLayerIsVisibleAtStartAndEnd()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @FlakyTest(bugId = 240916028)
     @Test
     override fun taskBarLayerIsVisibleAtStartAndEnd() = super.taskBarLayerIsVisibleAtStartAndEnd()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @FlakyTest(bugId = 240916028)
     @Test
     override fun taskBarWindowIsAlwaysVisible() = super.taskBarWindowIsAlwaysVisible()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @FlakyTest(bugId = 240916028)
     @Test
     override fun navBarLayerPositionAtStartAndEnd() = super.navBarLayerPositionAtStartAndEnd()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @FlakyTest(bugId = 240916028)
     @Test
     override fun navBarWindowIsAlwaysVisible() = super.navBarWindowIsAlwaysVisible()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @FlakyTest(bugId = 240916028)
     @Test
-    override fun statusBarLayerPositionAtStartAndEnd() =
-        super.statusBarLayerPositionAtStartAndEnd()
+    override fun statusBarLayerPositionAtStartAndEnd() = super.statusBarLayerPositionAtStartAndEnd()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @FlakyTest(bugId = 240916028)
     @Test
     override fun statusBarLayerIsVisibleAtStartAndEnd() =
         super.statusBarLayerIsVisibleAtStartAndEnd()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @FlakyTest(bugId = 240916028)
     @Test
     override fun statusBarWindowIsAlwaysVisible() = super.statusBarWindowIsAlwaysVisible()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @FlakyTest(bugId = 240916028)
     @Test
     override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
         super.visibleLayersShownMoreThanOneConsecutiveEntry()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @FlakyTest(bugId = 240916028)
     @Test
     override fun visibleWindowsShownMoreThanOneConsecutiveEntry() =
         super.visibleWindowsShownMoreThanOneConsecutiveEntry()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @FlakyTest(bugId = 240916028)
     @Test
     override fun appWindowIsTopWindowAtEnd() = super.appWindowIsTopWindowAtEnd()
 
@@ -187,14 +181,13 @@ class OpenAppColdFromIcon(
         /**
          * Creates the test configurations.
          *
-         * See [FlickerTestParameterFactory.getConfigNonRotationTests] for configuring
-         * repetitions, screen orientation and navigation modes.
+         * See [FlickerTestParameterFactory.getConfigNonRotationTests] for configuring repetitions,
+         * screen orientation and navigation modes.
          */
         @Parameterized.Parameters(name = "{0}")
         @JvmStatic
         fun getParams(): Collection<FlickerTestParameter> {
-            return FlickerTestParameterFactory.getInstance()
-                .getConfigNonRotationTests()
+            return FlickerTestParameterFactory.getInstance().getConfigNonRotationTests()
         }
     }
 }

@@ -27,7 +27,6 @@ import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
 import com.android.server.wm.flicker.R
-import com.android.server.wm.flicker.annotation.Group4
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.SimpleAppHelper
 import com.android.server.wm.flicker.helpers.StandardAppHelper
@@ -50,13 +49,14 @@ import org.junit.runners.Parameterized
  * To run this test: `atest FlickerTests:OverrideTaskTransitionTest`
  *
  * Actions:
+ * ```
  *     Launches SimpleActivity with alpha_2000ms animation
+ * ```
  */
 @RequiresDevice
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-@Group4
 class OverrideTaskTransitionTest(val testSpec: FlickerTestParameter) {
 
     private val instrumentation: Instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -72,16 +72,17 @@ class OverrideTaskTransitionTest(val testSpec: FlickerTestParameter) {
             }
             transitions {
                 instrumentation.context.startActivity(
-                        testApp.openAppIntent, createCustomTaskAnimation())
-                wmHelper.StateSyncBuilder()
-                        .add(WindowManagerConditionsFactory.isWMStateComplete())
-                        .withAppTransitionIdle()
-                        .withWindowSurfaceAppeared(testApp)
-                        .waitForAndVerify()
+                    testApp.openAppIntent,
+                    createCustomTaskAnimation()
+                )
+                wmHelper
+                    .StateSyncBuilder()
+                    .add(WindowManagerConditionsFactory.isWMStateComplete())
+                    .withAppTransitionIdle()
+                    .withWindowSurfaceAppeared(testApp)
+                    .waitForAndVerify()
             }
-            teardown {
-                testApp.exit()
-            }
+            teardown { testApp.exit() }
         }
     }
 
@@ -100,16 +101,22 @@ class OverrideTaskTransitionTest(val testSpec: FlickerTestParameter) {
     }
 
     private fun createCustomTaskAnimation(): Bundle {
-        return android.app.ActivityOptions.makeCustomTaskAnimation(instrumentation.context,
-                R.anim.show_2000ms, 0, Handler.getMain(), null, null).toBundle()
+        return android.app.ActivityOptions.makeCustomTaskAnimation(
+                instrumentation.context,
+                R.anim.show_2000ms,
+                0,
+                Handler.getMain(),
+                null,
+                null
+            )
+            .toBundle()
     }
 
     companion object {
         @Parameterized.Parameters(name = "{0}")
         @JvmStatic
         fun getParams(): Collection<FlickerTestParameter> {
-            return FlickerTestParameterFactory.getInstance()
-                    .getConfigNonRotationTests()
+            return FlickerTestParameterFactory.getInstance().getConfigNonRotationTests()
         }
     }
 }

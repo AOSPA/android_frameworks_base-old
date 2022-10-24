@@ -45,6 +45,7 @@ import android.util.Slog;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.server.utils.EventLogger;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -311,7 +312,7 @@ public class AudioDeviceInventory {
             address = "";
         }
 
-        AudioService.sDeviceLogger.log(new AudioEventLogger.StringEvent("BT connected:"
+        AudioService.sDeviceLogger.log(new EventLogger.StringEvent("BT connected:"
                         + " addr=" + address
                         + " profile=" + btInfo.mProfile
                         + " state=" + btInfo.mState
@@ -380,7 +381,8 @@ public class AudioDeviceInventory {
                         makeLeAudioDeviceUnavailable(address, btInfo.mAudioSystemDevice);
                     } else if (switchToAvailable) {
                         makeLeAudioDeviceAvailable(address, BtHelper.getName(btInfo.mDevice),
-                                streamType, btInfo.mVolume, btInfo.mAudioSystemDevice,
+                                streamType, btInfo.mVolume == -1 ? -1 : btInfo.mVolume * 10,
+                                btInfo.mAudioSystemDevice,
                                 "onSetBtActiveDevice");
                     }
                     break;
@@ -413,7 +415,7 @@ public class AudioDeviceInventory {
         if (!BluetoothAdapter.checkBluetoothAddress(address)) {
             address = "";
         }
-        AudioService.sDeviceLogger.log(new AudioEventLogger.StringEvent(
+        AudioService.sDeviceLogger.log(new EventLogger.StringEvent(
                 "onBluetoothA2dpDeviceConfigChange addr=" + address
                     + " event=" + BtHelper.a2dpDeviceEventToString(event)));
 
@@ -432,7 +434,7 @@ public class AudioDeviceInventory {
                 //Now if we are ignoring active device change,update mApmConnected ,
                 //so that next connection events are handled
                 mApmConnectedDevices.replace(AudioSystem.DEVICE_OUT_BLUETOOTH_A2DP, key);
-                AudioService.sDeviceLogger.log(new AudioEventLogger.StringEvent(
+                AudioService.sDeviceLogger.log(new EventLogger.StringEvent(
                         "A2dp config change ignored (scheduled connection change)")
                         .printLog(TAG));
                 mmi.set(MediaMetrics.Property.EARLY_RETURN, "A2dp config change ignored")
@@ -486,7 +488,7 @@ public class AudioDeviceInventory {
                     BtHelper.getName(btDevice), a2dpCodec);
 
             if (res != AudioSystem.AUDIO_STATUS_OK) {
-                AudioService.sDeviceLogger.log(new AudioEventLogger.StringEvent(
+                AudioService.sDeviceLogger.log(new EventLogger.StringEvent(
                         "APM handleDeviceConfigChange failed for A2DP device addr=" + address
                                 + " codec=" + AudioSystem.audioFormatToString(a2dpCodec))
                         .printLog(TAG));
@@ -498,7 +500,7 @@ public class AudioDeviceInventory {
                                 BluetoothProfile.A2DP, BluetoothProfile.STATE_DISCONNECTED,
                                 musicDevice, AudioSystem.DEVICE_OUT_BLUETOOTH_A2DP));
             } else {
-                AudioService.sDeviceLogger.log(new AudioEventLogger.StringEvent(
+                AudioService.sDeviceLogger.log(new EventLogger.StringEvent(
                         "APM handleDeviceConfigChange success for A2DP device addr=" + address
                                 + " codec=" + AudioSystem.audioFormatToString(a2dpCodec))
                         .printLog(TAG));
@@ -645,7 +647,7 @@ public class AudioDeviceInventory {
             @NonNull List<AudioDeviceAttributes> devices) {
         final long identity = Binder.clearCallingIdentity();
 
-        AudioService.sDeviceLogger.log((new AudioEventLogger.StringEvent(
+        AudioService.sDeviceLogger.log((new EventLogger.StringEvent(
                                 "setPreferredDevicesForStrategySync, strategy: " + strategy
                                 + " devices: " + devices)).printLog(TAG));
         final int status = mAudioSystem.setDevicesRoleForStrategy(
@@ -661,7 +663,7 @@ public class AudioDeviceInventory {
     /*package*/ int removePreferredDevicesForStrategySync(int strategy) {
         final long identity = Binder.clearCallingIdentity();
 
-        AudioService.sDeviceLogger.log((new AudioEventLogger.StringEvent(
+        AudioService.sDeviceLogger.log((new EventLogger.StringEvent(
                 "removePreferredDevicesForStrategySync, strategy: "
                 + strategy)).printLog(TAG));
 
@@ -1083,7 +1085,7 @@ public class AudioDeviceInventory {
         // TODO: log in MediaMetrics once distinction between connection failure and
         // double connection is made.
         if (res != AudioSystem.AUDIO_STATUS_OK) {
-            AudioService.sDeviceLogger.log(new AudioEventLogger.StringEvent(
+            AudioService.sDeviceLogger.log(new EventLogger.StringEvent(
                     "APM failed to make available A2DP device addr=" + address
                             + " error=" + res).printLog(TAG));
             // If error is audioserver died,add device to the list,so that during restart AS will
@@ -1094,7 +1096,7 @@ public class AudioDeviceInventory {
             }
 
         } else {
-            AudioService.sDeviceLogger.log(new AudioEventLogger.StringEvent(
+            AudioService.sDeviceLogger.log(new EventLogger.StringEvent(
                     "A2DP device addr=" + address + " now available").printLog(TAG));
         }
 
@@ -1132,7 +1134,7 @@ public class AudioDeviceInventory {
         if (!deviceToRemoveKey
                 .equals(mApmConnectedDevices.get(AudioSystem.DEVICE_OUT_BLUETOOTH_A2DP))) {
             // removing A2DP device not currently used by AudioPolicy, log but don't act on it
-            AudioService.sDeviceLogger.log((new AudioEventLogger.StringEvent(
+            AudioService.sDeviceLogger.log((new EventLogger.StringEvent(
                     "A2DP device " + address + " made unavailable, was not used")).printLog(TAG));
             mmi.set(MediaMetrics.Property.EARLY_RETURN,
                     "A2DP device made unavailable, was not used")
@@ -1147,13 +1149,13 @@ public class AudioDeviceInventory {
                 AudioSystem.DEVICE_STATE_UNAVAILABLE, a2dpCodec);
 
         if (res != AudioSystem.AUDIO_STATUS_OK) {
-            AudioService.sDeviceLogger.log(new AudioEventLogger.StringEvent(
+            AudioService.sDeviceLogger.log(new EventLogger.StringEvent(
                     "APM failed to make unavailable A2DP device addr=" + address
                             + " error=" + res).printLog(TAG));
             // TODO:  failed to disconnect, stop here
             // TODO: return;
         } else {
-            AudioService.sDeviceLogger.log((new AudioEventLogger.StringEvent(
+            AudioService.sDeviceLogger.log((new EventLogger.StringEvent(
                     "A2DP device addr=" + address + " made unavailable")).printLog(TAG));
         }
         mApmConnectedDevices.remove(AudioSystem.DEVICE_OUT_BLUETOOTH_A2DP);
@@ -1404,7 +1406,7 @@ public class AudioDeviceInventory {
                     && !mDeviceBroker.hasAudioFocusUsers()) {
                 // no media playback, not a "becoming noisy" situation, otherwise it could cause
                 // the pausing of some apps that are playing remotely
-                AudioService.sDeviceLogger.log((new AudioEventLogger.StringEvent(
+                AudioService.sDeviceLogger.log((new EventLogger.StringEvent(
                         "dropping ACTION_AUDIO_BECOMING_NOISY")).printLog(TAG));
                 mmi.set(MediaMetrics.Property.DELAY_MS, 0).record(); // OK to return
                 return 0;

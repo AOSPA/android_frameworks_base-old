@@ -20,6 +20,7 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
+import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.WindowManager.LayoutParams.INVALID_WINDOW_TYPE;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION;
@@ -49,22 +50,29 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import android.content.res.Resources;
+import android.graphics.Point;
 import android.graphics.Rect;
+import android.hardware.display.VirtualDisplay;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.platform.test.annotations.Presubmit;
+import android.util.DisplayMetrics;
 import android.util.MergedConfiguration;
 import android.view.IWindowSessionCallback;
 import android.view.InsetsSourceControl;
 import android.view.InsetsState;
 import android.view.InsetsVisibilities;
+import android.view.Surface;
 import android.view.SurfaceControl;
 import android.view.View;
 import android.view.WindowManager;
@@ -87,6 +95,7 @@ import org.junit.runner.RunWith;
 @Presubmit
 @RunWith(WindowTestRunner.class)
 public class WindowManagerServiceTests extends WindowTestsBase {
+
     @Rule
     public ExpectedException mExpectedException = ExpectedException.none();
 
@@ -189,14 +198,31 @@ public class WindowManagerServiceTests extends WindowTestsBase {
         mWm.mWindowMap.put(win.mClient.asBinder(), win);
         final int w = 100;
         final int h = 200;
+        final ClientWindowFrames outFrames = new ClientWindowFrames();
+        final MergedConfiguration outConfig = new MergedConfiguration();
+        final SurfaceControl outSurfaceControl = new SurfaceControl();
+        final InsetsState outInsetsState = new InsetsState();
+        final InsetsSourceControl[] outControls = new InsetsSourceControl[0];
+        final Bundle outBundle = new Bundle();
         mWm.relayoutWindow(win.mSession, win.mClient, win.mAttrs, w, h, View.GONE, 0, 0, 0,
-                new ClientWindowFrames(), new MergedConfiguration(), new SurfaceControl(),
-                new InsetsState(), new InsetsSourceControl[0], new Bundle());
+                outFrames, outConfig, outSurfaceControl, outInsetsState, outControls, outBundle);
         // Because the window is already invisible, it doesn't need to apply exiting animation
         // and WMS#tryStartExitingAnimation() will destroy the surface directly.
         assertFalse(win.mAnimatingExit);
         assertFalse(win.mHasSurface);
         assertNull(win.mWinAnimator.mSurfaceController);
+
+        doReturn(mSystemServicesTestRule.mTransaction).when(SurfaceControl::getGlobalTransaction);
+        // Invisible requested activity should not get the last config even if its view is visible.
+        mWm.relayoutWindow(win.mSession, win.mClient, win.mAttrs, w, h, View.VISIBLE, 0, 0, 0,
+                outFrames, outConfig, outSurfaceControl, outInsetsState, outControls, outBundle);
+        assertEquals(0, outConfig.getMergedConfiguration().densityDpi);
+        // Non activity window can still get the last config.
+        win.mActivityRecord = null;
+        win.fillClientWindowFramesAndConfiguration(outFrames, outConfig,
+                false /* useLatestConfig */, true /* relayoutVisible */);
+        assertEquals(win.getConfiguration().densityDpi,
+                outConfig.getMergedConfiguration().densityDpi);
     }
 
     @Test
@@ -321,14 +347,22 @@ public class WindowManagerServiceTests extends WindowTestsBase {
 
     @Test
     public void testSetInTouchMode_instrumentedProcessGetPermissionToSwitchTouchMode() {
-        boolean currentTouchMode = mWm.getInTouchMode();
+        // Disable global touch mode (config_perDisplayFocusEnabled set to true)
+        Resources mockResources = mock(Resources.class);
+        spyOn(mContext);
+        when(mContext.getResources()).thenReturn(mockResources);
+        doReturn(true).when(mockResources).getBoolean(
+                com.android.internal.R.bool.config_perDisplayFocusEnabled);
+
+        // Get current touch mode state and setup WMS to run setInTouchMode
+        boolean currentTouchMode = mWm.isInTouchMode(DEFAULT_DISPLAY);
         int callingPid = Binder.getCallingPid();
         int callingUid = Binder.getCallingUid();
         doReturn(false).when(mWm).checkCallingPermission(anyString(), anyString(), anyBoolean());
         when(mWm.mAtmService.instrumentationSourceHasPermission(callingPid,
                 android.Manifest.permission.MODIFY_TOUCH_MODE_STATE)).thenReturn(true);
 
-        mWm.setInTouchMode(!currentTouchMode);
+        mWm.setInTouchMode(!currentTouchMode, DEFAULT_DISPLAY);
 
         verify(mWm.mInputManager).setInTouchMode(
                 !currentTouchMode, callingPid, callingUid, /* hasPermission= */ true,
@@ -337,18 +371,103 @@ public class WindowManagerServiceTests extends WindowTestsBase {
 
     @Test
     public void testSetInTouchMode_nonInstrumentedProcessDontGetPermissionToSwitchTouchMode() {
-        boolean currentTouchMode = mWm.getInTouchMode();
+        // Disable global touch mode (config_perDisplayFocusEnabled set to true)
+        Resources mockResources = mock(Resources.class);
+        spyOn(mContext);
+        when(mContext.getResources()).thenReturn(mockResources);
+        doReturn(true).when(mockResources).getBoolean(
+                com.android.internal.R.bool.config_perDisplayFocusEnabled);
+
+        // Get current touch mode state and setup WMS to run setInTouchMode
+        boolean currentTouchMode = mWm.isInTouchMode(DEFAULT_DISPLAY);
         int callingPid = Binder.getCallingPid();
         int callingUid = Binder.getCallingUid();
         doReturn(false).when(mWm).checkCallingPermission(anyString(), anyString(), anyBoolean());
         when(mWm.mAtmService.instrumentationSourceHasPermission(callingPid,
                 android.Manifest.permission.MODIFY_TOUCH_MODE_STATE)).thenReturn(false);
 
-        mWm.setInTouchMode(!currentTouchMode);
+        mWm.setInTouchMode(!currentTouchMode, DEFAULT_DISPLAY);
 
         verify(mWm.mInputManager).setInTouchMode(
                 !currentTouchMode, callingPid, callingUid, /* hasPermission= */ false,
                 DEFAULT_DISPLAY);
+    }
+
+    @Test
+    public void testSetInTouchMode_multiDisplay_globalTouchModeUpdate() {
+        // Create one extra display
+        final VirtualDisplay virtualDisplay = createVirtualDisplay();
+        final int numberOfDisplays = mWm.mRoot.mChildren.size();
+        assertThat(numberOfDisplays).isAtLeast(2);
+
+        // Enable global touch mode (config_perDisplayFocusEnabled set to false)
+        Resources mockResources = mock(Resources.class);
+        spyOn(mContext);
+        when(mContext.getResources()).thenReturn(mockResources);
+        doReturn(false).when(mockResources).getBoolean(
+                com.android.internal.R.bool.config_perDisplayFocusEnabled);
+
+        // Get current touch mode state and setup WMS to run setInTouchMode
+        boolean currentTouchMode = mWm.isInTouchMode(DEFAULT_DISPLAY);
+        int callingPid = Binder.getCallingPid();
+        int callingUid = Binder.getCallingUid();
+        doReturn(false).when(mWm).checkCallingPermission(anyString(), anyString(), anyBoolean());
+        when(mWm.mAtmService.instrumentationSourceHasPermission(callingPid,
+                android.Manifest.permission.MODIFY_TOUCH_MODE_STATE)).thenReturn(true);
+
+        mWm.setInTouchMode(!currentTouchMode, DEFAULT_DISPLAY);
+
+        verify(mWm.mInputManager, times(numberOfDisplays)).setInTouchMode(
+                eq(!currentTouchMode), eq(callingPid), eq(callingUid),
+                /* hasPermission= */ eq(true), /* displayId= */ anyInt());
+    }
+
+    @Test
+    public void testSetInTouchMode_multiDisplay_singleDisplayTouchModeUpdate() {
+        // Create one extra display
+        final VirtualDisplay virtualDisplay = createVirtualDisplay();
+        final int numberOfDisplays = mWm.mRoot.mChildren.size();
+        assertThat(numberOfDisplays).isAtLeast(2);
+
+        // Disable global touch mode (config_perDisplayFocusEnabled set to true)
+        Resources mockResources = mock(Resources.class);
+        spyOn(mContext);
+        when(mContext.getResources()).thenReturn(mockResources);
+        doReturn(true).when(mockResources).getBoolean(
+                com.android.internal.R.bool.config_perDisplayFocusEnabled);
+
+        // Get current touch mode state and setup WMS to run setInTouchMode
+        boolean currentTouchMode = mWm.isInTouchMode(DEFAULT_DISPLAY);
+        int callingPid = Binder.getCallingPid();
+        int callingUid = Binder.getCallingUid();
+        doReturn(false).when(mWm).checkCallingPermission(anyString(), anyString(), anyBoolean());
+        when(mWm.mAtmService.instrumentationSourceHasPermission(callingPid,
+                android.Manifest.permission.MODIFY_TOUCH_MODE_STATE)).thenReturn(true);
+
+        mWm.setInTouchMode(!currentTouchMode, virtualDisplay.getDisplay().getDisplayId());
+
+        // Ensure that new display touch mode state has changed.
+        verify(mWm.mInputManager).setInTouchMode(
+                !currentTouchMode, callingPid, callingUid, /* hasPermission= */ true,
+                virtualDisplay.getDisplay().getDisplayId());
+    }
+
+    private VirtualDisplay createVirtualDisplay() {
+        // Create virtual display
+        Point surfaceSize = new Point(
+                mDefaultDisplay.getDefaultTaskDisplayArea().getBounds().width(),
+                mDefaultDisplay.getDefaultTaskDisplayArea().getBounds().height());
+        VirtualDisplay virtualDisplay = mWm.mDisplayManager.createVirtualDisplay("VirtualDisplay",
+                surfaceSize.x, surfaceSize.y,
+                DisplayMetrics.DENSITY_140, new Surface(), VIRTUAL_DISPLAY_FLAG_PUBLIC);
+        final int displayId = virtualDisplay.getDisplay().getDisplayId();
+        mWm.mRoot.onDisplayAdded(displayId);
+
+        // Ensure that virtual display was properly created and stored in WRC
+        assertThat(mWm.mRoot.getDisplayContent(
+                virtualDisplay.getDisplay().getDisplayId())).isNotNull();
+
+        return virtualDisplay;
     }
 
     @Test

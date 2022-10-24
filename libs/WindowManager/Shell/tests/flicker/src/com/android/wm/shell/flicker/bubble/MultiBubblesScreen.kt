@@ -24,7 +24,6 @@ import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
-import com.android.server.wm.flicker.annotation.Group4
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.isShellTransitionsEnabled
 import org.junit.Assume
@@ -39,12 +38,13 @@ import org.junit.runners.Parameterized
  * To run this test: `atest WMShellFlickerTests:MultiBubblesScreen`
  *
  * Actions:
+ * ```
  *     Switch in different bubble notifications
+ * ```
  */
 @RequiresDevice
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
-@Group4
 open class MultiBubblesScreen(testSpec: FlickerTestParameter) : BaseBubbleScreen(testSpec) {
 
     @Before
@@ -61,20 +61,22 @@ open class MultiBubblesScreen(testSpec: FlickerTestParameter) : BaseBubbleScreen
                     addBubbleBtn.click()
                     SystemClock.sleep(1000)
                 }
-                val showBubble = device.wait(
-                    Until.findObject(
-                        By.res(SYSTEM_UI_PACKAGE, BUBBLE_RES_NAME)
-                    ), FIND_OBJECT_TIMEOUT
-                ) ?: error("Show bubble not found")
+                val showBubble =
+                    device.wait(
+                        Until.findObject(By.res(SYSTEM_UI_PACKAGE, BUBBLE_RES_NAME)),
+                        FIND_OBJECT_TIMEOUT
+                    )
+                        ?: error("Show bubble not found")
                 showBubble.click()
                 SystemClock.sleep(1000)
             }
             transitions {
-                val bubbles: List<UiObject2> = device.wait(
-                    Until.findObjects(
-                        By.res(SYSTEM_UI_PACKAGE, BUBBLE_RES_NAME)
-                    ), FIND_OBJECT_TIMEOUT
-                ) ?: error("No bubbles found")
+                val bubbles: List<UiObject2> =
+                    device.wait(
+                        Until.findObjects(By.res(SYSTEM_UI_PACKAGE, BUBBLE_RES_NAME)),
+                        FIND_OBJECT_TIMEOUT
+                    )
+                        ?: error("No bubbles found")
                 for (entry in bubbles) {
                     entry.click()
                     SystemClock.sleep(1000)
@@ -85,8 +87,6 @@ open class MultiBubblesScreen(testSpec: FlickerTestParameter) : BaseBubbleScreen
     @Presubmit
     @Test
     open fun testAppIsAlwaysVisible() {
-        testSpec.assertLayers {
-            this.isVisible(testApp)
-        }
+        testSpec.assertLayers { this.isVisible(testApp) }
     }
 }

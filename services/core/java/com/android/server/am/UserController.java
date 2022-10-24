@@ -439,11 +439,6 @@ class UserController implements Handler.Callback {
         mUserLru.add(UserHandle.USER_SYSTEM);
         mLockPatternUtils = mInjector.getLockPatternUtils();
         updateStartedUserArrayLU();
-
-        // TODO(b/232452368): currently mAllowUserUnlocking is only used on devices with HSUM
-        // (Headless System User Mode), but on master it will be used by all devices (and hence this
-        // initial assignment should be removed).
-        mAllowUserUnlocking = !UserManager.isHeadlessSystemUserMode();
     }
 
     void setInitialConfig(boolean userSwitchUiEnabled, int maxRunningUsers,
@@ -602,8 +597,11 @@ class UserController implements Handler.Callback {
             if (!mInjector.getUserManager().isPreCreated(userId)) {
                 mHandler.sendMessage(mHandler.obtainMessage(REPORT_LOCKED_BOOT_COMPLETE_MSG,
                         userId, 0));
-                // In case of headless system user mode, do not send boot complete broadcast for
-                // system user as it is sent by sendBootCompleted call.
+                // The "locked boot complete" broadcast for the system user is supposed be sent when
+                // the device has finished booting.  Normally, that is the same time that the system
+                // user transitions to RUNNING_LOCKED.  However, in "headless system user mode", the
+                // system user is explicitly started before the device has finished booting.  In
+                // that case, we need to wait until onBootComplete() to send the broadcast.
                 if (!(UserManager.isHeadlessSystemUserMode() && uss.mHandle.isSystem())) {
                     // ACTION_LOCKED_BOOT_COMPLETED
                     sendLockedBootCompletedBroadcast(resultTo, userId);
@@ -654,7 +652,7 @@ class UserController implements Handler.Callback {
         EventLog.writeEvent(EventLogTags.UC_FINISH_USER_UNLOCKING, userId);
         logUserLifecycleEvent(userId, USER_LIFECYCLE_EVENT_UNLOCKING_USER,
                 USER_LIFECYCLE_EVENT_STATE_BEGIN);
-        // Only keep marching forward if user is actually unlocked
+        // If the user key hasn't been unlocked yet, we cannot proceed.
         if (!StorageManager.isUserKeyUnlocked(userId)) return false;
         synchronized (mLock) {
             // Do not proceed if unexpected state or a stale user
@@ -1776,28 +1774,19 @@ class UserController implements Handler.Callback {
         }
     }
 
-    boolean unlockUser(final @UserIdInt int userId, byte[] secret, IProgressListener listener) {
+    boolean unlockUser(@UserIdInt int userId, @Nullable IProgressListener listener) {
         checkCallingPermission(INTERACT_ACROSS_USERS_FULL, "unlockUser");
         EventLog.writeEvent(EventLogTags.UC_UNLOCK_USER, userId);
         final long binderToken = Binder.clearCallingIdentity();
         try {
-            return unlockUserCleared(userId, secret, listener);
+            return maybeUnlockUser(userId, listener);
         } finally {
             Binder.restoreCallingIdentity(binderToken);
         }
     }
 
-    /**
-     * Attempt to unlock user without a secret. This typically succeeds when the
-     * device doesn't have credential-encrypted storage, or when the
-     * credential-encrypted storage isn't tied to a user-provided PIN or
-     * pattern.
-     */
-    private boolean maybeUnlockUser(final @UserIdInt int userId) {
-        return unlockUserCleared(userId, null, null);
-    }
-
-    private static void notifyFinished(@UserIdInt int userId, IProgressListener listener) {
+    private static void notifyFinished(@UserIdInt int userId,
+            @Nullable IProgressListener listener) {
         if (listener == null) return;
         try {
             listener.onFinished(userId, null);
@@ -1805,17 +1794,25 @@ class UserController implements Handler.Callback {
         }
     }
 
-    private boolean unlockUserCleared(final @UserIdInt int userId, byte[] secret,
-            IProgressListener listener) {
-        // Delay user unlocking for headless system user mode until the system boot
-        // completes. When the system boot completes, the {@link #onBootCompleted()}
-        // method unlocks all started users for headless system user mode. This is done
-        // to prevent unlocking the users too early during the system boot up.
-        // Otherwise, emulated volumes are mounted too early during the system
-        // boot up. When vold is reset on boot complete, vold kills all apps/services
-        // (that use these emulated volumes) before unmounting the volumes(b/241929666).
-        // In the past, these killings have caused the system to become too unstable on
-        // some occasions.
+    private boolean maybeUnlockUser(@UserIdInt int userId) {
+        return maybeUnlockUser(userId, null);
+    }
+
+    /**
+     * Tries to unlock the given user.
+     * <p>
+     * This will succeed only if the user's CE storage key is already unlocked or if the user
+     * doesn't have a lockscreen credential set.
+     */
+    private boolean maybeUnlockUser(@UserIdInt int userId, @Nullable IProgressListener listener) {
+
+        // We cannot allow users to be unlocked before PHASE_BOOT_COMPLETED, for two reasons.
+        // First, emulated volumes aren't supposed to be used until then; StorageManagerService
+        // assumes it can reset everything upon reaching PHASE_BOOT_COMPLETED.  Second, on some
+        // devices the Weaver HAL needed to unlock the user's storage isn't available until sometime
+        // shortly before PHASE_BOOT_COMPLETED.  The below logic enforces a consistent flow across
+        // all devices, regardless of their Weaver implementation.
+        //
         // Any unlocks that get delayed by this will be done by onBootComplete() instead.
         if (!mAllowUserUnlocking) {
             Slogf.i(TAG, "Not unlocking user %d yet because boot hasn't completed", userId);
@@ -1825,14 +1822,8 @@ class UserController implements Handler.Callback {
 
         UserState uss;
         if (!StorageManager.isUserKeyUnlocked(userId)) {
-            final UserInfo userInfo = getUserInfo(userId);
-            final IStorageManager storageManager = mInjector.getStorageManager();
-            try {
-                // We always want to unlock user storage, even user is not started yet
-                storageManager.unlockUserKey(userId, userInfo.serialNumber, secret);
-            } catch (RemoteException | RuntimeException e) {
-                Slogf.w(TAG, "Failed to unlock: " + e.getMessage());
-            }
+            // We always want to try to unlock the user key, even if the user is not started yet.
+            mLockPatternUtils.unlockUserKeyIfUnsecured(userId);
         }
         synchronized (mLock) {
             // Register the given listener to watch for unlock progress
@@ -2429,11 +2420,8 @@ class UserController implements Handler.Callback {
         }
     }
 
-    /**
-     * @deprecated TODO(b/232452368): this logic will be merged into sendBootCompleted
-     */
-    @Deprecated
-    private void onBootCompletedOnHeadlessSystemUserModeDevices() {
+    void onBootComplete(IIntentReceiver resultTo) {
+        // Now that PHASE_BOOT_COMPLETED has been reached, user unlocking is allowed.
         setAllowUserUnlocking(true);
 
         // Get a copy of mStartedUsers to use outside of lock.
@@ -2441,37 +2429,30 @@ class UserController implements Handler.Callback {
         synchronized (mLock) {
             startedUsers = mStartedUsers.clone();
         }
+        // In non-headless system user mode, call finishUserBoot() to transition the system user
+        // from the BOOTING state to RUNNING_LOCKED, then to RUNNING_UNLOCKED if possible.
+        //
+        // In headless system user mode, additional users may have been started, and all users
+        // (including the system user) that ever get started are started explicitly.  In this case,
+        // we should *not* transition users out of the BOOTING state using finishUserBoot(), as that
+        // doesn't handle issuing the needed onUserStarting() call, and it would just race with an
+        // explicit start anyway.  We do, however, need to send the "locked boot complete" broadcast
+        // for the system user, as that got skipped earlier due to the *device* boot not being
+        // complete yet.  We also need to try to unlock all started users, since until now explicit
+        // user starts didn't proceed to unlocking, due to it being too early in the device boot.
+        //
         // USER_SYSTEM must be processed first.  It will be first in the array, as its ID is lowest.
         Preconditions.checkArgument(startedUsers.keyAt(0) == UserHandle.USER_SYSTEM);
         for (int i = 0; i < startedUsers.size(); i++) {
-            UserState uss = startedUsers.valueAt(i);
-            int userId = uss.mHandle.getIdentifier();
-            Slogf.i(TAG, "Attempting to unlock user %d on boot complete", userId);
-            maybeUnlockUser(userId);
-        }
-    }
-
-    void sendBootCompleted(IIntentReceiver resultTo) {
-        if (UserManager.isHeadlessSystemUserMode()) {
-            // Unlocking users is delayed until boot complete for headless system user mode.
-            onBootCompletedOnHeadlessSystemUserModeDevices();
-        }
-
-        // Get a copy of mStartedUsers to use outside of lock
-        SparseArray<UserState> startedUsers;
-        synchronized (mLock) {
-            startedUsers = mStartedUsers.clone();
-        }
-        for (int i = 0; i < startedUsers.size(); i++) {
+            int userId = startedUsers.keyAt(i);
             UserState uss = startedUsers.valueAt(i);
             if (!UserManager.isHeadlessSystemUserMode()) {
                 finishUserBoot(uss, resultTo);
-            } else if (uss.mHandle.isSystem()) {
-                // In case of headless system user mode, send only locked boot complete broadcast
-                // for system user since finishUserBoot call will be made using other code path;
-                // for non-system user, do nothing since finishUserBoot will be called elsewhere.
-                sendLockedBootCompletedBroadcast(resultTo, uss.mHandle.getIdentifier());
-                return;
+            } else {
+                if (userId == UserHandle.USER_SYSTEM) {
+                    sendLockedBootCompletedBroadcast(resultTo, userId);
+                }
+                maybeUnlockUser(userId);
             }
         }
     }

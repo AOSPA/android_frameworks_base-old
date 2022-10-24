@@ -45,7 +45,7 @@ class KeyguardUpdateMonitorLogger @Inject constructor(
 
     fun e(@CompileTimeConstant msg: String) = log(msg, ERROR)
 
-    fun v(@CompileTimeConstant msg: String) = log(msg, ERROR)
+    fun v(@CompileTimeConstant msg: String) = log(msg, VERBOSE)
 
     fun w(@CompileTimeConstant msg: String) = log(msg, WARNING)
 
@@ -108,10 +108,11 @@ class KeyguardUpdateMonitorLogger @Inject constructor(
                 }, { "Face help received, msgId: $int1 msg: $str1" })
     }
 
-    fun logFaceAuthRequested(userInitiatedRequest: Boolean) {
-        logBuffer.log(TAG, DEBUG,
-                { bool1 = userInitiatedRequest },
-                { "requestFaceAuth() userInitiated=$bool1" })
+    fun logFaceAuthRequested(userInitiatedRequest: Boolean, reason: String) {
+        logBuffer.log(TAG, DEBUG, {
+            bool1 = userInitiatedRequest
+            str1 = reason
+        }, { "requestFaceAuth() userInitiated=$bool1 reason=$str1" })
     }
 
     fun logFaceAuthSuccess(userId: Int) {
@@ -170,8 +171,14 @@ class KeyguardUpdateMonitorLogger @Inject constructor(
         logBuffer.log(TAG, VERBOSE, { str1 = "$model" }, { str1!! })
     }
 
-    fun logKeyguardVisibilityChanged(showing: Boolean) {
-        logBuffer.log(TAG, DEBUG, { bool1 = showing }, { "onKeyguardVisibilityChanged($bool1)" })
+    fun logKeyguardShowingChanged(showing: Boolean, occluded: Boolean, visible: Boolean) {
+        logBuffer.log(TAG, DEBUG, {
+            bool1 = showing
+            bool2 = occluded
+            bool3 = visible
+        }, {
+            "keyguardShowingChanged(showing=$bool1 occluded=$bool2 visible=$bool3)"
+        })
     }
 
     fun logMissingSupervisorAppError(userId: Int) {

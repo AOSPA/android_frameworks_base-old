@@ -17,6 +17,7 @@
 package com.android.systemui.media.taptotransfer.sender
 
 import android.app.StatusBarManager
+import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
@@ -35,18 +36,24 @@ import com.android.internal.logging.testing.UiEventLoggerFake
 import com.android.internal.statusbar.IUndoMediaTransferCallback
 import com.android.systemui.R
 import com.android.systemui.SysuiTestCase
+import com.android.systemui.classifier.FalsingCollector
 import com.android.systemui.media.taptotransfer.common.MediaTttLogger
+import com.android.systemui.media.taptotransfer.receiver.MediaTttReceiverLogger
+import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.statusbar.CommandQueue
 import com.android.systemui.statusbar.policy.ConfigurationController
+import com.android.systemui.util.concurrency.DelayableExecutor
 import com.android.systemui.util.concurrency.FakeExecutor
 import com.android.systemui.util.mockito.any
 import com.android.systemui.util.mockito.eq
 import com.android.systemui.util.time.FakeSystemClock
+import com.android.systemui.util.view.ViewUtil
 import com.google.common.truth.Truth.assertThat
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.ArgumentCaptor
+import org.mockito.ArgumentMatchers.anyInt
 import org.mockito.Mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
@@ -57,7 +64,7 @@ import org.mockito.MockitoAnnotations
 @RunWith(AndroidTestingRunner::class)
 @TestableLooper.RunWithLooper
 class MediaTttChipControllerSenderTest : SysuiTestCase() {
-    private lateinit var controllerSender: MediaTttChipControllerSender
+    private lateinit var controllerSender: TestMediaTttChipControllerSender
 
     @Mock
     private lateinit var packageManager: PackageManager
@@ -75,6 +82,12 @@ class MediaTttChipControllerSenderTest : SysuiTestCase() {
     private lateinit var windowManager: WindowManager
     @Mock
     private lateinit var commandQueue: CommandQueue
+    @Mock
+    private lateinit var falsingManager: FalsingManager
+    @Mock
+    private lateinit var falsingCollector: FalsingCollector
+    @Mock
+    private lateinit var viewUtil: ViewUtil
     private lateinit var commandQueueCallback: CommandQueue.Callbacks
     private lateinit var fakeAppIconDrawable: Drawable
     private lateinit var fakeClock: FakeSystemClock
@@ -102,7 +115,7 @@ class MediaTttChipControllerSenderTest : SysuiTestCase() {
 
         whenever(accessibilityManager.getRecommendedTimeoutMillis(any(), any())).thenReturn(TIMEOUT)
 
-        controllerSender = MediaTttChipControllerSender(
+        controllerSender = TestMediaTttChipControllerSender(
             commandQueue,
             context,
             logger,
@@ -111,8 +124,12 @@ class MediaTttChipControllerSenderTest : SysuiTestCase() {
             accessibilityManager,
             configurationController,
             powerManager,
-            senderUiEventLogger
+            senderUiEventLogger,
+            falsingManager,
+            falsingCollector,
+            viewUtil,
         )
+        controllerSender.start()
 
         val callbackCaptor = ArgumentCaptor.forClass(CommandQueue.Callbacks::class.java)
         verify(commandQueue).addCallback(callbackCaptor.capture())
@@ -403,6 +420,38 @@ class MediaTttChipControllerSenderTest : SysuiTestCase() {
 
     @Test
     fun transferToReceiverSucceeded_withUndoRunnable_undoButtonClickRunsRunnable() {
+        var undoCallbackCalled = false
+        val undoCallback = object : IUndoMediaTransferCallback.Stub() {
+            override fun onUndoTriggered() {
+                undoCallbackCalled = true
+            }
+        }
+
+        controllerSender.displayView(transferToReceiverSucceeded(undoCallback))
+        getChipView().getUndoButton().performClick()
+
+        assertThat(undoCallbackCalled).isTrue()
+    }
+
+    @Test
+    fun transferToReceiverSucceeded_withUndoRunnable_falseTap_callbackNotRun() {
+        whenever(falsingManager.isFalseTap(anyInt())).thenReturn(true)
+        var undoCallbackCalled = false
+        val undoCallback = object : IUndoMediaTransferCallback.Stub() {
+            override fun onUndoTriggered() {
+                undoCallbackCalled = true
+            }
+        }
+
+        controllerSender.displayView(transferToReceiverSucceeded(undoCallback))
+        getChipView().getUndoButton().performClick()
+
+        assertThat(undoCallbackCalled).isFalse()
+    }
+
+    @Test
+    fun transferToReceiverSucceeded_withUndoRunnable_realTap_callbackRun() {
+        whenever(falsingManager.isFalseTap(anyInt())).thenReturn(false)
         var undoCallbackCalled = false
         val undoCallback = object : IUndoMediaTransferCallback.Stub() {
             override fun onUndoTriggered() {
@@ -773,6 +822,39 @@ class MediaTttChipControllerSenderTest : SysuiTestCase() {
     /** Helper method providing default parameters to not clutter up the tests. */
     private fun transferToThisDeviceFailed() =
         ChipSenderInfo(ChipStateSender.TRANSFER_TO_RECEIVER_FAILED, routeInfo)
+
+    private class TestMediaTttChipControllerSender(
+        commandQueue: CommandQueue,
+        context: Context,
+        @MediaTttReceiverLogger logger: MediaTttLogger,
+        windowManager: WindowManager,
+        mainExecutor: DelayableExecutor,
+        accessibilityManager: AccessibilityManager,
+        configurationController: ConfigurationController,
+        powerManager: PowerManager,
+        uiEventLogger: MediaTttSenderUiEventLogger,
+        falsingManager: FalsingManager,
+        falsingCollector: FalsingCollector,
+        viewUtil: ViewUtil,
+    ) : MediaTttChipControllerSender(
+        commandQueue,
+        context,
+        logger,
+        windowManager,
+        mainExecutor,
+        accessibilityManager,
+        configurationController,
+        powerManager,
+        uiEventLogger,
+        falsingManager,
+        falsingCollector,
+        viewUtil,
+    ) {
+        override fun animateViewOut(view: ViewGroup, onAnimationEnd: Runnable) {
+            // Just bypass the animation in tests
+            onAnimationEnd.run()
+        }
+    }
 }
 
 private const val APP_NAME = "Fake app name"

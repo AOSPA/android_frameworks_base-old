@@ -1674,8 +1674,8 @@ public class ComputerEngine implements Computer {
             ApplicationInfo ai = new ApplicationInfo();
             ai.packageName = ps.getPackageName();
             ai.uid = UserHandle.getUid(userId, ps.getAppId());
-            ai.primaryCpuAbi = ps.getPrimaryCpuAbi();
-            ai.secondaryCpuAbi = ps.getSecondaryCpuAbi();
+            ai.primaryCpuAbi = ps.getPrimaryCpuAbiLegacy();
+            ai.secondaryCpuAbi = ps.getSecondaryCpuAbiLegacy();
             ai.setVersionCode(ps.getVersionCode());
             ai.flags = ps.getFlags();
             ai.privateFlags = ps.getPrivateFlags();
@@ -1814,6 +1814,19 @@ public class ComputerEngine implements Computer {
         packageName = resolveInternalPackageNameInternalLocked(
                 packageName, PackageManager.VERSION_CODE_HIGHEST, callingUid);
         return mSettings.getPackage(packageName);
+    }
+
+    @Override
+    public PackageStateInternal getPackageStateFiltered(@NonNull String packageName,
+            int callingUid, @UserIdInt int userId) {
+        packageName = resolveInternalPackageNameInternalLocked(
+                packageName, PackageManager.VERSION_CODE_HIGHEST, callingUid);
+        var packageState = mSettings.getPackage(packageName);
+        if (shouldFilterApplication(packageState, callingUid, userId)) {
+            return null;
+        } else {
+            return packageState;
+        }
     }
 
     public final ParceledListSlice<PackageInfo> getInstalledPackages(long flags, int userId) {

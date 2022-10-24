@@ -566,13 +566,6 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
         mScreenBrightnessForVrRangeMinimum = clampAbsoluteBrightness(
                 pm.getBrightnessConstraint(PowerManager.BRIGHTNESS_CONSTRAINT_TYPE_MINIMUM_VR));
 
-        // Check the setting, but also verify that it is the default display. Only the default
-        // display has an automatic brightness controller running.
-        // TODO: b/179021925 - Fix to work with multiple displays
-        mUseSoftwareAutoBrightnessConfig = resources.getBoolean(
-                com.android.internal.R.bool.config_automatic_brightness_available)
-                && mDisplayId == Display.DEFAULT_DISPLAY;
-
         mAllowAutoBrightnessWhileDozingConfig = resources.getBoolean(
                 com.android.internal.R.bool.config_allowAutoBrightnessWhileDozing);
 
@@ -952,6 +945,8 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
     }
 
     private void setUpAutoBrightness(Resources resources, Handler handler) {
+        mUseSoftwareAutoBrightnessConfig = mDisplayDeviceConfig.isAutoBrightnessAvailable();
+
         if (!mUseSoftwareAutoBrightnessConfig) {
             return;
         }
@@ -970,53 +965,77 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
                     com.android.internal.R.fraction.config_screenAutoBrightnessDozeScaleFactor,
                     1, 1);
 
-            int[] ambientBrighteningThresholds = resources.getIntArray(
-                    com.android.internal.R.array.config_ambientBrighteningThresholds);
-            int[] ambientDarkeningThresholds = resources.getIntArray(
-                    com.android.internal.R.array.config_ambientDarkeningThresholds);
-            int[] ambientThresholdLevels = resources.getIntArray(
-                    com.android.internal.R.array.config_ambientThresholdLevels);
+            // Ambient Lux - Active Mode Brightness Thresholds
+            float[] ambientBrighteningThresholds =
+                    mDisplayDeviceConfig.getAmbientBrighteningPercentages();
+            float[] ambientDarkeningThresholds =
+                    mDisplayDeviceConfig.getAmbientDarkeningPercentages();
+            float[] ambientBrighteningLevels =
+                    mDisplayDeviceConfig.getAmbientBrighteningLevels();
+            float[] ambientDarkeningLevels =
+                    mDisplayDeviceConfig.getAmbientDarkeningLevels();
             float ambientDarkeningMinThreshold =
                     mDisplayDeviceConfig.getAmbientLuxDarkeningMinThreshold();
             float ambientBrighteningMinThreshold =
                     mDisplayDeviceConfig.getAmbientLuxBrighteningMinThreshold();
             HysteresisLevels ambientBrightnessThresholds = new HysteresisLevels(
                     ambientBrighteningThresholds, ambientDarkeningThresholds,
-                    ambientThresholdLevels, ambientDarkeningMinThreshold,
+                    ambientBrighteningLevels, ambientDarkeningLevels, ambientDarkeningMinThreshold,
                     ambientBrighteningMinThreshold);
 
-            int[] screenBrighteningThresholds = resources.getIntArray(
-                    com.android.internal.R.array.config_screenBrighteningThresholds);
-            int[] screenDarkeningThresholds = resources.getIntArray(
-                    com.android.internal.R.array.config_screenDarkeningThresholds);
-            float[] screenThresholdLevels = BrightnessMappingStrategy.getFloatArray(resources
-                    .obtainTypedArray(com.android.internal.R.array.config_screenThresholdLevels));
+            // Display - Active Mode Brightness Thresholds
+            float[] screenBrighteningThresholds =
+                    mDisplayDeviceConfig.getScreenBrighteningPercentages();
+            float[] screenDarkeningThresholds =
+                    mDisplayDeviceConfig.getScreenDarkeningPercentages();
+            float[] screenBrighteningLevels =
+                    mDisplayDeviceConfig.getScreenBrighteningLevels();
+            float[] screenDarkeningLevels =
+                    mDisplayDeviceConfig.getScreenDarkeningLevels();
             float screenDarkeningMinThreshold =
                     mDisplayDeviceConfig.getScreenDarkeningMinThreshold();
             float screenBrighteningMinThreshold =
                     mDisplayDeviceConfig.getScreenBrighteningMinThreshold();
             HysteresisLevels screenBrightnessThresholds = new HysteresisLevels(
-                    screenBrighteningThresholds, screenDarkeningThresholds, screenThresholdLevels,
-                    screenDarkeningMinThreshold, screenBrighteningMinThreshold);
+                    screenBrighteningThresholds, screenDarkeningThresholds,
+                    screenBrighteningLevels, screenDarkeningLevels, screenDarkeningMinThreshold,
+                    screenBrighteningMinThreshold, true);
 
-            // Idle screen thresholds
-            float screenDarkeningMinThresholdIdle =
-                    mDisplayDeviceConfig.getScreenDarkeningMinThresholdIdle();
-            float screenBrighteningMinThresholdIdle =
-                    mDisplayDeviceConfig.getScreenBrighteningMinThresholdIdle();
-            HysteresisLevels screenBrightnessThresholdsIdle = new HysteresisLevels(
-                    screenBrighteningThresholds, screenDarkeningThresholds, screenThresholdLevels,
-                    screenDarkeningMinThresholdIdle, screenBrighteningMinThresholdIdle);
-
-            // Idle ambient thresholds
+            // Ambient Lux - Idle Screen Brightness Thresholds
             float ambientDarkeningMinThresholdIdle =
                     mDisplayDeviceConfig.getAmbientLuxDarkeningMinThresholdIdle();
             float ambientBrighteningMinThresholdIdle =
                     mDisplayDeviceConfig.getAmbientLuxBrighteningMinThresholdIdle();
+            float[] ambientBrighteningThresholdsIdle =
+                    mDisplayDeviceConfig.getAmbientBrighteningPercentagesIdle();
+            float[] ambientDarkeningThresholdsIdle =
+                    mDisplayDeviceConfig.getAmbientDarkeningPercentagesIdle();
+            float[] ambientBrighteningLevelsIdle =
+                    mDisplayDeviceConfig.getAmbientBrighteningLevelsIdle();
+            float[] ambientDarkeningLevelsIdle =
+                    mDisplayDeviceConfig.getAmbientDarkeningLevelsIdle();
             HysteresisLevels ambientBrightnessThresholdsIdle = new HysteresisLevels(
-                    ambientBrighteningThresholds, ambientDarkeningThresholds,
-                    ambientThresholdLevels, ambientDarkeningMinThresholdIdle,
-                    ambientBrighteningMinThresholdIdle);
+                    ambientBrighteningThresholdsIdle, ambientDarkeningThresholdsIdle,
+                    ambientBrighteningLevelsIdle, ambientDarkeningLevelsIdle,
+                    ambientDarkeningMinThresholdIdle, ambientBrighteningMinThresholdIdle);
+
+            // Display - Idle Screen Brightness Thresholds
+            float screenDarkeningMinThresholdIdle =
+                    mDisplayDeviceConfig.getScreenDarkeningMinThresholdIdle();
+            float screenBrighteningMinThresholdIdle =
+                    mDisplayDeviceConfig.getScreenBrighteningMinThresholdIdle();
+            float[] screenBrighteningThresholdsIdle =
+                    mDisplayDeviceConfig.getScreenBrighteningPercentagesIdle();
+            float[] screenDarkeningThresholdsIdle =
+                    mDisplayDeviceConfig.getScreenDarkeningPercentagesIdle();
+            float[] screenBrighteningLevelsIdle =
+                    mDisplayDeviceConfig.getScreenBrighteningLevelsIdle();
+            float[] screenDarkeningLevelsIdle =
+                    mDisplayDeviceConfig.getScreenDarkeningLevelsIdle();
+            HysteresisLevels screenBrightnessThresholdsIdle = new HysteresisLevels(
+                    screenBrighteningThresholdsIdle, screenDarkeningThresholdsIdle,
+                    screenBrighteningLevelsIdle, screenDarkeningLevelsIdle,
+                    screenDarkeningMinThresholdIdle, screenBrighteningMinThresholdIdle);
 
             long brighteningLightDebounce = mDisplayDeviceConfig
                     .getAutoBrightnessBrighteningLightDebounce();
@@ -1172,13 +1191,10 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
     }
 
     private void updatePowerState() {
-        if (DEBUG) {
-            Trace.beginSection("DisplayPowerController#updatePowerState");
-        }
+        Trace.traceBegin(Trace.TRACE_TAG_POWER,
+                "DisplayPowerController#updatePowerState");
         updatePowerStateInternal();
-        if (DEBUG) {
-            Trace.endSection();
-        }
+        Trace.traceEnd(Trace.TRACE_TAG_POWER);
     }
 
     private void updatePowerStateInternal() {

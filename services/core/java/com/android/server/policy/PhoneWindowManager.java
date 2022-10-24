@@ -63,7 +63,6 @@ import static android.view.WindowManager.LayoutParams.isSystemAlertWindowType;
 import static android.view.WindowManager.ScreenshotSource.SCREENSHOT_KEY_CHORD;
 import static android.view.WindowManager.ScreenshotSource.SCREENSHOT_KEY_OTHER;
 import static android.view.WindowManager.TAKE_SCREENSHOT_FULLSCREEN;
-import static android.view.WindowManager.TAKE_SCREENSHOT_SELECTED_REGION;
 import static android.view.WindowManagerGlobal.ADD_OKAY;
 import static android.view.WindowManagerGlobal.ADD_PERMISSION_DENIED;
 
@@ -1609,7 +1608,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         // If there's a dream running then use home to escape the dream
         // but don't actually go home.
         if (mDreamManagerInternal != null && mDreamManagerInternal.isDreaming()) {
-            mDreamManagerInternal.stopDream(false /*immediate*/);
+            mDreamManagerInternal.stopDream(false /*immediate*/, "short press on home" /*reason*/);
             return;
         }
 
@@ -2875,9 +2874,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 break;
             case KeyEvent.KEYCODE_S:
                 if (down && event.isMetaPressed() && event.isCtrlPressed() && repeatCount == 0) {
-                    int type = event.isShiftPressed() ? TAKE_SCREENSHOT_SELECTED_REGION
-                            : TAKE_SCREENSHOT_FULLSCREEN;
-                    interceptScreenshotChord(type, SCREENSHOT_KEY_OTHER, 0 /*pressDelay*/);
+                    interceptScreenshotChord(
+                            TAKE_SCREENSHOT_FULLSCREEN, SCREENSHOT_KEY_OTHER, 0 /*pressDelay*/);
                     return key_consumed;
                 }
                 break;
@@ -2947,9 +2945,17 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 }
                 return key_consumed;
             case KeyEvent.KEYCODE_KEYBOARD_BACKLIGHT_DOWN:
+                if (down) {
+                    mInputManagerInternal.decrementKeyboardBacklight(event.getDeviceId());
+                }
+                return key_consumed;
             case KeyEvent.KEYCODE_KEYBOARD_BACKLIGHT_UP:
+                if (down) {
+                    mInputManagerInternal.incrementKeyboardBacklight(event.getDeviceId());
+                }
+                return key_consumed;
             case KeyEvent.KEYCODE_KEYBOARD_BACKLIGHT_TOGGLE:
-                // TODO: Add logic to handle keyboard backlight controls (go/pk_backlight_control)
+                // TODO: Add logic
                 return key_consumed;
             case KeyEvent.KEYCODE_VOLUME_UP:
             case KeyEvent.KEYCODE_VOLUME_DOWN:
@@ -4206,6 +4212,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mCameraGestureTriggered = true;
         if (mRequestedOrSleepingDefaultDisplay) {
             mCameraGestureTriggeredDuringGoingToSleep = true;
+            // Wake device up early to prevent display doing redundant turning off/on stuff.
+            wakeUpFromPowerKey(event.getDownTime());
         }
         return true;
     }
@@ -5504,6 +5512,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     @Override
+    public boolean isGlobalKey(int keyCode) {
+        return mGlobalKeyManager.shouldHandleGlobalKey(keyCode);
+    }
+
+    @Override
     public boolean performHapticFeedback(int uid, String packageName, int effectId,
             boolean always, String reason) {
         if (!mVibrator.hasVibrator()) {
@@ -5528,6 +5541,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         switch (effectId) {
             case HapticFeedbackConstants.CONTEXT_CLICK:
             case HapticFeedbackConstants.GESTURE_END:
+            case HapticFeedbackConstants.ROTARY_SCROLL_TICK:
                 return VibrationEffect.get(VibrationEffect.EFFECT_TICK);
             case HapticFeedbackConstants.TEXT_HANDLE_MOVE:
                 if (!mHapticTextHandleEnabled) {
@@ -5546,6 +5560,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             case HapticFeedbackConstants.EDGE_RELEASE:
             case HapticFeedbackConstants.CONFIRM:
             case HapticFeedbackConstants.GESTURE_START:
+            case HapticFeedbackConstants.ROTARY_SCROLL_ITEM_FOCUS:
+            case HapticFeedbackConstants.ROTARY_SCROLL_LIMIT:
                 return VibrationEffect.get(VibrationEffect.EFFECT_CLICK);
             case HapticFeedbackConstants.LONG_PRESS:
             case HapticFeedbackConstants.LONG_PRESS_POWER_BUTTON:

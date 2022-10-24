@@ -6,14 +6,18 @@ package com.android.server.display.config {
     method public final java.math.BigInteger getBrighteningLightDebounceMillis();
     method public final java.math.BigInteger getDarkeningLightDebounceMillis();
     method public final com.android.server.display.config.DisplayBrightnessMapping getDisplayBrightnessMapping();
+    method public boolean getEnabled();
     method public final void setBrighteningLightDebounceMillis(java.math.BigInteger);
     method public final void setDarkeningLightDebounceMillis(java.math.BigInteger);
     method public final void setDisplayBrightnessMapping(com.android.server.display.config.DisplayBrightnessMapping);
+    method public void setEnabled(boolean);
   }
 
   public class BrightnessThresholds {
     ctor public BrightnessThresholds();
+    method public final com.android.server.display.config.ThresholdPoints getBrightnessThresholdPoints();
     method @NonNull public final java.math.BigDecimal getMinimum();
+    method public final void setBrightnessThresholdPoints(com.android.server.display.config.ThresholdPoints);
     method public final void setMinimum(@NonNull java.math.BigDecimal);
   }
 
@@ -202,6 +206,19 @@ package com.android.server.display.config {
     ctor public ThermalThrottling();
     method @NonNull public final com.android.server.display.config.BrightnessThrottlingMap getBrightnessThrottlingMap();
     method public final void setBrightnessThrottlingMap(@NonNull com.android.server.display.config.BrightnessThrottlingMap);
+  }
+
+  public class ThresholdPoint {
+    ctor public ThresholdPoint();
+    method @NonNull public final java.math.BigDecimal getPercentage();
+    method @NonNull public final java.math.BigDecimal getThreshold();
+    method public final void setPercentage(@NonNull java.math.BigDecimal);
+    method public final void setThreshold(@NonNull java.math.BigDecimal);
+  }
+
+  public class ThresholdPoints {
+    ctor public ThresholdPoints();
+    method @NonNull public final java.util.List<com.android.server.display.config.ThresholdPoint> getBrightnessThresholdPoint();
   }
 
   public class Thresholds {

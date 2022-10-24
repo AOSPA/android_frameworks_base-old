@@ -71,12 +71,12 @@ import com.android.systemui.dump.DumpManager;
 import com.android.systemui.keyguard.ScreenLifecycle;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
+import com.android.systemui.shade.ShadeExpansionStateManager;
 import com.android.systemui.statusbar.LockscreenShadeTransitionController;
 import com.android.systemui.statusbar.VibratorHelper;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
 import com.android.systemui.statusbar.phone.SystemUIDialogManager;
 import com.android.systemui.statusbar.phone.UnlockedScreenOffAnimationController;
-import com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManager;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.concurrency.Execution;
@@ -126,8 +126,6 @@ public class UdfpsControllerTest extends SysuiTestCase {
     @Mock
     private WindowManager mWindowManager;
     @Mock
-    private UdfpsDisplayModeProvider mDisplayModeProvider;
-    @Mock
     private StatusBarStateController mStatusBarStateController;
     @Mock
     private StatusBarKeyguardViewManager mStatusBarKeyguardViewManager;
@@ -168,6 +166,8 @@ public class UdfpsControllerTest extends SysuiTestCase {
     @Mock
     private LatencyTracker mLatencyTracker;
     private FakeExecutor mFgExecutor;
+    @Mock
+    private UdfpsDisplayMode mUdfpsDisplayMode;
 
     // Stuff for configuring mocks
     @Mock
@@ -245,7 +245,7 @@ public class UdfpsControllerTest extends SysuiTestCase {
                 mWindowManager,
                 mStatusBarStateController,
                 mFgExecutor,
-                new PanelExpansionStateManager(),
+                new ShadeExpansionStateManager(),
                 mStatusBarKeyguardViewManager,
                 mDumpManager,
                 mKeyguardUpdateMonitor,
@@ -257,7 +257,6 @@ public class UdfpsControllerTest extends SysuiTestCase {
                 mVibrator,
                 mUdfpsHapticsSimulator,
                 mUdfpsShell,
-                Optional.of(mDisplayModeProvider),
                 mKeyguardStateController,
                 mDisplayManager,
                 mHandler,
@@ -274,6 +273,7 @@ public class UdfpsControllerTest extends SysuiTestCase {
         verify(mScreenLifecycle).addObserver(mScreenObserverCaptor.capture());
         mScreenObserver = mScreenObserverCaptor.getValue();
         mUdfpsController.updateOverlayParams(TEST_UDFPS_SENSOR_ID, new UdfpsOverlayParams());
+        mUdfpsController.setUdfpsDisplayMode(mUdfpsDisplayMode);
     }
 
     @Test

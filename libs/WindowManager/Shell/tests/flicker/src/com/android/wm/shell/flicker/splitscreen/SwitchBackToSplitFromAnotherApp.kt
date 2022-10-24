@@ -16,15 +16,14 @@
 
 package com.android.wm.shell.flicker.splitscreen
 
+import android.platform.test.annotations.FlakyTest
 import android.platform.test.annotations.IwTest
-import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
 import android.view.WindowManagerPolicyConstants
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
-import com.android.server.wm.flicker.annotation.Group1
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.wm.shell.flicker.appWindowBecomesVisible
 import com.android.wm.shell.flicker.layerBecomesVisible
@@ -46,7 +45,6 @@ import org.junit.runners.Parameterized
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-@Group1
 class SwitchBackToSplitFromAnotherApp(testSpec: FlickerTestParameter) : SplitScreenBase(testSpec) {
     val thirdApp = SplitScreenUtils.getNonResizeable(instrumentation)
 
@@ -57,9 +55,7 @@ class SwitchBackToSplitFromAnotherApp(testSpec: FlickerTestParameter) : SplitScr
                 SplitScreenUtils.enterSplit(wmHelper, tapl, primaryApp, secondaryApp)
 
                 thirdApp.launchViaIntent(wmHelper)
-                wmHelper.StateSyncBuilder()
-                    .withWindowSurfaceAppeared(thirdApp)
-                    .waitForAndVerify()
+                wmHelper.StateSyncBuilder().withWindowSurfaceAppeared(thirdApp).waitForAndVerify()
             }
             transitions {
                 tapl.launchedAppState.quickSwitchToPreviousApp()
@@ -76,9 +72,7 @@ class SwitchBackToSplitFromAnotherApp(testSpec: FlickerTestParameter) : SplitScr
     @Test
     fun splitScreenDividerBecomesVisible() = testSpec.splitScreenDividerBecomesVisible()
 
-    @Presubmit
-    @Test
-    fun primaryAppLayerBecomesVisible() = testSpec.layerBecomesVisible(primaryApp)
+    @Presubmit @Test fun primaryAppLayerBecomesVisible() = testSpec.layerBecomesVisible(primaryApp)
 
     @Presubmit
     @Test
@@ -86,13 +80,21 @@ class SwitchBackToSplitFromAnotherApp(testSpec: FlickerTestParameter) : SplitScr
 
     @Presubmit
     @Test
-    fun primaryAppBoundsIsVisibleAtEnd() = testSpec.splitAppLayerBoundsIsVisibleAtEnd(
-        primaryApp, landscapePosLeft = tapl.isTablet, portraitPosTop = false)
+    fun primaryAppBoundsIsVisibleAtEnd() =
+        testSpec.splitAppLayerBoundsIsVisibleAtEnd(
+            primaryApp,
+            landscapePosLeft = tapl.isTablet,
+            portraitPosTop = false
+        )
 
     @Presubmit
     @Test
-    fun secondaryAppBoundsIsVisibleAtEnd() = testSpec.splitAppLayerBoundsIsVisibleAtEnd(
-        secondaryApp, landscapePosLeft = !tapl.isTablet, portraitPosTop = true)
+    fun secondaryAppBoundsIsVisibleAtEnd() =
+        testSpec.splitAppLayerBoundsIsVisibleAtEnd(
+            secondaryApp,
+            landscapePosLeft = !tapl.isTablet,
+            portraitPosTop = true
+        )
 
     @Presubmit
     @Test
@@ -103,67 +105,60 @@ class SwitchBackToSplitFromAnotherApp(testSpec: FlickerTestParameter) : SplitScr
     fun secondaryAppWindowBecomesVisible() = testSpec.appWindowBecomesVisible(secondaryApp)
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @FlakyTest
     @Test
     override fun entireScreenCovered() =
         super.entireScreenCovered()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @Presubmit
     @Test
-    override fun navBarLayerIsVisibleAtStartAndEnd() =
-        super.navBarLayerIsVisibleAtStartAndEnd()
+    override fun navBarLayerIsVisibleAtStartAndEnd() = super.navBarLayerIsVisibleAtStartAndEnd()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @Presubmit
     @Test
-    override fun navBarLayerPositionAtStartAndEnd() =
-        super.navBarLayerPositionAtStartAndEnd()
+    override fun navBarLayerPositionAtStartAndEnd() = super.navBarLayerPositionAtStartAndEnd()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @Presubmit
     @Test
-    override fun navBarWindowIsAlwaysVisible() =
-        super.navBarWindowIsAlwaysVisible()
+    override fun navBarWindowIsAlwaysVisible() = super.navBarWindowIsAlwaysVisible()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @Presubmit
     @Test
     override fun statusBarLayerIsVisibleAtStartAndEnd() =
         super.statusBarLayerIsVisibleAtStartAndEnd()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @Presubmit
     @Test
-    override fun statusBarLayerPositionAtStartAndEnd() =
-        super.statusBarLayerPositionAtStartAndEnd()
+    override fun statusBarLayerPositionAtStartAndEnd() = super.statusBarLayerPositionAtStartAndEnd()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @Presubmit
     @Test
-    override fun statusBarWindowIsAlwaysVisible() =
-        super.statusBarWindowIsAlwaysVisible()
+    override fun statusBarWindowIsAlwaysVisible() = super.statusBarWindowIsAlwaysVisible()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @Presubmit
     @Test
-    override fun taskBarLayerIsVisibleAtStartAndEnd() =
-        super.taskBarLayerIsVisibleAtStartAndEnd()
+    override fun taskBarLayerIsVisibleAtStartAndEnd() = super.taskBarLayerIsVisibleAtStartAndEnd()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @Presubmit
     @Test
-    override fun taskBarWindowIsAlwaysVisible() =
-        super.taskBarWindowIsAlwaysVisible()
+    override fun taskBarWindowIsAlwaysVisible() = super.taskBarWindowIsAlwaysVisible()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @Presubmit
     @Test
     override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
         super.visibleLayersShownMoreThanOneConsecutiveEntry()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @Presubmit
     @Test
     override fun visibleWindowsShownMoreThanOneConsecutiveEntry() =
         super.visibleWindowsShownMoreThanOneConsecutiveEntry()
@@ -172,10 +167,12 @@ class SwitchBackToSplitFromAnotherApp(testSpec: FlickerTestParameter) : SplitScr
         @Parameterized.Parameters(name = "{0}")
         @JvmStatic
         fun getParams(): List<FlickerTestParameter> {
-            return FlickerTestParameterFactory.getInstance().getConfigNonRotationTests(
-                // TODO(b/176061063):The 3 buttons of nav bar do not exist in the hierarchy.
-                supportedNavigationModes =
-                    listOf(WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL_OVERLAY))
+            return FlickerTestParameterFactory.getInstance()
+                .getConfigNonRotationTests(
+                    // TODO(b/176061063):The 3 buttons of nav bar do not exist in the hierarchy.
+                    supportedNavigationModes =
+                        listOf(WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL_OVERLAY)
+                )
         }
     }
 }

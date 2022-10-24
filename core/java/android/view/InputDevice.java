@@ -80,6 +80,7 @@ public final class InputDevice implements Parcelable {
     private final boolean mHasButtonUnderPad;
     private final boolean mHasSensor;
     private final boolean mHasBattery;
+    private final boolean mSupportsUsi;
     private final ArrayList<MotionRange> mMotionRanges = new ArrayList<MotionRange>();
 
     @GuardedBy("mMotionRanges")
@@ -90,9 +91,6 @@ public final class InputDevice implements Parcelable {
 
     @GuardedBy("mMotionRanges")
     private SensorManager mSensorManager;
-
-    @GuardedBy("mMotionRanges")
-    private BatteryState mBatteryState;
 
     @GuardedBy("mMotionRanges")
     private LightsManager mLightsManager;
@@ -465,7 +463,7 @@ public final class InputDevice implements Parcelable {
             int productId, String descriptor, boolean isExternal, int sources, int keyboardType,
             KeyCharacterMap keyCharacterMap, @InputDeviceCountryCode int countryCode,
             boolean hasVibrator, boolean hasMicrophone, boolean hasButtonUnderPad,
-            boolean hasSensor, boolean hasBattery) {
+            boolean hasSensor, boolean hasBattery, boolean supportsUsi) {
         mId = id;
         mGeneration = generation;
         mControllerNumber = controllerNumber;
@@ -484,6 +482,7 @@ public final class InputDevice implements Parcelable {
         mHasSensor = hasSensor;
         mHasBattery = hasBattery;
         mIdentifier = new InputDeviceIdentifier(descriptor, vendorId, productId);
+        mSupportsUsi = supportsUsi;
     }
 
     private InputDevice(Parcel in) {
@@ -504,6 +503,7 @@ public final class InputDevice implements Parcelable {
         mHasButtonUnderPad = in.readInt() != 0;
         mHasSensor = in.readInt() != 0;
         mHasBattery = in.readInt() != 0;
+        mSupportsUsi = in.readInt() != 0;
         mIdentifier = new InputDeviceIdentifier(mDescriptor, mVendorId, mProductId);
 
         int numRanges = in.readInt();
@@ -541,6 +541,7 @@ public final class InputDevice implements Parcelable {
         private boolean mHasBattery = false;
         @InputDeviceCountryCode
         private int mCountryCode = InputDeviceCountryCode.INVALID;
+        private boolean mSupportsUsi = false;
 
         /** @see InputDevice#getId()  */
         public Builder setId(int id) {
@@ -644,12 +645,18 @@ public final class InputDevice implements Parcelable {
             return this;
         }
 
+        /** @see InputDevice#supportsUsi() ()  */
+        public Builder setSupportsUsi(boolean supportsUsi) {
+            mSupportsUsi = supportsUsi;
+            return this;
+        }
+
         /** Build {@link InputDevice}. */
         public InputDevice build() {
             return new InputDevice(mId, mGeneration, mControllerNumber, mName, mVendorId,
                     mProductId, mDescriptor, mIsExternal, mSources, mKeyboardType, mKeyCharacterMap,
                     mCountryCode, mHasVibrator, mHasMicrophone, mHasButtonUnderPad, mHasSensor,
-                    mHasBattery);
+                    mHasBattery, mSupportsUsi);
         }
     }
 
@@ -1058,10 +1065,7 @@ public final class InputDevice implements Parcelable {
      */
     @NonNull
     public BatteryState getBatteryState() {
-        if (mBatteryState == null) {
-            mBatteryState = InputManager.getInstance().getInputDeviceBatteryState(mId, mHasBattery);
-        }
-        return mBatteryState;
+        return InputManager.getInstance().getInputDeviceBatteryState(mId, mHasBattery);
     }
 
     /**
@@ -1182,6 +1186,15 @@ public final class InputDevice implements Parcelable {
      */
     public boolean hasBattery() {
         return mHasBattery;
+    }
+
+    /**
+     * Reports whether the device supports the Universal Stylus Initiative (USI) protocol for
+     * styluses.
+     * @hide
+     */
+    public boolean supportsUsi() {
+        return mSupportsUsi;
     }
 
     /**
@@ -1314,6 +1327,7 @@ public final class InputDevice implements Parcelable {
         out.writeInt(mHasButtonUnderPad ? 1 : 0);
         out.writeInt(mHasSensor ? 1 : 0);
         out.writeInt(mHasBattery ? 1 : 0);
+        out.writeInt(mSupportsUsi ? 1 : 0);
 
         final int numRanges = mMotionRanges.size();
         out.writeInt(numRanges);
@@ -1366,6 +1380,8 @@ public final class InputDevice implements Parcelable {
         description.append("  Has battery: ").append(mHasBattery).append("\n");
 
         description.append("  Has mic: ").append(mHasMicrophone).append("\n");
+
+        description.append("  Supports USI: ").append(mSupportsUsi).append("\n");
 
         description.append("  Sources: 0x").append(Integer.toHexString(mSources)).append(" (");
         appendSourceDescriptionIfApplicable(description, SOURCE_KEYBOARD, "keyboard");

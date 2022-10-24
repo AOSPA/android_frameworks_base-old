@@ -57,6 +57,7 @@ import static java.lang.annotation.RetentionPolicy.SOURCE;
 import android.annotation.AnyThread;
 import android.annotation.CallSuper;
 import android.annotation.DrawableRes;
+import android.annotation.DurationMillisLong;
 import android.annotation.IntDef;
 import android.annotation.MainThread;
 import android.annotation.NonNull;
@@ -364,6 +365,11 @@ public class InputMethodService extends AbstractInputMethodService {
             STYLUS_HANDWRITING_IDLE_TIMEOUT_MS * 3;
 
     /**
+     * Stylus idle-timeout after which stylus {@code InkWindow} will be removed.
+     */
+    private static final long STYLUS_WINDOW_IDLE_TIMEOUT_MILLIS = 5 * 60 * 1000; // 5 minutes.
+
+    /**
      * A circular buffer of size MAX_EVENTS_BUFFER in case IME is taking too long to add ink view.
      **/
     private RingBuffer<MotionEvent> mPendingEvents;
@@ -373,6 +379,8 @@ public class InputMethodService extends AbstractInputMethodService {
     private Runnable mImeSurfaceRemoverRunnable;
     private Runnable mFinishHwRunnable;
     private long mStylusHwSessionsTimeout = STYLUS_HANDWRITING_IDLE_TIMEOUT_MS;
+    private Runnable mStylusWindowIdleTimeoutRunnable;
+    private long mStylusWindowIdleTimeoutForTest;
 
     /**
      * Returns whether {@link InputMethodService} is responsible for rendering the back button and
@@ -977,7 +985,7 @@ public class InputMethodService extends AbstractInputMethodService {
                 Log.d(TAG, "Input should have started before starting Stylus handwriting.");
                 return;
             }
-            maybeCreateInkWindow();
+            maybeCreateAndInitInkWindow();
             if (!mOnPreparedStylusHwCalled) {
                 // prepare hasn't been called by Stylus HOVER.
                 onPrepareStylusHandwriting();
@@ -1037,21 +1045,20 @@ public class InputMethodService extends AbstractInputMethodService {
          */
         @Override
         public void initInkWindow() {
-            maybeCreateInkWindow();
-            mInkWindow.initOnly();
+            maybeCreateAndInitInkWindow();
             onPrepareStylusHandwriting();
             mOnPreparedStylusHwCalled = true;
         }
 
         /**
-         * Create and attach token to Ink window if it wasn't already created.
+         * Create, attach token and layout Ink window if it wasn't already created.
          */
-        private void maybeCreateInkWindow() {
+        private void maybeCreateAndInitInkWindow() {
             if (mInkWindow == null) {
                 mInkWindow = new InkWindow(mWindow.getContext());
                 mInkWindow.setToken(mToken);
             }
-            // TODO(b/243571274): set an idle-timeout after which InkWindow is removed.
+            mInkWindow.initOnly();
         }
 
         /**
@@ -1070,6 +1077,15 @@ public class InputMethodService extends AbstractInputMethodService {
         @Override
         public void removeStylusHandwritingWindow() {
             InputMethodService.this.removeStylusHandwritingWindow();
+        }
+
+        /**
+         * {@inheritDoc}
+         * @hide
+         */
+        @Override
+        public void setStylusWindowIdleTimeoutForTest(@DurationMillisLong long timeout) {
+            mStylusWindowIdleTimeoutForTest = timeout;
         }
 
         /**
@@ -2487,21 +2503,31 @@ public class InputMethodService extends AbstractInputMethodService {
      * @param motionEvent {@link MotionEvent} from stylus.
      */
     public void onStylusHandwritingMotionEvent(@NonNull MotionEvent motionEvent) {
-        if (mInkWindow.isInkViewVisible()) {
+        if (mInkWindow != null && mInkWindow.isInkViewVisible()) {
             mInkWindow.getDecorView().dispatchTouchEvent(motionEvent);
         } else {
             if (mPendingEvents == null) {
                 mPendingEvents = new RingBuffer(MotionEvent.class, MAX_EVENTS_BUFFER);
             }
             mPendingEvents.append(motionEvent);
-            mInkWindow.setInkViewVisibilityListener(() -> {
-                if (mPendingEvents != null && !mPendingEvents.isEmpty()) {
-                    for (MotionEvent event : mPendingEvents.toArray()) {
-                        mInkWindow.getDecorView().dispatchTouchEvent(event);
+            if (mInkWindow != null) {
+                mInkWindow.setInkViewVisibilityListener(() -> {
+                    if (mPendingEvents != null && !mPendingEvents.isEmpty()) {
+                        for (MotionEvent event : mPendingEvents.toArray()) {
+                            if (mInkWindow == null) {
+                                break;
+                            }
+                            mInkWindow.getDecorView().dispatchTouchEvent(event);
+                        }
+                        mPendingEvents.clear();
                     }
-                    mPendingEvents.clear();
-                }
-            });
+                });
+            }
+        }
+
+        // Create a stylus window idle-timeout after which InkWindow is removed.
+        if (motionEvent.getAction() == MotionEvent.ACTION_DOWN) {
+            scheduleStylusWindowIdleTimeout();
         }
     }
 
@@ -2563,7 +2589,6 @@ public class InputMethodService extends AbstractInputMethodService {
 
         mHandwritingEventReceiver.dispose();
         mHandwritingEventReceiver = null;
-        // TODO(b/243571274): set an idle-timeout after which InkWindow is removed.
         mInkWindow.hide(false /* remove */);
 
         mPrivOps.resetStylusHandwriting(requestId);
@@ -2587,9 +2612,41 @@ public class InputMethodService extends AbstractInputMethodService {
     }
 
     private void removeHandwritingInkWindow() {
-        mInkWindow.hide(true /* remove */);
-        mInkWindow.destroy();
-        mInkWindow = null;
+        cancelStylusWindowIdleTimeout();
+        mOnPreparedStylusHwCalled = false;
+        mStylusWindowIdleTimeoutRunnable = null;
+        if (mInkWindow != null) {
+            mInkWindow.hide(true /* remove */);
+            mInkWindow.destroy();
+            mInkWindow = null;
+        }
+    }
+
+    private void cancelStylusWindowIdleTimeout() {
+        if (mStylusWindowIdleTimeoutRunnable != null && mHandler != null) {
+            mHandler.removeCallbacks(mStylusWindowIdleTimeoutRunnable);
+        }
+    }
+
+    private void scheduleStylusWindowIdleTimeout() {
+        if (mHandler == null) {
+            return;
+        }
+        cancelStylusWindowIdleTimeout();
+        long timeout = (mStylusWindowIdleTimeoutForTest > 0)
+                ? mStylusWindowIdleTimeoutForTest : STYLUS_WINDOW_IDLE_TIMEOUT_MILLIS;
+        mHandler.postDelayed(getStylusWindowIdleTimeoutRunnable(), timeout);
+    }
+
+    private Runnable getStylusWindowIdleTimeoutRunnable() {
+        if (mStylusWindowIdleTimeoutRunnable == null) {
+            mStylusWindowIdleTimeoutRunnable = () -> {
+                removeHandwritingInkWindow();
+                mStylusWindowIdleTimeoutRunnable = null;
+            };
+        }
+
+        return mStylusWindowIdleTimeoutRunnable;
     }
 
     /**

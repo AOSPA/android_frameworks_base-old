@@ -227,6 +227,7 @@ import android.view.IWindowFocusObserver;
 import android.view.RemoteAnimationAdapter;
 import android.view.RemoteAnimationDefinition;
 import android.view.WindowManager;
+import android.window.BackAnimationAdapter;
 import android.window.BackNavigationInfo;
 import android.window.IWindowOrganizerController;
 import android.window.SplashScreenView.SplashScreenViewParcelable;
@@ -459,7 +460,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     private final ClientLifecycleManager mLifecycleManager;
 
     @Nullable
-    private final BackNavigationController mBackNavigationController;
+    final BackNavigationController mBackNavigationController;
 
     private TaskChangeNotificationController mTaskChangeNotificationController;
     /** The controller for all operations related to locktask. */
@@ -1846,14 +1847,15 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     }
 
     @Override
-    public BackNavigationInfo startBackNavigation(boolean requestAnimation,
-            IWindowFocusObserver observer) {
+    public BackNavigationInfo startBackNavigation(
+            IWindowFocusObserver observer, BackAnimationAdapter adapter) {
         mAmInternal.enforceCallingPermission(START_TASKS_FROM_RECENTS,
                 "startBackNavigation()");
         if (mBackNavigationController == null) {
             return null;
         }
-        return mBackNavigationController.startBackNavigation(requestAnimation, observer);
+
+        return mBackNavigationController.startBackNavigation(observer, adapter);
     }
 
     /**
@@ -5039,19 +5041,18 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     }
 
     private void updateResumedAppTrace(@Nullable ActivityRecord resumed) {
-        if (mTracedResumedActivity != null) {
-            Trace.asyncTraceEnd(TRACE_TAG_WINDOW_MANAGER,
-                    constructResumedTraceName(mTracedResumedActivity.packageName), 0);
-        }
-        if (resumed != null) {
-            Trace.asyncTraceBegin(TRACE_TAG_WINDOW_MANAGER,
-                    constructResumedTraceName(resumed.packageName), 0);
+        if (Trace.isTagEnabled(Trace.TRACE_TAG_WINDOW_MANAGER)) {
+            if (mTracedResumedActivity != null) {
+                Trace.asyncTraceForTrackEnd(TRACE_TAG_WINDOW_MANAGER,
+                        "Focused app", System.identityHashCode(mTracedResumedActivity));
+            }
+            if (resumed != null) {
+                Trace.asyncTraceForTrackBegin(TRACE_TAG_WINDOW_MANAGER,
+                        "Focused app", resumed.mActivityComponent.flattenToShortString(),
+                        System.identityHashCode(resumed));
+            }
         }
         mTracedResumedActivity = resumed;
-    }
-
-    private String constructResumedTraceName(String packageName) {
-        return "focused app: " + packageName;
     }
 
     /** Applies latest configuration and/or visibility updates if needed. */
@@ -5757,17 +5758,19 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         @HotPath(caller = HotPath.OOM_ADJUSTMENT)
         @Override
         public int getTopProcessState() {
-            final int topState = mTopProcessState;
-            if (mDemoteTopAppReasons != 0 && topState == ActivityManager.PROCESS_STATE_TOP) {
-                // There may be a more important UI/animation than the top app.
-                return ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND;
-            }
             if (mRetainPowerModeAndTopProcessState) {
                 // There is a launching app while device may be sleeping, force the top state so
                 // the launching process can have top-app scheduling group.
                 return ActivityManager.PROCESS_STATE_TOP;
             }
-            return topState;
+            return mTopProcessState;
+        }
+
+        @HotPath(caller = HotPath.OOM_ADJUSTMENT)
+        @Override
+        public boolean useTopSchedGroupForTopProcess() {
+            // If it is non-zero, there may be a more important UI/animation than the top app.
+            return mDemoteTopAppReasons == 0;
         }
 
         @HotPath(caller = HotPath.PROCESS_CHANGE)

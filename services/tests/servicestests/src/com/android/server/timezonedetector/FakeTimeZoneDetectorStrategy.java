@@ -15,39 +15,45 @@
  */
 package com.android.server.timezonedetector;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-
 import android.annotation.NonNull;
 import android.annotation.UserIdInt;
+import android.app.time.TimeZoneState;
 import android.app.timezonedetector.ManualTimeZoneSuggestion;
 import android.app.timezonedetector.TelephonyTimeZoneSuggestion;
 import android.util.IndentingPrintWriter;
 
-class FakeTimeZoneDetectorStrategy implements TimeZoneDetectorStrategy {
+public class FakeTimeZoneDetectorStrategy implements TimeZoneDetectorStrategy {
 
-    // Call tracking.
-    private GeolocationTimeZoneSuggestion mLastGeolocationSuggestion;
-    private ManualTimeZoneSuggestion mLastManualSuggestion;
-    private TelephonyTimeZoneSuggestion mLastTelephonySuggestion;
-    private boolean mDumpCalled;
+    private TimeZoneState mTimeZoneState;
+
+    @Override
+    public boolean confirmTimeZone(String timeZoneId) {
+        return false;
+    }
+
+    @Override
+    public TimeZoneState getTimeZoneState() {
+        return mTimeZoneState;
+    }
+
+    @Override
+    public void setTimeZoneState(TimeZoneState timeZoneState) {
+        mTimeZoneState = timeZoneState;
+    }
 
     @Override
     public void suggestGeolocationTimeZone(GeolocationTimeZoneSuggestion timeZoneSuggestion) {
-        mLastGeolocationSuggestion = timeZoneSuggestion;
     }
 
     @Override
     public boolean suggestManualTimeZone(
-            @UserIdInt int userId, @NonNull ManualTimeZoneSuggestion timeZoneSuggestion) {
-        mLastManualSuggestion = timeZoneSuggestion;
+            @UserIdInt int userId, @NonNull ManualTimeZoneSuggestion timeZoneSuggestion,
+            boolean bypassUserPolicyChecks) {
         return true;
     }
 
     @Override
-    public void suggestTelephonyTimeZone(
-            @NonNull TelephonyTimeZoneSuggestion timeZoneSuggestion) {
-        mLastTelephonySuggestion = timeZoneSuggestion;
+    public void suggestTelephonyTimeZone(@NonNull TelephonyTimeZoneSuggestion timeZoneSuggestion) {
     }
 
     @Override
@@ -72,30 +78,5 @@ class FakeTimeZoneDetectorStrategy implements TimeZoneDetectorStrategy {
 
     @Override
     public void dump(IndentingPrintWriter pw, String[] args) {
-        mDumpCalled = true;
-    }
-
-    void resetCallTracking() {
-        mLastGeolocationSuggestion = null;
-        mLastManualSuggestion = null;
-        mLastTelephonySuggestion = null;
-        mDumpCalled = false;
-    }
-
-    void verifySuggestGeolocationTimeZoneCalled(
-            GeolocationTimeZoneSuggestion expectedSuggestion) {
-        assertEquals(expectedSuggestion, mLastGeolocationSuggestion);
-    }
-
-    void verifySuggestManualTimeZoneCalled(ManualTimeZoneSuggestion expectedSuggestion) {
-        assertEquals(expectedSuggestion, mLastManualSuggestion);
-    }
-
-    void verifySuggestTelephonyTimeZoneCalled(TelephonyTimeZoneSuggestion expectedSuggestion) {
-        assertEquals(expectedSuggestion, mLastTelephonySuggestion);
-    }
-
-    void verifyDumpCalled() {
-        assertTrue(mDumpCalled);
     }
 }

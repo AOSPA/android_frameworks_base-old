@@ -23,7 +23,6 @@ import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
 import com.android.server.wm.flicker.annotation.FlickerServiceCompatible
-import com.android.server.wm.flicker.annotation.Group1
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.setRotation
 import org.junit.FixMethodOrder
@@ -38,29 +37,29 @@ import org.junit.runners.Parameterized
  * To run this test: `atest FlickerTests:OpenAppWarmTest`
  *
  * Actions:
+ * ```
  *     Launch [testApp]
  *     Press home
  *     Relaunch an app [testApp] and wait animation to complete (only this action is traced)
- *
+ * ```
  * Notes:
+ * ```
  *     1. Some default assertions (e.g., nav bar, status bar and screen covered)
  *        are inherited [OpenAppTransition]
  *     2. Part of the test setup occurs automatically via
  *        [com.android.server.wm.flicker.TransitionRunnerWithRules],
  *        including configuring navigation mode, initial orientation and ensuring no
  *        apps are running before setup
+ * ```
  */
 @RequiresDevice
 @FlickerServiceCompatible
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-@Group1
 open class OpenAppWarmTest(testSpec: FlickerTestParameter) :
     OpenAppFromLauncherTransition(testSpec) {
-    /**
-     * Defines the transition used to run the test
-     */
+    /** Defines the transition used to run the test */
     override val transition: FlickerBuilder.() -> Unit
         get() = {
             super.transition(this)
@@ -68,17 +67,11 @@ open class OpenAppWarmTest(testSpec: FlickerTestParameter) :
                 tapl.setExpectedRotationCheckEnabled(false)
                 testApp.launchViaIntent(wmHelper)
                 tapl.goHome()
-                wmHelper.StateSyncBuilder()
-                    .withHomeActivityVisible()
-                    .waitForAndVerify()
+                wmHelper.StateSyncBuilder().withHomeActivityVisible().waitForAndVerify()
                 this.setRotation(testSpec.startRotation)
             }
-            teardown {
-                testApp.exit(wmHelper)
-            }
-            transitions {
-                testApp.launchViaIntent(wmHelper)
-            }
+            teardown { testApp.exit(wmHelper) }
+            transitions { testApp.launchViaIntent(wmHelper) }
         }
 
     /** {@inheritDoc} */
@@ -87,9 +80,7 @@ open class OpenAppWarmTest(testSpec: FlickerTestParameter) :
     override fun navBarLayerPositionAtStartAndEnd() = super.navBarLayerPositionAtStartAndEnd()
 
     /** {@inheritDoc} */
-    @Presubmit
-    @Test
-    override fun appLayerReplacesLauncher() = super.appLayerReplacesLauncher()
+    @Presubmit @Test override fun appLayerReplacesLauncher() = super.appLayerReplacesLauncher()
 
     /** {@inheritDoc} */
     @Presubmit
@@ -105,14 +96,13 @@ open class OpenAppWarmTest(testSpec: FlickerTestParameter) :
         /**
          * Creates the test configurations.
          *
-         * See [FlickerTestParameterFactory.getConfigNonRotationTests] for configuring
-         * repetitions, screen orientation and navigation modes.
+         * See [FlickerTestParameterFactory.getConfigNonRotationTests] for configuring repetitions,
+         * screen orientation and navigation modes.
          */
         @Parameterized.Parameters(name = "{0}")
         @JvmStatic
         fun getParams(): Collection<FlickerTestParameter> {
-            return FlickerTestParameterFactory.getInstance()
-                .getConfigNonRotationTests()
+            return FlickerTestParameterFactory.getInstance().getConfigNonRotationTests()
         }
     }
 }

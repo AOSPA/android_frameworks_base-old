@@ -81,6 +81,8 @@ import android.content.pm.verify.domain.DomainVerificationManager;
 import android.content.pm.verify.domain.IDomainVerificationManager;
 import android.content.res.Resources;
 import android.content.rollback.RollbackManagerFrameworkInitializer;
+import android.credentials.CredentialManager;
+import android.credentials.ICredentialManager;
 import android.debug.AdbManager;
 import android.debug.IAdbManager;
 import android.graphics.fonts.FontManager;
@@ -111,6 +113,7 @@ import android.hardware.location.ContextHubManager;
 import android.hardware.radio.RadioManager;
 import android.hardware.usb.IUsbManager;
 import android.hardware.usb.UsbManager;
+import android.healthconnect.HealthServicesInitializer;
 import android.location.CountryDetector;
 import android.location.ICountryDetector;
 import android.location.ILocationManager;
@@ -1137,6 +1140,19 @@ public final class SystemServiceRegistry {
                 return new AutofillManager(ctx.getOuterContext(), service);
             }});
 
+        registerService(Context.CREDENTIAL_SERVICE, CredentialManager.class,
+                new CachedServiceFetcher<CredentialManager>() {
+                    @Override
+                    public CredentialManager createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        IBinder b = ServiceManager.getService(Context.CREDENTIAL_SERVICE);
+                        ICredentialManager service = ICredentialManager.Stub.asInterface(b);
+                        if (service != null) {
+                            return new CredentialManager(ctx.getOuterContext(), service);
+                        }
+                        return null;
+                    }});
+
         registerService(Context.MUSIC_RECOGNITION_SERVICE, MusicRecognitionManager.class,
                 new CachedServiceFetcher<MusicRecognitionManager>() {
                     @Override
@@ -1524,6 +1540,7 @@ public final class SystemServiceRegistry {
             BluetoothFrameworkInitializer.registerServiceWrappers();
             TelephonyFrameworkInitializer.registerServiceWrappers();
             AppSearchManagerFrameworkInitializer.initialize();
+            HealthServicesInitializer.registerServiceWrappers();
             WifiFrameworkInitializer.registerServiceWrappers();
             StatsFrameworkInitializer.registerServiceWrappers();
             RollbackManagerFrameworkInitializer.initialize();

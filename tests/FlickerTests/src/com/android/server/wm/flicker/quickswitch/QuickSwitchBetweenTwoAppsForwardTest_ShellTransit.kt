@@ -16,13 +16,14 @@
 
 package com.android.server.wm.flicker.quickswitch
 
+import android.platform.test.annotations.FlakyTest
 import android.platform.test.annotations.Presubmit
 import android.platform.test.annotations.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
-import com.android.server.wm.flicker.annotation.Group1
 import com.android.server.wm.flicker.helpers.isShellTransitionsEnabled
 import com.android.server.wm.flicker.navBarWindowIsVisibleAtStartAndEnd
+import com.android.server.wm.traces.common.ComponentNameMatcher
 import org.junit.Assume
 import org.junit.Before
 import org.junit.FixMethodOrder
@@ -38,19 +39,19 @@ import org.junit.runners.Parameterized
  * To run this test: `atest FlickerTests:QuickSwitchBetweenTwoAppsForwardTest`
  *
  * Actions:
+ * ```
  *     Launch an app [testApp1]
  *     Launch another app [testApp2]
  *     Swipe right from the bottom of the screen to quick switch back to the first app [testApp1]
  *     Swipe left from the bottom of the screen to quick switch forward to the second app [testApp2]
+ * ```
  */
 @RequiresDevice
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-@Group1
-open class QuickSwitchBetweenTwoAppsForwardTest_ShellTransit(
-    testSpec: FlickerTestParameter
-) : QuickSwitchBetweenTwoAppsForwardTest(testSpec) {
+open class QuickSwitchBetweenTwoAppsForwardTest_ShellTransit(testSpec: FlickerTestParameter) :
+    QuickSwitchBetweenTwoAppsForwardTest(testSpec) {
     @Before
     override fun before() {
         Assume.assumeTrue(isShellTransitionsEnabled)
@@ -62,8 +63,8 @@ open class QuickSwitchBetweenTwoAppsForwardTest_ShellTransit(
     override fun navBarWindowIsAlwaysVisible() = super.navBarWindowIsAlwaysVisible()
 
     /**
-     * Checks that [ComponentMatcher.NAV_BAR] window is visible and above the app windows at the start
-     * and end of the WM trace
+     * Checks that [ComponentNameMatcher.NAV_BAR] window is visible and above the app windows at
+     * the start and end of the WM trace
      */
     @Presubmit
     @Test
@@ -71,4 +72,18 @@ open class QuickSwitchBetweenTwoAppsForwardTest_ShellTransit(
         Assume.assumeFalse(testSpec.isTablet)
         testSpec.navBarWindowIsVisibleAtStartAndEnd()
     }
+
+    @FlakyTest(bugId = 246284708)
+    @Test
+    override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
+        super.visibleLayersShownMoreThanOneConsecutiveEntry()
+
+    @FlakyTest(bugId = 250518877)
+    @Test
+    override fun navBarLayerPositionAtStartAndEnd() = super.navBarLayerPositionAtStartAndEnd()
+
+    @FlakyTest(bugId = 250522691)
+    @Test
+    override fun startsWithApp1LayersCoverFullScreen() =
+        super.startsWithApp1LayersCoverFullScreen()
 }

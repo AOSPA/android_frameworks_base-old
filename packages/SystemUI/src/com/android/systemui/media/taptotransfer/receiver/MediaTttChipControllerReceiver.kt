@@ -19,6 +19,7 @@ package com.android.systemui.media.taptotransfer.receiver
 import android.annotation.SuppressLint
 import android.app.StatusBarManager
 import android.content.Context
+import android.graphics.Rect
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.Icon
 import android.media.MediaRoute2Info
@@ -30,6 +31,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityManager
+import com.android.internal.widget.CachingIconView
 import com.android.settingslib.Utils
 import com.android.systemui.R
 import com.android.systemui.dagger.SysUISingleton
@@ -43,6 +45,7 @@ import com.android.systemui.temporarydisplay.TemporaryViewDisplayController
 import com.android.systemui.temporarydisplay.TemporaryViewInfo
 import com.android.systemui.util.animation.AnimationUtil.Companion.frames
 import com.android.systemui.util.concurrency.DelayableExecutor
+import com.android.systemui.util.view.ViewUtil
 import javax.inject.Inject
 
 /**
@@ -52,7 +55,7 @@ import javax.inject.Inject
  */
 @SysUISingleton
 class MediaTttChipControllerReceiver @Inject constructor(
-        commandQueue: CommandQueue,
+        private val commandQueue: CommandQueue,
         context: Context,
         @MediaTttReceiverLogger logger: MediaTttLogger,
         windowManager: WindowManager,
@@ -62,6 +65,7 @@ class MediaTttChipControllerReceiver @Inject constructor(
         powerManager: PowerManager,
         @Main private val mainHandler: Handler,
         private val uiEventLogger: MediaTttReceiverUiEventLogger,
+        private val viewUtil: ViewUtil,
 ) : TemporaryViewDisplayController<ChipReceiverInfo, MediaTttLogger>(
         context,
         logger,
@@ -82,7 +86,6 @@ class MediaTttChipControllerReceiver @Inject constructor(
         height = WindowManager.LayoutParams.MATCH_PARENT
         layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
         fitInsetsTypes = 0 // Ignore insets from all system bars
-        flags = WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
     }
 
     private val commandQueueCallbacks = object : CommandQueue.Callbacks {
@@ -96,10 +99,6 @@ class MediaTttChipControllerReceiver @Inject constructor(
                 displayState, routeInfo, appIcon, appName
             )
         }
-    }
-
-    init {
-        commandQueue.addCallback(commandQueueCallbacks)
     }
 
     private fun updateMediaTapToTransferReceiverDisplay(
@@ -138,32 +137,31 @@ class MediaTttChipControllerReceiver @Inject constructor(
         )
     }
 
-    override fun updateView(newInfo: ChipReceiverInfo, currentView: ViewGroup) {
-        super.updateView(newInfo, currentView)
+    override fun start() {
+        commandQueue.addCallback(commandQueueCallbacks)
+    }
 
+    override fun updateView(newInfo: ChipReceiverInfo, currentView: ViewGroup) {
         val iconInfo = MediaTttUtils.getIconInfoFromPackageName(
             context, newInfo.routeInfo.clientPackageName, logger
         )
         val iconDrawable = newInfo.appIconDrawableOverride ?: iconInfo.drawable
         val iconContentDescription = newInfo.appNameOverride ?: iconInfo.contentDescription
-        val iconSize = context.resources.getDimensionPixelSize(
+        val iconPadding =
             if (iconInfo.isAppIcon) {
-                R.dimen.media_ttt_icon_size_receiver
+                0
             } else {
-                R.dimen.media_ttt_generic_icon_size_receiver
+                context.resources.getDimensionPixelSize(R.dimen.media_ttt_generic_icon_padding)
             }
-        )
 
-        MediaTttUtils.setIcon(
-            currentView.requireViewById(R.id.app_icon),
-            iconDrawable,
-            iconContentDescription,
-            iconSize,
-        )
+        val iconView = currentView.getAppIconView()
+        iconView.setPadding(iconPadding, iconPadding, iconPadding, iconPadding)
+        iconView.setImageDrawable(iconDrawable)
+        iconView.contentDescription = iconContentDescription
     }
 
     override fun animateViewIn(view: ViewGroup) {
-        val appIconView = view.requireViewById<View>(R.id.app_icon)
+        val appIconView = view.getAppIconView()
         appIconView.animate()
                 .translationYBy(-1 * getTranslationAmount().toFloat())
                 .setDuration(30.frames)
@@ -175,6 +173,12 @@ class MediaTttChipControllerReceiver @Inject constructor(
         // Using withEndAction{} doesn't apply a11y focus when screen is unlocked.
         appIconView.postOnAnimation { view.requestAccessibilityFocus() }
         startRipple(view.requireViewById(R.id.ripple))
+    }
+
+    override fun getTouchableRegion(view: View, outRect: Rect) {
+        // Even though the app icon view isn't touchable, users might think it is. So, use it as the
+        // touchable region to ensure that touches don't get passed to the window below.
+        viewUtil.setRectToViewWindowLocation(view.getAppIconView(), outRect)
     }
 
     /** Returns the amount that the chip will be translated by in its intro animation. */
@@ -204,15 +208,18 @@ class MediaTttChipControllerReceiver @Inject constructor(
 
     private fun layoutRipple(rippleView: ReceiverChipRippleView) {
         val windowBounds = windowManager.currentWindowMetrics.bounds
-        val height = windowBounds.height()
-        val width = windowBounds.width()
+        val height = windowBounds.height().toFloat()
+        val width = windowBounds.width().toFloat()
 
-        val maxDiameter = height / 2.5f
-        rippleView.setMaxSize(maxDiameter, maxDiameter)
+        rippleView.setMaxSize(width / 2f, height / 2f)
         // Center the ripple on the bottom of the screen in the middle.
-        rippleView.setCenter(width * 0.5f, height.toFloat())
+        rippleView.setCenter(width * 0.5f, height)
         val color = Utils.getColorAttrDefaultColor(context, R.attr.wallpaperTextColorAccent)
         rippleView.setColor(color, 70)
+    }
+
+    private fun View.getAppIconView(): CachingIconView {
+        return this.requireViewById(R.id.app_icon)
     }
 }
 

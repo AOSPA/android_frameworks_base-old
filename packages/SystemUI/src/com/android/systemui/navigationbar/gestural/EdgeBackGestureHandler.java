@@ -19,6 +19,7 @@ import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_EXCLUDE_FROM_
 
 import static com.android.systemui.classifier.Classifier.BACK_GESTURE;
 
+import android.annotation.NonNull;
 import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Context;
@@ -57,7 +58,6 @@ import android.window.BackEvent;
 
 import com.android.internal.config.sysui.SystemUiDeviceConfigFlags;
 import com.android.internal.policy.GestureNavigationSettingsObserver;
-import com.android.internal.util.LatencyTracker;
 import com.android.systemui.R;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.qualifiers.Background;
@@ -199,7 +199,7 @@ public class EdgeBackGestureHandler extends CurrentUserTracker
     private final Rect mNavBarOverlayExcludedBounds = new Rect();
     private final Region mExcludeRegion = new Region();
     private final Region mUnrestrictedExcludeRegion = new Region();
-    private final LatencyTracker mLatencyTracker;
+    private final Provider<NavigationBarEdgePanel> mNavBarEdgePanelProvider;
     private final Provider<BackGestureTfClassifierProvider>
             mBackGestureTfClassifierProviderProvider;
     private final FeatureFlags mFeatureFlags;
@@ -303,6 +303,13 @@ public class EdgeBackGestureHandler extends CurrentUserTracker
                     mOverviewProxyService.notifyBackAction(false, (int) mDownPoint.x,
                             (int) mDownPoint.y, false /* isButton */, !mIsOnLeftEdge);
                 }
+
+                @Override
+                public void setTriggerBack(boolean triggerBack) {
+                    if (mBackAnimation != null) {
+                        mBackAnimation.setTriggerBack(triggerBack);
+                    }
+                }
             };
 
     private final SysUiState.SysUiStateCallback mSysUiStateCallback =
@@ -332,7 +339,7 @@ public class EdgeBackGestureHandler extends CurrentUserTracker
             IWindowManager windowManagerService,
             Optional<Pip> pipOptional,
             FalsingManager falsingManager,
-            LatencyTracker latencyTracker,
+            Provider<NavigationBarEdgePanel> navigationBarEdgePanelProvider,
             Provider<BackGestureTfClassifierProvider> backGestureTfClassifierProviderProvider,
             FeatureFlags featureFlags) {
         super(broadcastDispatcher);
@@ -351,7 +358,7 @@ public class EdgeBackGestureHandler extends CurrentUserTracker
         mWindowManagerService = windowManagerService;
         mPipOptional = pipOptional;
         mFalsingManager = falsingManager;
-        mLatencyTracker = latencyTracker;
+        mNavBarEdgePanelProvider = navigationBarEdgePanelProvider;
         mBackGestureTfClassifierProviderProvider = backGestureTfClassifierProviderProvider;
         mFeatureFlags = featureFlags;
         mLastReportedConfig.setTo(mContext.getResources().getConfiguration());
@@ -576,8 +583,7 @@ public class EdgeBackGestureHandler extends CurrentUserTracker
             setEdgeBackPlugin(
                     mBackPanelControllerFactory.create(mContext));
         } else {
-            setEdgeBackPlugin(
-                    new NavigationBarEdgePanel(mContext, mLatencyTracker));
+            setEdgeBackPlugin(mNavBarEdgePanelProvider.get());
         }
     }
 
@@ -950,7 +956,7 @@ public class EdgeBackGestureHandler extends CurrentUserTracker
                 mStartingQuickstepRotation != rotation;
     }
 
-    public void onConfigurationChanged(Configuration newConfig) {
+    public void onConfigurationChanged(@NonNull Configuration newConfig) {
         if (mStartingQuickstepRotation > -1) {
             updateDisabledForQuickstep(newConfig);
         }
@@ -1084,7 +1090,7 @@ public class EdgeBackGestureHandler extends CurrentUserTracker
         private final IWindowManager mWindowManagerService;
         private final Optional<Pip> mPipOptional;
         private final FalsingManager mFalsingManager;
-        private final LatencyTracker mLatencyTracker;
+        private final Provider<NavigationBarEdgePanel> mNavBarEdgePanelProvider;
         private final Provider<BackGestureTfClassifierProvider>
                 mBackGestureTfClassifierProviderProvider;
         private final FeatureFlags mFeatureFlags;
@@ -1104,7 +1110,7 @@ public class EdgeBackGestureHandler extends CurrentUserTracker
                        IWindowManager windowManagerService,
                        Optional<Pip> pipOptional,
                        FalsingManager falsingManager,
-                       LatencyTracker latencyTracker,
+                       Provider<NavigationBarEdgePanel> navBarEdgePanelProvider,
                        Provider<BackGestureTfClassifierProvider>
                                backGestureTfClassifierProviderProvider,
                        FeatureFlags featureFlags) {
@@ -1122,7 +1128,7 @@ public class EdgeBackGestureHandler extends CurrentUserTracker
             mWindowManagerService = windowManagerService;
             mPipOptional = pipOptional;
             mFalsingManager = falsingManager;
-            mLatencyTracker = latencyTracker;
+            mNavBarEdgePanelProvider = navBarEdgePanelProvider;
             mBackGestureTfClassifierProviderProvider = backGestureTfClassifierProviderProvider;
             mFeatureFlags = featureFlags;
         }
@@ -1145,7 +1151,7 @@ public class EdgeBackGestureHandler extends CurrentUserTracker
                     mWindowManagerService,
                     mPipOptional,
                     mFalsingManager,
-                    mLatencyTracker,
+                    mNavBarEdgePanelProvider,
                     mBackGestureTfClassifierProviderProvider,
                     mFeatureFlags);
         }

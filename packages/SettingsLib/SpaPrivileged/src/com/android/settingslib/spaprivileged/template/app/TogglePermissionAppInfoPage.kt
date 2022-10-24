@@ -46,8 +46,8 @@ import kotlinx.coroutines.Dispatchers
 
 private const val ENTRY_NAME = "AllowControl"
 private const val PERMISSION = "permission"
-private const val PACKAGE_NAME = "packageName"
-private const val USER_ID = "userId"
+private const val PACKAGE_NAME = "rt_packageName"
+private const val USER_ID = "rt_userId"
 private const val PAGE_NAME = "TogglePermissionAppInfoPage"
 private val PAGE_PARAMETER = listOf(
     navArgument(PERMISSION) { type = NavType.StringType },
@@ -143,9 +143,11 @@ private fun <T : AppRecord> createSwitchModel(
     userId: Int,
 ): TogglePermissionSwitchModel<T>? {
     val record = remember {
-        val app = PackageManagers.getApplicationInfoAsUser(packageName, userId) ?: return null
-        listModel.transformItem(app)
-    }
+        PackageManagers.getApplicationInfoAsUser(packageName, userId)?.let { app ->
+            listModel.transformItem(app)
+        }
+    } ?: return null
+
     val context = LocalContext.current
     val isAllowed = listModel.isAllowed(record)
     return remember {

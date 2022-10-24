@@ -99,14 +99,14 @@ import android.text.BoringLayout;
 import android.text.DynamicLayout;
 import android.text.Editable;
 import android.text.GetChars;
-import android.text.GraphemeClusterSegmentIterator;
+import android.text.GraphemeClusterSegmentFinder;
 import android.text.GraphicsOperations;
 import android.text.InputFilter;
 import android.text.InputType;
 import android.text.Layout;
 import android.text.ParcelableSpan;
 import android.text.PrecomputedText;
-import android.text.SegmentIterator;
+import android.text.SegmentFinder;
 import android.text.Selection;
 import android.text.SpanWatcher;
 import android.text.Spannable;
@@ -120,7 +120,7 @@ import android.text.TextPaint;
 import android.text.TextUtils;
 import android.text.TextUtils.TruncateAt;
 import android.text.TextWatcher;
-import android.text.WordSegmentIterator;
+import android.text.WordSegmentFinder;
 import android.text.method.AllCapsTransformationMethod;
 import android.text.method.ArrowKeyMovementMethod;
 import android.text.method.DateKeyListener;
@@ -151,6 +151,7 @@ import android.util.DisplayMetrics;
 import android.util.FeatureFlagUtils;
 import android.util.IntArray;
 import android.util.Log;
+import android.util.Range;
 import android.util.SparseIntArray;
 import android.util.TypedValue;
 import android.view.AccessibilityIterators.TextSegmentIterator;
@@ -9312,27 +9313,27 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
     /** @hide */
     public int performHandwritingSelectGesture(@NonNull SelectGesture gesture) {
-        int[] range = getRangeForRect(
+        Range<Integer> range = getRangeForRect(
                 convertFromScreenToContentCoordinates(gesture.getSelectionArea()),
                 gesture.getGranularity());
         if (range == null) {
             return handleGestureFailure(gesture);
         }
-        Selection.setSelection(getEditableText(), range[0], range[1]);
+        Selection.setSelection(getEditableText(), range.getLower(), range.getUpper());
         mEditor.startSelectionActionModeAsync(/* adjustSelection= */ false);
         return InputConnection.HANDWRITING_GESTURE_RESULT_SUCCESS;
     }
 
     /** @hide */
     public int performHandwritingDeleteGesture(@NonNull DeleteGesture gesture) {
-        int[] range = getRangeForRect(
+        Range<Integer> range = getRangeForRect(
                 convertFromScreenToContentCoordinates(gesture.getDeletionArea()),
                 gesture.getGranularity());
         if (range == null) {
             return handleGestureFailure(gesture);
         }
-        int start = range[0];
-        int end = range[1];
+        int start = range.getLower();
+        int end = range.getUpper();
 
         // For word granularity, adjust the start and end offsets to remove extra whitespace around
         // the deleted text.
@@ -9358,10 +9359,11 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 // - The deleted text is at the end of the text
                 //     e.g. "one [deleted]" -> "one |" -> "one|"
                 // (The pipe | indicates the cursor position.)
-                while (start > 0 && TextUtils.isWhitespaceExceptNewline(codePointBeforeStart)) {
+                do {
                     start -= Character.charCount(codePointBeforeStart);
+                    if (start == 0) break;
                     codePointBeforeStart = Character.codePointBefore(mText, start);
-                }
+                } while (TextUtils.isWhitespaceExceptNewline(codePointBeforeStart));
             } else if (TextUtils.isWhitespaceExceptNewline(codePointAtEnd)
                     && (TextUtils.isWhitespace(codePointBeforeStart)
                             || TextUtils.isPunctuation(codePointBeforeStart))) {
@@ -9373,11 +9375,11 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 // - The deleted text is at the start of the text
                 //     e.g. "[deleted] two" -> "| two" -> "|two"
                 // (The pipe | indicates the cursor position.)
-                while (end < mText.length()
-                        && TextUtils.isWhitespaceExceptNewline(codePointAtEnd)) {
+                do {
                     end += Character.charCount(codePointAtEnd);
+                    if (end == mText.length()) break;
                     codePointAtEnd = Character.codePointAt(mText, end);
-                }
+                } while (TextUtils.isWhitespaceExceptNewline(codePointAtEnd));
             }
         }
 
@@ -9487,11 +9489,19 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         }
 
         int endOffset = startOffset;
-        while (startOffset > 0 && Character.isWhitespace(mText.charAt(startOffset - 1))) {
-            startOffset--;
+        while (startOffset > 0) {
+            int codePointBeforeStart = Character.codePointBefore(mText, startOffset);
+            if (!TextUtils.isWhitespace(codePointBeforeStart)) {
+                break;
+            }
+            startOffset -= Character.charCount(codePointBeforeStart);
         }
-        while (endOffset < mText.length() && Character.isWhitespace(mText.charAt(endOffset))) {
-            endOffset++;
+        while (endOffset < mText.length()) {
+            int codePointAtEnd = Character.codePointAt(mText, endOffset);
+            if (!TextUtils.isWhitespace(codePointAtEnd)) {
+                break;
+            }
+            endOffset += Character.charCount(codePointAtEnd);
         }
         if (startOffset < endOffset) {
             getEditableText().delete(startOffset, endOffset);
@@ -9514,17 +9524,18 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     @Nullable
-    private int[] getRangeForRect(@NonNull RectF area, int granularity) {
-        SegmentIterator segmentIterator;
+    private Range<Integer> getRangeForRect(@NonNull RectF area, int granularity) {
+        SegmentFinder segmentFinder;
         if (granularity == HandwritingGesture.GRANULARITY_WORD) {
             WordIterator wordIterator = getWordIterator();
             wordIterator.setCharSequence(mText, 0, mText.length());
-            segmentIterator = new WordSegmentIterator(mText, wordIterator);
+            segmentFinder = new WordSegmentFinder(mText, wordIterator);
         } else {
-            segmentIterator = new GraphemeClusterSegmentIterator(mText, mTextPaint);
+            segmentFinder = new GraphemeClusterSegmentFinder(mText, mTextPaint);
         }
 
-        return mLayout.getRangeForRect(area, segmentIterator);
+        return mLayout.getRangeForRect(
+                area, segmentFinder, Layout.INCLUSION_STRATEGY_CONTAINS_CENTER);
     }
 
     private Pattern getWhitespacePattern() {

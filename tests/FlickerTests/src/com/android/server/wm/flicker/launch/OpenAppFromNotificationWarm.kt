@@ -19,7 +19,6 @@ package com.android.server.wm.flicker.launch
 import android.platform.test.annotations.FlakyTest
 import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.RequiresDevice
-import android.view.Surface
 import android.view.WindowInsets
 import android.view.WindowManager
 import androidx.test.uiautomator.By
@@ -27,7 +26,6 @@ import androidx.test.uiautomator.Until
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
-import com.android.server.wm.flicker.annotation.Group1
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.NotificationAppHelper
 import com.android.server.wm.flicker.helpers.isShellTransitionsEnabled
@@ -55,11 +53,9 @@ import org.junit.runners.Parameterized
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-@Group1
 @Postsubmit
-open class OpenAppFromNotificationWarm(
-    testSpec: FlickerTestParameter
-) : OpenAppTransition(testSpec) {
+open class OpenAppFromNotificationWarm(testSpec: FlickerTestParameter) :
+    OpenAppTransition(testSpec) {
     override val testApp: NotificationAppHelper = NotificationAppHelper(instrumentation)
 
     open val openingNotificationsFromLockScreen = false
@@ -71,21 +67,10 @@ open class OpenAppFromNotificationWarm(
                 device.wakeUpAndGoToHomeScreen()
                 this.setRotation(testSpec.startRotation)
                 testApp.launchViaIntent(wmHelper)
-                wmHelper.StateSyncBuilder()
-                    .withFullScreenApp(testApp)
-                    .waitForAndVerify()
+                wmHelper.StateSyncBuilder().withFullScreenApp(testApp).waitForAndVerify()
                 testApp.postNotification(wmHelper)
-
-                if (testSpec.isTablet) {
-                    tapl.setExpectedRotation(testSpec.startRotation)
-                } else {
-                    tapl.setExpectedRotation(Surface.ROTATION_0)
-                }
-
-                tapl.goHome()
-                wmHelper.StateSyncBuilder()
-                    .withHomeActivityVisible()
-                    .waitForAndVerify()
+                device.pressHome()
+                wmHelper.StateSyncBuilder().withHomeActivityVisible().waitForAndVerify()
             }
 
             transitions {
@@ -97,10 +82,10 @@ open class OpenAppFromNotificationWarm(
                         instrumentation.context.getSystemService(WindowManager::class.java)
                             ?: error("Unable to connect to WindowManager service")
                     val metricInsets = wm.currentWindowMetrics.windowInsets
-                    val insets = metricInsets.getInsetsIgnoringVisibility(
-                        WindowInsets.Type.statusBars()
-                            or WindowInsets.Type.displayCutout()
-                    )
+                    val insets =
+                        metricInsets.getInsetsIgnoringVisibility(
+                            WindowInsets.Type.statusBars() or WindowInsets.Type.displayCutout()
+                        )
 
                     startY = insets.top + 100
                     endY = device.displayHeight / 2
@@ -114,23 +99,16 @@ open class OpenAppFromNotificationWarm(
                 instrumentation.uiAutomation.syncInputTransactions()
 
                 // Launch the activity by clicking the notification
-                val notification = device.wait(
-                    Until.findObject(
-                        By.text("Flicker Test Notification")
-                    ), 2000L
-                )
+                val notification =
+                    device.wait(Until.findObject(By.text("Flicker Test Notification")), 2000L)
                 notification?.click() ?: error("Notification not found")
                 instrumentation.uiAutomation.syncInputTransactions()
 
                 // Wait for the app to launch
-                wmHelper.StateSyncBuilder()
-                    .withFullScreenApp(testApp)
-                    .waitForAndVerify()
+                wmHelper.StateSyncBuilder().withFullScreenApp(testApp).waitForAndVerify()
             }
 
-            teardown {
-                testApp.exit(wmHelper)
-            }
+            teardown { testApp.exit(wmHelper) }
         }
 
     /** {@inheritDoc} */
@@ -147,8 +125,7 @@ open class OpenAppFromNotificationWarm(
     /** {@inheritDoc} */
     @Postsubmit
     @Test
-    override fun statusBarLayerPositionAtStartAndEnd() =
-        super.statusBarLayerPositionAtStartAndEnd()
+    override fun statusBarLayerPositionAtStartAndEnd() = super.statusBarLayerPositionAtStartAndEnd()
 
     /** {@inheritDoc} */
     @Postsubmit
@@ -157,14 +134,10 @@ open class OpenAppFromNotificationWarm(
         super.visibleLayersShownMoreThanOneConsecutiveEntry()
 
     /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun appWindowBecomesVisible() = appWindowBecomesVisible_warmStart()
+    @Postsubmit @Test override fun appWindowBecomesVisible() = appWindowBecomesVisible_warmStart()
 
     /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun appLayerBecomesVisible() = appLayerBecomesVisible_warmStart()
+    @Postsubmit @Test override fun appLayerBecomesVisible() = appLayerBecomesVisible_warmStart()
 
     /** {@inheritDoc} */
     @Postsubmit
@@ -172,9 +145,7 @@ open class OpenAppFromNotificationWarm(
     override fun statusBarWindowIsAlwaysVisible() = super.statusBarWindowIsAlwaysVisible()
 
     /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun entireScreenCovered() = super.entireScreenCovered()
+    @Postsubmit @Test override fun entireScreenCovered() = super.entireScreenCovered()
 
     /** {@inheritDoc} */
     @Postsubmit
@@ -193,33 +164,24 @@ open class OpenAppFromNotificationWarm(
         super.visibleWindowsShownMoreThanOneConsecutiveEntry()
 
     /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun appWindowIsTopWindowAtEnd() =
-        super.appWindowIsTopWindowAtEnd()
+    @Postsubmit @Test override fun appWindowIsTopWindowAtEnd() = super.appWindowIsTopWindowAtEnd()
 
     @Postsubmit
     @Test
     open fun notificationAppWindowVisibleAtEnd() {
-        testSpec.assertWmEnd {
-            this.isAppWindowVisible(testApp)
-        }
+        testSpec.assertWmEnd { this.isAppWindowVisible(testApp) }
     }
 
     @Postsubmit
     @Test
     open fun notificationAppWindowOnTopAtEnd() {
-        testSpec.assertWmEnd {
-            this.isAppWindowOnTop(testApp)
-        }
+        testSpec.assertWmEnd { this.isAppWindowOnTop(testApp) }
     }
 
     @Postsubmit
     @Test
     open fun notificationAppLayerVisibleAtEnd() {
-        testSpec.assertLayersEnd {
-            this.isVisible(testApp)
-        }
+        testSpec.assertLayersEnd { this.isVisible(testApp) }
     }
 
     /** {@inheritDoc} */
@@ -251,8 +213,7 @@ open class OpenAppFromNotificationWarm(
     }
 
     /**
-     * Checks that the [ComponentNameMatcher.TASK_BAR] layer is visible at the end of the
-     * transition
+     * Checks that the [ComponentNameMatcher.TASK_BAR] layer is visible at the end of the transition
      *
      * Note: Large screen only
      */
@@ -266,27 +227,24 @@ open class OpenAppFromNotificationWarm(
     /** {@inheritDoc} */
     @Test
     @Ignore("Display is locked at the start")
-    override fun taskBarWindowIsAlwaysVisible() =
-        super.taskBarWindowIsAlwaysVisible()
+    override fun taskBarWindowIsAlwaysVisible() = super.taskBarWindowIsAlwaysVisible()
 
     /** {@inheritDoc} */
     @Test
     @Ignore("Display is locked at the start")
-    override fun taskBarLayerIsVisibleAtStartAndEnd() =
-        super.taskBarLayerIsVisibleAtStartAndEnd()
+    override fun taskBarLayerIsVisibleAtStartAndEnd() = super.taskBarLayerIsVisibleAtStartAndEnd()
 
     companion object {
         /**
          * Creates the test configurations.
          *
-         * See [FlickerTestParameterFactory.getConfigNonRotationTests] for configuring
-         * repetitions, screen orientation and navigation modes.
+         * See [FlickerTestParameterFactory.getConfigNonRotationTests] for configuring repetitions,
+         * screen orientation and navigation modes.
          */
         @Parameterized.Parameters(name = "{0}")
         @JvmStatic
         fun getParams(): Collection<FlickerTestParameter> {
-            return FlickerTestParameterFactory.getInstance()
-                .getConfigNonRotationTests()
+            return FlickerTestParameterFactory.getInstance().getConfigNonRotationTests()
         }
     }
 }

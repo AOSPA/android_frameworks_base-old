@@ -24,7 +24,6 @@ import com.android.server.wm.flicker.BaseTest
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
-import com.android.server.wm.flicker.annotation.Group2
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.ImeAppAutoFocusHelper
 import com.android.server.wm.traces.common.ComponentNameMatcher
@@ -38,10 +37,10 @@ import org.junit.runners.Parameterized
  * Test IME window closing back to app window transitions.
  *
  * This test doesn't work on 90 degrees. According to the InputMethodService documentation:
- *
+ * ```
  *     Don't show if this is not explicitly requested by the user and the input method
  *     is fullscreen. That would be too disruptive.
- *
+ * ```
  * More details on b/190352379
  *
  * To run this test: `atest FlickerTests:CloseImeAutoOpenWindowToAppTest`
@@ -50,57 +49,40 @@ import org.junit.runners.Parameterized
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-@Group2
 class CloseImeAutoOpenWindowToAppTest(testSpec: FlickerTestParameter) : BaseTest(testSpec) {
     private val testApp = ImeAppAutoFocusHelper(instrumentation, testSpec.startRotation)
 
     /** {@inheritDoc} */
     override val transition: FlickerBuilder.() -> Unit = {
-        setup {
-            testApp.launchViaIntent(wmHelper)
-        }
-        teardown {
-            testApp.exit(wmHelper)
-        }
-        transitions {
-            testApp.closeIME(wmHelper)
-        }
+        setup { testApp.launchViaIntent(wmHelper) }
+        teardown { testApp.exit(wmHelper) }
+        transitions { testApp.closeIME(wmHelper) }
     }
 
     @Presubmit
     @Test
     fun imeAppWindowIsAlwaysVisible() {
-        testSpec.assertWm {
-            this.isAppWindowOnTop(testApp)
-        }
+        testSpec.assertWm { this.isAppWindowOnTop(testApp) }
     }
 
     @Presubmit
     @Test
     fun imeLayerVisibleStart() {
-        testSpec.assertLayersStart {
-            this.isVisible(ComponentNameMatcher.IME)
-        }
+        testSpec.assertLayersStart { this.isVisible(ComponentNameMatcher.IME) }
     }
 
     @Presubmit
     @Test
     fun imeLayerInvisibleEnd() {
-        testSpec.assertLayersEnd {
-            this.isInvisible(ComponentNameMatcher.IME)
-        }
+        testSpec.assertLayersEnd { this.isInvisible(ComponentNameMatcher.IME) }
     }
 
-    @Presubmit
-    @Test
-    fun imeLayerBecomesInvisible() = testSpec.imeLayerBecomesInvisible()
+    @Presubmit @Test fun imeLayerBecomesInvisible() = testSpec.imeLayerBecomesInvisible()
 
     @Presubmit
     @Test
     fun imeAppLayerIsAlwaysVisible() {
-        testSpec.assertLayers {
-            this.isVisible(testApp)
-        }
+        testSpec.assertLayers { this.isVisible(testApp) }
     }
 
     companion object {
@@ -109,12 +91,13 @@ class CloseImeAutoOpenWindowToAppTest(testSpec: FlickerTestParameter) : BaseTest
         fun getParams(): Collection<FlickerTestParameter> {
             return FlickerTestParameterFactory.getInstance()
                 .getConfigNonRotationTests(
-                                        // b/190352379 (IME doesn't show on app launch in 90 degrees)
+                    // b/190352379 (IME doesn't show on app launch in 90 degrees)
                     supportedRotations = listOf(Surface.ROTATION_0),
-                    supportedNavigationModes = listOf(
-                        WindowManagerPolicyConstants.NAV_BAR_MODE_3BUTTON_OVERLAY,
-                        WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL_OVERLAY
-                    )
+                    supportedNavigationModes =
+                        listOf(
+                            WindowManagerPolicyConstants.NAV_BAR_MODE_3BUTTON_OVERLAY,
+                            WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL_OVERLAY
+                        )
                 )
         }
     }

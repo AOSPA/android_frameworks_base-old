@@ -3278,8 +3278,10 @@ public final class PowerManagerService extends SystemService
         if (mDreamManager != null) {
             // Restart the dream whenever the sandman is summoned.
             if (startDreaming) {
-                mDreamManager.stopDream(/* immediate= */ false);
-                mDreamManager.startDream(wakefulness == WAKEFULNESS_DOZING);
+                mDreamManager.stopDream(/* immediate= */ false,
+                        "power manager request before starting dream" /*reason*/);
+                mDreamManager.startDream(wakefulness == WAKEFULNESS_DOZING,
+                        "power manager request" /*reason*/);
             }
             isDreaming = mDreamManager.isDreaming();
         } else {
@@ -3364,7 +3366,7 @@ public final class PowerManagerService extends SystemService
 
         // Stop dream.
         if (isDreaming) {
-            mDreamManager.stopDream(/* immediate= */ false);
+            mDreamManager.stopDream(/* immediate= */ false, "power manager request" /*reason*/);
         }
     }
 
@@ -5316,7 +5318,7 @@ public final class PowerManagerService extends SystemService
     private final class SuspendBlockerImpl implements SuspendBlocker {
         private static final String UNKNOWN_ID = "unknown";
         private final String mName;
-        private final String mTraceName;
+        private final int mNameHash;
         private int mReferenceCount;
 
         // Maps suspend blocker IDs to a list (LongArray) of open acquisitions for the suspend
@@ -5325,7 +5327,7 @@ public final class PowerManagerService extends SystemService
 
         public SuspendBlockerImpl(String name) {
             mName = name;
-            mTraceName = "SuspendBlocker (" + name + ")";
+            mNameHash = mName.hashCode();
         }
 
         @Override
@@ -5336,7 +5338,8 @@ public final class PowerManagerService extends SystemService
                             + "\" was finalized without being released!");
                     mReferenceCount = 0;
                     mNativeWrapper.nativeReleaseSuspendBlocker(mName);
-                    Trace.asyncTraceEnd(Trace.TRACE_TAG_POWER, mTraceName, 0);
+                    Trace.asyncTraceForTrackEnd(Trace.TRACE_TAG_POWER,
+                            "SuspendBlockers", mNameHash);
                 }
             } finally {
                 super.finalize();
@@ -5357,7 +5360,8 @@ public final class PowerManagerService extends SystemService
                     if (DEBUG_SPEW) {
                         Slog.d(TAG, "Acquiring suspend blocker \"" + mName + "\".");
                     }
-                    Trace.asyncTraceBegin(Trace.TRACE_TAG_POWER, mTraceName, 0);
+                    Trace.asyncTraceForTrackBegin(Trace.TRACE_TAG_POWER,
+                            "SuspendBlockers", mName, mNameHash);
                     mNativeWrapper.nativeAcquireSuspendBlocker(mName);
                 }
             }
@@ -5378,7 +5382,10 @@ public final class PowerManagerService extends SystemService
                         Slog.d(TAG, "Releasing suspend blocker \"" + mName + "\".");
                     }
                     mNativeWrapper.nativeReleaseSuspendBlocker(mName);
-                    Trace.asyncTraceEnd(Trace.TRACE_TAG_POWER, mTraceName, 0);
+                    if (Trace.isTagEnabled(Trace.TRACE_TAG_POWER)) {
+                        Trace.asyncTraceForTrackEnd(Trace.TRACE_TAG_POWER,
+                                "SuspendBlockers", mNameHash);
+                    }
                 } else if (mReferenceCount < 0) {
                     Slog.wtf(TAG, "Suspend blocker \"" + mName
                             + "\" was released without being acquired!", new Throwable());

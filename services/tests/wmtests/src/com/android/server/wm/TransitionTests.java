@@ -19,7 +19,6 @@ package com.android.server.wm;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
-import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_NOSENSOR;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
 import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_SEAMLESS;
@@ -393,6 +392,70 @@ public class TransitionTests extends WindowTestsBase {
                 info.getChanges().get(info.getChanges().size() - 1).getFlags());
         assertEquals(FLAG_SHOW_WALLPAPER, info.getChange(
                 tasks[showWallpaperTask].mRemoteToken.toWindowContainerToken()).getFlags());
+    }
+
+    @Test
+    public void testCreateInfo_PromoteSimilarClose() {
+        final Transition transition = createTestTransition(TRANSIT_CLOSE);
+        ArrayMap<WindowContainer, Transition.ChangeInfo> changes = transition.mChanges;
+        ArraySet<WindowContainer> participants = transition.mParticipants;
+
+        final Task topTask = createTask(mDisplayContent);
+        final Task belowTask = createTask(mDisplayContent);
+        final ActivityRecord showing = createActivityRecord(belowTask);
+        final ActivityRecord hiding = createActivityRecord(topTask);
+        final ActivityRecord closing = createActivityRecord(topTask);
+        // Start states.
+        changes.put(topTask, new Transition.ChangeInfo(true /* vis */, false /* exChg */));
+        changes.put(belowTask, new Transition.ChangeInfo(false /* vis */, false /* exChg */));
+        changes.put(showing, new Transition.ChangeInfo(false /* vis */, false /* exChg */));
+        changes.put(hiding, new Transition.ChangeInfo(true /* vis */, false /* exChg */));
+        changes.put(closing, new Transition.ChangeInfo(true /* vis */, true /* exChg */));
+        fillChangeMap(changes, topTask);
+        // End states.
+        showing.mVisibleRequested = true;
+        closing.mVisibleRequested = false;
+        hiding.mVisibleRequested = false;
+
+        participants.add(belowTask);
+        participants.add(hiding);
+        participants.add(closing);
+        ArrayList<WindowContainer> targets = Transition.calculateTargets(participants, changes);
+        assertEquals(2, targets.size());
+        assertTrue(targets.contains(belowTask));
+        assertTrue(targets.contains(topTask));
+    }
+
+    @Test
+    public void testCreateInfo_PromoteSimilarOpen() {
+        final Transition transition = createTestTransition(TRANSIT_OPEN);
+        ArrayMap<WindowContainer, Transition.ChangeInfo> changes = transition.mChanges;
+        ArraySet<WindowContainer> participants = transition.mParticipants;
+
+        final Task topTask = createTask(mDisplayContent);
+        final Task belowTask = createTask(mDisplayContent);
+        final ActivityRecord showing = createActivityRecord(topTask);
+        final ActivityRecord opening = createActivityRecord(topTask);
+        final ActivityRecord closing = createActivityRecord(belowTask);
+        // Start states.
+        changes.put(topTask, new Transition.ChangeInfo(false /* vis */, false /* exChg */));
+        changes.put(belowTask, new Transition.ChangeInfo(true /* vis */, false /* exChg */));
+        changes.put(showing, new Transition.ChangeInfo(false /* vis */, false /* exChg */));
+        changes.put(opening, new Transition.ChangeInfo(false /* vis */, true /* exChg */));
+        changes.put(closing, new Transition.ChangeInfo(true /* vis */, false /* exChg */));
+        fillChangeMap(changes, topTask);
+        // End states.
+        showing.mVisibleRequested = true;
+        opening.mVisibleRequested = true;
+        closing.mVisibleRequested = false;
+
+        participants.add(belowTask);
+        participants.add(showing);
+        participants.add(opening);
+        ArrayList<WindowContainer> targets = Transition.calculateTargets(participants, changes);
+        assertEquals(2, targets.size());
+        assertTrue(targets.contains(belowTask));
+        assertTrue(targets.contains(topTask));
     }
 
     @Test
@@ -1168,10 +1231,8 @@ public class TransitionTests extends WindowTestsBase {
         final ArraySet<WindowContainer> participants = transition.mParticipants;
 
         final Task task = createTask(mDisplayContent);
-        // Set to multi-windowing mode in order to set bounds.
-        task.setWindowingMode(WINDOWING_MODE_MULTI_WINDOW);
         final Rect taskBounds = new Rect(0, 0, 500, 1000);
-        task.setBounds(taskBounds);
+        task.getConfiguration().windowConfiguration.setBounds(taskBounds);
         final ActivityRecord nonEmbeddedActivity = createActivityRecord(task);
         final TaskFragmentOrganizer organizer = new TaskFragmentOrganizer(Runnable::run);
         mAtm.mTaskFragmentOrganizerController.registerOrganizer(
@@ -1213,10 +1274,8 @@ public class TransitionTests extends WindowTestsBase {
         final ArraySet<WindowContainer> participants = transition.mParticipants;
 
         final Task task = createTask(mDisplayContent);
-        // Set to multi-windowing mode in order to set bounds.
-        task.setWindowingMode(WINDOWING_MODE_MULTI_WINDOW);
         final Rect taskBounds = new Rect(0, 0, 500, 1000);
-        task.setBounds(taskBounds);
+        task.getConfiguration().windowConfiguration.setBounds(taskBounds);
         final ActivityRecord activity = createActivityRecord(task);
         // Start states: set bounds to make sure the start bounds is ignored if it is not visible.
         activity.getConfiguration().windowConfiguration.setBounds(new Rect(0, 0, 250, 500));
@@ -1244,10 +1303,8 @@ public class TransitionTests extends WindowTestsBase {
         final ArraySet<WindowContainer> participants = transition.mParticipants;
 
         final Task task = createTask(mDisplayContent);
-        // Set to multi-windowing mode in order to set bounds.
-        task.setWindowingMode(WINDOWING_MODE_MULTI_WINDOW);
         final Rect taskBounds = new Rect(0, 0, 500, 1000);
-        task.setBounds(taskBounds);
+        task.getConfiguration().windowConfiguration.setBounds(taskBounds);
         final ActivityRecord activity = createActivityRecord(task);
         // Start states: fills Task without override.
         activity.mVisibleRequested = true;

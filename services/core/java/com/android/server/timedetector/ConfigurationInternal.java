@@ -46,6 +46,7 @@ public final class ConfigurationInternal {
 
     private final boolean mAutoDetectionSupported;
     private final int mSystemClockUpdateThresholdMillis;
+    private final int mSystemClockConfidenceThresholdMillis;
     private final Instant mAutoSuggestionLowerBound;
     private final Instant mManualSuggestionLowerBound;
     private final Instant mSuggestionUpperBound;
@@ -57,6 +58,8 @@ public final class ConfigurationInternal {
     private ConfigurationInternal(Builder builder) {
         mAutoDetectionSupported = builder.mAutoDetectionSupported;
         mSystemClockUpdateThresholdMillis = builder.mSystemClockUpdateThresholdMillis;
+        mSystemClockConfidenceThresholdMillis =
+                builder.mSystemClockConfidenceThresholdMillis;
         mAutoSuggestionLowerBound = Objects.requireNonNull(builder.mAutoSuggestionLowerBound);
         mManualSuggestionLowerBound = Objects.requireNonNull(builder.mManualSuggestionLowerBound);
         mSuggestionUpperBound = Objects.requireNonNull(builder.mSuggestionUpperBound);
@@ -79,6 +82,17 @@ public final class ConfigurationInternal {
      */
     public int getSystemClockUpdateThresholdMillis() {
         return mSystemClockUpdateThresholdMillis;
+    }
+
+    /**
+     * Return the absolute threshold for Unix epoch time comparison at/below which the system clock
+     * confidence can be said to be "close enough", e.g. if the detector receives a high-confidence
+     * time and the current system clock is +/- this value from that time and the current confidence
+     * in the time is low, then the device's confidence in the current system clock time can be
+     * upgraded.
+     */
+    public int getSystemClockConfidenceThresholdMillis() {
+        return mSystemClockConfidenceThresholdMillis;
     }
 
     /**
@@ -141,21 +155,33 @@ public final class ConfigurationInternal {
         return UserHandle.of(mUserId);
     }
 
-    /** Returns true if the user allowed to modify time zone configuration. */
+    /**
+     * Returns true if the user is allowed to modify time configuration, e.g. can be false due
+     * to device policy (enterprise).
+     *
+     * <p>See also {@link #createCapabilitiesAndConfig(boolean)} for situations where this
+     * value are ignored.
+     */
     public boolean isUserConfigAllowed() {
         return mUserConfigAllowed;
     }
 
-    /** Returns a {@link TimeCapabilitiesAndConfig} objects based on configuration values. */
-    public TimeCapabilitiesAndConfig capabilitiesAndConfig() {
-        return new TimeCapabilitiesAndConfig(timeCapabilities(), timeConfiguration());
+    /**
+     * Returns a {@link TimeCapabilitiesAndConfig} objects based on configuration values.
+     *
+     * @param bypassUserPolicyChecks {@code true} for device policy manager use cases where device
+     *   policy restrictions that should apply to actual users can be ignored
+     */
+    public TimeCapabilitiesAndConfig createCapabilitiesAndConfig(boolean bypassUserPolicyChecks) {
+        return new TimeCapabilitiesAndConfig(
+                timeCapabilities(bypassUserPolicyChecks), timeConfiguration());
     }
 
-    private TimeCapabilities timeCapabilities() {
+    private TimeCapabilities timeCapabilities(boolean bypassUserPolicyChecks) {
         UserHandle userHandle = UserHandle.of(mUserId);
         TimeCapabilities.Builder builder = new TimeCapabilities.Builder(userHandle);
 
-        boolean allowConfigDateTime = isUserConfigAllowed();
+        boolean allowConfigDateTime = isUserConfigAllowed() || bypassUserPolicyChecks;
 
         boolean deviceHasAutoTimeDetection = isAutoDetectionSupported();
         final @CapabilityState int configureAutoDetectionEnabledCapability;
@@ -172,15 +198,15 @@ public final class ConfigurationInternal {
         // current logic above, this could lead to a situation where a device hardware does not
         // support auto detection, the device has been forced into "auto" mode by an admin and the
         // user is unable to disable auto detection.
-        final @CapabilityState int suggestManualTimeZoneCapability;
+        final @CapabilityState int suggestManualTimeCapability;
         if (!allowConfigDateTime) {
-            suggestManualTimeZoneCapability = CAPABILITY_NOT_ALLOWED;
+            suggestManualTimeCapability = CAPABILITY_NOT_ALLOWED;
         } else if (getAutoDetectionEnabledBehavior()) {
-            suggestManualTimeZoneCapability = CAPABILITY_NOT_APPLICABLE;
+            suggestManualTimeCapability = CAPABILITY_NOT_APPLICABLE;
         } else {
-            suggestManualTimeZoneCapability = CAPABILITY_POSSESSED;
+            suggestManualTimeCapability = CAPABILITY_POSSESSED;
         }
-        builder.setSuggestManualTimeCapability(suggestManualTimeZoneCapability);
+        builder.setSetManualTimeCapability(suggestManualTimeCapability);
 
         return builder.build();
     }
@@ -242,6 +268,8 @@ public final class ConfigurationInternal {
         return "ConfigurationInternal{"
                 + "mAutoDetectionSupported=" + mAutoDetectionSupported
                 + ", mSystemClockUpdateThresholdMillis=" + mSystemClockUpdateThresholdMillis
+                + ", mSystemClockConfidenceThresholdMillis="
+                + mSystemClockConfidenceThresholdMillis
                 + ", mAutoSuggestionLowerBound=" + mAutoSuggestionLowerBound
                 + "(" + mAutoSuggestionLowerBound.toEpochMilli() + ")"
                 + ", mManualSuggestionLowerBound=" + mManualSuggestionLowerBound
@@ -258,6 +286,7 @@ public final class ConfigurationInternal {
     static final class Builder {
         private boolean mAutoDetectionSupported;
         private int mSystemClockUpdateThresholdMillis;
+        private int mSystemClockConfidenceThresholdMillis;
         @NonNull private Instant mAutoSuggestionLowerBound;
         @NonNull private Instant mManualSuggestionLowerBound;
         @NonNull private Instant mSuggestionUpperBound;
@@ -286,68 +315,55 @@ public final class ConfigurationInternal {
             this.mAutoDetectionEnabledSetting = toCopy.mAutoDetectionEnabledSetting;
         }
 
-        /**
-         * Sets whether the user is allowed to configure time settings on this device.
-         */
+        /** See {@link ConfigurationInternal#isUserConfigAllowed()}. */
         Builder setUserConfigAllowed(boolean userConfigAllowed) {
             mUserConfigAllowed = userConfigAllowed;
             return this;
         }
 
-        /**
-         * Sets whether automatic time detection is supported on this device.
-         */
+        /** See {@link ConfigurationInternal#isAutoDetectionSupported()}. */
         public Builder setAutoDetectionSupported(boolean supported) {
             mAutoDetectionSupported = supported;
             return this;
         }
 
-        /**
-         * Sets the absolute threshold below which the system clock need not be updated. i.e. if
-         * setting the system clock would adjust it by less than this (either backwards or forwards)
-         * then it need not be set.
-         */
+        /** See {@link ConfigurationInternal#getSystemClockUpdateThresholdMillis()}. */
         public Builder setSystemClockUpdateThresholdMillis(int systemClockUpdateThresholdMillis) {
             mSystemClockUpdateThresholdMillis = systemClockUpdateThresholdMillis;
             return this;
         }
 
-        /**
-         * Sets the lower bound for valid automatic time suggestions.
-         */
+        /** See {@link ConfigurationInternal#getSystemClockConfidenceThresholdMillis()}. */
+        public Builder setSystemClockConfidenceThresholdMillis(int thresholdMillis) {
+            mSystemClockConfidenceThresholdMillis = thresholdMillis;
+            return this;
+        }
+
+        /** See {@link ConfigurationInternal#getAutoSuggestionLowerBound()}. */
         public Builder setAutoSuggestionLowerBound(@NonNull Instant autoSuggestionLowerBound) {
             mAutoSuggestionLowerBound = Objects.requireNonNull(autoSuggestionLowerBound);
             return this;
         }
 
-        /**
-         * Sets the lower bound for valid manual time suggestions.
-         */
+        /** See {@link ConfigurationInternal#getManualSuggestionLowerBound()}. */
         public Builder setManualSuggestionLowerBound(@NonNull Instant manualSuggestionLowerBound) {
             mManualSuggestionLowerBound = Objects.requireNonNull(manualSuggestionLowerBound);
             return this;
         }
 
-        /**
-         * Sets the upper bound for valid time suggestions (manual and automatic).
-         */
+        /** See {@link ConfigurationInternal#getSuggestionUpperBound()}. */
         public Builder setSuggestionUpperBound(@NonNull Instant suggestionUpperBound) {
             mSuggestionUpperBound = Objects.requireNonNull(suggestionUpperBound);
             return this;
         }
 
-        /**
-         * Sets the order to look at time suggestions when automatically detecting time.
-         * See {@code #ORIGIN_} constants
-         */
+        /** See {@link ConfigurationInternal#getAutoOriginPriorities()}. */
         public Builder setOriginPriorities(@NonNull @Origin int... originPriorities) {
             mOriginPriorities = Objects.requireNonNull(originPriorities);
             return this;
         }
 
-        /**
-         * Sets the value of the automatic time detection enabled setting for this device.
-         */
+        /** See {@link ConfigurationInternal#getAutoDetectionEnabledSetting()}. */
         Builder setAutoDetectionEnabledSetting(boolean autoDetectionEnabledSetting) {
             mAutoDetectionEnabledSetting = autoDetectionEnabledSetting;
             return this;

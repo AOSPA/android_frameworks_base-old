@@ -559,7 +559,9 @@ public final class Parcel {
      */
     public final void recycle() {
         if (mRecycled) {
-            Log.w(TAG, "Recycle called on unowned Parcel. (recycle twice?)", mStack);
+            Log.w(TAG, "Recycle called on unowned Parcel. (recycle twice?) Here: "
+                    + Log.getStackTraceString(new Throwable())
+                    + " Original recycle call (if DEBUG_RECYCLE): ", mStack);
         }
         mRecycled = true;
 
@@ -4416,6 +4418,9 @@ public final class Parcel {
         int type = readInt();
         if (isLengthPrefixed(type)) {
             int objectLength = readInt();
+            if (objectLength < 0) {
+                return null;
+            }
             int end = MathUtils.addOrThrow(dataPosition(), objectLength);
             int valueLength = end - start;
             setDataPosition(end);

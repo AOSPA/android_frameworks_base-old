@@ -24,6 +24,8 @@ import android.app.time.ExternalTimeSuggestion;
 import android.app.time.ITimeDetectorListener;
 import android.app.time.TimeCapabilitiesAndConfig;
 import android.app.time.TimeConfiguration;
+import android.app.time.TimeState;
+import android.app.time.UnixEpochTime;
 import android.app.timedetector.ITimeDetectorService;
 import android.app.timedetector.ManualTimeSuggestion;
 import android.app.timedetector.TelephonyTimeSuggestion;
@@ -47,6 +49,7 @@ import com.android.internal.util.DumpUtils;
 import com.android.server.FgThread;
 import com.android.server.SystemService;
 import com.android.server.timezonedetector.CallerIdentityInjector;
+import com.android.server.timezonedetector.CurrentUserIdentityInjector;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -82,12 +85,17 @@ public final class TimeDetectorService extends ITimeDetectorService.Stub
                     TimeDetectorStrategyImpl.create(context, handler, serviceConfigAccessor);
 
             // Create and publish the local service for use by internal callers.
-            TimeDetectorInternal internal =
-                    new TimeDetectorInternalImpl(context, handler, timeDetectorStrategy);
+            CurrentUserIdentityInjector currentUserIdentityInjector =
+                    CurrentUserIdentityInjector.REAL;
+            TimeDetectorInternal internal = new TimeDetectorInternalImpl(
+                    context, handler, currentUserIdentityInjector, serviceConfigAccessor,
+                    timeDetectorStrategy);
             publishLocalService(TimeDetectorInternal.class, internal);
 
+            CallerIdentityInjector callerIdentityInjector = CallerIdentityInjector.REAL;
             TimeDetectorService service = new TimeDetectorService(
-                    context, handler, serviceConfigAccessor, timeDetectorStrategy);
+                    context, handler, callerIdentityInjector, serviceConfigAccessor,
+                    timeDetectorStrategy, NtpTrustedTime.getInstance(context));
 
             // Publish the binder service so it can be accessed from other (appropriately
             // permissioned) processes.
@@ -112,23 +120,15 @@ public final class TimeDetectorService extends ITimeDetectorService.Stub
 
     @VisibleForTesting
     public TimeDetectorService(@NonNull Context context, @NonNull Handler handler,
-            @NonNull ServiceConfigAccessor serviceConfigAccessor,
-            @NonNull TimeDetectorStrategy timeDetectorStrategy) {
-        this(context, handler, serviceConfigAccessor, timeDetectorStrategy,
-                CallerIdentityInjector.REAL, NtpTrustedTime.getInstance(context));
-    }
-
-    @VisibleForTesting
-    public TimeDetectorService(@NonNull Context context, @NonNull Handler handler,
+            @NonNull CallerIdentityInjector callerIdentityInjector,
             @NonNull ServiceConfigAccessor serviceConfigAccessor,
             @NonNull TimeDetectorStrategy timeDetectorStrategy,
-            @NonNull CallerIdentityInjector callerIdentityInjector,
             @NonNull NtpTrustedTime ntpTrustedTime) {
         mContext = Objects.requireNonNull(context);
         mHandler = Objects.requireNonNull(handler);
+        mCallerIdentityInjector = Objects.requireNonNull(callerIdentityInjector);
         mServiceConfigAccessor = Objects.requireNonNull(serviceConfigAccessor);
         mTimeDetectorStrategy = Objects.requireNonNull(timeDetectorStrategy);
-        mCallerIdentityInjector = Objects.requireNonNull(callerIdentityInjector);
         mNtpTrustedTime = Objects.requireNonNull(ntpTrustedTime);
 
         // Wire up a change listener so that ITimeZoneDetectorListeners can be notified when
@@ -151,7 +151,8 @@ public final class TimeDetectorService extends ITimeDetectorService.Stub
         try {
             ConfigurationInternal configurationInternal =
                     mServiceConfigAccessor.getConfigurationInternal(userId);
-            return configurationInternal.capabilitiesAndConfig();
+            final boolean bypassUserPolicyCheck = false;
+            return configurationInternal.createCapabilitiesAndConfig(bypassUserPolicyCheck);
         } finally {
             mCallerIdentityInjector.restoreCallingIdentity(token);
         }
@@ -174,7 +175,9 @@ public final class TimeDetectorService extends ITimeDetectorService.Stub
 
         final long token = mCallerIdentityInjector.clearCallingIdentity();
         try {
-            return mServiceConfigAccessor.updateConfiguration(resolvedUserId, configuration);
+            final boolean bypassUserPolicyCheck = false;
+            return mServiceConfigAccessor.updateConfiguration(
+                    resolvedUserId, configuration, bypassUserPolicyCheck);
         } finally {
             mCallerIdentityInjector.restoreCallingIdentity(token);
         }
@@ -272,6 +275,60 @@ public final class TimeDetectorService extends ITimeDetectorService.Stub
     }
 
     @Override
+    public TimeState getTimeState() {
+        enforceManageTimeDetectorPermission();
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            return mTimeDetectorStrategy.getTimeState();
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    void setTimeState(@NonNull TimeState timeState) {
+        enforceManageTimeDetectorPermission();
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            mTimeDetectorStrategy.setTimeState(timeState);
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    @Override
+    public boolean confirmTime(@NonNull UnixEpochTime time) {
+        enforceManageTimeDetectorPermission();
+        Objects.requireNonNull(time);
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            return mTimeDetectorStrategy.confirmTime(time);
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    @Override
+    public boolean setManualTime(@NonNull ManualTimeSuggestion timeSignal) {
+        enforceManageTimeDetectorPermission();
+        Objects.requireNonNull(timeSignal);
+
+        // This calls suggestManualTime() as the logic is identical, it only differs in the
+        // permission required, which is handled on the line above.
+        int userId = mCallerIdentityInjector.getCallingUserId();
+        final long token = Binder.clearCallingIdentity();
+        try {
+            final boolean bypassUserPolicyChecks = false;
+            return mTimeDetectorStrategy.suggestManualTime(
+                    userId, timeSignal, bypassUserPolicyChecks);
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    @Override
     public void suggestTelephonyTime(@NonNull TelephonyTimeSuggestion timeSignal) {
         enforceSuggestTelephonyTimePermission();
         Objects.requireNonNull(timeSignal);
@@ -287,7 +344,9 @@ public final class TimeDetectorService extends ITimeDetectorService.Stub
         int userId = mCallerIdentityInjector.getCallingUserId();
         final long token = mCallerIdentityInjector.clearCallingIdentity();
         try {
-            return mTimeDetectorStrategy.suggestManualTime(userId, timeSignal);
+            final boolean bypassUserPolicyChecks = false;
+            return mTimeDetectorStrategy.suggestManualTime(
+                    userId, timeSignal, bypassUserPolicyChecks);
         } finally {
             mCallerIdentityInjector.restoreCallingIdentity(token);
         }
@@ -352,19 +411,19 @@ public final class TimeDetectorService extends ITimeDetectorService.Stub
     }
 
     private void enforceSuggestManualTimePermission() {
-        mContext.enforceCallingOrSelfPermission(
+        mContext.enforceCallingPermission(
                 android.Manifest.permission.SUGGEST_MANUAL_TIME_AND_ZONE,
                 "suggest manual time and time zone");
     }
 
     private void enforceSuggestNetworkTimePermission() {
-        mContext.enforceCallingOrSelfPermission(
+        mContext.enforceCallingPermission(
                 android.Manifest.permission.SET_TIME,
                 "set time");
     }
 
     private void enforceSuggestGnssTimePermission() {
-        mContext.enforceCallingOrSelfPermission(
+        mContext.enforceCallingPermission(
                 android.Manifest.permission.SET_TIME,
                 "suggest gnss time");
     }

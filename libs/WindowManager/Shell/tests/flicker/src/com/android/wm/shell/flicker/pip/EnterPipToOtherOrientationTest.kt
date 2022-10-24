@@ -18,14 +18,12 @@ package com.android.wm.shell.flicker.pip
 
 import android.app.Activity
 import android.platform.test.annotations.FlakyTest
-import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
-import com.android.server.wm.flicker.annotation.Group3
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.entireScreenCovered
 import com.android.server.wm.flicker.helpers.FixedOrientationAppHelper
@@ -69,7 +67,6 @@ import org.junit.runners.Parameterized
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-@Group3
 class EnterPipToOtherOrientationTest(
     testSpec: FlickerTestParameter
 ) : PipTransition(testSpec) {
@@ -143,6 +140,12 @@ class EnterPipToOtherOrientationTest(
     @Presubmit
     @Test
     fun entireScreenCoveredAtStartAndEnd() = testSpec.entireScreenCovered(allStates = false)
+
+    @FlakyTest(bugId = 251219769)
+    @Test
+    override fun entireScreenCovered() {
+        super.entireScreenCovered()
+    }
 
     /**
      * Checks [pipApp] window remains visible and on top throughout the transition
@@ -227,7 +230,7 @@ class EnterPipToOtherOrientationTest(
     }
 
     /** {@inheritDoc}  */
-    @Postsubmit
+    @Presubmit
     @Test
     override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
         super.visibleLayersShownMoreThanOneConsecutiveEntry()

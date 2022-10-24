@@ -18,29 +18,36 @@ package com.android.systemui.media.taptotransfer.sender
 
 import android.app.StatusBarManager
 import android.content.Context
+import android.graphics.Rect
 import android.media.MediaRoute2Info
 import android.os.PowerManager
 import android.util.Log
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityManager
 import android.widget.TextView
 import com.android.internal.statusbar.IUndoMediaTransferCallback
+import com.android.internal.widget.CachingIconView
+import com.android.systemui.Gefingerpoken
 import com.android.systemui.R
 import com.android.systemui.animation.Interpolators
 import com.android.systemui.animation.ViewHierarchyAnimator
+import com.android.systemui.classifier.FalsingCollector
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.media.taptotransfer.common.MediaTttLogger
 import com.android.systemui.media.taptotransfer.common.MediaTttUtils
+import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.statusbar.CommandQueue
 import com.android.systemui.statusbar.policy.ConfigurationController
 import com.android.systemui.temporarydisplay.TemporaryDisplayRemovalReason
 import com.android.systemui.temporarydisplay.TemporaryViewDisplayController
 import com.android.systemui.temporarydisplay.TemporaryViewInfo
 import com.android.systemui.util.concurrency.DelayableExecutor
+import com.android.systemui.util.view.ViewUtil
 import javax.inject.Inject
 
 /**
@@ -48,8 +55,8 @@ import javax.inject.Inject
  * chip is shown when a user is transferring media to/from this device and a receiver device.
  */
 @SysUISingleton
-class MediaTttChipControllerSender @Inject constructor(
-        commandQueue: CommandQueue,
+open class MediaTttChipControllerSender @Inject constructor(
+        private val commandQueue: CommandQueue,
         context: Context,
         @MediaTttSenderLogger logger: MediaTttLogger,
         windowManager: WindowManager,
@@ -57,7 +64,10 @@ class MediaTttChipControllerSender @Inject constructor(
         accessibilityManager: AccessibilityManager,
         configurationController: ConfigurationController,
         powerManager: PowerManager,
-        private val uiEventLogger: MediaTttSenderUiEventLogger
+        private val uiEventLogger: MediaTttSenderUiEventLogger,
+        private val falsingManager: FalsingManager,
+        private val falsingCollector: FalsingCollector,
+        private val viewUtil: ViewUtil,
 ) : TemporaryViewDisplayController<ChipSenderInfo, MediaTttLogger>(
         context,
         logger,
@@ -70,6 +80,9 @@ class MediaTttChipControllerSender @Inject constructor(
         MediaTttUtils.WINDOW_TITLE,
         MediaTttUtils.WAKE_REASON,
 ) {
+
+    private lateinit var parent: MediaTttChipRootView
+
     override val windowLayoutParams = commonWindowLayoutParams.apply {
         gravity = Gravity.TOP.or(Gravity.CENTER_HORIZONTAL)
     }
@@ -84,10 +97,6 @@ class MediaTttChipControllerSender @Inject constructor(
                 displayState, routeInfo, undoCallback
             )
         }
-    }
-
-    init {
-        commandQueue.addCallback(commandQueueCallbacks)
     }
 
     private fun updateMediaTapToTransferSenderDisplay(
@@ -112,23 +121,32 @@ class MediaTttChipControllerSender @Inject constructor(
         }
     }
 
+    override fun start() {
+        commandQueue.addCallback(commandQueueCallbacks)
+    }
+
     override fun updateView(
         newInfo: ChipSenderInfo,
         currentView: ViewGroup
     ) {
-        super.updateView(newInfo, currentView)
-
         val chipState = newInfo.state
+
+        // Detect falsing touches on the chip.
+        parent = currentView.requireViewById(R.id.media_ttt_sender_chip)
+        parent.touchHandler = object : Gefingerpoken {
+            override fun onTouchEvent(ev: MotionEvent?): Boolean {
+                falsingCollector.onTouchEvent(ev)
+                return false
+            }
+        }
 
         // App icon
         val iconInfo = MediaTttUtils.getIconInfoFromPackageName(
             context, newInfo.routeInfo.clientPackageName, logger
         )
-        MediaTttUtils.setIcon(
-            currentView.requireViewById(R.id.app_icon),
-            iconInfo.drawable,
-            iconInfo.contentDescription
-        )
+        val iconView = currentView.requireViewById<CachingIconView>(R.id.app_icon)
+        iconView.setImageDrawable(iconInfo.drawable)
+        iconView.contentDescription = iconInfo.contentDescription
 
         // Text
         val otherDeviceName = newInfo.routeInfo.name.toString()
@@ -142,7 +160,11 @@ class MediaTttChipControllerSender @Inject constructor(
         // Undo
         val undoView = currentView.requireViewById<View>(R.id.undo)
         val undoClickListener = chipState.undoClickListener(
-                this, newInfo.routeInfo, newInfo.undoCallback, uiEventLogger
+                this,
+                newInfo.routeInfo,
+                newInfo.undoCallback,
+                uiEventLogger,
+                falsingManager,
         )
         undoView.setOnClickListener(undoClickListener)
         undoView.visibility = (undoClickListener != null).visibleIfTrue()
@@ -171,10 +193,22 @@ class MediaTttChipControllerSender @Inject constructor(
         )
     }
 
-    override fun removeView(removalReason: String) {
+    override fun animateViewOut(view: ViewGroup, onAnimationEnd: Runnable) {
+        ViewHierarchyAnimator.animateRemoval(
+            view.requireViewById<ViewGroup>(R.id.media_ttt_sender_chip_inner),
+            ViewHierarchyAnimator.Hotspot.TOP,
+            Interpolators.EMPHASIZED_ACCELERATE,
+            ANIMATION_DURATION,
+            onAnimationEnd,
+        )
+        // TODO(b/203800644): Add includeMargins as an option to ViewHierarchyAnimator so that the
+        //   animateChipOut matches the animateChipIn.
+    }
+
+    override fun shouldIgnoreViewRemoval(info: ChipSenderInfo, removalReason: String): Boolean {
         // Don't remove the chip if we're in progress or succeeded, since the user should still be
         // able to see the status of the transfer. (But do remove it if it's finally timed out.)
-        val transferStatus = info?.state?.transferStatus
+        val transferStatus = info.state.transferStatus
         if (
             (transferStatus == TransferStatus.IN_PROGRESS ||
                 transferStatus == TransferStatus.SUCCEEDED) &&
@@ -183,9 +217,13 @@ class MediaTttChipControllerSender @Inject constructor(
             logger.logRemovalBypass(
                 removalReason, bypassReason = "transferStatus=${transferStatus.name}"
             )
-            return
+            return true
         }
-        super.removeView(removalReason)
+        return false
+    }
+
+    override fun getTouchableRegion(view: View, outRect: Rect) {
+        viewUtil.setRectToViewWindowLocation(view, outRect)
     }
 
     private fun Boolean.visibleIfTrue(): Int {

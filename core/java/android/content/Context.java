@@ -52,11 +52,13 @@ import android.compat.annotation.UnsupportedAppUsage;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PermissionMethod;
+import android.content.pm.PermissionName;
 import android.content.res.AssetManager;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
+import android.credentials.CredentialManager;
 import android.database.DatabaseErrorHandler;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteDatabase.CursorFactory;
@@ -3815,6 +3817,7 @@ public abstract class Context {
             CAPTIONING_SERVICE,
             KEYGUARD_SERVICE,
             LOCATION_SERVICE,
+            HEALTHCONNECT_SERVICE,
             //@hide: COUNTRY_DETECTOR,
             SEARCH_SERVICE,
             SENSOR_SERVICE,
@@ -3933,6 +3936,7 @@ public abstract class Context {
             //@hide: ATTESTATION_VERIFICATION_SERVICE,
             //@hide: SAFETY_CENTER_SERVICE,
             DISPLAY_HASH_SERVICE,
+            CREDENTIAL_SERVICE,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ServiceName {}
@@ -6050,6 +6054,24 @@ public abstract class Context {
     public static final String AMBIENT_CONTEXT_SERVICE = "ambient_context";
 
     /**
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.healthconnect.HealthConnectManager}.
+     *
+     * @see #getSystemService(String)
+     * @see android.healthconnect.HealthConnectManager
+     */
+    public static final String HEALTHCONNECT_SERVICE = "healthconnect";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.credentials.CredentialManager} to authenticate a user to your app.
+     *
+     * @see #getSystemService(String)
+     * @see CredentialManager
+     */
+    public static final String CREDENTIAL_SERVICE = "credential";
+
+    /**
      * Determine whether the given permission is allowed for a particular
      * process and user ID running in the system.
      *
@@ -6068,7 +6090,8 @@ public abstract class Context {
     @CheckResult(suggest="#enforcePermission(String,int,int,String)")
     @PackageManager.PermissionResult
     @PermissionMethod
-    public abstract int checkPermission(@NonNull String permission, int pid, int uid);
+    public abstract int checkPermission(
+            @NonNull @PermissionName String permission, int pid, int uid);
 
     /** @hide */
     @SuppressWarnings("HiddenAbstractMethod")
@@ -6101,7 +6124,7 @@ public abstract class Context {
     @CheckResult(suggest="#enforceCallingPermission(String,String)")
     @PackageManager.PermissionResult
     @PermissionMethod
-    public abstract int checkCallingPermission(@NonNull String permission);
+    public abstract int checkCallingPermission(@NonNull @PermissionName String permission);
 
     /**
      * Determine whether the calling process of an IPC <em>or you</em> have been
@@ -6122,7 +6145,7 @@ public abstract class Context {
     @CheckResult(suggest="#enforceCallingOrSelfPermission(String,String)")
     @PackageManager.PermissionResult
     @PermissionMethod
-    public abstract int checkCallingOrSelfPermission(@NonNull String permission);
+    public abstract int checkCallingOrSelfPermission(@NonNull @PermissionName String permission);
 
     /**
      * Determine whether <em>you</em> have been granted a particular permission.
@@ -6152,7 +6175,7 @@ public abstract class Context {
      */
     @PermissionMethod
     public abstract void enforcePermission(
-            @NonNull String permission, int pid, int uid, @Nullable String message);
+            @NonNull @PermissionName String permission, int pid, int uid, @Nullable String message);
 
     /**
      * If the calling process of an IPC you are handling has not been
@@ -6174,7 +6197,7 @@ public abstract class Context {
      */
     @PermissionMethod
     public abstract void enforceCallingPermission(
-            @NonNull String permission, @Nullable String message);
+            @NonNull @PermissionName String permission, @Nullable String message);
 
     /**
      * If neither you nor the calling process of an IPC you are
@@ -6191,7 +6214,7 @@ public abstract class Context {
      */
     @PermissionMethod
     public abstract void enforceCallingOrSelfPermission(
-            @NonNull String permission, @Nullable String message);
+            @NonNull @PermissionName String permission, @Nullable String message);
 
     /**
      * Grant permission to access a specific Uri to another package, regardless

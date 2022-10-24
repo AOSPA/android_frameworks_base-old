@@ -55,7 +55,7 @@ import com.android.wm.shell.freeform.FreeformComponents;
 import com.android.wm.shell.freeform.FreeformTaskListener;
 import com.android.wm.shell.freeform.FreeformTaskTransitionHandler;
 import com.android.wm.shell.freeform.FreeformTaskTransitionObserver;
-import com.android.wm.shell.fullscreen.FullscreenTaskListener;
+import com.android.wm.shell.kidsmode.KidsModeTaskOrganizer;
 import com.android.wm.shell.onehanded.OneHandedController;
 import com.android.wm.shell.pip.Pip;
 import com.android.wm.shell.pip.PipAnimationController;
@@ -182,7 +182,7 @@ public abstract class WMShellModule {
 
     @WMSingleton
     @Provides
-    static WindowDecorViewModel<?> provideWindowDecorViewModel(
+    static WindowDecorViewModel provideWindowDecorViewModel(
             Context context,
             @ShellMainThread Handler mainHandler,
             @ShellMainThread Choreographer mainChoreographer,
@@ -191,13 +191,13 @@ public abstract class WMShellModule {
             SyncTransactionQueue syncQueue,
             @DynamicOverride DesktopModeController desktopModeController) {
         return new CaptionWindowDecorViewModel(
-                        context,
-                        mainHandler,
-                        mainChoreographer,
-                        taskOrganizer,
-                        displayController,
-                        syncQueue,
-                        desktopModeController);
+                    context,
+                    mainHandler,
+                    mainChoreographer,
+                    taskOrganizer,
+                    displayController,
+                    syncQueue,
+                    desktopModeController);
     }
 
     //
@@ -208,7 +208,7 @@ public abstract class WMShellModule {
     @Provides
     @DynamicOverride
     static FreeformComponents provideFreeformComponents(
-            FreeformTaskListener<?> taskListener,
+            FreeformTaskListener taskListener,
             FreeformTaskTransitionHandler transitionHandler,
             FreeformTaskTransitionObserver transitionObserver) {
         return new FreeformComponents(
@@ -217,18 +217,18 @@ public abstract class WMShellModule {
 
     @WMSingleton
     @Provides
-    static FreeformTaskListener<?> provideFreeformTaskListener(
+    static FreeformTaskListener provideFreeformTaskListener(
             Context context,
             ShellInit shellInit,
             ShellTaskOrganizer shellTaskOrganizer,
             Optional<DesktopModeTaskRepository> desktopModeTaskRepository,
-            WindowDecorViewModel<?> windowDecorViewModel) {
+            WindowDecorViewModel windowDecorViewModel) {
         // TODO(b/238217847): Temporarily add this check here until we can remove the dynamic
         //                    override for this controller from the base module
         ShellInit init = FreeformComponents.isFreeformEnabled(context)
                 ? shellInit
                 : null;
-        return new FreeformTaskListener<>(init, shellTaskOrganizer, desktopModeTaskRepository,
+        return new FreeformTaskListener(init, shellTaskOrganizer, desktopModeTaskRepository,
                 windowDecorViewModel);
     }
 
@@ -237,7 +237,7 @@ public abstract class WMShellModule {
     static FreeformTaskTransitionHandler provideFreeformTaskTransitionHandler(
             ShellInit shellInit,
             Transitions transitions,
-            WindowDecorViewModel<?> windowDecorViewModel) {
+            WindowDecorViewModel windowDecorViewModel) {
         return new FreeformTaskTransitionHandler(shellInit, transitions, windowDecorViewModel);
     }
 
@@ -247,10 +247,9 @@ public abstract class WMShellModule {
             Context context,
             ShellInit shellInit,
             Transitions transitions,
-            FullscreenTaskListener<?> fullscreenTaskListener,
-            FreeformTaskListener<?> freeformTaskListener) {
+            WindowDecorViewModel windowDecorViewModel) {
         return new FreeformTaskTransitionObserver(
-                context, shellInit, transitions, fullscreenTaskListener, freeformTaskListener);
+                context, shellInit, transitions, windowDecorViewModel);
     }
 
     //
@@ -599,7 +598,9 @@ public abstract class WMShellModule {
     @WMSingleton
     @Provides
     @DynamicOverride
-    static DesktopModeController provideDesktopModeController(Context context, ShellInit shellInit,
+    static DesktopModeController provideDesktopModeController(Context context,
+            ShellInit shellInit,
+            ShellController shellController,
             ShellTaskOrganizer shellTaskOrganizer,
             RootTaskDisplayAreaOrganizer rootTaskDisplayAreaOrganizer,
             Transitions transitions,
@@ -607,7 +608,7 @@ public abstract class WMShellModule {
             @ShellMainThread Handler mainHandler,
             @ShellMainThread ShellExecutor mainExecutor
     ) {
-        return new DesktopModeController(context, shellInit, shellTaskOrganizer,
+        return new DesktopModeController(context, shellInit, shellController, shellTaskOrganizer,
                 rootTaskDisplayAreaOrganizer, transitions, desktopModeTaskRepository, mainHandler,
                 mainExecutor);
     }
@@ -617,6 +618,28 @@ public abstract class WMShellModule {
     @DynamicOverride
     static DesktopModeTaskRepository provideDesktopModeTaskRepository() {
         return new DesktopModeTaskRepository();
+    }
+
+    //
+    // Kids mode
+    //
+    @WMSingleton
+    @Provides
+    static KidsModeTaskOrganizer provideKidsModeTaskOrganizer(
+            Context context,
+            ShellInit shellInit,
+            ShellCommandHandler shellCommandHandler,
+            SyncTransactionQueue syncTransactionQueue,
+            DisplayController displayController,
+            DisplayInsetsController displayInsetsController,
+            Optional<UnfoldAnimationController> unfoldAnimationController,
+            Optional<RecentTasksController> recentTasksOptional,
+            @ShellMainThread ShellExecutor mainExecutor,
+            @ShellMainThread Handler mainHandler
+    ) {
+        return new KidsModeTaskOrganizer(context, shellInit, shellCommandHandler,
+                syncTransactionQueue, displayController, displayInsetsController,
+                unfoldAnimationController, recentTasksOptional, mainExecutor, mainHandler);
     }
 
     //
@@ -630,6 +653,7 @@ public abstract class WMShellModule {
     @Provides
     static Object provideIndependentShellComponentsToCreate(
             DefaultMixedHandler defaultMixedHandler,
+            KidsModeTaskOrganizer kidsModeTaskOrganizer,
             Optional<DesktopModeController> desktopModeController) {
         return new Object();
     }

@@ -8947,6 +8947,7 @@ package android.companion {
 
   public final class AssociationInfo implements android.os.Parcelable {
     method public int describeContents();
+    method @Nullable public android.os.Parcelable getAssociatedDevice();
     method @Nullable public android.net.MacAddress getDeviceMacAddress();
     method @Nullable public String getDeviceProfile();
     method @Nullable public CharSequence getDisplayName();
@@ -9015,6 +9016,7 @@ package android.companion {
   public final class CompanionDeviceManager {
     method @RequiresPermission(anyOf={android.Manifest.permission.REQUEST_COMPANION_PROFILE_WATCH, android.Manifest.permission.REQUEST_COMPANION_PROFILE_COMPUTER, android.Manifest.permission.REQUEST_COMPANION_PROFILE_APP_STREAMING, android.Manifest.permission.REQUEST_COMPANION_PROFILE_AUTOMOTIVE_PROJECTION}, conditional=true) public void associate(@NonNull android.companion.AssociationRequest, @NonNull android.companion.CompanionDeviceManager.Callback, @Nullable android.os.Handler);
     method @RequiresPermission(anyOf={android.Manifest.permission.REQUEST_COMPANION_PROFILE_WATCH, android.Manifest.permission.REQUEST_COMPANION_PROFILE_COMPUTER, android.Manifest.permission.REQUEST_COMPANION_PROFILE_APP_STREAMING, android.Manifest.permission.REQUEST_COMPANION_PROFILE_AUTOMOTIVE_PROJECTION}, conditional=true) public void associate(@NonNull android.companion.AssociationRequest, @NonNull java.util.concurrent.Executor, @NonNull android.companion.CompanionDeviceManager.Callback);
+    method @Nullable public android.content.IntentSender buildAssociationCancellationIntent();
     method @Nullable public android.content.IntentSender buildPermissionTransferUserConsentIntent(int) throws android.companion.DeviceNotAssociatedException;
     method @Deprecated public void disassociate(@NonNull String);
     method public void disassociate(int);
@@ -9820,6 +9822,7 @@ package android.content {
     field public static final int CONTEXT_IGNORE_SECURITY = 2; // 0x2
     field public static final int CONTEXT_INCLUDE_CODE = 1; // 0x1
     field public static final int CONTEXT_RESTRICTED = 4; // 0x4
+    field public static final String CREDENTIAL_SERVICE = "credential";
     field public static final String CROSS_PROFILE_APPS_SERVICE = "crossprofileapps";
     field public static final String DEVICE_POLICY_SERVICE = "device_policy";
     field public static final String DISPLAY_HASH_SERVICE = "display_hash";
@@ -9832,6 +9835,7 @@ package android.content {
     field public static final String FINGERPRINT_SERVICE = "fingerprint";
     field public static final String GAME_SERVICE = "game";
     field public static final String HARDWARE_PROPERTIES_SERVICE = "hardware_properties";
+    field public static final String HEALTHCONNECT_SERVICE = "healthconnect";
     field public static final String INPUT_METHOD_SERVICE = "input_method";
     field public static final String INPUT_SERVICE = "input";
     field public static final String IPSEC_SERVICE = "ipsec";
@@ -12874,6 +12878,82 @@ package android.content.res.loader {
     method @NonNull public static android.content.res.loader.ResourcesProvider loadFromDirectory(@NonNull String, @Nullable android.content.res.loader.AssetsProvider) throws java.io.IOException;
     method @NonNull public static android.content.res.loader.ResourcesProvider loadFromSplit(@NonNull android.content.Context, @NonNull String) throws java.io.IOException;
     method @NonNull public static android.content.res.loader.ResourcesProvider loadFromTable(@NonNull android.os.ParcelFileDescriptor, @Nullable android.content.res.loader.AssetsProvider) throws java.io.IOException;
+  }
+
+}
+
+package android.credentials {
+
+  public final class CreateCredentialRequest implements android.os.Parcelable {
+    ctor public CreateCredentialRequest(@NonNull String, @NonNull android.os.Bundle);
+    method public int describeContents();
+    method @NonNull public android.os.Bundle getData();
+    method @NonNull public String getType();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.credentials.CreateCredentialRequest> CREATOR;
+  }
+
+  public final class CreateCredentialResponse implements android.os.Parcelable {
+    ctor public CreateCredentialResponse(@NonNull android.os.Bundle);
+    method public int describeContents();
+    method @NonNull public android.os.Bundle getData();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.credentials.CreateCredentialResponse> CREATOR;
+  }
+
+  public final class Credential implements android.os.Parcelable {
+    ctor public Credential(@NonNull String, @NonNull android.os.Bundle);
+    method public int describeContents();
+    method @NonNull public android.os.Bundle getData();
+    method @NonNull public String getType();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.credentials.Credential> CREATOR;
+  }
+
+  public final class CredentialManager {
+    method public void executeCreateCredential(@NonNull android.credentials.CreateCredentialRequest, @Nullable android.os.CancellationSignal, @NonNull java.util.concurrent.Executor, @NonNull android.os.OutcomeReceiver<android.credentials.CreateCredentialResponse,android.credentials.CredentialManagerException>);
+    method public void executeGetCredential(@NonNull android.credentials.GetCredentialRequest, @Nullable android.os.CancellationSignal, @NonNull java.util.concurrent.Executor, @NonNull android.os.OutcomeReceiver<android.credentials.GetCredentialResponse,android.credentials.CredentialManagerException>);
+  }
+
+  public class CredentialManagerException extends java.lang.Exception {
+    ctor public CredentialManagerException(int, @Nullable String);
+    ctor public CredentialManagerException(int, @Nullable String, @Nullable Throwable);
+    ctor public CredentialManagerException(int, @Nullable Throwable);
+    ctor public CredentialManagerException(int);
+    field public static final int ERROR_UNKNOWN = 0; // 0x0
+    field public final int errorCode;
+  }
+
+  public final class GetCredentialOption implements android.os.Parcelable {
+    ctor public GetCredentialOption(@NonNull String, @NonNull android.os.Bundle);
+    method public int describeContents();
+    method @NonNull public android.os.Bundle getData();
+    method @NonNull public String getType();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.credentials.GetCredentialOption> CREATOR;
+  }
+
+  public final class GetCredentialRequest implements android.os.Parcelable {
+    method public int describeContents();
+    method @NonNull public java.util.List<android.credentials.GetCredentialOption> getGetCredentialOptions();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.credentials.GetCredentialRequest> CREATOR;
+  }
+
+  public static final class GetCredentialRequest.Builder {
+    ctor public GetCredentialRequest.Builder();
+    method @NonNull public android.credentials.GetCredentialRequest.Builder addGetCredentialOption(@NonNull android.credentials.GetCredentialOption);
+    method @NonNull public android.credentials.GetCredentialRequest build();
+    method @NonNull public android.credentials.GetCredentialRequest.Builder setGetCredentialOptions(@NonNull java.util.List<android.credentials.GetCredentialOption>);
+  }
+
+  public final class GetCredentialResponse implements android.os.Parcelable {
+    ctor public GetCredentialResponse(@NonNull android.credentials.Credential);
+    ctor public GetCredentialResponse();
+    method public int describeContents();
+    method @Nullable public android.credentials.Credential getCredential();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.credentials.GetCredentialResponse> CREATOR;
   }
 
 }
@@ -19469,6 +19549,7 @@ package android.location {
     method public boolean isFullTracking();
     method public void writeToParcel(@NonNull android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.location.GnssMeasurementRequest> CREATOR;
+    field public static final int PASSIVE_INTERVAL = 2147483647; // 0x7fffffff
   }
 
   public static final class GnssMeasurementRequest.Builder {
@@ -45114,6 +45195,14 @@ package android.text {
     method public void getChars(int, int, char[], int);
   }
 
+  public class GraphemeClusterSegmentFinder extends android.text.SegmentFinder {
+    ctor public GraphemeClusterSegmentFinder(@NonNull CharSequence, @NonNull android.text.TextPaint);
+    method public int nextEndBoundary(@IntRange(from=0) int);
+    method public int nextStartBoundary(@IntRange(from=0) int);
+    method public int previousEndBoundary(@IntRange(from=0) int);
+    method public int previousStartBoundary(@IntRange(from=0) int);
+  }
+
   public class Html {
     method public static String escapeHtml(CharSequence);
     method @Deprecated public static android.text.Spanned fromHtml(String);
@@ -45243,6 +45332,7 @@ package android.text {
     method public final int getParagraphLeft(int);
     method public final int getParagraphRight(int);
     method public float getPrimaryHorizontal(int);
+    method @Nullable public android.util.Range<java.lang.Integer> getRangeForRect(@NonNull android.graphics.RectF, @NonNull android.text.SegmentFinder, @NonNull android.text.Layout.TextInclusionStrategy);
     method public float getSecondaryHorizontal(int);
     method public void getSelectionPath(int, int, android.graphics.Path);
     method public final float getSpacingAdd();
@@ -45266,6 +45356,9 @@ package android.text {
     field public static final int HYPHENATION_FREQUENCY_NONE = 0; // 0x0
     field public static final int HYPHENATION_FREQUENCY_NORMAL = 1; // 0x1
     field public static final int HYPHENATION_FREQUENCY_NORMAL_FAST = 3; // 0x3
+    field @NonNull public static final android.text.Layout.TextInclusionStrategy INCLUSION_STRATEGY_ANY_OVERLAP;
+    field @NonNull public static final android.text.Layout.TextInclusionStrategy INCLUSION_STRATEGY_CONTAINS_ALL;
+    field @NonNull public static final android.text.Layout.TextInclusionStrategy INCLUSION_STRATEGY_CONTAINS_CENTER;
     field public static final int JUSTIFICATION_MODE_INTER_WORD = 1; // 0x1
     field public static final int JUSTIFICATION_MODE_NONE = 0; // 0x0
   }
@@ -45277,6 +45370,10 @@ package android.text {
   }
 
   public static class Layout.Directions {
+  }
+
+  @java.lang.FunctionalInterface public static interface Layout.TextInclusionStrategy {
+    method public boolean isSegmentInside(@NonNull android.graphics.RectF, @NonNull android.graphics.RectF);
   }
 
   @Deprecated public abstract class LoginFilter implements android.text.InputFilter {
@@ -45353,6 +45450,15 @@ package android.text {
     method public android.text.PrecomputedText.Params.Builder setHyphenationFrequency(int);
     method @NonNull public android.text.PrecomputedText.Params.Builder setLineBreakConfig(@NonNull android.graphics.text.LineBreakConfig);
     method public android.text.PrecomputedText.Params.Builder setTextDirection(@NonNull android.text.TextDirectionHeuristic);
+  }
+
+  public abstract class SegmentFinder {
+    ctor public SegmentFinder();
+    method public abstract int nextEndBoundary(@IntRange(from=0) int);
+    method public abstract int nextStartBoundary(@IntRange(from=0) int);
+    method public abstract int previousEndBoundary(@IntRange(from=0) int);
+    method public abstract int previousStartBoundary(@IntRange(from=0) int);
+    field public static final int DONE = -1; // 0xffffffff
   }
 
   public class Selection {
@@ -45638,6 +45744,14 @@ package android.text {
     method public void afterTextChanged(android.text.Editable);
     method public void beforeTextChanged(CharSequence, int, int, int);
     method public void onTextChanged(CharSequence, int, int, int);
+  }
+
+  public class WordSegmentFinder extends android.text.SegmentFinder {
+    ctor public WordSegmentFinder(@NonNull CharSequence, @NonNull android.icu.util.ULocale);
+    method public int nextEndBoundary(@IntRange(from=0) int);
+    method public int nextStartBoundary(@IntRange(from=0) int);
+    method public int previousEndBoundary(@IntRange(from=0) int);
+    method public int previousStartBoundary(@IntRange(from=0) int);
   }
 
 }
@@ -51909,6 +52023,7 @@ package android.view.accessibility {
     field public static final int CONTENT_CHANGE_TYPE_DRAG_CANCELLED = 512; // 0x200
     field public static final int CONTENT_CHANGE_TYPE_DRAG_DROPPED = 256; // 0x100
     field public static final int CONTENT_CHANGE_TYPE_DRAG_STARTED = 128; // 0x80
+    field public static final int CONTENT_CHANGE_TYPE_ENABLED = 4096; // 0x1000
     field public static final int CONTENT_CHANGE_TYPE_ERROR = 2048; // 0x800
     field public static final int CONTENT_CHANGE_TYPE_PANE_APPEARED = 16; // 0x10
     field public static final int CONTENT_CHANGE_TYPE_PANE_DISAPPEARED = 32; // 0x20
@@ -53486,6 +53601,7 @@ package android.view.inputmethod {
     method public void sendAppPrivateCommand(android.view.View, String, android.os.Bundle);
     method @Deprecated public void setAdditionalInputMethodSubtypes(@NonNull String, @NonNull android.view.inputmethod.InputMethodSubtype[]);
     method @Deprecated @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public boolean setCurrentInputMethodSubtype(android.view.inputmethod.InputMethodSubtype);
+    method public void setExplicitlyEnabledInputMethodSubtypes(@NonNull String, @NonNull int[]);
     method @Deprecated public void setInputMethod(android.os.IBinder, String);
     method @Deprecated public void setInputMethodAndSubtype(@NonNull android.os.IBinder, String, android.view.inputmethod.InputMethodSubtype);
     method @Deprecated public boolean shouldOfferSwitchingToNextInputMethod(android.os.IBinder);
