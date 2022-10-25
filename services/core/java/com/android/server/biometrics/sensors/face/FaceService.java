@@ -63,6 +63,8 @@ import com.android.server.biometrics.sensors.LockoutResetDispatcher;
 import com.android.server.biometrics.sensors.LockoutTracker;
 import com.android.server.biometrics.sensors.face.aidl.FaceProvider;
 import com.android.server.biometrics.sensors.face.hidl.Face10;
+import com.android.server.biometrics.sensors.face.sense.SenseProvider;
+import com.android.server.biometrics.sensors.face.sense.SenseUtils;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -654,6 +656,14 @@ public class FaceService extends SystemService {
             }
         }
 
+        private void addSenseProvider() {
+            if (SenseUtils.canUseProvider() {
+                FaceSensorPropertiesInternal props = new FaceSensorPropertiesInternal(1008, 0, 1, new ArrayList(), 1, false, false, false);
+                SenseProvider provider = new SenseProvider(getContext(), props, mLockoutResetDispatcher);
+                mServiceProviders.add(provider);
+            }
+        }
+
         @Override // Binder call
         public void registerAuthenticators(
                 @NonNull List<FaceSensorPropertiesInternal> hidlSensors) {
@@ -671,6 +681,7 @@ public class FaceService extends SystemService {
             handler.post(() -> {
                 addHidlProviders(hidlSensors);
                 addAidlProviders();
+                addSenseProvider();
 
                 final IBiometricService biometricService = IBiometricService.Stub.asInterface(
                         ServiceManager.getService(Context.BIOMETRIC_SERVICE));
