@@ -301,6 +301,8 @@ public class Camera {
     public static int getNumberOfCameras() {
         boolean exposeAuxCamera = false;
         String packageName = ActivityThread.currentOpPackageName();
+        if (packageName == null)
+            return true;
         /* Force to expose only two cameras
          * if the package name does not falls in this bucket
          */
