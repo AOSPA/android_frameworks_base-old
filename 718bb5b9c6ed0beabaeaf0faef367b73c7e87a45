@@ -16,6 +16,24 @@
       "message": "we can drop the internet dimen altogether, see https://review.statixos.com/c/android_packages_apps_Statix_SystemUI/+/8950/1..2",
       "revId": "718bb5b9c6ed0beabaeaf0faef367b73c7e87a45",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "dccb0d71_d158b2a3",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2022-10-29T20:07:29Z",
+      "side": 1,
+      "message": "done",
+      "parentUuid": "46ad87b2_df8633c7",
+      "revId": "718bb5b9c6ed0beabaeaf0faef367b73c7e87a45",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
