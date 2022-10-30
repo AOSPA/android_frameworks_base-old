@@ -28,6 +28,7 @@ import static com.android.systemui.screenshot.LogConfig.DEBUG_UI;
 import static com.android.systemui.screenshot.LogConfig.DEBUG_WINDOW;
 import static com.android.systemui.screenshot.LogConfig.logTag;
 import static com.android.systemui.screenshot.ScreenshotEvent.SCREENSHOT_DISMISSED_OTHER;
+import static com.android.systemui.screenshot.ScreenshotEvent.SCREENSHOT_INTERACTION_TIMEOUT;
 
 import static java.util.Objects.requireNonNull;
 
@@ -173,7 +174,7 @@ public class ScreenshotController {
         public List<Notification.Action> smartActions;
         public Notification.Action quickShareAction;
         public UserHandle owner;
-
+        public String subject;  // Title for sharing
 
         /**
          * POD for shared element transition.
@@ -194,6 +195,7 @@ public class ScreenshotController {
             deleteAction = null;
             smartActions = null;
             quickShareAction = null;
+            subject = null;
         }
     }
 
@@ -272,6 +274,7 @@ public class ScreenshotController {
     private final ScreenshotNotificationSmartActionsProvider
             mScreenshotNotificationSmartActionsProvider;
     private final TimeoutHandler mScreenshotHandler;
+    private final ActionIntentExecutor mActionExecutor;
 
     private ScreenshotView mScreenshotView;
     private Bitmap mScreenBitmap;
@@ -309,7 +312,8 @@ public class ScreenshotController {
             ActivityManager activityManager,
             TimeoutHandler timeoutHandler,
             BroadcastSender broadcastSender,
-            ScreenshotNotificationSmartActionsProvider screenshotNotificationSmartActionsProvider
+            ScreenshotNotificationSmartActionsProvider screenshotNotificationSmartActionsProvider,
+            ActionIntentExecutor actionExecutor
     ) {
         mScreenshotSmartActions = screenshotSmartActions;
         mNotificationsController = screenshotNotificationsController;
@@ -331,9 +335,7 @@ public class ScreenshotController {
             if (DEBUG_UI) {
                 Log.d(TAG, "Corner timeout hit");
             }
-            mUiEventLogger.log(ScreenshotEvent.SCREENSHOT_INTERACTION_TIMEOUT, 0,
-                    mPackageName);
-            ScreenshotController.this.dismissScreenshot(false);
+            dismissScreenshot(SCREENSHOT_INTERACTION_TIMEOUT);
         });
 
         mDisplayManager = requireNonNull(context.getSystemService(DisplayManager.class));
@@ -341,6 +343,7 @@ public class ScreenshotController {
         mContext = (WindowContext) displayContext.createWindowContext(TYPE_SCREENSHOT, null);
         mWindowManager = mContext.getSystemService(WindowManager.class);
         mFlags = flags;
+        mActionExecutor = actionExecutor;
 
         mAccessibilityManager = AccessibilityManager.getInstance(mContext);
 
@@ -361,8 +364,7 @@ public class ScreenshotController {
             @Override
             public void onReceive(Context context, Intent intent) {
                 if (ClipboardOverlayController.COPY_OVERLAY_ACTION.equals(intent.getAction())) {
-                    mUiEventLogger.log(SCREENSHOT_DISMISSED_OTHER);
-                    dismissScreenshot(false);
+                    dismissScreenshot(SCREENSHOT_DISMISSED_OTHER);
                 }
             }
         };
@@ -410,24 +412,20 @@ public class ScreenshotController {
     /**
      * Clears current screenshot
      */
-    void dismissScreenshot(boolean immediate) {
+    void dismissScreenshot(ScreenshotEvent event) {
         if (DEBUG_DISMISS) {
-            Log.d(TAG, "dismissScreenshot(immediate=" + immediate + ")");
+            Log.d(TAG, "dismissScreenshot");
         }
         // If we're already animating out, don't restart the animation
-        // (but do obey an immediate dismissal)
-        if (!immediate && mScreenshotView.isDismissing()) {
+        if (mScreenshotView.isDismissing()) {
             if (DEBUG_DISMISS) {
                 Log.v(TAG, "Already dismissing, ignoring duplicate command");
             }
             return;
         }
+        mUiEventLogger.log(event, 0, mPackageName);
         mScreenshotHandler.cancelTimeout();
-        if (immediate) {
-            finishDismiss();
-        } else {
-            mScreenshotView.animateDismissal();
-        }
+        mScreenshotView.animateDismissal();
     }
 
     boolean isPendingSharedTransition() {
@@ -492,7 +490,7 @@ public class ScreenshotController {
                 // TODO(159460485): Remove this when focus is handled properly in the system
                 setWindowFocusable(false);
             }
-        });
+        }, mActionExecutor, mFlags);
         mScreenshotView.setDefaultTimeoutMillis(mScreenshotHandler.getDefaultTimeoutMillis());
 
         mScreenshotView.setOnKeyListener((v, keyCode, event) -> {
@@ -500,7 +498,7 @@ public class ScreenshotController {
                 if (DEBUG_INPUT) {
                     Log.d(TAG, "onKeyEvent: KeyEvent.KEYCODE_BACK");
                 }
-                dismissScreenshot(false);
+                dismissScreenshot(SCREENSHOT_DISMISSED_OTHER);
                 return true;
             }
             return false;

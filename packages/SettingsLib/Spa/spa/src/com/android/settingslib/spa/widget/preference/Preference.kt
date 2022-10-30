@@ -26,7 +26,9 @@ import com.android.settingslib.spa.framework.common.EntryMacro
 import com.android.settingslib.spa.framework.common.EntrySearchData
 import com.android.settingslib.spa.framework.compose.navigator
 import com.android.settingslib.spa.framework.compose.stateOf
+import com.android.settingslib.spa.framework.util.wrapOnClickWithLog
 import com.android.settingslib.spa.widget.ui.createSettingsIcon
+import com.android.settingslib.spa.widget.util.EntryHighlight
 
 data class SimplePreferenceMacro(
     val title: String,
@@ -105,17 +107,23 @@ fun Preference(
     model: PreferenceModel,
     singleLineSummary: Boolean = false,
 ) {
-    val modifier = remember(model.enabled.value, model.onClick) {
-        model.onClick?.let { onClick ->
-            Modifier.clickable(enabled = model.enabled.value, onClick = onClick)
-        } ?: Modifier
+    val onClickWithLog = wrapOnClickWithLog(model.onClick)
+    val modifier = remember(model.enabled.value) {
+        if (onClickWithLog != null) {
+            Modifier.clickable(
+                enabled = model.enabled.value,
+                onClick = onClickWithLog
+            )
+        } else Modifier
     }
-    BasePreference(
-        title = model.title,
-        summary = model.summary,
-        singleLineSummary = singleLineSummary,
-        modifier = modifier,
-        icon = model.icon,
-        enabled = model.enabled,
-    )
+    EntryHighlight {
+        BasePreference(
+            title = model.title,
+            summary = model.summary,
+            singleLineSummary = singleLineSummary,
+            modifier = modifier,
+            icon = model.icon,
+            enabled = model.enabled,
+        )
+    }
 }

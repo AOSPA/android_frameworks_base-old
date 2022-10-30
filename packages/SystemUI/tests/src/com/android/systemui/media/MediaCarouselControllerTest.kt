@@ -25,6 +25,11 @@ import com.android.systemui.SysuiTestCase
 import com.android.systemui.classifier.FalsingCollector
 import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.dump.DumpManager
+import com.android.systemui.media.MediaCarouselController.Companion.ANIMATION_BASE_DURATION
+import com.android.systemui.media.MediaCarouselController.Companion.DURATION
+import com.android.systemui.media.MediaCarouselController.Companion.PAGINATION_DELAY
+import com.android.systemui.media.MediaCarouselController.Companion.TRANSFORM_BEZIER
+import com.android.systemui.media.MediaHierarchyManager.Companion.LOCATION_QS
 import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.statusbar.notification.collection.provider.OnReorderingAllowedListener
@@ -71,7 +76,6 @@ class MediaCarouselControllerTest : SysuiTestCase() {
     @Mock lateinit var dumpManager: DumpManager
     @Mock lateinit var logger: MediaUiEventLogger
     @Mock lateinit var debugLogger: MediaCarouselControllerLogger
-    @Mock lateinit var mediaPlayer: MediaControlPanel
     @Mock lateinit var mediaViewController: MediaViewController
     @Mock lateinit var smartspaceMediaData: SmartspaceMediaData
     @Captor lateinit var listener: ArgumentCaptor<MediaDataManager.Listener>
@@ -102,8 +106,8 @@ class MediaCarouselControllerTest : SysuiTestCase() {
         verify(mediaDataManager).addListener(capture(listener))
         verify(visualStabilityProvider)
             .addPersistentReorderingAllowedListener(capture(visualStabilityCallback))
-        whenever(mediaControlPanelFactory.get()).thenReturn(mediaPlayer)
-        whenever(mediaPlayer.mediaViewController).thenReturn(mediaViewController)
+        whenever(mediaControlPanelFactory.get()).thenReturn(panel)
+        whenever(panel.mediaViewController).thenReturn(mediaViewController)
         whenever(mediaDataManager.smartspaceMediaData).thenReturn(smartspaceMediaData)
         MediaPlayerData.clear()
     }
@@ -184,6 +188,10 @@ class MediaCarouselControllerTest : SysuiTestCase() {
         for ((index, key) in MediaPlayerData.playerKeys().withIndex()) {
             assertEquals(expected.get(index).first, key.data.notificationKey)
         }
+
+        for ((index, key) in MediaPlayerData.visiblePlayerKeys().withIndex()) {
+            assertEquals(expected.get(index).first, key.data.notificationKey)
+        }
     }
 
     @Test
@@ -199,6 +207,22 @@ class MediaCarouselControllerTest : SysuiTestCase() {
     }
 
     @Test
+    fun testOrderWithSmartspace_prioritized_updatingVisibleMediaPlayers() {
+        testPlayerOrdering()
+
+        // If smartspace is prioritized
+        listener.value.onSmartspaceMediaDataLoaded(
+                SMARTSPACE_KEY,
+                EMPTY_SMARTSPACE_MEDIA_DATA.copy(isActive = true),
+                true
+        )
+
+        // Then it should be shown immediately after any actively playing controls
+        assertTrue(MediaPlayerData.playerKeys().elementAt(2).isSsMediaRec)
+        assertTrue(MediaPlayerData.visiblePlayerKeys().elementAt(2).isSsMediaRec)
+    }
+
+    @Test
     fun testOrderWithSmartspace_notPrioritized() {
         testPlayerOrdering()
 
@@ -211,6 +235,31 @@ class MediaCarouselControllerTest : SysuiTestCase() {
         assertTrue(MediaPlayerData.playerKeys().elementAt(idx).isSsMediaRec)
     }
 
+    @Test
+    fun testPlayingExistingMediaPlayerFromCarousel_visibleMediaPlayersNotUpdated() {
+        testPlayerOrdering()
+        // playing paused player
+        listener.value.onMediaDataLoaded("paused local",
+                "paused local",
+                DATA.copy(active = true, isPlaying = true,
+                        playbackLocation = MediaData.PLAYBACK_LOCAL, resumption = false))
+        listener.value.onMediaDataLoaded("playing local",
+                "playing local",
+                DATA.copy(active = true, isPlaying = false,
+                        playbackLocation = MediaData.PLAYBACK_LOCAL, resumption = true)
+        )
+
+        assertEquals(
+                MediaPlayerData.getMediaPlayerIndex("paused local"),
+                mediaCarouselController.mediaCarouselScrollHandler.visibleMediaIndex
+        )
+        // paused player order should stays the same in visibleMediaPLayer map.
+        // paused player order should be first in mediaPlayer map.
+        assertEquals(
+                MediaPlayerData.visiblePlayerKeys().elementAt(3),
+                MediaPlayerData.playerKeys().elementAt(0)
+        )
+    }
     @Test
     fun testSwipeDismiss_logged() {
         mediaCarouselController.mediaCarouselScrollHandler.dismissCallback.invoke()
@@ -276,6 +325,7 @@ class MediaCarouselControllerTest : SysuiTestCase() {
         verify(logger).logRecommendationRemoved(eq(packageName), eq(instanceId!!))
     }
 
+    @Test
     fun testMediaLoaded_ScrollToActivePlayer() {
         listener.value.onMediaDataLoaded("playing local",
                 null,
@@ -287,9 +337,9 @@ class MediaCarouselControllerTest : SysuiTestCase() {
                 DATA.copy(active = true, isPlaying = false,
                         playbackLocation = MediaData.PLAYBACK_LOCAL, resumption = false))
         // adding a media recommendation card.
-        MediaPlayerData.addMediaRecommendation(SMARTSPACE_KEY, EMPTY_SMARTSPACE_MEDIA_DATA, panel,
-                false, clock)
-        mediaCarouselController.shouldScrollToActivePlayer = true
+        listener.value.onSmartspaceMediaDataLoaded(SMARTSPACE_KEY, EMPTY_SMARTSPACE_MEDIA_DATA,
+                false)
+        mediaCarouselController.shouldScrollToKey = true
         // switching between media players.
         listener.value.onMediaDataLoaded("playing local",
         "playing local",
@@ -309,8 +359,11 @@ class MediaCarouselControllerTest : SysuiTestCase() {
 
     @Test
     fun testMediaLoadedFromRecommendationCard_ScrollToActivePlayer() {
-        MediaPlayerData.addMediaRecommendation(SMARTSPACE_KEY, EMPTY_SMARTSPACE_MEDIA_DATA, panel,
-                false, clock)
+        listener.value.onSmartspaceMediaDataLoaded(
+                SMARTSPACE_KEY,
+                EMPTY_SMARTSPACE_MEDIA_DATA.copy(packageName = "PACKAGE_NAME", isActive = true),
+                false
+        )
         listener.value.onMediaDataLoaded("playing local",
                 null,
                 DATA.copy(active = true, isPlaying = true,
@@ -326,10 +379,12 @@ class MediaCarouselControllerTest : SysuiTestCase() {
 
         // Replaying the same media player one more time.
         // And check that the card stays in its position.
+        mediaCarouselController.shouldScrollToKey = true
         listener.value.onMediaDataLoaded("playing local",
                 null,
                 DATA.copy(active = true, isPlaying = true,
-                        playbackLocation = MediaData.PLAYBACK_LOCAL, resumption = false)
+                        playbackLocation = MediaData.PLAYBACK_LOCAL, resumption = false,
+                        packageName = "PACKAGE_NAME")
         )
         playerIndex = MediaPlayerData.getMediaPlayerIndex("playing local")
         assertEquals(playerIndex, 0)
@@ -397,5 +452,25 @@ class MediaCarouselControllerTest : SysuiTestCase() {
         // mediaCarouselScrollHandler.visibleMediaIndex is unchanged (= 0), and the new player is
         // added to the end because it was active less recently.
         assertEquals(mediaCarouselController.getCurrentVisibleMediaContentIntent(), clickIntent2)
+    }
+
+    @Test
+    fun testSetCurrentState_UpdatePageIndicatorAlphaWhenSquish() {
+        val delta = 0.0001F
+        val paginationSquishMiddle = TRANSFORM_BEZIER.getInterpolation(
+                (PAGINATION_DELAY + DURATION / 2) / ANIMATION_BASE_DURATION)
+        val paginationSquishEnd = TRANSFORM_BEZIER.getInterpolation(
+                (PAGINATION_DELAY + DURATION) / ANIMATION_BASE_DURATION)
+        whenever(mediaHostStatesManager.mediaHostStates)
+            .thenReturn(mutableMapOf(LOCATION_QS to mediaHostState))
+        whenever(mediaHostState.visible).thenReturn(true)
+        mediaCarouselController.currentEndLocation = LOCATION_QS
+        whenever(mediaHostState.squishFraction).thenReturn(paginationSquishMiddle)
+        mediaCarouselController.updatePageIndicatorAlpha()
+        assertEquals(mediaCarouselController.pageIndicator.alpha, 0.5F, delta)
+
+        whenever(mediaHostState.squishFraction).thenReturn(paginationSquishEnd)
+        mediaCarouselController.updatePageIndicatorAlpha()
+        assertEquals(mediaCarouselController.pageIndicator.alpha, 1.0F, delta)
     }
 }

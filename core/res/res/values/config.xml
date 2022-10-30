@@ -658,6 +658,20 @@
         -->
     </integer-array>
 
+    <!-- The device states (supplied by DeviceStateManager) that should be treated as half-folded by
+     the display fold controller. Default is empty. -->
+    <integer-array name="config_halfFoldedDeviceStates">
+        <!-- Example:
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+        -->
+    </integer-array>
+
+    <!-- Indicates whether the window manager reacts to half-fold device states by overriding
+     rotation. -->
+    <bool name="config_windowManagerHalfFoldAutoRotateOverride">false</bool>
+
     <!-- When a device enters any of these states, it should be woken up. States are defined in
          device_state_configuration.xml. -->
     <integer-array name="config_deviceStatesOnWhichToWakeUp">
@@ -687,7 +701,7 @@
 
     <!-- Indicates the time needed to time out the fold animation if the device stops in half folded
          mode. -->
-    <integer name="config_unfoldTransitionHalfFoldedTimeout">600</integer>
+    <integer name="config_unfoldTransitionHalfFoldedTimeout">1000</integer>
 
     <!-- Indicates that the device supports having more than one internal display on at the same
          time. Only applicable to devices with more than one internal display. If this option is
@@ -2433,6 +2447,8 @@
     <integer name="config_attentionMaximumExtension">900000</integer> <!-- 15 minutes.  -->
     <!-- Is the system user the only user allowed to dream. -->
     <bool name="config_dreamsOnlyEnabledForSystemUser">false</bool>
+    <!-- Whether dreams are disabled when ambient mode is suppressed. -->
+    <bool name="config_dreamsDisabledByAmbientModeSuppressionConfig">false</bool>
 
     <!-- Whether to dismiss the active dream when an activity is started. Doesn't apply to
          assistant activities (ACTIVITY_TYPE_ASSISTANT) -->
@@ -2598,6 +2614,9 @@
     <!-- Base "hover slop" value used by ViewConfiguration as a
          movement threshold under which hover is considered "stationary". -->
     <dimen name="config_viewConfigurationHoverSlop">4dp</dimen>
+
+    <!-- Margin around text line bounds where stylus handwriting gestures should be supported. -->
+    <dimen name="config_viewConfigurationHandwritingGestureLineMargin">16dp</dimen>
 
     <!-- Multiplier for gesture thresholds when a MotionEvent classification is ambiguous. -->
     <item name="config_ambiguousGestureMultiplier" format="float" type="dimen">2.0</item>
@@ -3546,9 +3565,9 @@
          config_sidefpsSkipWaitForPowerVendorAcquireMessage -->
     <integer name="config_sidefpsSkipWaitForPowerAcquireMessage">6</integer>
 
-    <!-- This vendor acquired message that will cause the sidefpsKgPowerPress window to be skipped.
-         config_sidefpsSkipWaitForPowerOnFingerUp must be true and
-         config_sidefpsSkipWaitForPowerAcquireMessage must be BIOMETRIC_ACQUIRED_VENDOR == 6. -->
+    <!-- This vendor acquired message will cause the sidefpsKgPowerPress window to be skipped
+         when config_sidefpsSkipWaitForPowerAcquireMessage == 6 (VENDOR) and the vendor acquire
+         message equals this constant -->
     <integer name="config_sidefpsSkipWaitForPowerVendorAcquireMessage">2</integer>
 
     <!-- This config is used to force VoiceInteractionService to start on certain low ram devices.
@@ -5937,7 +5956,12 @@
     -->
     <integer name="config_deviceStateRearDisplay">-1</integer>
 
+    <!-- Whether the lock screen is allowed to run its own live wallpaper,
+         different from the home screen wallpaper. -->
+    <bool name="config_independentLockscreenLiveWallpaper">false</bool>
+
     <!-- Maximum time in millisecs for telephony should wait to deactivate data call
          when user turned off mobile data or data roaming during CIWLAN -->
     <integer name="config_maximumDelayTimeToDeactivateDataCall">7000</integer>
+
 </resources>

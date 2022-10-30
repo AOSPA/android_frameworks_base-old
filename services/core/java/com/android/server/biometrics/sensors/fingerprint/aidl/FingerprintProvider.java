@@ -47,6 +47,7 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.RemoteException;
 import android.os.ServiceManager;
+import android.os.SystemClock;
 import android.os.UserManager;
 import android.util.Slog;
 import android.util.SparseArray;
@@ -328,7 +329,8 @@ public class FingerprintProvider implements IBinder.DeathRecipient, ServiceProvi
                     createLogger(BiometricsProtoEnums.ACTION_UNKNOWN,
                             BiometricsProtoEnums.CLIENT_UNKNOWN),
                     mBiometricContext, hardwareAuthToken,
-                    mSensors.get(sensorId).getLockoutCache(), mLockoutResetDispatcher);
+                    mSensors.get(sensorId).getLockoutCache(), mLockoutResetDispatcher,
+                    Utils.getCurrentStrength(sensorId));
             scheduleForSensor(sensorId, client);
         });
     }
@@ -447,7 +449,9 @@ public class FingerprintProvider implements IBinder.DeathRecipient, ServiceProvi
                     mBiometricContext, isStrongBiometric,
                     mTaskStackListener, mSensors.get(sensorId).getLockoutCache(),
                     mUdfpsOverlayController, mSidefpsController, allowBackgroundAuthentication,
-                    mSensors.get(sensorId).getSensorProperties(), mHandler);
+                    mSensors.get(sensorId).getSensorProperties(), mHandler,
+                    Utils.getCurrentStrength(sensorId),
+                    SystemClock.elapsedRealtimeClock());
             scheduleForSensor(sensorId, client, mBiometricStateCallback);
         });
     }
@@ -702,6 +706,9 @@ public class FingerprintProvider implements IBinder.DeathRecipient, ServiceProvi
         }
         pw.println(dump);
         pw.println("HAL deaths since last reboot: " + performanceTracker.getHALDeathCount());
+        pw.println("---AuthSessionCoordinator logs begin---");
+        pw.println(mBiometricContext.getAuthSessionCoordinator());
+        pw.println("---AuthSessionCoordinator logs end  ---");
 
         mSensors.get(sensorId).getScheduler().dump(pw);
     }

@@ -143,7 +143,6 @@ import android.window.WindowContainerToken;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.ResolverActivity;
 import com.android.internal.protolog.common.ProtoLog;
-import com.android.internal.util.function.pooled.PooledConsumer;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.internal.util.function.pooled.PooledPredicate;
 import com.android.server.LocalServices;
@@ -277,12 +276,16 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             synchronized (mService.mGlobalLock) {
                 try {
                     mTaskSupervisor.beginDeferResume();
-
-                    final PooledConsumer c = PooledLambda.obtainConsumer(
-                            RootWindowContainer::destroyActivity, RootWindowContainer.this,
-                            PooledLambda.__(ActivityRecord.class));
-                    forAllActivities(c);
-                    c.recycle();
+                    forAllActivities(r -> {
+                        if (r.finishing || !r.isDestroyable()) return;
+                        if (DEBUG_SWITCH) {
+                            Slog.v(TAG_SWITCH, "Destroying " + r + " in state " + r.getState()
+                                    + " resumed=" + r.getTask().getTopResumedActivity()
+                                    + " pausing=" + r.getTask().getTopPausingActivity()
+                                    + " for reason " + mDestroyAllActivitiesReason);
+                        }
+                        r.destroyImmediately(mDestroyAllActivitiesReason);
+                    });
                 } finally {
                     mTaskSupervisor.endDeferResume();
                     resumeFocusedTasksTopActivities();
@@ -2028,7 +2031,12 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 // non-fullscreen bounds. Then when this new PIP task exits PIP, it can restore
                 // to its previous freeform bounds.
                 rootTask.setLastNonFullscreenBounds(task.mLastNonFullscreenBounds);
-                rootTask.setBounds(task.getBounds());
+                // When creating a new Task for PiP, set its initial bounds as the TaskFragment in
+                // case the activity is embedded, so that it can be animated to PiP window from the
+                // current bounds.
+                // Use Task#setBoundsUnchecked to skip checking windowing mode as the windowing mode
+                // will be updated later after this is collected in transition.
+                rootTask.setBoundsUnchecked(r.getTaskFragment().getBounds());
 
                 // Move the last recents animation transaction from original task to the new one.
                 if (task.mLastRecentsAnimationTransaction != null) {
@@ -2528,28 +2536,21 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         info.childTaskUserIds = new int[numTasks];
         final int[] currentIndex = {0};
 
-        final PooledConsumer c = PooledLambda.obtainConsumer(
-                RootWindowContainer::processTaskForTaskInfo, PooledLambda.__(Task.class), info,
-                currentIndex);
-        task.forAllLeafTasks(c, false /* traverseTopToBottom */);
-        c.recycle();
+        task.forAllLeafTasks(t -> {
+            int i = currentIndex[0];
+            info.childTaskIds[i] = t.mTaskId;
+            info.childTaskNames[i] = t.origActivity != null ? t.origActivity.flattenToString()
+                    : t.realActivity != null ? t.realActivity.flattenToString()
+                    : t.getTopNonFinishingActivity() != null
+                    ? t.getTopNonFinishingActivity().packageName : "unknown";
+            info.childTaskBounds[i] = t.mAtmService.getTaskBounds(t.mTaskId);
+            info.childTaskUserIds[i] = t.mUserId;
+            currentIndex[0] = ++i;
+        }, false /* traverseTopToBottom */);
 
         final ActivityRecord top = task.topRunningActivity();
         info.topActivity = top != null ? top.intent.getComponent() : null;
         return info;
-    }
-
-    private static void processTaskForTaskInfo(
-            Task task, RootTaskInfo info, int[] currentIndex) {
-        int i = currentIndex[0];
-        info.childTaskIds[i] = task.mTaskId;
-        info.childTaskNames[i] = task.origActivity != null ? task.origActivity.flattenToString()
-                : task.realActivity != null ? task.realActivity.flattenToString()
-                        : task.getTopNonFinishingActivity() != null
-                                ? task.getTopNonFinishingActivity().packageName : "unknown";
-        info.childTaskBounds[i] = task.mAtmService.getTaskBounds(task.mTaskId);
-        info.childTaskUserIds[i] = task.mUserId;
-        currentIndex[0] = ++i;
     }
 
     RootTaskInfo getRootTaskInfo(int taskId) {
@@ -2776,35 +2777,16 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     void clearOtherAppTimeTrackers(AppTimeTracker except) {
-        final PooledConsumer c = PooledLambda.obtainConsumer(
-                RootWindowContainer::clearOtherAppTimeTrackers,
-                PooledLambda.__(ActivityRecord.class), except);
-        forAllActivities(c);
-        c.recycle();
-    }
-
-    private static void clearOtherAppTimeTrackers(ActivityRecord r, AppTimeTracker except) {
-        if (r.appTimeTracker != except) {
-            r.appTimeTracker = null;
-        }
+        forAllActivities(r -> {
+            if (r.appTimeTracker != except) {
+                r.appTimeTracker = null;
+            }
+        });
     }
 
     void scheduleDestroyAllActivities(String reason) {
         mDestroyAllActivitiesReason = reason;
         mService.mH.post(mDestroyAllActivitiesRunnable);
-    }
-
-    private void destroyActivity(ActivityRecord r) {
-        if (r.finishing || !r.isDestroyable()) return;
-
-        if (DEBUG_SWITCH) {
-            Slog.v(TAG_SWITCH, "Destroying " + r + " in state " + r.getState()
-                    + " resumed=" + r.getTask().getTopResumedActivity() + " pausing="
-                    + r.getTask().getTopPausingActivity() + " for reason "
-                    + mDestroyAllActivitiesReason);
-        }
-
-        r.destroyImmediately(mDestroyAllActivitiesReason);
     }
 
     // Tries to put all activity tasks to sleep. Returns true if all tasks were
@@ -3203,18 +3185,11 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     void updateActivityApplicationInfo(ApplicationInfo aInfo) {
         final String packageName = aInfo.packageName;
         final int userId = UserHandle.getUserId(aInfo.uid);
-        final PooledConsumer c = PooledLambda.obtainConsumer(
-                RootWindowContainer::updateActivityApplicationInfo,
-                PooledLambda.__(ActivityRecord.class), aInfo, userId, packageName);
-        forAllActivities(c);
-        c.recycle();
-    }
-
-    private static void updateActivityApplicationInfo(
-            ActivityRecord r, ApplicationInfo aInfo, int userId, String packageName) {
-        if (r.mUserId == userId && packageName.equals(r.packageName)) {
-            r.updateApplicationInfo(aInfo);
-        }
+        forAllActivities(r -> {
+            if (r.mUserId == userId && packageName.equals(r.packageName)) {
+                r.updateApplicationInfo(aInfo);
+            }
+        });
     }
 
     void finishVoiceTask(IVoiceInteractionSession session) {

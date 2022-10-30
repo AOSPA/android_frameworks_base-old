@@ -26,6 +26,7 @@ import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.ActivityOptions;
 import android.app.BroadcastOptions;
+import android.app.IApplicationThread;
 import android.app.PendingIntent;
 import android.content.IIntentReceiver;
 import android.content.IIntentSender;
@@ -302,13 +303,21 @@ public final class PendingIntentRecord extends IIntentSender.Stub {
 
     public void send(int code, Intent intent, String resolvedType, IBinder allowlistToken,
             IIntentReceiver finishedReceiver, String requiredPermission, Bundle options) {
-        sendInner(code, intent, resolvedType, allowlistToken, finishedReceiver,
+        sendInner(null, code, intent, resolvedType, allowlistToken, finishedReceiver,
                 requiredPermission, null, null, 0, 0, 0, options);
     }
 
-    public int sendWithResult(int code, Intent intent, String resolvedType, IBinder allowlistToken,
-            IIntentReceiver finishedReceiver, String requiredPermission, Bundle options) {
-        return sendInner(code, intent, resolvedType, allowlistToken, finishedReceiver,
+    public void send(IApplicationThread caller, int code, Intent intent, String resolvedType,
+            IBinder allowlistToken, IIntentReceiver finishedReceiver, String requiredPermission,
+            Bundle options) {
+        sendInner(caller, code, intent, resolvedType, allowlistToken, finishedReceiver,
+                requiredPermission, null, null, 0, 0, 0, options);
+    }
+
+    public int sendWithResult(IApplicationThread caller, int code, Intent intent,
+            String resolvedType, IBinder allowlistToken, IIntentReceiver finishedReceiver,
+            String requiredPermission, Bundle options) {
+        return sendInner(caller, code, intent, resolvedType, allowlistToken, finishedReceiver,
                 requiredPermission, null, null, 0, 0, 0, options);
     }
 
@@ -339,9 +348,19 @@ public final class PendingIntentRecord extends IIntentSender.Stub {
                 ActivityOptions.PENDING_INTENT_BAL_ALLOWED_DEFAULT);
     }
 
+    @Deprecated
     public int sendInner(int code, Intent intent, String resolvedType, IBinder allowlistToken,
             IIntentReceiver finishedReceiver, String requiredPermission, IBinder resultTo,
             String resultWho, int requestCode, int flagsMask, int flagsValues, Bundle options) {
+        return sendInner(null, code, intent, resolvedType, allowlistToken, finishedReceiver,
+                requiredPermission, resultTo, resultWho, requestCode, flagsMask, flagsValues,
+                options);
+    }
+
+    public int sendInner(IApplicationThread caller, int code, Intent intent,
+            String resolvedType, IBinder allowlistToken, IIntentReceiver finishedReceiver,
+            String requiredPermission, IBinder resultTo, String resultWho, int requestCode,
+            int flagsMask, int flagsValues, Bundle options) {
         if (intent != null) intent.setDefusable(true);
         if (options != null) options.setDefusable(true);
 
@@ -424,13 +443,14 @@ public final class PendingIntentRecord extends IIntentSender.Stub {
         // invocation side effects such as allowlisting.
         if (options != null && callingUid != Process.SYSTEM_UID
                 && key.type == ActivityManager.INTENT_SENDER_BROADCAST) {
-            if (options.containsKey(BroadcastOptions.KEY_ALARM_BROADCAST)) {
+            if (options.containsKey(BroadcastOptions.KEY_ALARM_BROADCAST)
+                    || options.containsKey(BroadcastOptions.KEY_INTERACTIVE_BROADCAST)) {
                 if (DEBUG_BROADCAST_LIGHT) {
                     Slog.w(TAG, "Non-system caller " + callingUid
-                            + " may not flag broadcast as alarm-related");
+                            + " may not flag broadcast as alarm or interactive");
                 }
                 throw new SecurityException(
-                        "Non-system callers may not flag broadcasts as alarm-related");
+                        "Non-system callers may not flag broadcasts as alarm or interactive");
             }
         }
 
@@ -468,6 +488,7 @@ public final class PendingIntentRecord extends IIntentSender.Stub {
                 }
             }
 
+            final IApplicationThread finishedReceiverThread = caller;
             boolean sendFinish = finishedReceiver != null;
             int userId = key.userId;
             if (userId == UserHandle.USER_CURRENT) {
@@ -525,9 +546,9 @@ public final class PendingIntentRecord extends IIntentSender.Stub {
                         // that the broadcast be delivered synchronously
                         int sent = controller.mAmInternal.broadcastIntentInPackage(key.packageName,
                                 key.featureId, uid, callingUid, callingPid, finalIntent,
-                                resolvedType, finishedReceiver, code, null, null,
-                                requiredPermission, options, (finishedReceiver != null), false,
-                                userId, allowedByToken || allowTrampoline, bgStartsToken,
+                                resolvedType, finishedReceiverThread, finishedReceiver, code, null,
+                                null, requiredPermission, options, (finishedReceiver != null),
+                                false, userId, allowedByToken || allowTrampoline, bgStartsToken,
                                 null /* broadcastAllowList */);
                         if (sent == ActivityManager.BROADCAST_SUCCESS) {
                             sendFinish = false;

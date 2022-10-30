@@ -91,7 +91,7 @@ import java.util.Set;
  * other hand, not overriding in {@link ComputerLocked} may leave a function walking
  * unstable data.
  */
-@VisibleForTesting(visibility = VisibleForTesting.Visibility.PRIVATE)
+@VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
 public interface Computer extends PackageDataSnapshot {
 
     int getVersion();
@@ -203,6 +203,12 @@ public interface Computer extends PackageDataSnapshot {
     boolean filterSharedLibPackage(@Nullable PackageStateInternal ps, int uid, int userId,
             long flags);
     boolean isCallerSameApp(String packageName, int uid);
+    /**
+     * Returns true if the package name and the uid represent the same app.
+     *
+     * @param resolveIsolatedUid if true, resolves an isolated uid into the real uid.
+     */
+    boolean isCallerSameApp(String packageName, int uid, boolean resolveIsolatedUid);
     boolean isComponentVisibleToInstantApp(@Nullable ComponentName component);
     boolean isComponentVisibleToInstantApp(@Nullable ComponentName component,
             @PackageManager.ComponentType int type);
@@ -479,7 +485,7 @@ public interface Computer extends PackageDataSnapshot {
     boolean getBlockUninstallForUser(@NonNull String packageName, @UserIdInt int userId);
 
     @Nullable
-    String getInstallerPackageName(@NonNull String packageName);
+    String getInstallerPackageName(@NonNull String packageName, @UserIdInt int userId);
 
     @Nullable
     InstallSourceInfo getInstallSourceInfo(@NonNull String packageName);

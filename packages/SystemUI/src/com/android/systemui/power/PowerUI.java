@@ -46,6 +46,7 @@ import com.android.systemui.CoreStartable;
 import com.android.systemui.R;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.SysUISingleton;
+import com.android.systemui.keyguard.WakefulnessLifecycle;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.phone.CentralSurfaces;
 
@@ -59,7 +60,7 @@ import javax.inject.Inject;
 import dagger.Lazy;
 
 @SysUISingleton
-public class PowerUI extends CoreStartable implements CommandQueue.Callbacks {
+public class PowerUI implements CoreStartable, CommandQueue.Callbacks {
 
     static final String TAG = "PowerUI";
     static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
@@ -78,6 +79,7 @@ public class PowerUI extends CoreStartable implements CommandQueue.Callbacks {
 
     private final PowerManager mPowerManager;
     private final WarningsUI mWarnings;
+    private final WakefulnessLifecycle mWakefulnessLifecycle;
     private InattentiveSleepWarningView mOverlayView;
     private final Configuration mLastConfiguration = new Configuration();
     private int mPlugType = 0;
@@ -103,22 +105,37 @@ public class PowerUI extends CoreStartable implements CommandQueue.Callbacks {
 
     private IThermalEventListener mSkinThermalEventListener;
     private IThermalEventListener mUsbThermalEventListener;
+    private final Context mContext;
     private final BroadcastDispatcher mBroadcastDispatcher;
     private final CommandQueue mCommandQueue;
     private final Lazy<Optional<CentralSurfaces>> mCentralSurfacesOptionalLazy;
+    private final WakefulnessLifecycle.Observer mWakefulnessObserver =
+            new WakefulnessLifecycle.Observer() {
+                @Override
+                public void onStartedWakingUp() {
+                    mScreenOffTime = -1;
+                }
+
+                @Override
+                public void onFinishedGoingToSleep() {
+                    mScreenOffTime = SystemClock.elapsedRealtime();
+                }
+            };
 
     @Inject
     public PowerUI(Context context, BroadcastDispatcher broadcastDispatcher,
             CommandQueue commandQueue, Lazy<Optional<CentralSurfaces>> centralSurfacesOptionalLazy,
             WarningsUI warningsUI, EnhancedEstimates enhancedEstimates,
+            WakefulnessLifecycle wakefulnessLifecycle,
             PowerManager powerManager) {
-        super(context);
+        mContext = context;
         mBroadcastDispatcher = broadcastDispatcher;
         mCommandQueue = commandQueue;
         mCentralSurfacesOptionalLazy = centralSurfacesOptionalLazy;
         mWarnings = warningsUI;
         mEnhancedEstimates = enhancedEstimates;
         mPowerManager = powerManager;
+        mWakefulnessLifecycle = wakefulnessLifecycle;
     }
 
     public void start() {
@@ -137,6 +154,7 @@ public class PowerUI extends CoreStartable implements CommandQueue.Callbacks {
                 false, obs, UserHandle.USER_ALL);
         updateBatteryWarningLevels();
         mReceiver.init();
+        mWakefulnessLifecycle.addObserver(mWakefulnessObserver);
 
         // Check to see if we need to let the user know that the phone previously shut down due
         // to the temperature being too high.
@@ -169,7 +187,7 @@ public class PowerUI extends CoreStartable implements CommandQueue.Callbacks {
     }
 
     @Override
-    protected void onConfigurationChanged(Configuration newConfig) {
+    public void onConfigurationChanged(Configuration newConfig) {
         final int mask = ActivityInfo.CONFIG_MCC | ActivityInfo.CONFIG_MNC;
 
         // Safe to modify mLastConfiguration here as it's only updated by the main thread (here).
@@ -232,8 +250,6 @@ public class PowerUI extends CoreStartable implements CommandQueue.Callbacks {
             IntentFilter filter = new IntentFilter();
             filter.addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED);
             filter.addAction(Intent.ACTION_BATTERY_CHANGED);
-            filter.addAction(Intent.ACTION_SCREEN_OFF);
-            filter.addAction(Intent.ACTION_SCREEN_ON);
             filter.addAction(Intent.ACTION_USER_SWITCHED);
             mBroadcastDispatcher.registerReceiverWithHandler(this, filter, mHandler);
             // Force get initial values. Relying on Sticky behavior until API for getting info.
@@ -316,10 +332,6 @@ public class PowerUI extends CoreStartable implements CommandQueue.Callbacks {
                             plugged, bucket);
                 });
 
-            } else if (Intent.ACTION_SCREEN_OFF.equals(action)) {
-                mScreenOffTime = SystemClock.elapsedRealtime();
-            } else if (Intent.ACTION_SCREEN_ON.equals(action)) {
-                mScreenOffTime = -1;
             } else if (Intent.ACTION_USER_SWITCHED.equals(action)) {
                 mWarnings.userSwitched();
             } else {

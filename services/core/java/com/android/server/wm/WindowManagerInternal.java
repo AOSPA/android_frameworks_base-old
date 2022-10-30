@@ -21,6 +21,7 @@ import static java.lang.annotation.RetentionPolicy.SOURCE;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.UserIdInt;
 import android.content.ClipData;
 import android.content.Context;
 import android.graphics.Matrix;
@@ -452,6 +453,15 @@ public abstract class WindowManagerInternal {
     public abstract boolean isKeyguardShowingAndNotOccluded();
 
     /**
+     * Return whether the keyguard is secured by a PIN, pattern or password or a SIM card is
+     * currently locked.
+     *
+     * @param userId User ID to be queried about.
+     * @return {@code true} if a PIN, pattern or password is set or a SIM card is locked.
+     */
+    public abstract boolean isKeyguardSecure(@UserIdInt int userId);
+
+    /**
      * Gets the frame of a window given its token.
      *
      * @param token The token.
@@ -601,15 +611,6 @@ public abstract class WindowManagerInternal {
      */
     public abstract void updateInputMethodTargetWindow(@NonNull IBinder imeToken,
             @NonNull IBinder imeTargetWindowToken);
-
-    /**
-     * Returns the presence of a software navigation bar on the specified display.
-     *
-     * @param displayId the id of display to check if there is a software navigation bar.
-     * @return {@code true} if there is a software navigation. {@code false} otherwise, including
-     *         the case when the specified display does not exist.
-     */
-    public abstract boolean hasNavigationBar(int displayId);
 
     /**
       * Returns true when the hardware keyboard is available.

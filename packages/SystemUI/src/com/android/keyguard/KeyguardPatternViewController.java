@@ -299,12 +299,6 @@ public class KeyguardPatternViewController
     }
 
     @Override
-    public void onResume(int reason) {
-        super.onResume(reason);
-        mMessageAreaController.setMessageIfEmpty(R.string.keyguard_enter_your_pattern);
-    }
-
-    @Override
     public boolean needsInput() {
         return false;
     }
@@ -362,7 +356,7 @@ public class KeyguardPatternViewController
     }
 
     private void displayDefaultSecurityMessage() {
-        mMessageAreaController.setMessage("");
+        mMessageAreaController.setMessage(getInitialMessageResId());
     }
 
     private void handleAttemptLockout(long elapsedRealtimeDeadline) {
@@ -392,5 +386,10 @@ public class KeyguardPatternViewController
             }
 
         }.start();
+    }
+
+    @Override
+    protected int getInitialMessageResId() {
+        return R.string.keyguard_enter_your_pattern;
     }
 }

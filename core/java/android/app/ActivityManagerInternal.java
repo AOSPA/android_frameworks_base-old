@@ -23,6 +23,7 @@ import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager.ProcessCapability;
 import android.app.ActivityManager.RestrictionLevel;
+import android.app.assist.ActivityId;
 import android.content.ComponentName;
 import android.content.IIntentReceiver;
 import android.content.IIntentSender;
@@ -343,7 +344,7 @@ public abstract class ActivityManagerInternal {
      */
     public abstract void updateActivityUsageStats(
             ComponentName activity, @UserIdInt int userId, int event, IBinder appToken,
-            ComponentName taskRoot);
+            ComponentName taskRoot, ActivityId activityId);
     public abstract void updateForegroundTimeIfOnBattery(
             String packageName, int uid, long cpuTimeDiff);
     public abstract void sendForegroundProfileChanged(@UserIdInt int userId);
@@ -419,10 +420,11 @@ public abstract class ActivityManagerInternal {
 
     public abstract int broadcastIntentInPackage(String packageName, @Nullable String featureId,
             int uid, int realCallingUid, int realCallingPid, Intent intent, String resolvedType,
-            IIntentReceiver resultTo, int resultCode, String resultData, Bundle resultExtras,
-            String requiredPermission, Bundle bOptions, boolean serialized, boolean sticky,
-            @UserIdInt int userId, boolean allowBackgroundActivityStarts,
-            @Nullable IBinder backgroundActivityStartsToken, @Nullable int[] broadcastAllowList);
+            IApplicationThread resultToThread, IIntentReceiver resultTo, int resultCode,
+            String resultData, Bundle resultExtras, String requiredPermission, Bundle bOptions,
+            boolean serialized, boolean sticky, @UserIdInt int userId,
+            boolean allowBackgroundActivityStarts, @Nullable IBinder backgroundActivityStartsToken,
+            @Nullable int[] broadcastAllowList);
 
     public abstract ComponentName startServiceInPackage(int uid, Intent service,
             String resolvedType, boolean fgRequired, String callingPackage,

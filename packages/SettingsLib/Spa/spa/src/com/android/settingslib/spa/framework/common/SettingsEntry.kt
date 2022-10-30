@@ -17,16 +17,27 @@
 package com.android.settingslib.spa.framework.common
 
 import android.os.Bundle
-import android.widget.Toast
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.ProvidedValue
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.platform.LocalContext
 import com.android.settingslib.spa.framework.compose.LocalNavController
 
 const val INJECT_ENTRY_NAME = "INJECT"
 const val ROOT_ENTRY_NAME = "ROOT"
+
+interface EntryData {
+    val pageId: String?
+        get() = null
+    val entryId: String?
+        get() = null
+    val isHighlighted: Boolean
+        get() = false
+}
+
+val LocalEntryDataProvider =
+    compositionLocalOf<EntryData> { object : EntryData {} }
 
 /**
  * Defines data of a Settings entry.
@@ -111,17 +122,21 @@ data class SettingsEntry(
 
     @Composable
     fun UiLayout(runtimeArguments: Bundle? = null) {
-        val context = LocalContext.current
+        CompositionLocalProvider(provideLocalEntryData()) {
+            uiLayoutImpl(fullArgument(runtimeArguments))
+        }
+    }
+
+    @Composable
+    fun provideLocalEntryData(): ProvidedValue<EntryData> {
         val controller = LocalNavController.current
-        val highlight = rememberSaveable {
-            mutableStateOf(controller.highlightEntryId == id)
+        return LocalEntryDataProvider provides remember {
+            object : EntryData {
+                override val pageId = containerPage().id
+                override val entryId = id
+                override val isHighlighted = controller.highlightEntryId == id
+            }
         }
-        if (highlight.value) {
-            highlight.value = false
-            // TODO: Add highlight entry logic
-            Toast.makeText(context, "entry $id highlighted", Toast.LENGTH_SHORT).show()
-        }
-        uiLayoutImpl(fullArgument(runtimeArguments))
     }
 }
 

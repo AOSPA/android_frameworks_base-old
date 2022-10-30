@@ -187,7 +187,7 @@ import dagger.Lazy;
  * directly to the keyguard UI is posted to a {@link android.os.Handler} to ensure it is taken on the UI
  * thread of the keyguard.
  */
-public class KeyguardViewMediator extends CoreStartable implements Dumpable,
+public class KeyguardViewMediator implements CoreStartable, Dumpable,
         StatusBarStateController.StateListener {
     private static final int KEYGUARD_DISPLAY_TIMEOUT_DELAY_DEFAULT = 30000;
     private static final long KEYGUARD_DONE_PENDING_TIMEOUT_MS = 3000;
@@ -273,6 +273,7 @@ public class KeyguardViewMediator extends CoreStartable implements Dumpable,
     private boolean mShuttingDown;
     private boolean mDozing;
     private boolean mAnimatingScreenOff;
+    private final Context mContext;
     private final FalsingCollector mFalsingCollector;
 
     /** High level access to the power manager for WakeLocks */
@@ -797,6 +798,8 @@ public class KeyguardViewMediator extends CoreStartable implements Dumpable,
             KeyguardUpdateMonitor.StrongAuthTracker strongAuthTracker =
                     mUpdateMonitor.getStrongAuthTracker();
             int strongAuth = strongAuthTracker.getStrongAuthForUser(currentUser);
+            boolean allowedNonStrongAfterIdleTimeout =
+                    strongAuthTracker.isNonStrongBiometricAllowedAfterIdleTimeout(currentUser);
 
             if (any && !strongAuthTracker.hasUserAuthenticatedSinceBoot()) {
                 return KeyguardSecurityView.PROMPT_REASON_RESTART;
@@ -814,6 +817,8 @@ public class KeyguardViewMediator extends CoreStartable implements Dumpable,
                 return KeyguardSecurityView.PROMPT_REASON_PREPARE_FOR_UPDATE;
             } else if (any && (strongAuth
                     & STRONG_AUTH_REQUIRED_AFTER_NON_STRONG_BIOMETRICS_TIMEOUT) != 0) {
+                return KeyguardSecurityView.PROMPT_REASON_NON_STRONG_BIOMETRIC_TIMEOUT;
+            } else if (any && !allowedNonStrongAfterIdleTimeout) {
                 return KeyguardSecurityView.PROMPT_REASON_NON_STRONG_BIOMETRIC_TIMEOUT;
             }
             return KeyguardSecurityView.PROMPT_REASON_NONE;
@@ -1129,7 +1134,7 @@ public class KeyguardViewMediator extends CoreStartable implements Dumpable,
             DreamOverlayStateController dreamOverlayStateController,
             Lazy<NotificationShadeWindowController> notificationShadeWindowControllerLazy,
             Lazy<ActivityLaunchAnimator> activityLaunchAnimator) {
-        super(context);
+        mContext = context;
         mFalsingCollector = falsingCollector;
         mLockPatternUtils = lockPatternUtils;
         mBroadcastDispatcher = broadcastDispatcher;

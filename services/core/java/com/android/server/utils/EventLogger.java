@@ -17,14 +17,16 @@
 package com.android.server.utils;
 
 import android.annotation.IntDef;
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.util.Log;
 
 import java.io.PrintWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.text.SimpleDateFormat;
+import java.util.ArrayDeque;
 import java.util.Date;
-import java.util.LinkedList;
 import java.util.Locale;
 
 /**
@@ -36,7 +38,7 @@ public class EventLogger {
     private final String mTag;
 
     /** Stores the events using a ring buffer. */
-    private final LinkedList<Event> mEvents;
+    private final ArrayDeque<Event> mEvents;
 
     /**
      * The maximum number of events to keep in {@code mEvents}.
@@ -52,16 +54,18 @@ public class EventLogger {
      * @param tag the string displayed before the recorded log
      */
     public EventLogger(int size, String tag) {
-        mEvents = new LinkedList<Event>();
+        mEvents = new ArrayDeque<>(size);
         mMemSize = size;
         mTag = tag;
     }
 
-    public synchronized void log(Event evt) {
+    /** Enqueues {@code event} to be logged. */
+    public synchronized void log(Event event) {
         if (mEvents.size() >= mMemSize) {
-            mEvents.removeFirst();
+            mEvents.removeLast();
         }
-        mEvents.add(evt);
+
+        mEvents.addFirst(event);
     }
 
     /**
@@ -85,10 +89,17 @@ public class EventLogger {
         log(event.printLog(logType, tag));
     }
 
+    /** Dumps events using {@link PrintWriter}. */
     public synchronized void dump(PrintWriter pw) {
-        pw.println("Events log: " + mTag);
+        dump(pw, "" /* prefix */);
+    }
+
+    /** Dumps events using {@link PrintWriter} with a certain indent. */
+    public synchronized void dump(PrintWriter pw, String prefix) {
+        pw.println(prefix + "Events log: " + mTag);
+        String indent = prefix + "  ";
         for (Event evt : mEvents) {
-            pw.println(evt.toString());
+            pw.println(indent + evt.toString());
         }
     }
 
@@ -176,15 +187,37 @@ public class EventLogger {
     }
 
     public static class StringEvent extends Event {
-        private final String mMsg;
 
-        public StringEvent(String msg) {
-            mMsg = msg;
+        @Nullable
+        private final String mSource;
+
+        private final String mDescription;
+
+        /** Creates event from {@code source} and formatted {@code description} with {@code args} */
+        public static StringEvent from(@NonNull String source,
+                @NonNull String description, Object... args) {
+            return new StringEvent(source, String.format(Locale.US, description, args));
+        }
+
+        public StringEvent(String description) {
+            this(null /* source */, description);
+        }
+
+        public StringEvent(String source, String description) {
+            mSource = source;
+            mDescription = description;
         }
 
         @Override
         public String eventToString() {
-            return mMsg;
+            if (mSource == null) {
+                return mDescription;
+            }
+
+            // [source ] optional description
+            return String.format("[%-40s] %s",
+                    mSource,
+                    (mDescription == null ? "" : mDescription));
         }
     }
 }

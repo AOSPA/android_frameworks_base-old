@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2022 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.android.credentialmanager.getflow
 
 import androidx.compose.foundation.Image
@@ -28,7 +44,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.android.credentialmanager.R
 import com.android.credentialmanager.createflow.CancelButton
 import com.android.credentialmanager.ui.theme.Grey100
@@ -39,8 +54,7 @@ import com.android.credentialmanager.ui.theme.lightBackgroundColor
 @ExperimentalMaterialApi
 @Composable
 fun GetCredentialScreen(
-  viewModel: GetCredentialViewModel = viewModel(),
-  cancelActivity: () -> Unit,
+  viewModel: GetCredentialViewModel,
 ) {
   val state = rememberModalBottomSheetState(
     initialValue = ModalBottomSheetValue.Expanded,
@@ -53,7 +67,7 @@ fun GetCredentialScreen(
       when (uiState.currentScreenState) {
         GetScreenState.CREDENTIAL_SELECTION -> CredentialSelectionCard(
           providerInfo = uiState.selectedProvider!!,
-          onCancel = cancelActivity,
+          onCancel = {viewModel.onCancel()},
           onOptionSelected = {viewModel.onCredentailSelected(it)},
           multiProvider = uiState.providers.size > 1,
           onMoreOptionSelected = {viewModel.onMoreOptionSelected()},
@@ -65,7 +79,7 @@ fun GetCredentialScreen(
   ) {}
   LaunchedEffect(state.currentValue) {
     if (state.currentValue == ModalBottomSheetValue.Hidden) {
-      cancelActivity()
+      viewModel.onCancel()
     }
   }
 }
@@ -74,7 +88,7 @@ fun GetCredentialScreen(
 @Composable
 fun CredentialSelectionCard(
   providerInfo: ProviderInfo,
-  onOptionSelected: (String) -> Unit,
+  onOptionSelected: (Int) -> Unit,
   onCancel: () -> Unit,
   multiProvider: Boolean,
   onMoreOptionSelected: () -> Unit,
@@ -149,7 +163,7 @@ fun CredentialSelectionCard(
 @Composable
 fun CredentialOptionRow(
     credentialOptionInfo: CredentialOptionInfo,
-    onOptionSelected: (String) -> Unit
+    onOptionSelected: (Int) -> Unit
 ) {
   Chip(
     modifier = Modifier.fillMaxWidth(),

@@ -83,6 +83,7 @@ final class BroadcastRecord extends Binder {
     final boolean alarm;    // originated from an alarm triggering?
     final boolean pushMessage; // originated from a push message?
     final boolean pushMessageOverQuota; // originated from a push message which was over quota?
+    final boolean interactive; // originated from user interaction?
     final boolean initialSticky; // initial broadcast from register to sticky?
     final boolean prioritized; // contains more than one priority tranche
     final int userId;       // user id this broadcast was for
@@ -94,6 +95,7 @@ final class BroadcastRecord extends Binder {
     final @Nullable BroadcastOptions options; // BroadcastOptions supplied by caller
     final @NonNull List<Object> receivers;   // contains BroadcastFilter and ResolveInfo
     final @DeliveryState int[] delivery;   // delivery state of each receiver
+    @Nullable ProcessRecord resultToApp; // who receives final result if non-null
     @Nullable IIntentReceiver resultTo; // who receives final result if non-null
     boolean deferred;
     int splitCount;         // refcount for result callback, when split
@@ -345,7 +347,8 @@ final class BroadcastRecord extends Binder {
             boolean _callerInstantApp, String _resolvedType,
             String[] _requiredPermissions, String[] _excludedPermissions,
             String[] _excludedPackages, int _appOp,
-            BroadcastOptions _options, List _receivers, IIntentReceiver _resultTo, int _resultCode,
+            BroadcastOptions _options, List _receivers,
+            ProcessRecord _resultToApp, IIntentReceiver _resultTo, int _resultCode,
             String _resultData, Bundle _resultExtras, boolean _serialized, boolean _sticky,
             boolean _initialSticky, int _userId, boolean allowBackgroundActivityStarts,
             @Nullable IBinder backgroundActivityStartsToken, boolean timeoutExempt,
@@ -372,6 +375,7 @@ final class BroadcastRecord extends Binder {
         delivery = new int[_receivers != null ? _receivers.size() : 0];
         scheduledTime = new long[delivery.length];
         terminalTime = new long[delivery.length];
+        resultToApp = _resultToApp;
         resultTo = _resultTo;
         resultCode = _resultCode;
         resultData = _resultData;
@@ -389,6 +393,7 @@ final class BroadcastRecord extends Binder {
         alarm = options != null && options.isAlarmBroadcast();
         pushMessage = options != null && options.isPushMessagingBroadcast();
         pushMessageOverQuota = options != null && options.isPushMessagingOverQuotaBroadcast();
+        interactive = options != null && options.isInteractiveBroadcast();
         this.filterExtrasForReceiver = filterExtrasForReceiver;
     }
 
@@ -421,6 +426,7 @@ final class BroadcastRecord extends Binder {
         delivery = from.delivery;
         scheduledTime = from.scheduledTime;
         terminalTime = from.terminalTime;
+        resultToApp = from.resultToApp;
         resultTo = from.resultTo;
         enqueueTime = from.enqueueTime;
         enqueueRealTime = from.enqueueRealTime;
@@ -446,6 +452,7 @@ final class BroadcastRecord extends Binder {
         alarm = from.alarm;
         pushMessage = from.pushMessage;
         pushMessageOverQuota = from.pushMessageOverQuota;
+        interactive = from.interactive;
         filterExtrasForReceiver = from.filterExtrasForReceiver;
     }
 
@@ -480,8 +487,8 @@ final class BroadcastRecord extends Binder {
         BroadcastRecord split = new BroadcastRecord(queue, intent, callerApp, callerPackage,
                 callerFeatureId, callingPid, callingUid, callerInstantApp, resolvedType,
                 requiredPermissions, excludedPermissions, excludedPackages, appOp, options,
-                splitReceivers, resultTo, resultCode, resultData, resultExtras, ordered, sticky,
-                initialSticky, userId, allowBackgroundActivityStarts,
+                splitReceivers, resultToApp, resultTo, resultCode, resultData, resultExtras,
+                ordered, sticky, initialSticky, userId, allowBackgroundActivityStarts,
                 mBackgroundActivityStartsToken, timeoutExempt, filterExtrasForReceiver);
         split.enqueueTime = this.enqueueTime;
         split.enqueueRealTime = this.enqueueRealTime;
@@ -559,7 +566,7 @@ final class BroadcastRecord extends Binder {
             final BroadcastRecord br = new BroadcastRecord(queue, intent, callerApp, callerPackage,
                     callerFeatureId, callingPid, callingUid, callerInstantApp, resolvedType,
                     requiredPermissions, excludedPermissions, excludedPackages, appOp, options,
-                    uid2receiverList.valueAt(i), null /* _resultTo */,
+                    uid2receiverList.valueAt(i), null /* _resultToApp */, null /* _resultTo */,
                     resultCode, resultData, resultExtras, ordered, sticky, initialSticky, userId,
                     allowBackgroundActivityStarts, mBackgroundActivityStartsToken, timeoutExempt,
                     filterExtrasForReceiver);
@@ -605,6 +612,18 @@ final class BroadcastRecord extends Binder {
 
     boolean isNoAbort() {
         return (intent.getFlags() & Intent.FLAG_RECEIVER_NO_ABORT) != 0;
+    }
+
+    /**
+     * Core policy determination about this broadcast's delivery prioritization
+     */
+    boolean isUrgent() {
+        // TODO: flags for controlling policy
+        // TODO: migrate alarm-prioritization flag to BroadcastConstants
+        return (isForeground()
+                || interactive
+                || alarm)
+                && receivers.size() == 1;
     }
 
     @NonNull String getHostingRecordTriggerType() {
@@ -790,6 +809,16 @@ final class BroadcastRecord extends Binder {
                 }
             }
         }
+    }
+
+    public boolean matchesDeliveryGroup(@NonNull BroadcastRecord other) {
+        final String key = (options != null) ? options.getDeliveryGroupKey() : null;
+        final String otherKey = (other.options != null)
+                ? other.options.getDeliveryGroupKey() : null;
+        if (key == null && otherKey == null) {
+            return intent.filterEquals(other.intent);
+        }
+        return Objects.equals(key, otherKey);
     }
 
     @Override

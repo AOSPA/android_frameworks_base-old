@@ -16,8 +16,13 @@
 
 package com.android.settingslib.spa.framework.common
 
+import android.app.Activity
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import androidx.navigation.NamedNavArgument
+import com.android.settingslib.spa.framework.BrowseActivity
 import com.android.settingslib.spa.framework.util.isRuntimeParam
 import com.android.settingslib.spa.framework.util.navLink
 import com.android.settingslib.spa.framework.util.normalize
@@ -26,16 +31,16 @@ import com.android.settingslib.spa.framework.util.normalize
  * Defines data to identify a Settings page.
  */
 data class SettingsPage(
-    // The unique id of this page, which is computed by name + normalized(arguments)
+    // The unique id of this page, which is computed by sppName + normalized(arguments)
     val id: String,
 
-    // The name of the page, which is used to compute the unique id, and need to be stable.
-    val name: String,
+    // The name of the page provider, who creates this page. It is used to compute the unique id.
+    val sppName: String,
 
     // The display name of the page, for better readability.
     val displayName: String,
 
-    // Defined parameters of this page.
+    // The parameters defined in its page provider.
     val parameter: List<NamedNavArgument> = emptyList(),
 
     // The arguments of this page.
@@ -50,7 +55,7 @@ data class SettingsPage(
         ): SettingsPage {
             return SettingsPage(
                 id = id(name, parameter, arguments),
-                name = name,
+                sppName = name,
                 displayName = displayName ?: name,
                 parameter = parameter,
                 arguments = arguments
@@ -70,7 +75,7 @@ data class SettingsPage(
 
     // Returns if this Settings Page is created by the given Spp.
     fun isCreateBy(SppName: String): Boolean {
-        return name == SppName
+        return sppName == SppName
     }
 
     fun formatArguments(): String {
@@ -84,7 +89,7 @@ data class SettingsPage(
     }
 
     fun buildRoute(): String {
-        return name + parameter.navLink(arguments)
+        return sppName + parameter.navLink(arguments)
     }
 
     fun hasRuntimeParam(): Boolean {
@@ -92,6 +97,59 @@ data class SettingsPage(
             if (navArg.isRuntimeParam()) return true
         }
         return false
+    }
+
+    fun enterPage() {
+        SpaEnvironmentFactory.instance.logger.event(
+            id,
+            LogEvent.PAGE_ENTER,
+            category = LogCategory.FRAMEWORK,
+            details = formatDisplayTitle()
+        )
+    }
+
+    fun leavePage() {
+        SpaEnvironmentFactory.instance.logger.event(
+            id,
+            LogEvent.PAGE_LEAVE,
+            category = LogCategory.FRAMEWORK,
+            details = formatDisplayTitle()
+        )
+    }
+
+    fun createBrowseIntent(
+        context: Context?,
+        browseActivityClass: Class<out Activity>?,
+        entryId: String? = null
+    ): Intent? {
+        if (!isBrowsable(context, browseActivityClass)) return null
+        return Intent().setComponent(ComponentName(context!!, browseActivityClass!!))
+            .apply {
+                putExtra(BrowseActivity.KEY_DESTINATION, buildRoute())
+                if (entryId != null) {
+                    putExtra(BrowseActivity.KEY_HIGHLIGHT_ENTRY, entryId)
+                }
+            }
+    }
+
+    fun createBrowseAdbCommand(
+        context: Context?,
+        browseActivityClass: Class<out Activity>?,
+        entryId: String? = null
+    ): String? {
+        if (!isBrowsable(context, browseActivityClass)) return null
+        val packageName = context!!.packageName
+        val activityName = browseActivityClass!!.name.replace(packageName, "")
+        val destinationParam = " -e ${BrowseActivity.KEY_DESTINATION} ${buildRoute()}"
+        val highlightParam =
+            if (entryId != null) " -e ${BrowseActivity.KEY_HIGHLIGHT_ENTRY} $entryId" else ""
+        return "adb shell am start -n $packageName/$activityName$destinationParam$highlightParam"
+    }
+
+    fun isBrowsable(context: Context?, browseActivityClass: Class<out Activity>?): Boolean {
+        return context != null &&
+            browseActivityClass != null &&
+            !hasRuntimeParam()
     }
 }
 

@@ -86,6 +86,7 @@ import android.os.RemoteCallback;
 import android.os.RemoteException;
 import android.os.SELinux;
 import android.os.ServiceManager;
+import android.os.SystemConfigManager;
 import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
@@ -110,11 +111,10 @@ import com.android.internal.content.PackageMonitor;
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.providers.settings.SettingsState.Setting;
-import com.android.server.SystemConfig;
-
-import com.google.android.collect.Sets;
 
 import libcore.util.HexEncoding;
+
+import com.google.android.collect.Sets;
 
 import java.io.File;
 import java.io.FileDescriptor;
@@ -368,6 +368,8 @@ public class SettingsProvider extends ContentProvider {
     // We have to call in the package manager with no lock held,
     private volatile IPackageManager mPackageManager;
 
+    private volatile SystemConfigManager mSysConfigManager;
+
     @GuardedBy("mLock")
     private boolean mSyncConfigDisabledUntilReboot;
 
@@ -397,6 +399,7 @@ public class SettingsProvider extends ContentProvider {
         synchronized (mLock) {
             mUserManager = UserManager.get(getContext());
             mPackageManager = AppGlobals.getPackageManager();
+            mSysConfigManager = getContext().getSystemService(SystemConfigManager.class);
             mHandlerThread = new HandlerThread(LOG_TAG,
                     Process.THREAD_PRIORITY_BACKGROUND);
             mHandlerThread.start();
@@ -3656,7 +3659,7 @@ public class SettingsProvider extends ContentProvider {
         }
 
         private final class UpgradeController {
-            private static final int SETTINGS_VERSION = 210;
+            private static final int SETTINGS_VERSION = 211;
 
             private final int mUserId;
 
@@ -3875,8 +3878,7 @@ public class SettingsProvider extends ContentProvider {
                     Setting currentSetting = secureSettings.getSettingLocked(
                             Settings.Secure.ENABLED_VR_LISTENERS);
                     if (currentSetting.isNull()) {
-                        ArraySet<ComponentName> l =
-                                SystemConfig.getInstance().getDefaultVrComponents();
+                        List<ComponentName> l = mSysConfigManager.getDefaultVrComponents();
 
                         if (l != null && !l.isEmpty()) {
                             StringBuilder b = new StringBuilder();
@@ -5539,7 +5541,17 @@ public class SettingsProvider extends ContentProvider {
                     // removed now that feature is enabled for everyone
                     currentVersion = 210;
                 }
-
+                if (currentVersion == 210) {
+                    final SettingsState secureSettings = getSecureSettingsLocked(userId);
+                    final int defaultValueVibrateIconEnabled = getContext().getResources()
+                            .getInteger(R.integer.def_statusBarVibrateIconEnabled);
+                    secureSettings.insertSettingOverrideableByRestoreLocked(
+                            Secure.STATUS_BAR_SHOW_VIBRATE_ICON,
+                            String.valueOf(defaultValueVibrateIconEnabled),
+                            null /* tag */, true /* makeDefault */,
+                            SettingsState.SYSTEM_PACKAGE_NAME);
+                    currentVersion = 211;
+                }
                 // vXXX: Add new settings above this point.
 
                 if (currentVersion != newVersion) {

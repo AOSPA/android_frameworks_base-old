@@ -2008,7 +2008,6 @@
   <java-symbol type="color" name="config_defaultNotificationColor" />
   <java-symbol type="color" name="decor_view_status_guard" />
   <java-symbol type="color" name="decor_view_status_guard_light" />
-  <java-symbol type="drawable" name="ic_notification_ime_default" />
   <java-symbol type="drawable" name="ic_menu_refresh" />
   <java-symbol type="drawable" name="ic_settings" />
   <java-symbol type="drawable" name="ic_voice_search" />
@@ -2252,6 +2251,7 @@
   <java-symbol type="integer" name="config_dreamsBatteryLevelMinimumWhenNotPowered" />
   <java-symbol type="integer" name="config_dreamsBatteryLevelDrainCutoff" />
   <java-symbol type="string" name="config_dreamsDefaultComponent" />
+  <java-symbol type="bool" name="config_dreamsDisabledByAmbientModeSuppressionConfig" />
   <java-symbol type="bool" name="config_dreamsOnlyEnabledForSystemUser" />
   <java-symbol type="array" name="config_supportedDreamComplications" />
   <java-symbol type="array" name="config_disabledDreamComponents" />
@@ -4043,6 +4043,8 @@
 
   <!-- For Foldables -->
   <java-symbol type="array" name="config_foldedDeviceStates" />
+  <java-symbol type="array" name="config_halfFoldedDeviceStates" />
+  <java-symbol type="bool" name="config_windowManagerHalfFoldAutoRotateOverride" />
   <java-symbol type="array" name="config_deviceStatesOnWhichToWakeUp" />
   <java-symbol type="array" name="config_deviceStatesOnWhichToSleep" />
   <java-symbol type="string" name="config_foldedArea" />
@@ -4916,6 +4918,7 @@
   <java-symbol type="array" name="config_deviceStatesAvailableForAppRequests" />
   <java-symbol type="array" name="config_serviceStateLocationAllowedPackages" />
   <java-symbol type="integer" name="config_deviceStateRearDisplay"/>
+  <java-symbol type="bool" name="config_independentLockscreenLiveWallpaper"/>
 
   <!-- For app language picker -->
   <java-symbol type="string" name="system_locale_title" />

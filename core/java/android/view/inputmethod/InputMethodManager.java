@@ -33,8 +33,6 @@ import static android.view.inputmethod.InputMethodManagerProto.FULLSCREEN_MODE;
 import static android.view.inputmethod.InputMethodManagerProto.SERVED_CONNECTING;
 
 import static com.android.internal.inputmethod.StartInputReason.BOUND_TO_IMMS;
-import static com.android.internal.inputmethod.StartInputReason.WINDOW_FOCUS_GAIN_REPORT_WITHOUT_CONNECTION;
-import static com.android.internal.inputmethod.StartInputReason.WINDOW_FOCUS_GAIN_REPORT_WITH_CONNECTION;
 
 import android.Manifest;
 import android.annotation.DisplayContext;
@@ -46,6 +44,7 @@ import android.annotation.RequiresFeature;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
+import android.annotation.UiThread;
 import android.annotation.UserIdInt;
 import android.app.ActivityThread;
 import android.compat.annotation.ChangeId;
@@ -79,6 +78,7 @@ import android.text.TextUtils;
 import android.text.style.SuggestionSpan;
 import android.util.BoostFramework;
 import android.util.Log;
+import android.util.Pair;
 import android.util.Pools.Pool;
 import android.util.Pools.SimplePool;
 import android.util.PrintWriterPrinter;
@@ -95,6 +95,7 @@ import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewRootImpl;
 import android.view.WindowInsets;
+import android.view.WindowManager;
 import android.view.WindowManager.LayoutParams.SoftInputModeFlags;
 import android.view.autofill.AutofillId;
 import android.view.autofill.AutofillManager;
@@ -471,6 +472,22 @@ public final class InputMethodManager {
     // -----------------------------------------------------------
 
     /**
+     * This is the view that should currently be served by an input method,
+     * regardless of the state of setting that up.
+     */
+    @Nullable
+    @GuardedBy("mH")
+    private View mServedView;
+
+    /**
+     * This is the next view that will be served by the input method, when
+     * we get around to updating things.
+     */
+    @Nullable
+    @GuardedBy("mH")
+    private View mNextServedView;
+
+    /**
      * This is the root view of the overall window that currently has input
      * method focus.
      */
@@ -637,6 +654,7 @@ public final class InputMethodManager {
     private static final int MSG_REPORT_FULLSCREEN_MODE = 10;
     private static final int MSG_BIND_ACCESSIBILITY_SERVICE = 11;
     private static final int MSG_UNBIND_ACCESSIBILITY_SERVICE = 12;
+    private static final int MSG_SET_INTERACTIVE = 13;
     private static final int MSG_UPDATE_VIRTUAL_DISPLAY_TO_SCREEN_MATRIX = 30;
     private static final int MSG_ON_SHOW_REQUESTED = 31;
 
@@ -705,8 +723,7 @@ public final class InputMethodManager {
             if (mCurRootView == null) {
                 return null;
             }
-            final View servedView = mCurRootView.getImeFocusController().getServedViewLocked();
-            return servedView != null ? servedView.getContext() : null;
+            return mServedView != null ? mServedView.getContext() : null;
         }
     }
 
@@ -727,79 +744,36 @@ public final class InputMethodManager {
 
     private final class DelegateImpl implements
             ImeFocusController.InputMethodManagerDelegate {
-        /**
-         * Used by {@link ImeFocusController} to start input connection.
-         */
+
         @Override
-        public boolean startInput(@StartInputReason int startInputReason, View focusedView,
-                @StartInputFlags int startInputFlags, @SoftInputModeFlags int softInputMode,
-                int windowFlags) {
-            ImeTracing.getInstance().triggerClientDump(
-                    "InputMethodManager.DelegateImpl#startInput", InputMethodManager.this,
-                    null /* icProto */);
-
-            if (isImeBoostPropertyRead == false) {
-                mPerfBoost = new BoostFramework();
-
-                if (mPerfBoost != null) {
-                    IME_BOOST_ENABLED = Boolean.parseBoolean(mPerfBoost.perfGetProp("ro.vendor.qti.sys.fw.use_ime_boost", "false"));
-                }
-                isImeBoostPropertyRead = true;
-            }
-
-            if (IME_BOOST_ENABLED == true && mPerfBoost != null) {
-                mPerfBoost.perfEvent(BoostFramework.VENDOR_HINT_IME_LAUNCH_EVENT, null);
-            }
-            return startInputOnWindowFocusGainInternal(startInputReason, focusedView,
-                    startInputFlags, softInputMode, windowFlags);
-        }
-
-        /**
-         * Used by {@link ImeFocusController} to finish input connection.
-         */
-        @Override
-        public void finishInput() {
-            ImeTracing.getInstance().triggerClientDump(
-                    "InputMethodManager.DelegateImpl#finishInput", InputMethodManager.this,
-                    null /* icProto */);
+        public void onPreWindowGainedFocus(ViewRootImpl viewRootImpl) {
             synchronized (mH) {
-                finishInputLocked();
+                setCurrentRootViewLocked(viewRootImpl);
             }
         }
 
-        /**
-         * Used by {@link ImeFocusController} to finish input connection and callback
-         * {@link InputMethodService#onFinishInput()}.
-         *
-         * This method is especially for when ImeFocusController received device screen-off event to
-         * ensure the entire finish input connection and the connection lifecycle callback to
-         * IME can be done for security concern.
-         */
         @Override
-        public void finishInputAndReportToIme() {
+        public void onPostWindowGainedFocus(View viewForWindowFocus,
+                @NonNull WindowManager.LayoutParams windowAttribute) {
+            boolean forceFocus = false;
             synchronized (mH) {
-                finishInputLocked();
-                if (isImeSessionAvailableLocked()) {
-                    mCurBindState.mImeSession.finishInput();
+                // Update mNextServedView when focusedView changed.
+                onViewFocusChangedInternal(viewForWindowFocus, true);
+
+                // Starting new input when the next focused view is same as served view but the
+                // currently active connection (if any) is not associated with it.
+                final boolean nextFocusIsServedView = mServedView == viewForWindowFocus;
+
+                if (nextFocusIsServedView
+                        && !hasActiveInputConnectionInternal(viewForWindowFocus)) {
+                    forceFocus = true;
                 }
-                forAccessibilitySessionsLocked(
-                        IAccessibilityInputMethodSessionInvoker::finishInput);
             }
+            startInputOnWindowFocusGain(viewForWindowFocus,
+                    windowAttribute.softInputMode, windowAttribute.flags, forceFocus);
         }
 
-        /**
-         * Used by {@link ImeFocusController} to hide current input method editor.
-         */
-        @Override
-        public void closeCurrentIme() {
-            closeCurrentInput();
-        }
-
-        /**
-         * For {@link ImeFocusController} to start input when gaining the window focus.
-         */
-        @Override
-        public void startInputOnWindowFocusGain(View focusedView,
+        private void startInputOnWindowFocusGain(View focusedView,
                 @SoftInputModeFlags int softInputMode, int windowFlags, boolean forceNewFocus) {
             int startInputFlags = getStartInputFlags(focusedView, 0);
             startInputFlags |= StartInputFlags.WINDOW_GAINED_FOCUS;
@@ -808,20 +782,20 @@ public final class InputMethodManager {
                     "InputMethodManager.DelegateImpl#startInputAsyncOnWindowFocusGain",
                     InputMethodManager.this, null /* icProto */);
 
-            final ImeFocusController controller = getFocusController();
-            if (controller == null) {
-                return;
-            }
-
+            boolean checkFocusResult;
             synchronized (mH) {
+                if (mCurRootView == null) {
+                    return;
+                }
                 if (mRestartOnNextWindowFocus) {
                     if (DEBUG) Log.v(TAG, "Restarting due to mRestartOnNextWindowFocus as true");
                     mRestartOnNextWindowFocus = false;
                     forceNewFocus = true;
                 }
+                checkFocusResult = checkFocusInternalLocked(forceNewFocus, mCurRootView);
             }
 
-            if (controller.checkFocus(forceNewFocus, false)) {
+            if (checkFocusResult) {
                 // We need to restart input on the current focus view.  This
                 // should be done in conjunction with telling the system service
                 // about the window gaining focus, to help make the transition
@@ -835,20 +809,13 @@ public final class InputMethodManager {
             synchronized (mH) {
                 // For some reason we didn't do a startInput + windowFocusGain, so
                 // we'll just do a window focus gain and call it a day.
-                View servedView = controller.getServedViewLocked();
-                boolean nextFocusHasConnection = servedView != null && servedView == focusedView
-                        && hasActiveInputConnectionInternal(focusedView);
                 if (DEBUG) {
-                    Log.v(TAG, "Reporting focus gain, without startInput"
-                            + ", nextFocusIsServedView=" + nextFocusHasConnection);
+                    Log.v(TAG, "Reporting focus gain, without startInput");
                 }
 
-                final int startInputReason = nextFocusHasConnection
-                        ? WINDOW_FOCUS_GAIN_REPORT_WITH_CONNECTION
-                        : WINDOW_FOCUS_GAIN_REPORT_WITHOUT_CONNECTION;
                 // ignore the result
                 mServiceInvoker.startInputOrWindowGainedFocus(
-                        startInputReason, mClient,
+                        StartInputReason.WINDOW_FOCUS_GAIN_REPORT_ONLY, mClient,
                         focusedView.getWindowToken(), startInputFlags, softInputMode,
                         windowFlags,
                         null,
@@ -858,59 +825,55 @@ public final class InputMethodManager {
             }
         }
 
-        /**
-         * Used by {@link ImeFocusController} to finish current composing text.
-         */
         @Override
-        public void finishComposingText() {
+        public void onViewFocusChanged(@Nullable View view, boolean hasFocus) {
+            onViewFocusChangedInternal(view, hasFocus);
+        }
+
+        @Override
+        public void onScheduledCheckFocus(ViewRootImpl viewRootImpl) {
             synchronized (mH) {
-                if (mServedInputConnection != null) {
-                    mServedInputConnection.finishComposingTextFromImm();
+                if (!checkFocusInternalLocked(false, viewRootImpl)) {
+                    return;
+                }
+            }
+            startInputOnWindowFocusGainInternal(StartInputReason.SCHEDULED_CHECK_FOCUS,
+                    null /* focusedView */, 0 /* startInputFlags */, 0 /* softInputMode */,
+                    0 /* windowFlags */);
+        }
+
+        @Override
+        public void onViewDetachedFromWindow(View view, ViewRootImpl viewRootImpl) {
+            synchronized (mH) {
+                if (mCurRootView != view.getViewRootImpl()) {
+                    return;
+                }
+                if (mNextServedView == view) {
+                    mNextServedView = null;
+                }
+                if (mServedView == view) {
+                    viewRootImpl.dispatchCheckFocus();
                 }
             }
         }
 
-        /**
-         * Used for {@link ImeFocusController} to set the current focused root view.
-         */
         @Override
-        public void setCurrentRootView(ViewRootImpl rootView) {
+        public void onWindowDismissed(ViewRootImpl viewRootImpl) {
             synchronized (mH) {
-                mImeDispatcher.switchRootView(mCurRootView, rootView);
-                mCurRootView = rootView;
+                if (mCurRootView != viewRootImpl) {
+                    return;
+                }
+                if (mServedView != null) {
+                    finishInputLocked();
+                }
+                setCurrentRootViewLocked(null);
             }
         }
 
-        /**
-         * Used for {@link ImeFocusController} to return if the root view from the
-         * controller is this {@link InputMethodManager} currently focused.
-         * TODO: Address event-order problem when get current root view in multi-threads.
-         */
-        @Override
-        public boolean isCurrentRootView(ViewRootImpl rootView) {
-            synchronized (mH) {
-                return mCurRootView == rootView;
-            }
-        }
-
-        /**
-         * Checks whether the active input connection (if any) is for the given view.
-         *
-         * @see #hasActiveInputConnectionInternal(View)}
-         */
-        @Override
-        public boolean hasActiveConnection(View view) {
-            return hasActiveInputConnectionInternal(view);
-        }
-
-        /**
-         * Returns the {@link InputMethodManager#mH} lock object.
-         * Used for {@link ImeFocusController} to guard the served view being accessed by
-         * {@link InputMethodManager} in different threads.
-         */
-        @Override
-        public Object getLockObject() {
-            return mH;
+        @GuardedBy("mH")
+        private void setCurrentRootViewLocked(ViewRootImpl rootView) {
+            mImeDispatcher.switchRootView(mCurRootView, rootView);
+            mCurRootView = rootView;
         }
     }
 
@@ -922,12 +885,25 @@ public final class InputMethodManager {
     /**
      * Checks whether the active input connection (if any) is for the given view.
      *
+     * <p>Note that {@code view} parameter does not take
+     * {@link View#checkInputConnectionProxy(View)} into account. This method returns {@code true}
+     * when and only when the specified {@code view} is the actual {@link View} instance that is
+     * connected to the IME.</p>
+     *
+     * @param view {@link View} to be checked.
+     * @return {@code true} if {@code view} is currently interacting with IME.
      * @hide
-     * @see #hasActiveInputConnectionInternal(View)}
      */
     @TestApi
     public boolean hasActiveInputConnection(@Nullable View view) {
-        return hasActiveInputConnectionInternal(view);
+        synchronized (mH) {
+            return mCurRootView != null
+                    && view != null
+                    && mServedView == view
+                    && mServedInputConnection != null
+                    && mServedInputConnection.isAssociatedWith(view)
+                    && isImeSessionAvailableLocked();
+        }
     }
 
     /**
@@ -946,7 +922,7 @@ public final class InputMethodManager {
 
             return mServedInputConnection != null
                     && mServedInputConnection.isActive()
-                    && mServedInputConnection.getServedView() == view;
+                    && mServedInputConnection.isAssociatedWith(view);
         }
     }
 
@@ -965,23 +941,12 @@ public final class InputMethodManager {
 
     @GuardedBy("mH")
     private View getServedViewLocked() {
-        return mCurRootView != null ? mCurRootView.getImeFocusController().getServedViewLocked()
-                : null;
+        return mCurRootView != null ? mServedView : null;
     }
 
     @GuardedBy("mH")
     private View getNextServedViewLocked() {
-        return mCurRootView != null ? mCurRootView.getImeFocusController().getNextServedViewLocked()
-                : null;
-    }
-
-    private ImeFocusController getFocusController() {
-        synchronized (mH) {
-            if (mCurRootView != null) {
-                return mCurRootView.getImeFocusController();
-            }
-            return null;
-        }
+        return mCurRootView != null ? mNextServedView : null;
     }
 
     /**
@@ -1141,22 +1106,12 @@ public final class InputMethodManager {
                 case MSG_SET_ACTIVE: {
                     final boolean active = msg.arg1 != 0;
                     final boolean fullscreen = msg.arg2 != 0;
-                    final boolean reportToImeController = msg.obj != null && (boolean) msg.obj;
                     if (DEBUG) {
                         Log.i(TAG, "handleMessage: MSG_SET_ACTIVE " + active + ", was " + mActive);
                     }
                     synchronized (mH) {
                         mActive = active;
                         mFullscreenMode = fullscreen;
-
-                        // Report active state to ImeFocusController to handle IME input
-                        // connection lifecycle callback when it allowed.
-                        final ImeFocusController controller = getFocusController();
-                        final View rootView = mCurRootView != null ? mCurRootView.getView() : null;
-                        if (controller != null && rootView != null && reportToImeController) {
-                            rootView.post(() -> controller.onInteractiveChanged(active));
-                            return;
-                        }
 
                         if (!active) {
                             // Some other client has starting using the IME, so note
@@ -1170,13 +1125,56 @@ public final class InputMethodManager {
                         // Check focus again in case that "onWindowFocus" is called before
                         // handling this message.
                         final View servedView = getServedViewLocked();
-                        if (servedView != null && canStartInput(servedView)) {
-                            if (mCurRootView != null && mCurRootView.getImeFocusController()
-                                    .checkFocus(mRestartOnNextWindowFocus, false)) {
-                                final int reason = active ? StartInputReason.ACTIVATED_BY_IMMS
-                                        : StartInputReason.DEACTIVATED_BY_IMMS;
-                                startInputOnWindowFocusGainInternal(reason, null, 0, 0, 0);
+                        if (servedView == null || !canStartInput(servedView)) {
+                            return;
+                        }
+                        if (mCurRootView == null) {
+                            return;
+                        }
+                        if (!checkFocusInternalLocked(mRestartOnNextWindowFocus, mCurRootView)) {
+                            return;
+                        }
+                        final int reason = active ? StartInputReason.ACTIVATED_BY_IMMS
+                                : StartInputReason.DEACTIVATED_BY_IMMS;
+                        startInputOnWindowFocusGainInternal(reason, null, 0, 0, 0);
+                    }
+                    return;
+                }
+                case MSG_SET_INTERACTIVE: {
+                    final boolean interactive = msg.arg1 != 0;
+                    final boolean fullscreen = msg.arg2 != 0;
+                    if (DEBUG) {
+                        Log.i(TAG, "handleMessage: MSG_SET_INTERACTIVE " + interactive
+                                + ", was " + mActive);
+                    }
+                    synchronized (mH) {
+                        mActive = interactive;
+                        mFullscreenMode = fullscreen;
+                        if (interactive) {
+                            final View rootView =
+                                    mCurRootView != null ? mCurRootView.getView() : null;
+                            if (rootView == null) {
+                                return;
                             }
+                            // Find the next view focus to start the input connection when the
+                            // device was interactive.
+                            final ViewRootImpl currentViewRootImpl = mCurRootView;
+                            rootView.post(() -> {
+                                synchronized (mH) {
+                                    if (mCurRootView != currentViewRootImpl) {
+                                        return;
+                                    }
+                                }
+                                final View focusedView = currentViewRootImpl.getView().findFocus();
+                                onViewFocusChangedInternal(focusedView, focusedView != null);
+                            });
+                        } else {
+                            finishInputLocked();
+                            if (isImeSessionAvailableLocked()) {
+                                mCurBindState.mImeSession.finishInput();
+                            }
+                            forAccessibilitySessionsLocked(
+                                    IAccessibilityInputMethodSessionInvoker::finishInput);
                         }
                     }
                     return;
@@ -1298,9 +1296,14 @@ public final class InputMethodManager {
         }
 
         @Override
-        public void setActive(boolean active, boolean fullscreen, boolean reportToImeController) {
-            mH.obtainMessage(MSG_SET_ACTIVE, active ? 1 : 0, fullscreen ? 1 : 0,
-                    reportToImeController).sendToTarget();
+        public void setActive(boolean active, boolean fullscreen) {
+            mH.obtainMessage(MSG_SET_ACTIVE, active ? 1 : 0, fullscreen ? 1 : 0).sendToTarget();
+        }
+
+        @Override
+        public void setInteractive(boolean interactive, boolean fullscreen) {
+            mH.obtainMessage(MSG_SET_INTERACTIVE, interactive ? 1 : 0, fullscreen ? 1 : 0)
+                    .sendToTarget();
         }
 
         @Override
@@ -1721,7 +1724,7 @@ public final class InputMethodManager {
     public boolean isAcceptingText() {
         checkFocus();
         synchronized (mH) {
-            return mServedInputConnection != null && !mServedInputConnection.isFinished();
+            return mServedInputConnection != null;
         }
     }
 
@@ -1821,8 +1824,12 @@ public final class InputMethodManager {
     @GuardedBy("mH")
     void finishInputLocked() {
         mVirtualDisplayToScreenMatrix = null;
-        final ImeFocusController controller = getFocusController();
-        final View clearedView = controller != null ? controller.clearServedViewsLocked() : null;
+        View clearedView = null;
+        mNextServedView = null;
+        if (mServedView != null) {
+            clearedView = mServedView;
+            mServedView = null;
+        }
         if (clearedView != null) {
             if (DEBUG) {
                 Log.v(TAG, "FINISH INPUT: mServedView="
@@ -2344,8 +2351,7 @@ public final class InputMethodManager {
     }
 
     /**
-     * Called when {@link DelegateImpl#startInput}, {@link #restartInput(View)},
-     * {@link #MSG_BIND} or {@link #MSG_UNBIND}.
+     * Starts an input connection from the served view that gains the window focus.
      * Note that this method should *NOT* be called inside of {@code mH} lock to prevent start input
      * background thread may blocked by other methods which already inside {@code mH} lock.
      */
@@ -2403,24 +2409,9 @@ public final class InputMethodManager {
         // Okay we are now ready to call into the served view and have it
         // do its stuff.
         // Life is good: let's hook everything up!
-        EditorInfo editorInfo = new EditorInfo();
-        // Note: Use Context#getOpPackageName() rather than Context#getPackageName() so that the
-        // system can verify the consistency between the uid of this process and package name passed
-        // from here. See comment of Context#getOpPackageName() for details.
-        editorInfo.packageName = view.getContext().getOpPackageName();
-        editorInfo.autofillId = view.getAutofillId();
-        editorInfo.fieldId = view.getId();
-        InputConnection ic = view.onCreateInputConnection(editorInfo);
-        if (DEBUG) Log.v(TAG, "Starting input: editorInfo=" + editorInfo + " ic=" + ic);
-
-        // Clear autofill and field ids if a connection could not be established.
-        // This ensures that even disconnected EditorInfos have well-defined attributes,
-        // making them consistently and straightforwardly comparable.
-        if (ic == null) {
-            editorInfo.autofillId = AutofillId.NO_AUTOFILL_ID;
-            editorInfo.fieldId = 0;
-        }
-
+        final Pair<InputConnection, EditorInfo> connectionPair = createInputConnection(view);
+        final InputConnection ic = connectionPair.first;
+        final EditorInfo editorInfo = connectionPair.second;
         final Handler icHandler;
         InputBindResult res = null;
         synchronized (mH) {
@@ -2668,17 +2659,89 @@ public final class InputMethodManager {
     }
 
     /**
-     * Check the next served view from {@link ImeFocusController} if needs to start input.
      * Note that this method should *NOT* be called inside of {@code mH} lock to prevent start input
      * background thread may blocked by other methods which already inside {@code mH} lock.
      * @hide
      */
     @UnsupportedAppUsage
     public void checkFocus() {
-        final ImeFocusController controller = getFocusController();
-        if (controller != null) {
-            controller.checkFocus(false /* forceNewFocus */, true /* startInput */);
+        synchronized (mH) {
+            if (mCurRootView == null) {
+                return;
+            }
+            if (!checkFocusInternalLocked(false /* forceNewFocus */, mCurRootView)) {
+                return;
+            }
         }
+        startInputOnWindowFocusGainInternal(StartInputReason.CHECK_FOCUS,
+                null /* focusedView */,
+                0 /* startInputFlags */, 0 /* softInputMode */, 0 /* windowFlags */);
+    }
+
+    /**
+     * Check the next served view if needs to start input.
+     */
+    @GuardedBy("mH")
+    private boolean checkFocusInternalLocked(boolean forceNewFocus, ViewRootImpl viewRootImpl) {
+        if (mCurRootView != viewRootImpl) {
+            return false;
+        }
+        if (mServedView == mNextServedView && !forceNewFocus) {
+            return false;
+        }
+        if (DEBUG) {
+            Log.v(TAG, "checkFocus: view=" + mServedView
+                    + " next=" + mNextServedView
+                    + " force=" + forceNewFocus
+                    + " package="
+                    + (mServedView != null ? mServedView.getContext().getPackageName()
+                    : "<none>"));
+        }
+        // Close the connection when no next served view coming.
+        if (mNextServedView == null) {
+            finishInputLocked();
+            closeCurrentInput();
+            return false;
+        }
+        mServedView = mNextServedView;
+        if (mServedInputConnection != null) {
+            mServedInputConnection.finishComposingTextFromImm();
+        }
+        return true;
+    }
+
+    @UiThread
+    private void onViewFocusChangedInternal(@Nullable View view, boolean hasFocus) {
+        if (view == null || view.isTemporarilyDetached()) {
+            return;
+        }
+        final ViewRootImpl viewRootImpl = view.getViewRootImpl();
+        synchronized (mH) {
+            if (mCurRootView != viewRootImpl) {
+                return;
+            }
+            if (!view.hasImeFocus() || !view.hasWindowFocus()) {
+                return;
+            }
+            if (DEBUG) {
+                Log.d(TAG, "onViewFocusChangedInternal, view="
+                        + InputMethodDebug.dumpViewInfo(view));
+            }
+
+            // We don't need to track the next served view when the view lost focus here
+            // because:
+            // 1) The current view focus may be cleared temporary when in touch mode, closing
+            //    input at this moment isn't the right way.
+            // 2) We only care about the served view change when it focused, since changing
+            //    input connection when the focus target changed is reasonable.
+            // 3) Setting the next served view as null when no more served view should be
+            //    handled in other special events (e.g. view detached from window or the window
+            //    dismissed).
+            if (hasFocus) {
+                mNextServedView = view;
+            }
+        }
+        viewRootImpl.dispatchCheckFocus();
     }
 
     @UnsupportedAppUsage
@@ -3960,5 +4023,28 @@ public final class InputMethodManager {
         for (int i = 0; i < mAccessibilityInputMethodSession.size(); i++) {
             consumer.accept(mAccessibilityInputMethodSession.valueAt(i));
         }
+    }
+
+    @UiThread
+    private static Pair<InputConnection, EditorInfo> createInputConnection(
+            @NonNull View servedView) {
+        final EditorInfo editorInfo = new EditorInfo();
+        // Note: Use Context#getOpPackageName() rather than Context#getPackageName() so that the
+        // system can verify the consistency between the uid of this process and package name passed
+        // from here. See comment of Context#getOpPackageName() for details.
+        editorInfo.packageName = servedView.getContext().getOpPackageName();
+        editorInfo.autofillId = servedView.getAutofillId();
+        editorInfo.fieldId = servedView.getId();
+        final InputConnection ic = servedView.onCreateInputConnection(editorInfo);
+        if (DEBUG) Log.v(TAG, "Starting input: editorInfo=" + editorInfo + " ic=" + ic);
+
+        // Clear autofill and field ids if a connection could not be established.
+        // This ensures that even disconnected EditorInfos have well-defined attributes,
+        // making them consistently and straightforwardly comparable.
+        if (ic == null) {
+            editorInfo.autofillId = AutofillId.NO_AUTOFILL_ID;
+            editorInfo.fieldId = 0;
+        }
+        return new Pair<>(ic, editorInfo);
     }
 }
