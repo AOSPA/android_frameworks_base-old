@@ -25,6 +25,7 @@ import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.content.Context;
 import android.hardware.biometrics.BiometricsProtoEnums;
+import android.hardware.biometrics.SensorProperties;
 import android.hardware.biometrics.IBiometricSensorReceiver;
 import android.hardware.biometrics.IBiometricService;
 import android.hardware.biometrics.IBiometricServiceLockoutResetCallback;
@@ -66,6 +67,8 @@ import com.android.server.biometrics.sensors.LockoutResetDispatcher;
 import com.android.server.biometrics.sensors.LockoutTracker;
 import com.android.server.biometrics.sensors.face.aidl.FaceProvider;
 import com.android.server.biometrics.sensors.face.hidl.Face10;
+import com.android.server.biometrics.sensors.face.sense.SenseProvider;
+import com.android.server.biometrics.sensors.face.sense.SenseUtils;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -670,6 +673,24 @@ public class FaceService extends SystemService {
             return providers;
         }
 
+        private List<ServiceProvider> getSenseProviders() {
+            final List<ServiceProvider> providers = new ArrayList<>();
+            if (SenseUtils.canUseProvider()) {
+                FaceSensorPropertiesInternal props = new FaceSensorPropertiesInternal(
+                        SenseProvider.DEVICE_ID,
+                        SensorProperties.STRENGTH_WEAK,
+                        1, /** maxEnrollmentsPerUser **/
+                        new ArrayList(),
+                        FaceSensorProperties.TYPE_RGB,
+                        false, /** supportsFaceDetection **/
+                        false, /** supportsSelfIllumination **/
+                        false); /** resetLockoutRequiresChallenge **/
+                SenseProvider provider = new SenseProvider(getContext(), props, mLockoutResetDispatcher);
+                providers.add(provider);
+            }
+            return providers;
+        }
+
         @android.annotation.EnforcePermission(android.Manifest.permission.USE_BIOMETRIC_INTERNAL)
         public void registerAuthenticators(
                 @NonNull List<FaceSensorPropertiesInternal> hidlSensors) {
@@ -683,6 +704,7 @@ public class FaceService extends SystemService {
                                     hidlSensor, mLockoutResetDispatcher));
                 }
                 providers.addAll(getAidlProviders());
+                providers.addAll(getSenseProviders());
                 return providers;
             });
         }
