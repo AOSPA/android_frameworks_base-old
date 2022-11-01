@@ -34,6 +34,7 @@ package android {
     field public static final String BIND_COMPANION_DEVICE_SERVICE = "android.permission.BIND_COMPANION_DEVICE_SERVICE";
     field public static final String BIND_CONDITION_PROVIDER_SERVICE = "android.permission.BIND_CONDITION_PROVIDER_SERVICE";
     field public static final String BIND_CONTROLS = "android.permission.BIND_CONTROLS";
+    field public static final String BIND_CREDENTIAL_PROVIDER_SERVICE = "android.permission.BIND_CREDENTIAL_PROVIDER_SERVICE";
     field public static final String BIND_DEVICE_ADMIN = "android.permission.BIND_DEVICE_ADMIN";
     field public static final String BIND_DREAM_SERVICE = "android.permission.BIND_DREAM_SERVICE";
     field public static final String BIND_INCALL_SERVICE = "android.permission.BIND_INCALL_SERVICE";
@@ -4749,7 +4750,7 @@ package android.app {
     method @Deprecated public int startOp(@NonNull String, int, @NonNull String);
     method public int startOp(@NonNull String, int, @Nullable String, @Nullable String, @Nullable String);
     method @Deprecated public int startOpNoThrow(@NonNull String, int, @NonNull String);
-    method public int startOpNoThrow(@NonNull String, int, @NonNull String, @NonNull String, @Nullable String);
+    method public int startOpNoThrow(@NonNull String, int, @NonNull String, @Nullable String, @Nullable String);
     method public int startProxyOp(@NonNull String, int, @NonNull String, @Nullable String, @Nullable String);
     method public int startProxyOpNoThrow(@NonNull String, int, @NonNull String, @Nullable String, @Nullable String);
     method public void startWatchingActive(@NonNull String[], @NonNull java.util.concurrent.Executor, @NonNull android.app.AppOpsManager.OnOpActiveChangedListener);
@@ -9070,6 +9071,24 @@ package android.companion {
 
 }
 
+package android.companion.virtual {
+
+  public final class VirtualDevice implements android.os.Parcelable {
+    method public int describeContents();
+    method public int getDeviceId();
+    method @Nullable public String getName();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.companion.virtual.VirtualDevice> CREATOR;
+  }
+
+  public final class VirtualDeviceManager {
+    method @NonNull public java.util.List<android.companion.virtual.VirtualDevice> getVirtualDevices();
+    field public static final int DEFAULT_DEVICE_ID = 0; // 0x0
+    field public static final int INVALID_DEVICE_ID = -1; // 0xffffffff
+  }
+
+}
+
 package android.content {
 
   public abstract class AbstractThreadedSyncAdapter {
@@ -9667,6 +9686,7 @@ package android.content {
     method public abstract android.content.Context createConfigurationContext(@NonNull android.content.res.Configuration);
     method @NonNull public android.content.Context createContext(@NonNull android.content.ContextParams);
     method public abstract android.content.Context createContextForSplit(String) throws android.content.pm.PackageManager.NameNotFoundException;
+    method @NonNull public android.content.Context createDeviceContext(int);
     method public abstract android.content.Context createDeviceProtectedStorageContext();
     method @DisplayContext public abstract android.content.Context createDisplayContext(@NonNull android.view.Display);
     method public abstract android.content.Context createPackageContext(String, int) throws android.content.pm.PackageManager.NameNotFoundException;
@@ -9697,6 +9717,7 @@ package android.content {
     method public abstract android.content.ContentResolver getContentResolver();
     method public abstract java.io.File getDataDir();
     method public abstract java.io.File getDatabasePath(String);
+    method public int getDeviceId();
     method public abstract java.io.File getDir(String, int);
     method @Nullable public android.view.Display getDisplay();
     method @Nullable public final android.graphics.drawable.Drawable getDrawable(@DrawableRes int);
@@ -9892,6 +9913,7 @@ package android.content {
     field public static final String USER_SERVICE = "user";
     field public static final String VIBRATOR_MANAGER_SERVICE = "vibrator_manager";
     field @Deprecated public static final String VIBRATOR_SERVICE = "vibrator";
+    field public static final String VIRTUAL_DEVICE_SERVICE = "virtualdevice";
     field public static final String VPN_MANAGEMENT_SERVICE = "vpn_management";
     field @UiContext public static final String WALLPAPER_SERVICE = "wallpaper";
     field public static final String WIFI_AWARE_SERVICE = "wifiaware";
@@ -11596,6 +11618,7 @@ package android.content.pm {
     field public static final String ACTION_SESSION_UPDATED = "android.content.pm.action.SESSION_UPDATED";
     field public static final String EXTRA_OTHER_PACKAGE_NAME = "android.content.pm.extra.OTHER_PACKAGE_NAME";
     field public static final String EXTRA_PACKAGE_NAME = "android.content.pm.extra.PACKAGE_NAME";
+    field public static final String EXTRA_PRE_APPROVAL = "android.content.pm.extra.PRE_APPROVAL";
     field public static final String EXTRA_SESSION = "android.content.pm.extra.SESSION";
     field public static final String EXTRA_SESSION_ID = "android.content.pm.extra.SESSION_ID";
     field public static final String EXTRA_STATUS = "android.content.pm.extra.STATUS";
@@ -11652,6 +11675,7 @@ package android.content.pm {
     method public void removeChildSessionId(int);
     method public void removeSplit(@NonNull String) throws java.io.IOException;
     method public void requestChecksums(@NonNull String, int, @NonNull java.util.List<java.security.cert.Certificate>, @NonNull java.util.concurrent.Executor, @NonNull android.content.pm.PackageManager.OnChecksumsReadyListener) throws java.security.cert.CertificateEncodingException, java.io.FileNotFoundException;
+    method public void requestUserPreapproval(@NonNull android.content.pm.PackageInstaller.PreapprovalDetails, @NonNull android.content.IntentSender);
     method @Deprecated public void setChecksums(@NonNull String, @NonNull java.util.List<android.content.pm.Checksum>, @Nullable byte[]) throws java.io.IOException;
     method public void setStagingProgress(float);
     method public void transfer(@NonNull String) throws android.content.pm.PackageManager.NameNotFoundException;
@@ -19425,9 +19449,30 @@ package android.location {
   public final class GnssCapabilities implements android.os.Parcelable {
     method public int describeContents();
     method public boolean hasAntennaInfo();
+    method public boolean hasGeofencing();
     method @Deprecated public boolean hasGnssAntennaInfo();
+    method public boolean hasLowPowerMode();
+    method public boolean hasMeasurementCorrections();
+    method public boolean hasMeasurementCorrectionsExcessPathLength();
+    method public boolean hasMeasurementCorrectionsForDriving();
+    method public boolean hasMeasurementCorrectionsLosSats();
+    method public boolean hasMeasurementCorrectionsReflectingPlane();
+    method public boolean hasMeasurementCorrelationVectors();
     method public boolean hasMeasurements();
+    method public boolean hasMsa();
+    method public boolean hasMsb();
     method public boolean hasNavigationMessages();
+    method public boolean hasOnDemandTime();
+    method public boolean hasPowerMultibandAcquisition();
+    method public boolean hasPowerMultibandTracking();
+    method public boolean hasPowerOtherModes();
+    method public boolean hasPowerSinglebandAcquisition();
+    method public boolean hasPowerSinglebandTracking();
+    method public boolean hasPowerTotal();
+    method public boolean hasSatelliteBlocklist();
+    method public boolean hasSatellitePvt();
+    method public boolean hasScheduling();
+    method public boolean hasSingleShot();
     method public void writeToParcel(@NonNull android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.location.GnssCapabilities> CREATOR;
   }
@@ -19437,8 +19482,29 @@ package android.location {
     ctor public GnssCapabilities.Builder(@NonNull android.location.GnssCapabilities);
     method @NonNull public android.location.GnssCapabilities build();
     method @NonNull public android.location.GnssCapabilities.Builder setHasAntennaInfo(boolean);
+    method @NonNull public android.location.GnssCapabilities.Builder setHasGeofencing(boolean);
+    method @NonNull public android.location.GnssCapabilities.Builder setHasLowPowerMode(boolean);
+    method @NonNull public android.location.GnssCapabilities.Builder setHasMeasurementCorrections(boolean);
+    method @NonNull public android.location.GnssCapabilities.Builder setHasMeasurementCorrectionsExcessPathLength(boolean);
+    method @NonNull public android.location.GnssCapabilities.Builder setHasMeasurementCorrectionsForDriving(boolean);
+    method @NonNull public android.location.GnssCapabilities.Builder setHasMeasurementCorrectionsLosSats(boolean);
+    method @NonNull public android.location.GnssCapabilities.Builder setHasMeasurementCorrectionsReflectingPlane(boolean);
+    method @NonNull public android.location.GnssCapabilities.Builder setHasMeasurementCorrelationVectors(boolean);
     method @NonNull public android.location.GnssCapabilities.Builder setHasMeasurements(boolean);
+    method @NonNull public android.location.GnssCapabilities.Builder setHasMsa(boolean);
+    method @NonNull public android.location.GnssCapabilities.Builder setHasMsb(boolean);
     method @NonNull public android.location.GnssCapabilities.Builder setHasNavigationMessages(boolean);
+    method @NonNull public android.location.GnssCapabilities.Builder setHasOnDemandTime(boolean);
+    method @NonNull public android.location.GnssCapabilities.Builder setHasPowerMultibandAcquisition(boolean);
+    method @NonNull public android.location.GnssCapabilities.Builder setHasPowerMultibandTracking(boolean);
+    method @NonNull public android.location.GnssCapabilities.Builder setHasPowerOtherModes(boolean);
+    method @NonNull public android.location.GnssCapabilities.Builder setHasPowerSinglebandAcquisition(boolean);
+    method @NonNull public android.location.GnssCapabilities.Builder setHasPowerSinglebandTracking(boolean);
+    method @NonNull public android.location.GnssCapabilities.Builder setHasPowerTotal(boolean);
+    method @NonNull public android.location.GnssCapabilities.Builder setHasSatelliteBlocklist(boolean);
+    method @NonNull public android.location.GnssCapabilities.Builder setHasSatellitePvt(boolean);
+    method @NonNull public android.location.GnssCapabilities.Builder setHasScheduling(boolean);
+    method @NonNull public android.location.GnssCapabilities.Builder setHasSingleShot(boolean);
   }
 
   public final class GnssClock implements android.os.Parcelable {
@@ -23127,6 +23193,7 @@ package android.media {
     method public int describeContents();
     method @Nullable public String getClientPackageName();
     method public int getConnectionState();
+    method @NonNull public java.util.Set<java.lang.String> getDeduplicationIds();
     method @Nullable public CharSequence getDescription();
     method @Nullable public android.os.Bundle getExtras();
     method @NonNull public java.util.List<java.lang.String> getFeatures();
@@ -23160,6 +23227,7 @@ package android.media {
     method @NonNull public android.media.MediaRoute2Info.Builder clearFeatures();
     method @NonNull public android.media.MediaRoute2Info.Builder setClientPackageName(@Nullable String);
     method @NonNull public android.media.MediaRoute2Info.Builder setConnectionState(int);
+    method @NonNull public android.media.MediaRoute2Info.Builder setDeduplicationIds(@NonNull java.util.Set<java.lang.String>);
     method @NonNull public android.media.MediaRoute2Info.Builder setDescription(@Nullable CharSequence);
     method @NonNull public android.media.MediaRoute2Info.Builder setExtras(@Nullable android.os.Bundle);
     method @NonNull public android.media.MediaRoute2Info.Builder setIconUri(@Nullable android.net.Uri);
@@ -39259,6 +39327,7 @@ package android.service.notification {
     field public static final int HINT_HOST_DISABLE_CALL_EFFECTS = 4; // 0x4
     field public static final int HINT_HOST_DISABLE_EFFECTS = 1; // 0x1
     field public static final int HINT_HOST_DISABLE_NOTIFICATION_EFFECTS = 2; // 0x2
+    field public static final String INTENT_CATEGORY_SETTINGS_HOME = "android.service.notification.category.SETTINGS_HOME";
     field public static final int INTERRUPTION_FILTER_ALARMS = 4; // 0x4
     field public static final int INTERRUPTION_FILTER_ALL = 1; // 0x1
     field public static final int INTERRUPTION_FILTER_NONE = 3; // 0x3
@@ -41554,6 +41623,7 @@ package android.telephony {
     field public static final String KEY_DATA_LIMIT_NOTIFICATION_BOOL = "data_limit_notification_bool";
     field public static final String KEY_DATA_LIMIT_THRESHOLD_BYTES_LONG = "data_limit_threshold_bytes_long";
     field public static final String KEY_DATA_RAPID_NOTIFICATION_BOOL = "data_rapid_notification_bool";
+    field public static final String KEY_DATA_SWITCH_VALIDATION_MIN_INTERVAL_MILLIS_LONG = "data_switch_validation_min_gap_long";
     field public static final String KEY_DATA_SWITCH_VALIDATION_TIMEOUT_LONG = "data_switch_validation_timeout_long";
     field public static final String KEY_DATA_WARNING_NOTIFICATION_BOOL = "data_warning_notification_bool";
     field public static final String KEY_DATA_WARNING_THRESHOLD_BYTES_LONG = "data_warning_threshold_bytes_long";
@@ -41724,6 +41794,8 @@ package android.telephony {
     field public static final String KEY_VOICEMAIL_NOTIFICATION_PERSISTENT_BOOL = "voicemail_notification_persistent_bool";
     field public static final String KEY_VOICE_PRIVACY_DISABLE_UI_BOOL = "voice_privacy_disable_ui_bool";
     field public static final String KEY_VOLTE_REPLACEMENT_RAT_INT = "volte_replacement_rat_int";
+    field public static final String KEY_VONR_ENABLED_BOOL = "vonr_enabled_bool";
+    field public static final String KEY_VONR_SETTING_VISIBILITY_BOOL = "vonr_setting_visibility_bool";
     field public static final String KEY_VT_UPGRADE_SUPPORTED_FOR_DOWNGRADED_RTT_CALL_BOOL = "vt_upgrade_supported_for_downgraded_rtt_call";
     field public static final String KEY_VVM_CELLULAR_DATA_REQUIRED_BOOL = "vvm_cellular_data_required_bool";
     field public static final String KEY_VVM_CLIENT_PREFIX_STRING = "vvm_client_prefix_string";
@@ -43486,7 +43558,7 @@ package android.telephony {
     method public void setSubscriptionOverrideUnmetered(int, boolean, @NonNull int[], long);
     method @Deprecated public void setSubscriptionPlans(int, @NonNull java.util.List<android.telephony.SubscriptionPlan>);
     method public void setSubscriptionPlans(int, @NonNull java.util.List<android.telephony.SubscriptionPlan>, long);
-    method @RequiresPermission("android.permission.WRITE_EMBEDDED_SUBSCRIPTIONS") public void switchToSubscription(int, @NonNull android.app.PendingIntent);
+    method @Deprecated @RequiresPermission("android.permission.WRITE_EMBEDDED_SUBSCRIPTIONS") public void switchToSubscription(int, @NonNull android.app.PendingIntent);
     field public static final String ACTION_DEFAULT_SMS_SUBSCRIPTION_CHANGED = "android.telephony.action.DEFAULT_SMS_SUBSCRIPTION_CHANGED";
     field public static final String ACTION_DEFAULT_SUBSCRIPTION_CHANGED = "android.telephony.action.DEFAULT_SUBSCRIPTION_CHANGED";
     field public static final String ACTION_MANAGE_SUBSCRIPTION_PLANS = "android.telephony.action.MANAGE_SUBSCRIPTION_PLANS";
@@ -43773,7 +43845,7 @@ package android.telephony {
     method public void registerTelephonyCallback(int, @NonNull java.util.concurrent.Executor, @NonNull android.telephony.TelephonyCallback);
     method @RequiresPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) public void requestCellInfoUpdate(@NonNull java.util.concurrent.Executor, @NonNull android.telephony.TelephonyManager.CellInfoCallback);
     method @RequiresPermission(allOf={android.Manifest.permission.MODIFY_PHONE_STATE, android.Manifest.permission.ACCESS_FINE_LOCATION}) public android.telephony.NetworkScan requestNetworkScan(android.telephony.NetworkScanRequest, java.util.concurrent.Executor, android.telephony.TelephonyScanManager.NetworkScanCallback);
-    method @Nullable @RequiresPermission(allOf={android.Manifest.permission.MODIFY_PHONE_STATE, android.Manifest.permission.ACCESS_FINE_LOCATION}) public android.telephony.NetworkScan requestNetworkScan(int, @NonNull android.telephony.NetworkScanRequest, @NonNull java.util.concurrent.Executor, @NonNull android.telephony.TelephonyScanManager.NetworkScanCallback);
+    method @Nullable @RequiresPermission(allOf={android.Manifest.permission.MODIFY_PHONE_STATE}) public android.telephony.NetworkScan requestNetworkScan(int, @NonNull android.telephony.NetworkScanRequest, @NonNull java.util.concurrent.Executor, @NonNull android.telephony.TelephonyScanManager.NetworkScanCallback);
     method public void sendDialerSpecialCode(String);
     method public String sendEnvelopeWithStatus(String);
     method @RequiresPermission(android.Manifest.permission.CALL_PHONE) public void sendUssdRequest(String, android.telephony.TelephonyManager.UssdResponseCallback, android.os.Handler);
@@ -48388,9 +48460,9 @@ package android.view {
 
   public static interface GestureDetector.OnGestureListener {
     method public boolean onDown(@NonNull android.view.MotionEvent);
-    method public boolean onFling(@NonNull android.view.MotionEvent, @NonNull android.view.MotionEvent, float, float);
+    method public boolean onFling(@Nullable android.view.MotionEvent, @NonNull android.view.MotionEvent, float, float);
     method public void onLongPress(@NonNull android.view.MotionEvent);
-    method public boolean onScroll(@NonNull android.view.MotionEvent, @NonNull android.view.MotionEvent, float, float);
+    method public boolean onScroll(@Nullable android.view.MotionEvent, @NonNull android.view.MotionEvent, float, float);
     method public void onShowPress(@NonNull android.view.MotionEvent);
     method public boolean onSingleTapUp(@NonNull android.view.MotionEvent);
   }
@@ -48401,9 +48473,9 @@ package android.view {
     method public boolean onDoubleTap(@NonNull android.view.MotionEvent);
     method public boolean onDoubleTapEvent(@NonNull android.view.MotionEvent);
     method public boolean onDown(@NonNull android.view.MotionEvent);
-    method public boolean onFling(@NonNull android.view.MotionEvent, @NonNull android.view.MotionEvent, float, float);
+    method public boolean onFling(@Nullable android.view.MotionEvent, @NonNull android.view.MotionEvent, float, float);
     method public void onLongPress(@NonNull android.view.MotionEvent);
-    method public boolean onScroll(@NonNull android.view.MotionEvent, @NonNull android.view.MotionEvent, float, float);
+    method public boolean onScroll(@Nullable android.view.MotionEvent, @NonNull android.view.MotionEvent, float, float);
     method public void onShowPress(@NonNull android.view.MotionEvent);
     method public boolean onSingleTapConfirmed(@NonNull android.view.MotionEvent);
     method public boolean onSingleTapUp(@NonNull android.view.MotionEvent);
@@ -49358,6 +49430,8 @@ package android.view {
     field public static final int AXIS_GENERIC_7 = 38; // 0x26
     field public static final int AXIS_GENERIC_8 = 39; // 0x27
     field public static final int AXIS_GENERIC_9 = 40; // 0x28
+    field public static final int AXIS_GESTURE_X_OFFSET = 48; // 0x30
+    field public static final int AXIS_GESTURE_Y_OFFSET = 49; // 0x31
     field public static final int AXIS_HAT_X = 15; // 0xf
     field public static final int AXIS_HAT_Y = 16; // 0x10
     field public static final int AXIS_HSCROLL = 10; // 0xa
@@ -50866,6 +50940,7 @@ package android.view {
     method public int getScaledDoubleTapSlop();
     method public int getScaledEdgeSlop();
     method public int getScaledFadingEdgeLength();
+    method public int getScaledHandwritingGestureLineMargin();
     method public int getScaledHandwritingSlop();
     method public float getScaledHorizontalScrollFactor();
     method public int getScaledHoverSlop();

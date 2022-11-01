@@ -401,6 +401,7 @@ package android {
 
   public static final class R.dimen {
     field public static final int config_restrictedIconSize = 17104903; // 0x1050007
+    field public static final int config_viewConfigurationHandwritingGestureLineMargin;
   }
 
   public static final class R.drawable {
@@ -458,6 +459,14 @@ package android {
   public static final class R.style {
     field public static final int Theme_DeviceDefault_DocumentsUI = 16974562; // 0x10302e2
     field public static final int Theme_Leanback_FormWizard = 16974544; // 0x10302d0
+  }
+
+}
+
+package android.accessibilityservice {
+
+  public class AccessibilityServiceInfo implements android.os.Parcelable {
+    method public void setAccessibilityTool(boolean);
   }
 
 }
@@ -2790,8 +2799,6 @@ package android.companion.virtual {
 
   public final class VirtualDeviceManager {
     method @NonNull @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE) public android.companion.virtual.VirtualDeviceManager.VirtualDevice createVirtualDevice(int, @NonNull android.companion.virtual.VirtualDeviceParams);
-    field public static final int DEFAULT_DEVICE_ID = 0; // 0x0
-    field public static final int INVALID_DEVICE_ID = -1; // 0xffffffff
     field public static final int LAUNCH_FAILURE_NO_ACTIVITY = 2; // 0x2
     field public static final int LAUNCH_FAILURE_PENDING_INTENT_CANCELED = 1; // 0x1
     field public static final int LAUNCH_SUCCESS = 0; // 0x0
@@ -2826,6 +2833,7 @@ package android.companion.virtual {
     method public int getDefaultActivityPolicy();
     method public int getDefaultNavigationPolicy();
     method public int getLockState();
+    method @Nullable public String getName();
     method @NonNull public java.util.Set<android.os.UserHandle> getUsersWithMatchingAccounts();
     method public void writeToParcel(@NonNull android.os.Parcel, int);
     field public static final int ACTIVITY_POLICY_DEFAULT_ALLOWED = 0; // 0x0
@@ -2845,6 +2853,7 @@ package android.companion.virtual {
     method @NonNull public android.companion.virtual.VirtualDeviceParams.Builder setBlockedActivities(@NonNull java.util.Set<android.content.ComponentName>);
     method @NonNull public android.companion.virtual.VirtualDeviceParams.Builder setBlockedCrossTaskNavigations(@NonNull java.util.Set<android.content.ComponentName>);
     method @NonNull @RequiresPermission(value=android.Manifest.permission.ADD_ALWAYS_UNLOCKED_DISPLAY, conditional=true) public android.companion.virtual.VirtualDeviceParams.Builder setLockState(int);
+    method @NonNull public android.companion.virtual.VirtualDeviceParams.Builder setName(@NonNull String);
     method @NonNull public android.companion.virtual.VirtualDeviceParams.Builder setUsersWithMatchingAccounts(@NonNull java.util.Set<android.os.UserHandle>);
   }
 
@@ -5471,32 +5480,9 @@ package android.location {
   }
 
   public final class GnssCapabilities implements android.os.Parcelable {
-    method public boolean hasGeofencing();
-    method public boolean hasLowPowerMode();
-    method public boolean hasMeasurementCorrections();
-    method public boolean hasMeasurementCorrectionsExcessPathLength();
-    method public boolean hasMeasurementCorrectionsForDriving();
-    method public boolean hasMeasurementCorrectionsLosSats();
     method @Deprecated public boolean hasMeasurementCorrectionsReflectingPane();
-    method public boolean hasMeasurementCorrectionsReflectingPlane();
-    method public boolean hasMeasurementCorrelationVectors();
     method @Deprecated public boolean hasNavMessages();
     method @Deprecated public boolean hasSatelliteBlacklist();
-    method public boolean hasSatelliteBlocklist();
-    method public boolean hasSatellitePvt();
-  }
-
-  public static final class GnssCapabilities.Builder {
-    method @NonNull public android.location.GnssCapabilities.Builder setHasGeofencing(boolean);
-    method @NonNull public android.location.GnssCapabilities.Builder setHasLowPowerMode(boolean);
-    method @NonNull public android.location.GnssCapabilities.Builder setHasMeasurementCorrections(boolean);
-    method @NonNull public android.location.GnssCapabilities.Builder setHasMeasurementCorrectionsExcessPathLength(boolean);
-    method @NonNull public android.location.GnssCapabilities.Builder setHasMeasurementCorrectionsForDriving(boolean);
-    method @NonNull public android.location.GnssCapabilities.Builder setHasMeasurementCorrectionsLosSats(boolean);
-    method @NonNull public android.location.GnssCapabilities.Builder setHasMeasurementCorrectionsReflectingPlane(boolean);
-    method @NonNull public android.location.GnssCapabilities.Builder setHasMeasurementCorrelationVectors(boolean);
-    method @NonNull public android.location.GnssCapabilities.Builder setHasSatelliteBlocklist(boolean);
-    method @NonNull public android.location.GnssCapabilities.Builder setHasSatellitePvt(boolean);
   }
 
   public final class GnssExcessPathInfo implements android.os.Parcelable {
@@ -6534,6 +6520,7 @@ package android.media.audiopolicy {
     field public static final int MIX_ROLE_PLAYERS = 0; // 0x0
     field public static final int RULE_MATCH_ATTRIBUTE_CAPTURE_PRESET = 2; // 0x2
     field public static final int RULE_MATCH_ATTRIBUTE_USAGE = 1; // 0x1
+    field public static final int RULE_MATCH_AUDIO_SESSION_ID = 16; // 0x10
     field public static final int RULE_MATCH_UID = 4; // 0x4
     field public static final int RULE_MATCH_USERID = 8; // 0x8
   }
@@ -7090,6 +7077,7 @@ package android.media.tv.tuner {
     method @Nullable @RequiresPermission(android.Manifest.permission.ACCESS_TV_SHARED_FILTER) public static android.media.tv.tuner.filter.SharedFilter openSharedFilter(@NonNull android.content.Context, @NonNull String, @NonNull java.util.concurrent.Executor, @NonNull android.media.tv.tuner.filter.SharedFilterCallback);
     method @Nullable public android.media.tv.tuner.filter.TimeFilter openTimeFilter();
     method public int removeOutputPid(@IntRange(from=0) int);
+    method public int requestFrontendById(int);
     method public int scan(@NonNull android.media.tv.tuner.frontend.FrontendSettings, int, @NonNull java.util.concurrent.Executor, @NonNull android.media.tv.tuner.frontend.ScanCallback);
     method public int setLnaEnabled(boolean);
     method public int setMaxNumberOfFrontends(int, @IntRange(from=0) int);
@@ -9299,13 +9287,17 @@ package android.os {
   }
 
   public final class BugreportManager {
+    method @RequiresPermission(android.Manifest.permission.DUMP) @WorkerThread public void preDumpUiData();
     method @RequiresPermission(android.Manifest.permission.DUMP) public void requestBugreport(@NonNull android.os.BugreportParams, @Nullable CharSequence, @Nullable CharSequence);
     method @RequiresPermission(android.Manifest.permission.DUMP) @WorkerThread public void startBugreport(@NonNull android.os.ParcelFileDescriptor, @Nullable android.os.ParcelFileDescriptor, @NonNull android.os.BugreportParams, @NonNull java.util.concurrent.Executor, @NonNull android.os.BugreportManager.BugreportCallback);
   }
 
   public final class BugreportParams {
     ctor public BugreportParams(int);
+    ctor public BugreportParams(int, int);
+    method public int getFlags();
     method public int getMode();
+    field public static final int BUGREPORT_FLAG_USE_PREDUMPED_UI_DATA = 1; // 0x1
     field public static final int BUGREPORT_MODE_FULL = 0; // 0x0
     field public static final int BUGREPORT_MODE_INTERACTIVE = 1; // 0x1
     field public static final int BUGREPORT_MODE_REMOTE = 2; // 0x2
@@ -11162,6 +11154,7 @@ package android.service.contentcapture {
 
   public final class ActivityEvent implements android.os.Parcelable {
     method public int describeContents();
+    method @NonNull public android.app.assist.ActivityId getActivityId();
     method @NonNull public android.content.ComponentName getComponentName();
     method public int getEventType();
     method public void writeToParcel(@NonNull android.os.Parcel, int);
@@ -11988,7 +11981,7 @@ package android.service.voice {
   public final class HotwordAudioStream implements android.os.Parcelable {
     method public int describeContents();
     method @NonNull public android.media.AudioFormat getAudioFormat();
-    method @NonNull public android.os.ParcelFileDescriptor getAudioStream();
+    method @NonNull public android.os.ParcelFileDescriptor getAudioStreamParcelFileDescriptor();
     method @NonNull public android.os.PersistableBundle getMetadata();
     method @Nullable public android.media.AudioTimestamp getTimestamp();
     method public void writeToParcel(@NonNull android.os.Parcel, int);
@@ -11999,7 +11992,7 @@ package android.service.voice {
     ctor public HotwordAudioStream.Builder(@NonNull android.media.AudioFormat, @NonNull android.os.ParcelFileDescriptor);
     method @NonNull public android.service.voice.HotwordAudioStream build();
     method @NonNull public android.service.voice.HotwordAudioStream.Builder setAudioFormat(@NonNull android.media.AudioFormat);
-    method @NonNull public android.service.voice.HotwordAudioStream.Builder setAudioStream(@NonNull android.os.ParcelFileDescriptor);
+    method @NonNull public android.service.voice.HotwordAudioStream.Builder setAudioStreamParcelFileDescriptor(@NonNull android.os.ParcelFileDescriptor);
     method @NonNull public android.service.voice.HotwordAudioStream.Builder setMetadata(@NonNull android.os.PersistableBundle);
     method @NonNull public android.service.voice.HotwordAudioStream.Builder setTimestamp(@NonNull android.media.AudioTimestamp);
   }

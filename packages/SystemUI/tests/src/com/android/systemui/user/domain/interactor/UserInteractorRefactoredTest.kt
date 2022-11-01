@@ -43,6 +43,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -202,6 +203,7 @@ class UserInteractorRefactoredTest : UserInteractorTest() {
     fun `actions - device unlocked`() =
         runBlocking(IMMEDIATE) {
             val userInfos = createUserInfos(count = 2, includeGuest = false)
+
             userRepository.setUserInfos(userInfos)
             userRepository.setSelectedUserInfo(userInfos[0])
             userRepository.setSettings(UserSwitcherSettingsModel(isUserSwitcherEnabled = true))
@@ -215,6 +217,7 @@ class UserInteractorRefactoredTest : UserInteractorTest() {
                         UserActionModel.ENTER_GUEST_MODE,
                         UserActionModel.ADD_USER,
                         UserActionModel.ADD_SUPERVISED_USER,
+                        UserActionModel.NAVIGATE_TO_USER_MANAGEMENT,
                     )
                 )
 
@@ -276,6 +279,7 @@ class UserInteractorRefactoredTest : UserInteractorTest() {
                         UserActionModel.ENTER_GUEST_MODE,
                         UserActionModel.ADD_USER,
                         UserActionModel.ADD_SUPERVISED_USER,
+                        UserActionModel.NAVIGATE_TO_USER_MANAGEMENT,
                     )
                 )
 
@@ -283,7 +287,7 @@ class UserInteractorRefactoredTest : UserInteractorTest() {
         }
 
     @Test
-    fun `actions - device locked - only guest action is shown`() =
+    fun `actions - device locked - only guest action and manage user is shown`() =
         runBlocking(IMMEDIATE) {
             val userInfos = createUserInfos(count = 2, includeGuest = false)
             userRepository.setUserInfos(userInfos)
@@ -293,7 +297,13 @@ class UserInteractorRefactoredTest : UserInteractorTest() {
             var value: List<UserActionModel>? = null
             val job = underTest.actions.onEach { value = it }.launchIn(this)
 
-            assertThat(value).isEqualTo(listOf(UserActionModel.ENTER_GUEST_MODE))
+            assertThat(value)
+                .isEqualTo(
+                    listOf(
+                        UserActionModel.ENTER_GUEST_MODE,
+                        UserActionModel.NAVIGATE_TO_USER_MANAGEMENT
+                    )
+                )
 
             job.cancel()
         }
@@ -330,7 +340,7 @@ class UserInteractorRefactoredTest : UserInteractorTest() {
             underTest.executeAction(UserActionModel.ADD_SUPERVISED_USER)
 
             val intentCaptor = kotlinArgumentCaptor<Intent>()
-            verify(activityStarter).startActivity(intentCaptor.capture(), eq(false))
+            verify(activityStarter).startActivity(intentCaptor.capture(), eq(true))
             assertThat(intentCaptor.value.action)
                 .isEqualTo(UserManager.ACTION_CREATE_SUPERVISED_USER)
             assertThat(intentCaptor.value.`package`).isEqualTo(SUPERVISED_USER_CREATION_APP_PACKAGE)
@@ -342,7 +352,7 @@ class UserInteractorRefactoredTest : UserInteractorTest() {
             underTest.executeAction(UserActionModel.NAVIGATE_TO_USER_MANAGEMENT)
 
             val intentCaptor = kotlinArgumentCaptor<Intent>()
-            verify(activityStarter).startActivity(intentCaptor.capture(), eq(false))
+            verify(activityStarter).startActivity(intentCaptor.capture(), eq(true))
             assertThat(intentCaptor.value.action).isEqualTo(Settings.ACTION_USER_SETTINGS)
         }
 
@@ -561,6 +571,7 @@ class UserInteractorRefactoredTest : UserInteractorTest() {
                         UserActionModel.ENTER_GUEST_MODE,
                         UserActionModel.ADD_USER,
                         UserActionModel.ADD_SUPERVISED_USER,
+                        UserActionModel.NAVIGATE_TO_USER_MANAGEMENT,
                     ),
             )
         }
@@ -705,7 +716,7 @@ class UserInteractorRefactoredTest : UserInteractorTest() {
             name,
             /* iconPath= */ "",
             /* flags= */ if (isPrimary) {
-                UserInfo.FLAG_PRIMARY
+                UserInfo.FLAG_PRIMARY or UserInfo.FLAG_ADMIN
             } else {
                 0
             },

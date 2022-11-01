@@ -19,9 +19,13 @@ import androidx.compose.material.ChipDefaults
 import androidx.compose.material.Divider
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
 import androidx.compose.material.ModalBottomSheetLayout
 import androidx.compose.material.ModalBottomSheetValue
 import androidx.compose.material.Text
+import androidx.compose.material.TopAppBar
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -31,9 +35,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.android.credentialmanager.R
 import com.android.credentialmanager.ui.theme.Grey100
 import com.android.credentialmanager.ui.theme.Shapes
@@ -45,8 +49,7 @@ import com.android.credentialmanager.ui.theme.lightSurface1
 @ExperimentalMaterialApi
 @Composable
 fun CreatePasskeyScreen(
-  viewModel: CreatePasskeyViewModel = viewModel(),
-  cancelActivity: () -> Unit,
+  viewModel: CreatePasskeyViewModel,
 ) {
   val state = rememberModalBottomSheetState(
     initialValue = ModalBottomSheetValue.Expanded,
@@ -59,19 +62,29 @@ fun CreatePasskeyScreen(
       when (uiState.currentScreenState) {
         CreateScreenState.PASSKEY_INTRO -> ConfirmationCard(
           onConfirm = {viewModel.onConfirmIntro()},
-          onCancel = cancelActivity,
+          onCancel = {viewModel.onCancel()},
         )
         CreateScreenState.PROVIDER_SELECTION -> ProviderSelectionCard(
           providerList = uiState.providers,
-          onCancel = cancelActivity,
+          onCancel = {viewModel.onCancel()},
           onProviderSelected = {viewModel.onProviderSelected(it)}
         )
         CreateScreenState.CREATION_OPTION_SELECTION -> CreationSelectionCard(
           providerInfo = uiState.selectedProvider!!,
           onOptionSelected = {viewModel.onCreateOptionSelected(it)},
-          onCancel = cancelActivity,
+          onCancel = {viewModel.onCancel()},
           multiProvider = uiState.providers.size > 1,
-          onMoreOptionSelected = {viewModel.onMoreOptionSelected()}
+          onMoreOptionsSelected = {viewModel.onMoreOptionsSelected(it)}
+        )
+        CreateScreenState.MORE_OPTIONS_SELECTION -> MoreOptionsSelectionCard(
+            providerInfo = uiState.selectedProvider!!,
+            providerList = uiState.providers,
+            onBackButtonSelected = {viewModel.onBackButtonSelected(it)},
+            onOptionSelected = {viewModel.onMoreOptionsRowSelected(it)}
+          )
+        CreateScreenState.MORE_OPTIONS_ROW_INTRO -> MoreOptionsRowIntroCard(
+          providerInfo = uiState.selectedProvider!!,
+          onDefaultOrNotSelected = {viewModel.onDefaultOrNotSelected(it)}
         )
       }
     },
@@ -80,7 +93,7 @@ fun CreatePasskeyScreen(
   ) {}
   LaunchedEffect(state.currentValue) {
     if (state.currentValue == ModalBottomSheetValue.Hidden) {
-      cancelActivity()
+      viewModel.onCancel()
     }
   }
 }
@@ -204,6 +217,109 @@ fun ProviderSelectionCard(
 
 @ExperimentalMaterialApi
 @Composable
+fun MoreOptionsSelectionCard(
+  providerInfo: ProviderInfo,
+  providerList: List<ProviderInfo>,
+  onBackButtonSelected: (String) -> Unit,
+  onOptionSelected: (String) -> Unit
+) {
+  Card(
+    backgroundColor = lightBackgroundColor,
+  ) {
+    Column() {
+      TopAppBar(
+        title = {
+          Text(text = stringResource(R.string.string_more_options), style = Typography.subtitle1)
+        },
+        backgroundColor = lightBackgroundColor,
+        elevation = 0.dp,
+        navigationIcon =
+        {
+          IconButton(onClick = { onBackButtonSelected(providerInfo.name) }) {
+            Icon(Icons.Filled.ArrowBack, "backIcon"
+            )
+          }
+        }
+      )
+      Divider(
+         thickness = 24.dp,
+         color = Color.Transparent
+      )
+      Text(
+        text = stringResource(R.string.create_passkey_at),
+        style = Typography.body1,
+        modifier = Modifier.padding(horizontal = 28.dp),
+        textAlign = TextAlign.Center
+      )
+      Card(
+        shape = Shapes.medium,
+        modifier = Modifier
+          .padding(horizontal = 24.dp)
+          .align(alignment = Alignment.CenterHorizontally)
+      ) {
+        LazyColumn(
+          verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+          // TODO: change the order according to usage frequency
+          providerList.forEach { providerInfo ->
+            providerInfo.createOptions.forEach { createOptionInfo ->
+              item {
+                MoreOptionsInfoRow(providerInfo = providerInfo,
+                  createOptionInfo = createOptionInfo,
+                  onOptionSelected = onOptionSelected)
+              }
+            }
+          }
+        }
+      }
+      Divider(
+        thickness = 18.dp,
+        color = Color.Transparent,
+        modifier = Modifier.padding(bottom = 40.dp)
+      )
+    }
+  }
+}
+
+@ExperimentalMaterialApi
+@Composable
+fun MoreOptionsRowIntroCard(
+  providerInfo: ProviderInfo,
+  onDefaultOrNotSelected: (String) -> Unit,
+) {
+  Card(
+    backgroundColor = lightBackgroundColor,
+  ) {
+    Column() {
+      Text(
+        text = stringResource(R.string.use_provider_for_all_title, providerInfo.name),
+        style = Typography.subtitle1,
+        modifier = Modifier.padding(all = 24.dp).align(alignment = Alignment.CenterHorizontally)
+      )
+      Row(
+        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
+      ) {
+        CancelButton(
+          stringResource(R.string.use_once),
+          onclick = { onDefaultOrNotSelected(providerInfo.name) }
+        )
+        ConfirmButton(
+          stringResource(R.string.set_as_default),
+          onclick = { onDefaultOrNotSelected(providerInfo.name) }
+        )
+      }
+      Divider(
+        thickness = 18.dp,
+        color = Color.Transparent,
+        modifier = Modifier.padding(bottom = 40.dp)
+      )
+    }
+  }
+}
+
+@ExperimentalMaterialApi
+@Composable
 fun ProviderRow(providerInfo: ProviderInfo, onProviderSelected: (String) -> Unit) {
   Chip(
     modifier = Modifier.fillMaxWidth(),
@@ -273,10 +389,10 @@ fun NavigationButton(
 @Composable
 fun CreationSelectionCard(
   providerInfo: ProviderInfo,
-  onOptionSelected: (String) -> Unit,
+  onOptionSelected: (Int) -> Unit,
   onCancel: () -> Unit,
   multiProvider: Boolean,
-  onMoreOptionSelected: () -> Unit,
+  onMoreOptionsSelected: (String) -> Unit,
 ) {
   Card(
     backgroundColor = lightBackgroundColor,
@@ -318,7 +434,7 @@ fun CreationSelectionCard(
           }
           if (multiProvider) {
             item {
-              MoreOptionRow(onSelect = onMoreOptionSelected)
+              MoreOptionsRow(onSelect = { onMoreOptionsSelected(providerInfo.name) })
             }
           }
         }
@@ -344,7 +460,7 @@ fun CreationSelectionCard(
 
 @ExperimentalMaterialApi
 @Composable
-fun CreateOptionRow(createOptionInfo: CreateOptionInfo, onOptionSelected: (String) -> Unit) {
+fun CreateOptionRow(createOptionInfo: CreateOptionInfo, onOptionSelected: (Int) -> Unit) {
   Chip(
     modifier = Modifier.fillMaxWidth(),
     onClick = {onOptionSelected(createOptionInfo.id)},
@@ -378,7 +494,46 @@ fun CreateOptionRow(createOptionInfo: CreateOptionInfo, onOptionSelected: (Strin
 
 @ExperimentalMaterialApi
 @Composable
-fun MoreOptionRow(onSelect: () -> Unit) {
+fun MoreOptionsInfoRow(
+  providerInfo: ProviderInfo,
+  createOptionInfo: CreateOptionInfo,
+  onOptionSelected: (String) -> Unit
+) {
+    Chip(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = { onOptionSelected(providerInfo.name) },
+        leadingIcon = {
+            Image(modifier = Modifier.size(24.dp, 24.dp).padding(start = 10.dp),
+                bitmap = createOptionInfo.icon.toBitmap().asImageBitmap(),
+                // painter = painterResource(R.drawable.ic_passkey),
+                // TODO: add description.
+                contentDescription = "")
+        },
+        colors = ChipDefaults.chipColors(
+            backgroundColor = Grey100,
+            leadingIconContentColor = Grey100
+        ),
+        shape = Shapes.large
+    ) {
+        Column() {
+            Text(
+                text = if (providerInfo.createOptions.size > 1)
+                {providerInfo.name + " for " + createOptionInfo.title} else { providerInfo.name},
+                style = Typography.h6,
+                modifier = Modifier.padding(top = 16.dp)
+            )
+            Text(
+                text = createOptionInfo.usageData,
+                style = Typography.body2,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+        }
+    }
+}
+
+@ExperimentalMaterialApi
+@Composable
+fun MoreOptionsRow(onSelect: () -> Unit) {
   Chip(
     modifier = Modifier.fillMaxWidth().height(52.dp),
     onClick = onSelect,
@@ -389,7 +544,7 @@ fun MoreOptionRow(onSelect: () -> Unit) {
     shape = Shapes.large
   ) {
       Text(
-        text = stringResource(R.string.string_more_options),
+        text = stringResource(R.string.string_create_at_another_place),
         style = Typography.h6,
       )
   }

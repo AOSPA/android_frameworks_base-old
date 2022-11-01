@@ -71,7 +71,7 @@ public class DreamHomeControlsComplication implements Complication {
     /**
      * {@link CoreStartable} for registering the complication with SystemUI on startup.
      */
-    public static class Registrant extends CoreStartable {
+    public static class Registrant implements CoreStartable {
         private final DreamHomeControlsComplication mComplication;
         private final DreamOverlayStateController mDreamOverlayStateController;
         private final ControlsComponent mControlsComponent;
@@ -90,11 +90,9 @@ public class DreamHomeControlsComplication implements Complication {
                 };
 
         @Inject
-        public Registrant(Context context, DreamHomeControlsComplication complication,
+        public Registrant(DreamHomeControlsComplication complication,
                 DreamOverlayStateController dreamOverlayStateController,
                 ControlsComponent controlsComponent) {
-            super(context);
-
             mComplication = complication;
             mControlsComponent = controlsComponent;
             mDreamOverlayStateController = dreamOverlayStateController;
@@ -212,7 +210,8 @@ public class DreamHomeControlsComplication implements Complication {
 
             final Intent intent = new Intent(mContext, ControlsActivity.class)
                     .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK)
-                    .putExtra(ControlsUiController.EXTRA_ANIMATE, true);
+                    .putExtra(ControlsUiController.EXTRA_ANIMATE, true)
+                    .putExtra(ControlsUiController.EXIT_TO_DREAM, true);
 
             final ActivityLaunchAnimator.Controller controller =
                     v != null ? ActivityLaunchAnimator.Controller.fromView(v, null /* cujType */)

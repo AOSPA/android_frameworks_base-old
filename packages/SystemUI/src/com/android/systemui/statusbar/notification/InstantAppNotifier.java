@@ -66,11 +66,12 @@ import javax.inject.Inject;
  * splitted screen.
  */
 @SysUISingleton
-public class InstantAppNotifier extends CoreStartable
-        implements CommandQueue.Callbacks, KeyguardStateController.Callback {
+public class InstantAppNotifier
+        implements CoreStartable, CommandQueue.Callbacks, KeyguardStateController.Callback {
     private static final String TAG = "InstantAppNotifier";
     public static final int NUM_TASKS_FOR_INSTANT_APP_INFO = 5;
 
+    private final Context mContext;
     private final Handler mHandler = new Handler();
     private final Executor mUiBgExecutor;
     private final ArraySet<Pair<String, Integer>> mCurrentNotifs = new ArraySet<>();
@@ -83,7 +84,7 @@ public class InstantAppNotifier extends CoreStartable
             CommandQueue commandQueue,
             @UiBackground Executor uiBgExecutor,
             KeyguardStateController keyguardStateController) {
-        super(context);
+        mContext = context;
         mCommandQueue = commandQueue;
         mUiBgExecutor = uiBgExecutor;
         mKeyguardStateController = keyguardStateController;
@@ -289,7 +290,7 @@ public class InstantAppNotifier extends CoreStartable
                             .setComponent(aiaComponent)
                             .setAction(Intent.ACTION_VIEW)
                             .addCategory(Intent.CATEGORY_BROWSABLE)
-                            .addCategory("unique:" + System.currentTimeMillis())
+                            .setIdentifier("unique:" + System.currentTimeMillis())
                             .putExtra(Intent.EXTRA_PACKAGE_NAME, appInfo.packageName)
                             .putExtra(
                                     Intent.EXTRA_VERSION_CODE,

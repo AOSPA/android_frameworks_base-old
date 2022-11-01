@@ -222,6 +222,11 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
         return mAssociationInfo.getDisplayName();
     }
 
+    /** Returns the optional name of the device. */
+    String getDeviceName() {
+        return mParams.getName();
+    }
+
     /** Returns the unique device ID of this device. */
     @Override // Binder call
     public int getDeviceId() {
@@ -491,6 +496,17 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
             Binder.restoreCallingIdentity(binderToken);
         }
     }
+
+    @Override // Binder call
+    public int getInputDeviceId(IBinder token) {
+        final long binderToken = Binder.clearCallingIdentity();
+        try {
+            return mInputController.getInputDeviceId(token);
+        } finally {
+            Binder.restoreCallingIdentity(binderToken);
+        }
+    }
+
 
     @Override // Binder call
     public boolean sendDpadKeyEvent(IBinder token, VirtualKeyEvent event) {

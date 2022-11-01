@@ -105,7 +105,7 @@ import kotlin.Pair;
  * for antialiasing and emulation purposes.
  */
 @SysUISingleton
-public class ScreenDecorations extends CoreStartable implements Tunable , Dumpable {
+public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
     private static final boolean DEBUG = false;
     private static final String TAG = "ScreenDecorations";
 
@@ -134,6 +134,7 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
     @VisibleForTesting
     protected boolean mIsRegistered;
     private final BroadcastDispatcher mBroadcastDispatcher;
+    private final Context mContext;
     private final Executor mMainExecutor;
     private final TunerService mTunerService;
     private final SecureSettings mSecureSettings;
@@ -312,7 +313,7 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
             ThreadFactory threadFactory,
             PrivacyDotDecorProviderFactory dotFactory,
             FaceScanningProviderFactory faceScanningFactory) {
-        super(context);
+        mContext = context;
         mMainExecutor = mainExecutor;
         mSecureSettings = secureSettings;
         mBroadcastDispatcher = broadcastDispatcher;
@@ -459,7 +460,6 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
                     }
                 }
 
-                boolean needToUpdateProviderViews = false;
                 final String newUniqueId = mDisplayInfo.uniqueId;
                 if (!Objects.equals(newUniqueId, mDisplayUniqueId)) {
                     mDisplayUniqueId = newUniqueId;
@@ -477,37 +477,6 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
                         setupDecorations();
                         return;
                     }
-
-                    if (mScreenDecorHwcLayer != null) {
-                        updateHwLayerRoundedCornerDrawable();
-                        updateHwLayerRoundedCornerExistAndSize();
-                    }
-                    needToUpdateProviderViews = true;
-                }
-
-                final float newRatio = getPhysicalPixelDisplaySizeRatio();
-                if (mRoundedCornerResDelegate.getPhysicalPixelDisplaySizeRatio() != newRatio) {
-                    mRoundedCornerResDelegate.setPhysicalPixelDisplaySizeRatio(newRatio);
-                    if (mScreenDecorHwcLayer != null) {
-                        updateHwLayerRoundedCornerExistAndSize();
-                    }
-                    needToUpdateProviderViews = true;
-                }
-
-                if (needToUpdateProviderViews) {
-                    updateOverlayProviderViews(null);
-                } else {
-                    updateOverlayProviderViews(new Integer[] {
-                            mFaceScanningViewId,
-                            R.id.display_cutout,
-                            R.id.display_cutout_left,
-                            R.id.display_cutout_right,
-                            R.id.display_cutout_bottom,
-                    });
-                }
-
-                if (mScreenDecorHwcLayer != null) {
-                    mScreenDecorHwcLayer.onDisplayChanged(newUniqueId);
                 }
             }
         };
@@ -977,7 +946,7 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
     }
 
     @Override
-    protected void onConfigurationChanged(Configuration newConfig) {
+    public void onConfigurationChanged(Configuration newConfig) {
         if (DEBUG_DISABLE_SCREEN_DECORATIONS) {
             Log.i(TAG, "ScreenDecorations is disabled");
             return;
@@ -1073,9 +1042,11 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
                 && (newRotation != mRotation || displayModeChanged(mDisplayMode, newMod))) {
             mRotation = newRotation;
             mDisplayMode = newMod;
+            mRoundedCornerResDelegate.setPhysicalPixelDisplaySizeRatio(
+                    getPhysicalPixelDisplaySizeRatio());
             if (mScreenDecorHwcLayer != null) {
                 mScreenDecorHwcLayer.pendingConfigChange = false;
-                mScreenDecorHwcLayer.updateRotation(mRotation);
+                mScreenDecorHwcLayer.updateConfiguration(mDisplayUniqueId);
                 updateHwLayerRoundedCornerExistAndSize();
                 updateHwLayerRoundedCornerDrawable();
             }
@@ -1118,7 +1089,8 @@ public class ScreenDecorations extends CoreStartable implements Tunable , Dumpab
                 context.getResources(), context.getDisplay().getUniqueId());
     }
 
-    private void updateOverlayProviderViews(@Nullable Integer[] filterIds) {
+    @VisibleForTesting
+    void updateOverlayProviderViews(@Nullable Integer[] filterIds) {
         if (mOverlays == null) {
             return;
         }

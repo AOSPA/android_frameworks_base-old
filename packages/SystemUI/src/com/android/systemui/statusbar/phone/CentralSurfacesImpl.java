@@ -90,7 +90,6 @@ import android.util.EventLog;
 import android.util.IndentingPrintWriter;
 import android.util.Log;
 import android.util.MathUtils;
-import android.util.Slog;
 import android.view.Display;
 import android.view.IRemoteAnimationRunner;
 import android.view.IWindowManager;
@@ -268,8 +267,7 @@ import dagger.Lazy;
  * </b>
  */
 @SysUISingleton
-public class CentralSurfacesImpl extends CoreStartable implements
-        CentralSurfaces {
+public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
 
     private static final String BANNER_ACTION_CANCEL =
             "com.android.systemui.statusbar.banner_action_cancel";
@@ -290,6 +288,7 @@ public class CentralSurfacesImpl extends CoreStartable implements
 
     private static final UiEventLogger sUiEventLogger = new UiEventLoggerImpl();
 
+    private final Context mContext;
     private final LockscreenShadeTransitionController mLockscreenShadeTransitionController;
     private CentralSurfacesCommandQueueCallbacks mCommandQueueCallbacks;
     private float mTransitionToFullShadeProgress = 0f;
@@ -747,7 +746,7 @@ public class CentralSurfacesImpl extends CoreStartable implements
             DeviceStateManager deviceStateManager,
             WiredChargingRippleController wiredChargingRippleController,
             IDreamManager dreamManager) {
-        super(context);
+        mContext = context;
         mNotificationsController = notificationsController;
         mFragmentService = fragmentService;
         mLightBarController = lightBarController;
@@ -868,6 +867,11 @@ public class CentralSurfacesImpl extends CoreStartable implements
         if (mBubblesOptional.isPresent()) {
             mBubblesOptional.get().setExpandListener(mBubbleExpandListener);
         }
+
+        // Do not restart System UI when the bugreport flag changes.
+        mFeatureFlags.addListener(Flags.LEAVE_SHADE_OPEN_FOR_BUGREPORT, event -> {
+            event.requestNoRestart();
+        });
 
         mStatusBarSignalPolicy.init();
         mKeyguardIndicationController.init();
@@ -3562,6 +3566,13 @@ public class CentralSurfacesImpl extends CoreStartable implements
         }
     }
 
+    @Override
+    public void collapseShadeForBugreport() {
+        if (!mFeatureFlags.isEnabled(Flags.LEAVE_SHADE_OPEN_FOR_BUGREPORT)) {
+            collapseShade();
+        }
+    }
+
     @VisibleForTesting
     final WakefulnessLifecycle.Observer mWakefulnessObserver = new WakefulnessLifecycle.Observer() {
         @Override
@@ -3794,8 +3805,7 @@ public class CentralSurfacesImpl extends CoreStartable implements
         if (mDevicePolicyManager.getCameraDisabled(null,
                 mLockscreenUserManager.getCurrentUserId())) {
             return false;
-        } else if (mStatusBarKeyguardViewManager == null
-                || (isKeyguardShowing() && isKeyguardSecure())) {
+        } else if (isKeyguardShowing() && isKeyguardSecure()) {
             // Check if the admin has disabled the camera specifically for the keyguard
             return (mDevicePolicyManager.getKeyguardDisabledFeatures(null,
                     mLockscreenUserManager.getCurrentUserId())
@@ -4203,14 +4213,6 @@ public class CentralSurfacesImpl extends CoreStartable implements
 
     @Override
     public boolean isKeyguardSecure() {
-        if (mStatusBarKeyguardViewManager == null) {
-            // startKeyguard() hasn't been called yet, so we don't know.
-            // Make sure anything that needs to know isKeyguardSecure() checks and re-checks this
-            // value onVisibilityChanged().
-            Slog.w(TAG, "isKeyguardSecure() called before startKeyguard(), returning false",
-                    new Throwable());
-            return false;
-        }
         return mStatusBarKeyguardViewManager.isSecure();
     }
     @Override
@@ -4270,11 +4272,6 @@ public class CentralSurfacesImpl extends CoreStartable implements
             .Callback() {
         @Override
         public void onFinished() {
-            if (mStatusBarKeyguardViewManager == null) {
-                Log.w(TAG, "Tried to notify keyguard visibility when "
-                        + "mStatusBarKeyguardViewManager was null");
-                return;
-            }
             if (mKeyguardStateController.isKeyguardFadingAway()) {
                 mStatusBarKeyguardViewManager.onKeyguardFadedAway();
             }

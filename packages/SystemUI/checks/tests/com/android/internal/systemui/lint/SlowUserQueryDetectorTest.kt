@@ -16,18 +16,15 @@
 
 package com.android.internal.systemui.lint
 
-import com.android.tools.lint.checks.infrastructure.LintDetectorTest
 import com.android.tools.lint.checks.infrastructure.TestFiles
-import com.android.tools.lint.checks.infrastructure.TestLintTask
 import com.android.tools.lint.detector.api.Detector
 import com.android.tools.lint.detector.api.Issue
 import org.junit.Test
 
 @Suppress("UnstableApiUsage")
-class SlowUserQueryDetectorTest : LintDetectorTest() {
+class SlowUserQueryDetectorTest : SystemUILintDetectorTest() {
 
     override fun getDetector(): Detector = SlowUserQueryDetector()
-    override fun lint(): TestLintTask = super.lint().allowMissingSdk(true)
 
     override fun getIssues(): List<Issue> =
         listOf(
@@ -44,7 +41,7 @@ class SlowUserQueryDetectorTest : LintDetectorTest() {
                         package test.pkg;
                         import android.app.ActivityManager;
 
-                        public class TestClass1 {
+                        public class TestClass {
                             public void slewlyGetCurrentUser() {
                                 ActivityManager.getCurrentUser();
                             }
@@ -59,10 +56,13 @@ class SlowUserQueryDetectorTest : LintDetectorTest() {
                 SlowUserQueryDetector.ISSUE_SLOW_USER_INFO_QUERY
             )
             .run()
-            .expectWarningCount(1)
-            .expectContains(
-                "ActivityManager.getCurrentUser() is slow. " +
-                    "Use UserTracker.getUserId() instead."
+            .expect(
+                """
+                src/test/pkg/TestClass.java:6: Warning: Use UserTracker.getUserId() instead of ActivityManager.getCurrentUser() [SlowUserIdQuery]
+                        ActivityManager.getCurrentUser();
+                                        ~~~~~~~~~~~~~~
+                0 errors, 1 warnings
+                """
             )
     }
 
@@ -75,7 +75,7 @@ class SlowUserQueryDetectorTest : LintDetectorTest() {
                         package test.pkg;
                         import android.os.UserManager;
 
-                        public class TestClass2 {
+                        public class TestClass {
                             public void slewlyGetUserInfo(UserManager userManager) {
                                 userManager.getUserInfo();
                             }
@@ -90,9 +90,13 @@ class SlowUserQueryDetectorTest : LintDetectorTest() {
                 SlowUserQueryDetector.ISSUE_SLOW_USER_INFO_QUERY
             )
             .run()
-            .expectWarningCount(1)
-            .expectContains(
-                "UserManager.getUserInfo() is slow. " + "Use UserTracker.getUserInfo() instead."
+            .expect(
+                """
+                src/test/pkg/TestClass.java:6: Warning: Use UserTracker.getUserInfo() instead of UserManager.getUserInfo() [SlowUserInfoQuery]
+                        userManager.getUserInfo();
+                                    ~~~~~~~~~~~
+                0 errors, 1 warnings
+                """
             )
     }
 
@@ -105,7 +109,7 @@ class SlowUserQueryDetectorTest : LintDetectorTest() {
                         package test.pkg;
                         import com.android.systemui.settings.UserTracker;
 
-                        public class TestClass3 {
+                        public class TestClass {
                             public void quicklyGetUserId(UserTracker userTracker) {
                                 userTracker.getUserId();
                             }
@@ -132,7 +136,7 @@ class SlowUserQueryDetectorTest : LintDetectorTest() {
                         package test.pkg;
                         import com.android.systemui.settings.UserTracker;
 
-                        public class TestClass4 {
+                        public class TestClass {
                             public void quicklyGetUserId(UserTracker userTracker) {
                                 userTracker.getUserInfo();
                             }

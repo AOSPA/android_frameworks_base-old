@@ -17,20 +17,26 @@
 package com.android.settingslib.spa.framework
 
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.android.settingslib.spa.R
-import com.android.settingslib.spa.framework.common.SpaEnvironment
+import com.android.settingslib.spa.framework.common.LogCategory
+import com.android.settingslib.spa.framework.common.SpaEnvironmentFactory
+import com.android.settingslib.spa.framework.common.createSettingsPage
 import com.android.settingslib.spa.framework.compose.LocalNavController
 import com.android.settingslib.spa.framework.compose.NavControllerWrapperImpl
 import com.android.settingslib.spa.framework.compose.localNavController
@@ -42,21 +48,27 @@ private const val NULL_PAGE_NAME = "NULL"
 
 /**
  * The Activity to render ALL SPA pages, and handles jumps between SPA pages.
+ *
  * One can open any SPA page by:
- *   $ adb shell am start -n <BrowseActivityComponent> -e spa:SpaActivity:destination <SpaPageRoute>
- * For gallery, BrowseActivityComponent = com.android.settingslib.spa.gallery/.MainActivity
- * For SettingsGoogle, BrowseActivityComponent = com.android.settings/.spa.SpaActivity
+ * ```
+ * $ adb shell am start -n <BrowseActivityComponent> -e spaActivityDestination <SpaPageRoute>
+ * ```
+ * - For Gallery, BrowseActivityComponent = com.android.settingslib.spa.gallery/.GalleryMainActivity
+ * - For Settings, BrowseActivityComponent = com.android.settings/.spa.SpaActivity
+ *
  * Some examples:
- *   $ adb shell am start -n <BrowseActivityComponent> -e spa:SpaActivity:destination HOME
- *   $ adb shell am start -n <BrowseActivityComponent> -e spa:SpaActivity:destination ARGUMENT/bar/5
+ * ```
+ * $ adb shell am start -n <BrowseActivityComponent> -e spaActivityDestination HOME
+ * $ adb shell am start -n <BrowseActivityComponent> -e spaActivityDestination ARGUMENT/bar/5
+ * ```
  */
-open class BrowseActivity(spaEnvironment: SpaEnvironment) : ComponentActivity() {
-    private val sppRepository by spaEnvironment.pageProviderRepository
+open class BrowseActivity : ComponentActivity() {
+    private val spaEnvironment get() = SpaEnvironmentFactory.instance
 
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(R.style.Theme_SpaLib_DayNight)
         super.onCreate(savedInstanceState)
-        Log.d(TAG, "onCreate")
+        spaEnvironment.logger.message(TAG, "onCreate", category = LogCategory.FRAMEWORK)
 
         setContent {
             SettingsTheme {
@@ -67,15 +79,41 @@ open class BrowseActivity(spaEnvironment: SpaEnvironment) : ComponentActivity() 
 
     @Composable
     private fun MainContent() {
+        val sppRepository by spaEnvironment.pageProviderRepository
         val navController = rememberNavController()
         CompositionLocalProvider(navController.localNavController()) {
             NavHost(navController, NULL_PAGE_NAME) {
                 composable(NULL_PAGE_NAME) {}
-                for (page in sppRepository.getAllProviders()) {
+                for (spp in sppRepository.getAllProviders()) {
                     composable(
-                        route = page.name + page.parameter.navRoute(),
-                        arguments = page.parameter,
-                    ) { navBackStackEntry -> page.Page(navBackStackEntry.arguments) }
+                        route = spp.name + spp.parameter.navRoute(),
+                        arguments = spp.parameter,
+                    ) { navBackStackEntry ->
+                        val lifecycleOwner = LocalLifecycleOwner.current
+                        val sp = remember(navBackStackEntry.arguments) {
+                            spp.createSettingsPage(arguments = navBackStackEntry.arguments)
+                        }
+
+                        DisposableEffect(lifecycleOwner) {
+                            val observer = LifecycleEventObserver { _, event ->
+                                if (event == Lifecycle.Event.ON_START) {
+                                    sp.enterPage()
+                                } else if (event == Lifecycle.Event.ON_STOP) {
+                                    sp.leavePage()
+                                }
+                            }
+
+                            // Add the observer to the lifecycle
+                            lifecycleOwner.lifecycle.addObserver(observer)
+
+                            // When the effect leaves the Composition, remove the observer
+                            onDispose {
+                                lifecycleOwner.lifecycle.removeObserver(observer)
+                            }
+                        }
+
+                        spp.Page(navBackStackEntry.arguments)
+                    }
                 }
             }
             InitialDestinationNavigator()
@@ -84,6 +122,7 @@ open class BrowseActivity(spaEnvironment: SpaEnvironment) : ComponentActivity() 
 
     @Composable
     private fun InitialDestinationNavigator() {
+        val sppRepository by spaEnvironment.pageProviderRepository
         val destinationNavigated = rememberSaveable { mutableStateOf(false) }
         if (destinationNavigated.value) return
         destinationNavigated.value = true

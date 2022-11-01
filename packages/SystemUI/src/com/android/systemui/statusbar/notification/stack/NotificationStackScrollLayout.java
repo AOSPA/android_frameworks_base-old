@@ -255,7 +255,6 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     private boolean mClearAllInProgress;
     private FooterClearAllListener mFooterClearAllListener;
     private boolean mFlingAfterUpEvent;
-
     /**
      * Was the scroller scrolled to the top when the down motion was observed?
      */
@@ -1114,6 +1113,10 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         updateFirstAndLastBackgroundViews();
         updateAlgorithmLayoutMinHeight();
         updateOwnTranslationZ();
+
+        // Give The Algorithm information regarding the QS height so it can layout notifications
+        // properly. Needed for some devices that grows notifications down-to-top
+        mStackScrollAlgorithm.updateQSFrameTop(mQsHeader == null ? 0 : mQsHeader.getHeight());
 
         // Once the layout has finished, we don't need to animate any scrolling clampings anymore.
         mAnimateStackYForContentHeightChange = false;
@@ -4016,8 +4019,9 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         setOwnScrollY(0);
     }
 
+    @VisibleForTesting
     @ShadeViewRefactor(RefactorComponent.COORDINATOR)
-    private void setIsExpanded(boolean isExpanded) {
+    void setIsExpanded(boolean isExpanded) {
         boolean changed = isExpanded != mIsExpanded;
         mIsExpanded = isExpanded;
         mStackScrollAlgorithm.setIsExpanded(isExpanded);
@@ -4838,13 +4842,21 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         }
     }
 
+    @VisibleForTesting
     @ShadeViewRefactor(RefactorComponent.COORDINATOR)
-    private void setOwnScrollY(int ownScrollY) {
+    void setOwnScrollY(int ownScrollY) {
         setOwnScrollY(ownScrollY, false /* animateScrollChangeListener */);
     }
 
     @ShadeViewRefactor(RefactorComponent.COORDINATOR)
     private void setOwnScrollY(int ownScrollY, boolean animateStackYChangeListener) {
+        // Avoid Flicking during clear all
+        // when the shade finishes closing, onExpansionStopped will call
+        // resetScrollPosition to setOwnScrollY to 0
+        if (mAmbientState.isClosing()) {
+            return;
+        }
+
         if (ownScrollY != mOwnScrollY) {
             // We still want to call the normal scrolled changed for accessibility reasons
             onScrollChanged(mScrollX, ownScrollY, mScrollX, mOwnScrollY);

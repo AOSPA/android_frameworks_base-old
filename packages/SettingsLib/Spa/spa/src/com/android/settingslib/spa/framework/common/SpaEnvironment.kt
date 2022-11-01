@@ -17,15 +17,36 @@
 package com.android.settingslib.spa.framework.common
 
 import android.app.Activity
+import android.util.Log
+
+private const val TAG = "SpaEnvironment"
+
+object SpaEnvironmentFactory {
+    private var spaEnvironment: SpaEnvironment? = null
+
+    fun reset(env: SpaEnvironment) {
+        spaEnvironment = env
+        Log.d(TAG, "reset")
+    }
+
+    val instance: SpaEnvironment
+        get() {
+            if (spaEnvironment == null)
+                throw UnsupportedOperationException("Spa environment is not set")
+            return spaEnvironment!!
+        }
+}
 
 abstract class SpaEnvironment {
     abstract val pageProviderRepository: Lazy<SettingsPageProviderRepository>
 
     val entryRepository = lazy { SettingsEntryRepository(pageProviderRepository.value) }
 
-    abstract val browseActivityClass: Class<out Activity>
+    open val browseActivityClass: Class<out Activity>? = null
 
     open val entryProviderAuthorities: String? = null
+
+    open val logger: SpaLogger = object : SpaLogger {}
 
     // TODO: add other environment setup here.
 }

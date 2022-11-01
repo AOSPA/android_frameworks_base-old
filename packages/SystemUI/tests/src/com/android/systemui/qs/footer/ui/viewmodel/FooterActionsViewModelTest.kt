@@ -47,7 +47,11 @@ import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.runBlockingTest
+import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -59,6 +63,7 @@ import org.mockito.Mockito.`when` as whenever
 @RunWithLooper
 class FooterActionsViewModelTest : SysuiTestCase() {
     private lateinit var utils: FooterActionsTestUtils
+    private val testDispatcher = UnconfinedTestDispatcher(TestCoroutineScheduler())
 
     @Before
     fun setUp() {
@@ -130,6 +135,7 @@ class FooterActionsViewModelTest : SysuiTestCase() {
                 showPowerButton = false,
                 footerActionsInteractor =
                     utils.footerActionsInteractor(
+                        bgDispatcher = testDispatcher,
                         userSwitcherRepository =
                             utils.userSwitcherRepository(
                                 userTracker = userTracker,
@@ -137,6 +143,7 @@ class FooterActionsViewModelTest : SysuiTestCase() {
                                 userManager = userManager,
                                 userInfoController = userInfoController,
                                 userSwitcherController = userSwitcherControllerWrapper.controller,
+                                bgDispatcher = testDispatcher,
                             ),
                     )
             )
@@ -192,16 +199,6 @@ class FooterActionsViewModelTest : SysuiTestCase() {
         // UserManager change.
         assertThat(iconTint()).isNull()
 
-        // Trigger a user info change: there should now be a tint.
-        userInfoController.updateInfo { userAccount = "doe" }
-        assertThat(iconTint())
-            .isEqualTo(
-                Utils.getColorAttrDefaultColor(
-                    context,
-                    android.R.attr.colorForeground,
-                )
-            )
-
         // Make sure we don't tint the icon if it is a user image (and not the default image), even
         // in guest mode.
         userInfoController.updateInfo { this.picture = mock<UserIconDrawable>() }
@@ -227,9 +224,11 @@ class FooterActionsViewModelTest : SysuiTestCase() {
                 footerActionsInteractor =
                     utils.footerActionsInteractor(
                         qsSecurityFooterUtils = qsSecurityFooterUtils,
+                        bgDispatcher = testDispatcher,
                         securityRepository =
                             utils.securityRepository(
                                 securityController = securityController,
+                                bgDispatcher = testDispatcher,
                             ),
                     ),
             )
@@ -298,9 +297,14 @@ class FooterActionsViewModelTest : SysuiTestCase() {
                 footerActionsInteractor =
                     utils.footerActionsInteractor(
                         qsSecurityFooterUtils = qsSecurityFooterUtils,
-                        securityRepository = utils.securityRepository(securityController),
+                        securityRepository =
+                            utils.securityRepository(
+                                securityController,
+                                bgDispatcher = testDispatcher,
+                            ),
                         foregroundServicesRepository =
                             utils.foregroundServicesRepository(fgsManagerController),
+                        bgDispatcher = testDispatcher,
                     ),
             )
 
@@ -386,6 +390,7 @@ class FooterActionsViewModelTest : SysuiTestCase() {
                     utils.footerActionsInteractor(
                         qsSecurityFooterUtils = qsSecurityFooterUtils,
                         broadcastDispatcher = broadcastDispatcher,
+                        bgDispatcher = testDispatcher,
                     ),
             )
 
@@ -410,4 +415,7 @@ class FooterActionsViewModelTest : SysuiTestCase() {
         underTest.onVisibilityChangeRequested(visible = true)
         assertThat(underTest.isVisible.value).isTrue()
     }
+
+    private fun runBlockingTest(block: suspend TestScope.() -> Unit) =
+        runTest(testDispatcher) { block() }
 }

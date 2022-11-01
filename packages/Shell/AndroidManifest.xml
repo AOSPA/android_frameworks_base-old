@@ -141,6 +141,7 @@
     <uses-permission android:name="android.permission.SET_PREFERRED_APPLICATIONS" />
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
+    <uses-permission android:name="android.permission.LOCATION_BYPASS" />
     <uses-permission android:name="android.permission.READ_DEVICE_CONFIG" />
     <uses-permission android:name="android.permission.WRITE_DEVICE_CONFIG" />
     <uses-permission android:name="android.permission.BROADCAST_STICKY" />
@@ -710,6 +711,9 @@
 
     <!-- Permission required for CTS test - CtsWindowManagerDeviceTestCases-->
     <uses-permission android:name="android.permission.UPDATE_LOCK_TASK_PACKAGES" />
+
+    <!-- Permission required for CTS test - ActivityPermissionRationaleTest -->
+    <uses-permission android:name="android.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY" />
 
     <application android:label="@string/app_label"
                 android:theme="@android:style/Theme.DeviceDefault.DayNight"

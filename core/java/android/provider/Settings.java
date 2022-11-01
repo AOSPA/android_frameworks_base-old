@@ -10908,13 +10908,6 @@ public final class Settings {
                 "accessibility_floating_menu_migration_tooltip_prompt";
 
         /**
-         * Setting that specifies whether the software cursor accessibility service is enabled.
-         * @hide
-         */
-        public static final String ACCESSIBILITY_SOFTWARE_CURSOR_ENABLED =
-                "accessibility_software_cursor_enabled";
-
-        /**
          * Whether the Adaptive connectivity option is enabled.
          *
          * @hide
@@ -17637,6 +17630,11 @@ public final class Settings {
              * @hide
              */
             public static final String BEDTIME_MODE = "bedtime_mode";
+
+            /**
+             * Whether hard bedtime mode is active thus limiting user interactions.
+             */
+            public static final String BEDTIME_HARD_MODE = "bedtime_hard_mode";
 
             /**
              * Whether the current watchface is decomposable.
