@@ -209,7 +209,7 @@ public class DisplayPolicy {
     private final ScreenshotHelper mScreenshotHelper;
 
     private static boolean SCROLL_BOOST_SS_ENABLE = false;
-    private static boolean DRAG_PLH_ENABLE = false;
+    private static boolean SILKY_SCROLLS_ENABLE = false;
     private static boolean isLowRAM = false;
 
     /*
@@ -488,7 +488,7 @@ public class DisplayPolicy {
 
         if (mPerf != null) {
             SCROLL_BOOST_SS_ENABLE = Boolean.parseBoolean(mPerf.perfGetProp("vendor.perf.gestureflingboost.enable", "false"));
-            DRAG_PLH_ENABLE = Boolean.parseBoolean(mPerf.perfGetProp("ro.vendor.perf.dplh", "false"));
+            SILKY_SCROLLS_ENABLE = Boolean.parseBoolean(mPerf.perfGetProp("ro.vendor.perf.ss", "false"));
         }
         isLowRAM = SystemProperties.getBoolean("ro.config.low_ram", false);
 
@@ -637,7 +637,7 @@ public class DisplayPolicy {
                             Slog.e(TAG, "Error: boost object null");
                             return;
                         }
-                        if (SCROLL_BOOST_SS_ENABLE) {
+                        if (SCROLL_BOOST_SS_ENABLE && started) {
                             if (mPerfBoostPrefling == null) {
                                 mPerfBoostPrefling = new BoostFramework();
                             }
@@ -653,13 +653,13 @@ public class DisplayPolicy {
                         }
                         isGame = isTopAppGame(currentPackage, mPerfBoostDrag);
                         if (!isGame && started) {
-                            if (DRAG_PLH_ENABLE) {
+                            if (SILKY_SCROLLS_ENABLE) {
                                 mPerfBoostDrag.perfEvent(BoostFramework.VENDOR_HINT_DRAG_START, currentPackage);
                             }
                             mPerfBoostDrag.perfHint(BoostFramework.VENDOR_HINT_DRAG_BOOST,
                                             currentPackage, -1, 1);
                         } else {
-                            if (DRAG_PLH_ENABLE) {
+                            if (SILKY_SCROLLS_ENABLE){
                                 mPerfBoostDrag.perfEvent(BoostFramework.VENDOR_HINT_DRAG_END, currentPackage);
                             }
                             mPerfBoostDrag.perfLockRelease();
