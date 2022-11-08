@@ -2612,6 +2612,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         boolean strongAuthAllowsScanning = (!isEncryptedOrTimedOut || canBypass
                 && !mBouncerFullyShown);
 
+        boolean unlockPossible = !((!mBouncerFullyShown || !awakeKeyguard) && isFaceAuthOnlyOnSecurityView());
+
         // If the device supports face detection (without authentication) and bypass is enabled,
         // allow face scanning to happen if the device is in lockdown mode.
         // Otherwise, prevent scanning.
@@ -2642,7 +2644,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                 && !mKeyguardGoingAway && biometricEnabledForUser && !mLockIconPressed
                 && strongAuthAllowsScanning && mIsPrimaryUser
                 && (!mSecureCameraLaunched || mOccludingAppRequestingFace)
-                && !faceAuthenticated
+                && !faceAuthenticated && unlockPossible
                 && !fpLockedout;
 
         // Aggregate relevant fields for debug logging.
@@ -2864,6 +2866,11 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         if (mFaceRunningState == BIOMETRIC_STATE_CANCELLING_RESTARTING) {
             setFaceRunningState(BIOMETRIC_STATE_CANCELLING);
         }
+    }
+
+    private boolean isFaceAuthOnlyOnSecurityView() {
+        return Settings.Secure.getInt(mContext.getContentResolver(),
+                Settings.Secure.FACE_UNLOCK_ALWAYS_REQUIRE_SWIPE, 0) != 0;
     }
 
     private boolean isDeviceProvisionedInSettingsDb() {
