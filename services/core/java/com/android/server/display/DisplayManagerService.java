@@ -120,6 +120,7 @@ import android.view.DisplayInfo;
 import android.view.DisplayAddress;
 import android.view.Surface;
 import android.view.SurfaceControl;
+import android.view.SurfaceControl.RefreshRateRange;
 import android.window.DisplayWindowPolicyController;
 import android.window.ScreenCapture;
 
@@ -127,6 +128,7 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.display.BrightnessSynchronizer;
 import com.android.internal.util.DumpUtils;
+import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.AnimationThread;
 import com.android.server.DisplayThread;
@@ -150,6 +152,7 @@ import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
+
 
 /**
  * Manages attached displays.
@@ -1367,11 +1370,19 @@ public final class DisplayManagerService extends SystemService {
         final long token = Binder.clearCallingIdentity();
         try {
             synchronized (mSyncRoot) {
-                final int displayId = createVirtualDisplayLocked(callback, projection, callingUid,
-                        packageName, surface, flags, virtualDisplayConfig);
+                final int displayId =
+                        createVirtualDisplayLocked(
+                                callback,
+                                projection,
+                                callingUid,
+                                packageName,
+                                virtualDevice,
+                                surface,
+                                flags,
+                                virtualDisplayConfig);
                 if (displayId != Display.INVALID_DISPLAY && virtualDevice != null && dwpc != null) {
-                    mDisplayWindowPolicyControllers.put(displayId,
-                            Pair.create(virtualDevice, dwpc));
+                    mDisplayWindowPolicyControllers.put(
+                            displayId, Pair.create(virtualDevice, dwpc));
                 }
                 return displayId;
             }
@@ -1380,12 +1391,20 @@ public final class DisplayManagerService extends SystemService {
         }
     }
 
-    private int createVirtualDisplayLocked(IVirtualDisplayCallback callback,
-            IMediaProjection projection, int callingUid, String packageName, Surface surface,
-            int flags, VirtualDisplayConfig virtualDisplayConfig) {
+    private int createVirtualDisplayLocked(
+            IVirtualDisplayCallback callback,
+            IMediaProjection projection,
+            int callingUid,
+            String packageName,
+            IVirtualDevice virtualDevice,
+            Surface surface,
+            int flags,
+            VirtualDisplayConfig virtualDisplayConfig) {
         if (mVirtualDisplayAdapter == null) {
-            Slog.w(TAG, "Rejecting request to create private virtual display "
-                    + "because the virtual display adapter is not available.");
+            Slog.w(
+                    TAG,
+                    "Rejecting request to create private virtual display "
+                            + "because the virtual display adapter is not available.");
             return -1;
         }
 
@@ -1396,6 +1415,19 @@ public final class DisplayManagerService extends SystemService {
             return -1;
         }
 
+        // If the display is to be added to a device display group, we need to make the
+        // LogicalDisplayMapper aware of the link between the new display and its associated virtual
+        // device before triggering DISPLAY_DEVICE_EVENT_ADDED.
+        if (virtualDevice != null && (flags & VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP) == 0) {
+            try {
+                final int virtualDeviceId = virtualDevice.getDeviceId();
+                mLogicalDisplayMapper.associateDisplayDeviceWithVirtualDevice(
+                        device, virtualDeviceId);
+            } catch (RemoteException e) {
+                e.rethrowFromSystemServer();
+            }
+        }
+
         // DisplayDevice events are handled manually for Virtual Displays.
         // TODO: multi-display Fix this so that generic add/remove events are not handled in a
         // different code path for virtual displays.  Currently this happens so that we can
@@ -1404,8 +1436,7 @@ public final class DisplayManagerService extends SystemService {
         // called on the DisplayThread (which we don't want to wait for?).
         // One option would be to actually wait here on the binder thread
         // to be notified when the virtual display is created (or failed).
-        mDisplayDeviceRepo.onDisplayDeviceEvent(device,
-                DisplayAdapter.DISPLAY_DEVICE_EVENT_ADDED);
+        mDisplayDeviceRepo.onDisplayDeviceEvent(device, DisplayAdapter.DISPLAY_DEVICE_EVENT_ADDED);
 
         final LogicalDisplay display = mLogicalDisplayMapper.getDisplayLocked(device);
         if (display != null) {
@@ -1881,6 +1912,14 @@ public final class DisplayManagerService extends SystemService {
                 DisplayDevice displayDevice = mDisplayDeviceRepo.getByUniqueIdLocked(uniqueId);
                 if (displayDevice == null) {
                     return;
+                }
+                if (mLogicalDisplayMapper.getDisplayLocked(displayDevice)
+                        .getDisplayInfoLocked().type == Display.TYPE_INTERNAL) {
+                    FrameworkStatsLog.write(FrameworkStatsLog.BRIGHTNESS_CONFIGURATION_UPDATED,
+                                c.getCurve().first,
+                                c.getCurve().second,
+                                // should not be logged for virtual displays
+                                uniqueId);
                 }
                 mPersistentDataStore.setBrightnessConfigurationForDisplayLocked(c, displayDevice,
                         userSerial, packageName);

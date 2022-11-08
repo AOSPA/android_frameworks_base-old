@@ -3374,9 +3374,26 @@ public final class Settings {
                     }
                 }
 
-                // Fetch all flags for the namespace at once for caching purposes
-                Bundle b = cp.call(cr.getAttributionSource(),
-                        mProviderHolder.mUri.getAuthority(), mCallListCommand, null, args);
+                Bundle b;
+                // b/252663068: if we're in system server and the caller did not call
+                // clearCallingIdentity, the read would fail due to mismatched AttributionSources.
+                // TODO(b/256013480): remove this bypass after fixing the callers in system server.
+                if (namespace.equals(DeviceConfig.NAMESPACE_DEVICE_POLICY_MANAGER)
+                        && Settings.isInSystemServer()
+                        && Binder.getCallingUid() != Process.myUid()) {
+                    final long token = Binder.clearCallingIdentity();
+                    try {
+                        // Fetch all flags for the namespace at once for caching purposes
+                        b = cp.call(cr.getAttributionSource(),
+                                mProviderHolder.mUri.getAuthority(), mCallListCommand, null, args);
+                    } finally {
+                        Binder.restoreCallingIdentity(token);
+                    }
+                } else {
+                    // Fetch all flags for the namespace at once for caching purposes
+                    b = cp.call(cr.getAttributionSource(),
+                            mProviderHolder.mUri.getAuthority(), mCallListCommand, null, args);
+                }
                 if (b == null) {
                     // Invalid response, return an empty map
                     return keyValues;
@@ -6886,6 +6903,14 @@ public final class Settings {
         @Readable
         public static final String VOICE_INTERACTION_SERVICE = "voice_interaction_service";
 
+
+        /**
+         * The currently selected credential service(s) flattened ComponentName.
+         *
+         * @hide
+         */
+        public static final String CREDENTIAL_SERVICE = "credential_service";
+
         /**
          * The currently selected autofill service flattened ComponentName.
          * @hide
@@ -7138,7 +7163,7 @@ public final class Settings {
          * Format like "ime0;subtype0;subtype1;subtype2:ime1:ime2;subtype0"
          * where imeId is ComponentName and subtype is int32.
          */
-        @Readable
+        @Readable(maxTargetSdk = Build.VERSION_CODES.TIRAMISU)
         public static final String ENABLED_INPUT_METHODS = "enabled_input_methods";
 
         /**
@@ -7147,7 +7172,7 @@ public final class Settings {
          * by ':'.
          * @hide
          */
-        @Readable
+        @Readable(maxTargetSdk = Build.VERSION_CODES.TIRAMISU)
         public static final String DISABLED_SYSTEM_INPUT_METHODS = "disabled_system_input_methods";
 
         /**
@@ -16057,6 +16082,18 @@ public final class Settings {
         @Readable
         public static final String KEY_CHORD_POWER_VOLUME_UP =
                 "key_chord_power_volume_up";
+
+        /**
+         * Record audio from near-field microphone (ie. TV remote)
+         * Allows audio recording regardless of sensor privacy state,
+         * as it is an intentional user interaction: hold-to-talk
+         *
+         * Type: int (0 to disable, 1 to enable)
+         *
+         * @hide
+         */
+        public static final String RECEIVE_EXPLICIT_USER_INTERACTION_AUDIO_ENABLED =
+                "receive_explicit_user_interaction_audio_enabled";
 
         /**
          * Keyguard should be on the left hand side of the screen, for wide screen layouts.

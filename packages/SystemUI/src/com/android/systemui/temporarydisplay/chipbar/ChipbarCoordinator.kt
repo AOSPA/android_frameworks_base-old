@@ -38,10 +38,8 @@ import com.android.systemui.common.ui.binder.IconViewBinder
 import com.android.systemui.common.ui.binder.TextViewBinder
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Main
-import com.android.systemui.media.taptotransfer.common.MediaTttLogger
-import com.android.systemui.media.taptotransfer.common.MediaTttUtils
-import com.android.systemui.media.taptotransfer.sender.MediaTttSenderLogger
 import com.android.systemui.plugins.FalsingManager
+import com.android.systemui.statusbar.VibratorHelper
 import com.android.systemui.statusbar.policy.ConfigurationController
 import com.android.systemui.temporarydisplay.TemporaryViewDisplayController
 import com.android.systemui.util.concurrency.DelayableExecutor
@@ -63,14 +61,11 @@ import javax.inject.Inject
  * Only one chipbar may be shown at a time.
  * TODO(b/245610654): Should we just display whichever chipbar was most recently requested, or do we
  *   need to maintain a priority ordering?
- *
- * TODO(b/245610654): Remove all media-related items from this class so it's just for generic
- *   chipbars.
  */
 @SysUISingleton
 open class ChipbarCoordinator @Inject constructor(
         context: Context,
-        @MediaTttSenderLogger logger: MediaTttLogger,
+        logger: ChipbarLogger,
         windowManager: WindowManager,
         @Main mainExecutor: DelayableExecutor,
         accessibilityManager: AccessibilityManager,
@@ -79,7 +74,8 @@ open class ChipbarCoordinator @Inject constructor(
         private val falsingManager: FalsingManager,
         private val falsingCollector: FalsingCollector,
         private val viewUtil: ViewUtil,
-) : TemporaryViewDisplayController<ChipbarInfo, MediaTttLogger>(
+        private val vibratorHelper: VibratorHelper,
+) : TemporaryViewDisplayController<ChipbarInfo, ChipbarLogger>(
         context,
         logger,
         windowManager,
@@ -88,8 +84,6 @@ open class ChipbarCoordinator @Inject constructor(
         configurationController,
         powerManager,
         R.layout.chipbar,
-        MediaTttUtils.WINDOW_TITLE,
-        MediaTttUtils.WAKE_REASON,
 ) {
 
     private lateinit var parent: ChipbarRootView
@@ -104,7 +98,16 @@ open class ChipbarCoordinator @Inject constructor(
         newInfo: ChipbarInfo,
         currentView: ViewGroup
     ) {
-        // TODO(b/245610654): Adding logging here.
+        logger.logViewUpdate(
+            newInfo.windowTitle,
+            newInfo.text.loadText(context),
+            when (newInfo.endItem) {
+                null -> "null"
+                is ChipbarEndItem.Loading -> "loading"
+                is ChipbarEndItem.Error -> "error"
+                is ChipbarEndItem.Button -> "button(${newInfo.endItem.text.loadText(context)})"
+            }
+        )
 
         // Detect falsing touches on the chip.
         parent = currentView.requireViewById(R.id.chipbar_root_view)
@@ -122,6 +125,9 @@ open class ChipbarCoordinator @Inject constructor(
         // ---- Text ----
         val textView = currentView.requireViewById<TextView>(R.id.text)
         TextViewBinder.bind(textView, newInfo.text)
+        // Updates text view bounds to make sure it perfectly fits the new text
+        // (If the new text is smaller than the previous text) see b/253228632.
+        textView.requestLayout()
 
         // ---- End item ----
         // Loading
@@ -154,6 +160,11 @@ open class ChipbarCoordinator @Inject constructor(
         ).contentDescription =
             "${newInfo.startIcon.contentDescription.loadContentDescription(context)} " +
                 "${newInfo.text.loadText(context)}"
+
+        // ---- Haptics ----
+        newInfo.vibrationEffect?.let {
+            vibratorHelper.vibrate(it)
+        }
     }
 
     override fun animateViewIn(view: ViewGroup) {
@@ -194,5 +205,4 @@ open class ChipbarCoordinator @Inject constructor(
     }
 }
 
-const val SENDER_TAG = "MediaTapToTransferSender"
 private const val ANIMATION_DURATION = 500L

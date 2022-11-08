@@ -122,7 +122,6 @@ import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.statusbar.RegisterStatusBarResult;
 import com.android.keyguard.AuthKeyguardMessageArea;
-import com.android.keyguard.FaceAuthApiRequestReason;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.KeyguardUpdateMonitorCallback;
 import com.android.keyguard.ViewMediatorCallback;
@@ -1614,18 +1613,6 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
         return (mDisabled2 & StatusBarManager.DISABLE2_NOTIFICATION_SHADE) != 0;
     }
 
-    /**
-     * Asks {@link KeyguardUpdateMonitor} to run face auth.
-     */
-    @Override
-    public void requestFaceAuth(boolean userInitiatedRequest,
-            @FaceAuthApiRequestReason String reason) {
-        if (!mKeyguardStateController.canDismissLockScreen()) {
-            mKeyguardUpdateMonitor.requestFaceAuth(
-                    userInitiatedRequest, reason);
-        }
-    }
-
     private void updateReportRejectedTouchVisibility() {
         if (mReportRejectedTouch == null) {
             return;
@@ -1774,18 +1761,6 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
         startActivityDismissingKeyguard(intent, false, dismissShade,
                 false /* disallowEnterPictureInPictureWhileLaunching */, callback, 0,
                 null /* animationController */, getActivityUserHandle(intent));
-    }
-
-    @Override
-    public void setQsExpanded(boolean expanded) {
-        mNotificationShadeWindowController.setQsExpanded(expanded);
-        mNotificationPanelViewController.setStatusAccessibilityImportance(expanded
-                ? View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
-                : View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);
-        mNotificationPanelViewController.updateSystemUiStateFlags();
-        if (getNavigationBarView() != null) {
-            getNavigationBarView().onStatusBarPanelStateChanged();
-        }
     }
 
     @Override
@@ -2972,7 +2947,10 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
             //  * When phone is unlocked: we still don't want to execute hiding of the keyguard
             //    as the animation could prepare 'fake AOD' interface (without actually
             //    transitioning to keyguard state) and this might reset the view states
-            if (!mScreenOffAnimationController.isKeyguardHideDelayed()) {
+            if (!mScreenOffAnimationController.isKeyguardHideDelayed()
+                    // If we're animating occluded, there's an activity launching over the keyguard
+                    // UI. Wait to hide it until after the animation concludes.
+                    && !mKeyguardViewMediator.isOccludeAnimationPlaying()) {
                 return hideKeyguardImpl(forceStateChange);
             }
         }

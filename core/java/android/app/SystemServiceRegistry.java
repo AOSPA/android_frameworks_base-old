@@ -85,6 +85,7 @@ import android.credentials.CredentialManager;
 import android.credentials.ICredentialManager;
 import android.debug.AdbManager;
 import android.debug.IAdbManager;
+import android.devicelock.DeviceLockFrameworkInitializer;
 import android.graphics.fonts.FontManager;
 import android.hardware.ConsumerIrManager;
 import android.hardware.ISerialManager;
@@ -172,6 +173,7 @@ import android.os.IThermalService;
 import android.os.IUserManager;
 import android.os.IncidentManager;
 import android.os.PerformanceHintManager;
+import android.os.PermissionEnforcer;
 import android.os.PowerManager;
 import android.os.RecoverySystem;
 import android.os.ServiceManager;
@@ -1365,6 +1367,14 @@ public final class SystemServiceRegistry {
                         return new PermissionCheckerManager(ctx.getOuterContext());
                     }});
 
+        registerService(Context.PERMISSION_ENFORCER_SERVICE, PermissionEnforcer.class,
+                new CachedServiceFetcher<PermissionEnforcer>() {
+                    @Override
+                    public PermissionEnforcer createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        return new PermissionEnforcer(ctx.getOuterContext());
+                    }});
+
         registerService(Context.DYNAMIC_SYSTEM_SERVICE, DynamicSystemManager.class,
                 new CachedServiceFetcher<DynamicSystemManager>() {
                     @Override
@@ -1555,6 +1565,7 @@ public final class SystemServiceRegistry {
             ConnectivityFrameworkInitializerTiramisu.registerServiceWrappers();
             NearbyFrameworkInitializer.registerServiceWrappers();
             OnDevicePersonalizationFrameworkInitializer.registerServiceWrappers();
+            DeviceLockFrameworkInitializer.registerServiceWrappers();
         } finally {
             // If any of the above code throws, we're in a pretty bad shape and the process
             // will likely crash, but we'll reset it just in case there's an exception handler...

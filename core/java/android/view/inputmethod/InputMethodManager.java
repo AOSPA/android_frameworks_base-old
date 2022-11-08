@@ -30,7 +30,9 @@ import static android.view.inputmethod.InputMethodEditorTraceProto.InputMethodCl
 import static android.view.inputmethod.InputMethodManagerProto.ACTIVE;
 import static android.view.inputmethod.InputMethodManagerProto.CUR_ID;
 import static android.view.inputmethod.InputMethodManagerProto.FULLSCREEN_MODE;
+import static android.view.inputmethod.InputMethodManagerProto.NEXT_SERVED_VIEW;
 import static android.view.inputmethod.InputMethodManagerProto.SERVED_CONNECTING;
+import static android.view.inputmethod.InputMethodManagerProto.SERVED_VIEW;
 
 import static com.android.internal.inputmethod.StartInputReason.BOUND_TO_IMMS;
 
@@ -68,8 +70,6 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.Process;
 import android.os.ResultReceiver;
-import android.os.ServiceManager;
-import android.os.ServiceManager.ServiceNotFoundException;
 import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
@@ -299,7 +299,7 @@ public final class InputMethodManager {
     static boolean isImeBoostPropertyRead = false;
 
     /**
-     * Provide this to {@link IInputMethodManagerInvoker#startInputOrWindowGainedFocus(int,
+     * Provide this to {@link IInputMethodManagerGlobalInvoker#startInputOrWindowGainedFocus(int,
      * IInputMethodClient, IBinder, int, int, int, EditorInfo,
      * com.android.internal.inputmethod.IRemoteInputConnection, IRemoteAccessibilityInputConnection,
      * int, int, ImeOnBackInvokedDispatcher)} to receive
@@ -426,15 +426,12 @@ public final class InputMethodManager {
             SystemProperties.getBoolean("debug.imm.optimize_noneditable_views", true);
 
     /**
-     * @deprecated Use {@link #mServiceInvoker} instead.
+     * @deprecated Use {@link IInputMethodManagerGlobalInvoker} instead.
      */
     @Deprecated
     @UnsupportedAppUsage
     final IInputMethodManager mService;
     private final Looper mMainLooper;
-
-    @NonNull
-    private final IInputMethodManagerInvoker mServiceInvoker;
 
     // For scheduling work on the main thread.  This also serves as our
     // global lock.
@@ -739,7 +736,7 @@ public final class InputMethodManager {
      * @hide
      */
     public void reportPerceptible(@NonNull IBinder windowToken, boolean perceptible) {
-        mServiceInvoker.reportPerceptibleAsync(windowToken, perceptible);
+        IInputMethodManagerGlobalInvoker.reportPerceptibleAsync(windowToken, perceptible);
     }
 
     private final class DelegateImpl implements
@@ -769,13 +766,11 @@ public final class InputMethodManager {
                     forceFocus = true;
                 }
             }
-            startInputOnWindowFocusGain(viewForWindowFocus,
-                    windowAttribute.softInputMode, windowAttribute.flags, forceFocus);
-        }
 
-        private void startInputOnWindowFocusGain(View focusedView,
-                @SoftInputModeFlags int softInputMode, int windowFlags, boolean forceNewFocus) {
-            int startInputFlags = getStartInputFlags(focusedView, 0);
+            final int softInputMode = windowAttribute.softInputMode;
+            final int windowFlags = windowAttribute.flags;
+
+            int startInputFlags = getStartInputFlags(viewForWindowFocus, 0);
             startInputFlags |= StartInputFlags.WINDOW_GAINED_FOCUS;
 
             ImeTracing.getInstance().triggerClientDump(
@@ -790,9 +785,9 @@ public final class InputMethodManager {
                 if (mRestartOnNextWindowFocus) {
                     if (DEBUG) Log.v(TAG, "Restarting due to mRestartOnNextWindowFocus as true");
                     mRestartOnNextWindowFocus = false;
-                    forceNewFocus = true;
+                    forceFocus = true;
                 }
-                checkFocusResult = checkFocusInternalLocked(forceNewFocus, mCurRootView);
+                checkFocusResult = checkFocusInternalLocked(forceFocus, mCurRootView);
             }
 
             if (checkFocusResult) {
@@ -801,7 +796,7 @@ public final class InputMethodManager {
                 // about the window gaining focus, to help make the transition
                 // smooth.
                 if (startInputOnWindowFocusGainInternal(StartInputReason.WINDOW_FOCUS_GAIN,
-                        focusedView, startInputFlags, softInputMode, windowFlags)) {
+                        viewForWindowFocus, startInputFlags, softInputMode, windowFlags)) {
                     return;
                 }
             }
@@ -814,9 +809,9 @@ public final class InputMethodManager {
                 }
 
                 // ignore the result
-                mServiceInvoker.startInputOrWindowGainedFocus(
+                IInputMethodManagerGlobalInvoker.startInputOrWindowGainedFocus(
                         StartInputReason.WINDOW_FOCUS_GAIN_REPORT_ONLY, mClient,
-                        focusedView.getWindowToken(), startInputFlags, softInputMode,
+                        viewForWindowFocus.getWindowToken(), startInputFlags, softInputMode,
                         windowFlags,
                         null,
                         null, null,
@@ -909,8 +904,6 @@ public final class InputMethodManager {
     /**
      * Checks whether the active input connection (if any) is for the given view.
      *
-     * TODO(b/182259171): Clean-up hasActiveConnection to simplify the logic.
-     *
      * Note that this method is only intended for restarting input after focus gain
      * (e.g. b/160391516), DO NOT leverage this method to do another check.
      */
@@ -921,7 +914,6 @@ public final class InputMethodManager {
             }
 
             return mServedInputConnection != null
-                    && mServedInputConnection.isActive()
                     && mServedInputConnection.isAssociatedWith(view);
         }
     }
@@ -1134,10 +1126,13 @@ public final class InputMethodManager {
                         if (!checkFocusInternalLocked(mRestartOnNextWindowFocus, mCurRootView)) {
                             return;
                         }
-                        final int reason = active ? StartInputReason.ACTIVATED_BY_IMMS
-                                : StartInputReason.DEACTIVATED_BY_IMMS;
-                        startInputOnWindowFocusGainInternal(reason, null, 0, 0, 0);
+                        mCurrentEditorInfo = null;
+                        mCompletions = null;
+                        mServedConnecting = true;
                     }
+                    final int reason = active ? StartInputReason.ACTIVATED_BY_IMMS
+                            : StartInputReason.DEACTIVATED_BY_IMMS;
+                    startInputInner(reason, null, 0, 0, 0);
                     return;
                 }
                 case MSG_SET_INTERACTIVE: {
@@ -1359,6 +1354,10 @@ public final class InputMethodManager {
         return false;
     }
 
+    static boolean isInEditModeInternal() {
+        return isInEditMode();
+    }
+
     @NonNull
     private static InputMethodManager createInstance(int displayId, Looper looper) {
         return isInEditMode() ? createStubInstance(displayId, looper)
@@ -1367,12 +1366,9 @@ public final class InputMethodManager {
 
     @NonNull
     private static InputMethodManager createRealInstance(int displayId, Looper looper) {
-        final IInputMethodManager service;
-        try {
-            service = IInputMethodManager.Stub.asInterface(
-                    ServiceManager.getServiceOrThrow(Context.INPUT_METHOD_SERVICE));
-        } catch (ServiceNotFoundException e) {
-            throw new IllegalStateException(e);
+        final IInputMethodManager service = IInputMethodManagerGlobalInvoker.getService();
+        if (service == null) {
+            throw new IllegalStateException("IInputMethodManager is not available");
         }
         final InputMethodManager imm = new InputMethodManager(service, displayId, looper);
         // InputMethodManagerService#addClient() relies on Binder.getCalling{Pid, Uid}() to
@@ -1384,7 +1380,8 @@ public final class InputMethodManager {
         // 1) doing so has no effect for A and 2) doing so is sufficient for B.
         final long identity = Binder.clearCallingIdentity();
         try {
-            imm.mServiceInvoker.addClient(imm.mClient, imm.mFallbackInputConnection, displayId);
+            IInputMethodManagerGlobalInvoker.addClient(imm.mClient, imm.mFallbackInputConnection,
+                    displayId);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -1424,7 +1421,6 @@ public final class InputMethodManager {
 
     private InputMethodManager(@NonNull IInputMethodManager service, int displayId, Looper looper) {
         mService = service;  // For @UnsupportedAppUsage
-        mServiceInvoker = IInputMethodManagerInvoker.create(service);
         mMainLooper = looper;
         mH = new H(looper);
         mDisplayId = displayId;
@@ -1518,7 +1514,8 @@ public final class InputMethodManager {
         // We intentionally do not use UserHandle.getCallingUserId() here because for system
         // services InputMethodManagerInternal.getInputMethodListAsUser() should be used
         // instead.
-        return mServiceInvoker.getInputMethodList(UserHandle.myUserId(), DirectBootAwareness.AUTO);
+        return IInputMethodManagerGlobalInvoker.getInputMethodList(UserHandle.myUserId(),
+                DirectBootAwareness.AUTO);
     }
 
     /**
@@ -1552,7 +1549,7 @@ public final class InputMethodManager {
             }
             return false;
         }
-        return mServiceInvoker.isStylusHandwritingAvailableAsUser(userId);
+        return IInputMethodManagerGlobalInvoker.isStylusHandwritingAvailableAsUser(userId);
     }
 
     /**
@@ -1566,7 +1563,8 @@ public final class InputMethodManager {
     @RequiresPermission(INTERACT_ACROSS_USERS_FULL)
     @NonNull
     public List<InputMethodInfo> getInputMethodListAsUser(@UserIdInt int userId) {
-        return mServiceInvoker.getInputMethodList(userId, DirectBootAwareness.AUTO);
+        return IInputMethodManagerGlobalInvoker.getInputMethodList(userId,
+                DirectBootAwareness.AUTO);
     }
 
     /**
@@ -1582,7 +1580,7 @@ public final class InputMethodManager {
     @NonNull
     public List<InputMethodInfo> getInputMethodListAsUser(@UserIdInt int userId,
             @DirectBootAwareness int directBootAwareness) {
-        return mServiceInvoker.getInputMethodList(userId, directBootAwareness);
+        return IInputMethodManagerGlobalInvoker.getInputMethodList(userId, directBootAwareness);
     }
 
     /**
@@ -1597,7 +1595,7 @@ public final class InputMethodManager {
         // We intentionally do not use UserHandle.getCallingUserId() here because for system
         // services InputMethodManagerInternal.getEnabledInputMethodListAsUser() should be used
         // instead.
-        return mServiceInvoker.getEnabledInputMethodList(UserHandle.myUserId());
+        return IInputMethodManagerGlobalInvoker.getEnabledInputMethodList(UserHandle.myUserId());
     }
 
     /**
@@ -1609,7 +1607,7 @@ public final class InputMethodManager {
      */
     @RequiresPermission(INTERACT_ACROSS_USERS_FULL)
     public List<InputMethodInfo> getEnabledInputMethodListAsUser(@UserIdInt int userId) {
-        return mServiceInvoker.getEnabledInputMethodList(userId);
+        return IInputMethodManagerGlobalInvoker.getEnabledInputMethodList(userId);
     }
 
     /**
@@ -1626,7 +1624,7 @@ public final class InputMethodManager {
     @NonNull
     public List<InputMethodSubtype> getEnabledInputMethodSubtypeList(@Nullable InputMethodInfo imi,
             boolean allowsImplicitlyEnabledSubtypes) {
-        return mServiceInvoker.getEnabledInputMethodSubtypeList(
+        return IInputMethodManagerGlobalInvoker.getEnabledInputMethodSubtypeList(
                 imi == null ? null : imi.getId(),
                 allowsImplicitlyEnabledSubtypes,
                 UserHandle.myUserId());
@@ -2009,7 +2007,7 @@ public final class InputMethodManager {
             mH.executeOrSendMessage(Message.obtain(mH, MSG_ON_SHOW_REQUESTED));
             Log.d(TAG, "showSoftInput() view=" + view + " flags=" + flags + " reason="
                     + InputMethodDebug.softInputDisplayReasonToString(reason));
-            return mServiceInvoker.showSoftInput(
+            return IInputMethodManagerGlobalInvoker.showSoftInput(
                     mClient,
                     view.getWindowToken(),
                     flags,
@@ -2041,7 +2039,7 @@ public final class InputMethodManager {
             // Makes sure to call ImeInsetsSourceConsumer#onShowRequested on the UI thread.
             // TODO(b/229426865): call WindowInsetsController#show instead.
             mH.executeOrSendMessage(Message.obtain(mH, MSG_ON_SHOW_REQUESTED));
-            mServiceInvoker.showSoftInput(
+            IInputMethodManagerGlobalInvoker.showSoftInput(
                     mClient,
                     mCurRootView.getView().getWindowToken(),
                     flags,
@@ -2122,8 +2120,8 @@ public final class InputMethodManager {
                 return false;
             }
 
-            return mServiceInvoker.hideSoftInput(mClient, windowToken, flags, resultReceiver,
-                    reason);
+            return IInputMethodManagerGlobalInvoker.hideSoftInput(mClient, windowToken, flags,
+                    resultReceiver, reason);
         }
     }
 
@@ -2171,7 +2169,7 @@ public final class InputMethodManager {
                 return;
             }
 
-            mServiceInvoker.startStylusHandwriting(mClient);
+            IInputMethodManagerGlobalInvoker.startStylusHandwriting(mClient);
             // TODO(b/210039666): do we need any extra work for supporting non-native
             //   UI toolkits?
         }
@@ -2504,7 +2502,7 @@ public final class InputMethodManager {
             }
             final int targetUserId = editorInfo.targetInputMethodUser != null
                     ? editorInfo.targetInputMethodUser.getIdentifier() : UserHandle.myUserId();
-            res = mServiceInvoker.startInputOrWindowGainedFocus(
+            res = IInputMethodManagerGlobalInvoker.startInputOrWindowGainedFocus(
                     startInputReason, mClient, windowGainingFocus, startInputFlags,
                     softInputMode, windowFlags, editorInfo, servedInputConnection,
                     servedInputConnection == null ? null
@@ -2600,7 +2598,7 @@ public final class InputMethodManager {
     @TestApi
     public void addVirtualStylusIdForTestSession() {
         synchronized (mH) {
-            mServiceInvoker.addVirtualStylusIdForTestSession(mClient);
+            IInputMethodManagerGlobalInvoker.addVirtualStylusIdForTestSession(mClient);
         }
     }
 
@@ -2614,7 +2612,7 @@ public final class InputMethodManager {
     @TestApi
     public void setStylusWindowIdleTimeoutForTest(@DurationMillisLong long timeout) {
         synchronized (mH) {
-            mServiceInvoker.setStylusWindowIdleTimeoutForTest(mClient, timeout);
+            IInputMethodManagerGlobalInvoker.setStylusWindowIdleTimeoutForTest(mClient, timeout);
         }
     }
 
@@ -2751,7 +2749,7 @@ public final class InputMethodManager {
                 Log.w(TAG, "No current root view, ignoring closeCurrentInput()");
                 return;
             }
-            mServiceInvoker.hideSoftInput(
+            IInputMethodManagerGlobalInvoker.hideSoftInput(
                     mClient,
                     mCurRootView.getView().getWindowToken(),
                     HIDE_NOT_ALWAYS,
@@ -2827,7 +2825,7 @@ public final class InputMethodManager {
         synchronized (mH) {
             if (isImeSessionAvailableLocked() && mCurRootView != null
                     && mCurRootView.getWindowToken() == windowToken) {
-                mServiceInvoker.hideSoftInput(mClient, windowToken, 0 /* flags */,
+                IInputMethodManagerGlobalInvoker.hideSoftInput(mClient, windowToken, 0 /* flags */,
                         null /* resultReceiver */,
                         SoftInputShowHideReason.HIDE_SOFT_INPUT_BY_INSETS_API);
             }
@@ -2841,7 +2839,7 @@ public final class InputMethodManager {
      */
     public void removeImeSurface(@NonNull IBinder windowToken) {
         synchronized (mH) {
-            mServiceInvoker.removeImeSurfaceFromWindowAsync(windowToken);
+            IInputMethodManagerGlobalInvoker.removeImeSurfaceFromWindowAsync(windowToken);
         }
     }
 
@@ -3446,12 +3444,13 @@ public final class InputMethodManager {
         final int mode = showAuxiliarySubtypes
                 ? SHOW_IM_PICKER_MODE_INCLUDE_AUXILIARY_SUBTYPES
                 : SHOW_IM_PICKER_MODE_EXCLUDE_AUXILIARY_SUBTYPES;
-        mServiceInvoker.showInputMethodPickerFromSystem(mClient, mode, displayId);
+        IInputMethodManagerGlobalInvoker.showInputMethodPickerFromSystem(mClient, mode, displayId);
     }
 
     @GuardedBy("mH")
     private void showInputMethodPickerLocked() {
-        mServiceInvoker.showInputMethodPickerFromClient(mClient, SHOW_IM_PICKER_MODE_AUTO);
+        IInputMethodManagerGlobalInvoker.showInputMethodPickerFromClient(mClient,
+                SHOW_IM_PICKER_MODE_AUTO);
     }
 
     /**
@@ -3467,7 +3466,7 @@ public final class InputMethodManager {
      */
     @TestApi
     public boolean isInputMethodPickerShown() {
-        return mServiceInvoker.isInputMethodPickerShownForTest();
+        return IInputMethodManagerGlobalInvoker.isInputMethodPickerShownForTest();
     }
 
     /**
@@ -3506,7 +3505,7 @@ public final class InputMethodManager {
      */
     @Nullable
     public InputMethodSubtype getCurrentInputMethodSubtype() {
-        return mServiceInvoker.getCurrentInputMethodSubtype(UserHandle.myUserId());
+        return IInputMethodManagerGlobalInvoker.getCurrentInputMethodSubtype(UserHandle.myUserId());
     }
 
     /**
@@ -3551,7 +3550,7 @@ public final class InputMethodManager {
             return false;
         }
         final List<InputMethodSubtype> enabledSubtypes =
-                mServiceInvoker.getEnabledInputMethodSubtypeList(imeId, true,
+                IInputMethodManagerGlobalInvoker.getEnabledInputMethodSubtypeList(imeId, true,
                         UserHandle.myUserId());
         final int numSubtypes = enabledSubtypes.size();
         for (int i = 0; i < numSubtypes; ++i) {
@@ -3617,7 +3616,7 @@ public final class InputMethodManager {
     @UnsupportedAppUsage(trackingBug = 204906124, maxTargetSdk = Build.VERSION_CODES.TIRAMISU,
             publicAlternatives = "Use {@link android.view.WindowInsets} instead")
     public int getInputMethodWindowVisibleHeight() {
-        return mServiceInvoker.getInputMethodWindowVisibleHeight(mClient);
+        return IInputMethodManagerGlobalInvoker.getInputMethodWindowVisibleHeight(mClient);
     }
 
     /**
@@ -3637,7 +3636,8 @@ public final class InputMethodManager {
             matrixValues = new float[9];
             matrix.getValues(matrixValues);
         }
-        mServiceInvoker.reportVirtualDisplayGeometryAsync(mClient, childDisplayId, matrixValues);
+        IInputMethodManagerGlobalInvoker.reportVirtualDisplayGeometryAsync(mClient, childDisplayId,
+                matrixValues);
     }
 
     /**
@@ -3744,7 +3744,8 @@ public final class InputMethodManager {
     @Deprecated
     public void setAdditionalInputMethodSubtypes(@NonNull String imiId,
             @NonNull InputMethodSubtype[] subtypes) {
-        mServiceInvoker.setAdditionalInputMethodSubtypes(imiId, subtypes, UserHandle.myUserId());
+        IInputMethodManagerGlobalInvoker.setAdditionalInputMethodSubtypes(imiId, subtypes,
+                UserHandle.myUserId());
     }
 
     /**
@@ -3793,8 +3794,8 @@ public final class InputMethodManager {
      */
     public void setExplicitlyEnabledInputMethodSubtypes(@NonNull String imiId,
             @NonNull int[] subtypeHashCodes) {
-        mServiceInvoker.setExplicitlyEnabledInputMethodSubtypes(imiId, subtypeHashCodes,
-                UserHandle.myUserId());
+        IInputMethodManagerGlobalInvoker.setExplicitlyEnabledInputMethodSubtypes(imiId,
+                subtypeHashCodes, UserHandle.myUserId());
     }
 
     /**
@@ -3804,7 +3805,7 @@ public final class InputMethodManager {
      */
     @Nullable
     public InputMethodSubtype getLastInputMethodSubtype() {
-        return mServiceInvoker.getLastInputMethodSubtype(UserHandle.myUserId());
+        return IInputMethodManagerGlobalInvoker.getLastInputMethodSubtype(UserHandle.myUserId());
     }
 
     /**
@@ -3998,6 +3999,8 @@ public final class InputMethodManager {
             proto.write(FULLSCREEN_MODE, mFullscreenMode);
             proto.write(ACTIVE, mActive);
             proto.write(SERVED_CONNECTING, mServedConnecting);
+            proto.write(SERVED_VIEW, Objects.toString(mServedView));
+            proto.write(NEXT_SERVED_VIEW, Objects.toString(mNextServedView));
             proto.end(token);
             if (mCurRootView != null) {
                 mCurRootView.dumpDebug(proto, VIEW_ROOT_IMPL);

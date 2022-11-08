@@ -3938,6 +3938,7 @@ public abstract class Context {
             //@hide: SAFETY_CENTER_SERVICE,
             DISPLAY_HASH_SERVICE,
             CREDENTIAL_SERVICE,
+            DEVICE_LOCK_SERVICE,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ServiceName {}
@@ -5141,6 +5142,14 @@ public abstract class Context {
     public static final String PERMISSION_CHECKER_SERVICE = "permission_checker";
 
     /**
+     * Official published name of the (internal) permission enforcer service.
+     *
+     * @see #getSystemService(String)
+     * @hide
+     */
+    public static final String PERMISSION_ENFORCER_SERVICE = "permission_enforcer";
+
+    /**
      * Use with {@link #getSystemService(String) to retrieve an
      * {@link android.apphibernation.AppHibernationManager}} for
      * communicating with the hibernation service.
@@ -5191,6 +5200,15 @@ public abstract class Context {
      * @see #getSystemService(String)
      */
     public static final String DROPBOX_SERVICE = "dropbox";
+
+    /**
+     * System service name for BackgroundInstallControlService. This service supervises the MBAs
+     * on device and provides the related metadata of the MBAs.
+     *
+     * @hide
+     */
+    @SuppressLint("ServiceName")
+    public static final String BACKGROUND_INSTALL_CONTROL_SERVICE = "background_install_control";
 
     /**
      * System service name for BinaryTransparencyService. This is used to retrieve measurements
@@ -6071,6 +6089,14 @@ public abstract class Context {
      * @see CredentialManager
      */
     public static final String CREDENTIAL_SERVICE = "credential";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.devicelock.DeviceLockManager}.
+     *
+     * @see #getSystemService(String)
+     */
+    public static final String DEVICE_LOCK_SERVICE = "device_lock";
 
     /**
      * Determine whether the given permission is allowed for a particular

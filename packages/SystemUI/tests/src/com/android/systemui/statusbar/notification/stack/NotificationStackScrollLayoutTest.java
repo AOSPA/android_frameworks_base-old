@@ -78,6 +78,7 @@ import com.android.systemui.statusbar.phone.UnlockedScreenOffAnimationController
 
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -89,6 +90,7 @@ import org.mockito.junit.MockitoRule;
 /**
  * Tests for {@link NotificationStackScrollLayout}.
  */
+@Ignore("b/255552856")
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
 @TestableLooper.RunWithLooper
@@ -163,7 +165,7 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
         mStackScroller.setCentralSurfaces(mCentralSurfaces);
         mStackScroller.setEmptyShadeView(mEmptyShadeView);
         when(mStackScrollLayoutController.isHistoryEnabled()).thenReturn(true);
-        when(mStackScrollLayoutController.getNoticationRoundessManager())
+        when(mStackScrollLayoutController.getNotificationRoundnessManager())
                 .thenReturn(mNotificationRoundnessManager);
         mStackScroller.setController(mStackScrollLayoutController);
 

@@ -602,6 +602,8 @@
   <java-symbol type="string" name="RestrictedOnEmergencyTitle" />
   <java-symbol type="string" name="RestrictedOnNormalTitle" />
   <java-symbol type="string" name="RestrictedStateContent" />
+  <java-symbol type="string" name="auto_data_switch_title" />
+  <java-symbol type="string" name="auto_data_switch_content" />
   <java-symbol type="string" name="RestrictedStateContentMsimTemplate" />
   <java-symbol type="string" name="notification_channel_network_alert" />
   <java-symbol type="string" name="notification_channel_call_forward" />
@@ -2253,6 +2255,8 @@
   <java-symbol type="string" name="config_dreamsDefaultComponent" />
   <java-symbol type="bool" name="config_dreamsDisabledByAmbientModeSuppressionConfig" />
   <java-symbol type="bool" name="config_dreamsOnlyEnabledForSystemUser" />
+  <java-symbol type="integer" name="config_dreamOpenAnimationDuration" />
+  <java-symbol type="integer" name="config_dreamCloseAnimationDuration" />
   <java-symbol type="array" name="config_supportedDreamComplications" />
   <java-symbol type="array" name="config_disabledDreamComponents" />
   <java-symbol type="bool" name="config_dismissDreamOnActivityStart" />
@@ -3741,7 +3745,6 @@
   <java-symbol type="integer" name="config_maxUiWidth" />
 
   <!-- system notification channels -->
-  <java-symbol type="string" name="notification_channel_virtual_keyboard" />
   <java-symbol type="string" name="notification_channel_physical_keyboard" />
   <java-symbol type="string" name="notification_channel_security" />
   <java-symbol type="string" name="notification_channel_car_mode" />

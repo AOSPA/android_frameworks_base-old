@@ -1185,7 +1185,28 @@
                 android:protectionLevel="dangerous" />
 
     <!-- Allows an application to write to external storage.
-         <p class="note"><strong>Note:</strong> If <em>both</em> your <a
+         <p><strong>Note: </strong>If your app targets {@link android.os.Build.VERSION_CODES#R} or
+         higher, this permission has no effect.
+
+         <p>If your app is on a device that runs API level 19 or higher, you don't need to declare
+         this permission to read and write files in your application-specific directories returned
+         by {@link android.content.Context#getExternalFilesDir} and
+         {@link android.content.Context#getExternalCacheDir}.
+
+         <p>Learn more about how to
+         <a href="{@docRoot}training/data-storage/shared/media#update-other-apps-files">modify media
+         files</a> that your app doesn't own, and how to
+         <a href="{@docRoot}training/data-storage/shared/documents-files">modify non-media files</a>
+         that your app doesn't own.
+
+         <p>If your app is a file manager and needs broad access to external storage files, then
+         the system must place your app on an allowlist so that you can successfully request the
+         <a href="#MANAGE_EXTERNAL_STORAGE><code>MANAGE_EXTERNAL_STORAGE</code></a> permission.
+         Learn more about the appropriate use cases for
+         <a href="{@docRoot}training/data-storage/manage-all-files>managing all files on a storage
+         device</a>.
+
+         <p>If <em>both</em> your <a
          href="{@docRoot}guide/topics/manifest/uses-sdk-element.html#min">{@code
          minSdkVersion}</a> and <a
          href="{@docRoot}guide/topics/manifest/uses-sdk-element.html#target">{@code
@@ -1193,12 +1214,6 @@
          grants your app this permission. If you don't need this permission, be sure your <a
          href="{@docRoot}guide/topics/manifest/uses-sdk-element.html#target">{@code
          targetSdkVersion}</a> is 4 or higher.
-         <p>Starting in API level 19, this permission is <em>not</em> required to
-         read/write files in your application-specific directories returned by
-         {@link android.content.Context#getExternalFilesDir} and
-         {@link android.content.Context#getExternalCacheDir}.
-         <p>If this permission is not allowlisted for an app that targets an API level before
-         {@link android.os.Build.VERSION_CODES#Q} this permission cannot be granted to apps.</p>
          <p>Protection level: dangerous</p>
     -->
     <permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
@@ -3081,6 +3096,12 @@
     <permission android:name="android.permission.CREATE_USERS"
         android:protectionLevel="signature" />
 
+    <!-- @SystemApi @hide Allows an application to set user association
+         with a certain subscription. Used by Enterprise to associate a
+         subscription with a work or personal profile. -->
+    <permission android:name="android.permission.MANAGE_SUBSCRIPTION_USER_ASSOCIATION"
+                android:protectionLevel="signature" />
+
     <!-- @SystemApi @hide Allows an application to call APIs that allow it to query users on the
          device. -->
     <permission android:name="android.permission.QUERY_USERS"
@@ -3194,12 +3215,29 @@
 
     <!-- Allows an application to call
         {@link android.app.ActivityManager#killBackgroundProcesses}.
+        <p>As of Android version {@link android.os.Build.VERSION_CODES#UPSIDE_DOWN_CAKE},
+        the {@link android.app.ActivityManager#killBackgroundProcesses} is no longer available to
+        third party applications. For backwards compatibility, the background processes of the
+        caller's own package will still be killed when calling this API. If the caller has
+        the system permission {@code KILL_ALL_BACKGROUND_PROCESSES}, other processes will be
+        killed too.
+
          <p>Protection level: normal
     -->
     <permission android:name="android.permission.KILL_BACKGROUND_PROCESSES"
         android:label="@string/permlab_killBackgroundProcesses"
         android:description="@string/permdesc_killBackgroundProcesses"
         android:protectionLevel="normal" />
+
+    <!-- @SystemApi @hide Allows an application to call
+        {@link android.app.ActivityManager#killBackgroundProcesses}
+        to kill background processes of other apps.
+         <p>Not for use by third-party applications.
+    -->
+    <permission android:name="android.permission.KILL_ALL_BACKGROUND_PROCESSES"
+        android:label="@string/permlab_killBackgroundProcesses"
+        android:description="@string/permdesc_killBackgroundProcesses"
+        android:protectionLevel="signature|privileged" />
 
     <!-- @SystemApi @hide Allows an application to query process states and current
          OOM adjustment scores.
@@ -6615,6 +6653,22 @@
     <permission android:name="android.permission.HANDLE_QUERY_PACKAGE_RESTART"
                 android:protectionLevel="signature" />
     <uses-permission android:name="android.permission.HANDLE_QUERY_PACKAGE_RESTART" />
+
+    <!-- Allows financed device kiosk apps to perform actions on the Device Lock service
+         <p>Protection level: internal|role
+         <p>Intended for use by the FINANCED_DEVICE_KIOSK role only.
+    -->
+    <permission android:name="android.permission.MANAGE_DEVICE_LOCK_STATE"
+                android:protectionLevel="internal|role" />
+
+    <!-- Allows applications to use the long running jobs APIs.
+         <p>This is a special access permission that can be revoked by the system or the user.
+         <p>Apps need to target API {@link android.os.Build.VERSION_CODES#UPSIDE_DOWN_CAKE} or above
+         to be able to request this permission.
+         <p>Protection level: appop
+     -->
+    <permission android:name="android.permission.RUN_LONG_JOBS"
+                android:protectionLevel="normal|appop"/>
 
     <!-- Attribution for Geofencing service. -->
     <attribution android:tag="GeofencingService" android:label="@string/geofencing_service"/>

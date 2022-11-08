@@ -3963,24 +3963,29 @@ public class ActivityManagerService extends IActivityManager.Stub
                             finishForceStopPackageLocked(packageName, appInfo.uid);
                         }
                     }
-                    final Intent intent = new Intent(Intent.ACTION_PACKAGE_DATA_CLEARED,
-                            Uri.fromParts("package", packageName, null));
-                    intent.addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND
-                            | Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
-                    intent.putExtra(Intent.EXTRA_UID, (appInfo != null) ? appInfo.uid : -1);
-                    intent.putExtra(Intent.EXTRA_USER_HANDLE, resolvedUserId);
-                    final int[] visibilityAllowList =
-                            mPackageManagerInt.getVisibilityAllowList(packageName, resolvedUserId);
-                    if (isInstantApp) {
-                        intent.putExtra(Intent.EXTRA_PACKAGE_NAME, packageName);
-                        broadcastIntentInPackage("android", null, SYSTEM_UID, uid, pid, intent,
-                                null, null, null, 0, null, null, permission.ACCESS_INSTANT_APPS,
-                                null, false, false, resolvedUserId, false, null,
-                                visibilityAllowList);
-                    } else {
-                        broadcastIntentInPackage("android", null, SYSTEM_UID, uid, pid, intent,
-                                null, null, null, 0, null, null, null, null, false, false,
-                                resolvedUserId, false, null, visibilityAllowList);
+
+                    if (succeeded) {
+                        final Intent intent = new Intent(Intent.ACTION_PACKAGE_DATA_CLEARED,
+                                Uri.fromParts("package", packageName, null /* fragment */));
+                        intent.addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND
+                                | Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
+                        intent.putExtra(Intent.EXTRA_UID,
+                                (appInfo != null) ? appInfo.uid : INVALID_UID);
+                        intent.putExtra(Intent.EXTRA_USER_HANDLE, resolvedUserId);
+                        if (isInstantApp) {
+                            intent.putExtra(Intent.EXTRA_PACKAGE_NAME, packageName);
+                        }
+                        final int[] visibilityAllowList = mPackageManagerInt.getVisibilityAllowList(
+                                packageName, resolvedUserId);
+
+                        broadcastIntentInPackage("android", null /* featureId */,
+                                SYSTEM_UID, uid, pid, intent, null /* resolvedType */,
+                                null /* resultToApp */, null /* resultTo */, 0 /* resultCode */,
+                                null /* resultData */, null /* resultExtras */,
+                                isInstantApp ? permission.ACCESS_INSTANT_APPS : null,
+                                null /* bOptions */, false /* serialized */, false /* sticky */,
+                                resolvedUserId, false /* allowBackgroundActivityStarts */,
+                                null /* backgroundActivityStartsToken */, visibilityAllowList);
                     }
 
                     if (observer != null) {
@@ -4039,8 +4044,12 @@ public class ActivityManagerService extends IActivityManager.Stub
             Slog.w(TAG, msg);
             throw new SecurityException(msg);
         }
+        final boolean hasKillAllPermission = checkCallingPermission(
+                android.Manifest.permission.KILL_ALL_BACKGROUND_PROCESSES) == PERMISSION_GRANTED;
+        final int callingUid = Binder.getCallingUid();
+        final int callingAppId = UserHandle.getAppId(callingUid);
 
-        userId = mUserController.handleIncomingUser(Binder.getCallingPid(), Binder.getCallingUid(),
+        userId = mUserController.handleIncomingUser(Binder.getCallingPid(), callingUid,
                 userId, true, ALLOW_FULL_ONLY, "killBackgroundProcesses", null);
         final int[] userIds = mUserController.expandUserId(userId);
 
@@ -4055,7 +4064,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                                     targetUserId));
                 } catch (RemoteException e) {
                 }
-                if (appId == -1) {
+                if (appId == -1 || (!hasKillAllPermission && appId != callingAppId)) {
                     Slog.w(TAG, "Invalid packageName: " + packageName);
                     return;
                 }
@@ -4074,11 +4083,11 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @Override
     public void killAllBackgroundProcesses() {
-        if (checkCallingPermission(android.Manifest.permission.KILL_BACKGROUND_PROCESSES)
+        if (checkCallingPermission(android.Manifest.permission.KILL_ALL_BACKGROUND_PROCESSES)
                 != PackageManager.PERMISSION_GRANTED) {
             final String msg = "Permission Denial: killAllBackgroundProcesses() from pid="
                     + Binder.getCallingPid() + ", uid=" + Binder.getCallingUid()
-                    + " requires " + android.Manifest.permission.KILL_BACKGROUND_PROCESSES;
+                    + " requires " + android.Manifest.permission.KILL_ALL_BACKGROUND_PROCESSES;
             Slog.w(TAG, msg);
             throw new SecurityException(msg);
         }
@@ -4114,11 +4123,11 @@ public class ActivityManagerService extends IActivityManager.Stub
      *                     processes, or {@code -1} to ignore the process state
      */
     void killAllBackgroundProcessesExcept(int minTargetSdk, int maxProcState) {
-        if (checkCallingPermission(android.Manifest.permission.KILL_BACKGROUND_PROCESSES)
+        if (checkCallingPermission(android.Manifest.permission.KILL_ALL_BACKGROUND_PROCESSES)
                 != PackageManager.PERMISSION_GRANTED) {
             final String msg = "Permission Denial: killAllBackgroundProcessesExcept() from pid="
                     + Binder.getCallingPid() + ", uid=" + Binder.getCallingUid()
-                    + " requires " + android.Manifest.permission.KILL_BACKGROUND_PROCESSES;
+                    + " requires " + android.Manifest.permission.KILL_ALL_BACKGROUND_PROCESSES;
             Slog.w(TAG, msg);
             throw new SecurityException(msg);
         }
@@ -8430,14 +8439,14 @@ public class ActivityManagerService extends IActivityManager.Stub
         mBatteryStatsService.noteEvent(BatteryStats.HistoryItem.EVENT_USER_FOREGROUND_START,
                 Integer.toString(currentUserId), currentUserId);
 
-        // On Automotive, at this point the system user has already been started and unlocked,
-        // and some of the tasks we do here have already been done. So skip those in that case.
-        // TODO(b/132262830, b/203885241): this workdound shouldn't be necessary once we move the
-        // headless-user start logic to UserManager-land
+        // On Automotive / Headless System User Mode, at this point the system user has already been
+        // started and unlocked, and some of the tasks we do here have already been done. So skip
+        // those in that case.
+        // TODO(b/242195409): this workaround shouldn't be necessary once we move the headless-user
+        // start logic to UserManager-land
         final boolean bootingSystemUser = currentUserId == UserHandle.USER_SYSTEM;
-
         if (bootingSystemUser) {
-            mSystemServiceManager.onUserStarting(t, currentUserId);
+            mUserController.onSystemUserStarting();
         }
 
         synchronized (this) {
@@ -13483,27 +13492,19 @@ public class ActivityManagerService extends IActivityManager.Stub
         int callingPid;
         boolean instantApp;
         synchronized(this) {
-            if (caller != null) {
-                callerApp = getRecordForAppLOSP(caller);
-                if (callerApp == null) {
-                    throw new SecurityException(
-                            "Unable to find app for caller " + caller
-                            + " (pid=" + Binder.getCallingPid()
-                            + ") when registering receiver " + receiver);
-                }
-                if (callerApp.info.uid != SYSTEM_UID
-                        && !callerApp.getPkgList().containsKey(callerPackage)
-                        && !"android".equals(callerPackage)) {
-                    throw new SecurityException("Given caller package " + callerPackage
-                            + " is not running in process " + callerApp);
-                }
-                callingUid = callerApp.info.uid;
-                callingPid = callerApp.getPid();
-            } else {
-                callerPackage = null;
-                callingUid = Binder.getCallingUid();
-                callingPid = Binder.getCallingPid();
+            callerApp = getRecordForAppLOSP(caller);
+            if (callerApp == null) {
+                Slog.w(TAG, "registerReceiverWithFeature: no app for " + caller);
+                return null;
             }
+            if (callerApp.info.uid != SYSTEM_UID
+                    && !callerApp.getPkgList().containsKey(callerPackage)
+                    && !"android".equals(callerPackage)) {
+                throw new SecurityException("Given caller package " + callerPackage
+                        + " is not running in process " + callerApp);
+            }
+            callingUid = callerApp.info.uid;
+            callingPid = callerApp.getPid();
 
             instantApp = isInstantApp(callerApp, callerPackage, callingUid);
             userId = mUserController.handleIncomingUser(callingPid, callingUid, userId, true,
@@ -13974,6 +13975,9 @@ public class ActivityManagerService extends IActivityManager.Stub
             @Nullable IBinder backgroundActivityStartsToken,
             @Nullable int[] broadcastAllowList,
             @Nullable BiFunction<Integer, Bundle, Bundle> filterExtrasForReceiver) {
+        // Ensure all internal loopers are registered for idle checks
+        BroadcastLoopers.addMyLooper();
+
         if ((resultTo != null) && (resultToApp == null)) {
             if (resultTo.asBinder() instanceof BinderProxy) {
                 // Warn when requesting results without a way to deliver them
@@ -14011,7 +14015,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         if (DEBUG_BROADCAST_LIGHT) Slog.v(TAG_BROADCAST,
                 (sticky ? "Broadcast sticky: ": "Broadcast: ") + intent
                 + " ordered=" + ordered + " userid=" + userId);
-        if ((resultTo != null) && !ordered) {
+        if ((resultTo != null) && !ordered && !mEnableModernQueue) {
             Slog.w(TAG, "Broadcast " + intent + " not ordered but result callback requested!");
         }
 
@@ -14573,10 +14577,12 @@ public class ActivityManagerService extends IActivityManager.Stub
         filterNonExportedComponents(intent, callingUid, registeredReceivers,
                 mPlatformCompat, callerPackage);
         int NR = registeredReceivers != null ? registeredReceivers.size() : 0;
-        if (!ordered && NR > 0) {
+        if (!ordered && NR > 0 && !mEnableModernQueue) {
             // If we are not serializing this broadcast, then send the
             // registered receivers separately so they don't wait for the
-            // components to be launched.
+            // components to be launched. We don't do this split for the modern
+            // queue because delivery to registered receivers isn't blocked
+            // behind manifest receivers.
             if (isCallerSystem) {
                 checkBroadcastFromSystem(intent, callerApp, callerPackage, callingUid,
                         isProtectedBroadcast, registeredReceivers);
@@ -17014,6 +17020,11 @@ public class ActivityManagerService extends IActivityManager.Stub
             return mSystemReady;
         }
 
+        @Override
+        public boolean isModernQueueEnabled() {
+            return mEnableModernQueue;
+        }
+
         /**
          * Returns package name by pid.
          */
@@ -18222,6 +18233,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     public void waitForBroadcastIdle(@Nullable PrintWriter pw) {
         enforceCallingPermission(permission.DUMP, "waitForBroadcastIdle()");
+        BroadcastLoopers.waitForIdle(pw);
         for (BroadcastQueue queue : mBroadcastQueues) {
             queue.waitForIdle(pw);
         }
@@ -18233,6 +18245,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     public void waitForBroadcastBarrier(@Nullable PrintWriter pw) {
         enforceCallingPermission(permission.DUMP, "waitForBroadcastBarrier()");
+        BroadcastLoopers.waitForIdle(pw);
         for (BroadcastQueue queue : mBroadcastQueues) {
             queue.waitForBarrier(pw);
         }

@@ -52,6 +52,7 @@ import android.hardware.fingerprint.IFingerprintClientActiveCallback;
 import android.hardware.fingerprint.IFingerprintService;
 import android.hardware.fingerprint.IFingerprintServiceReceiver;
 import android.hardware.fingerprint.ISidefpsController;
+import android.hardware.fingerprint.IUdfpsOverlay;
 import android.hardware.fingerprint.IUdfpsOverlayController;
 import android.os.Binder;
 import android.os.Build;
@@ -874,10 +875,30 @@ public class FingerprintService extends SystemService {
 
         @android.annotation.EnforcePermission(android.Manifest.permission.USE_BIOMETRIC_INTERNAL)
         @Override
+        public void setUdfpsOverlay(@NonNull IUdfpsOverlay controller) {
+            for (ServiceProvider provider : mRegistry.getProviders()) {
+                provider.setUdfpsOverlay(controller);
+            }
+        }
+
+        @android.annotation.EnforcePermission(android.Manifest.permission.USE_BIOMETRIC_INTERNAL)
+        @Override
         public void onPowerPressed() {
             for (ServiceProvider provider : mRegistry.getProviders()) {
                 provider.onPowerPressed();
             }
+        }
+
+        @android.annotation.EnforcePermission(android.Manifest.permission.USE_BIOMETRIC_INTERNAL)
+        @Override
+        public void scheduleWatchdog() {
+            final Pair<Integer, ServiceProvider> provider = mRegistry.getSingleProvider();
+            if (provider == null) {
+                Slog.w(TAG, "Null provider for scheduling watchdog");
+                return;
+            }
+
+            provider.second.scheduleWatchdog(provider.first);
         }
     };
 

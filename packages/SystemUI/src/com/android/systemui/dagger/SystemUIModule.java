@@ -23,7 +23,8 @@ import android.service.dreams.IDreamManager;
 import androidx.annotation.Nullable;
 
 import com.android.internal.statusbar.IStatusBarService;
-import com.android.keyguard.clock.ClockModule;
+import com.android.keyguard.clock.ClockInfoModule;
+import com.android.keyguard.dagger.ClockRegistryModule;
 import com.android.keyguard.dagger.KeyguardBouncerComponent;
 import com.android.systemui.BootCompleteCache;
 import com.android.systemui.BootCompleteCacheImpl;
@@ -47,6 +48,7 @@ import com.android.systemui.log.dagger.LogModule;
 import com.android.systemui.mediaprojection.appselector.MediaProjectionModule;
 import com.android.systemui.model.SysUiState;
 import com.android.systemui.navigationbar.NavigationBarComponent;
+import com.android.systemui.notetask.NoteTaskModule;
 import com.android.systemui.people.PeopleModule;
 import com.android.systemui.plugins.BcSmartspaceDataPlugin;
 import com.android.systemui.privacy.PrivacyModule;
@@ -82,6 +84,7 @@ import com.android.systemui.statusbar.policy.dagger.SmartRepliesInflationModule;
 import com.android.systemui.statusbar.policy.dagger.StatusBarPolicyModule;
 import com.android.systemui.statusbar.window.StatusBarWindowModule;
 import com.android.systemui.telephony.data.repository.TelephonyRepositoryModule;
+import com.android.systemui.temporarydisplay.dagger.TemporaryDisplayModule;
 import com.android.systemui.tuner.dagger.TunerModule;
 import com.android.systemui.unfold.SysUIUnfoldModule;
 import com.android.systemui.user.UserModule;
@@ -120,7 +123,8 @@ import dagger.Provides;
             BiometricsModule.class,
             BouncerViewModule.class,
             ClipboardOverlayModule.class,
-            ClockModule.class,
+            ClockInfoModule.class,
+            ClockRegistryModule.class,
             CoroutinesModule.class,
             DreamModule.class,
             ControlsModule.class,
@@ -147,9 +151,11 @@ import dagger.Provides;
             SysUIConcurrencyModule.class,
             SysUIUnfoldModule.class,
             TelephonyRepositoryModule.class,
+            TemporaryDisplayModule.class,
             TunerModule.class,
             UserModule.class,
             UtilModule.class,
+            NoteTaskModule.class,
             WalletModule.class
         },
         subcomponents = {

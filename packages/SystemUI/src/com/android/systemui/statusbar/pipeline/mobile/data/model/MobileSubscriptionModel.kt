@@ -27,6 +27,8 @@ import android.telephony.TelephonyCallback.ServiceStateListener
 import android.telephony.TelephonyCallback.SignalStrengthsListener
 import android.telephony.TelephonyDisplayInfo
 import android.telephony.TelephonyManager
+import android.telephony.TelephonyManager.NETWORK_TYPE_UNKNOWN
+import com.android.systemui.statusbar.pipeline.mobile.data.model.DataConnectionState.Disconnected
 
 /**
  * Data class containing all of the relevant information for a particular line of service, known as
@@ -48,15 +50,20 @@ data class MobileSubscriptionModel(
     @IntRange(from = 0, to = 4)
     val primaryLevel: Int = CellSignalStrength.SIGNAL_STRENGTH_NONE_OR_UNKNOWN,
 
-    /** Comes directly from [DataConnectionStateListener.onDataConnectionStateChanged] */
-    val dataConnectionState: Int? = null,
+    /** Mapped from [DataConnectionStateListener.onDataConnectionStateChanged] */
+    val dataConnectionState: DataConnectionState = Disconnected,
 
     /** From [DataActivityListener.onDataActivity]. See [TelephonyManager] for the values */
     @DataActivityType val dataActivityDirection: Int? = null,
 
     /** From [CarrierNetworkListener.onCarrierNetworkChange] */
-    val carrierNetworkChangeActive: Boolean? = null,
+    val carrierNetworkChangeActive: Boolean = false,
 
-    /** From [DisplayInfoListener.onDisplayInfoChanged] */
-    val displayInfo: TelephonyDisplayInfo? = null
+    /**
+     * From [DisplayInfoListener.onDisplayInfoChanged].
+     *
+     * [resolvedNetworkType] is the [TelephonyDisplayInfo.getOverrideNetworkType] if it exists or
+     * [TelephonyDisplayInfo.getNetworkType]. This is used to look up the proper network type icon
+     */
+    val resolvedNetworkType: ResolvedNetworkType = DefaultNetworkType(NETWORK_TYPE_UNKNOWN),
 )

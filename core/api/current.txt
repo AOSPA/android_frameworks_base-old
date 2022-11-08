@@ -107,6 +107,7 @@ package android {
     field public static final String LAUNCH_MULTI_PANE_SETTINGS_DEEP_LINK = "android.permission.LAUNCH_MULTI_PANE_SETTINGS_DEEP_LINK";
     field public static final String LOADER_USAGE_STATS = "android.permission.LOADER_USAGE_STATS";
     field public static final String LOCATION_HARDWARE = "android.permission.LOCATION_HARDWARE";
+    field public static final String MANAGE_DEVICE_LOCK_STATE = "android.permission.MANAGE_DEVICE_LOCK_STATE";
     field public static final String MANAGE_DOCUMENTS = "android.permission.MANAGE_DOCUMENTS";
     field public static final String MANAGE_EXTERNAL_STORAGE = "android.permission.MANAGE_EXTERNAL_STORAGE";
     field public static final String MANAGE_MEDIA = "android.permission.MANAGE_MEDIA";
@@ -171,6 +172,7 @@ package android {
     field public static final String REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE = "android.permission.REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE";
     field public static final String REQUEST_PASSWORD_COMPLEXITY = "android.permission.REQUEST_PASSWORD_COMPLEXITY";
     field @Deprecated public static final String RESTART_PACKAGES = "android.permission.RESTART_PACKAGES";
+    field public static final String RUN_LONG_JOBS = "android.permission.RUN_LONG_JOBS";
     field public static final String SCHEDULE_EXACT_ALARM = "android.permission.SCHEDULE_EXACT_ALARM";
     field public static final String SEND_RESPOND_VIA_MESSAGE = "android.permission.SEND_RESPOND_VIA_MESSAGE";
     field public static final String SEND_SMS = "android.permission.SEND_SMS";
@@ -1491,6 +1493,7 @@ package android {
     field public static final int targetCellWidth = 16844340; // 0x1010634
     field public static final int targetClass = 16842799; // 0x101002f
     field @Deprecated public static final int targetDescriptions = 16843680; // 0x10103a0
+    field public static final int targetDisplayCategory;
     field public static final int targetId = 16843740; // 0x10103dc
     field public static final int targetName = 16843853; // 0x101044d
     field public static final int targetPackage = 16842785; // 0x1010021
@@ -7454,6 +7457,7 @@ package android.app.admin {
     method public long getMaximumTimeToLock(@Nullable android.content.ComponentName);
     method @NonNull public java.util.List<java.lang.String> getMeteredDataDisabledPackages(@NonNull android.content.ComponentName);
     method public int getMinimumRequiredWifiSecurityLevel();
+    method public int getMtePolicy();
     method @RequiresPermission(value=android.Manifest.permission.READ_NEARBY_STREAMING_POLICY, conditional=true) public int getNearbyAppStreamingPolicy();
     method @RequiresPermission(value=android.Manifest.permission.READ_NEARBY_STREAMING_POLICY, conditional=true) public int getNearbyNotificationStreamingPolicy();
     method @Deprecated @ColorInt public int getOrganizationColor(@NonNull android.content.ComponentName);
@@ -7602,6 +7606,7 @@ package android.app.admin {
     method public void setMaximumTimeToLock(@NonNull android.content.ComponentName, long);
     method @NonNull public java.util.List<java.lang.String> setMeteredDataDisabledPackages(@NonNull android.content.ComponentName, @NonNull java.util.List<java.lang.String>);
     method public void setMinimumRequiredWifiSecurityLevel(int);
+    method public void setMtePolicy(int);
     method public void setNearbyAppStreamingPolicy(int);
     method public void setNearbyNotificationStreamingPolicy(int);
     method public void setNetworkLoggingEnabled(@Nullable android.content.ComponentName, boolean);
@@ -7785,6 +7790,9 @@ package android.app.admin {
     field public static final int LOCK_TASK_FEATURE_SYSTEM_INFO = 1; // 0x1
     field public static final int MAKE_USER_EPHEMERAL = 2; // 0x2
     field public static final String MIME_TYPE_PROVISIONING_NFC = "application/com.android.managedprovisioning";
+    field public static final int MTE_DISABLED = 2; // 0x2
+    field public static final int MTE_ENABLED = 1; // 0x1
+    field public static final int MTE_NOT_CONTROLLED_BY_POLICY = 0; // 0x0
     field public static final int NEARBY_STREAMING_DISABLED = 1; // 0x1
     field public static final int NEARBY_STREAMING_ENABLED = 2; // 0x2
     field public static final int NEARBY_STREAMING_NOT_CONTROLLED_BY_POLICY = 0; // 0x0
@@ -9266,6 +9274,7 @@ package android.content {
     field public static final int CLASSIFICATION_NOT_COMPLETE = 1; // 0x1
     field public static final int CLASSIFICATION_NOT_PERFORMED = 2; // 0x2
     field @NonNull public static final android.os.Parcelable.Creator<android.content.ClipDescription> CREATOR;
+    field public static final String EXTRA_IS_REMOTE_DEVICE = "android.content.extra.IS_REMOTE_DEVICE";
     field public static final String EXTRA_IS_SENSITIVE = "android.content.extra.IS_SENSITIVE";
     field public static final String MIMETYPE_TEXT_HTML = "text/html";
     field public static final String MIMETYPE_TEXT_INTENT = "text/vnd.android.intent";
@@ -9845,6 +9854,7 @@ package android.content {
     field public static final int CONTEXT_RESTRICTED = 4; // 0x4
     field public static final String CREDENTIAL_SERVICE = "credential";
     field public static final String CROSS_PROFILE_APPS_SERVICE = "crossprofileapps";
+    field public static final String DEVICE_LOCK_SERVICE = "device_lock";
     field public static final String DEVICE_POLICY_SERVICE = "device_policy";
     field public static final String DISPLAY_HASH_SERVICE = "display_hash";
     field public static final String DISPLAY_SERVICE = "display";
@@ -11136,6 +11146,7 @@ package android.content.pm {
     field public int screenOrientation;
     field public int softInputMode;
     field public String targetActivity;
+    field @Nullable public String targetDisplayCategory;
     field public String taskAffinity;
     field public int theme;
     field public int uiOptions;
@@ -11991,6 +12002,7 @@ package android.content.pm {
     field public static final String FEATURE_CONTROLS = "android.software.controls";
     field public static final String FEATURE_CREDENTIALS = "android.software.credentials";
     field public static final String FEATURE_DEVICE_ADMIN = "android.software.device_admin";
+    field public static final String FEATURE_DEVICE_LOCK = "android.software.device_lock";
     field public static final String FEATURE_EMBEDDED = "android.hardware.type.embedded";
     field public static final String FEATURE_ETHERNET = "android.hardware.ethernet";
     field public static final String FEATURE_EXPANDED_PICTURE_IN_PICTURE = "android.software.expanded_picture_in_picture";
@@ -17588,6 +17600,7 @@ package android.hardware.camera2 {
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<android.hardware.camera2.params.Capability[]> CONTROL_AVAILABLE_EXTENDED_SCENE_MODE_CAPABILITIES;
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<int[]> CONTROL_AVAILABLE_MODES;
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<int[]> CONTROL_AVAILABLE_SCENE_MODES;
+    field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<int[]> CONTROL_AVAILABLE_SETTINGS_OVERRIDES;
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<int[]> CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES;
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<int[]> CONTROL_AWB_AVAILABLE_MODES;
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<java.lang.Boolean> CONTROL_AWB_LOCK_AVAILABLE;
@@ -17627,6 +17640,7 @@ package android.hardware.camera2 {
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<int[]> NOISE_REDUCTION_AVAILABLE_NOISE_REDUCTION_MODES;
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<java.lang.Integer> REPROCESS_MAX_CAPTURE_STALL;
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<int[]> REQUEST_AVAILABLE_CAPABILITIES;
+    field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<android.hardware.camera2.params.ColorSpaceProfiles> REQUEST_AVAILABLE_COLOR_SPACE_PROFILES;
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<android.hardware.camera2.params.DynamicRangeProfiles> REQUEST_AVAILABLE_DYNAMIC_RANGE_PROFILES;
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<java.lang.Integer> REQUEST_MAX_NUM_INPUT_STREAMS;
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<java.lang.Integer> REQUEST_MAX_NUM_OUTPUT_PROC;
@@ -17941,6 +17955,8 @@ package android.hardware.camera2 {
     field public static final int CONTROL_SCENE_MODE_STEADYPHOTO = 11; // 0xb
     field public static final int CONTROL_SCENE_MODE_SUNSET = 10; // 0xa
     field public static final int CONTROL_SCENE_MODE_THEATRE = 7; // 0x7
+    field public static final int CONTROL_SETTINGS_OVERRIDE_OFF = 0; // 0x0
+    field public static final int CONTROL_SETTINGS_OVERRIDE_ZOOM = 1; // 0x1
     field public static final int CONTROL_VIDEO_STABILIZATION_MODE_OFF = 0; // 0x0
     field public static final int CONTROL_VIDEO_STABILIZATION_MODE_ON = 1; // 0x1
     field public static final int CONTROL_VIDEO_STABILIZATION_MODE_PREVIEW_STABILIZATION = 2; // 0x2
@@ -17990,6 +18006,7 @@ package android.hardware.camera2 {
     field public static final int NOISE_REDUCTION_MODE_ZERO_SHUTTER_LAG = 4; // 0x4
     field public static final int REQUEST_AVAILABLE_CAPABILITIES_BACKWARD_COMPATIBLE = 0; // 0x0
     field public static final int REQUEST_AVAILABLE_CAPABILITIES_BURST_CAPTURE = 6; // 0x6
+    field public static final int REQUEST_AVAILABLE_CAPABILITIES_COLOR_SPACE_PROFILES = 20; // 0x14
     field public static final int REQUEST_AVAILABLE_CAPABILITIES_CONSTRAINED_HIGH_SPEED_VIDEO = 9; // 0x9
     field public static final int REQUEST_AVAILABLE_CAPABILITIES_DEPTH_OUTPUT = 8; // 0x8
     field public static final int REQUEST_AVAILABLE_CAPABILITIES_DYNAMIC_RANGE_TEN_BIT = 18; // 0x12
@@ -18138,6 +18155,7 @@ package android.hardware.camera2 {
     field @NonNull public static final android.hardware.camera2.CaptureRequest.Key<java.lang.Integer> CONTROL_MODE;
     field @NonNull public static final android.hardware.camera2.CaptureRequest.Key<java.lang.Integer> CONTROL_POST_RAW_SENSITIVITY_BOOST;
     field @NonNull public static final android.hardware.camera2.CaptureRequest.Key<java.lang.Integer> CONTROL_SCENE_MODE;
+    field @NonNull public static final android.hardware.camera2.CaptureRequest.Key<java.lang.Integer> CONTROL_SETTINGS_OVERRIDE;
     field @NonNull public static final android.hardware.camera2.CaptureRequest.Key<java.lang.Integer> CONTROL_VIDEO_STABILIZATION_MODE;
     field @NonNull public static final android.hardware.camera2.CaptureRequest.Key<java.lang.Float> CONTROL_ZOOM_RATIO;
     field @NonNull public static final android.os.Parcelable.Creator<android.hardware.camera2.CaptureRequest> CREATOR;
@@ -18228,6 +18246,7 @@ package android.hardware.camera2 {
     field @NonNull public static final android.hardware.camera2.CaptureResult.Key<java.lang.Integer> CONTROL_MODE;
     field @NonNull public static final android.hardware.camera2.CaptureResult.Key<java.lang.Integer> CONTROL_POST_RAW_SENSITIVITY_BOOST;
     field @NonNull public static final android.hardware.camera2.CaptureResult.Key<java.lang.Integer> CONTROL_SCENE_MODE;
+    field @NonNull public static final android.hardware.camera2.CaptureResult.Key<java.lang.Integer> CONTROL_SETTINGS_OVERRIDE;
     field @NonNull public static final android.hardware.camera2.CaptureResult.Key<java.lang.Integer> CONTROL_VIDEO_STABILIZATION_MODE;
     field @NonNull public static final android.hardware.camera2.CaptureResult.Key<java.lang.Float> CONTROL_ZOOM_RATIO;
     field @NonNull public static final android.hardware.camera2.CaptureResult.Key<java.lang.Integer> DISTORTION_CORRECTION_MODE;
@@ -18339,6 +18358,15 @@ package android.hardware.camera2.params {
     method @NonNull public android.util.Size getMaxStreamingSize();
     method public int getMode();
     method @NonNull public android.util.Range<java.lang.Float> getZoomRatioRange();
+  }
+
+  public final class ColorSpaceProfiles {
+    ctor public ColorSpaceProfiles(@NonNull long[]);
+    method @NonNull public java.util.Set<android.graphics.ColorSpace.Named> getSupportedColorSpaces(int);
+    method @NonNull public java.util.Set<android.graphics.ColorSpace.Named> getSupportedColorSpacesForDynamicRange(int, long);
+    method @NonNull public java.util.Set<java.lang.Long> getSupportedDynamicRangeProfiles(@NonNull android.graphics.ColorSpace.Named, int);
+    method @NonNull public java.util.Set<java.lang.Integer> getSupportedImageFormatsForColorSpace(@NonNull android.graphics.ColorSpace.Named);
+    field public static final int UNSPECIFIED = -1; // 0xffffffff
   }
 
   public final class ColorSpaceTransform {
@@ -18572,13 +18600,16 @@ package android.hardware.camera2.params {
 
   public final class SessionConfiguration implements android.os.Parcelable {
     ctor public SessionConfiguration(int, @NonNull java.util.List<android.hardware.camera2.params.OutputConfiguration>, @NonNull java.util.concurrent.Executor, @NonNull android.hardware.camera2.CameraCaptureSession.StateCallback);
+    method public void clearColorSpace();
     method public int describeContents();
+    method @Nullable public android.graphics.ColorSpace getColorSpace();
     method public java.util.concurrent.Executor getExecutor();
     method public android.hardware.camera2.params.InputConfiguration getInputConfiguration();
     method public java.util.List<android.hardware.camera2.params.OutputConfiguration> getOutputConfigurations();
     method public android.hardware.camera2.CaptureRequest getSessionParameters();
     method public int getSessionType();
     method public android.hardware.camera2.CameraCaptureSession.StateCallback getStateCallback();
+    method public void setColorSpace(@NonNull android.graphics.ColorSpace.Named);
     method public void setInputConfiguration(@NonNull android.hardware.camera2.params.InputConfiguration);
     method public void setSessionParameters(android.hardware.camera2.CaptureRequest);
     method public void writeToParcel(android.os.Parcel, int);
@@ -19472,7 +19503,7 @@ package android.location {
     method public boolean hasSatelliteBlocklist();
     method public boolean hasSatellitePvt();
     method public boolean hasScheduling();
-    method public boolean hasSingleShot();
+    method public boolean hasSingleShotFix();
     method public void writeToParcel(@NonNull android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.location.GnssCapabilities> CREATOR;
   }
@@ -19504,7 +19535,7 @@ package android.location {
     method @NonNull public android.location.GnssCapabilities.Builder setHasSatelliteBlocklist(boolean);
     method @NonNull public android.location.GnssCapabilities.Builder setHasSatellitePvt(boolean);
     method @NonNull public android.location.GnssCapabilities.Builder setHasScheduling(boolean);
-    method @NonNull public android.location.GnssCapabilities.Builder setHasSingleShot(boolean);
+    method @NonNull public android.location.GnssCapabilities.Builder setHasSingleShotFix(boolean);
   }
 
   public final class GnssClock implements android.os.Parcelable {
@@ -19702,7 +19733,7 @@ package android.location {
     method public int getConstellationType(@IntRange(from=0) int);
     method @FloatRange(from=0xffffffa6, to=90) public float getElevationDegrees(@IntRange(from=0) int);
     method @IntRange(from=0) public int getSatelliteCount();
-    method @IntRange(from=1, to=200) public int getSvid(@IntRange(from=0) int);
+    method @IntRange(from=1, to=206) public int getSvid(@IntRange(from=0) int);
     method public boolean hasAlmanacData(@IntRange(from=0) int);
     method public boolean hasBasebandCn0DbHz(@IntRange(from=0) int);
     method public boolean hasCarrierFrequencyHz(@IntRange(from=0) int);
@@ -39320,6 +39351,7 @@ package android.service.notification {
     method public final void setNotificationsShown(String[]);
     method public final void snoozeNotification(String, long);
     method public final void updateNotificationChannel(@NonNull String, @NonNull android.os.UserHandle, @NonNull android.app.NotificationChannel);
+    field public static final String ACTION_SETTINGS_HOME = "android.service.notification.action.SETTINGS_HOME";
     field public static final int FLAG_FILTER_TYPE_ALERTING = 2; // 0x2
     field public static final int FLAG_FILTER_TYPE_CONVERSATIONS = 1; // 0x1
     field public static final int FLAG_FILTER_TYPE_ONGOING = 8; // 0x8
@@ -39327,7 +39359,6 @@ package android.service.notification {
     field public static final int HINT_HOST_DISABLE_CALL_EFFECTS = 4; // 0x4
     field public static final int HINT_HOST_DISABLE_EFFECTS = 1; // 0x1
     field public static final int HINT_HOST_DISABLE_NOTIFICATION_EFFECTS = 2; // 0x2
-    field public static final String INTENT_CATEGORY_SETTINGS_HOME = "android.service.notification.category.SETTINGS_HOME";
     field public static final int INTERRUPTION_FILTER_ALARMS = 4; // 0x4
     field public static final int INTERRUPTION_FILTER_ALL = 1; // 0x1
     field public static final int INTERRUPTION_FILTER_NONE = 3; // 0x3
@@ -41727,10 +41758,12 @@ package android.telephony {
     field public static final String KEY_OPPORTUNISTIC_NETWORK_PING_PONG_TIME_LONG = "opportunistic_network_ping_pong_time_long";
     field public static final String KEY_PING_TEST_BEFORE_DATA_SWITCH_BOOL = "ping_test_before_data_switch_bool";
     field public static final String KEY_PREFER_2G_BOOL = "prefer_2g_bool";
+    field public static final String KEY_PREMIUM_CAPABILITY_MAXIMUM_NOTIFICATION_COUNT_INT_ARRAY = "premium_capability_maximum_notification_count_int_array";
     field public static final String KEY_PREMIUM_CAPABILITY_NOTIFICATION_BACKOFF_HYSTERESIS_TIME_MILLIS_LONG = "premium_capability_notification_backoff_hysteresis_time_millis_long";
     field public static final String KEY_PREMIUM_CAPABILITY_NOTIFICATION_DISPLAY_TIMEOUT_MILLIS_LONG = "premium_capability_notification_display_timeout_millis_long";
     field public static final String KEY_PREMIUM_CAPABILITY_PURCHASE_CONDITION_BACKOFF_HYSTERESIS_TIME_MILLIS_LONG = "premium_capability_purchase_condition_backoff_hysteresis_time_millis_long";
     field public static final String KEY_PREMIUM_CAPABILITY_PURCHASE_URL_STRING = "premium_capability_purchase_url_string";
+    field public static final String KEY_PREMIUM_CAPABILITY_SUPPORTED_ON_LTE_BOOL = "premium_capability_supported_on_lte_bool";
     field public static final String KEY_PREVENT_CLIR_ACTIVATION_AND_DEACTIVATION_CODE_BOOL = "prevent_clir_activation_and_deactivation_code_bool";
     field public static final String KEY_RADIO_RESTART_FAILURE_CAUSES_INT_ARRAY = "radio_restart_failure_causes_int_array";
     field public static final String KEY_RCS_CONFIG_SERVER_URL_STRING = "rcs_config_server_url_string";
@@ -43979,9 +44012,10 @@ package android.telephony {
     field public static final long NETWORK_TYPE_BITMASK_HSPA = 512L; // 0x200L
     field public static final long NETWORK_TYPE_BITMASK_HSPAP = 16384L; // 0x4000L
     field public static final long NETWORK_TYPE_BITMASK_HSUPA = 256L; // 0x100L
+    field public static final long NETWORK_TYPE_BITMASK_IDEN = 1024L; // 0x400L
     field public static final long NETWORK_TYPE_BITMASK_IWLAN = 131072L; // 0x20000L
     field public static final long NETWORK_TYPE_BITMASK_LTE = 4096L; // 0x1000L
-    field public static final long NETWORK_TYPE_BITMASK_LTE_CA = 262144L; // 0x40000L
+    field @Deprecated public static final long NETWORK_TYPE_BITMASK_LTE_CA = 262144L; // 0x40000L
     field public static final long NETWORK_TYPE_BITMASK_NR = 524288L; // 0x80000L
     field public static final long NETWORK_TYPE_BITMASK_TD_SCDMA = 65536L; // 0x10000L
     field public static final long NETWORK_TYPE_BITMASK_UMTS = 4L; // 0x4L
@@ -44009,7 +44043,7 @@ package android.telephony {
     field public static final int PHONE_TYPE_GSM = 1; // 0x1
     field public static final int PHONE_TYPE_NONE = 0; // 0x0
     field public static final int PHONE_TYPE_SIP = 3; // 0x3
-    field public static final int PREMIUM_CAPABILITY_REALTIME_INTERACTIVE_TRAFFIC = 1; // 0x1
+    field public static final int PREMIUM_CAPABILITY_PRIORITIZE_LATENCY = 34; // 0x22
     field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_ALREADY_IN_PROGRESS = 4; // 0x4
     field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_ALREADY_PURCHASED = 3; // 0x3
     field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_CARRIER_DISABLED = 7; // 0x7
@@ -44017,12 +44051,13 @@ package android.telephony {
     field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_FEATURE_NOT_SUPPORTED = 10; // 0xa
     field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_NETWORK_CONGESTED = 13; // 0xd
     field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_NETWORK_NOT_AVAILABLE = 12; // 0xc
+    field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_NOT_DEFAULT_DATA = 14; // 0xe
+    field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_OVERRIDDEN = 5; // 0x5
     field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_REQUEST_FAILED = 11; // 0xb
     field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_SUCCESS = 1; // 0x1
     field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_THROTTLED = 2; // 0x2
     field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_TIMEOUT = 9; // 0x9
     field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_USER_CANCELED = 6; // 0x6
-    field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_USER_DISABLED = 5; // 0x5
     field public static final int SET_OPPORTUNISTIC_SUB_INACTIVE_SUBSCRIPTION = 2; // 0x2
     field public static final int SET_OPPORTUNISTIC_SUB_NO_OPPORTUNISTIC_SUB_AVAILABLE = 3; // 0x3
     field public static final int SET_OPPORTUNISTIC_SUB_REMOTE_SERVICE_EXCEPTION = 4; // 0x4
@@ -45404,7 +45439,7 @@ package android.text {
     method public final int getParagraphLeft(int);
     method public final int getParagraphRight(int);
     method public float getPrimaryHorizontal(int);
-    method @Nullable public android.util.Range<java.lang.Integer> getRangeForRect(@NonNull android.graphics.RectF, @NonNull android.text.SegmentFinder, @NonNull android.text.Layout.TextInclusionStrategy);
+    method @Nullable public int[] getRangeForRect(@NonNull android.graphics.RectF, @NonNull android.text.SegmentFinder, @NonNull android.text.Layout.TextInclusionStrategy);
     method public float getSecondaryHorizontal(int);
     method public void getSelectionPath(int, int, android.graphics.Path);
     method public final float getSpacingAdd();
@@ -47403,6 +47438,7 @@ package android.util {
     field public static final int DENSITY_420 = 420; // 0x1a4
     field public static final int DENSITY_440 = 440; // 0x1b8
     field public static final int DENSITY_450 = 450; // 0x1c2
+    field public static final int DENSITY_520 = 520; // 0x208
     field public static final int DENSITY_560 = 560; // 0x230
     field public static final int DENSITY_600 = 600; // 0x258
     field public static final int DENSITY_DEFAULT = 160; // 0xa0
@@ -49917,10 +49953,13 @@ package android.view {
     method public void clear();
     method public void computeCurrentVelocity(int);
     method public void computeCurrentVelocity(int, float);
+    method public float getAxisVelocity(int, int);
+    method public float getAxisVelocity(int);
     method public float getXVelocity();
     method public float getXVelocity(int);
     method public float getYVelocity();
     method public float getYVelocity(int);
+    method public boolean isAxisSupported(int);
     method public static android.view.VelocityTracker obtain();
     method public void recycle();
   }

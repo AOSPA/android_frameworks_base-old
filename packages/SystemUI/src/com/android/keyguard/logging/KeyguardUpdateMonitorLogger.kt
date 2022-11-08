@@ -17,9 +17,12 @@
 package com.android.keyguard.logging
 
 import android.hardware.biometrics.BiometricConstants.LockoutMode
+import android.os.PowerManager
+import android.os.PowerManager.WakeReason
 import android.telephony.ServiceState
 import android.telephony.SubscriptionInfo
 import com.android.keyguard.ActiveUnlockConfig
+import com.android.keyguard.FaceAuthUiEvent
 import com.android.keyguard.KeyguardListenModel
 import com.android.keyguard.KeyguardUpdateMonitorCallback
 import com.android.systemui.plugins.log.LogBuffer
@@ -51,7 +54,7 @@ class KeyguardUpdateMonitorLogger @Inject constructor(
 
     fun log(@CompileTimeConstant msg: String, level: LogLevel) = logBuffer.log(TAG, level, msg)
 
-    fun logActiveUnlockTriggered(reason: String) {
+    fun logActiveUnlockTriggered(reason: String?) {
         logBuffer.log("ActiveUnlock", DEBUG,
                 { str1 = reason },
                 { "initiate active unlock triggerReason=$str1" })
@@ -101,18 +104,17 @@ class KeyguardUpdateMonitorLogger @Inject constructor(
                 { "Face authenticated for wrong user: $int1" })
     }
 
-    fun logFaceAuthHelpMsg(msgId: Int, helpMsg: String) {
+    fun logFaceAuthHelpMsg(msgId: Int, helpMsg: String?) {
         logBuffer.log(TAG, DEBUG, {
                     int1 = msgId
                     str1 = helpMsg
                 }, { "Face help received, msgId: $int1 msg: $str1" })
     }
 
-    fun logFaceAuthRequested(userInitiatedRequest: Boolean, reason: String) {
+    fun logFaceAuthRequested(reason: String?) {
         logBuffer.log(TAG, DEBUG, {
-            bool1 = userInitiatedRequest
             str1 = reason
-        }, { "requestFaceAuth() userInitiated=$bool1 reason=$str1" })
+        }, { "requestFaceAuth() reason=$str1" })
     }
 
     fun logFaceAuthSuccess(userId: Int) {
@@ -187,7 +189,7 @@ class KeyguardUpdateMonitorLogger @Inject constructor(
                 { "No Profile Owner or Device Owner supervision app found for User $int1" })
     }
 
-    fun logPhoneStateChanged(newState: String) {
+    fun logPhoneStateChanged(newState: String?) {
         logBuffer.log(TAG, DEBUG,
                 { str1 = newState },
                 { "handlePhoneStateChanged($str1)" })
@@ -240,7 +242,7 @@ class KeyguardUpdateMonitorLogger @Inject constructor(
         }, { "handleServiceStateChange(subId=$int1, serviceState=$str1)" })
     }
 
-    fun logServiceStateIntent(action: String, serviceState: ServiceState?, subId: Int) {
+    fun logServiceStateIntent(action: String?, serviceState: ServiceState?, subId: Int) {
         logBuffer.log(TAG, VERBOSE, {
             str1 = action
             str2 = "$serviceState"
@@ -256,7 +258,7 @@ class KeyguardUpdateMonitorLogger @Inject constructor(
         }, { "handleSimStateChange(subId=$int1, slotId=$int2, state=$long1)" })
     }
 
-    fun logSimStateFromIntent(action: String, extraSimState: String, slotId: Int, subId: Int) {
+    fun logSimStateFromIntent(action: String?, extraSimState: String?, slotId: Int, subId: Int) {
         logBuffer.log(TAG, VERBOSE, {
             str1 = action
             str2 = extraSimState
@@ -269,11 +271,19 @@ class KeyguardUpdateMonitorLogger @Inject constructor(
         logBuffer.log(TAG, VERBOSE, { int1 = subId }, { "reportSimUnlocked(subId=$int1)" })
     }
 
-    fun logStartedListeningForFace(faceRunningState: Int, faceAuthReason: String) {
+    fun logStartedListeningForFace(faceRunningState: Int, faceAuthUiEvent: FaceAuthUiEvent) {
         logBuffer.log(TAG, VERBOSE, {
             int1 = faceRunningState
-            str1 = faceAuthReason
-        }, { "startListeningForFace(): $int1, reason: $str1" })
+            str1 = faceAuthUiEvent.reason
+            str2 = faceAuthUiEvent.extraInfoToString()
+        }, { "startListeningForFace(): $int1, reason: $str1 $str2" })
+    }
+
+    fun logStartedListeningForFaceFromWakeUp(faceRunningState: Int, @WakeReason pmWakeReason: Int) {
+        logBuffer.log(TAG, VERBOSE, {
+            int1 = faceRunningState
+            str1 = PowerManager.wakeReasonToString(pmWakeReason)
+        }, { "startListeningForFace(): $int1, reason: wakeUp-$str1" })
     }
 
     fun logStoppedListeningForFace(faceRunningState: Int, faceAuthReason: String) {
@@ -289,7 +299,7 @@ class KeyguardUpdateMonitorLogger @Inject constructor(
                 { "SubInfo:$str1" })
     }
 
-    fun logTimeFormatChanged(newTimeFormat: String) {
+    fun logTimeFormatChanged(newTimeFormat: String?) {
         logBuffer.log(TAG, DEBUG,
                 { str1 = newTimeFormat },
                 { "handleTimeFormatUpdate timeFormat=$str1" })
@@ -338,18 +348,18 @@ class KeyguardUpdateMonitorLogger @Inject constructor(
 
     fun logUserRequestedUnlock(
         requestOrigin: ActiveUnlockConfig.ACTIVE_UNLOCK_REQUEST_ORIGIN,
-        reason: String,
+        reason: String?,
         dismissKeyguard: Boolean
     ) {
         logBuffer.log("ActiveUnlock", DEBUG, {
-                    str1 = requestOrigin.name
+                    str1 = requestOrigin?.name
                     str2 = reason
                     bool1 = dismissKeyguard
                 }, { "reportUserRequestedUnlock origin=$str1 reason=$str2 dismissKeyguard=$bool1" })
     }
 
     fun logShowTrustGrantedMessage(
-            message: String
+            message: String?
     ) {
         logBuffer.log(TAG, DEBUG, {
             str1 = message
@@ -382,5 +392,11 @@ class KeyguardUpdateMonitorLogger @Inject constructor(
             bool4 = trustManaged
         }, { "#update secure=$bool1 canDismissKeyguard=$bool2" +
                 " trusted=$bool3 trustManaged=$bool4" })
+    }
+
+    fun logSkipUpdateFaceListeningOnWakeup(@WakeReason pmWakeReason: Int) {
+        logBuffer.log(TAG, VERBOSE, {
+            str1 = PowerManager.wakeReasonToString(pmWakeReason)
+        }, { "Skip updating face listening state on wakeup from $str1"})
     }
 }

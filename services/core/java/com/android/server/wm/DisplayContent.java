@@ -47,7 +47,6 @@ import static android.view.Display.STATE_UNKNOWN;
 import static android.view.Display.isSuspendedState;
 import static android.view.InsetsState.ITYPE_IME;
 import static android.view.InsetsState.ITYPE_LEFT_GESTURES;
-import static android.view.InsetsState.ITYPE_NAVIGATION_BAR;
 import static android.view.InsetsState.ITYPE_RIGHT_GESTURES;
 import static android.view.Surface.ROTATION_0;
 import static android.view.Surface.ROTATION_270;
@@ -55,6 +54,7 @@ import static android.view.Surface.ROTATION_90;
 import static android.view.View.GONE;
 import static android.view.WindowInsets.Type.displayCutout;
 import static android.view.WindowInsets.Type.ime;
+import static android.view.WindowInsets.Type.navigationBars;
 import static android.view.WindowInsets.Type.systemBars;
 import static android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE;
 import static android.view.WindowManager.DISPLAY_IME_POLICY_FALLBACK_DISPLAY;
@@ -216,7 +216,6 @@ import android.view.InputDevice;
 import android.view.InsetsSource;
 import android.view.InsetsState;
 import android.view.InsetsState.InternalInsetsType;
-import android.view.InsetsVisibilities;
 import android.view.MagnificationSpec;
 import android.view.PrivacyIndicatorBounds;
 import android.view.RemoteAnimationDefinition;
@@ -227,6 +226,7 @@ import android.view.SurfaceControl;
 import android.view.SurfaceControl.Transaction;
 import android.view.SurfaceSession;
 import android.view.WindowInsets;
+import android.view.WindowInsets.Type.InsetsType;
 import android.view.WindowManager;
 import android.view.WindowManager.DisplayImePolicy;
 import android.view.WindowManagerPolicyConstants.PointerEventListener;
@@ -788,11 +788,11 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         // higher window hierarchy, we don't give it focus if the next IME layering target
         // doesn't request IME visible.
         if (w.mIsImWindow && w.isChildWindow() && (mImeLayeringTarget == null
-                || !mImeLayeringTarget.getRequestedVisibility(ITYPE_IME))) {
+                || !mImeLayeringTarget.isRequestedVisible(ime()))) {
             return false;
         }
         if (w.mAttrs.type == TYPE_INPUT_METHOD_DIALOG && mImeLayeringTarget != null
-                && !mImeLayeringTarget.getRequestedVisibility(ITYPE_IME)
+                && !mImeLayeringTarget.isRequestedVisible(ime())
                 && !mImeLayeringTarget.isVisibleRequested()) {
             return false;
         }
@@ -2059,7 +2059,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         // is opened for logging metrics.
         if (mWmService.mAccessibilityController.hasCallbacks()) {
             final boolean isImeShow = mImeControlTarget != null
-                    && mImeControlTarget.getRequestedVisibility(ITYPE_IME);
+                    && mImeControlTarget.isRequestedVisible(ime());
             mWmService.mAccessibilityController.updateImeVisibilityIfNeeded(mDisplayId, isImeShow);
         }
     }
@@ -2188,8 +2188,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             mDisplayInfo.flags &= ~Display.FLAG_SCALING_DISABLED;
         }
 
-        computeSizeRangesAndScreenLayout(mDisplayInfo, rotated, dw, dh,
-                mDisplayMetrics.density, outConfig);
+        computeSizeRanges(mDisplayInfo, rotated, dw, dh, mDisplayMetrics.density, outConfig);
 
         mWmService.mDisplayManagerInternal.setDisplayInfoOverrideFromWindowManager(mDisplayId,
                 mDisplayInfo);
@@ -2289,8 +2288,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         displayInfo.appHeight = appBounds.height();
         final DisplayCutout displayCutout = calculateDisplayCutoutForRotation(rotation);
         displayInfo.displayCutout = displayCutout.isEmpty() ? null : displayCutout;
-        computeSizeRangesAndScreenLayout(displayInfo, rotated, dw, dh,
-                mDisplayMetrics.density, outConfig);
+        computeSizeRanges(displayInfo, rotated, dw, dh, mDisplayMetrics.density, outConfig);
         return displayInfo;
     }
 
@@ -2309,6 +2307,9 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         outConfig.screenHeightDp = (int) (info.mConfigFrame.height() / density + 0.5f);
         outConfig.compatScreenWidthDp = (int) (outConfig.screenWidthDp / mCompatibleScreenScale);
         outConfig.compatScreenHeightDp = (int) (outConfig.screenHeightDp / mCompatibleScreenScale);
+        outConfig.screenLayout = computeScreenLayout(
+                Configuration.resetScreenLayout(outConfig.screenLayout),
+                outConfig.screenWidthDp, outConfig.screenHeightDp);
 
         final boolean rotated = (rotation == ROTATION_90 || rotation == ROTATION_270);
         outConfig.compatSmallestScreenWidthDp = computeCompatSmallestWidth(rotated, dw, dh);
@@ -2450,7 +2451,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         return curSize;
     }
 
-    private void computeSizeRangesAndScreenLayout(DisplayInfo displayInfo, boolean rotated,
+    private void computeSizeRanges(DisplayInfo displayInfo, boolean rotated,
             int dw, int dh, float density, Configuration outConfig) {
 
         // We need to determine the smallest width that will occur under normal
@@ -2477,31 +2478,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         if (outConfig == null) {
             return;
         }
-        int sl = Configuration.resetScreenLayout(outConfig.screenLayout);
-        sl = reduceConfigLayout(sl, Surface.ROTATION_0, density, unrotDw, unrotDh);
-        sl = reduceConfigLayout(sl, Surface.ROTATION_90, density, unrotDh, unrotDw);
-        sl = reduceConfigLayout(sl, Surface.ROTATION_180, density, unrotDw, unrotDh);
-        sl = reduceConfigLayout(sl, Surface.ROTATION_270, density, unrotDh, unrotDw);
         outConfig.smallestScreenWidthDp =
                 (int) (displayInfo.smallestNominalAppWidth / density + 0.5f);
-        outConfig.screenLayout = sl;
-    }
-
-    private int reduceConfigLayout(int curLayout, int rotation, float density, int dw, int dh) {
-        // Get the app screen size at this rotation.
-        final Rect size = mDisplayPolicy.getDecorInsetsInfo(rotation, dw, dh).mNonDecorFrame;
-
-        // Compute the screen layout size class for this rotation.
-        int longSize = size.width();
-        int shortSize = size.height();
-        if (longSize < shortSize) {
-            int tmp = longSize;
-            longSize = shortSize;
-            shortSize = tmp;
-        }
-        longSize = (int) (longSize / density + 0.5f);
-        shortSize = (int) (shortSize / density + 0.5f);
-        return Configuration.reduceScreenLayout(curLayout, longSize, shortSize);
     }
 
     private void adjustDisplaySizeRanges(DisplayInfo displayInfo, int rotation, int dw, int dh) {
@@ -5681,7 +5659,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         final int type = win.mAttrs.type;
         final int privateFlags = win.mAttrs.privateFlags;
         final boolean stickyHideNav =
-                !win.getRequestedVisibility(ITYPE_NAVIGATION_BAR)
+                !win.isRequestedVisible(navigationBars())
                         && win.mAttrs.insetsFlags.behavior == BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE;
         return (!stickyHideNav || ignoreRequest) && type != TYPE_INPUT_METHOD
                 && type != TYPE_NOTIFICATION_SHADE && win.getActivityType() != ACTIVITY_TYPE_HOME
@@ -6691,7 +6669,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
     class RemoteInsetsControlTarget implements InsetsControlTarget {
         private final IDisplayWindowInsetsController mRemoteInsetsController;
-        private final InsetsVisibilities mRequestedVisibilities = new InsetsVisibilities();
+        private @InsetsType int mRequestedVisibleTypes = WindowInsets.Type.defaultVisible();
         private final boolean mCanShowTransient;
 
         RemoteInsetsControlTarget(IDisplayWindowInsetsController controller) {
@@ -6704,12 +6682,12 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
          * Notifies the remote insets controller that the top focused window has changed.
          *
          * @param component The application component that is open in the top focussed window.
-         * @param requestedVisibilities The insets visibilities requested by the focussed window.
+         * @param requestedVisibleTypes The insets types requested visible by the focused window.
          */
         void topFocusedWindowChanged(ComponentName component,
-                InsetsVisibilities requestedVisibilities) {
+                @InsetsType int requestedVisibleTypes) {
             try {
-                mRemoteInsetsController.topFocusedWindowChanged(component, requestedVisibilities);
+                mRemoteInsetsController.topFocusedWindowChanged(component, requestedVisibleTypes);
             } catch (RemoteException e) {
                 Slog.w(TAG, "Failed to deliver package in top focused window change", e);
             }
@@ -6745,7 +6723,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
 
         @Override
-        public void hideInsets(@WindowInsets.Type.InsetsType int types, boolean fromIme) {
+        public void hideInsets(@InsetsType int types, boolean fromIme) {
             try {
                 mRemoteInsetsController.hideInsets(types, fromIme);
             } catch (RemoteException e) {
@@ -6759,15 +6737,25 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
 
         @Override
-        public boolean getRequestedVisibility(@InternalInsetsType int type) {
-            if (type == ITYPE_IME) {
+        public boolean isRequestedVisible(@InsetsType int types) {
+            if (types == ime()) {
                 return getInsetsStateController().getImeSourceProvider().isImeShowing();
             }
-            return mRequestedVisibilities.getVisibility(type);
+            return (mRequestedVisibleTypes & types) != 0;
         }
 
-        void setRequestedVisibilities(InsetsVisibilities requestedVisibilities) {
-            mRequestedVisibilities.set(requestedVisibilities);
+        @Override
+        public @InsetsType int getRequestedVisibleTypes() {
+            return mRequestedVisibleTypes;
+        }
+
+        /**
+         * @see #getRequestedVisibleTypes()
+         */
+        void setRequestedVisibleTypes(@InsetsType int requestedVisibleTypes) {
+            if (mRequestedVisibleTypes != requestedVisibleTypes) {
+                mRequestedVisibleTypes = requestedVisibleTypes;
+            }
         }
     }
 

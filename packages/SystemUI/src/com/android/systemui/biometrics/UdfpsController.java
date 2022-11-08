@@ -60,6 +60,8 @@ import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.doze.DozeReceiver;
 import com.android.systemui.dump.DumpManager;
+import com.android.systemui.flags.FeatureFlags;
+import com.android.systemui.flags.Flags;
 import com.android.systemui.keyguard.ScreenLifecycle;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
@@ -119,6 +121,7 @@ public class UdfpsController implements DozeReceiver {
     @NonNull private final SystemUIDialogManager mDialogManager;
     @NonNull private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
     @NonNull private final VibratorHelper mVibrator;
+    @NonNull private final FeatureFlags mFeatureFlags;
     @NonNull private final FalsingManager mFalsingManager;
     @NonNull private final PowerManager mPowerManager;
     @NonNull private final AccessibilityManager mAccessibilityManager;
@@ -202,6 +205,10 @@ public class UdfpsController implements DozeReceiver {
         @Override
         public void showUdfpsOverlay(long requestId, int sensorId, int reason,
                 @NonNull IUdfpsOverlayControllerCallback callback) {
+            if (mFeatureFlags.isEnabled(Flags.NEW_UDFPS_OVERLAY)) {
+                return;
+            }
+
             mFgExecutor.execute(() -> UdfpsController.this.showUdfpsOverlay(
                     new UdfpsControllerOverlay(mContext, mFingerprintManager, mInflater,
                             mWindowManager, mAccessibilityManager, mStatusBarStateController,
@@ -217,6 +224,10 @@ public class UdfpsController implements DozeReceiver {
 
         @Override
         public void hideUdfpsOverlay(int sensorId) {
+            if (mFeatureFlags.isEnabled(Flags.NEW_UDFPS_OVERLAY)) {
+                return;
+            }
+
             mFgExecutor.execute(() -> {
                 if (mKeyguardUpdateMonitor.isFingerprintDetectionRunning()) {
                     // if we get here, we expect keyguardUpdateMonitor's fingerprintRunningState
@@ -590,6 +601,7 @@ public class UdfpsController implements DozeReceiver {
             @NonNull StatusBarKeyguardViewManager statusBarKeyguardViewManager,
             @NonNull DumpManager dumpManager,
             @NonNull KeyguardUpdateMonitor keyguardUpdateMonitor,
+            @NonNull FeatureFlags featureFlags,
             @NonNull FalsingManager falsingManager,
             @NonNull PowerManager powerManager,
             @NonNull AccessibilityManager accessibilityManager,
@@ -625,6 +637,7 @@ public class UdfpsController implements DozeReceiver {
         mDumpManager = dumpManager;
         mDialogManager = dialogManager;
         mKeyguardUpdateMonitor = keyguardUpdateMonitor;
+        mFeatureFlags = featureFlags;
         mFalsingManager = falsingManager;
         mPowerManager = powerManager;
         mAccessibilityManager = accessibilityManager;
@@ -788,7 +801,7 @@ public class UdfpsController implements DozeReceiver {
             // ACTION_UP/ACTION_CANCEL,  we need to be careful about not letting the screen
             // accidentally remain in high brightness mode. As a mitigation, queue a call to
             // cancel the fingerprint scan.
-            mCancelAodTimeoutAction = mFgExecutor.executeDelayed(this::onCancelUdfps,
+            mCancelAodTimeoutAction = mFgExecutor.executeDelayed(this::cancelAodInterrupt,
                     AOD_INTERRUPT_TIMEOUT_MILLIS);
             // using a hard-coded value for major and minor until it is available from the sensor
             onFingerDown(requestId, screenX, screenY, minor, major);
@@ -815,26 +828,22 @@ public class UdfpsController implements DozeReceiver {
     }
 
     /**
-     * Cancel UDFPS affordances - ability to hide the UDFPS overlay before the user explicitly
-     * lifts their finger. Generally, this should be called on errors in the authentication flow.
-     *
-     * The sensor that triggers an AOD fingerprint interrupt (see onAodInterrupt) doesn't give
-     * ACTION_UP/ACTION_CANCEL events, so and AOD interrupt scan needs to be cancelled manually.
+     * The sensor that triggers {@link #onAodInterrupt} doesn't emit ACTION_UP or ACTION_CANCEL
+     * events, which means the fingerprint gesture created by the AOD interrupt needs to be
+     * cancelled manually.
      * This should be called when authentication either succeeds or fails. Failing to cancel the
      * scan will leave the display in the UDFPS mode until the user lifts their finger. On optical
      * sensors, this can result in illumination persisting for longer than necessary.
      */
-    void onCancelUdfps() {
+    @VisibleForTesting
+    void cancelAodInterrupt() {
         if (!mIsAodInterruptActive) {
             return;
         }
         if (mOverlay != null && mOverlay.getOverlayView() != null) {
             onFingerUp(mOverlay.getRequestId(), mOverlay.getOverlayView());
         }
-        if (mCancelAodTimeoutAction != null) {
-            mCancelAodTimeoutAction.run();
-            mCancelAodTimeoutAction = null;
-        }
+        mCancelAodTimeoutAction = null;
         mIsAodInterruptActive = false;
     }
 
@@ -863,9 +872,7 @@ public class UdfpsController implements DozeReceiver {
             playStartHaptic();
 
             if (!mKeyguardUpdateMonitor.isFaceDetectionRunning()) {
-                mKeyguardUpdateMonitor.requestFaceAuth(
-                        /* userInitiatedRequest */ false,
-                        FaceAuthApiRequestReason.UDFPS_POINTER_DOWN);
+                mKeyguardUpdateMonitor.requestFaceAuth(FaceAuthApiRequestReason.UDFPS_POINTER_DOWN);
             }
         }
         mOnFingerDown = true;

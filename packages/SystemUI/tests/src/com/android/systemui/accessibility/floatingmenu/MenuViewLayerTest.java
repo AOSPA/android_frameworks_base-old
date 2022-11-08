@@ -23,17 +23,25 @@ import static com.android.systemui.accessibility.floatingmenu.MenuViewLayer.Laye
 
 import static com.google.common.truth.Truth.assertThat;
 
+import static org.mockito.Mockito.verify;
+
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
 import android.view.View;
+import android.view.WindowManager;
+import android.view.accessibility.AccessibilityManager;
 
 import androidx.test.filters.SmallTest;
 
 import com.android.systemui.SysuiTestCase;
 
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mock;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /** Tests for {@link MenuViewLayer}. */
 @RunWith(AndroidTestingRunner.class)
@@ -42,9 +50,19 @@ import org.junit.runner.RunWith;
 public class MenuViewLayerTest extends SysuiTestCase {
     private MenuViewLayer mMenuViewLayer;
 
+    @Rule
+    public MockitoRule mockito = MockitoJUnit.rule();
+
+    @Mock
+    private IAccessibilityFloatingMenu mFloatingMenu;
+
     @Before
     public void setUp() throws Exception {
-        mMenuViewLayer = new MenuViewLayer(mContext);
+        final WindowManager stubWindowManager = mContext.getSystemService(WindowManager.class);
+        final AccessibilityManager stubAccessibilityManager = mContext.getSystemService(
+                AccessibilityManager.class);
+        mMenuViewLayer = new MenuViewLayer(mContext, stubWindowManager, stubAccessibilityManager,
+                mFloatingMenu);
     }
 
     @Test
@@ -61,5 +79,12 @@ public class MenuViewLayerTest extends SysuiTestCase {
         final View menuView = mMenuViewLayer.getChildAt(LayerIndex.MENU_VIEW);
 
         assertThat(menuView.getVisibility()).isEqualTo(GONE);
+    }
+
+    @Test
+    public void tiggerDismissMenuAction_hideFloatingMenu() {
+        mMenuViewLayer.mDismissMenuAction.run();
+
+        verify(mFloatingMenu).hide();
     }
 }

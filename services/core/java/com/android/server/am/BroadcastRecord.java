@@ -78,6 +78,7 @@ final class BroadcastRecord extends Binder {
     final int callingPid;   // the pid of who sent this
     final int callingUid;   // the uid of who sent this
     final boolean callerInstantApp; // caller is an Instant App?
+    final boolean callerInstrumented; // caller is being instrumented?
     final boolean ordered;  // serialize the send to receivers?
     final boolean sticky;   // originated from existing sticky data?
     final boolean alarm;    // originated from an alarm triggering?
@@ -365,6 +366,7 @@ final class BroadcastRecord extends Binder {
         callingPid = _callingPid;
         callingUid = _callingUid;
         callerInstantApp = _callerInstantApp;
+        callerInstrumented = isCallerInstrumented(_callerApp, _callingUid);
         resolvedType = _resolvedType;
         requiredPermissions = _requiredPermissions;
         excludedPermissions = _excludedPermissions;
@@ -411,6 +413,7 @@ final class BroadcastRecord extends Binder {
         callingPid = from.callingPid;
         callingUid = from.callingUid;
         callerInstantApp = from.callerInstantApp;
+        callerInstrumented = from.callerInstrumented;
         ordered = from.ordered;
         sticky = from.sticky;
         initialSticky = from.initialSticky;
@@ -669,6 +672,17 @@ final class BroadcastRecord extends Binder {
             newIntent.setComponent(((ResolveInfo) receiver).activityInfo.getComponentName());
         }
         return (newIntent != null) ? newIntent : intent;
+    }
+
+    static boolean isCallerInstrumented(@Nullable ProcessRecord callerApp, int callingUid) {
+        switch (UserHandle.getAppId(callingUid)) {
+            case android.os.Process.ROOT_UID:
+            case android.os.Process.SHELL_UID:
+                // Broadcasts sent via "shell" are typically invoked by test
+                // suites, so we treat them as if the caller was instrumented
+                return true;
+        }
+        return (callerApp != null) ? (callerApp.getActiveInstrumentation() != null) : false;
     }
 
     /**

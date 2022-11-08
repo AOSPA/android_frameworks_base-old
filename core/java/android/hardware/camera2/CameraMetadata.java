@@ -1253,6 +1253,24 @@ public abstract class CameraMetadata<TKey> {
      */
     public static final int REQUEST_AVAILABLE_CAPABILITIES_STREAM_USE_CASE = 19;
 
+    /**
+     * <p>The device supports querying the possible combinations of color spaces, image
+     * formats, and dynamic range profiles supported by the camera and requesting a
+     * particular color space for a session via
+     * {@link android.hardware.camera2.params.SessionConfiguration#setColorSpace }.</p>
+     * <p>Cameras that enable this capability may or may not also implement dynamic range
+     * profiles. If they don't,
+     * {@link android.hardware.camera2.params.ColorSpaceProfiles#getSupportedDynamicRangeProfiles }
+     * will return only
+     * {@link android.hardware.camera2.params.DynamicRangeProfiles#STANDARD } and
+     * {@link android.hardware.camera2.params.ColorSpaceProfiles#getSupportedColorSpacesForDynamicRange }
+     * will assume support of the
+     * {@link android.hardware.camera2.params.DynamicRangeProfiles#STANDARD }
+     * profile in all combinations of color spaces and image formats.</p>
+     * @see CameraCharacteristics#REQUEST_AVAILABLE_CAPABILITIES
+     */
+    public static final int REQUEST_AVAILABLE_CAPABILITIES_COLOR_SPACE_PROFILES = 20;
+
     //
     // Enumeration values for CameraCharacteristics#REQUEST_AVAILABLE_DYNAMIC_RANGE_PROFILES_MAP
     //
@@ -1361,6 +1379,18 @@ public abstract class CameraMetadata<TKey> {
      * @hide
      */
     public static final int REQUEST_AVAILABLE_DYNAMIC_RANGE_PROFILES_MAP_MAX = 0x1000;
+
+    //
+    // Enumeration values for CameraCharacteristics#REQUEST_AVAILABLE_COLOR_SPACE_PROFILES_MAP
+    //
+
+    /**
+     * <p>Default value, when not explicitly specified. The Camera device will choose the color
+     * space to employ.</p>
+     * @see CameraCharacteristics#REQUEST_AVAILABLE_COLOR_SPACE_PROFILES_MAP
+     * @hide
+     */
+    public static final int REQUEST_AVAILABLE_COLOR_SPACE_PROFILES_MAP_UNSPECIFIED = -1;
 
     //
     // Enumeration values for CameraCharacteristics#SCALER_CROPPING_TYPE
@@ -3165,6 +3195,49 @@ public abstract class CameraMetadata<TKey> {
      * @hide
      */
     public static final int CONTROL_EXTENDED_SCENE_MODE_VENDOR_START = 0x40;
+
+    //
+    // Enumeration values for CaptureRequest#CONTROL_SETTINGS_OVERRIDE
+    //
+
+    /**
+     * <p>No keys are applied sooner than the other keys when applying CaptureRequest
+     * settings to the camera device. This is the default value.</p>
+     * @see CaptureRequest#CONTROL_SETTINGS_OVERRIDE
+     */
+    public static final int CONTROL_SETTINGS_OVERRIDE_OFF = 0;
+
+    /**
+     * <p>Zoom related keys are applied sooner than the other keys in the CaptureRequest. The
+     * zoom related keys are:</p>
+     * <ul>
+     * <li>{@link CaptureRequest#CONTROL_ZOOM_RATIO android.control.zoomRatio}</li>
+     * <li>{@link CaptureRequest#SCALER_CROP_REGION android.scaler.cropRegion}</li>
+     * <li>{@link CaptureRequest#CONTROL_AE_REGIONS android.control.aeRegions}</li>
+     * <li>{@link CaptureRequest#CONTROL_AWB_REGIONS android.control.awbRegions}</li>
+     * <li>{@link CaptureRequest#CONTROL_AF_REGIONS android.control.afRegions}</li>
+     * </ul>
+     * <p>Even though {@link CaptureRequest#CONTROL_AE_REGIONS android.control.aeRegions}, {@link CaptureRequest#CONTROL_AWB_REGIONS android.control.awbRegions},
+     * and {@link CaptureRequest#CONTROL_AF_REGIONS android.control.afRegions} are not directly zoom related, applications
+     * typically scale these regions together with {@link CaptureRequest#SCALER_CROP_REGION android.scaler.cropRegion} to have a
+     * consistent mapping within the current field of view. In this aspect, they are
+     * related to {@link CaptureRequest#SCALER_CROP_REGION android.scaler.cropRegion} and {@link CaptureRequest#CONTROL_ZOOM_RATIO android.control.zoomRatio}.</p>
+     *
+     * @see CaptureRequest#CONTROL_AE_REGIONS
+     * @see CaptureRequest#CONTROL_AF_REGIONS
+     * @see CaptureRequest#CONTROL_AWB_REGIONS
+     * @see CaptureRequest#CONTROL_ZOOM_RATIO
+     * @see CaptureRequest#SCALER_CROP_REGION
+     * @see CaptureRequest#CONTROL_SETTINGS_OVERRIDE
+     */
+    public static final int CONTROL_SETTINGS_OVERRIDE_ZOOM = 1;
+
+    /**
+     * <p>Vendor defined settingsOverride. These depend on vendor implementation.</p>
+     * @see CaptureRequest#CONTROL_SETTINGS_OVERRIDE
+     * @hide
+     */
+    public static final int CONTROL_SETTINGS_OVERRIDE_VENDOR_START = 0x4000;
 
     //
     // Enumeration values for CaptureRequest#EDGE_MODE

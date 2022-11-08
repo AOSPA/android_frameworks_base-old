@@ -918,6 +918,22 @@ public class FingerprintManager implements BiometricAuthenticator, BiometricFing
         }
     }
 
+    /**
+     * @hide
+     */
+    @RequiresPermission(USE_BIOMETRIC_INTERNAL)
+    public void setUdfpsOverlay(@NonNull IUdfpsOverlay controller) {
+        if (mService == null) {
+            Slog.w(TAG, "setUdfpsOverlay: no fingerprint service");
+            return;
+        }
+
+        try {
+            mService.setUdfpsOverlay(controller);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
 
     /**
      * Forwards BiometricStateListener to FingerprintService
@@ -1080,7 +1096,7 @@ public class FingerprintManager implements BiometricAuthenticator, BiometricFing
      */
     public boolean isPowerbuttonFps() {
         final FingerprintSensorPropertiesInternal sensorProps = getFirstFingerprintSensor();
-        return sensorProps.sensorType == TYPE_POWER_BUTTON;
+        return sensorProps == null ? false : sensorProps.sensorType == TYPE_POWER_BUTTON;
     }
 
     /**
@@ -1122,6 +1138,20 @@ public class FingerprintManager implements BiometricAuthenticator, BiometricFing
             }
         }
         return BIOMETRIC_LOCKOUT_NONE;
+    }
+
+    /**
+     * Schedules a watchdog.
+     *
+     * @hide
+     */
+    @RequiresPermission(USE_BIOMETRIC_INTERNAL)
+    public void scheduleWatchdog() {
+        try {
+            mService.scheduleWatchdog();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     /**

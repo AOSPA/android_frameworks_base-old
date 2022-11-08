@@ -587,9 +587,9 @@ public class VirtualDeviceManagerServiceTest {
         final int fd = 1;
         final int keyCode = KeyEvent.KEYCODE_A;
         final int action = VirtualKeyEvent.ACTION_UP;
-        mInputController.mInputDeviceDescriptors.put(BINDER,
-                new InputController.InputDeviceDescriptor(fd, () -> {}, /* type= */ 1,
-                        /* displayId= */ 1, PHYS, DEVICE_ID));
+        mInputController.addDeviceForTesting(BINDER, fd, /* type= */1, /* displayId= */ 1, PHYS,
+                DEVICE_ID);
+
         mDeviceImpl.sendKeyEvent(BINDER, new VirtualKeyEvent.Builder().setKeyCode(keyCode)
                 .setAction(action).build());
         verify(mNativeWrapperMock).writeKeyEvent(fd, keyCode, action);
@@ -612,9 +612,8 @@ public class VirtualDeviceManagerServiceTest {
         final int fd = 1;
         final int buttonCode = VirtualMouseButtonEvent.BUTTON_BACK;
         final int action = VirtualMouseButtonEvent.ACTION_BUTTON_PRESS;
-        mInputController.mInputDeviceDescriptors.put(BINDER,
-                new InputController.InputDeviceDescriptor(fd, () -> {}, /* type= */ 2,
-                        /* displayId= */ 1, PHYS, DEVICE_ID));
+        mInputController.addDeviceForTesting(BINDER, fd, /* type= */2, /* displayId= */ 1, PHYS,
+                DEVICE_ID);
         doReturn(1).when(mInputManagerInternalMock).getVirtualMousePointerDisplayId();
         mDeviceImpl.sendButtonEvent(BINDER, new VirtualMouseButtonEvent.Builder()
                 .setButtonCode(buttonCode)
@@ -627,9 +626,8 @@ public class VirtualDeviceManagerServiceTest {
         final int fd = 1;
         final int buttonCode = VirtualMouseButtonEvent.BUTTON_BACK;
         final int action = VirtualMouseButtonEvent.ACTION_BUTTON_PRESS;
-        mInputController.mInputDeviceDescriptors.put(BINDER,
-                new InputController.InputDeviceDescriptor(fd, () -> {}, /* type= */ 2,
-                        /* displayId= */ 1, PHYS, DEVICE_ID));
+        mInputController.addDeviceForTesting(BINDER, fd, /* type= */2, /* displayId= */ 1, PHYS,
+                DEVICE_ID);
         assertThrows(
                 IllegalStateException.class,
                 () ->
@@ -653,9 +651,8 @@ public class VirtualDeviceManagerServiceTest {
         final int fd = 1;
         final float x = -0.2f;
         final float y = 0.7f;
-        mInputController.mInputDeviceDescriptors.put(BINDER,
-                new InputController.InputDeviceDescriptor(fd, () -> {}, /* type= */ 2,
-                        /* displayId= */ 1, PHYS, DEVICE_ID));
+        mInputController.addDeviceForTesting(BINDER, fd, /* type= */2, /* displayId= */ 1, PHYS,
+                DEVICE_ID);
         doReturn(1).when(mInputManagerInternalMock).getVirtualMousePointerDisplayId();
         mDeviceImpl.sendRelativeEvent(BINDER, new VirtualMouseRelativeEvent.Builder()
                 .setRelativeX(x).setRelativeY(y).build());
@@ -667,9 +664,8 @@ public class VirtualDeviceManagerServiceTest {
         final int fd = 1;
         final float x = -0.2f;
         final float y = 0.7f;
-        mInputController.mInputDeviceDescriptors.put(BINDER,
-                new InputController.InputDeviceDescriptor(fd, () -> {}, /* type= */ 2,
-                        /* displayId= */ 1, PHYS, DEVICE_ID));
+        mInputController.addDeviceForTesting(BINDER, fd, /* type= */2, /* displayId= */ 1, PHYS,
+                DEVICE_ID);
         assertThrows(
                 IllegalStateException.class,
                 () ->
@@ -694,9 +690,8 @@ public class VirtualDeviceManagerServiceTest {
         final int fd = 1;
         final float x = 0.5f;
         final float y = 1f;
-        mInputController.mInputDeviceDescriptors.put(BINDER,
-                new InputController.InputDeviceDescriptor(fd, () -> {}, /* type= */ 2,
-                        /* displayId= */ 1, PHYS, DEVICE_ID));
+        mInputController.addDeviceForTesting(BINDER, fd, /* type= */2, /* displayId= */ 1, PHYS,
+                DEVICE_ID);
         doReturn(1).when(mInputManagerInternalMock).getVirtualMousePointerDisplayId();
         mDeviceImpl.sendScrollEvent(BINDER, new VirtualMouseScrollEvent.Builder()
                 .setXAxisMovement(x)
@@ -709,9 +704,8 @@ public class VirtualDeviceManagerServiceTest {
         final int fd = 1;
         final float x = 0.5f;
         final float y = 1f;
-        mInputController.mInputDeviceDescriptors.put(BINDER,
-                new InputController.InputDeviceDescriptor(fd, () -> {}, /* type= */ 2,
-                        /* displayId= */ 1, PHYS, DEVICE_ID));
+        mInputController.addDeviceForTesting(BINDER, fd, /* type= */2, /* displayId= */ 1, PHYS,
+                DEVICE_ID);
         assertThrows(
                 IllegalStateException.class,
                 () ->
@@ -742,9 +736,8 @@ public class VirtualDeviceManagerServiceTest {
         final float x = 100.5f;
         final float y = 200.5f;
         final int action = VirtualTouchEvent.ACTION_UP;
-        mInputController.mInputDeviceDescriptors.put(BINDER,
-                new InputController.InputDeviceDescriptor(fd, () -> {}, /* type= */ 3,
-                        /* displayId= */ 1, PHYS, DEVICE_ID));
+        mInputController.addDeviceForTesting(BINDER, fd, /* type= */3, /* displayId= */ 1, PHYS,
+                DEVICE_ID);
         mDeviceImpl.sendTouchEvent(BINDER, new VirtualTouchEvent.Builder().setX(x)
                 .setY(y).setAction(action).setPointerId(pointerId).setToolType(toolType).build());
         verify(mNativeWrapperMock).writeTouchEvent(fd, pointerId, toolType, action, x, y, Float.NaN,
@@ -761,9 +754,8 @@ public class VirtualDeviceManagerServiceTest {
         final int action = VirtualTouchEvent.ACTION_UP;
         final float pressure = 1.0f;
         final float majorAxisSize = 10.0f;
-        mInputController.mInputDeviceDescriptors.put(BINDER,
-                new InputController.InputDeviceDescriptor(fd, () -> {}, /* type= */ 3,
-                        /* displayId= */ 1, PHYS, DEVICE_ID));
+        mInputController.addDeviceForTesting(BINDER, fd, /* type= */3, /* displayId= */ 1, PHYS,
+                DEVICE_ID);
         mDeviceImpl.sendTouchEvent(BINDER, new VirtualTouchEvent.Builder().setX(x)
                 .setY(y).setAction(action).setPointerId(pointerId).setToolType(toolType)
                 .setPressure(pressure).setMajorAxisSize(majorAxisSize).build());
@@ -898,5 +890,35 @@ public class VirtualDeviceManagerServiceTest {
 
         verify(mContext).startActivityAsUser(argThat(intent ->
                 intent.filterEquals(blockedAppIntent)), any(), any());
+    }
+
+    @Test
+    public void registerRunningAppsChangedListener_onRunningAppsChanged_listenersNotified() {
+        ArraySet<Integer> uids = new ArraySet<>(Arrays.asList(UID_1, UID_2));
+        mDeviceImpl.onVirtualDisplayCreatedLocked(
+                mDeviceImpl.createWindowPolicyController(), DISPLAY_ID);
+        GenericWindowPolicyController gwpc = mDeviceImpl.getWindowPolicyControllersForTesting().get(
+                DISPLAY_ID);
+
+        gwpc.onRunningAppsChanged(uids);
+        mDeviceImpl.onRunningAppsChanged(uids);
+
+        assertThat(gwpc.getRunningAppsChangedListenersSizeForTesting()).isEqualTo(1);
+        verify(mRunningAppsChangedCallback).accept(new ArraySet<>(Arrays.asList(UID_1, UID_2)));
+    }
+
+    @Test
+    public void noRunningAppsChangedListener_onRunningAppsChanged_doesNotThrowException() {
+        ArraySet<Integer> uids = new ArraySet<>(Arrays.asList(UID_1, UID_2));
+        mDeviceImpl.onVirtualDisplayCreatedLocked(
+                mDeviceImpl.createWindowPolicyController(), DISPLAY_ID);
+        GenericWindowPolicyController gwpc = mDeviceImpl.getWindowPolicyControllersForTesting().get(
+                DISPLAY_ID);
+        mDeviceImpl.onVirtualDisplayRemovedLocked(DISPLAY_ID);
+
+        // This call should not throw any exceptions.
+        gwpc.onRunningAppsChanged(uids);
+
+        assertThat(gwpc.getRunningAppsChangedListenersSizeForTesting()).isEqualTo(0);
     }
 }

@@ -72,6 +72,8 @@ import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.os.SomeArgs;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.systemui.CoreStartable;
+import com.android.systemui.biometrics.domain.interactor.BiometricPromptCredentialInteractor;
+import com.android.systemui.biometrics.ui.viewmodel.CredentialViewModel;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
@@ -122,6 +124,10 @@ public class AuthController implements CoreStartable,  CommandQueue.Callbacks,
     private final Provider<UdfpsController> mUdfpsControllerFactory;
     private final Provider<SidefpsController> mSidefpsControllerFactory;
 
+    // TODO: these should be migrated out once ready
+    @NonNull private final Provider<BiometricPromptCredentialInteractor> mBiometricPromptInteractor;
+    @NonNull private final Provider<CredentialViewModel> mCredentialViewModelProvider;
+
     private final Display mDisplay;
     private float mScaleFactor = 1f;
     // sensor locations without any resolution scaling nor rotation adjustments:
@@ -153,6 +159,7 @@ public class AuthController implements CoreStartable,  CommandQueue.Callbacks,
     @Nullable private List<FingerprintSensorPropertiesInternal> mSidefpsProps;
 
     @NonNull private final SparseBooleanArray mUdfpsEnrolledForUser;
+    @NonNull private final SparseBooleanArray mFaceEnrolledForUser;
     @NonNull private final SensorPrivacyManager mSensorPrivacyManager;
     private final WakefulnessLifecycle mWakefulnessLifecycle;
     private boolean mAllFingerprintAuthenticatorsRegistered;
@@ -346,6 +353,15 @@ public class AuthController implements CoreStartable,  CommandQueue.Callbacks,
             for (FingerprintSensorPropertiesInternal prop : mUdfpsProps) {
                 if (prop.sensorId == sensorId) {
                     mUdfpsEnrolledForUser.put(userId, hasEnrollments);
+                }
+            }
+        }
+        if (mFaceProps == null) {
+            Log.d(TAG, "handleEnrollmentsChanged, mFaceProps is null");
+        } else {
+            for (FaceSensorPropertiesInternal prop : mFaceProps) {
+                if (prop.sensorId == sensorId) {
+                    mFaceEnrolledForUser.put(userId, hasEnrollments);
                 }
             }
         }
@@ -652,17 +668,6 @@ public class AuthController implements CoreStartable,  CommandQueue.Callbacks,
         mUdfpsController.onAodInterrupt(screenX, screenY, major, minor);
     }
 
-    /**
-     * Cancel a fingerprint scan manually. This will get rid of the white circle on the udfps
-     * sensor area even if the user hasn't explicitly lifted their finger yet.
-     */
-    public void onCancelUdfps() {
-        if (mUdfpsController == null) {
-            return;
-        }
-        mUdfpsController.onCancelUdfps();
-    }
-
     private void sendResultAndCleanUp(@DismissedReason int reason,
             @Nullable byte[] credentialAttestation) {
         if (mReceiver == null) {
@@ -694,6 +699,8 @@ public class AuthController implements CoreStartable,  CommandQueue.Callbacks,
             @NonNull LockPatternUtils lockPatternUtils,
             @NonNull UdfpsLogger udfpsLogger,
             @NonNull StatusBarStateController statusBarStateController,
+            @NonNull Provider<BiometricPromptCredentialInteractor> biometricPromptInteractor,
+            @NonNull Provider<CredentialViewModel> credentialViewModelProvider,
             @NonNull InteractionJankMonitor jankMonitor,
             @Main Handler handler,
             @Background DelayableExecutor bgExecutor,
@@ -715,7 +722,11 @@ public class AuthController implements CoreStartable,  CommandQueue.Callbacks,
         mWindowManager = windowManager;
         mInteractionJankMonitor = jankMonitor;
         mUdfpsEnrolledForUser = new SparseBooleanArray();
+        mFaceEnrolledForUser = new SparseBooleanArray();
         mVibratorHelper = vibrator;
+
+        mBiometricPromptInteractor = biometricPromptInteractor;
+        mCredentialViewModelProvider = credentialViewModelProvider;
 
         mOrientationListener = new BiometricDisplayListener(
                 context,
@@ -1021,8 +1032,6 @@ public class AuthController implements CoreStartable,  CommandQueue.Callbacks,
         } else {
             Log.w(TAG, "onBiometricError callback but dialog is gone");
         }
-
-        onCancelUdfps();
     }
 
     @Override
@@ -1067,7 +1076,7 @@ public class AuthController implements CoreStartable,  CommandQueue.Callbacks,
             return false;
         }
 
-        return mFaceManager.hasEnrolledTemplates(userId);
+        return mFaceEnrolledForUser.get(userId);
     }
 
     /**
@@ -1079,6 +1088,11 @@ public class AuthController implements CoreStartable,  CommandQueue.Callbacks,
         }
 
         return mUdfpsEnrolledForUser.get(userId);
+    }
+
+    /** If BiometricPrompt is currently being shown to the user. */
+    public boolean isShowing() {
+        return mCurrentDialog != null;
     }
 
     private void showDialog(SomeArgs args, boolean skipAnimation, Bundle savedState) {
@@ -1212,7 +1226,8 @@ public class AuthController implements CoreStartable,  CommandQueue.Callbacks,
                 .setMultiSensorConfig(multiSensorConfig)
                 .setScaleFactorProvider(() -> getScaleFactor())
                 .build(bgExecutor, sensorIds, mFpProps, mFaceProps, wakefulnessLifecycle,
-                        userManager, lockPatternUtils, mInteractionJankMonitor);
+                        userManager, lockPatternUtils, mInteractionJankMonitor,
+                        mBiometricPromptInteractor, mCredentialViewModelProvider);
     }
 
     @Override
