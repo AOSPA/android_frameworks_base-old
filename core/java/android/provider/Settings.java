@@ -5674,6 +5674,7 @@ public final class Settings {
          * Force full screen for devices with cutout
          * @hide
          */
+        @Readable
         public static final String FORCE_FULLSCREEN_CUTOUT_APPS = "force_full_screen_cutout_apps";
 
         /**
