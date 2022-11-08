@@ -21,7 +21,7 @@ import android.graphics.drawable.Drawable
 data class ProviderInfo(
   val icon: Drawable,
   val name: String,
-  val appDomainName: String,
+  val displayName: String,
   val credentialTypeIcon: Drawable,
   val createOptions: List<CreateOptionInfo>,
 )
@@ -30,8 +30,25 @@ data class CreateOptionInfo(
   val icon: Drawable,
   val title: String,
   val subtitle: String,
-  val id: Int,
+  val entryKey: String,
+  val entrySubkey: String,
   val usageData: String
+)
+
+data class RequestDisplayInfo(
+  val userName: String,
+  val displayName: String,
+  val type: String,
+  val appDomainName: String,
+)
+
+/**
+ * This is initialized to be the most recent used. Can then be changed if
+ * user selects a different entry on the more option page.
+ */
+data class ActiveEntry (
+  val activeProvider: ProviderInfo,
+  val activeCreateOptionInfo: CreateOptionInfo,
 )
 
 /** The name of the current screen. */

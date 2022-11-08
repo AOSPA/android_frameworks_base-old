@@ -104,8 +104,6 @@ import android.util.SparseBooleanArray;
 import android.util.SparseIntArray;
 import android.util.SparseLongArray;
 import android.util.TypedValue;
-import android.util.TypedXmlPullParser;
-import android.util.TypedXmlSerializer;
 import android.util.Xml;
 import android.util.proto.ProtoOutputStream;
 import android.view.Display;
@@ -124,6 +122,8 @@ import com.android.internal.os.SomeArgs;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.widget.IRemoteViewsFactory;
+import com.android.modules.utils.TypedXmlPullParser;
+import com.android.modules.utils.TypedXmlSerializer;
 import com.android.server.LocalServices;
 import com.android.server.ServiceThread;
 import com.android.server.WidgetBackupProvider;
@@ -868,6 +868,33 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
             }
 
             return appWidgetId;
+        }
+    }
+
+    @Override
+    public void setAppWidgetHidden(String callingPackage, int hostId) {
+        final int userId = UserHandle.getCallingUserId();
+
+        if (DEBUG) {
+            Slog.i(TAG, "setAppWidgetHidden() " + userId);
+        }
+
+        mSecurityPolicy.enforceCallFromPackage(callingPackage);
+
+        synchronized (mLock) {
+            ensureGroupStateLoadedLocked(userId, /* enforceUserUnlockingOrUnlocked */false);
+
+            HostId id = new HostId(Binder.getCallingUid(), hostId, callingPackage);
+            Host host = lookupHostLocked(id);
+
+            if (host != null) {
+                try {
+                    mAppOpsManagerInternal.updateAppWidgetVisibility(host.getWidgetUids(), false);
+                } catch (NullPointerException e) {
+                    Slog.e(TAG, "setAppWidgetHidden(): Getting host uids: " + host.toString(), e);
+                    throw e;
+                }
+            }
         }
     }
 

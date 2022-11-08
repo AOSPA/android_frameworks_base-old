@@ -22,6 +22,7 @@ import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import android.media.MediaRoute2Info
 import android.os.PowerManager
+import android.os.VibrationEffect
 import android.testing.AndroidTestingRunner
 import android.testing.TestableLooper
 import android.view.View
@@ -41,8 +42,10 @@ import com.android.systemui.media.taptotransfer.MediaTttFlags
 import com.android.systemui.media.taptotransfer.common.MediaTttLogger
 import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.statusbar.CommandQueue
+import com.android.systemui.statusbar.VibratorHelper
 import com.android.systemui.statusbar.policy.ConfigurationController
 import com.android.systemui.temporarydisplay.chipbar.ChipbarCoordinator
+import com.android.systemui.temporarydisplay.chipbar.ChipbarLogger
 import com.android.systemui.temporarydisplay.chipbar.FakeChipbarCoordinator
 import com.android.systemui.util.concurrency.FakeExecutor
 import com.android.systemui.util.mockito.any
@@ -78,13 +81,14 @@ class MediaTttSenderCoordinatorTest : SysuiTestCase() {
     @Mock private lateinit var configurationController: ConfigurationController
     @Mock private lateinit var falsingManager: FalsingManager
     @Mock private lateinit var falsingCollector: FalsingCollector
+    @Mock private lateinit var chipbarLogger: ChipbarLogger
     @Mock private lateinit var logger: MediaTttLogger
     @Mock private lateinit var mediaTttFlags: MediaTttFlags
     @Mock private lateinit var packageManager: PackageManager
-
     @Mock private lateinit var powerManager: PowerManager
     @Mock private lateinit var viewUtil: ViewUtil
     @Mock private lateinit var windowManager: WindowManager
+    @Mock private lateinit var vibratorHelper: VibratorHelper
     private lateinit var chipbarCoordinator: ChipbarCoordinator
     private lateinit var commandQueueCallback: CommandQueue.Callbacks
     private lateinit var fakeAppIconDrawable: Drawable
@@ -120,7 +124,7 @@ class MediaTttSenderCoordinatorTest : SysuiTestCase() {
         chipbarCoordinator =
             FakeChipbarCoordinator(
                 context,
-                logger,
+                chipbarLogger,
                 windowManager,
                 fakeExecutor,
                 accessibilityManager,
@@ -129,6 +133,7 @@ class MediaTttSenderCoordinatorTest : SysuiTestCase() {
                 falsingManager,
                 falsingCollector,
                 viewUtil,
+                vibratorHelper,
             )
         chipbarCoordinator.start()
 
@@ -182,9 +187,9 @@ class MediaTttSenderCoordinatorTest : SysuiTestCase() {
         assertThat(chipbarView.getLoadingIcon().visibility).isEqualTo(View.GONE)
         assertThat(chipbarView.getUndoButton().visibility).isEqualTo(View.GONE)
         assertThat(chipbarView.getErrorIcon().visibility).isEqualTo(View.GONE)
-
         assertThat(uiEventLoggerFake.eventId(0))
             .isEqualTo(MediaTttSenderUiEvents.MEDIA_TTT_SENDER_ALMOST_CLOSE_TO_START_CAST.id)
+        verify(vibratorHelper).vibrate(any<VibrationEffect>())
     }
 
     @Test
@@ -203,9 +208,9 @@ class MediaTttSenderCoordinatorTest : SysuiTestCase() {
         assertThat(chipbarView.getLoadingIcon().visibility).isEqualTo(View.GONE)
         assertThat(chipbarView.getUndoButton().visibility).isEqualTo(View.GONE)
         assertThat(chipbarView.getErrorIcon().visibility).isEqualTo(View.GONE)
-
         assertThat(uiEventLoggerFake.eventId(0))
             .isEqualTo(MediaTttSenderUiEvents.MEDIA_TTT_SENDER_ALMOST_CLOSE_TO_END_CAST.id)
+        verify(vibratorHelper).vibrate(any<VibrationEffect>())
     }
 
     @Test
@@ -224,9 +229,9 @@ class MediaTttSenderCoordinatorTest : SysuiTestCase() {
         assertThat(chipbarView.getLoadingIcon().visibility).isEqualTo(View.VISIBLE)
         assertThat(chipbarView.getUndoButton().visibility).isEqualTo(View.GONE)
         assertThat(chipbarView.getErrorIcon().visibility).isEqualTo(View.GONE)
-
         assertThat(uiEventLoggerFake.eventId(0))
             .isEqualTo(MediaTttSenderUiEvents.MEDIA_TTT_SENDER_TRANSFER_TO_RECEIVER_TRIGGERED.id)
+        verify(vibratorHelper).vibrate(any<VibrationEffect>())
     }
 
     @Test
@@ -245,9 +250,9 @@ class MediaTttSenderCoordinatorTest : SysuiTestCase() {
         assertThat(chipbarView.getLoadingIcon().visibility).isEqualTo(View.VISIBLE)
         assertThat(chipbarView.getUndoButton().visibility).isEqualTo(View.GONE)
         assertThat(chipbarView.getErrorIcon().visibility).isEqualTo(View.GONE)
-
         assertThat(uiEventLoggerFake.eventId(0))
             .isEqualTo(MediaTttSenderUiEvents.MEDIA_TTT_SENDER_TRANSFER_TO_THIS_DEVICE_TRIGGERED.id)
+        verify(vibratorHelper).vibrate(any<VibrationEffect>())
     }
 
     @Test
@@ -265,9 +270,9 @@ class MediaTttSenderCoordinatorTest : SysuiTestCase() {
             .isEqualTo(ChipStateSender.TRANSFER_TO_RECEIVER_SUCCEEDED.getExpectedStateText())
         assertThat(chipbarView.getLoadingIcon().visibility).isEqualTo(View.GONE)
         assertThat(chipbarView.getUndoButton().visibility).isEqualTo(View.GONE)
-
         assertThat(uiEventLoggerFake.eventId(0))
             .isEqualTo(MediaTttSenderUiEvents.MEDIA_TTT_SENDER_TRANSFER_TO_RECEIVER_SUCCEEDED.id)
+        verify(vibratorHelper, never()).vibrate(any<VibrationEffect>())
     }
 
     @Test
@@ -335,9 +340,9 @@ class MediaTttSenderCoordinatorTest : SysuiTestCase() {
             .isEqualTo(ChipStateSender.TRANSFER_TO_THIS_DEVICE_SUCCEEDED.getExpectedStateText())
         assertThat(chipbarView.getLoadingIcon().visibility).isEqualTo(View.GONE)
         assertThat(chipbarView.getUndoButton().visibility).isEqualTo(View.GONE)
-
         assertThat(uiEventLoggerFake.eventId(0))
             .isEqualTo(MediaTttSenderUiEvents.MEDIA_TTT_SENDER_TRANSFER_TO_THIS_DEVICE_SUCCEEDED.id)
+        verify(vibratorHelper, never()).vibrate(any<VibrationEffect>())
     }
 
     @Test
@@ -408,9 +413,9 @@ class MediaTttSenderCoordinatorTest : SysuiTestCase() {
         assertThat(chipbarView.getLoadingIcon().visibility).isEqualTo(View.GONE)
         assertThat(chipbarView.getUndoButton().visibility).isEqualTo(View.GONE)
         assertThat(chipbarView.getErrorIcon().visibility).isEqualTo(View.VISIBLE)
-
         assertThat(uiEventLoggerFake.eventId(0))
             .isEqualTo(MediaTttSenderUiEvents.MEDIA_TTT_SENDER_TRANSFER_TO_RECEIVER_FAILED.id)
+        verify(vibratorHelper).vibrate(any<VibrationEffect>())
     }
 
     @Test
@@ -429,9 +434,9 @@ class MediaTttSenderCoordinatorTest : SysuiTestCase() {
         assertThat(chipbarView.getLoadingIcon().visibility).isEqualTo(View.GONE)
         assertThat(chipbarView.getUndoButton().visibility).isEqualTo(View.GONE)
         assertThat(chipbarView.getErrorIcon().visibility).isEqualTo(View.VISIBLE)
-
         assertThat(uiEventLoggerFake.eventId(0))
             .isEqualTo(MediaTttSenderUiEvents.MEDIA_TTT_SENDER_TRANSFER_TO_THIS_DEVICE_FAILED.id)
+        verify(vibratorHelper).vibrate(any<VibrationEffect>())
     }
 
     @Test

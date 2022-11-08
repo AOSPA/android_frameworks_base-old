@@ -41,13 +41,13 @@ import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SystemConfigFileCommitEventLogger;
-import android.util.TypedXmlSerializer;
 import android.util.Xml;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.BitUtils;
+import com.android.modules.utils.TypedXmlSerializer;
 import com.android.server.IoThread;
 import com.android.server.job.JobSchedulerInternal.JobStorePersistStats;
 import com.android.server.job.controllers.JobStatus;
@@ -1024,7 +1024,8 @@ public final class JobStore {
                 // have a deadline. If a job is rescheduled (via jobFinished(true) or onStopJob()'s
                 // return value), the deadline is dropped. Periodic jobs require all constraints
                 // to be met, so there's no issue with their deadlines.
-                builtJob = jobBuilder.build(false);
+                // The same logic applies for other target SDK-based validation checks.
+                builtJob = jobBuilder.build(false, false);
             } catch (Exception e) {
                 Slog.w(TAG, "Unable to build job from XML, ignoring: " + jobBuilder.summarize(), e);
                 return null;

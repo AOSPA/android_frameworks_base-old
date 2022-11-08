@@ -18,6 +18,8 @@ package com.android.systemui.statusbar.pipeline.mobile.ui.viewmodel
 
 import android.graphics.Color
 import com.android.settingslib.graph.SignalDrawable
+import com.android.systemui.common.shared.model.ContentDescription
+import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.statusbar.pipeline.mobile.domain.interactor.MobileIconInteractor
 import com.android.systemui.statusbar.pipeline.mobile.domain.interactor.MobileIconsInteractor
 import com.android.systemui.statusbar.pipeline.shared.ConnectivityPipelineLogger
@@ -53,6 +55,22 @@ constructor(
             }
             .distinctUntilChanged()
             .logOutputChange(logger, "iconId($subscriptionId)")
+
+    /** The RAT icon (LTE, 3G, 5G, etc) to be displayed. Null if we shouldn't show anything */
+    var networkTypeIcon: Flow<Icon?> =
+        combine(iconInteractor.networkTypeIconGroup, iconInteractor.isDataEnabled) {
+            networkTypeIconGroup,
+            isDataEnabled ->
+            if (!isDataEnabled) {
+                null
+            } else {
+                val desc =
+                    if (networkTypeIconGroup.dataContentDescription != 0)
+                        ContentDescription.Resource(networkTypeIconGroup.dataContentDescription)
+                    else null
+                Icon.Resource(networkTypeIconGroup.dataType, desc)
+            }
+        }
 
     var tint: Flow<Int> = flowOf(Color.CYAN)
 }

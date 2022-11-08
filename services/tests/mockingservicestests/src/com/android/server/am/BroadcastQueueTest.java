@@ -549,12 +549,6 @@ public class BroadcastQueueTest {
                 receivers, false, null, null, userId);
     }
 
-    private BroadcastRecord makeOrderedBroadcastRecord(Intent intent, ProcessRecord callerApp,
-            List<Object> receivers, IIntentReceiver orderedResultTo, Bundle orderedExtras) {
-        return makeBroadcastRecord(intent, callerApp, BroadcastOptions.makeBasic(),
-                receivers, true, orderedResultTo, orderedExtras, UserHandle.USER_SYSTEM);
-    }
-
     private BroadcastRecord makeBroadcastRecord(Intent intent, ProcessRecord callerApp,
             BroadcastOptions options, List<Object> receivers) {
         return makeBroadcastRecord(intent, callerApp, options,
@@ -562,12 +556,24 @@ public class BroadcastQueueTest {
     }
 
     private BroadcastRecord makeBroadcastRecord(Intent intent, ProcessRecord callerApp,
+            List<Object> receivers, IIntentReceiver resultTo) {
+        return makeBroadcastRecord(intent, callerApp, BroadcastOptions.makeBasic(),
+                receivers, false, resultTo, null, UserHandle.USER_SYSTEM);
+    }
+
+    private BroadcastRecord makeOrderedBroadcastRecord(Intent intent, ProcessRecord callerApp,
+            List<Object> receivers, IIntentReceiver resultTo, Bundle resultExtras) {
+        return makeBroadcastRecord(intent, callerApp, BroadcastOptions.makeBasic(),
+                receivers, true, resultTo, resultExtras, UserHandle.USER_SYSTEM);
+    }
+
+    private BroadcastRecord makeBroadcastRecord(Intent intent, ProcessRecord callerApp,
             BroadcastOptions options, List<Object> receivers, boolean ordered,
-            IIntentReceiver orderedResultTo, Bundle orderedExtras, int userId) {
+            IIntentReceiver resultTo, Bundle resultExtras, int userId) {
         return new BroadcastRecord(mQueue, intent, callerApp, callerApp.info.packageName, null,
                 callerApp.getPid(), callerApp.info.uid, false, null, null, null, null,
-                AppOpsManager.OP_NONE, options, receivers, callerApp, orderedResultTo,
-                Activity.RESULT_OK, null, orderedExtras, ordered, false, false, userId, false, null,
+                AppOpsManager.OP_NONE, options, receivers, callerApp, resultTo,
+                Activity.RESULT_OK, null, resultExtras, ordered, false, false, userId, false, null,
                 false, null);
     }
 
@@ -882,7 +888,7 @@ public class BroadcastQueueTest {
         }) {
             // Confirm expected OOM adjustments; we were invoked once to upgrade
             // and once to downgrade
-            assertEquals(ActivityManager.PROCESS_STATE_RECEIVER,
+            assertEquals(String.valueOf(receiverApp), ActivityManager.PROCESS_STATE_RECEIVER,
                     receiverApp.mState.getReportedProcState());
             verify(mAms, times(2)).enqueueOomAdjTargetLocked(eq(receiverApp));
 
@@ -891,8 +897,8 @@ public class BroadcastQueueTest {
                 // cold-started apps to be thawed, but the modern stack does
             } else {
                 // Confirm that app was thawed
-                verify(mAms.mOomAdjuster.mCachedAppOptimizer).unfreezeTemporarily(eq(receiverApp),
-                        eq(OomAdjuster.OOM_ADJ_REASON_START_RECEIVER));
+                verify(mAms.mOomAdjuster.mCachedAppOptimizer, atLeastOnce()).unfreezeTemporarily(
+                        eq(receiverApp), eq(OomAdjuster.OOM_ADJ_REASON_START_RECEIVER));
 
                 // Confirm that we added package to process
                 verify(receiverApp, atLeastOnce()).addPackage(eq(receiverApp.info.packageName),
@@ -1347,6 +1353,26 @@ public class BroadcastQueueTest {
     }
 
     /**
+     * Verify that we deliver results for unordered broadcasts.
+     */
+    @Test
+    public void testUnordered_ResultTo() throws Exception {
+        final ProcessRecord callerApp = makeActiveProcessRecord(PACKAGE_RED);
+        final IApplicationThread callerThread = callerApp.getThread();
+
+        final IIntentReceiver resultTo = mock(IIntentReceiver.class);
+        final Intent airplane = new Intent(Intent.ACTION_AIRPLANE_MODE_CHANGED);
+        enqueueBroadcast(makeBroadcastRecord(airplane, callerApp,
+                List.of(makeManifestReceiver(PACKAGE_GREEN, CLASS_GREEN),
+                        makeManifestReceiver(PACKAGE_BLUE, CLASS_BLUE)), resultTo));
+
+        waitForIdle();
+        verify(callerThread).scheduleRegisteredReceiver(any(), argThat(filterEquals(airplane)),
+                eq(Activity.RESULT_OK), any(), any(), eq(false),
+                anyBoolean(), eq(UserHandle.USER_SYSTEM), anyInt());
+    }
+
+    /**
      * Verify that we're not surprised by a process attempting to finishing a
      * broadcast when none is in progress.
      */
@@ -1572,5 +1598,40 @@ public class BroadcastQueueTest {
         assertTrue(mQueue.isBeyondBarrierLocked(beforeFirst));
         assertTrue(mQueue.isBeyondBarrierLocked(afterFirst));
         assertTrue(mQueue.isBeyondBarrierLocked(afterSecond));
+    }
+
+    /**
+     * Verify that we OOM adjust for manifest receivers.
+     */
+    @Test
+    public void testOomAdjust_Manifest() throws Exception {
+        final ProcessRecord callerApp = makeActiveProcessRecord(PACKAGE_RED);
+
+        final Intent airplane = new Intent(Intent.ACTION_AIRPLANE_MODE_CHANGED);
+        enqueueBroadcast(makeBroadcastRecord(airplane, callerApp,
+                List.of(makeManifestReceiver(PACKAGE_GREEN, CLASS_GREEN),
+                        makeManifestReceiver(PACKAGE_GREEN, CLASS_BLUE),
+                        makeManifestReceiver(PACKAGE_GREEN, CLASS_RED))));
+
+        waitForIdle();
+        verify(mAms, atLeastOnce()).enqueueOomAdjTargetLocked(any());
+    }
+
+    /**
+     * Verify that we never OOM adjust for registered receivers.
+     */
+    @Test
+    public void testOomAdjust_Registered() throws Exception {
+        final ProcessRecord callerApp = makeActiveProcessRecord(PACKAGE_RED);
+        final ProcessRecord receiverApp = makeActiveProcessRecord(PACKAGE_GREEN);
+
+        final Intent airplane = new Intent(Intent.ACTION_AIRPLANE_MODE_CHANGED);
+        enqueueBroadcast(makeBroadcastRecord(airplane, callerApp,
+                List.of(makeRegisteredReceiver(receiverApp),
+                        makeRegisteredReceiver(receiverApp),
+                        makeRegisteredReceiver(receiverApp))));
+
+        waitForIdle();
+        verify(mAms, never()).enqueueOomAdjTargetLocked(any());
     }
 }

@@ -22,7 +22,6 @@ import static android.app.ActivityTaskManager.RESIZE_MODE_FORCED;
 import static android.app.ActivityTaskManager.RESIZE_MODE_SYSTEM_SCREEN_ROTATION;
 import static android.app.ITaskStackListener.FORCED_RESIZEABLE_REASON_SPLIT_SCREEN;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_ASSISTANT;
-import static android.app.WindowConfiguration.ACTIVITY_TYPE_DREAM;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
@@ -176,8 +175,6 @@ import android.util.ArraySet;
 import android.util.BoostFramework;
 import android.util.DisplayMetrics;
 import android.util.Slog;
-import android.util.TypedXmlPullParser;
-import android.util.TypedXmlSerializer;
 import android.util.proto.ProtoOutputStream;
 import android.view.DisplayInfo;
 import android.view.InsetsState;
@@ -202,6 +199,8 @@ import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.XmlUtils;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.internal.util.function.pooled.PooledPredicate;
+import com.android.modules.utils.TypedXmlPullParser;
+import com.android.modules.utils.TypedXmlSerializer;
 import com.android.server.Watchdog;
 import com.android.server.am.ActivityManagerService;
 import com.android.server.am.AppTimeTracker;
@@ -3521,7 +3520,7 @@ class Task extends TaskFragment {
             final WindowState topMainWin = getWindow(w -> w.mAttrs.type == TYPE_BASE_APPLICATION);
             if (topMainWin != null) {
                 info.mainWindowLayoutParams = topMainWin.getAttrs();
-                info.requestedVisibilities.set(topMainWin.getRequestedVisibilities());
+                info.requestedVisibleTypes = topMainWin.getRequestedVisibleTypes();
             }
         }
         // If the developer has persist a different configuration, we need to override it to the
@@ -5797,12 +5796,10 @@ class Task extends TaskFragment {
             return false;
         }
 
-        // Existing Tasks can be reused if a new root task will be created anyway, or for the
-        // Dream - because there can only ever be one DreamActivity.
+        // Existing Tasks can be reused if a new root task will be created anyway.
         final int windowingMode = getWindowingMode();
         final int activityType = getActivityType();
-        return DisplayContent.alwaysCreateRootTask(windowingMode, activityType)
-                || activityType == ACTIVITY_TYPE_DREAM;
+        return DisplayContent.alwaysCreateRootTask(windowingMode, activityType);
     }
 
     void addChild(WindowContainer child, final boolean toTop, boolean showForAllUsers) {

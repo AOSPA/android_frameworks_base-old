@@ -25,6 +25,7 @@ import com.android.systemui.plugins.log.LogLevel.ERROR
 import com.android.systemui.plugins.log.LogLevel.INFO
 import com.android.systemui.log.dagger.DozeLog
 import com.android.systemui.statusbar.policy.DevicePostureController
+import com.google.errorprone.annotations.CompileTimeConstant
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -224,10 +225,14 @@ class DozeLogger @Inject constructor(
         })
     }
 
-    fun logPulseDropped(from: String, state: DozeMachine.State) {
+    /**
+     * Log why a pulse was dropped and the current doze machine state. The state can be null
+     * if the DozeMachine is the middle of transitioning between states.
+     */
+    fun logPulseDropped(from: String, state: DozeMachine.State?) {
         buffer.log(TAG, INFO, {
             str1 = from
-            str2 = state.name
+            str2 = state?.name
         }, {
             "Pulse dropped, cannot pulse from=$str1 state=$str2"
         })
@@ -319,6 +324,50 @@ class DozeLogger @Inject constructor(
         buffer.log(TAG, INFO, {}, {
             "Doze car mode started"
         })
+    }
+
+    fun logSensorRegisterAttempt(sensorInfo: String, successfulRegistration: Boolean) {
+        buffer.log(TAG, INFO, {
+            str1 = sensorInfo
+            bool1 = successfulRegistration
+        }, {
+            "Register sensor. Success=$bool1 sensor=$str1"
+        })
+    }
+
+    fun logSensorUnregisterAttempt(sensorInfo: String, successfulUnregister: Boolean) {
+        buffer.log(TAG, INFO, {
+            str1 = sensorInfo
+            bool1 = successfulUnregister
+        }, {
+            "Unregister sensor. Success=$bool1 sensor=$str1"
+        })
+    }
+
+    fun logSensorUnregisterAttempt(
+            sensorInfo: String,
+            successfulUnregister: Boolean,
+            reason: String
+    ) {
+        buffer.log(TAG, INFO, {
+            str1 = sensorInfo
+            bool1 = successfulUnregister
+            str2 = reason
+        }, {
+            "Unregister sensor. reason=$str2. Success=$bool1 sensor=$str1"
+        })
+    }
+
+    fun logSkipSensorRegistration(sensor: String) {
+        buffer.log(TAG, DEBUG, {
+            str1 = sensor
+        }, {
+            "Skipping sensor registration because its already registered. sensor=$str1"
+        })
+    }
+
+    fun log(@CompileTimeConstant msg: String) {
+        buffer.log(TAG, DEBUG, msg)
     }
 }
 

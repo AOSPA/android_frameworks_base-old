@@ -35,8 +35,8 @@ class GetFlowUtils {
         ProviderInfo(
           // TODO: replace to extract from the service data structure when available
           icon = context.getDrawable(R.drawable.ic_passkey)!!,
-          name = it.providerId,
-          appDomainName = "tribank.us",
+          name = it.providerFlattenedComponentName,
+          displayName = it.providerDisplayName,
           credentialTypeIcon = context.getDrawable(R.drawable.ic_passkey)!!,
           credentialOptions = toCredentialOptionInfoList(it.credentialEntries, context)
         )
@@ -59,7 +59,8 @@ class GetFlowUtils {
             ?: context.getDrawable(R.drawable.ic_passkey)!!,
           title = credentialEntryUi.userName.toString(),
           subtitle = credentialEntryUi.displayName?.toString() ?: "Unknown display name",
-          id = it.entryId,
+          entryKey = it.key,
+          entrySubkey = it.subkey,
           usageData = credentialEntryUi.usageData?.toString() ?: "Unknown usageData",
         )
       }
@@ -78,8 +79,8 @@ class CreateFlowUtils {
         com.android.credentialmanager.createflow.ProviderInfo(
           // TODO: replace to extract from the service data structure when available
           icon = context.getDrawable(R.drawable.ic_passkey)!!,
-          name = it.providerId,
-          appDomainName = "tribank.us",
+          name = it.providerFlattenedComponentName,
+          displayName = it.providerDisplayName,
           credentialTypeIcon = context.getDrawable(R.drawable.ic_passkey)!!,
           createOptions = toCreationOptionInfoList(it.credentialEntries, context),
         )
@@ -99,7 +100,8 @@ class CreateFlowUtils {
             ?: context.getDrawable(R.drawable.ic_passkey)!!,
           title = saveEntryUi.title.toString(),
           subtitle = saveEntryUi.subTitle?.toString() ?: "Unknown subtitle",
-          id = it.entryId,
+          entryKey = it.key,
+          entrySubkey = it.subkey,
           usageData = saveEntryUi.usageData?.toString() ?: "Unknown usageData",
         )
       }

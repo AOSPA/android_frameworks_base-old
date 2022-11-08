@@ -26,6 +26,7 @@ import android.hardware.fingerprint.IFingerprintAuthenticatorsRegisteredCallback
 import android.hardware.fingerprint.IFingerprintServiceReceiver;
 import android.hardware.fingerprint.IUdfpsOverlayController;
 import android.hardware.fingerprint.ISidefpsController;
+import android.hardware.fingerprint.IUdfpsOverlay;
 import android.hardware.fingerprint.Fingerprint;
 import android.hardware.fingerprint.FingerprintSensorPropertiesInternal;
 import java.util.List;
@@ -201,6 +202,10 @@ interface IFingerprintService {
     @EnforcePermission("USE_BIOMETRIC_INTERNAL")
     void setSidefpsController(in ISidefpsController controller);
 
+    // Sets the controller for managing the UDFPS overlay.
+    @EnforcePermission("USE_BIOMETRIC_INTERNAL")
+    void setUdfpsOverlay(in IUdfpsOverlay controller);
+
     // Registers BiometricStateListener.
     @EnforcePermission("USE_BIOMETRIC_INTERNAL")
     void registerBiometricStateListener(IBiometricStateListener listener);
@@ -208,4 +213,9 @@ interface IFingerprintService {
     // Sends a power button pressed event to all listeners.
     @EnforcePermission("USE_BIOMETRIC_INTERNAL")
     oneway void onPowerPressed();
+
+    // Internal operation used to clear fingerprint biometric scheduler.
+    // Ensures that the scheduler is not stuck.
+    @EnforcePermission("USE_BIOMETRIC_INTERNAL")
+    void scheduleWatchdog();
 }

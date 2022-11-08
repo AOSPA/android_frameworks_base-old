@@ -131,8 +131,6 @@ import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
 import android.util.TimeUtils;
-import android.util.TypedXmlPullParser;
-import android.util.TypedXmlSerializer;
 import android.util.Xml;
 
 import com.android.internal.annotations.GuardedBy;
@@ -147,6 +145,8 @@ import com.android.internal.util.DumpUtils;
 import com.android.internal.util.HexDump;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
+import com.android.modules.utils.TypedXmlPullParser;
+import com.android.modules.utils.TypedXmlSerializer;
 import com.android.server.pm.Installer;
 import com.android.server.pm.UserManagerInternal;
 import com.android.server.storage.AppFuseBridge;
@@ -3585,6 +3585,13 @@ class StorageManagerService extends IStorageManager.Stub
         final boolean includeSharedProfile =
                 (flags & StorageManager.FLAG_INCLUDE_SHARED_PROFILE) != 0;
 
+        // When the caller is the app actually hosting external storage, we
+        // should never attempt to augment the actual storage volume state,
+        // otherwise we risk confusing it with race conditions as users go
+        // through various unlocked states
+        final boolean callerIsMediaStore = UserHandle.isSameApp(callingUid,
+                mMediaStoreAuthorityAppId);
+
         // Only Apps with MANAGE_EXTERNAL_STORAGE should call the API with includeSharedProfile
         if (includeSharedProfile) {
             try {
@@ -3597,8 +3604,13 @@ class StorageManagerService extends IStorageManager.Stub
                 // Checking first entry in packagesFromUid is enough as using "sharedUserId"
                 // mechanism is rare and discouraged. Also, Apps that share same UID share the same
                 // permissions.
-                if (!mStorageManagerInternal.hasExternalStorageAccess(callingUid,
-                        packagesFromUid[0])) {
+                // Allowing Media Provider is an exception, Media Provider process should be allowed
+                // to query users across profiles, even without MANAGE_EXTERNAL_STORAGE access.
+                // Note that ordinarily Media provider process has the above permission, but if they
+                // are revoked, Storage Volume(s) should still be returned.
+                if (!callerIsMediaStore
+                        && !mStorageManagerInternal.hasExternalStorageAccess(callingUid,
+                                packagesFromUid[0])) {
                     throw new SecurityException("Only File Manager Apps permitted");
                 }
             } catch (RemoteException re) {
@@ -3610,13 +3622,6 @@ class StorageManagerService extends IStorageManager.Stub
         // are no guarantees that callers will see a consistent view of the volume before that
         // point
         final boolean systemUserUnlocked = isSystemUnlocked(UserHandle.USER_SYSTEM);
-
-        // When the caller is the app actually hosting external storage, we
-        // should never attempt to augment the actual storage volume state,
-        // otherwise we risk confusing it with race conditions as users go
-        // through various unlocked states
-        final boolean callerIsMediaStore = UserHandle.isSameApp(callingUid,
-                mMediaStoreAuthorityAppId);
 
         final boolean userIsDemo;
         final boolean userKeyUnlocked;

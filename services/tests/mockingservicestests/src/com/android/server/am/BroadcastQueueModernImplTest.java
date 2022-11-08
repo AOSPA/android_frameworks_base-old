@@ -26,11 +26,14 @@ import static com.android.server.am.BroadcastQueueTest.PACKAGE_YELLOW;
 import static com.android.server.am.BroadcastQueueTest.getUidForPackage;
 import static com.android.server.am.BroadcastQueueTest.makeManifestReceiver;
 
+import static com.google.common.truth.Truth.assertThat;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.Mockito.doReturn;
 
 import android.annotation.NonNull;
@@ -41,6 +44,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.media.AudioManager;
 import android.os.Bundle;
+import android.os.BundleMerger;
 import android.os.HandlerThread;
 import android.os.UserHandle;
 import android.provider.Settings;
@@ -55,12 +59,15 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.mockito.junit.MockitoJUnitRunner;
 
+import java.lang.reflect.Array;
+import java.util.ArrayList;
 import java.util.List;
 
 @SmallTest
 @RunWith(MockitoJUnitRunner.class)
 public class BroadcastQueueModernImplTest {
     private static final int TEST_UID = android.os.Process.FIRST_APPLICATION_UID;
+    private static final int TEST_UID2 = android.os.Process.FIRST_APPLICATION_UID + 1;
 
     @Mock ActivityManagerService mAms;
     @Mock ProcessRecord mProcess;
@@ -85,6 +92,10 @@ public class BroadcastQueueModernImplTest {
         mHandlerThread.start();
 
         mConstants = new BroadcastConstants(Settings.Global.BROADCAST_FG_CONSTANTS);
+        mConstants.DELAY_URGENT_MILLIS = -120_000;
+        mConstants.DELAY_NORMAL_MILLIS = 10_000;
+        mConstants.DELAY_CACHED_MILLIS = 120_000;
+
         mImpl = new BroadcastQueueModernImpl(mAms, mHandlerThread.getThreadHandler(),
                 mConstants, mConstants);
 
@@ -278,7 +289,7 @@ public class BroadcastQueueModernImplTest {
         final long notCachedRunnableAt = queue.getRunnableAt();
         queue.setProcessCached(true);
         final long cachedRunnableAt = queue.getRunnableAt();
-        assertTrue(cachedRunnableAt > notCachedRunnableAt);
+        assertThat(cachedRunnableAt).isGreaterThan(notCachedRunnableAt);
         assertEquals(ProcessList.SCHED_GROUP_BACKGROUND, queue.getPreferredSchedulingGroupLocked());
     }
 
@@ -306,13 +317,13 @@ public class BroadcastQueueModernImplTest {
         // (b) the next one up is the fg-priority broadcast despite its later enqueue time
         queue.setProcessCached(false);
         assertTrue(queue.isRunnable());
-        assertEquals(airplaneRecord.enqueueTime, queue.getRunnableAt());
+        assertThat(queue.getRunnableAt()).isAtMost(airplaneRecord.enqueueClockTime);
         assertEquals(ProcessList.SCHED_GROUP_DEFAULT, queue.getPreferredSchedulingGroupLocked());
         assertEquals(queue.peekNextBroadcastRecord(), airplaneRecord);
 
         queue.setProcessCached(true);
         assertTrue(queue.isRunnable());
-        assertEquals(airplaneRecord.enqueueTime, queue.getRunnableAt());
+        assertThat(queue.getRunnableAt()).isAtMost(airplaneRecord.enqueueClockTime);
         assertEquals(ProcessList.SCHED_GROUP_DEFAULT, queue.getPreferredSchedulingGroupLocked());
         assertEquals(queue.peekNextBroadcastRecord(), airplaneRecord);
     }
@@ -356,12 +367,12 @@ public class BroadcastQueueModernImplTest {
 
         mConstants.MAX_PENDING_BROADCASTS = 128;
         queue.invalidateRunnableAt();
-        assertTrue(queue.getRunnableAt() > airplaneRecord.enqueueTime);
+        assertThat(queue.getRunnableAt()).isGreaterThan(airplaneRecord.enqueueTime);
         assertEquals(BroadcastProcessQueue.REASON_NORMAL, queue.getRunnableAtReason());
 
         mConstants.MAX_PENDING_BROADCASTS = 1;
         queue.invalidateRunnableAt();
-        assertTrue(queue.getRunnableAt() == airplaneRecord.enqueueTime);
+        assertThat(queue.getRunnableAt()).isAtMost(airplaneRecord.enqueueTime);
         assertEquals(BroadcastProcessQueue.REASON_MAX_PENDING, queue.getRunnableAtReason());
     }
 
@@ -465,6 +476,62 @@ public class BroadcastQueueModernImplTest {
                 List.of(musicVolumeChanged, alarmVolumeChanged, timeTick));
     }
 
+    /**
+     * Verify that sending a broadcast with DELIVERY_GROUP_POLICY_MERGED works as expected.
+     */
+    @Test
+    public void testDeliveryGroupPolicy_merged() {
+        final BundleMerger extrasMerger = new BundleMerger();
+        extrasMerger.setMergeStrategy(Intent.EXTRA_CHANGED_COMPONENT_NAME_LIST,
+                BundleMerger.STRATEGY_ARRAY_APPEND);
+
+        final Intent packageChangedForUid = createPackageChangedIntent(TEST_UID,
+                List.of("com.testuid.component1"));
+        final BroadcastOptions optionsPackageChangedForUid = BroadcastOptions.makeBasic();
+        optionsPackageChangedForUid.setDeliveryGroupPolicy(
+                BroadcastOptions.DELIVERY_GROUP_POLICY_MERGED);
+        optionsPackageChangedForUid.setDeliveryGroupKey("package", String.valueOf(TEST_UID));
+        optionsPackageChangedForUid.setDeliveryGroupExtrasMerger(extrasMerger);
+
+        final Intent secondPackageChangedForUid = createPackageChangedIntent(TEST_UID,
+                List.of("com.testuid.component2", "com.testuid.component3"));
+
+        final Intent packageChangedForUid2 = createPackageChangedIntent(TEST_UID2,
+                List.of("com.testuid2.component1"));
+        final BroadcastOptions optionsPackageChangedForUid2 = BroadcastOptions.makeBasic();
+        optionsPackageChangedForUid.setDeliveryGroupPolicy(
+                BroadcastOptions.DELIVERY_GROUP_POLICY_MERGED);
+        optionsPackageChangedForUid.setDeliveryGroupKey("package", String.valueOf(TEST_UID2));
+        optionsPackageChangedForUid.setDeliveryGroupExtrasMerger(extrasMerger);
+
+        // Halt all processing so that we get a consistent view
+        mHandlerThread.getLooper().getQueue().postSyncBarrier();
+
+        mImpl.enqueueBroadcastLocked(makeBroadcastRecord(packageChangedForUid,
+                optionsPackageChangedForUid));
+        mImpl.enqueueBroadcastLocked(makeBroadcastRecord(packageChangedForUid2,
+                optionsPackageChangedForUid2));
+        mImpl.enqueueBroadcastLocked(makeBroadcastRecord(secondPackageChangedForUid,
+                optionsPackageChangedForUid));
+
+        final BroadcastProcessQueue queue = mImpl.getProcessQueue(PACKAGE_GREEN,
+                getUidForPackage(PACKAGE_GREEN));
+        final Intent expectedPackageChangedForUid = createPackageChangedIntent(TEST_UID,
+                List.of("com.testuid.component2", "com.testuid.component3",
+                        "com.testuid.component1"));
+        // Verify that packageChangedForUid and secondPackageChangedForUid broadcasts
+        // have been merged.
+        verifyPendingRecords(queue, List.of(packageChangedForUid2, expectedPackageChangedForUid));
+    }
+
+    private Intent createPackageChangedIntent(int uid, List<String> componentNameList) {
+        final Intent packageChangedIntent = new Intent(Intent.ACTION_PACKAGE_CHANGED);
+        packageChangedIntent.putExtra(Intent.EXTRA_UID, uid);
+        packageChangedIntent.putExtra(Intent.EXTRA_CHANGED_COMPONENT_NAME_LIST,
+                componentNameList.toArray());
+        return packageChangedIntent;
+    }
+
     private void verifyPendingRecords(BroadcastProcessQueue queue,
             List<Intent> intents) {
         for (int i = 0; i < intents.size(); i++) {
@@ -475,9 +542,45 @@ public class BroadcastQueueModernImplTest {
                     + ", actual_extras=" + actualIntent.getExtras()
                     + ", expected_extras=" + expectedIntent.getExtras();
             assertTrue(errMsg, actualIntent.filterEquals(expectedIntent));
-            assertTrue(errMsg, Bundle.kindofEquals(
-                    actualIntent.getExtras(), expectedIntent.getExtras()));
+            assertBundleEquals(expectedIntent.getExtras(), actualIntent.getExtras());
         }
         assertTrue(queue.isEmpty());
+    }
+
+    private void assertBundleEquals(Bundle expected, Bundle actual) {
+        final String errMsg = "expected=" + expected + ", actual=" + actual;
+        if (expected == actual) {
+            return;
+        } else if (expected == null || actual == null) {
+            fail(errMsg);
+        }
+        if (!expected.keySet().equals(actual.keySet())) {
+            fail(errMsg);
+        }
+        for (String key : expected.keySet()) {
+            final Object expectedValue = expected.get(key);
+            final Object actualValue = actual.get(key);
+            if (expectedValue == actualValue) {
+                continue;
+            } else if (expectedValue == null || actualValue == null) {
+                fail(errMsg);
+            }
+            assertEquals(errMsg, expectedValue.getClass(), actualValue.getClass());
+            if (expectedValue.getClass().isArray()) {
+                assertEquals(errMsg, Array.getLength(expectedValue), Array.getLength(actualValue));
+                for (int i = 0; i < Array.getLength(expectedValue); ++i) {
+                    assertEquals(errMsg, Array.get(expectedValue, i), Array.get(actualValue, i));
+                }
+            } else if (expectedValue instanceof ArrayList) {
+                final ArrayList<?> expectedList = (ArrayList<?>) expectedValue;
+                final ArrayList<?> actualList = (ArrayList<?>) actualValue;
+                assertEquals(errMsg, expectedList.size(), actualList.size());
+                for (int i = 0; i < expectedList.size(); ++i) {
+                    assertEquals(errMsg, expectedList.get(i), actualList.get(i));
+                }
+            } else {
+                assertEquals(errMsg, expectedValue, actualValue);
+            }
+        }
     }
 }

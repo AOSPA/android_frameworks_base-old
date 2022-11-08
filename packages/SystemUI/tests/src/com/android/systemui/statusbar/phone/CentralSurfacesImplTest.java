@@ -80,6 +80,7 @@ import androidx.test.filters.SmallTest;
 
 import com.android.internal.colorextraction.ColorExtractor;
 import com.android.internal.jank.InteractionJankMonitor;
+import com.android.internal.logging.UiEventLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.logging.testing.FakeMetricsLogger;
 import com.android.internal.statusbar.IStatusBarService;
@@ -234,6 +235,7 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
     @Mock private NavigationBarController mNavigationBarController;
     @Mock private AccessibilityFloatingMenuController mAccessibilityFloatingMenuController;
     @Mock private SysuiColorExtractor mColorExtractor;
+    private WakefulnessLifecycle mWakefulnessLifecycle;
     @Mock private ColorExtractor.GradientColors mGradientColors;
     @Mock private PulseExpansionHandler mPulseExpansionHandler;
     @Mock private NotificationWakeUpCoordinator mNotificationWakeUpCoordinator;
@@ -323,7 +325,8 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
                         mock(NotificationInterruptLogger.class),
                         new Handler(TestableLooper.get(this).getLooper()),
                         mock(NotifPipelineFlags.class),
-                        mock(KeyguardNotificationVisibilityProvider.class));
+                        mock(KeyguardNotificationVisibilityProvider.class),
+                        mock(UiEventLogger.class));
 
         mContext.addMockSystemService(TrustManager.class, mock(TrustManager.class));
         mContext.addMockSystemService(FingerprintManager.class, mock(FingerprintManager.class));
@@ -364,10 +367,10 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
             return null;
         }).when(mStatusBarKeyguardViewManager).addAfterKeyguardGoneRunnable(any());
 
-        WakefulnessLifecycle wakefulnessLifecycle =
+        mWakefulnessLifecycle =
                 new WakefulnessLifecycle(mContext, mIWallpaperManager, mDumpManager);
-        wakefulnessLifecycle.dispatchStartedWakingUp(PowerManager.WAKE_REASON_UNKNOWN);
-        wakefulnessLifecycle.dispatchFinishedWakingUp();
+        mWakefulnessLifecycle.dispatchStartedWakingUp(PowerManager.WAKE_REASON_UNKNOWN);
+        mWakefulnessLifecycle.dispatchFinishedWakingUp();
 
         when(mGradientColors.supportsDarkText()).thenReturn(true);
         when(mColorExtractor.getNeutralColors()).thenReturn(mGradientColors);
@@ -426,7 +429,7 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
                 mBatteryController,
                 mColorExtractor,
                 new ScreenLifecycle(mDumpManager),
-                wakefulnessLifecycle,
+                mWakefulnessLifecycle,
                 mStatusBarStateController,
                 Optional.of(mBubbles),
                 mDeviceProvisionedController,
@@ -505,6 +508,8 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
         mCentralSurfaces.mKeyguardIndicationController = mKeyguardIndicationController;
         mCentralSurfaces.mBarService = mBarService;
         mCentralSurfaces.mStackScroller = mStackScroller;
+        mCentralSurfaces.mGestureWakeLock = mPowerManager.newWakeLock(
+                PowerManager.SCREEN_BRIGHT_WAKE_LOCK, "sysui:GestureWakeLock");
         mCentralSurfaces.startKeyguard();
         mInitController.executePostInitTasks();
         notificationLogger.setUpWithContainer(mNotificationListContainer);
@@ -1123,6 +1128,55 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
         assertThat(onDismissActionCaptor.getValue().onDismiss()).isFalse();
     }
 
+    @Test
+    public void testKeyguardHideDelayedIfOcclusionAnimationRunning() {
+        // Show the keyguard and verify we've done so.
+        setKeyguardShowingAndOccluded(true /* showing */, false /* occluded */);
+        verify(mStatusBarStateController).setState(StatusBarState.KEYGUARD);
+
+        // Request to hide the keyguard, but while the occlude animation is playing. We should delay
+        // this hide call, since we're playing the occlude animation over the keyguard and thus want
+        // it to remain visible.
+        when(mKeyguardViewMediator.isOccludeAnimationPlaying()).thenReturn(true);
+        setKeyguardShowingAndOccluded(false /* showing */, true /* occluded */);
+        verify(mStatusBarStateController, never()).setState(StatusBarState.SHADE);
+
+        // Once the animation ends, verify that the keyguard is actually hidden.
+        when(mKeyguardViewMediator.isOccludeAnimationPlaying()).thenReturn(false);
+        setKeyguardShowingAndOccluded(false /* showing */, true /* occluded */);
+        verify(mStatusBarStateController).setState(StatusBarState.SHADE);
+    }
+
+    @Test
+    public void testKeyguardHideNotDelayedIfOcclusionAnimationNotRunning() {
+        // Show the keyguard and verify we've done so.
+        setKeyguardShowingAndOccluded(true /* showing */, false /* occluded */);
+        verify(mStatusBarStateController).setState(StatusBarState.KEYGUARD);
+
+        // Hide the keyguard while the occlusion animation is not running. Verify that we
+        // immediately hide the keyguard.
+        when(mKeyguardViewMediator.isOccludeAnimationPlaying()).thenReturn(false);
+        setKeyguardShowingAndOccluded(false /* showing */, true /* occluded */);
+        verify(mStatusBarStateController).setState(StatusBarState.SHADE);
+    }
+
+    /**
+     * Configures the appropriate mocks and then calls {@link CentralSurfacesImpl#updateIsKeyguard}
+     * to reconfigure the keyguard to reflect the requested showing/occluded states.
+     */
+    private void setKeyguardShowingAndOccluded(boolean showing, boolean occluded) {
+        when(mStatusBarStateController.isKeyguardRequested()).thenReturn(showing);
+        when(mKeyguardStateController.isOccluded()).thenReturn(occluded);
+
+        // If we want to show the keyguard, make sure that we think we're awake and not unlocking.
+        if (showing) {
+            when(mBiometricUnlockController.isWakeAndUnlock()).thenReturn(false);
+            mWakefulnessLifecycle.dispatchStartedWakingUp(PowerManager.WAKE_REASON_UNKNOWN);
+        }
+
+        mCentralSurfaces.updateIsKeyguard(false /* forceStateChange */);
+    }
+
     private void setDeviceState(int state) {
         ArgumentCaptor<DeviceStateManager.DeviceStateCallback> callbackCaptor =
                 ArgumentCaptor.forClass(DeviceStateManager.DeviceStateCallback.class);
@@ -1157,7 +1211,8 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
                 NotificationInterruptLogger logger,
                 Handler mainHandler,
                 NotifPipelineFlags flags,
-                KeyguardNotificationVisibilityProvider keyguardNotificationVisibilityProvider) {
+                KeyguardNotificationVisibilityProvider keyguardNotificationVisibilityProvider,
+                UiEventLogger uiEventLogger) {
             super(
                     contentResolver,
                     powerManager,
@@ -1170,7 +1225,8 @@ public class CentralSurfacesImplTest extends SysuiTestCase {
                     logger,
                     mainHandler,
                     flags,
-                    keyguardNotificationVisibilityProvider
+                    keyguardNotificationVisibilityProvider,
+                    uiEventLogger
             );
             mUseHeadsUp = true;
         }

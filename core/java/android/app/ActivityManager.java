@@ -81,8 +81,6 @@ import android.util.ArrayMap;
 import android.util.DisplayMetrics;
 import android.util.Singleton;
 import android.util.Size;
-import android.util.TypedXmlPullParser;
-import android.util.TypedXmlSerializer;
 import android.window.TaskSnapshot;
 
 import com.android.internal.app.LocalePicker;
@@ -92,6 +90,8 @@ import com.android.internal.os.TransferPipe;
 import com.android.internal.util.FastPrintWriter;
 import com.android.internal.util.MemInfoReader;
 import com.android.internal.util.Preconditions;
+import com.android.modules.utils.TypedXmlPullParser;
+import com.android.modules.utils.TypedXmlSerializer;
 import com.android.server.LocalServices;
 
 import java.io.FileDescriptor;
@@ -3952,6 +3952,10 @@ public class ActivityManager {
      * with the given package.  This is the same as the kernel killing those
      * processes to reclaim memory; the system will take care of restarting
      * these processes in the future as needed.
+     *
+     * <p class="note">On devices with a {@link Build.VERSION#SECURITY_PATCH} of 2022-12-01 or
+     * greater, third party applications can only use this API to kill their own processes.
+     * </p>
      *
      * @param packageName The name of the package whose processes are to
      * be killed.

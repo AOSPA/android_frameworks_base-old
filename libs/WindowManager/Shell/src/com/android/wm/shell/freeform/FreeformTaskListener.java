@@ -87,9 +87,13 @@ public class FreeformTaskListener implements ShellTaskOrganizer.TaskListener {
         }
 
         if (DesktopModeStatus.IS_SUPPORTED && taskInfo.isVisible) {
-            ProtoLog.v(ShellProtoLogGroup.WM_SHELL_DESKTOP_MODE,
-                    "Adding active freeform task: #%d", taskInfo.taskId);
-            mDesktopModeTaskRepository.ifPresent(it -> it.addActiveTask(taskInfo.taskId));
+            mDesktopModeTaskRepository.ifPresent(repository -> {
+                if (repository.addActiveTask(taskInfo.taskId)) {
+                    ProtoLog.v(ShellProtoLogGroup.WM_SHELL_DESKTOP_MODE,
+                            "Adding active freeform task: #%d", taskInfo.taskId);
+                }
+                repository.updateVisibleFreeformTasks(taskInfo.taskId, true);
+            });
         }
     }
 
@@ -100,9 +104,13 @@ public class FreeformTaskListener implements ShellTaskOrganizer.TaskListener {
         mTasks.remove(taskInfo.taskId);
 
         if (DesktopModeStatus.IS_SUPPORTED) {
-            ProtoLog.v(ShellProtoLogGroup.WM_SHELL_DESKTOP_MODE,
-                    "Removing active freeform task: #%d", taskInfo.taskId);
-            mDesktopModeTaskRepository.ifPresent(it -> it.removeActiveTask(taskInfo.taskId));
+            mDesktopModeTaskRepository.ifPresent(repository -> {
+                if (repository.removeActiveTask(taskInfo.taskId)) {
+                    ProtoLog.v(ShellProtoLogGroup.WM_SHELL_DESKTOP_MODE,
+                            "Removing active freeform task: #%d", taskInfo.taskId);
+                }
+                repository.updateVisibleFreeformTasks(taskInfo.taskId, false);
+            });
         }
 
         if (!Transitions.ENABLE_SHELL_TRANSITIONS) {
@@ -119,11 +127,15 @@ public class FreeformTaskListener implements ShellTaskOrganizer.TaskListener {
         mWindowDecorationViewModel.onTaskInfoChanged(state.mTaskInfo);
 
         if (DesktopModeStatus.IS_SUPPORTED) {
-            if (taskInfo.isVisible) {
-                ProtoLog.v(ShellProtoLogGroup.WM_SHELL_DESKTOP_MODE,
-                        "Adding active freeform task: #%d", taskInfo.taskId);
-                mDesktopModeTaskRepository.ifPresent(it -> it.addActiveTask(taskInfo.taskId));
-            }
+            mDesktopModeTaskRepository.ifPresent(repository -> {
+                if (taskInfo.isVisible) {
+                    if (repository.addActiveTask(taskInfo.taskId)) {
+                        ProtoLog.v(ShellProtoLogGroup.WM_SHELL_DESKTOP_MODE,
+                                "Adding active freeform task: #%d", taskInfo.taskId);
+                    }
+                }
+                repository.updateVisibleFreeformTasks(taskInfo.taskId, taskInfo.isVisible);
+            });
         }
     }
 

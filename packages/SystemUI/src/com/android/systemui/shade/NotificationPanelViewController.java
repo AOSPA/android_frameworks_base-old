@@ -137,7 +137,6 @@ import com.android.systemui.biometrics.AuthController;
 import com.android.systemui.camera.CameraGestureHelper;
 import com.android.systemui.classifier.Classifier;
 import com.android.systemui.classifier.FalsingCollector;
-import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.DisplayId;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.doze.DozeLog;
@@ -149,10 +148,12 @@ import com.android.systemui.fragments.FragmentService;
 import com.android.systemui.keyguard.KeyguardUnlockAnimationController;
 import com.android.systemui.keyguard.domain.interactor.KeyguardBottomAreaInteractor;
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardBottomAreaViewModel;
-import com.android.systemui.media.KeyguardMediaController;
-import com.android.systemui.media.MediaDataManager;
-import com.android.systemui.media.MediaHierarchyManager;
+import com.android.systemui.media.controls.pipeline.MediaDataManager;
+import com.android.systemui.media.controls.ui.KeyguardMediaController;
+import com.android.systemui.media.controls.ui.MediaHierarchyManager;
 import com.android.systemui.model.SysUiState;
+import com.android.systemui.navigationbar.NavigationBarController;
+import com.android.systemui.navigationbar.NavigationBarView;
 import com.android.systemui.navigationbar.NavigationModeController;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.FalsingManager.FalsingTapListener;
@@ -231,7 +232,6 @@ import com.android.systemui.statusbar.window.StatusBarWindowStateController;
 import com.android.systemui.unfold.SysUIUnfoldComponent;
 import com.android.systemui.util.Compile;
 import com.android.systemui.util.LargeScreenUtils;
-import com.android.systemui.util.ListenerSet;
 import com.android.systemui.util.Utils;
 import com.android.systemui.util.time.SystemClock;
 import com.android.wm.shell.animation.FlingAnimationUtils;
@@ -372,7 +372,6 @@ public final class NotificationPanelViewController {
     private final TapAgainViewController mTapAgainViewController;
     private final LargeScreenShadeHeaderController mLargeScreenShadeHeaderController;
     private final RecordingController mRecordingController;
-    private final PanelEventsEmitter mPanelEventsEmitter;
     private final boolean mVibrateOnOpening;
     private final VelocityTracker mVelocityTracker = VelocityTracker.obtain();
     private final FlingAnimationUtils mFlingAnimationUtilsClosing;
@@ -588,6 +587,7 @@ public final class NotificationPanelViewController {
     private final SysUiState mSysUiState;
 
     private final NotificationShadeDepthController mDepthController;
+    private final NavigationBarController mNavigationBarController;
     private final int mDisplayId;
 
     private KeyguardIndicationController mKeyguardIndicationController;
@@ -866,6 +866,7 @@ public final class NotificationPanelViewController {
             PrivacyDotViewController privacyDotViewController,
             TapAgainViewController tapAgainViewController,
             NavigationModeController navigationModeController,
+            NavigationBarController navigationBarController,
             FragmentService fragmentService,
             ContentResolver contentResolver,
             RecordingController recordingController,
@@ -881,7 +882,6 @@ public final class NotificationPanelViewController {
             Provider<KeyguardBottomAreaViewController> keyguardBottomAreaViewControllerProvider,
             KeyguardUnlockAnimationController keyguardUnlockAnimationController,
             NotificationListContainer notificationListContainer,
-            PanelEventsEmitter panelEventsEmitter,
             NotificationStackSizeCalculator notificationStackSizeCalculator,
             UnlockedScreenOffAnimationController unlockedScreenOffAnimationController,
             ShadeTransitionController shadeTransitionController,
@@ -960,6 +960,7 @@ public final class NotificationPanelViewController {
         mNotificationsQSContainerController = notificationsQSContainerController;
         mNotificationListContainer = notificationListContainer;
         mNotificationStackSizeCalculator = notificationStackSizeCalculator;
+        mNavigationBarController = navigationBarController;
         mKeyguardBottomAreaViewControllerProvider = keyguardBottomAreaViewControllerProvider;
         mNotificationsQSContainerController.init();
         mNotificationStackScrollLayoutController = notificationStackScrollLayoutController;
@@ -995,7 +996,6 @@ public final class NotificationPanelViewController {
         mMediaDataManager = mediaDataManager;
         mTapAgainViewController = tapAgainViewController;
         mSysUiState = sysUiState;
-        mPanelEventsEmitter = panelEventsEmitter;
         pulseExpansionHandler.setPulseExpandAbortListener(() -> {
             if (mQs != null) {
                 mQs.animateHeaderSlidingOut();
@@ -1452,6 +1452,16 @@ public final class NotificationPanelViewController {
     @VisibleForTesting
     void setMaxDisplayedNotifications(int maxAllowed) {
         mMaxAllowedKeyguardNotifications = maxAllowed;
+    }
+
+    @VisibleForTesting
+    boolean getClosing() {
+        return mClosing;
+    }
+
+    @VisibleForTesting
+    boolean getIsFlinging() {
+        return mIsFlinging;
     }
 
     private void updateMaxDisplayedNotifications(boolean recompute) {
@@ -1944,7 +1954,7 @@ public final class NotificationPanelViewController {
     private void setQsExpandImmediate(boolean expandImmediate) {
         if (expandImmediate != mQsExpandImmediate) {
             mQsExpandImmediate = expandImmediate;
-            mPanelEventsEmitter.notifyExpandImmediateChange(expandImmediate);
+            mShadeExpansionStateManager.notifyExpandImmediateChange(expandImmediate);
         }
     }
 
@@ -2670,8 +2680,8 @@ public final class NotificationPanelViewController {
 
         // When expanding QS, let's authenticate the user if possible,
         // this will speed up notification actions.
-        if (height == 0) {
-            mCentralSurfaces.requestFaceAuth(false, FaceAuthApiRequestReason.QS_EXPANDED);
+        if (height == 0 && !mKeyguardStateController.canDismissLockScreen()) {
+            mUpdateMonitor.requestFaceAuth(FaceAuthApiRequestReason.QS_EXPANDED);
         }
     }
 
@@ -2682,12 +2692,16 @@ public final class NotificationPanelViewController {
             mQsExpanded = expanded;
             updateQsState();
             updateExpandedHeightToMaxHeight();
-            mFalsingCollector.setQsExpanded(expanded);
-            mCentralSurfaces.setQsExpanded(expanded);
-            mNotificationsQSContainerController.setQsExpanded(expanded);
-            mPulseExpansionHandler.setQsExpanded(expanded);
-            mKeyguardBypassController.setQSExpanded(expanded);
-            mPrivacyDotViewController.setQsExpanded(expanded);
+            setStatusAccessibilityImportance(expanded
+                    ? View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                    : View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);
+            updateSystemUiStateFlags();
+            NavigationBarView navigationBarView =
+                    mNavigationBarController.getNavigationBarView(mDisplayId);
+            if (navigationBarView != null) {
+                navigationBarView.onStatusBarPanelStateChanged();
+            }
+            mShadeExpansionStateManager.onQsExpansionChanged(expanded);
         }
     }
 
@@ -3729,6 +3743,11 @@ public final class NotificationPanelViewController {
         setListening(true);
     }
 
+    @VisibleForTesting
+    void setTouchSlopExceeded(boolean isTouchSlopExceeded) {
+        mTouchSlopExceeded = isTouchSlopExceeded;
+    }
+
     public void setOverExpansion(float overExpansion) {
         if (overExpansion == mOverExpansion) {
             return;
@@ -3876,7 +3895,7 @@ public final class NotificationPanelViewController {
         boolean wasRunning = mIsLaunchAnimationRunning;
         mIsLaunchAnimationRunning = running;
         if (wasRunning != mIsLaunchAnimationRunning) {
-            mPanelEventsEmitter.notifyLaunchingActivityChanged(running);
+            mShadeExpansionStateManager.notifyLaunchingActivityChanged(running);
         }
     }
 
@@ -3885,7 +3904,7 @@ public final class NotificationPanelViewController {
         boolean wasClosing = isClosing();
         mClosing = isClosing;
         if (wasClosing != isClosing) {
-            mPanelEventsEmitter.notifyPanelCollapsingChanged(isClosing);
+            mShadeExpansionStateManager.notifyPanelCollapsingChanged(isClosing);
         }
         mAmbientState.setIsClosing(isClosing);
     }
@@ -3920,20 +3939,19 @@ public final class NotificationPanelViewController {
                     mShadeLog.v("onMiddleClicked on Keyguard, mDozingOnDown: false");
                     // Try triggering face auth, this "might" run. Check
                     // KeyguardUpdateMonitor#shouldListenForFace to see when face auth won't run.
-                    mUpdateMonitor.requestFaceAuth(true,
+                    boolean didFaceAuthRun = mUpdateMonitor.requestFaceAuth(
                             FaceAuthApiRequestReason.NOTIFICATION_PANEL_CLICKED);
 
-                    mLockscreenGestureLogger.write(MetricsEvent.ACTION_LS_HINT,
-                            0 /* lengthDp - N/A */, 0 /* velocityDp - N/A */);
-                    mLockscreenGestureLogger
-                            .log(LockscreenUiEvent.LOCKSCREEN_LOCK_SHOW_HINT);
-                    if (!mUpdateMonitor.isFaceDetectionRunning()) {
-                        startUnlockHintAnimation();
-                    }
-                    if (mUpdateMonitor.isFaceEnrolled()) {
+                    if (didFaceAuthRun) {
                         mUpdateMonitor.requestActiveUnlock(
                                 ActiveUnlockConfig.ACTIVE_UNLOCK_REQUEST_ORIGIN.UNLOCK_INTENT,
                                 "lockScreenEmptySpaceTap");
+                    } else {
+                        mLockscreenGestureLogger.write(MetricsEvent.ACTION_LS_HINT,
+                                0 /* lengthDp - N/A */, 0 /* velocityDp - N/A */);
+                        mLockscreenGestureLogger
+                                .log(LockscreenUiEvent.LOCKSCREEN_LOCK_SHOW_HINT);
+                        startUnlockHintAnimation();
                     }
                 }
                 return true;
@@ -4211,8 +4229,8 @@ public final class NotificationPanelViewController {
     /**
      * Sets the dozing state.
      *
-     * @param dozing              {@code true} when dozing.
-     * @param animate             if transition should be animated.
+     * @param dozing  {@code true} when dozing.
+     * @param animate if transition should be animated.
      */
     public void setDozing(boolean dozing, boolean animate) {
         if (dozing == mDozing) return;
@@ -4352,35 +4370,35 @@ public final class NotificationPanelViewController {
     /**
      * Starts fold to AOD animation.
      *
-     * @param startAction invoked when the animation starts.
-     * @param endAction invoked when the animation finishes, also if it was cancelled.
+     * @param startAction  invoked when the animation starts.
+     * @param endAction    invoked when the animation finishes, also if it was cancelled.
      * @param cancelAction invoked when the animation is cancelled, before endAction.
      */
     public void startFoldToAodAnimation(Runnable startAction, Runnable endAction,
             Runnable cancelAction) {
         mView.animate()
-            .translationX(0)
-            .alpha(1f)
-            .setDuration(ANIMATION_DURATION_FOLD_TO_AOD)
-            .setInterpolator(EMPHASIZED_DECELERATE)
-            .setListener(new AnimatorListenerAdapter() {
-                @Override
-                public void onAnimationStart(Animator animation) {
-                    startAction.run();
-                }
+                .translationX(0)
+                .alpha(1f)
+                .setDuration(ANIMATION_DURATION_FOLD_TO_AOD)
+                .setInterpolator(EMPHASIZED_DECELERATE)
+                .setListener(new AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationStart(Animator animation) {
+                        startAction.run();
+                    }
 
-                @Override
-                public void onAnimationCancel(Animator animation) {
-                    cancelAction.run();
-                }
+                    @Override
+                    public void onAnimationCancel(Animator animation) {
+                        cancelAction.run();
+                    }
 
-                @Override
-                public void onAnimationEnd(Animator animation) {
-                    endAction.run();
-                }
-            }).setUpdateListener(anim -> {
-                mKeyguardStatusViewController.animateFoldToAod(anim.getAnimatedFraction());
-            }).start();
+                    @Override
+                    public void onAnimationEnd(Animator animation) {
+                        endAction.run();
+                    }
+                }).setUpdateListener(anim -> {
+                    mKeyguardStatusViewController.animateFoldToAod(anim.getAnimatedFraction());
+                }).start();
     }
 
     /**
@@ -4740,8 +4758,10 @@ public final class NotificationPanelViewController {
     /**
      * Maybe vibrate as panel is opened.
      *
-     * @param openingWithTouch Whether the panel is being opened with touch. If the panel is instead
-     * being opened programmatically (such as by the open panel gesture), we always play haptic.
+     * @param openingWithTouch Whether the panel is being opened with touch. If the panel is
+     *                         instead
+     *                         being opened programmatically (such as by the open panel gesture), we
+     *                         always play haptic.
      */
     private void maybeVibrateOnOpening(boolean openingWithTouch) {
         if (mVibrateOnOpening) {
@@ -4787,6 +4807,7 @@ public final class NotificationPanelViewController {
         mAmbientState.setSwipingUp(false);
         if ((mTracking && mTouchSlopExceeded) || Math.abs(x - mInitialExpandX) > mTouchSlop
                 || Math.abs(y - mInitialExpandY) > mTouchSlop
+                || (!isFullyExpanded() && !isFullyCollapsed())
                 || event.getActionMasked() == MotionEvent.ACTION_CANCEL || forceCancel) {
             mVelocityTracker.computeCurrentVelocity(1000);
             float vel = mVelocityTracker.getYVelocity();
@@ -4906,10 +4927,12 @@ public final class NotificationPanelViewController {
         animator.setInterpolator(Interpolators.FAST_OUT_SLOW_IN);
         animator.addListener(new AnimatorListenerAdapter() {
             private boolean mCancelled;
+
             @Override
             public void onAnimationCancel(Animator animation) {
                 mCancelled = true;
             }
+
             @Override
             public void onAnimationEnd(Animator animation) {
                 mIsSpringBackAnimation = false;
@@ -4957,7 +4980,7 @@ public final class NotificationPanelViewController {
         if (isNaN(h)) {
             Log.wtf(TAG, "ExpandedHeight set to NaN");
         }
-        mNotificationShadeWindowController.batchApplyWindowLayoutParams(()-> {
+        mNotificationShadeWindowController.batchApplyWindowLayoutParams(() -> {
             if (mExpandLatencyTracking && h != 0f) {
                 DejankUtils.postAfterTraversal(
                         () -> mLatencyTracker.onActionEnd(LatencyTracker.ACTION_EXPAND_PANEL));
@@ -5148,7 +5171,7 @@ public final class NotificationPanelViewController {
     /**
      * Create an animator that can also overshoot
      *
-     * @param targetHeight the target height
+     * @param targetHeight    the target height
      * @param overshootAmount the amount of overshoot desired
      */
     private ValueAnimator createHeightAnimator(float targetHeight, float overshootAmount) {
@@ -5184,7 +5207,8 @@ public final class NotificationPanelViewController {
      */
     public void updatePanelExpansionAndVisibility() {
         mShadeExpansionStateManager.onPanelExpansionChanged(
-                mExpandedFraction, isExpanded(), mTracking, mExpansionDragDownAmountPx);
+                mExpandedFraction, isExpanded(),
+                mTracking, mExpansionDragDownAmountPx);
         updateVisibility();
     }
 
@@ -5903,49 +5927,11 @@ public final class NotificationPanelViewController {
         }
     }
 
-    @SysUISingleton
-    static class PanelEventsEmitter implements NotifPanelEvents {
-
-        private final ListenerSet<Listener> mListeners = new ListenerSet<>();
-
-        @Inject
-        PanelEventsEmitter() {
-        }
-
-        @Override
-        public void registerListener(@androidx.annotation.NonNull @NonNull Listener listener) {
-            mListeners.addIfAbsent(listener);
-        }
-
-        @Override
-        public void unregisterListener(@androidx.annotation.NonNull @NonNull Listener listener) {
-            mListeners.remove(listener);
-        }
-
-        private void notifyLaunchingActivityChanged(boolean isLaunchingActivity) {
-            for (Listener cb : mListeners) {
-                cb.onLaunchingActivityChanged(isLaunchingActivity);
-            }
-        }
-
-        private void notifyPanelCollapsingChanged(boolean isCollapsing) {
-            for (NotifPanelEvents.Listener cb : mListeners) {
-                cb.onPanelCollapsingChanged(isCollapsing);
-            }
-        }
-
-        private void notifyExpandImmediateChange(boolean expandImmediateEnabled) {
-            for (NotifPanelEvents.Listener cb : mListeners) {
-                cb.onExpandImmediateChanged(expandImmediateEnabled);
-            }
-        }
-    }
-
     /** Handles MotionEvents for the Shade. */
     public final class TouchHandler implements View.OnTouchListener {
         private long mLastTouchDownTime = -1L;
 
-        /** @see ViewGroup#onInterceptTouchEvent(MotionEvent)  */
+        /** @see ViewGroup#onInterceptTouchEvent(MotionEvent) */
         public boolean onInterceptTouchEvent(MotionEvent event) {
             if (SPEW_LOGCAT) {
                 Log.v(TAG,
@@ -6144,7 +6130,7 @@ public final class NotificationPanelViewController {
                 mShadeLog.logMotionEvent(event, "onTouch: touch ignored due to instant expanding");
                 return false;
             }
-            if (mTouchDisabled  && event.getActionMasked() != MotionEvent.ACTION_CANCEL) {
+            if (mTouchDisabled && event.getActionMasked() != MotionEvent.ACTION_CANCEL) {
                 mShadeLog.logMotionEvent(event, "onTouch: non-cancel action, touch disabled");
                 return false;
             }
@@ -6352,3 +6338,4 @@ public final class NotificationPanelViewController {
         }
     }
 }
+

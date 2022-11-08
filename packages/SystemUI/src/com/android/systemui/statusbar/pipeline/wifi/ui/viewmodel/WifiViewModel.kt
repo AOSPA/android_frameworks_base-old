@@ -31,6 +31,7 @@ import com.android.systemui.statusbar.connectivity.WifiIcons.WIFI_FULL_ICONS
 import com.android.systemui.statusbar.connectivity.WifiIcons.WIFI_NO_INTERNET_ICONS
 import com.android.systemui.statusbar.connectivity.WifiIcons.WIFI_NO_NETWORK
 import com.android.systemui.statusbar.pipeline.StatusBarPipelineFlags
+import com.android.systemui.statusbar.pipeline.airplane.ui.viewmodel.AirplaneModeViewModel
 import com.android.systemui.statusbar.pipeline.shared.ConnectivityConstants
 import com.android.systemui.statusbar.pipeline.shared.ConnectivityPipelineLogger
 import com.android.systemui.statusbar.pipeline.shared.ConnectivityPipelineLogger.Companion.logOutputChange
@@ -66,6 +67,7 @@ import kotlinx.coroutines.flow.stateIn
 class WifiViewModel
 @Inject
 constructor(
+    airplaneModeViewModel: AirplaneModeViewModel,
     connectivityConstants: ConnectivityConstants,
     private val context: Context,
     logger: ConnectivityPipelineLogger,
@@ -124,9 +126,10 @@ constructor(
     private val wifiIcon: StateFlow<Icon.Resource?> =
         combine(
             interactor.isEnabled,
+            interactor.isDefault,
             interactor.isForceHidden,
             interactor.wifiNetwork,
-        ) { isEnabled, isForceHidden, wifiNetwork ->
+        ) { isEnabled, isDefault, isForceHidden, wifiNetwork ->
             if (!isEnabled || isForceHidden || wifiNetwork is WifiNetworkModel.CarrierMerged) {
                 return@combine null
             }
@@ -135,6 +138,7 @@ constructor(
             val icon = Icon.Resource(iconResId, wifiNetwork.contentDescription())
 
             return@combine when {
+                isDefault -> icon
                 wifiConstants.alwaysShowIconIfEnabled -> icon
                 !connectivityConstants.hasDataCapabilities -> icon
                 wifiNetwork is WifiNetworkModel.Active && wifiNetwork.isValidated -> icon
@@ -175,6 +179,12 @@ constructor(
                 }
              .stateIn(scope, started = SharingStarted.WhileSubscribed(), initialValue = false)
 
+    // TODO(b/238425913): It isn't ideal for the wifi icon to need to know about whether the
+    //  airplane icon is visible. Instead, we should have a parent StatusBarSystemIconsViewModel
+    //  that appropriately knows about both icons and sets the padding appropriately.
+    private val isAirplaneSpacerVisible: Flow<Boolean> =
+        airplaneModeViewModel.isAirplaneModeIconVisible
+
     /** A view model for the status bar on the home screen. */
     val home: HomeWifiViewModel =
         HomeWifiViewModel(
@@ -183,6 +193,7 @@ constructor(
             isActivityInViewVisible,
             isActivityOutViewVisible,
             isActivityContainerVisible,
+            isAirplaneSpacerVisible,
         )
 
     /** A view model for the status bar on keyguard. */
@@ -193,6 +204,7 @@ constructor(
             isActivityInViewVisible,
             isActivityOutViewVisible,
             isActivityContainerVisible,
+            isAirplaneSpacerVisible,
         )
 
     /** A view model for the status bar in quick settings. */
@@ -203,6 +215,7 @@ constructor(
             isActivityInViewVisible,
             isActivityOutViewVisible,
             isActivityContainerVisible,
+            isAirplaneSpacerVisible,
         )
 
     companion object {

@@ -128,7 +128,8 @@ public class HdmiCecLocalDeviceTvTest {
 
         mHdmiControlService =
                 new HdmiControlService(InstrumentationRegistry.getTargetContext(),
-                        Collections.emptyList(), new FakeAudioDeviceVolumeManagerWrapper()) {
+                        Collections.singletonList(HdmiDeviceInfo.DEVICE_TV),
+                        new FakeAudioDeviceVolumeManagerWrapper()) {
                     @Override
                     void wakeUp() {
                         mWokenUp = true;
@@ -165,8 +166,6 @@ public class HdmiCecLocalDeviceTvTest {
                     }
                 };
 
-        mHdmiCecLocalDeviceTv = new HdmiCecLocalDeviceTv(mHdmiControlService);
-        mHdmiCecLocalDeviceTv.init();
         mHdmiControlService.setIoLooper(mMyLooper);
         mHdmiControlService.setHdmiCecConfig(new FakeHdmiCecConfig(context));
         mNativeWrapper = new FakeNativeWrapper();
@@ -174,7 +173,6 @@ public class HdmiCecLocalDeviceTvTest {
                 mHdmiControlService, mNativeWrapper, mHdmiControlService.getAtomWriter());
         mHdmiControlService.setCecController(mHdmiCecController);
         mHdmiControlService.setHdmiMhlController(HdmiMhlControllerStub.create(mHdmiControlService));
-        mLocalDevices.add(mHdmiCecLocalDeviceTv);
         HdmiPortInfo[] hdmiPortInfos = new HdmiPortInfo[2];
         hdmiPortInfos[0] =
                 new HdmiPortInfo(1, HdmiPortInfo.PORT_INPUT, 0x1000, true, false, false);
@@ -185,11 +183,12 @@ public class HdmiCecLocalDeviceTvTest {
         mHdmiControlService.onBootPhase(PHASE_SYSTEM_SERVICES_READY);
         mPowerManager = new FakePowerManagerWrapper(context);
         mHdmiControlService.setPowerManager(mPowerManager);
-        mHdmiControlService.allocateLogicalAddress(mLocalDevices, INITIATED_BY_ENABLE_CEC);
         mTvPhysicalAddress = 0x0000;
         mNativeWrapper.setPhysicalAddress(mTvPhysicalAddress);
         mTestLooper.dispatchAll();
+        mHdmiCecLocalDeviceTv = mHdmiControlService.tv();
         mTvLogicalAddress = mHdmiCecLocalDeviceTv.getDeviceInfo().getLogicalAddress();
+        mLocalDevices.add(mHdmiCecLocalDeviceTv);
         for (String sad : SADS_NOT_TO_QUERY) {
             mHdmiControlService.getHdmiCecConfig().setIntValue(
                     sad, HdmiControlManager.QUERY_SAD_DISABLED);
@@ -591,11 +590,15 @@ public class HdmiCecLocalDeviceTvTest {
 
     @Test
     public void handleReportAudioStatus_SamOnArcOff_setStreamVolumeNotCalled() {
+        mHdmiControlService.getHdmiCecConfig().setIntValue(
+                HdmiControlManager.CEC_SETTING_NAME_SYSTEM_AUDIO_CONTROL,
+                HdmiControlManager.SYSTEM_AUDIO_CONTROL_ENABLED);
         // Emulate Audio device on port 0x1000 (does not support ARC)
         mNativeWrapper.setPortConnectionStatus(1, true);
         HdmiCecMessage hdmiCecMessage = HdmiCecMessageBuilder.buildReportPhysicalAddressCommand(
                 ADDR_AUDIO_SYSTEM, 0x1000, HdmiDeviceInfo.DEVICE_AUDIO_SYSTEM);
         mNativeWrapper.onCecMessage(hdmiCecMessage);
+        mTestLooper.dispatchAll();
 
         HdmiCecFeatureAction systemAudioAutoInitiationAction =
                 new SystemAudioAutoInitiationAction(mHdmiCecLocalDeviceTv, ADDR_AUDIO_SYSTEM);
@@ -822,6 +825,10 @@ public class HdmiCecLocalDeviceTvTest {
 
     @Test
     public void receiveSetAudioVolumeLevel_samActivated_respondsFeatureAbort_noVolumeChange() {
+        mHdmiControlService.getHdmiCecConfig().setIntValue(
+                HdmiControlManager.CEC_SETTING_NAME_SYSTEM_AUDIO_CONTROL,
+                HdmiControlManager.SYSTEM_AUDIO_CONTROL_ENABLED);
+
         mNativeWrapper.onCecMessage(HdmiCecMessageBuilder.buildSetSystemAudioMode(
                 ADDR_AUDIO_SYSTEM, ADDR_TV, true));
         mTestLooper.dispatchAll();

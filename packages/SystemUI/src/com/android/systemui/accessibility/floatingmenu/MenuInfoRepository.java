@@ -16,22 +16,29 @@
 
 package com.android.systemui.accessibility.floatingmenu;
 
+import static android.provider.Settings.Secure.ACCESSIBILITY_FLOATING_MENU_FADE_ENABLED;
+import static android.provider.Settings.Secure.ACCESSIBILITY_FLOATING_MENU_OPACITY;
 import static android.provider.Settings.Secure.ACCESSIBILITY_FLOATING_MENU_SIZE;
 import static android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES;
 import static android.view.accessibility.AccessibilityManager.ACCESSIBILITY_BUTTON;
 
 import static com.android.internal.accessibility.dialog.AccessibilityTargetHelper.getTargets;
+import static com.android.systemui.accessibility.floatingmenu.MenuFadeEffectInfoKt.DEFAULT_FADE_EFFECT_IS_ENABLED;
+import static com.android.systemui.accessibility.floatingmenu.MenuFadeEffectInfoKt.DEFAULT_OPACITY_VALUE;
 import static com.android.systemui.accessibility.floatingmenu.MenuViewAppearance.MenuSizeType.SMALL;
 
+import android.annotation.FloatRange;
 import android.content.Context;
 import android.database.ContentObserver;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.UserHandle;
 import android.provider.Settings;
+import android.text.TextUtils;
 
 import com.android.internal.accessibility.dialog.AccessibilityTarget;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.systemui.Prefs;
 
 import java.util.List;
 
@@ -39,9 +46,16 @@ import java.util.List;
  * Stores and observe the settings contents for the menu view.
  */
 class MenuInfoRepository {
+    @FloatRange(from = 0.0, to = 1.0)
+    private static final float DEFAULT_MENU_POSITION_X_PERCENT = 1.0f;
+
+    @FloatRange(from = 0.0, to = 1.0)
+    private static final float DEFAULT_MENU_POSITION_Y_PERCENT = 0.9f;
+
     private final Context mContext;
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private final OnSettingsContentsChanged mSettingsContentsCallback;
+    private Position mPercentagePosition;
 
     private final ContentObserver mMenuTargetFeaturesContentObserver =
             new ContentObserver(mHandler) {
@@ -62,9 +76,24 @@ class MenuInfoRepository {
                 }
             };
 
+    @VisibleForTesting
+    final ContentObserver mMenuFadeOutContentObserver =
+            new ContentObserver(mHandler) {
+                @Override
+                public void onChange(boolean selfChange) {
+                    mSettingsContentsCallback.onFadeEffectInfoChanged(getMenuFadeEffectInfo());
+                }
+            };
+
     MenuInfoRepository(Context context, OnSettingsContentsChanged settingsContentsChanged) {
         mContext = context;
         mSettingsContentsCallback = settingsContentsChanged;
+
+        mPercentagePosition = getStartPosition();
+    }
+
+    void loadMenuPosition(OnInfoReady<Position> callback) {
+        callback.onReady(mPercentagePosition);
     }
 
     void loadMenuTargetFeatures(OnInfoReady<List<AccessibilityTarget>> callback) {
@@ -73,6 +102,30 @@ class MenuInfoRepository {
 
     void loadMenuSizeType(OnInfoReady<Integer> callback) {
         callback.onReady(getMenuSizeTypeFromSettings(mContext));
+    }
+
+    void loadMenuFadeEffectInfo(OnInfoReady<MenuFadeEffectInfo> callback) {
+        callback.onReady(getMenuFadeEffectInfo());
+    }
+
+    private MenuFadeEffectInfo getMenuFadeEffectInfo() {
+        return new MenuFadeEffectInfo(isMenuFadeEffectEnabledFromSettings(mContext),
+                getMenuOpacityFromSettings(mContext));
+    }
+
+    void updateMenuSavingPosition(Position percentagePosition) {
+        mPercentagePosition = percentagePosition;
+        Prefs.putString(mContext, Prefs.Key.ACCESSIBILITY_FLOATING_MENU_POSITION,
+                percentagePosition.toString());
+    }
+
+    private Position getStartPosition() {
+        final String absolutePositionString = Prefs.getString(mContext,
+                Prefs.Key.ACCESSIBILITY_FLOATING_MENU_POSITION, /* defaultValue= */ null);
+
+        return TextUtils.isEmpty(absolutePositionString)
+                ? new Position(DEFAULT_MENU_POSITION_X_PERCENT, DEFAULT_MENU_POSITION_Y_PERCENT)
+                : Position.fromString(absolutePositionString);
     }
 
     void registerContentObservers() {
@@ -88,17 +141,28 @@ class MenuInfoRepository {
                 Settings.Secure.getUriFor(Settings.Secure.ACCESSIBILITY_FLOATING_MENU_SIZE),
                 /* notifyForDescendants */ false, mMenuSizeContentObserver,
                 UserHandle.USER_CURRENT);
+        mContext.getContentResolver().registerContentObserver(
+                Settings.Secure.getUriFor(ACCESSIBILITY_FLOATING_MENU_FADE_ENABLED),
+                /* notifyForDescendants */ false, mMenuFadeOutContentObserver,
+                UserHandle.USER_CURRENT);
+        mContext.getContentResolver().registerContentObserver(
+                Settings.Secure.getUriFor(ACCESSIBILITY_FLOATING_MENU_OPACITY),
+                /* notifyForDescendants */ false, mMenuFadeOutContentObserver,
+                UserHandle.USER_CURRENT);
     }
 
     void unregisterContentObservers() {
         mContext.getContentResolver().unregisterContentObserver(mMenuTargetFeaturesContentObserver);
         mContext.getContentResolver().unregisterContentObserver(mMenuSizeContentObserver);
+        mContext.getContentResolver().unregisterContentObserver(mMenuFadeOutContentObserver);
     }
 
     interface OnSettingsContentsChanged {
         void onTargetFeaturesChanged(List<AccessibilityTarget> newTargetFeatures);
 
         void onSizeTypeChanged(int newSizeType);
+
+        void onFadeEffectInfoChanged(MenuFadeEffectInfo fadeEffectInfo);
     }
 
     interface OnInfoReady<T> {
@@ -108,5 +172,17 @@ class MenuInfoRepository {
     private static int getMenuSizeTypeFromSettings(Context context) {
         return Settings.Secure.getIntForUser(context.getContentResolver(),
                 ACCESSIBILITY_FLOATING_MENU_SIZE, SMALL, UserHandle.USER_CURRENT);
+    }
+
+    private static boolean isMenuFadeEffectEnabledFromSettings(Context context) {
+        return Settings.Secure.getIntForUser(context.getContentResolver(),
+                ACCESSIBILITY_FLOATING_MENU_FADE_ENABLED,
+                DEFAULT_FADE_EFFECT_IS_ENABLED, UserHandle.USER_CURRENT) == /* enabled */ 1;
+    }
+
+    private static float getMenuOpacityFromSettings(Context context) {
+        return Settings.Secure.getFloatForUser(context.getContentResolver(),
+                ACCESSIBILITY_FLOATING_MENU_OPACITY, DEFAULT_OPACITY_VALUE,
+                UserHandle.USER_CURRENT);
     }
 }

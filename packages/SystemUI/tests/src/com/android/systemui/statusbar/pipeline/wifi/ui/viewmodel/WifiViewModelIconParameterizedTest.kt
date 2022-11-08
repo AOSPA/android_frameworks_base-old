@@ -27,6 +27,9 @@ import com.android.systemui.statusbar.connectivity.WifiIcons.WIFI_FULL_ICONS
 import com.android.systemui.statusbar.connectivity.WifiIcons.WIFI_NO_INTERNET_ICONS
 import com.android.systemui.statusbar.connectivity.WifiIcons.WIFI_NO_NETWORK
 import com.android.systemui.statusbar.pipeline.StatusBarPipelineFlags
+import com.android.systemui.statusbar.pipeline.airplane.data.repository.FakeAirplaneModeRepository
+import com.android.systemui.statusbar.pipeline.airplane.domain.interactor.AirplaneModeInteractor
+import com.android.systemui.statusbar.pipeline.airplane.ui.viewmodel.AirplaneModeViewModel
 import com.android.systemui.statusbar.pipeline.shared.ConnectivityConstants
 import com.android.systemui.statusbar.pipeline.shared.ConnectivityPipelineLogger
 import com.android.systemui.statusbar.pipeline.shared.data.model.ConnectivitySlot
@@ -64,19 +67,31 @@ internal class WifiViewModelIconParameterizedTest(private val testCase: TestCase
     @Mock private lateinit var logger: ConnectivityPipelineLogger
     @Mock private lateinit var connectivityConstants: ConnectivityConstants
     @Mock private lateinit var wifiConstants: WifiConstants
+    private lateinit var airplaneModeRepository: FakeAirplaneModeRepository
     private lateinit var connectivityRepository: FakeConnectivityRepository
     private lateinit var wifiRepository: FakeWifiRepository
     private lateinit var interactor: WifiInteractor
+    private lateinit var airplaneModeViewModel: AirplaneModeViewModel
     private lateinit var scope: CoroutineScope
 
     @Before
     fun setUp() {
         MockitoAnnotations.initMocks(this)
+        airplaneModeRepository = FakeAirplaneModeRepository()
         connectivityRepository = FakeConnectivityRepository()
         wifiRepository = FakeWifiRepository()
         wifiRepository.setIsWifiEnabled(true)
         interactor = WifiInteractor(connectivityRepository, wifiRepository)
         scope = CoroutineScope(IMMEDIATE)
+        airplaneModeViewModel =
+            AirplaneModeViewModel(
+                AirplaneModeInteractor(
+                    airplaneModeRepository,
+                    connectivityRepository,
+                ),
+                logger,
+                scope,
+            )
     }
 
     @After
@@ -88,6 +103,7 @@ internal class WifiViewModelIconParameterizedTest(private val testCase: TestCase
     fun wifiIcon() =
         runBlocking(IMMEDIATE) {
             wifiRepository.setIsWifiEnabled(testCase.enabled)
+            wifiRepository.setIsWifiDefault(testCase.isDefault)
             connectivityRepository.setForceHiddenIcons(
                 if (testCase.forceHidden) {
                     setOf(ConnectivitySlot.WIFI)
@@ -101,6 +117,7 @@ internal class WifiViewModelIconParameterizedTest(private val testCase: TestCase
                 .thenReturn(testCase.hasDataCapabilities)
             underTest =
                 WifiViewModel(
+                    airplaneModeViewModel,
                     connectivityConstants,
                     context,
                     logger,
@@ -152,6 +169,7 @@ internal class WifiViewModelIconParameterizedTest(private val testCase: TestCase
         val forceHidden: Boolean = false,
         val alwaysShowIconWhenEnabled: Boolean = false,
         val hasDataCapabilities: Boolean = true,
+        val isDefault: Boolean = false,
         val network: WifiNetworkModel,
 
         /** The expected output. Null if we expect the output to be null. */
@@ -162,6 +180,7 @@ internal class WifiViewModelIconParameterizedTest(private val testCase: TestCase
                 "forceHidden=$forceHidden, " +
                 "showWhenEnabled=$alwaysShowIconWhenEnabled, " +
                 "hasDataCaps=$hasDataCapabilities, " +
+                "isDefault=$isDefault, " +
                 "network=$network) then " +
                 "EXPECTED($expected)"
         }
@@ -293,6 +312,46 @@ internal class WifiViewModelIconParameterizedTest(private val testCase: TestCase
                                 context.getString(WIFI_CONNECTION_STRENGTH[0])
                             },
                             description = "Full internet level 0 icon",
+                        ),
+                ),
+
+                // isDefault = true => all Inactive and Active networks shown
+                TestCase(
+                    isDefault = true,
+                    network = WifiNetworkModel.Inactive,
+                    expected =
+                        Expected(
+                            iconResource = WIFI_NO_NETWORK,
+                            contentDescription = { context ->
+                                "${context.getString(WIFI_NO_CONNECTION)}," +
+                                    context.getString(NO_INTERNET)
+                            },
+                            description = "No network icon",
+                        ),
+                ),
+                TestCase(
+                    isDefault = true,
+                    network = WifiNetworkModel.Active(NETWORK_ID, isValidated = false, level = 3),
+                    expected =
+                        Expected(
+                            iconResource = WIFI_NO_INTERNET_ICONS[3],
+                            contentDescription = { context ->
+                                "${context.getString(WIFI_CONNECTION_STRENGTH[3])}," +
+                                    context.getString(NO_INTERNET)
+                            },
+                            description = "No internet level 3 icon",
+                        ),
+                ),
+                TestCase(
+                    isDefault = true,
+                    network = WifiNetworkModel.Active(NETWORK_ID, isValidated = true, level = 1),
+                    expected =
+                        Expected(
+                            iconResource = WIFI_FULL_ICONS[1],
+                            contentDescription = { context ->
+                                context.getString(WIFI_CONNECTION_STRENGTH[1])
+                            },
+                            description = "Full internet level 1 icon",
                         ),
                 ),
 

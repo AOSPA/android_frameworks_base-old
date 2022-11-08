@@ -18,11 +18,36 @@ package android.hardware.radio.tests.unittests;
 
 import static com.google.common.truth.Truth.assertWithMessage;
 
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import android.content.Context;
+import android.hardware.radio.Announcement;
+import android.hardware.radio.IAnnouncementListener;
+import android.hardware.radio.ICloseHandle;
+import android.hardware.radio.IRadioService;
 import android.hardware.radio.ProgramSelector;
 import android.hardware.radio.RadioManager;
+import android.hardware.radio.RadioMetadata;
+import android.hardware.radio.RadioTuner;
+import android.os.RemoteException;
+import android.util.ArrayMap;
 
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.MockitoJUnitRunner;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Set;
+
+@RunWith(MockitoJUnitRunner.class)
 public final class RadioManagerTest {
 
     private static final int REGION = RadioManager.REGION_ITU_2;
@@ -62,6 +87,50 @@ public final class RadioManagerTest {
     private static final RadioManager.FmBandConfig FM_BAND_CONFIG = createFmBandConfig();
     private static final RadioManager.AmBandConfig AM_BAND_CONFIG = createAmBandConfig();
     private static final RadioManager.ModuleProperties AMFM_PROPERTIES = createAmFmProperties();
+
+    /**
+     * Info flags with live, tuned and stereo enabled
+     */
+    private static final int INFO_FLAGS = 0b110001;
+    private static final int SIGNAL_QUALITY = 2;
+    private static final ProgramSelector.Identifier DAB_SID_EXT_IDENTIFIER =
+            new ProgramSelector.Identifier(ProgramSelector.IDENTIFIER_TYPE_DAB_SID_EXT,
+                    /* value= */ 0x10000111);
+    private static final ProgramSelector.Identifier DAB_SID_EXT_IDENTIFIER_RELATED =
+            new ProgramSelector.Identifier(ProgramSelector.IDENTIFIER_TYPE_DAB_SID_EXT,
+                    /* value= */ 0x10000113);
+    private static final ProgramSelector.Identifier DAB_ENSEMBLE_IDENTIFIER =
+            new ProgramSelector.Identifier(ProgramSelector.IDENTIFIER_TYPE_DAB_ENSEMBLE,
+                    /* value= */ 0x1013);
+    private static final ProgramSelector.Identifier DAB_FREQUENCY_IDENTIFIER =
+            new ProgramSelector.Identifier(ProgramSelector.IDENTIFIER_TYPE_DAB_FREQUENCY,
+                    /* value= */ 95500);
+    private static final ProgramSelector DAB_SELECTOR =
+            new ProgramSelector(ProgramSelector.PROGRAM_TYPE_DAB, DAB_SID_EXT_IDENTIFIER,
+                    new ProgramSelector.Identifier[]{
+                            DAB_ENSEMBLE_IDENTIFIER, DAB_FREQUENCY_IDENTIFIER},
+                    /* vendorIds= */ null);
+    private static final RadioMetadata METADATA = createMetadata();
+    private static final RadioManager.ProgramInfo DAB_PROGRAM_INFO =
+            createDabProgramInfo(DAB_SELECTOR);
+
+    private static final int EVENT_ANNOUNCEMENT_TYPE = Announcement.TYPE_EVENT;
+    private static final List<Announcement> TEST_ANNOUNCEMENT_LIST = Arrays.asList(
+            new Announcement(DAB_SELECTOR, EVENT_ANNOUNCEMENT_TYPE,
+                    /* vendorInfo= */ new ArrayMap<>()));
+
+    private RadioManager mRadioManager;
+
+    @Mock
+    private IRadioService mRadioServiceMock;
+    @Mock
+    private Context mContextMock;
+    @Mock
+    private RadioTuner.Callback mCallbackMock;
+    @Mock
+    private Announcement.OnListUpdatedListener mEventListener;
+    @Mock
+    private ICloseHandle mCloseHandleMock;
 
     @Test
     public void getType_forBandDescriptor() {
@@ -460,6 +529,197 @@ public final class RadioManagerTest {
                 .that(AMFM_PROPERTIES).isNotEqualTo(propertiesDab);
     }
 
+    @Test
+    public void getSelector_forProgramInfo() {
+        assertWithMessage("Selector of DAB program info")
+                .that(DAB_PROGRAM_INFO.getSelector()).isEqualTo(DAB_SELECTOR);
+    }
+
+    @Test
+    public void getLogicallyTunedTo_forProgramInfo() {
+        assertWithMessage("Identifier logically tuned to in DAB program info")
+                .that(DAB_PROGRAM_INFO.getLogicallyTunedTo()).isEqualTo(DAB_FREQUENCY_IDENTIFIER);
+    }
+
+    @Test
+    public void getPhysicallyTunedTo_forProgramInfo() {
+        assertWithMessage("Identifier physically tuned to DAB program info")
+                .that(DAB_PROGRAM_INFO.getPhysicallyTunedTo()).isEqualTo(DAB_SID_EXT_IDENTIFIER);
+    }
+
+    @Test
+    public void getRelatedContent_forProgramInfo() {
+        assertWithMessage("Related contents of DAB program info")
+                .that(DAB_PROGRAM_INFO.getRelatedContent())
+                .containsExactly(DAB_SID_EXT_IDENTIFIER_RELATED);
+    }
+
+    @Test
+    public void getChannel_forProgramInfo() {
+        assertWithMessage("Main channel of DAB program info")
+                .that(DAB_PROGRAM_INFO.getChannel()).isEqualTo(0);
+    }
+
+    @Test
+    public void getSubChannel_forProgramInfo() {
+        assertWithMessage("Sub channel of DAB program info")
+                .that(DAB_PROGRAM_INFO.getSubChannel()).isEqualTo(0);
+    }
+
+    @Test
+    public void isTuned_forProgramInfo() {
+        assertWithMessage("Tuned status of DAB program info")
+                .that(DAB_PROGRAM_INFO.isTuned()).isTrue();
+    }
+
+    @Test
+    public void isStereo_forProgramInfo() {
+        assertWithMessage("Stereo support in DAB program info")
+                .that(DAB_PROGRAM_INFO.isStereo()).isTrue();
+    }
+
+    @Test
+    public void isDigital_forProgramInfo() {
+        assertWithMessage("Digital DAB program info")
+                .that(DAB_PROGRAM_INFO.isDigital()).isTrue();
+    }
+
+    @Test
+    public void isLive_forProgramInfo() {
+        assertWithMessage("Live status of DAB program info")
+                .that(DAB_PROGRAM_INFO.isLive()).isTrue();
+    }
+
+    @Test
+    public void isMuted_forProgramInfo() {
+        assertWithMessage("Muted status of DAB program info")
+                .that(DAB_PROGRAM_INFO.isMuted()).isFalse();
+    }
+
+    @Test
+    public void isTrafficProgram_forProgramInfo() {
+        assertWithMessage("Traffic program support in DAB program info")
+                .that(DAB_PROGRAM_INFO.isTrafficProgram()).isFalse();
+    }
+
+    @Test
+    public void isTrafficAnnouncementActive_forProgramInfo() {
+        assertWithMessage("Active traffic announcement for DAB program info")
+                .that(DAB_PROGRAM_INFO.isTrafficAnnouncementActive()).isFalse();
+    }
+
+    @Test
+    public void getSignalStrength_forProgramInfo() {
+        assertWithMessage("Signal strength of DAB program info")
+                .that(DAB_PROGRAM_INFO.getSignalStrength()).isEqualTo(SIGNAL_QUALITY);
+    }
+
+    @Test
+    public void getMetadata_forProgramInfo() {
+        assertWithMessage("Metadata of DAB program info")
+                .that(DAB_PROGRAM_INFO.getMetadata()).isEqualTo(METADATA);
+    }
+
+    @Test
+    public void getVendorInfo_forProgramInfo() {
+        assertWithMessage("Vendor info of DAB program info")
+                .that(DAB_PROGRAM_INFO.getVendorInfo()).isEmpty();
+    }
+
+    @Test
+    public void equals_withSameProgramInfo_returnsTrue() {
+        RadioManager.ProgramInfo dabProgramInfoCompared = createDabProgramInfo(DAB_SELECTOR);
+
+        assertWithMessage("The same program info")
+                .that(dabProgramInfoCompared).isEqualTo(DAB_PROGRAM_INFO);
+    }
+
+    @Test
+    public void equals_withSameProgramInfoOfDifferentSecondaryIdSelectors_returnsFalse() {
+        ProgramSelector dabSelectorCompared = new ProgramSelector(
+                ProgramSelector.PROGRAM_TYPE_DAB, DAB_SID_EXT_IDENTIFIER,
+                new ProgramSelector.Identifier[]{DAB_FREQUENCY_IDENTIFIER},
+                /* vendorIds= */ null);
+        RadioManager.ProgramInfo dabProgramInfoCompared = createDabProgramInfo(dabSelectorCompared);
+
+        assertWithMessage("Program info with different secondary id selectors")
+                .that(DAB_PROGRAM_INFO).isNotEqualTo(dabProgramInfoCompared);
+    }
+
+    @Test
+    public void listModules_forRadioManager() throws Exception {
+        createRadioManager();
+        List<RadioManager.ModuleProperties> modules = new ArrayList<>();
+
+        mRadioManager.listModules(modules);
+
+        assertWithMessage("Modules in radio manager")
+                .that(modules).containsExactly(AMFM_PROPERTIES);
+    }
+
+    @Test
+    public void openTuner_forRadioModule() throws Exception {
+        createRadioManager();
+        int moduleId = 0;
+        boolean withAudio = true;
+
+        mRadioManager.openTuner(moduleId, FM_BAND_CONFIG, withAudio, mCallbackMock,
+                /* handler= */ null);
+
+        verify(mRadioServiceMock).openTuner(eq(moduleId), eq(FM_BAND_CONFIG), eq(withAudio), any());
+    }
+
+    @Test
+    public void addAnnouncementListener_withListenerNotAddedBefore() throws Exception {
+        createRadioManager();
+        Set<Integer> enableTypeSet = createAnnouncementTypeSet(EVENT_ANNOUNCEMENT_TYPE);
+        int[] enableTypesExpected = new int[]{EVENT_ANNOUNCEMENT_TYPE};
+        ArgumentCaptor<IAnnouncementListener> announcementListener =
+                ArgumentCaptor.forClass(IAnnouncementListener.class);
+
+        mRadioManager.addAnnouncementListener(enableTypeSet, mEventListener);
+
+        verify(mRadioServiceMock).addAnnouncementListener(eq(enableTypesExpected),
+                announcementListener.capture());
+
+        announcementListener.getValue().onListUpdated(TEST_ANNOUNCEMENT_LIST);
+
+        verify(mEventListener).onListUpdated(TEST_ANNOUNCEMENT_LIST);
+    }
+
+    @Test
+    public void addAnnouncementListener_withListenerAddedBefore_closesPreviousOne()
+            throws Exception {
+        createRadioManager();
+        Set<Integer> enableTypeSet = createAnnouncementTypeSet(EVENT_ANNOUNCEMENT_TYPE);
+        mRadioManager.addAnnouncementListener(enableTypeSet, mEventListener);
+
+        mRadioManager.addAnnouncementListener(enableTypeSet, mEventListener);
+
+        verify(mCloseHandleMock).close();
+    }
+
+    @Test
+    public void removeAnnouncementListener_withListenerNotAddedBefore_ignores() throws Exception {
+        createRadioManager();
+
+        mRadioManager.removeAnnouncementListener(mEventListener);
+
+        verify(mCloseHandleMock, never()).close();
+    }
+
+    @Test
+    public void removeAnnouncementListener_withListenerAddedTwice_closesTheFirstOne()
+            throws Exception {
+        createRadioManager();
+        Set<Integer> enableTypeSet = createAnnouncementTypeSet(EVENT_ANNOUNCEMENT_TYPE);
+        mRadioManager.addAnnouncementListener(enableTypeSet, mEventListener);
+
+        mRadioManager.removeAnnouncementListener(mEventListener);
+
+        verify(mCloseHandleMock).close();
+    }
+
     private static RadioManager.ModuleProperties createAmFmProperties() {
         return new RadioManager.ModuleProperties(PROPERTIES_ID, SERVICE_NAME, CLASS_ID,
                 IMPLEMENTOR, PRODUCT, VERSION, SERIAL, NUM_TUNERS, NUM_AUDIO_SOURCES,
@@ -486,5 +746,27 @@ public final class RadioManagerTest {
 
     private static RadioManager.AmBandConfig createAmBandConfig() {
         return new RadioManager.AmBandConfig(createAmBandDescriptor());
+    }
+
+    private static RadioMetadata createMetadata() {
+        RadioMetadata.Builder metadataBuilder = new RadioMetadata.Builder();
+        return metadataBuilder.putString(RadioMetadata.METADATA_KEY_ARTIST, "artistTest").build();
+    }
+
+    private static RadioManager.ProgramInfo createDabProgramInfo(ProgramSelector selector) {
+        return new RadioManager.ProgramInfo(selector, DAB_FREQUENCY_IDENTIFIER,
+                DAB_SID_EXT_IDENTIFIER, Arrays.asList(DAB_SID_EXT_IDENTIFIER_RELATED), INFO_FLAGS,
+                SIGNAL_QUALITY, METADATA, /* vendorInfo= */ null);
+    }
+
+    private void createRadioManager() throws RemoteException {
+        when(mRadioServiceMock.listModules()).thenReturn(Arrays.asList(AMFM_PROPERTIES));
+        when(mRadioServiceMock.addAnnouncementListener(any(), any())).thenReturn(mCloseHandleMock);
+
+        mRadioManager = new RadioManager(mContextMock, mRadioServiceMock);
+    }
+
+    private Set<Integer> createAnnouncementTypeSet(int enableType) {
+        return Set.of(enableType);
     }
 }

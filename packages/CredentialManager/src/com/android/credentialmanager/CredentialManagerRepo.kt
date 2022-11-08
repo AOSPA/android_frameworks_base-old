@@ -16,24 +16,27 @@
 
 package com.android.credentialmanager
 
-import android.app.Activity
 import android.app.slice.Slice
 import android.app.slice.SliceSpec
 import android.content.Context
 import android.content.Intent
+import android.credentials.CreateCredentialRequest
 import android.credentials.ui.Constants
 import android.credentials.ui.Entry
 import android.credentials.ui.ProviderData
 import android.credentials.ui.RequestInfo
-import android.credentials.ui.UserSelectionResult
+import android.credentials.ui.BaseDialogResult
+import android.credentials.ui.UserSelectionDialogResult
 import android.graphics.drawable.Icon
 import android.os.Binder
 import android.os.Bundle
 import android.os.ResultReceiver
 import com.android.credentialmanager.createflow.CreatePasskeyUiState
 import com.android.credentialmanager.createflow.CreateScreenState
+import com.android.credentialmanager.createflow.RequestDisplayInfo
 import com.android.credentialmanager.getflow.GetCredentialUiState
 import com.android.credentialmanager.getflow.GetScreenState
+import com.android.credentialmanager.jetpack.CredentialEntryUi.Companion.TYPE_PUBLIC_KEY_CREDENTIAL
 
 // Consider repo per screen, similar to view model?
 class CredentialManagerRepo(
@@ -49,11 +52,7 @@ class CredentialManagerRepo(
     requestInfo = intent.extras?.getParcelable(
       RequestInfo.EXTRA_REQUEST_INFO,
       RequestInfo::class.java
-    ) ?: RequestInfo(
-      Binder(),
-      RequestInfo.TYPE_CREATE,
-      /*isFirstUsage=*/false
-    )
+    ) ?: testRequestInfo()
 
     providerList = intent.extras?.getParcelableArrayList(
       ProviderData.EXTRA_PROVIDER_DATA_LIST,
@@ -67,37 +66,51 @@ class CredentialManagerRepo(
   }
 
   fun onCancel() {
-    resultReceiver?.send(Activity.RESULT_CANCELED, null)
+    val resultData = Bundle()
+    BaseDialogResult.addToBundle(BaseDialogResult(requestInfo.token), resultData)
+    resultReceiver?.send(BaseDialogResult.RESULT_CODE_DIALOG_CANCELED, resultData)
   }
 
-  fun onOptionSelected(providerPackageName: String, entryId: Int) {
-    val userSelectionResult = UserSelectionResult(
+  fun onOptionSelected(providerPackageName: String, entryKey: String, entrySubkey: String) {
+    val userSelectionDialogResult = UserSelectionDialogResult(
       requestInfo.token,
       providerPackageName,
-      entryId
+      entryKey,
+      entrySubkey
     )
     val resultData = Bundle()
-    resultData.putParcelable(
-      UserSelectionResult.EXTRA_USER_SELECTION_RESULT,
-      userSelectionResult
-    )
-    resultReceiver?.send(Activity.RESULT_OK, resultData)
+    UserSelectionDialogResult.addToBundle(userSelectionDialogResult, resultData)
+    resultReceiver?.send(BaseDialogResult.RESULT_CODE_DIALOG_COMPLETE_WITH_SELECTION, resultData)
   }
 
   fun getCredentialInitialUiState(): GetCredentialUiState {
     val providerList = GetFlowUtils.toProviderList(providerList, context)
+    // TODO: covert from real requestInfo
+    val requestDisplayInfo = com.android.credentialmanager.getflow.RequestDisplayInfo(
+      "Elisa Beckett",
+      "beckett-bakert@gmail.com",
+      TYPE_PUBLIC_KEY_CREDENTIAL,
+      "tribank")
     return GetCredentialUiState(
       providerList,
       GetScreenState.CREDENTIAL_SELECTION,
+      requestDisplayInfo,
       providerList.first()
     )
   }
 
   fun createPasskeyInitialUiState(): CreatePasskeyUiState {
     val providerList = CreateFlowUtils.toProviderList(providerList, context)
+    // TODO: covert from real requestInfo
+    val requestDisplayInfo = RequestDisplayInfo(
+      "Elisa Beckett",
+      "beckett-bakert@gmail.com",
+      TYPE_PUBLIC_KEY_CREDENTIAL,
+      "tribank")
     return CreatePasskeyUiState(
       providers = providerList,
       currentScreenState = CreateScreenState.PASSKEY_INTRO,
+      requestDisplayInfo,
     )
   }
 
@@ -125,16 +138,16 @@ class CredentialManagerRepo(
         Icon.createWithResource(context, R.drawable.ic_launcher_foreground))
         .setCredentialEntries(
           listOf<Entry>(
-            newEntry(1, "elisa.beckett@gmail.com", "Elisa Backett",
-                     "20 passwords and 7 passkeys saved"),
-            newEntry(2, "elisa.work@google.com", "Elisa Backett Work",
-                     "20 passwords and 7 passkeys saved"),
+            newEntry("key1", "subkey-1", "elisa.beckett@gmail.com",
+              "Elisa Backett", "20 passwords and 7 passkeys saved"),
+            newEntry("key1", "subkey-2", "elisa.work@google.com",
+              "Elisa Backett Work", "20 passwords and 7 passkeys saved"),
           )
         ).setActionChips(
           listOf<Entry>(
-            newEntry(3, "Go to Settings", "",
+            newEntry("key2", "subkey-1", "Go to Settings", "",
                      "20 passwords and 7 passkeys saved"),
-            newEntry(4, "Switch Account", "",
+            newEntry("key2", "subkey-2", "Switch Account", "",
                      "20 passwords and 7 passkeys saved"),
           ),
         ).build(),
@@ -144,21 +157,28 @@ class CredentialManagerRepo(
         Icon.createWithResource(context, R.drawable.ic_launcher_foreground))
         .setCredentialEntries(
           listOf<Entry>(
-            newEntry(1, "elisa.beckett@dashlane.com", "Elisa Backett",
-                     "20 passwords and 7 passkeys saved"),
-            newEntry(2, "elisa.work@dashlane.com", "Elisa Backett Work",
-                     "20 passwords and 7 passkeys saved"),
+            newEntry("key1", "subkey-3", "elisa.beckett@dashlane.com",
+              "Elisa Backett", "20 passwords and 7 passkeys saved"),
+            newEntry("key1", "subkey-4", "elisa.work@dashlane.com",
+              "Elisa Backett Work", "20 passwords and 7 passkeys saved"),
           )
         ).setActionChips(
           listOf<Entry>(
-            newEntry(3, "Manage Accounts", "Manage your accounts in the dashlane app",
+            newEntry("key2", "subkey-3", "Manage Accounts",
+              "Manage your accounts in the dashlane app",
                      "20 passwords and 7 passkeys saved"),
           ),
         ).build(),
     )
   }
 
-  private fun newEntry(id: Int, title: String, subtitle: String, usageData: String): Entry {
+  private fun newEntry(
+    key: String,
+    subkey: String,
+    title: String,
+    subtitle: String,
+    usageData: String
+  ): Entry {
     val slice = Slice.Builder(
       Entry.CREDENTIAL_MANAGER_ENTRY_URI, SliceSpec(Entry.VERSION, 1)
     )
@@ -171,8 +191,23 @@ class CredentialManagerRepo(
       .addText(usageData, Slice.SUBTYPE_MESSAGE, listOf(Entry.HINT_SUBTITLE))
       .build()
     return Entry(
-      id,
+      key,
+      subkey,
       slice
+    )
+  }
+
+  private fun testRequestInfo(): RequestInfo {
+    val data = Bundle()
+    return RequestInfo.newCreateRequestInfo(
+      Binder(),
+      CreateCredentialRequest(
+        // TODO: use the jetpack type and utils once defined.
+        TYPE_PUBLIC_KEY_CREDENTIAL,
+        data
+      ),
+      /*isFirstUsage=*/false,
+      "tribank.us"
     )
   }
 }
