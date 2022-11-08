@@ -9817,6 +9817,12 @@ public final class Settings {
                 "face_unlock_always_require_confirmation";
 
         /**
+         * Whether face unlock is allowed only on security view.
+         * @hide
+         */
+        public static final String FACE_UNLOCK_ALWAYS_REQUIRE_SWIPE = "face_unlock_always_require_swipe";
+
+        /**
          * Whether or not a user should re enroll their face.
          *
          * Face unlock re enroll.
