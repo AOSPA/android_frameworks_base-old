@@ -179,6 +179,7 @@ public class InternetDialogController implements AccessPointController.AccessPoi
     private boolean mHasWifiEntries;
     private WifiStateWorker mWifiStateWorker;
     private int mNonDdsCallState = TelephonyManager.CALL_STATE_IDLE;
+    private int mActiveDataSubId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
 
     @VisibleForTesting
     static final float TOAST_PARAMS_HORIZONTAL_WEIGHT = 1.0f;
@@ -287,6 +288,7 @@ public class InternetDialogController implements AccessPointController.AccessPoi
         mSubscriptionManager.addOnSubscriptionsChangedListener(mExecutor,
                 mOnSubscriptionsChangedListener);
         mDefaultDataSubId = getDefaultDataSubscriptionId();
+        mActiveDataSubId = mSubscriptionManager.getActiveDataSubscriptionId();
         if (DEBUG) {
             Log.d(TAG, "Init, SubId: " + mDefaultDataSubId);
         }
@@ -893,6 +895,13 @@ public class InternetDialogController implements AccessPointController.AccessPoi
     }
 
     /**
+     * Return {@code true} if temporary DDS switch happened
+     */
+    boolean isTempDdsHappened() {
+        return mDefaultDataSubId != mActiveDataSubId;
+    }
+
+    /**
      * Return {@code true} if mobile data is enabled
      */
     boolean isMobileDataEnabled() {
@@ -1119,7 +1128,8 @@ public class InternetDialogController implements AccessPointController.AccessPoi
             TelephonyCallback.DisplayInfoListener,
             TelephonyCallback.ServiceStateListener,
             TelephonyCallback.SignalStrengthsListener,
-            TelephonyCallback.UserMobileDataStateListener {
+            TelephonyCallback.UserMobileDataStateListener,
+            TelephonyCallback.ActiveDataSubscriptionIdListener {
 
         @Override
         public void onServiceStateChanged(@NonNull ServiceState serviceState) {
@@ -1145,6 +1155,12 @@ public class InternetDialogController implements AccessPointController.AccessPoi
         @Override
         public void onUserMobileDataStateChanged(boolean enabled) {
             mCallback.onUserMobileDataStateChanged(enabled);
+        }
+
+        @Override
+        public void onActiveDataSubscriptionIdChanged(int subId) {
+            mActiveDataSubId = subId;
+            mCallback.onTempDdsSwitchHappened();
         }
     }
 
@@ -1322,6 +1338,8 @@ public class InternetDialogController implements AccessPointController.AccessPoi
                 @Nullable WifiEntry connectedEntry, boolean hasMoreWifiEntries);
 
         void onNonDdsCallStateChanged(int callState);
+
+        void onTempDdsSwitchHappened();
     }
 
     void makeOverlayToast(int stringId) {
