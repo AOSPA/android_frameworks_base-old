@@ -28,6 +28,7 @@ import static com.android.server.pm.PackageManagerService.SCAN_FIRST_BOOT_OR_UPG
 import static com.android.server.pm.PackageManagerService.SCAN_INITIAL;
 import static com.android.server.pm.PackageManagerService.SCAN_NO_DEX;
 import static com.android.server.pm.PackageManagerService.SCAN_REQUIRE_KNOWN;
+import static com.android.server.pm.PackageManagerService.SIGNATURE_RESET_PROP;
 import static com.android.server.pm.PackageManagerService.SYSTEM_PARTITIONS;
 import static com.android.server.pm.PackageManagerService.TAG;
 import static com.android.server.pm.pkg.parsing.ParsingPackageUtils.PARSE_APK_IN_APEX;
@@ -36,6 +37,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.os.Environment;
 import android.os.SystemClock;
+import android.os.SystemProperties;
 import android.os.Trace;
 import android.system.ErrnoException;
 import android.system.Os;
@@ -267,6 +269,7 @@ final class InitAppsHelper {
         fixSystemPackages(userIds);
         logNonSystemAppScanningTime(startTime);
         mExpectingBetter.clear();
+        SystemProperties.set(SIGNATURE_RESET_PROP, "1");
         mPm.mSettings.pruneRenamedPackagesLPw();
     }
 
