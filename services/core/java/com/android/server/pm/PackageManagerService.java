@@ -572,6 +572,8 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
      */
     public static final int MIN_INSTALLABLE_TARGET_SDK = Build.VERSION_CODES.M;
 
+    public static final String SIGNATURE_RESET_PROP = "ro.persist.sys.signatures.reset";
+
     // Compilation reasons.
     // TODO(b/260124949): Clean this up with the legacy dexopt code.
     public static final int REASON_FIRST_BOOT = 0;
