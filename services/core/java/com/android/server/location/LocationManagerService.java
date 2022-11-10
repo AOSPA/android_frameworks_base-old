@@ -962,6 +962,8 @@ public class LocationManagerService extends ILocationManager.Stub implements
     @Override
     public void injectLocation(Location location) {
 
+        super.injectLocation_enforcePermission();
+
         Preconditions.checkArgument(location.isComplete());
 
         int userId = UserHandle.getCallingUserId();
@@ -1172,6 +1174,8 @@ public class LocationManagerService extends ILocationManager.Stub implements
     @android.annotation.EnforcePermission(android.Manifest.permission.LOCATION_HARDWARE)
     @Override
     public void setExtraLocationControllerPackage(String packageName) {
+        super.setExtraLocationControllerPackage_enforcePermission();
+
         synchronized (mLock) {
             mExtraLocationControllerPackage = packageName;
         }
@@ -1187,6 +1191,8 @@ public class LocationManagerService extends ILocationManager.Stub implements
     @android.annotation.EnforcePermission(android.Manifest.permission.LOCATION_HARDWARE)
     @Override
     public void setExtraLocationControllerPackageEnabled(boolean enabled) {
+        super.setExtraLocationControllerPackageEnabled_enforcePermission();
+
         synchronized (mLock) {
             mExtraLocationControllerPackageEnabled = enabled;
         }
@@ -1246,6 +1252,8 @@ public class LocationManagerService extends ILocationManager.Stub implements
     @RequiresPermission(android.Manifest.permission.CONTROL_AUTOMOTIVE_GNSS)
     public void setAutomotiveGnssSuspended(boolean suspended) {
 
+        super.setAutomotiveGnssSuspended_enforcePermission();
+
         if (!mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)) {
             throw new IllegalStateException(
                     "setAutomotiveGnssSuspended only allowed on automotive devices");
@@ -1258,6 +1266,8 @@ public class LocationManagerService extends ILocationManager.Stub implements
     @Override
     @RequiresPermission(android.Manifest.permission.CONTROL_AUTOMOTIVE_GNSS)
     public boolean isAutomotiveGnssSuspended() {
+
+        super.isAutomotiveGnssSuspended_enforcePermission();
 
         if (!mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)) {
             throw new IllegalStateException(

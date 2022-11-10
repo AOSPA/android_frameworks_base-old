@@ -241,8 +241,20 @@ public final class JobStatus {
      */
     private long mOriginalLatestRunTimeElapsedMillis;
 
-    /** How many times this job has failed, used to compute back-off. */
+    /**
+     * How many times this job has failed to complete on its own
+     * (via {@link android.app.job.JobService#jobFinished(JobParameters, boolean)} or because of
+     * a timeout).
+     * This count doesn't include most times JobScheduler decided to stop the job
+     * (via {@link android.app.job.JobService#onStopJob(JobParameters)}.
+     */
     private final int numFailures;
+
+    /**
+     * The number of times JobScheduler has forced this job to stop due to reasons mostly outside
+     * of the app's control.
+     */
+    private final int mNumSystemStops;
 
     /**
      * Which app standby bucket this job's app is in.  Updated when the app is moved to a
@@ -488,6 +500,8 @@ public final class JobStatus {
      * @param tag A string associated with the job for debugging/logging purposes.
      * @param numFailures Count of how many times this job has requested a reschedule because
      *     its work was not yet finished.
+     * @param numSystemStops Count of how many times JobScheduler has forced this job to stop due to
+     *     factors mostly out of the app's control.
      * @param earliestRunTimeElapsedMillis Milestone: earliest point in time at which the job
      *     is to be considered runnable
      * @param latestRunTimeElapsedMillis Milestone: point in time at which the job will be
@@ -497,7 +511,7 @@ public final class JobStatus {
      * @param internalFlags Non-API property flags about this job
      */
     private JobStatus(JobInfo job, int callingUid, String sourcePackageName,
-            int sourceUserId, int standbyBucket, String tag, int numFailures,
+            int sourceUserId, int standbyBucket, String tag, int numFailures, int numSystemStops,
             long earliestRunTimeElapsedMillis, long latestRunTimeElapsedMillis,
             long lastSuccessfulRunTime, long lastFailedRunTime, int internalFlags,
             int dynamicConstraints) {
@@ -535,6 +549,7 @@ public final class JobStatus {
         this.latestRunTimeElapsedMillis = latestRunTimeElapsedMillis;
         this.mOriginalLatestRunTimeElapsedMillis = latestRunTimeElapsedMillis;
         this.numFailures = numFailures;
+        mNumSystemStops = numSystemStops;
 
         int requiredConstraints = job.getConstraintFlags();
         if (job.getRequiredNetwork() != null) {
@@ -576,7 +591,7 @@ public final class JobStatus {
         // Otherwise, every consecutive reschedule increases a jobs' flexibility deadline.
         if (!isRequestedExpeditedJob()
                 && satisfiesMinWindowException
-                && numFailures != 1
+                && (numFailures + numSystemStops) != 1
                 && lacksSomeFlexibleConstraints) {
             mNumRequiredFlexibleConstraints =
                     NUM_SYSTEM_WIDE_FLEXIBLE_CONSTRAINTS + (mPreferUnmetered ? 1 : 0);
@@ -626,7 +641,7 @@ public final class JobStatus {
         this(jobStatus.getJob(), jobStatus.getUid(),
                 jobStatus.getSourcePackageName(), jobStatus.getSourceUserId(),
                 jobStatus.getStandbyBucket(),
-                jobStatus.getSourceTag(), jobStatus.getNumFailures(),
+                jobStatus.getSourceTag(), jobStatus.getNumFailures(), jobStatus.getNumSystemStops(),
                 jobStatus.getEarliestRunTime(), jobStatus.getLatestRunTimeElapsed(),
                 jobStatus.getLastSuccessfulRunTime(), jobStatus.getLastFailedRunTime(),
                 jobStatus.getInternalFlags(), jobStatus.mDynamicConstraints);
@@ -654,7 +669,7 @@ public final class JobStatus {
             int innerFlags, int dynamicConstraints) {
         this(job, callingUid, sourcePkgName, sourceUserId,
                 standbyBucket,
-                sourceTag, 0,
+                sourceTag, /* numFailures */ 0, /* numSystemStops */ 0,
                 earliestRunTimeElapsedMillis, latestRunTimeElapsedMillis,
                 lastSuccessfulRunTime, lastFailedRunTime, innerFlags, dynamicConstraints);
 
@@ -673,12 +688,13 @@ public final class JobStatus {
     /** Create a new job to be rescheduled with the provided parameters. */
     public JobStatus(JobStatus rescheduling,
             long newEarliestRuntimeElapsedMillis,
-            long newLatestRuntimeElapsedMillis, int backoffAttempt,
+            long newLatestRuntimeElapsedMillis, int numFailures, int numSystemStops,
             long lastSuccessfulRunTime, long lastFailedRunTime) {
         this(rescheduling.job, rescheduling.getUid(),
                 rescheduling.getSourcePackageName(), rescheduling.getSourceUserId(),
                 rescheduling.getStandbyBucket(),
-                rescheduling.getSourceTag(), backoffAttempt, newEarliestRuntimeElapsedMillis,
+                rescheduling.getSourceTag(), numFailures, numSystemStops,
+                newEarliestRuntimeElapsedMillis,
                 newLatestRuntimeElapsedMillis,
                 lastSuccessfulRunTime, lastFailedRunTime, rescheduling.getInternalFlags(),
                 rescheduling.mDynamicConstraints);
@@ -715,7 +731,7 @@ public final class JobStatus {
         int standbyBucket = JobSchedulerService.standbyBucketForPackage(jobPackage,
                 sourceUserId, elapsedNow);
         return new JobStatus(job, callingUid, sourcePkg, sourceUserId,
-                standbyBucket, tag, 0,
+                standbyBucket, tag, /* numFailures */ 0, /* numSystemStops */ 0,
                 earliestRunTimeElapsedMillis, latestRunTimeElapsedMillis,
                 0 /* lastSuccessfulRunTime */, 0 /* lastFailedRunTime */,
                 /*innerFlags=*/ 0, /* dynamicConstraints */ 0);
@@ -868,8 +884,25 @@ public final class JobStatus {
         pw.print(job.getId());
     }
 
+    /**
+     * Returns the number of times the job stopped previously for reasons that appeared to be within
+     * the app's control.
+     */
     public int getNumFailures() {
         return numFailures;
+    }
+
+    /**
+     * Returns the number of times the system stopped a previous execution of this job for reasons
+     * that were likely outside the app's control.
+     */
+    public int getNumSystemStops() {
+        return mNumSystemStops;
+    }
+
+    /** Returns the total number of times we've attempted to run this job in the past. */
+    public int getNumPreviousAttempts() {
+        return numFailures + mNumSystemStops;
     }
 
     public ComponentName getServiceComponent() {
@@ -1061,27 +1094,41 @@ public final class JobStatus {
 
     private void updateNetworkBytesLocked() {
         mTotalNetworkDownloadBytes = job.getEstimatedNetworkDownloadBytes();
+        if (mTotalNetworkDownloadBytes < 0) {
+            // Legacy apps may have provided invalid negative values. Ignore invalid values.
+            mTotalNetworkDownloadBytes = JobInfo.NETWORK_BYTES_UNKNOWN;
+        }
         mTotalNetworkUploadBytes = job.getEstimatedNetworkUploadBytes();
+        if (mTotalNetworkUploadBytes < 0) {
+            // Legacy apps may have provided invalid negative values. Ignore invalid values.
+            mTotalNetworkUploadBytes = JobInfo.NETWORK_BYTES_UNKNOWN;
+        }
+        // Minimum network chunk bytes has had data validation since its introduction, so no
+        // need to do validation again.
         mMinimumNetworkChunkBytes = job.getMinimumNetworkChunkBytes();
 
         if (pendingWork != null) {
             for (int i = 0; i < pendingWork.size(); i++) {
-                if (mTotalNetworkDownloadBytes != JobInfo.NETWORK_BYTES_UNKNOWN) {
-                    // If any component of the job has unknown usage, we don't have a
-                    // complete picture of what data will be used, and we have to treat the
-                    // entire up/download as unknown.
-                    long downloadBytes = pendingWork.get(i).getEstimatedNetworkDownloadBytes();
-                    if (downloadBytes != JobInfo.NETWORK_BYTES_UNKNOWN) {
+                long downloadBytes = pendingWork.get(i).getEstimatedNetworkDownloadBytes();
+                if (downloadBytes != JobInfo.NETWORK_BYTES_UNKNOWN && downloadBytes > 0) {
+                    // If any component of the job has unknown usage, we won't have a
+                    // complete picture of what data will be used. However, we use what we are given
+                    // to get us as close to the complete picture as possible.
+                    if (mTotalNetworkDownloadBytes != JobInfo.NETWORK_BYTES_UNKNOWN) {
                         mTotalNetworkDownloadBytes += downloadBytes;
+                    } else {
+                        mTotalNetworkDownloadBytes = downloadBytes;
                     }
                 }
-                if (mTotalNetworkUploadBytes != JobInfo.NETWORK_BYTES_UNKNOWN) {
-                    // If any component of the job has unknown usage, we don't have a
-                    // complete picture of what data will be used, and we have to treat the
-                    // entire up/download as unknown.
-                    long uploadBytes = pendingWork.get(i).getEstimatedNetworkUploadBytes();
-                    if (uploadBytes != JobInfo.NETWORK_BYTES_UNKNOWN) {
+                long uploadBytes = pendingWork.get(i).getEstimatedNetworkUploadBytes();
+                if (uploadBytes != JobInfo.NETWORK_BYTES_UNKNOWN && uploadBytes > 0) {
+                    // If any component of the job has unknown usage, we won't have a
+                    // complete picture of what data will be used. However, we use what we are given
+                    // to get us as close to the complete picture as possible.
+                    if (mTotalNetworkUploadBytes != JobInfo.NETWORK_BYTES_UNKNOWN) {
                         mTotalNetworkUploadBytes += uploadBytes;
+                    } else {
+                        mTotalNetworkUploadBytes = uploadBytes;
                     }
                 }
                 final long chunkBytes = pendingWork.get(i).getMinimumNetworkChunkBytes();
@@ -1857,6 +1904,10 @@ public final class JobStatus {
             sb.append(" failures=");
             sb.append(numFailures);
         }
+        if (mNumSystemStops != 0) {
+            sb.append(" system stops=");
+            sb.append(mNumSystemStops);
+        }
         if (isReady()) {
             sb.append(" READY");
         } else {
@@ -2382,6 +2433,9 @@ public final class JobStatus {
         if (numFailures != 0) {
             pw.print("Num failures: "); pw.println(numFailures);
         }
+        if (mNumSystemStops != 0) {
+            pw.print("Num system stops: "); pw.println(mNumSystemStops);
+        }
         if (mLastSuccessfulRunTime != 0) {
             pw.print("Last successful run: ");
             pw.println(formatTime(mLastSuccessfulRunTime));
@@ -2579,7 +2633,7 @@ public final class JobStatus {
         proto.write(JobStatusDumpProto.ORIGINAL_LATEST_RUNTIME_ELAPSED,
                 mOriginalLatestRunTimeElapsedMillis);
 
-        proto.write(JobStatusDumpProto.NUM_FAILURES, numFailures);
+        proto.write(JobStatusDumpProto.NUM_FAILURES, numFailures + mNumSystemStops);
         proto.write(JobStatusDumpProto.LAST_SUCCESSFUL_RUN_TIME, mLastSuccessfulRunTime);
         proto.write(JobStatusDumpProto.LAST_FAILED_RUN_TIME, mLastFailedRunTime);
 

@@ -107,6 +107,7 @@ import android.content.pm.SigningDetails;
 import android.content.pm.SuspendDialogInfo;
 import android.content.pm.TestUtilityService;
 import android.content.pm.UserInfo;
+import android.content.pm.UserPackage;
 import android.content.pm.VerifierDeviceIdentity;
 import android.content.pm.VersionedPackage;
 import android.content.pm.overlay.OverlayPaths;
@@ -691,7 +692,6 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
     private final ModuleInfoProvider mModuleInfoProvider;
 
     final ApexManager mApexManager;
-    final ApexPackageInfo mApexPackageInfo;
 
     final PackageManagerServiceInjector mInjector;
 
@@ -1149,7 +1149,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         var done = SystemClock.currentTimeMicro();
 
         if (mSnapshotStatistics != null) {
-            mSnapshotStatistics.rebuild(now, done, hits);
+            mSnapshotStatistics.rebuild(now, done, hits, newSnapshot.getPackageStates().size());
         }
         return newSnapshot;
     }
@@ -1643,7 +1643,6 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         mSharedLibraries = injector.getSharedLibrariesImpl();
 
         mApexManager = testParams.apexManager;
-        mApexPackageInfo = new ApexPackageInfo(this);
         mArtManagerService = testParams.artManagerService;
         mAvailableFeatures = testParams.availableFeatures;
         mBackgroundDexOptService = testParams.backgroundDexOptService;
@@ -1844,7 +1843,6 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         mProtectedPackages = new ProtectedPackages(mContext);
 
         mApexManager = injector.getApexManager();
-        mApexPackageInfo = new ApexPackageInfo(this);
         mAppsFilter = mInjector.getAppsFilter();
 
         mInstantAppRegistry = new InstantAppRegistry(mContext, mPermissionManager,
@@ -1982,8 +1980,8 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                         + ver.fingerprint + " to " + PackagePartitions.FINGERPRINT);
             }
 
-            mInitAppsHelper = new InitAppsHelper(this, mApexManager, mApexPackageInfo,
-                mInstallPackageHelper, mInjector.getSystemPartitions());
+            mInitAppsHelper = new InitAppsHelper(this, mApexManager, mInstallPackageHelper,
+                    mInjector.getSystemPartitions());
 
             // when upgrading from pre-M, promote system app permissions from install to runtime
             mPromoteSystemApps =
@@ -3013,6 +3011,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
     @Override
     public void notifyPackageRemoved(String packageName, int uid) {
         mPackageObserverHelper.notifyRemoved(packageName, uid);
+        UserPackage.removeFromCache(UserHandle.getUserId(uid), packageName);
     }
 
     void sendPackageAddedForUser(@NonNull Computer snapshot, String packageName,
@@ -4245,7 +4244,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
             mSettings.removeUserLPw(userId);
             mPendingBroadcasts.remove(userId);
             mDeletePackageHelper.removeUnusedPackagesLPw(userManager, userId);
-            mAppsFilter.onUserDeleted(userId);
+            mAppsFilter.onUserDeleted(snapshotComputer(), userId);
         }
         mInstantAppRegistry.onUserRemoved(userId);
     }
@@ -5089,8 +5088,11 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                     "getUnsuspendablePackagesForUser");
             final int callingUid = Binder.getCallingUid();
             if (UserHandle.getUserId(callingUid) != userId) {
-                throw new SecurityException("Calling uid " + callingUid
-                        + " cannot query getUnsuspendablePackagesForUser for user " + userId);
+                mContext.enforceCallingOrSelfPermission(
+                        Manifest.permission.INTERACT_ACROSS_USERS_FULL,
+                        "Calling uid " + callingUid
+                                + " cannot query getUnsuspendablePackagesForUser for user "
+                                + userId);
             }
             return mSuspendPackageHelper.getUnsuspendablePackagesForUser(snapshotComputer(),
                     packageNames, userId, callingUid);

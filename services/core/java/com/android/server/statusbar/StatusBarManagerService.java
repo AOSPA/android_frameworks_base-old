@@ -16,12 +16,15 @@
 
 package com.android.server.statusbar;
 
+import static android.Manifest.permission.INTERACT_ACROSS_USERS;
+import static android.Manifest.permission.INTERACT_ACROSS_USERS_FULL;
 import static android.app.StatusBarManager.DISABLE2_GLOBAL_ACTIONS;
 import static android.app.StatusBarManager.DISABLE2_NOTIFICATION_SHADE;
 import static android.app.StatusBarManager.NAV_BAR_MODE_DEFAULT;
 import static android.app.StatusBarManager.NAV_BAR_MODE_KIDS;
 import static android.app.StatusBarManager.NavBarMode;
 import static android.app.StatusBarManager.SessionFlags;
+import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.WindowManagerPolicyConstants.NAV_BAR_MODE_3BUTTON_OVERLAY;
 
@@ -53,7 +56,7 @@ import android.hardware.biometrics.IBiometricSysuiReceiver;
 import android.hardware.biometrics.PromptInfo;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.DisplayManager.DisplayListener;
-import android.hardware.fingerprint.IUdfpsHbmListener;
+import android.hardware.fingerprint.IUdfpsRefreshRateRequestCallback;
 import android.media.INearbyMediaDevicesProvider;
 import android.media.MediaRoute2Info;
 import android.net.Uri;
@@ -80,7 +83,8 @@ import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.view.InsetsState.InternalInsetsType;
-import android.view.InsetsVisibilities;
+import android.view.WindowInsets;
+import android.view.WindowInsets.Type.InsetsType;
 import android.view.WindowInsetsController.Appearance;
 import android.view.WindowInsetsController.Behavior;
 
@@ -173,7 +177,7 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
 
     private final SparseArray<UiState> mDisplayUiState = new SparseArray<>();
     @GuardedBy("mLock")
-    private IUdfpsHbmListener mUdfpsHbmListener;
+    private IUdfpsRefreshRateRequestCallback mUdfpsRefreshRateRequestCallback;
     @GuardedBy("mLock")
     private IBiometricContextListener mBiometricContextListener;
 
@@ -615,15 +619,15 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
         @Override
         public void onSystemBarAttributesChanged(int displayId, @Appearance int appearance,
                 AppearanceRegion[] appearanceRegions, boolean navbarColorManagedByIme,
-                @Behavior int behavior, InsetsVisibilities requestedVisibilities,
+                @Behavior int behavior, @InsetsType int requestedVisibleTypes,
                 String packageName, LetterboxDetails[] letterboxDetails) {
             getUiState(displayId).setBarAttributes(appearance, appearanceRegions,
-                    navbarColorManagedByIme, behavior, requestedVisibilities, packageName,
+                    navbarColorManagedByIme, behavior, requestedVisibleTypes, packageName,
                     letterboxDetails);
             if (mBar != null) {
                 try {
                     mBar.onSystemBarAttributesChanged(displayId, appearance, appearanceRegions,
-                            navbarColorManagedByIme, behavior, requestedVisibilities, packageName,
+                            navbarColorManagedByIme, behavior, requestedVisibleTypes, packageName,
                             letterboxDetails);
                 } catch (RemoteException ex) { }
             }
@@ -692,13 +696,13 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
         }
 
         @Override
-        public void setUdfpsHbmListener(IUdfpsHbmListener listener) {
+        public void setUdfpsRefreshRateCallback(IUdfpsRefreshRateRequestCallback callback) {
             synchronized (mLock) {
-                mUdfpsHbmListener = listener;
+                mUdfpsRefreshRateRequestCallback = callback;
             }
             if (mBar != null) {
                 try {
-                    mBar.setUdfpsHbmListener(listener);
+                    mBar.setUdfpsRefreshRateCallback(callback);
                 } catch (RemoteException ex) { }
             }
         }
@@ -942,11 +946,11 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
     }
 
     @Override
-    public void setUdfpsHbmListener(IUdfpsHbmListener listener) {
+    public void setUdfpsRefreshRateCallback(IUdfpsRefreshRateRequestCallback callback) {
         enforceStatusBarService();
         if (mBar != null) {
             try {
-                mBar.setUdfpsHbmListener(listener);
+                mBar.setUdfpsRefreshRateCallback(callback);
             } catch (RemoteException ex) {
             }
         }
@@ -1209,7 +1213,7 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
         private final ArraySet<Integer> mTransientBarTypes = new ArraySet<>();
         private boolean mNavbarColorManagedByIme = false;
         private @Behavior int mBehavior;
-        private InsetsVisibilities mRequestedVisibilities = new InsetsVisibilities();
+        private @InsetsType int mRequestedVisibleTypes = WindowInsets.Type.defaultVisible();
         private String mPackageName = "none";
         private int mDisabled1 = 0;
         private int mDisabled2 = 0;
@@ -1221,14 +1225,14 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
 
         private void setBarAttributes(@Appearance int appearance,
                 AppearanceRegion[] appearanceRegions, boolean navbarColorManagedByIme,
-                @Behavior int behavior, InsetsVisibilities requestedVisibilities,
+                @Behavior int behavior, @InsetsType int requestedVisibleTypes,
                 String packageName,
                 LetterboxDetails[] letterboxDetails) {
             mAppearance = appearance;
             mAppearanceRegions = appearanceRegions;
             mNavbarColorManagedByIme = navbarColorManagedByIme;
             mBehavior = behavior;
-            mRequestedVisibilities = requestedVisibilities;
+            mRequestedVisibleTypes = requestedVisibleTypes;
             mPackageName = packageName;
             mLetterboxDetails = letterboxDetails;
         }
@@ -1305,18 +1309,23 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
                 "StatusBarManagerService");
     }
 
+    private boolean doesCallerHoldInteractAcrossUserPermission() {
+        return mContext.checkCallingPermission(INTERACT_ACROSS_USERS_FULL) == PERMISSION_GRANTED
+                || mContext.checkCallingPermission(INTERACT_ACROSS_USERS) == PERMISSION_GRANTED;
+    }
+
     /**
      *  For targetSdk S+ we require STATUS_BAR. For targetSdk < S, we only require EXPAND_STATUS_BAR
      *  but also require that it falls into one of the allowed use-cases to lock down abuse vector.
      */
     private boolean checkCanCollapseStatusBar(String method) {
         int uid = Binder.getCallingUid();
-        int pid = Binder.getCallingUid();
+        int pid = Binder.getCallingPid();
         if (CompatChanges.isChangeEnabled(LOCK_DOWN_COLLAPSE_STATUS_BAR, uid)) {
             enforceStatusBar();
         } else {
             if (mContext.checkPermission(Manifest.permission.STATUS_BAR, pid, uid)
-                    != PackageManager.PERMISSION_GRANTED) {
+                    != PERMISSION_GRANTED) {
                 enforceExpandStatusBar();
                 if (!mActivityTaskManager.canCloseSystemDialogs(pid, uid)) {
                     Slog.e(TAG, "Permission Denial: Method " + method + "() requires permission "
@@ -1356,7 +1365,7 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
                     state.mAppearance, state.mAppearanceRegions, state.mImeWindowVis,
                     state.mImeBackDisposition, state.mShowImeSwitcher,
                     gatherDisableActionsLocked(mCurrentUserId, 2), state.mImeToken,
-                    state.mNavbarColorManagedByIme, state.mBehavior, state.mRequestedVisibilities,
+                    state.mNavbarColorManagedByIme, state.mBehavior, state.mRequestedVisibleTypes,
                     state.mPackageName, transientBarTypes, state.mLetterboxDetails);
         }
     }
@@ -1367,11 +1376,11 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
             mGlobalActionListener.onGlobalActionsAvailableChanged(mBar != null);
         });
         // If StatusBarService dies, system_server doesn't get killed with it, so we need to make
-        // sure the UDFPS listener is refreshed as well. Deferring to the handler just so to avoid
+        // sure the UDFPS callback is refreshed as well. Deferring to the handler just so to avoid
         // making registerStatusBar re-entrant.
         mHandler.post(() -> {
             synchronized (mLock) {
-                setUdfpsHbmListener(mUdfpsHbmListener);
+                setUdfpsRefreshRateCallback(mUdfpsRefreshRateRequestCallback);
                 setBiometicContextListener(mBiometricContextListener);
             }
         });
@@ -2022,6 +2031,11 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
         }
 
         final int userId = mCurrentUserId;
+        final int callingUserId = UserHandle.getUserId(Binder.getCallingUid());
+        if (mCurrentUserId != callingUserId && !doesCallerHoldInteractAcrossUserPermission()) {
+            throw new SecurityException("Calling user id: " + callingUserId
+                    + ", cannot call on behalf of current user id: " + mCurrentUserId + ".");
+        }
         final long userIdentity = Binder.clearCallingIdentity();
         try {
             Settings.Secure.putIntForUser(mContext.getContentResolver(),

@@ -428,7 +428,7 @@ final class InstallPackageHelper {
             mPm.snapshotComputer().checkPackageFrozen(pkgName);
         }
 
-        final boolean isReplace = request.isReplace();
+        final boolean isReplace = request.isInstallReplace();
         // Also need to kill any apps that are dependent on the library, except the case of
         // installation of new version static shared library.
         if (clientLibPkgs != null) {
@@ -464,7 +464,8 @@ final class InstallPackageHelper {
 
             final Computer snapshot = mPm.snapshotComputer();
             mPm.mComponentResolver.addAllComponents(pkg, chatty, mPm.mSetupWizardPackage, snapshot);
-            mPm.mAppsFilter.addPackage(snapshot, pkgSetting, isReplace);
+            mPm.mAppsFilter.addPackage(snapshot, pkgSetting, isReplace,
+                    (scanFlags & SCAN_DONT_KILL_APP) != 0 /* retainImplicitGrantOnReplace */);
             mPm.addAllPackageProperties(pkg);
 
             if (oldPkgSetting == null || oldPkgSetting.getPkg() == null) {
@@ -814,6 +815,7 @@ final class InstallPackageHelper {
             for (InstallRequest request : requests) {
                 try {
                     Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "preparePackage");
+                    request.onPrepareStarted();
                     preparePackageLI(request);
                 } catch (PrepareFailure prepareFailure) {
                     request.setError(prepareFailure.error,
@@ -822,6 +824,7 @@ final class InstallPackageHelper {
                     request.setOriginPermission(prepareFailure.mConflictingPermission);
                     return;
                 } finally {
+                    request.onPrepareFinished();
                     Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
                 }
 
@@ -834,11 +837,13 @@ final class InstallPackageHelper {
                 request.setReturnCode(PackageManager.INSTALL_SUCCEEDED);
                 final String packageName = packageToScan.getPackageName();
                 try {
+                    request.onScanStarted();
                     final ScanResult scanResult = scanPackageTracedLI(request.getParsedPackage(),
                             request.getParseFlags(), request.getScanFlags(),
                             System.currentTimeMillis(), request.getUser(),
                             request.getAbiOverride());
                     request.setScanResult(scanResult);
+                    request.onScanFinished();
                     if (!scannedPackages.add(packageName)) {
                         request.setError(
                                 PackageManager.INSTALL_FAILED_DUPLICATE_PACKAGE,
@@ -966,7 +971,7 @@ final class InstallPackageHelper {
         final boolean isRollback =
                 request.getInstallReason() == PackageManager.INSTALL_REASON_ROLLBACK;
         @PackageManagerService.ScanFlags int scanFlags = SCAN_NEW_INSTALL | SCAN_UPDATE_SIGNATURE;
-        if (request.isMoveInstall()) {
+        if (request.isInstallMove()) {
             // moving a complete application; perform an initial scan on the new install location
             scanFlags |= SCAN_INITIAL;
         }
@@ -1359,7 +1364,7 @@ final class InstallPackageHelper {
             }
         }
 
-        if (request.isMoveInstall()) {
+        if (request.isInstallMove()) {
             // We did an in-place move, so dex is ready to roll
             scanFlags |= SCAN_NO_DEX;
             scanFlags |= SCAN_MOVE;
@@ -1678,7 +1683,7 @@ final class InstallPackageHelper {
             ParsedPackage parsedPackage) throws PrepareFailure {
         final int status = request.getReturnCode();
         final String statusMsg = request.getReturnMsg();
-        if (request.isMoveInstall()) {
+        if (request.isInstallMove()) {
             if (status != PackageManager.INSTALL_SUCCEEDED) {
                 mRemovePackageHelper.cleanUpForMoveInstall(request.getMoveToUuid(),
                         request.getMovePackageName(), request.getMoveFromCodePath());
@@ -1898,7 +1903,8 @@ final class InstallPackageHelper {
             final RemovePackageHelper removePackageHelper = new RemovePackageHelper(mPm);
             final DeletePackageHelper deletePackageHelper = new DeletePackageHelper(mPm);
 
-            if (installRequest.isReplace()) {
+            installRequest.onCommitStarted();
+            if (installRequest.isInstallReplace()) {
                 AndroidPackage oldPackage = mPm.mPackages.get(packageName);
 
                 // Set the update and install times
@@ -1915,7 +1921,7 @@ final class InstallPackageHelper {
                         mPm.mAppsFilter.getVisibilityAllowList(mPm.snapshotComputer(),
                                 installRequest.getScannedPackageSetting(),
                                 allUsers, mPm.mSettings.getPackagesLocked());
-                if (installRequest.isSystem()) {
+                if (installRequest.isInstallSystem()) {
                     // Remove existing system package
                     removePackageHelper.removePackage(oldPackage, true);
                     if (!disableSystemPackageLPw(oldPackage)) {
@@ -1983,6 +1989,7 @@ final class InstallPackageHelper {
                 mPm.updateSequenceNumberLP(ps, installRequest.getNewUsers());
                 mPm.updateInstantAppInstallerLocked(packageName);
             }
+            installRequest.onCommitFinished();
         }
         ApplicationPackageManager.invalidateGetPackagesForUidCache();
     }
@@ -2244,7 +2251,7 @@ final class InstallPackageHelper {
                         FLAG_STORAGE_DE | FLAG_STORAGE_CE | FLAG_STORAGE_EXTERNAL
                                 | Installer.FLAG_CLEAR_CODE_CACHE_ONLY);
             }
-            if (installRequest.isReplace()) {
+            if (installRequest.isInstallReplace()) {
                 mDexManager.notifyPackageUpdated(pkg.getPackageName(),
                         pkg.getBaseApkPath(), pkg.getSplitCodePaths());
             }

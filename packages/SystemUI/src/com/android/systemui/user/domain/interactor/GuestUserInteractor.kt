@@ -28,6 +28,8 @@ import android.util.Log
 import android.view.WindowManagerGlobal
 import android.widget.Toast
 import com.android.internal.logging.UiEventLogger
+import com.android.systemui.GuestResetOrExitSessionReceiver
+import com.android.systemui.GuestResumeSessionReceiver
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Background
@@ -58,12 +60,19 @@ constructor(
     private val devicePolicyManager: DevicePolicyManager,
     private val refreshUsersScheduler: RefreshUsersScheduler,
     private val uiEventLogger: UiEventLogger,
+    resumeSessionReceiver: GuestResumeSessionReceiver,
+    resetOrExitSessionReceiver: GuestResetOrExitSessionReceiver,
 ) {
     /** Whether the device is configured to always have a guest user available. */
     val isGuestUserAutoCreated: Boolean = repository.isGuestUserAutoCreated
 
     /** Whether the guest user is currently being reset. */
     val isGuestUserResetting: Boolean = repository.isGuestUserResetting
+
+    init {
+        resumeSessionReceiver.register()
+        resetOrExitSessionReceiver.register()
+    }
 
     /** Notifies that the device has finished booting. */
     fun onDeviceBootCompleted() {
@@ -208,7 +217,12 @@ constructor(
             if (newGuestId == UserHandle.USER_NULL) {
                 Log.e(TAG, "Could not create new guest, switching back to system user")
                 switchUser(UserHandle.USER_SYSTEM)
-                withContext(backgroundDispatcher) { manager.removeUser(currentUser.id) }
+                withContext(backgroundDispatcher) {
+                    manager.removeUserWhenPossible(
+                        UserHandle.of(currentUser.id),
+                        /* overrideDevicePolicy= */ false
+                    )
+                }
                 try {
                     WindowManagerGlobal.getWindowManagerService().lockNow(/* options= */ null)
                 } catch (e: RemoteException) {
@@ -222,13 +236,21 @@ constructor(
 
             switchUser(newGuestId)
 
-            withContext(backgroundDispatcher) { manager.removeUser(currentUser.id) }
+            withContext(backgroundDispatcher) {
+                manager.removeUserWhenPossible(
+                    UserHandle.of(currentUser.id),
+                    /* overrideDevicePolicy= */ false
+                )
+            }
         } else {
             if (repository.isGuestUserAutoCreated) {
                 repository.isGuestUserResetting = true
             }
             switchUser(targetUserId)
-            manager.removeUser(currentUser.id)
+            manager.removeUserWhenPossible(
+                UserHandle.of(currentUser.id),
+                /* overrideDevicePolicy= */ false
+            )
         }
     }
 

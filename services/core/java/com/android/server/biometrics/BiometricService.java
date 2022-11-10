@@ -72,6 +72,7 @@ import com.android.internal.os.SomeArgs;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.util.DumpUtils;
 import com.android.server.SystemService;
+import com.android.server.biometrics.log.BiometricContext;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -100,6 +101,7 @@ public class BiometricService extends SystemService {
     private final List<EnabledOnKeyguardCallback> mEnabledOnKeyguardCallbacks;
     private final Random mRandom = new Random();
     @NonNull private final Supplier<Long> mRequestCounter;
+    @NonNull private final BiometricContext mBiometricContext;
 
     @VisibleForTesting
     IStatusBarService mStatusBarService;
@@ -495,6 +497,8 @@ public class BiometricService extends SystemService {
         public ITestSession createTestSession(int sensorId, @NonNull ITestSessionCallback callback,
                 @NonNull String opPackageName) throws RemoteException {
 
+            super.createTestSession_enforcePermission();
+
             for (BiometricSensor sensor : mSensors) {
                 if (sensor.id == sensorId) {
                     return sensor.impl.createTestSession(callback, opPackageName);
@@ -509,6 +513,8 @@ public class BiometricService extends SystemService {
         @Override // Binder call
         public List<SensorPropertiesInternal> getSensorProperties(String opPackageName)
                 throws RemoteException {
+
+            super.getSensorProperties_enforcePermission();
 
             final List<SensorPropertiesInternal> sensors = new ArrayList<>();
             for (BiometricSensor sensor : mSensors) {
@@ -526,6 +532,8 @@ public class BiometricService extends SystemService {
         @Override // Binder call
         public void onReadyForAuthentication(long requestId, int cookie) {
 
+            super.onReadyForAuthentication_enforcePermission();
+
             mHandler.post(() -> handleOnReadyForAuthentication(requestId, cookie));
         }
 
@@ -533,6 +541,8 @@ public class BiometricService extends SystemService {
         @Override // Binder call
         public long authenticate(IBinder token, long operationId, int userId,
                 IBiometricServiceReceiver receiver, String opPackageName, PromptInfo promptInfo) {
+
+            super.authenticate_enforcePermission();
 
             if (token == null || receiver == null || opPackageName == null || promptInfo == null) {
                 Slog.e(TAG, "Unable to authenticate, one or more null arguments");
@@ -564,6 +574,8 @@ public class BiometricService extends SystemService {
         @Override // Binder call
         public void cancelAuthentication(IBinder token, String opPackageName, long requestId) {
 
+            super.cancelAuthentication_enforcePermission();
+
             SomeArgs args = SomeArgs.obtain();
             args.arg1 = token;
             args.arg2 = opPackageName;
@@ -576,6 +588,8 @@ public class BiometricService extends SystemService {
         @Override // Binder call
         public int canAuthenticate(String opPackageName, int userId, int callingUserId,
                 @Authenticators.Types int authenticators) {
+
+            super.canAuthenticate_enforcePermission();
 
             Slog.d(TAG, "canAuthenticate: User=" + userId
                     + ", Caller=" + callingUserId
@@ -599,6 +613,8 @@ public class BiometricService extends SystemService {
         @Override
         public boolean hasEnrolledBiometrics(int userId, String opPackageName) {
 
+            super.hasEnrolledBiometrics_enforcePermission();
+
             try {
                 for (BiometricSensor sensor : mSensors) {
                     if (sensor.impl.hasEnrolledTemplates(userId, opPackageName)) {
@@ -617,6 +633,8 @@ public class BiometricService extends SystemService {
         public synchronized void registerAuthenticator(int id, int modality,
                 @Authenticators.Types int strength,
                 @NonNull IBiometricAuthenticator authenticator) {
+
+            super.registerAuthenticator_enforcePermission();
 
             Slog.d(TAG, "Registering ID: " + id
                     + " Modality: " + modality
@@ -664,6 +682,8 @@ public class BiometricService extends SystemService {
         public void registerEnabledOnKeyguardCallback(
                 IBiometricEnabledOnKeyguardCallback callback, int callingUserId) {
 
+            super.registerEnabledOnKeyguardCallback_enforcePermission();
+
             mEnabledOnKeyguardCallbacks.add(new EnabledOnKeyguardCallback(callback));
             try {
                 callback.onChanged(mSettingObserver.getEnabledOnKeyguard(callingUserId),
@@ -678,12 +698,16 @@ public class BiometricService extends SystemService {
         public void invalidateAuthenticatorIds(int userId, int fromSensorId,
                 IInvalidationCallback callback) {
 
+            super.invalidateAuthenticatorIds_enforcePermission();
+
             InvalidationTracker.start(getContext(), mSensors, userId, fromSensorId, callback);
         }
 
         @android.annotation.EnforcePermission(android.Manifest.permission.USE_BIOMETRIC_INTERNAL)
         @Override // Binder call
         public long[] getAuthenticatorIds(int callingUserId) {
+
+            super.getAuthenticatorIds_enforcePermission();
 
             final List<Long> authenticatorIds = new ArrayList<>();
             for (BiometricSensor sensor : mSensors) {
@@ -717,6 +741,8 @@ public class BiometricService extends SystemService {
                 int userId, byte[] hardwareAuthToken) {
 
             // Check originating strength
+            super.resetLockoutTimeBound_enforcePermission();
+
             if (!Utils.isAtLeastStrength(getSensorForId(fromSensorId).getCurrentStrength(),
                     Authenticators.BIOMETRIC_STRONG)) {
                 Slog.w(TAG, "Sensor: " + fromSensorId + " is does not meet the required strength to"
@@ -752,7 +778,19 @@ public class BiometricService extends SystemService {
 
         @android.annotation.EnforcePermission(android.Manifest.permission.USE_BIOMETRIC_INTERNAL)
         @Override // Binder call
+        public void resetLockout(
+                int userId, byte[] hardwareAuthToken) {
+            Slog.d(TAG, "resetLockout(userId=" + userId
+                    + ", hat=" + (hardwareAuthToken == null ? "null " : "present") + ")");
+            mBiometricContext.getAuthSessionCoordinator()
+                    .resetLockoutFor(userId, Authenticators.BIOMETRIC_STRONG, -1);
+        }
+
+        @android.annotation.EnforcePermission(android.Manifest.permission.USE_BIOMETRIC_INTERNAL)
+        @Override // Binder call
         public int getCurrentStrength(int sensorId) {
+
+            super.getCurrentStrength_enforcePermission();
 
             for (BiometricSensor sensor : mSensors) {
                 if (sensor.id == sensorId) {
@@ -771,6 +809,8 @@ public class BiometricService extends SystemService {
                 int callingUserId,
                 @Authenticators.Types int authenticators) {
 
+
+            super.getCurrentModality_enforcePermission();
 
             Slog.d(TAG, "getCurrentModality: User=" + userId
                     + ", Caller=" + callingUserId
@@ -793,6 +833,8 @@ public class BiometricService extends SystemService {
         @android.annotation.EnforcePermission(android.Manifest.permission.USE_BIOMETRIC_INTERNAL)
         @Override // Binder call
         public int getSupportedModalities(@Authenticators.Types int authenticators) {
+
+            super.getSupportedModalities_enforcePermission();
 
             Slog.d(TAG, "getSupportedModalities: Authenticators=" + authenticators);
 
@@ -954,6 +996,10 @@ public class BiometricService extends SystemService {
             final AtomicLong generator = new AtomicLong(0);
             return () -> generator.incrementAndGet();
         }
+
+        public BiometricContext getBiometricContext(Context context) {
+            return BiometricContext.getInstance(context);
+        }
     }
 
     /**
@@ -980,6 +1026,7 @@ public class BiometricService extends SystemService {
         mSettingObserver = mInjector.getSettingObserver(context, mHandler,
                 mEnabledOnKeyguardCallbacks);
         mRequestCounter = mInjector.getRequestGenerator();
+        mBiometricContext = injector.getBiometricContext(context);
 
         try {
             injector.getActivityManagerService().registerUserSwitchObserver(

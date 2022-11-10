@@ -17,8 +17,12 @@ package com.android.systemui.flags
 
 import android.provider.DeviceConfig
 import com.android.internal.annotations.Keep
+import com.android.internal.annotations.VisibleForTesting
 import com.android.systemui.R
-import java.lang.reflect.Field
+import kotlin.reflect.KClass
+import kotlin.reflect.full.declaredMembers
+import kotlin.reflect.full.isSubclassOf
+import kotlin.reflect.full.staticProperties
 
 /**
  * List of [Flag] objects for use in SystemUI.
@@ -57,12 +61,13 @@ object Flags {
     val INSTANT_VOICE_REPLY = UnreleasedFlag(111, teamfood = true)
 
     // TODO(b/254512425): Tracking Bug
-    val NOTIFICATION_MEMORY_MONITOR_ENABLED = UnreleasedFlag(112, teamfood = true)
+    val NOTIFICATION_MEMORY_MONITOR_ENABLED = ReleasedFlag(112)
 
     // TODO(b/254512731): Tracking Bug
     @JvmField val NOTIFICATION_DISMISSAL_FADE = UnreleasedFlag(113, teamfood = true)
     val STABILITY_INDEX_FIX = UnreleasedFlag(114, teamfood = true)
     val SEMI_STABLE_SORT = UnreleasedFlag(115, teamfood = true)
+
     @JvmField val NOTIFICATION_GROUP_CORNER = UnreleasedFlag(116, teamfood = true)
     // next id: 117
 
@@ -89,7 +94,7 @@ object Flags {
      * replacement of KeyguardBouncer.java.
      */
     // TODO(b/254512385): Tracking Bug
-    @JvmField val MODERN_BOUNCER = UnreleasedFlag(208)
+    @JvmField val MODERN_BOUNCER = ReleasedFlag(208)
 
     /**
      * Whether the user interactor and repository should use `UserSwitcherController`.
@@ -122,11 +127,20 @@ object Flags {
      * Migration from the legacy isDozing/dozeAmount paths to the new KeyguardTransitionRepository
      * will occur in stages. This is one stage of many to come.
      */
-    @JvmField val DOZING_MIGRATION_1 = UnreleasedFlag(213, teamfood = true)
+    // TODO(b/255607168): Tracking Bug
+    @JvmField val DOZING_MIGRATION_1 = UnreleasedFlag(213)
 
     @JvmField val NEW_ELLIPSE_DETECTION = UnreleasedFlag(214)
 
     @JvmField val NEW_UDFPS_OVERLAY = UnreleasedFlag(215)
+
+    /**
+     * Whether to enable the code powering customizable lock screen quick affordances.
+     *
+     * Note that this flag does not enable individual implementations of quick affordances like the
+     * new camera quick affordance. Look for individual flags for those.
+     */
+    @JvmField val CUSTOMIZABLE_LOCK_SCREEN_QUICK_AFFORDANCES = UnreleasedFlag(216, teamfood = false)
 
     // 300 - power menu
     // TODO(b/254512600): Tracking Bug
@@ -139,20 +153,17 @@ object Flags {
     val SMARTSPACE = ResourceBooleanFlag(402, R.bool.flag_smartspace)
 
     // 500 - quick settings
-    @Deprecated("Not needed anymore") val NEW_USER_SWITCHER = ReleasedFlag(500)
 
     // TODO(b/254512321): Tracking Bug
-    @JvmField val COMBINED_QS_HEADERS = UnreleasedFlag(501, teamfood = true)
+    @JvmField val COMBINED_QS_HEADERS = ReleasedFlag(501)
     val PEOPLE_TILE = ResourceBooleanFlag(502, R.bool.flag_conversations)
+
     @JvmField
     val QS_USER_DETAIL_SHORTCUT =
         ResourceBooleanFlag(503, R.bool.flag_lockscreen_qs_user_detail_shortcut)
 
-    // TODO(b/254512699): Tracking Bug
-    @Deprecated("Not needed anymore") val NEW_FOOTER = ReleasedFlag(504)
-
     // TODO(b/254512747): Tracking Bug
-    val NEW_HEADER = UnreleasedFlag(505, teamfood = true)
+    val NEW_HEADER = ReleasedFlag(505)
 
     // TODO(b/254512383): Tracking Bug
     @JvmField
@@ -177,9 +188,17 @@ object Flags {
     @Deprecated("Replaced by mobile and wifi specific flags.")
     val NEW_STATUS_BAR_PIPELINE_FRONTEND = UnreleasedFlag(605, teamfood = false)
 
+    // TODO(b/256614753): Tracking Bug
     val NEW_STATUS_BAR_MOBILE_ICONS = UnreleasedFlag(606)
 
+    // TODO(b/256614210): Tracking Bug
     val NEW_STATUS_BAR_WIFI_ICON = UnreleasedFlag(607)
+
+    // TODO(b/256614751): Tracking Bug
+    val NEW_STATUS_BAR_MOBILE_ICONS_BACKEND = UnreleasedFlag(608)
+
+    // TODO(b/256613548): Tracking Bug
+    val NEW_STATUS_BAR_WIFI_ICON_BACKEND = UnreleasedFlag(609)
 
     // 700 - dialer/calls
     // TODO(b/254512734): Tracking Bug
@@ -229,7 +248,7 @@ object Flags {
     @JvmField val DREAM_MEDIA_TAP_TO_OPEN = UnreleasedFlag(906)
 
     // TODO(b/254513168): Tracking Bug
-    val UMO_SURFACE_RIPPLE = UnreleasedFlag(907)
+    @JvmField val UMO_SURFACE_RIPPLE = UnreleasedFlag(907)
 
     // 1000 - dock
     val SIMULATE_DOCK_THROUGH_CHARGING = ReleasedFlag(1000)
@@ -239,17 +258,13 @@ object Flags {
 
     // 1100 - windowing
     @Keep
+    @JvmField
     val WM_ENABLE_SHELL_TRANSITIONS =
-        SysPropBooleanFlag(1100, "persist.wm.debug.shell_transit", false)
-
-    /** b/170163464: animate bubbles expanded view collapse with home gesture */
-    @Keep
-    val BUBBLES_HOME_GESTURE =
-        SysPropBooleanFlag(1101, "persist.wm.debug.bubbles_home_gesture", true)
+        SysPropBooleanFlag(1100, "persist.wm.debug.shell_transit", true)
 
     // TODO(b/254513207): Tracking Bug
-    @JvmField
     @Keep
+    @JvmField
     val WM_ENABLE_PARTIAL_SCREEN_SHARING =
         DeviceConfigBooleanFlag(
             1102,
@@ -260,45 +275,49 @@ object Flags {
         )
 
     // TODO(b/254512674): Tracking Bug
-    @JvmField
     @Keep
+    @JvmField
     val HIDE_NAVBAR_WINDOW = SysPropBooleanFlag(1103, "persist.wm.debug.hide_navbar_window", false)
 
     @Keep
+    @JvmField
     val WM_DESKTOP_WINDOWING = SysPropBooleanFlag(1104, "persist.wm.debug.desktop_mode", false)
 
     @Keep
+    @JvmField
     val WM_CAPTION_ON_SHELL = SysPropBooleanFlag(1105, "persist.wm.debug.caption_on_shell", false)
 
     @Keep
-    val FLOATING_TASKS_ENABLED = SysPropBooleanFlag(1106, "persist.wm.debug.floating_tasks", false)
-
-    @Keep
-    val SHOW_FLOATING_TASKS_AS_BUBBLES =
-        SysPropBooleanFlag(1107, "persist.wm.debug.floating_tasks_as_bubbles", false)
-
-    @Keep
+    @JvmField
     val ENABLE_FLING_TO_DISMISS_BUBBLE =
         SysPropBooleanFlag(1108, "persist.wm.debug.fling_to_dismiss_bubble", true)
 
     @Keep
+    @JvmField
     val ENABLE_FLING_TO_DISMISS_PIP =
         SysPropBooleanFlag(1109, "persist.wm.debug.fling_to_dismiss_pip", true)
 
     @Keep
+    @JvmField
     val ENABLE_PIP_KEEP_CLEAR_ALGORITHM =
         SysPropBooleanFlag(1110, "persist.wm.debug.enable_pip_keep_clear_algorithm", false)
 
+    // TODO(b/256873975): Tracking Bug
+    @JvmField @Keep val WM_BUBBLE_BAR = UnreleasedFlag(1111)
+
     // 1200 - predictive back
     @Keep
+    @JvmField
     val WM_ENABLE_PREDICTIVE_BACK =
         SysPropBooleanFlag(1200, "persist.wm.debug.predictive_back", true)
 
     @Keep
+    @JvmField
     val WM_ENABLE_PREDICTIVE_BACK_ANIM =
         SysPropBooleanFlag(1201, "persist.wm.debug.predictive_back_anim", false)
 
     @Keep
+    @JvmField
     val WM_ALWAYS_ENFORCE_PREDICTIVE_BACK =
         SysPropBooleanFlag(1202, "persist.wm.debug.predictive_back_always_enforce", false)
 
@@ -307,7 +326,7 @@ object Flags {
 
     // 1300 - screenshots
     // TODO(b/254512719): Tracking Bug
-    @JvmField val SCREENSHOT_REQUEST_PROCESSOR = UnreleasedFlag(1300)
+    @JvmField val SCREENSHOT_REQUEST_PROCESSOR = UnreleasedFlag(1300, teamfood = true)
 
     // TODO(b/254513155): Tracking Bug
     @JvmField val SCREENSHOT_WORK_PROFILE_POLICY = UnreleasedFlag(1301)
@@ -324,7 +343,8 @@ object Flags {
     @JvmField val A11Y_FLOATING_MENU_FLING_SPRING_ANIMATIONS = UnreleasedFlag(1600)
 
     // 1700 - clipboard
-    @JvmField val CLIPBOARD_OVERLAY_REFACTOR = UnreleasedFlag(1700)
+    @JvmField val CLIPBOARD_OVERLAY_REFACTOR = UnreleasedFlag(1700, teamfood = true)
+    @JvmField val CLIPBOARD_REMOTE_BEHAVIOR = UnreleasedFlag(1701)
 
     // 1800 - shade container
     @JvmField val LEAVE_SHADE_OPEN_FOR_BUGREPORT = UnreleasedFlag(1800, teamfood = true)
@@ -332,30 +352,60 @@ object Flags {
     // 1900 - note task
     @JvmField val NOTE_TASKS = SysPropBooleanFlag(1900, "persist.sysui.debug.note_tasks")
 
+    // 2000 - device controls
+    @Keep @JvmField val USE_APP_PANELS = UnreleasedFlag(2000, teamfood = true)
+
+    // 2100 - Falsing Manager
+    @JvmField val FALSING_FOR_LONG_TAPS = ReleasedFlag(2100)
+
     // Pay no attention to the reflection behind the curtain.
     // ========================== Curtain ==========================
     // |                                                           |
     // |  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  |
     @JvmStatic
     fun collectFlags(): Map<Int, Flag<*>> {
-        return flagFields
-            .map { field ->
-                // field[null] returns the current value of the field.
-                // See java.lang.Field#get
-                val flag = field[null] as Flag<*>
-                flag.id to flag
-            }
-            .toMap()
+        return flagFields.mapKeys { field -> field.value.id }
     }
 
     // |  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  |
     @JvmStatic
-    val flagFields: List<Field>
-        get() {
-            return Flags::class.java.fields.filter { f ->
-                Flag::class.java.isAssignableFrom(f.type)
+    val flagFields: Map<String, Flag<*>>
+        get() = collectFlagsInClass(Flags)
+
+    @VisibleForTesting
+    fun collectFlagsInClass(instance: Any): Map<String, Flag<*>> {
+        val cls = instance::class
+        val javaPropNames = cls.java.fields.map { it.name }
+        val props = cls.declaredMembers
+        val staticProps = cls.staticProperties
+        val staticPropNames = staticProps.map { it.name }
+        return props
+            .mapNotNull { property ->
+                if ((property.returnType.classifier as KClass<*>).isSubclassOf(Flag::class)) {
+                    // Fields with @JvmStatic should be accessed via java mechanisms
+                    if (javaPropNames.contains(property.name)) {
+                        property.name to cls.java.getField(property.name)[null] as Flag<*>
+                        // Fields with @Keep but not @JvmField. Don't do this.
+                    } else if (staticPropNames.contains(property.name)) {
+                        // The below code causes access violation exceptions. I don't know why.
+                        // property.name to (property.call() as Flag<*>)
+                        // property.name to (staticProps.find { it.name == property.name }!!
+                        // .getter.call() as Flag<*>)
+                        throw java.lang.RuntimeException(
+                            "The {$property.name} flag needs @JvmField"
+                        )
+                        // Everything else. Skip the `get` prefixed fields that kotlin adds.
+                    } else if (property.name.subSequence(0, 3) != "get") {
+                        property.name to (property.call(instance) as Flag<*>)
+                    } else {
+                        null
+                    }
+                } else {
+                    null
+                }
             }
-        }
+            .toMap()
+    }
     // |                                                           |
     // \_/\_/\_/\_/\_/\_/\_/\_/\_/\_/\_/\_/\_/\_/\_/\_/\_/\_/\_/\_/
 }

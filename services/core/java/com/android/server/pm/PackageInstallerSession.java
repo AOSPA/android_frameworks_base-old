@@ -388,6 +388,14 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     @GuardedBy("mLock")
     private boolean mStageDirInUse = false;
 
+    /**
+     * True if the installation is already in progress. This is used to prevent the caller
+     * from {@link #commit(IntentSender, boolean) committing} the session again while the
+     * installation is still in progress.
+     */
+    @GuardedBy("mLock")
+    private boolean mInstallationInProgress = false;
+
     /** Permissions have been accepted by the user (see {@link #setPermissionsResult}) */
     @GuardedBy("mLock")
     private boolean mPermissionsManuallyAccepted = false;
@@ -1712,6 +1720,14 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             }
         }
 
+        synchronized (mLock) {
+            if (mInstallationInProgress) {
+                throw new IllegalStateException("Installation is already in progress. Don't "
+                        + "commit session=" + sessionId + " again.");
+            }
+            mInstallationInProgress = true;
+        }
+
         dispatchSessionSealed();
     }
 
@@ -2783,10 +2799,11 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                     "Missing existing base package");
         }
 
-        // Default to require only if existing base apk has fs-verity.
+        // Default to require only if existing base apk has fs-verity signature.
         mVerityFoundForApks = PackageManagerServiceUtils.isApkVerityEnabled()
                 && params.mode == SessionParams.MODE_INHERIT_EXISTING
-                && VerityUtils.hasFsverity(pkgInfo.applicationInfo.getBaseCodePath());
+                && (new File(VerityUtils.getFsveritySignatureFilePath(
+                        pkgInfo.applicationInfo.getBaseCodePath()))).exists();
 
         final List<File> removedFiles = getRemovedFilesLocked();
         final List<String> removeSplitList = new ArrayList<>();
@@ -3346,7 +3363,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                     "Failure to obtain package info.");
         }
         final List<String> filePaths = packageLite.getAllApkPaths();
-        final String appLabel = mPreapprovalDetails.getLabel();
+        final CharSequence appLabel = mPreapprovalDetails.getLabel();
         final ULocale appLocale = mPreapprovalDetails.getLocale();
         final ApplicationInfo appInfo = packageInfo.applicationInfo;
         boolean appLabelMatched = false;

@@ -18,17 +18,19 @@ package com.android.credentialmanager
 
 import android.content.Context
 import android.credentials.ui.Entry
-import android.credentials.ui.ProviderData
+import android.credentials.ui.GetCredentialProviderData
+import android.credentials.ui.CreateCredentialProviderData
 import com.android.credentialmanager.createflow.CreateOptionInfo
 import com.android.credentialmanager.getflow.CredentialOptionInfo
 import com.android.credentialmanager.getflow.ProviderInfo
+import com.android.credentialmanager.jetpack.provider.SaveEntryUi
 
 /** Utility functions for converting CredentialManager data structures to or from UI formats. */
 class GetFlowUtils {
   companion object {
 
     fun toProviderList(
-      providerDataList: List<ProviderData>,
+      providerDataList: List<GetCredentialProviderData>,
       context: Context,
     ): List<ProviderInfo> {
       return providerDataList.map {
@@ -36,9 +38,10 @@ class GetFlowUtils {
           // TODO: replace to extract from the service data structure when available
           icon = context.getDrawable(R.drawable.ic_passkey)!!,
           name = it.providerFlattenedComponentName,
-          displayName = it.providerDisplayName,
+          // TODO: get the service display name and icon from the component name.
+          displayName = it.providerFlattenedComponentName,
           credentialTypeIcon = context.getDrawable(R.drawable.ic_passkey)!!,
-          credentialOptions = toCredentialOptionInfoList(it.credentialEntries, context)
+          credentialOptions = toCredentialOptionInfoList(it.credentialEntries, context),
         )
       }
     }
@@ -57,8 +60,6 @@ class GetFlowUtils {
           // TODO: remove fallbacks
           icon = credentialEntryUi.icon?.loadDrawable(context)
             ?: context.getDrawable(R.drawable.ic_passkey)!!,
-          title = credentialEntryUi.userName.toString(),
-          subtitle = credentialEntryUi.displayName?.toString() ?: "Unknown display name",
           entryKey = it.key,
           entrySubkey = it.subkey,
           usageData = credentialEntryUi.usageData?.toString() ?: "Unknown usageData",
@@ -72,7 +73,7 @@ class CreateFlowUtils {
   companion object {
 
     fun toProviderList(
-      providerDataList: List<ProviderData>,
+      providerDataList: List<CreateCredentialProviderData>,
       context: Context,
     ): List<com.android.credentialmanager.createflow.ProviderInfo> {
       return providerDataList.map {
@@ -80,9 +81,9 @@ class CreateFlowUtils {
           // TODO: replace to extract from the service data structure when available
           icon = context.getDrawable(R.drawable.ic_passkey)!!,
           name = it.providerFlattenedComponentName,
-          displayName = it.providerDisplayName,
-          credentialTypeIcon = context.getDrawable(R.drawable.ic_passkey)!!,
-          createOptions = toCreationOptionInfoList(it.credentialEntries, context),
+          displayName = it.providerFlattenedComponentName,
+          createOptions = toCreationOptionInfoList(it.saveEntries, context),
+          isDefault = it.isDefaultProvider,
         )
       }
     }
@@ -96,13 +97,17 @@ class CreateFlowUtils {
 
         return@map CreateOptionInfo(
           // TODO: remove fallbacks
-          icon = saveEntryUi.icon?.loadDrawable(context)
-            ?: context.getDrawable(R.drawable.ic_passkey)!!,
-          title = saveEntryUi.title.toString(),
-          subtitle = saveEntryUi.subTitle?.toString() ?: "Unknown subtitle",
           entryKey = it.key,
           entrySubkey = it.subkey,
-          usageData = saveEntryUi.usageData?.toString() ?: "Unknown usageData",
+          userProviderDisplayName = saveEntryUi.userProviderAccountName as String,
+          credentialTypeIcon = saveEntryUi.credentialTypeIcon?.loadDrawable(context)
+            ?: context.getDrawable(R.drawable.ic_passkey)!!,
+          profileIcon = saveEntryUi.profileIcon?.loadDrawable(context)
+            ?: context.getDrawable(R.drawable.ic_profile)!!,
+          passwordCount = saveEntryUi.passwordCount ?: 0,
+          passkeyCount = saveEntryUi.passkeyCount ?: 0,
+          totalCredentialCount = saveEntryUi.totalCredentialCount ?: 0,
+          lastUsedTimeMillis = saveEntryUi.lastUsedTimeMillis ?: 0,
         )
       }
     }

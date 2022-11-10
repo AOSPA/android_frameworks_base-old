@@ -22,6 +22,15 @@ import static android.os.UserHandle.USER_NULL;
 import static android.provider.DeviceConfig.NAMESPACE_PACKAGE_MANAGER_SERVICE;
 
 import static com.android.internal.annotations.VisibleForTesting.Visibility.PRIVATE;
+import static com.android.internal.util.FrameworkStatsLog.PACKAGE_MANAGER_APPS_FILTER_CACHE_BUILD_REPORTED;
+import static com.android.internal.util.FrameworkStatsLog.PACKAGE_MANAGER_APPS_FILTER_CACHE_BUILD_REPORTED__EVENT_TYPE__BOOT;
+import static com.android.internal.util.FrameworkStatsLog.PACKAGE_MANAGER_APPS_FILTER_CACHE_BUILD_REPORTED__EVENT_TYPE__USER_CREATED;
+import static com.android.internal.util.FrameworkStatsLog.PACKAGE_MANAGER_APPS_FILTER_CACHE_BUILD_REPORTED__EVENT_TYPE__USER_DELETED;
+import static com.android.internal.util.FrameworkStatsLog.PACKAGE_MANAGER_APPS_FILTER_CACHE_UPDATE_REPORTED;
+import static com.android.internal.util.FrameworkStatsLog.PACKAGE_MANAGER_APPS_FILTER_CACHE_UPDATE_REPORTED__EVENT_TYPE__COMPAT_CHANGED;
+import static com.android.internal.util.FrameworkStatsLog.PACKAGE_MANAGER_APPS_FILTER_CACHE_UPDATE_REPORTED__EVENT_TYPE__PACKAGE_ADDED;
+import static com.android.internal.util.FrameworkStatsLog.PACKAGE_MANAGER_APPS_FILTER_CACHE_UPDATE_REPORTED__EVENT_TYPE__PACKAGE_DELETED;
+import static com.android.internal.util.FrameworkStatsLog.PACKAGE_MANAGER_APPS_FILTER_CACHE_UPDATE_REPORTED__EVENT_TYPE__PACKAGE_REPLACED;
 import static com.android.server.pm.AppsFilterUtils.canQueryAsInstaller;
 import static com.android.server.pm.AppsFilterUtils.canQueryViaComponents;
 import static com.android.server.pm.AppsFilterUtils.canQueryViaPackage;
@@ -36,6 +45,7 @@ import android.content.pm.PackageManagerInternal;
 import android.content.pm.SigningDetails;
 import android.content.pm.UserInfo;
 import android.os.Handler;
+import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
@@ -49,6 +59,7 @@ import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.ArrayUtils;
+import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.FgThread;
 import com.android.server.compat.CompatChange;
 import com.android.server.om.OverlayReferenceMapper;
@@ -351,8 +362,15 @@ public final class AppsFilterImpl extends AppsFilterLocked implements Watchable,
             if (pkg == null) {
                 return;
             }
+            final long currentTimeUs = SystemClock.currentTimeMicro();
             updateEnabledState(pkg);
             mAppsFilter.updateShouldFilterCacheForPackage(snapshot, packageName);
+            mAppsFilter.logCacheUpdated(
+                    PACKAGE_MANAGER_APPS_FILTER_CACHE_UPDATE_REPORTED__EVENT_TYPE__COMPAT_CHANGED,
+                    SystemClock.currentTimeMicro() - currentTimeUs,
+                    snapshot.getUserInfos().length,
+                    snapshot.getPackageStates().size(),
+                    pkg.getUid());
         }
 
         private void updateEnabledState(@NonNull AndroidPackage pkg) {
@@ -465,7 +483,8 @@ public final class AppsFilterImpl extends AppsFilterLocked implements Watchable,
         mOverlayReferenceMapper.rebuildIfDeferred();
         mFeatureConfig.onSystemReady();
 
-        updateEntireShouldFilterCacheAsync(pmInternal);
+        updateEntireShouldFilterCacheAsync(pmInternal,
+                PACKAGE_MANAGER_APPS_FILTER_CACHE_BUILD_REPORTED__EVENT_TYPE__BOOT);
     }
 
     /**
@@ -473,16 +492,23 @@ public final class AppsFilterImpl extends AppsFilterLocked implements Watchable,
      *
      * @param newPkgSetting the new setting being added
      * @param isReplace     if the package is being replaced and may need extra cleanup.
+     * @param retainImplicitGrantOnReplace {@code true} to retain implicit grant access if
+     *                                     the package is being replaced.
      */
     public void addPackage(Computer snapshot, PackageStateInternal newPkgSetting,
-            boolean isReplace) {
+            boolean isReplace, boolean retainImplicitGrantOnReplace) {
+        final long currentTimeUs = SystemClock.currentTimeMicro();
+        final int logType = isReplace
+                ? PACKAGE_MANAGER_APPS_FILTER_CACHE_UPDATE_REPORTED__EVENT_TYPE__PACKAGE_REPLACED
+                : PACKAGE_MANAGER_APPS_FILTER_CACHE_UPDATE_REPORTED__EVENT_TYPE__PACKAGE_ADDED;
         if (DEBUG_TRACING) {
             Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "filter.addPackage");
         }
         try {
             if (isReplace) {
                 // let's first remove any prior rules for this package
-                removePackage(snapshot, newPkgSetting, true /*isReplace*/);
+                removePackageInternal(snapshot, newPkgSetting,
+                        true /*isReplace*/, retainImplicitGrantOnReplace);
             }
             final ArrayMap<String, ? extends PackageStateInternal> settings =
                     snapshot.getPackageStates();
@@ -508,6 +534,8 @@ public final class AppsFilterImpl extends AppsFilterLocked implements Watchable,
                         }
                     }
                 }
+                logCacheUpdated(logType, SystemClock.currentTimeMicro() - currentTimeUs,
+                        users.length, settings.size(), newPkgSetting.getAppId());
             } else {
                 invalidateCache("addPackage: " + newPkgSetting.getPackageName());
             }
@@ -757,18 +785,19 @@ public final class AppsFilterImpl extends AppsFilterLocked implements Watchable,
         }
     }
 
-    private void updateEntireShouldFilterCacheAsync(PackageManagerInternal pmInternal) {
-        updateEntireShouldFilterCacheAsync(pmInternal, CACHE_REBUILD_DELAY_MIN_MS);
+    private void updateEntireShouldFilterCacheAsync(PackageManagerInternal pmInternal, int reason) {
+        updateEntireShouldFilterCacheAsync(pmInternal, CACHE_REBUILD_DELAY_MIN_MS, reason);
     }
 
     private void updateEntireShouldFilterCacheAsync(PackageManagerInternal pmInternal,
-            long delayMs) {
+            long delayMs, int reason) {
         mBackgroundHandler.postDelayed(() -> {
             if (!mCacheValid.compareAndSet(CACHE_INVALID, CACHE_VALID)) {
                 // Cache is already valid.
                 return;
             }
 
+            final long currentTimeUs = SystemClock.currentTimeMicro();
             final ArrayMap<String, AndroidPackage> packagesCache = new ArrayMap<>();
             final UserInfo[][] usersRef = new UserInfo[1][];
             final Computer snapshot = (Computer) pmInternal.snapshot();
@@ -787,11 +816,13 @@ public final class AppsFilterImpl extends AppsFilterLocked implements Watchable,
 
             updateEntireShouldFilterCacheInner(snapshot, settings, usersRef[0], USER_ALL);
             onChanged();
+            logCacheRebuilt(reason, SystemClock.currentTimeMicro() - currentTimeUs,
+                    users.length, settings.size());
 
             if (!mCacheValid.compareAndSet(CACHE_VALID, CACHE_VALID)) {
                 Slog.i(TAG, "Cache invalidated while building, retrying.");
                 updateEntireShouldFilterCacheAsync(pmInternal,
-                        Math.min(delayMs * 2, CACHE_REBUILD_DELAY_MAX_MS));
+                        Math.min(delayMs * 2, CACHE_REBUILD_DELAY_MAX_MS), reason);
                 return;
             }
 
@@ -803,15 +834,27 @@ public final class AppsFilterImpl extends AppsFilterLocked implements Watchable,
         if (!mCacheReady) {
             return;
         }
+        final long currentTimeUs = SystemClock.currentTimeMicro();
         updateEntireShouldFilterCache(snapshot, newUserId);
+        logCacheRebuilt(
+                PACKAGE_MANAGER_APPS_FILTER_CACHE_BUILD_REPORTED__EVENT_TYPE__USER_CREATED,
+                SystemClock.currentTimeMicro() - currentTimeUs,
+                snapshot.getUserInfos().length,
+                snapshot.getPackageStates().size());
     }
 
-    public void onUserDeleted(@UserIdInt int userId) {
+    public void onUserDeleted(Computer snapshot, @UserIdInt int userId) {
         if (!mCacheReady) {
             return;
         }
+        final long currentTimeUs = SystemClock.currentTimeMicro();
         removeShouldFilterCacheForUser(userId);
         onChanged();
+        logCacheRebuilt(
+                PACKAGE_MANAGER_APPS_FILTER_CACHE_BUILD_REPORTED__EVENT_TYPE__USER_DELETED,
+                SystemClock.currentTimeMicro() - currentTimeUs,
+                snapshot.getUserInfos().length,
+                snapshot.getPackageStates().size());
     }
 
     private void updateShouldFilterCacheForPackage(Computer snapshot,
@@ -976,13 +1019,31 @@ public final class AppsFilterImpl extends AppsFilterLocked implements Watchable,
     }
 
     /**
-     * Equivalent to calling {@link #addPackage(Computer, PackageStateInternal, boolean)}
-     * with {@code isReplace} equal to {@code false}.
+     * Equivalent to calling {@link #addPackage(Computer, PackageStateInternal, boolean, boolean)}
+     * with {@code isReplace} and {@code retainImplicitGrantOnReplace} equal to {@code false}.
      *
-     * @see AppsFilterImpl#addPackage(Computer, PackageStateInternal, boolean)
+     * @see AppsFilterImpl#addPackage(Computer, PackageStateInternal, boolean, boolean)
      */
     public void addPackage(Computer snapshot, PackageStateInternal newPkgSetting) {
-        addPackage(snapshot, newPkgSetting, false /* isReplace */);
+        addPackage(snapshot, newPkgSetting, false /* isReplace */,
+                false /* retainImplicitGrantOnReplace */);
+    }
+
+    /**
+     * Removes a package for consideration when filtering visibility between apps.
+     *
+     * @param setting the setting of the package being removed.
+     */
+    public void removePackage(Computer snapshot, PackageStateInternal setting) {
+        final long currentTimeUs = SystemClock.currentTimeMicro();
+        removePackageInternal(snapshot, setting,
+                false /* isReplace */, false /* retainImplicitGrantOnReplace */);
+        logCacheUpdated(
+                PACKAGE_MANAGER_APPS_FILTER_CACHE_UPDATE_REPORTED__EVENT_TYPE__PACKAGE_DELETED,
+                SystemClock.currentTimeMicro() - currentTimeUs,
+                snapshot.getUserInfos().length,
+                snapshot.getPackageStates().size(),
+                setting.getAppId());
     }
 
     /**
@@ -990,33 +1051,37 @@ public final class AppsFilterImpl extends AppsFilterLocked implements Watchable,
      *
      * @param setting   the setting of the package being removed.
      * @param isReplace if the package is being replaced.
+     * @param retainImplicitGrantOnReplace {@code true} to retain implicit grant access if
+     *                                     the package is being replaced.
      */
-    public void removePackage(Computer snapshot, PackageStateInternal setting,
-            boolean isReplace) {
+    private void removePackageInternal(Computer snapshot, PackageStateInternal setting,
+            boolean isReplace, boolean retainImplicitGrantOnReplace) {
         final ArraySet<String> additionalChangedPackages;
         final ArrayMap<String, ? extends PackageStateInternal> settings =
                 snapshot.getPackageStates();
         final UserInfo[] users = snapshot.getUserInfos();
         final Collection<SharedUserSetting> sharedUserSettings = snapshot.getAllSharedUsers();
         final int userCount = users.length;
-        synchronized (mImplicitlyQueryableLock) {
-            for (int u = 0; u < userCount; u++) {
-                final int userId = users[u].id;
-                final int removingUid = UserHandle.getUid(userId, setting.getAppId());
-                mImplicitlyQueryable.remove(removingUid);
-                for (int i = mImplicitlyQueryable.size() - 1; i >= 0; i--) {
-                    mImplicitlyQueryable.remove(mImplicitlyQueryable.keyAt(i),
-                            removingUid);
-                }
+        if (!isReplace || !retainImplicitGrantOnReplace) {
+            synchronized (mImplicitlyQueryableLock) {
+                for (int u = 0; u < userCount; u++) {
+                    final int userId = users[u].id;
+                    final int removingUid = UserHandle.getUid(userId, setting.getAppId());
+                    mImplicitlyQueryable.remove(removingUid);
+                    for (int i = mImplicitlyQueryable.size() - 1; i >= 0; i--) {
+                        mImplicitlyQueryable.remove(mImplicitlyQueryable.keyAt(i),
+                                removingUid);
+                    }
 
-                if (isReplace) {
-                    continue;
-                }
+                    if (isReplace) {
+                        continue;
+                    }
 
-                mRetainedImplicitlyQueryable.remove(removingUid);
-                for (int i = mRetainedImplicitlyQueryable.size() - 1; i >= 0; i--) {
-                    mRetainedImplicitlyQueryable.remove(
-                            mRetainedImplicitlyQueryable.keyAt(i), removingUid);
+                    mRetainedImplicitlyQueryable.remove(removingUid);
+                    for (int i = mRetainedImplicitlyQueryable.size() - 1; i >= 0; i--) {
+                        mRetainedImplicitlyQueryable.remove(
+                                mRetainedImplicitlyQueryable.keyAt(i), removingUid);
+                    }
                 }
             }
         }
@@ -1173,5 +1238,19 @@ public final class AppsFilterImpl extends AppsFilterLocked implements Watchable,
                 Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
             }
         }
+    }
+
+    private void logCacheRebuilt(int eventId, long latency, int userCount, int packageCount) {
+        FrameworkStatsLog.write(PACKAGE_MANAGER_APPS_FILTER_CACHE_BUILD_REPORTED,
+                eventId, latency, userCount, packageCount, mShouldFilterCache.size());
+    }
+
+    private void logCacheUpdated(int eventId, long latency, int userCount, int packageCount,
+            int appId) {
+        if (!mCacheReady) {
+            return;
+        }
+        FrameworkStatsLog.write(PACKAGE_MANAGER_APPS_FILTER_CACHE_UPDATE_REPORTED,
+                eventId, appId, latency, userCount, packageCount, mShouldFilterCache.size());
     }
 }

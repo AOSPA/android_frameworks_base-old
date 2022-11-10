@@ -1360,9 +1360,39 @@ public class AppOpsManager {
      */
     public static final int OP_RUN_LONG_JOBS = AppProtoEnums.APP_OP_RUN_LONG_JOBS;
 
+    /**
+     * Notify apps that they have been granted URI permission photos
+     *
+     * @hide
+     */
+    public static final int OP_READ_MEDIA_VISUAL_USER_SELECTED =
+            AppProtoEnums.APP_OP_READ_MEDIA_VISUAL_USER_SELECTED;
+
+    /**
+     * Prevent an app from being placed into app standby buckets.
+     *
+     * Only to be used by the system.
+     *
+     * @hide
+     */
+    public static final int OP_SYSTEM_EXEMPT_FROM_APP_STANDBY =
+            AppProtoEnums.APP_OP_SYSTEM_EXEMPT_FROM_APP_STANDBY;
+
+    /**
+     * Prevent an app from being placed into forced app standby.
+     * {@link ActivityManager#isBackgroundRestricted()}
+     * {@link #OP_RUN_ANY_IN_BACKGROUND}
+     *
+     * Only to be used by the system.
+     *
+     * @hide
+     */
+    public static final int OP_SYSTEM_EXEMPT_FROM_FORCED_APP_STANDBY =
+            AppProtoEnums.APP_OP_SYSTEM_EXEMPT_FROM_FORCED_APP_STANDBY;
+
     /** @hide */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-    public static final int _NUM_OP = 123;
+    public static final int _NUM_OP = 126;
 
     /** Access to coarse location information. */
     public static final String OPSTR_COARSE_LOCATION = "android:coarse_location";
@@ -1833,6 +1863,14 @@ public class AppOpsManager {
     @SystemApi
     public static final String OPSTR_RECEIVE_AMBIENT_TRIGGER_AUDIO =
             "android:receive_ambient_trigger_audio";
+    /**
+     * Notify apps that they have been granted URI permission photos
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String OPSTR_READ_MEDIA_VISUAL_USER_SELECTED =
+            "android:read_media_visual_user_selected";
 
     /**
      * Record audio from near-field microphone (ie. TV remote)
@@ -1852,6 +1890,28 @@ public class AppOpsManager {
      * @hide
      */
     public static final String OPSTR_RUN_LONG_JOBS = "android:run_long_jobs";
+
+    /**
+     * Prevent an app from being placed into app standby buckets.
+     *
+     * Only to be used by the system.
+     *
+     * @hide
+     */
+    public static final String OPSTR_SYSTEM_EXEMPT_FROM_APP_STANDBY =
+            "android:system_exempt_from_app_standby";
+
+    /**
+     * Prevent an app from being placed into forced app standby.
+     * {@link ActivityManager#isBackgroundRestricted()}
+     * {@link #OP_RUN_ANY_IN_BACKGROUND}
+     *
+     * Only to be used by the system.
+     *
+     * @hide
+     */
+    public static final String OPSTR_SYSTEM_EXEMPT_FROM_FORCED_APP_STANDBY =
+            "android:system_exempt_from_forced_app_standby";
 
     /** {@link #sAppOpsToNote} not initialized yet for this op */
     private static final byte SHOULD_COLLECT_NOTE_OP_NOT_INITIALIZED = 0;
@@ -1948,6 +2008,7 @@ public class AppOpsManager {
             OP_MANAGE_MEDIA,
             OP_TURN_SCREEN_ON,
             OP_RUN_LONG_JOBS,
+            OP_READ_MEDIA_VISUAL_USER_SELECTED,
     };
 
     static final AppOpInfo[] sAppOpInfos = new AppOpInfo[]{
@@ -2329,7 +2390,17 @@ public class AppOpsManager {
                 "RECEIVE_EXPLICIT_USER_INTERACTION_AUDIO").setDefaultMode(
                 AppOpsManager.MODE_ALLOWED).build(),
         new AppOpInfo.Builder(OP_RUN_LONG_JOBS, OPSTR_RUN_LONG_JOBS, "RUN_LONG_JOBS")
-                .setPermission(Manifest.permission.RUN_LONG_JOBS).build()
+                .setPermission(Manifest.permission.RUN_LONG_JOBS).build(),
+            new AppOpInfo.Builder(OP_READ_MEDIA_VISUAL_USER_SELECTED,
+                    OPSTR_READ_MEDIA_VISUAL_USER_SELECTED, "READ_MEDIA_VISUAL_USER_SELECTED")
+                    .setPermission(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
+                    .setDefaultMode(AppOpsManager.MODE_ALLOWED).build(),
+        new AppOpInfo.Builder(OP_SYSTEM_EXEMPT_FROM_APP_STANDBY,
+                OPSTR_SYSTEM_EXEMPT_FROM_APP_STANDBY,
+                "SYSTEM_EXEMPT_FROM_APP_STANDBY").build(),
+        new AppOpInfo.Builder(OP_SYSTEM_EXEMPT_FROM_FORCED_APP_STANDBY,
+                OPSTR_SYSTEM_EXEMPT_FROM_FORCED_APP_STANDBY,
+                "SYSTEM_EXEMPT_FROM_FORCED_APP_STANDBY").build()
     };
 
     /**

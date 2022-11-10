@@ -16,19 +16,22 @@
 
 package com.android.systemui.keyguard.domain.interactor
 
+import android.animation.ValueAnimator
+import com.android.systemui.animation.Interpolators
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
-import com.android.systemui.keyguard.data.repository.KeyguardRepository
 import com.android.systemui.keyguard.data.repository.KeyguardTransitionRepository
 import com.android.systemui.keyguard.shared.model.KeyguardState
 import com.android.systemui.keyguard.shared.model.StatusBarState.SHADE_LOCKED
 import com.android.systemui.keyguard.shared.model.TransitionInfo
 import com.android.systemui.keyguard.shared.model.TransitionState
+import com.android.systemui.keyguard.shared.model.WakefulnessModel
 import com.android.systemui.shade.data.repository.ShadeRepository
 import com.android.systemui.util.kotlin.sample
 import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
@@ -37,62 +40,112 @@ class LockscreenBouncerTransitionInteractor
 @Inject
 constructor(
     @Application private val scope: CoroutineScope,
-    private val keyguardRepository: KeyguardRepository,
+    private val keyguardInteractor: KeyguardInteractor,
     private val shadeRepository: ShadeRepository,
     private val keyguardTransitionRepository: KeyguardTransitionRepository,
+    private val keyguardTransitionInteractor: KeyguardTransitionInteractor
 ) : TransitionInteractor("LOCKSCREEN<->BOUNCER") {
 
     private var transitionId: UUID? = null
 
     override fun start() {
-        scope.launch {
-            shadeRepository.shadeModel.sample(
-                combine(
-                    keyguardTransitionRepository.transitions,
-                    keyguardRepository.statusBarState,
-                ) { transitions, statusBarState ->
-                    Pair(transitions, statusBarState)
-                }
-            ) { shadeModel, pair ->
-                val (transitions, statusBarState) = pair
+        listenForDraggingUpToBouncer()
+        listenForBouncerHiding()
+    }
 
-                val id = transitionId
-                if (id != null) {
-                    // An existing `id` means a transition is started, and calls to
-                    // `updateTransition` will control it until FINISHED
-                    keyguardTransitionRepository.updateTransition(
-                        id,
-                        shadeModel.expansionAmount,
-                        if (shadeModel.expansionAmount == 0f || shadeModel.expansionAmount == 1f) {
-                            transitionId = null
-                            TransitionState.FINISHED
-                        } else {
-                            TransitionState.RUNNING
-                        }
-                    )
-                } else {
-                    // TODO (b/251849525): Remove statusbarstate check when that state is integrated
-                    // into KeyguardTransitionRepository
-                    val isOnLockscreen =
-                        transitions.transitionState == TransitionState.FINISHED &&
-                            transitions.to == KeyguardState.LOCKSCREEN
-                    if (
-                        isOnLockscreen &&
-                            shadeModel.isUserDragging &&
-                            statusBarState != SHADE_LOCKED
-                    ) {
-                        transitionId =
-                            keyguardTransitionRepository.startTransition(
-                                TransitionInfo(
-                                    ownerName = name,
-                                    from = KeyguardState.LOCKSCREEN,
-                                    to = KeyguardState.BOUNCER,
-                                    animator = null,
-                                )
+    private fun listenForBouncerHiding() {
+        scope.launch {
+            keyguardInteractor.isBouncerShowing
+                .sample(keyguardInteractor.wakefulnessState, { a, b -> Pair(a, b) })
+                .collect { pair ->
+                    val (isBouncerShowing, wakefulnessState) = pair
+                    if (!isBouncerShowing) {
+                        val to =
+                            if (
+                                wakefulnessState == WakefulnessModel.STARTING_TO_SLEEP ||
+                                    wakefulnessState == WakefulnessModel.ASLEEP
+                            ) {
+                                KeyguardState.AOD
+                            } else {
+                                KeyguardState.LOCKSCREEN
+                            }
+                        keyguardTransitionRepository.startTransition(
+                            TransitionInfo(
+                                ownerName = name,
+                                from = KeyguardState.BOUNCER,
+                                to = to,
+                                animator = getAnimator(),
                             )
+                        )
                     }
                 }
-            }
         }
+    }
+
+    /* Starts transitions when manually dragging up the bouncer from the lockscreen. */
+    private fun listenForDraggingUpToBouncer() {
+        scope.launch {
+            shadeRepository.shadeModel
+                .sample(
+                    combine(
+                        keyguardTransitionInteractor.finishedKeyguardState,
+                        keyguardInteractor.statusBarState,
+                    ) { keyguardState, statusBarState ->
+                        Pair(keyguardState, statusBarState)
+                    },
+                    { shadeModel, pair -> Triple(shadeModel, pair.first, pair.second) }
+                )
+                .collect { triple ->
+                    val (shadeModel, keyguardState, statusBarState) = triple
+
+                    val id = transitionId
+                    if (id != null) {
+                        // An existing `id` means a transition is started, and calls to
+                        // `updateTransition` will control it until FINISHED
+                        keyguardTransitionRepository.updateTransition(
+                            id,
+                            shadeModel.expansionAmount,
+                            if (
+                                shadeModel.expansionAmount == 0f || shadeModel.expansionAmount == 1f
+                            ) {
+                                transitionId = null
+                                TransitionState.FINISHED
+                            } else {
+                                TransitionState.RUNNING
+                            }
+                        )
+                    } else {
+                        // TODO (b/251849525): Remove statusbarstate check when that state is
+                        // integrated
+                        // into KeyguardTransitionRepository
+                        if (
+                            keyguardState == KeyguardState.LOCKSCREEN &&
+                                shadeModel.isUserDragging &&
+                                statusBarState != SHADE_LOCKED
+                        ) {
+                            transitionId =
+                                keyguardTransitionRepository.startTransition(
+                                    TransitionInfo(
+                                        ownerName = name,
+                                        from = KeyguardState.LOCKSCREEN,
+                                        to = KeyguardState.BOUNCER,
+                                        animator = null,
+                                    )
+                                )
+                        }
+                    }
+                }
+        }
+    }
+
+    private fun getAnimator(): ValueAnimator {
+        return ValueAnimator().apply {
+            setInterpolator(Interpolators.LINEAR)
+            setDuration(TRANSITION_DURATION_MS)
+        }
+    }
+
+    companion object {
+        private const val TRANSITION_DURATION_MS = 300L
     }
 }

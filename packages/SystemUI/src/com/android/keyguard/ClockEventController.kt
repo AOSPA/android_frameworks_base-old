@@ -34,25 +34,27 @@ import com.android.systemui.flags.Flags.DOZING_MIGRATION_1
 import com.android.systemui.flags.Flags.REGION_SAMPLING
 import com.android.systemui.keyguard.domain.interactor.KeyguardInteractor
 import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInteractor
+import com.android.systemui.keyguard.shared.model.TransitionState
 import com.android.systemui.lifecycle.repeatWhenAttached
 import com.android.systemui.log.dagger.KeyguardClockLog
 import com.android.systemui.plugins.ClockController
 import com.android.systemui.plugins.log.LogBuffer
-import com.android.systemui.shared.regionsampling.RegionSamplingInstance
+import com.android.systemui.shared.regionsampling.RegionSampler
 import com.android.systemui.statusbar.policy.BatteryController
 import com.android.systemui.statusbar.policy.BatteryController.BatteryStateChangeCallback
 import com.android.systemui.statusbar.policy.ConfigurationController
-import java.io.PrintWriter
-import java.util.Locale
-import java.util.TimeZone
-import java.util.concurrent.Executor
-import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DisposableHandle
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
+import java.io.PrintWriter
+import java.util.Locale
+import java.util.TimeZone
+import java.util.concurrent.Executor
+import javax.inject.Inject
 
 /**
  * Controller for a Clock provided by the registry and used on the keyguard. Instantiated by
@@ -69,14 +71,17 @@ open class ClockEventController @Inject constructor(
     private val context: Context,
     @Main private val mainExecutor: Executor,
     @Background private val bgExecutor: Executor,
-    @KeyguardClockLog private val logBuffer: LogBuffer,
+    @KeyguardClockLog private val logBuffer: LogBuffer?,
     private val featureFlags: FeatureFlags
 ) {
     var clock: ClockController? = null
         set(value) {
             field = value
             if (value != null) {
-                value.setLogBuffer(logBuffer)
+                if (logBuffer != null) {
+                    value.setLogBuffer(logBuffer)
+                }
+
                 value.initialize(resources, dozeAmount, 0f)
                 updateRegionSamplers(value)
             }
@@ -139,21 +144,17 @@ open class ClockEventController @Inject constructor(
             bgExecutor: Executor?,
             regionSamplingEnabled: Boolean,
             updateColors: () -> Unit
-    ): RegionSamplingInstance {
-        return RegionSamplingInstance(
+    ): RegionSampler {
+        return RegionSampler(
             sampledView,
             mainExecutor,
             bgExecutor,
             regionSamplingEnabled,
-            object : RegionSamplingInstance.UpdateColorCallback {
-                override fun updateColors() {
-                    updateColors()
-                }
-            })
+            updateFun = { updateColors() } )
     }
 
-    var smallRegionSampler: RegionSamplingInstance? = null
-    var largeRegionSampler: RegionSamplingInstance? = null
+    var smallRegionSampler: RegionSampler? = null
+    var largeRegionSampler: RegionSampler? = null
 
     private var smallClockIsDark = true
     private var largeClockIsDark = true
@@ -161,6 +162,7 @@ open class ClockEventController @Inject constructor(
     private val configListener = object : ConfigurationController.ConfigurationListener {
         override fun onThemeChanged() {
             clock?.events?.onColorPaletteChanged(resources)
+            updateColors()
         }
 
         override fun onDensityOrFontScaleChanged() {
@@ -186,8 +188,10 @@ open class ClockEventController @Inject constructor(
     private val keyguardUpdateMonitorCallback = object : KeyguardUpdateMonitorCallback() {
         override fun onKeyguardVisibilityChanged(visible: Boolean) {
             isKeyguardVisible = visible
-            if (!isKeyguardVisible) {
-                clock?.animations?.doze(if (isDozing) 1f else 0f)
+            if (!featureFlags.isEnabled(DOZING_MIGRATION_1)) {
+                if (!isKeyguardVisible) {
+                    clock?.animations?.doze(if (isDozing) 1f else 0f)
+                }
             }
         }
 
@@ -224,6 +228,7 @@ open class ClockEventController @Inject constructor(
                 listenForDozing(this)
                 if (featureFlags.isEnabled(DOZING_MIGRATION_1)) {
                     listenForDozeAmountTransition(this)
+                    listenForAnyStateToAodTransition(this)
                 } else {
                     listenForDozeAmount(this)
                 }
@@ -271,6 +276,22 @@ open class ClockEventController @Inject constructor(
         return scope.launch {
             keyguardTransitionInteractor.dozeAmountTransition.collect {
                 dozeAmount = it.value
+                clock?.animations?.doze(dozeAmount)
+            }
+        }
+    }
+
+    /**
+     * When keyguard is displayed again after being gone, the clock must be reset to full
+     * dozing.
+     */
+    @VisibleForTesting
+    internal fun listenForAnyStateToAodTransition(scope: CoroutineScope): Job {
+        return scope.launch {
+            keyguardTransitionInteractor.anyStateToAodTransition.filter {
+                it.transitionState == TransitionState.FINISHED
+            }.collect {
+                dozeAmount = 1f
                 clock?.animations?.doze(dozeAmount)
             }
         }
