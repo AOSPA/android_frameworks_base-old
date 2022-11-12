@@ -39,10 +39,11 @@ struct FabricatedOverlay {
     Builder& SetOverlayable(const std::string& name);
 
     Builder& SetResourceValue(const std::string& resource_name, uint8_t data_type,
-                              uint32_t data_value);
+                              uint32_t data_value, const std::string& configuration);
 
     Builder& SetResourceValue(const std::string& resource_name, uint8_t data_type,
-                              const std::string& data_string_value);
+                              const std::string& data_string_value,
+                              const std::string& configuration);
 
     WARN_UNUSED Result<FabricatedOverlay> Build();
 
@@ -52,6 +53,7 @@ struct FabricatedOverlay {
       DataType data_type;
       DataValue data_value;
       std::string data_string_value;
+      std::string configuration;
     };
 
     std::string package_name_;
@@ -66,18 +68,21 @@ struct FabricatedOverlay {
 
  private:
   struct SerializedData {
-    std::unique_ptr<uint8_t[]> data;
-    size_t data_size;
-    uint32_t crc;
-  };
+    std::unique_ptr<uint8_t[]> pb_data;
+    size_t pb_data_size;
+    uint32_t pb_crc;
+    std::string sp_data;
+   };
 
   Result<SerializedData*> InitializeData() const;
   Result<uint32_t> GetCrc() const;
 
   explicit FabricatedOverlay(pb::FabricatedOverlay&& overlay,
+                             std::string&& string_pool_data_,
                              std::optional<uint32_t> crc_from_disk = {});
 
   pb::FabricatedOverlay overlay_pb_;
+  std::string string_pool_data_;
   std::optional<uint32_t> crc_from_disk_;
   mutable std::optional<SerializedData> data_;
 

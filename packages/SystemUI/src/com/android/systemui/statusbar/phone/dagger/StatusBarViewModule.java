@@ -30,10 +30,13 @@ import com.android.systemui.battery.BatteryMeterViewController;
 import com.android.systemui.biometrics.AuthRippleView;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.qualifiers.Main;
+import com.android.systemui.dump.DumpManager;
 import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.flags.Flags;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.privacy.OngoingPrivacyChip;
+import com.android.systemui.shade.CombinedShadeHeadersConstraintManager;
+import com.android.systemui.shade.CombinedShadeHeadersConstraintManagerImpl;
 import com.android.systemui.shade.NotificationPanelView;
 import com.android.systemui.shade.NotificationPanelViewController;
 import com.android.systemui.shade.NotificationShadeWindowView;
@@ -42,15 +45,19 @@ import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.NotificationShelf;
 import com.android.systemui.statusbar.NotificationShelfController;
 import com.android.systemui.statusbar.OperatorNameViewController;
+import com.android.systemui.statusbar.core.StatusBarInitializer.OnStatusBarViewInitializedListener;
 import com.android.systemui.statusbar.events.SystemStatusAnimationScheduler;
 import com.android.systemui.statusbar.notification.row.dagger.NotificationShelfComponent;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
 import com.android.systemui.statusbar.phone.KeyguardBottomAreaView;
+import com.android.systemui.statusbar.phone.LetterboxAppearanceCalculator;
 import com.android.systemui.statusbar.phone.NotificationIconAreaController;
+import com.android.systemui.statusbar.phone.StatusBarBoundsProvider;
 import com.android.systemui.statusbar.phone.StatusBarHideIconsForBouncerManager;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
 import com.android.systemui.statusbar.phone.StatusBarLocationPublisher;
 import com.android.systemui.statusbar.phone.StatusIconContainer;
+import com.android.systemui.statusbar.phone.SystemBarAttributesListener;
 import com.android.systemui.statusbar.phone.TapAgainView;
 import com.android.systemui.statusbar.phone.fragment.CollapsedStatusBarFragment;
 import com.android.systemui.statusbar.phone.fragment.CollapsedStatusBarFragmentLogger;
@@ -68,8 +75,10 @@ import java.util.concurrent.Executor;
 
 import javax.inject.Named;
 
+import dagger.Binds;
 import dagger.Module;
 import dagger.Provides;
+import dagger.multibindings.IntoSet;
 
 @Module(subcomponents = StatusBarFragmentComponent.class)
 public abstract class StatusBarViewModule {
@@ -177,6 +186,14 @@ public abstract class StatusBarViewModule {
     /** */
     @Provides
     @CentralSurfacesComponent.CentralSurfacesScope
+    public static CombinedShadeHeadersConstraintManager
+            provideCombinedShadeHeadersConstraintManager() {
+        return CombinedShadeHeadersConstraintManagerImpl.INSTANCE;
+    }
+
+    /** */
+    @Provides
+    @CentralSurfacesComponent.CentralSurfacesScope
     public static OngoingPrivacyChip getSplitShadeOngoingPrivacyChip(
             @Named(LARGE_SCREEN_SHADE_HEADER) View header) {
         return header.findViewById(R.id.privacy_chip);
@@ -236,6 +253,17 @@ public abstract class StatusBarViewModule {
         return notificationShadeWindowView.findViewById(R.id.notification_container_parent);
     }
 
+    @Binds
+    @IntoSet
+    abstract OnStatusBarViewInitializedListener statusBarInitializedListener(
+            LetterboxAppearanceCalculator letterboxAppearanceCalculator
+    );
+
+    @Binds
+    @IntoSet
+    abstract StatusBarBoundsProvider.BoundsChangeListener sysBarAttrsListenerAsBoundsListener(
+            SystemBarAttributesListener systemBarAttributesListener);
+
     /**
      * Creates a new {@link CollapsedStatusBarFragment}.
      *
@@ -258,6 +286,7 @@ public abstract class StatusBarViewModule {
             PanelExpansionStateManager panelExpansionStateManager,
             FeatureFlags featureFlags,
             StatusBarIconController statusBarIconController,
+            StatusBarIconController.DarkIconManager.Factory darkIconManagerFactory,
             StatusBarHideIconsForBouncerManager statusBarHideIconsForBouncerManager,
             KeyguardStateController keyguardStateController,
             NotificationPanelViewController notificationPanelViewController,
@@ -267,7 +296,8 @@ public abstract class StatusBarViewModule {
             CollapsedStatusBarFragmentLogger collapsedStatusBarFragmentLogger,
             OperatorNameViewController.Factory operatorNameViewControllerFactory,
             SecureSettings secureSettings,
-            @Main Executor mainExecutor
+            @Main Executor mainExecutor,
+            DumpManager dumpManager
     ) {
         return new CollapsedStatusBarFragment(statusBarFragmentComponentFactory,
                 ongoingCallController,
@@ -277,6 +307,7 @@ public abstract class StatusBarViewModule {
                 panelExpansionStateManager,
                 featureFlags,
                 statusBarIconController,
+                darkIconManagerFactory,
                 statusBarHideIconsForBouncerManager,
                 keyguardStateController,
                 notificationPanelViewController,
@@ -286,7 +317,8 @@ public abstract class StatusBarViewModule {
                 collapsedStatusBarFragmentLogger,
                 operatorNameViewControllerFactory,
                 secureSettings,
-                mainExecutor);
+                mainExecutor,
+                dumpManager);
     }
 
     /**

@@ -65,6 +65,7 @@ import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
+import android.apex.ApexInfo;
 import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Context;
@@ -142,7 +143,6 @@ import com.android.server.pm.pkg.component.ParsedIntentInfo;
 import com.android.server.pm.pkg.component.ParsedMainComponent;
 import com.android.server.pm.pkg.component.ParsedProvider;
 import com.android.server.pm.pkg.component.ParsedService;
-import com.android.server.pm.pkg.parsing.PackageInfoWithoutStateUtils;
 import com.android.server.pm.resolution.ComponentResolverApi;
 import com.android.server.pm.verify.domain.DomainVerificationManagerInternal;
 import com.android.server.pm.verify.domain.DomainVerificationUtils;
@@ -607,6 +607,15 @@ public class ComputerEngine implements Computer {
                 resolveForStart, userId, intent);
     }
 
+    @NonNull
+    @Override
+    public final List<ResolveInfo> queryIntentActivitiesInternal(Intent intent, String resolvedType,
+            @PackageManager.ResolveInfoFlagsBits long flags, int filterCallingUid, int userId) {
+        return queryIntentActivitiesInternal(
+                intent, resolvedType, flags, 0 /*privateResolveFlags*/, filterCallingUid,
+                userId, false /*resolveForStart*/, true /*allowDynamicSplits*/);
+    }
+
     public final @NonNull List<ResolveInfo> queryIntentActivitiesInternal(Intent intent,
             String resolvedType, @PackageManager.ResolveInfoFlagsBits long flags, int userId) {
         return queryIntentActivitiesInternal(
@@ -895,7 +904,7 @@ public class ComputerEngine implements Computer {
                     a, flags, ps.getUserStateOrDefault(userId), userId, ps);
         }
         if (resolveComponentName().equals(component)) {
-            return PackageInfoWithoutStateUtils.generateDelegateActivityInfo(mResolveActivity,
+            return PackageInfoUtils.generateDelegateActivityInfo(mResolveActivity,
                     flags, PackageUserStateInternal.DEFAULT, userId);
         }
         return null;
@@ -1018,11 +1027,12 @@ public class ComputerEngine implements Computer {
                 if ((flags & PackageManager.MATCH_SYSTEM_ONLY) != 0) {
                     apexFlags = ApexManager.MATCH_FACTORY_PACKAGE;
                 }
-                final PackageInfo pi = mApexPackageInfo.getPackageInfo(packageName, apexFlags);
-                if (pi == null) {
+                final var pair = mApexPackageInfo.getPackageInfo(packageName, apexFlags);
+                if (pair == null) {
                     return null;
                 }
-                return pi.applicationInfo;
+                return PackageInfoUtils.generateApplicationInfo(pair.second, flags,
+                        PackageUserStateInternal.DEFAULT, userId, null);
             }
         }
         if ("android".equals(packageName) || "system".equals(packageName)) {
@@ -1580,10 +1590,9 @@ public class ComputerEngine implements Computer {
             return result;
         }
         final ResolveInfo ephemeralInstaller = new ResolveInfo(mInstantAppInstallerInfo);
-        ephemeralInstaller.activityInfo =
-                PackageInfoWithoutStateUtils.generateDelegateActivityInfo(
-                        instantAppInstallerActivity(), 0 /*flags*/,
-                        ps.getUserStateOrDefault(userId), userId);
+        ephemeralInstaller.activityInfo = PackageInfoUtils.generateDelegateActivityInfo(
+                instantAppInstallerActivity(), 0 /*flags*/,
+                ps.getUserStateOrDefault(userId), userId);
         ephemeralInstaller.match = IntentFilter.MATCH_CATEGORY_SCHEME_SPECIFIC_PART
                 | IntentFilter.MATCH_ADJUSTMENT_NORMAL;
         // add a non-generic filter
@@ -1670,7 +1679,7 @@ public class ComputerEngine implements Computer {
             ai.setVersionCode(ps.getVersionCode());
             ai.flags = ps.getFlags();
             ai.privateFlags = ps.getPrivateFlags();
-            pi.applicationInfo = PackageInfoWithoutStateUtils.generateDelegateApplicationInfo(
+            pi.applicationInfo = PackageInfoUtils.generateDelegateApplicationInfo(
                     ai, flags, state, userId);
 
             if (DEBUG_PACKAGE_INFO) {
@@ -1718,8 +1727,12 @@ public class ComputerEngine implements Computer {
             // Instant app filtering for APEX modules is ignored
             if (!ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
                 if (matchApex) {
-                    return mApexPackageInfo.getPackageInfo(packageName,
+                    final var pair = mApexPackageInfo.getPackageInfo(packageName,
                             ApexManager.MATCH_FACTORY_PACKAGE);
+                    if (pair == null) {
+                        return null;
+                    }
+                    return PackageInfoUtils.generate(pair.second, pair.first, flags, null, userId);
                 }
             }
             final PackageStateInternal ps = mSettings.getDisabledSystemPkg(packageName);
@@ -1775,8 +1788,12 @@ public class ComputerEngine implements Computer {
         }
         if (!ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
             if (matchApex) {
-                return mApexPackageInfo.getPackageInfo(packageName,
+                final var pair = mApexPackageInfo.getPackageInfo(packageName,
                         ApexManager.MATCH_ACTIVE_PACKAGE);
+                if (pair == null) {
+                    return null;
+                }
+                return PackageInfoUtils.generate(pair.second, pair.first, flags, null, userId);
             }
         }
         return null;
@@ -1883,10 +1900,17 @@ public class ComputerEngine implements Computer {
         }
         if (!ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
             if (listApex) {
+                List<Pair<ApexInfo, AndroidPackage>> pairs;
                 if (listFactory) {
-                    list.addAll(mApexPackageInfo.getFactoryPackages());
+                    pairs = mApexPackageInfo.getFactoryPackages();
                 } else {
-                    list.addAll(mApexPackageInfo.getActivePackages());
+                    pairs = mApexPackageInfo.getActivePackages();
+                }
+
+                for (int index = 0; index < pairs.size(); index++) {
+                    var pair = pairs.get(index);
+                    list.add(PackageInfoUtils.generate(pair.second, pair.first, flags, null,
+                            userId));
                 }
             }
         }
@@ -3404,29 +3428,23 @@ public class ComputerEngine implements Computer {
         } // switch
     }
 
-    private void generateApexPackageInfo(List<PackageInfo> activePackages,
-            List<PackageInfo> inactivePackages, List<PackageInfo> factoryPackages) {
+    private void generateApexPackageInfo(@NonNull List<PackageStateInternal> activePackages,
+            @NonNull List<PackageStateInternal> inactivePackages,
+            @NonNull List<PackageStateInternal> factoryActivePackages,
+            @NonNull List<PackageStateInternal> factoryInactivePackages) {
         for (AndroidPackage p : mPackages.values()) {
             final String packageName = p.getPackageName();
             PackageStateInternal ps = mSettings.getPackage(packageName);
             if (!p.isApex() || ps == null) {
                 continue;
             }
-            PackageInfo pi = generatePackageInfo(ps, 0, 0);
-            if (pi == null) {
-                continue;
-            }
-            pi.isActiveApex = true;
-            activePackages.add(pi);
+            activePackages.add(ps);
             if (!ps.isUpdatedSystemApp()) {
-                factoryPackages.add(pi);
+                factoryActivePackages.add(ps);
             } else {
                 PackageStateInternal psDisabled = mSettings.getDisabledSystemPkg(packageName);
-                pi = generatePackageInfo(psDisabled, 0, 0);
-                if (pi != null) {
-                    factoryPackages.add(pi);
-                    inactivePackages.add(pi);
-                }
+                factoryInactivePackages.add(psDisabled);
+                inactivePackages.add(psDisabled);
             }
         }
     }
@@ -3434,16 +3452,19 @@ public class ComputerEngine implements Computer {
     private void dumpApex(PrintWriter pw, String packageName) {
         if (ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
             final IndentingPrintWriter ipw = new IndentingPrintWriter(pw, "  ", 120);
-            List<PackageInfo> activePackages = new ArrayList<>();
-            List<PackageInfo> inactivePackages = new ArrayList<>();
-            List<PackageInfo> factoryPackages = new ArrayList<>();
-            generateApexPackageInfo(activePackages, inactivePackages, factoryPackages);
+            List<PackageStateInternal> activePackages = new ArrayList<>();
+            List<PackageStateInternal> inactivePackages = new ArrayList<>();
+            List<PackageStateInternal> factoryActivePackages = new ArrayList<>();
+            List<PackageStateInternal> factoryInactivePackages = new ArrayList<>();
+            generateApexPackageInfo(activePackages, inactivePackages, factoryActivePackages,
+                    factoryInactivePackages);
             ipw.println("Active APEX packages:");
-            ApexPackageInfo.dumpPackages(activePackages, packageName, ipw);
+            ApexPackageInfo.dumpPackageStates(activePackages, true, packageName, ipw);
             ipw.println("Inactive APEX packages:");
-            ApexPackageInfo.dumpPackages(inactivePackages, packageName, ipw);
+            ApexPackageInfo.dumpPackageStates(inactivePackages, false, packageName, ipw);
             ipw.println("Factory APEX packages:");
-            ApexPackageInfo.dumpPackages(factoryPackages, packageName, ipw);
+            ApexPackageInfo.dumpPackageStates(factoryActivePackages, true, packageName, ipw);
+            ApexPackageInfo.dumpPackageStates(factoryInactivePackages, false, packageName, ipw);
         } else {
             mApexPackageInfo.dump(pw, packageName);
         }
@@ -5393,6 +5414,26 @@ public class ComputerEngine implements Computer {
             if (componentEnabledSetting == COMPONENT_ENABLED_STATE_DEFAULT) {
                 return componentInfo.isEnabled();
             } else return componentEnabledSetting == COMPONENT_ENABLED_STATE_ENABLED;
+        } catch (PackageManager.NameNotFoundException ignored) {
+            return false;
+        }
+    }
+
+    @Override
+    public boolean isApplicationEffectivelyEnabled(@NonNull String packageName,
+            @UserIdInt int userId) {
+        try {
+            int appEnabledSetting = mSettings.getApplicationEnabledSetting(packageName, userId);
+            if (appEnabledSetting == COMPONENT_ENABLED_STATE_DEFAULT) {
+                final AndroidPackage pkg = getPackage(packageName);
+                if (pkg == null) {
+                    // Should not happen because getApplicationEnabledSetting would have thrown
+                    return false;
+                }
+                return pkg.isEnabled();
+            } else {
+                return appEnabledSetting == COMPONENT_ENABLED_STATE_ENABLED;
+            }
         } catch (PackageManager.NameNotFoundException ignored) {
             return false;
         }

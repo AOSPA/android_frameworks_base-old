@@ -75,7 +75,7 @@ open class AuthBiometricFingerprintView(
         }
     }
 
-    override fun getDelayAfterAuthenticatedDurationMs() = 0
+    override fun getDelayAfterAuthenticatedDurationMs() = 500
 
     override fun getStateForAfterError() = STATE_AUTHENTICATING
 
@@ -90,8 +90,9 @@ open class AuthBiometricFingerprintView(
 
     fun updateOverrideIconLayoutParamsSize() {
         udfpsAdapter?.let {
-            (mIconController as? AuthBiometricFingerprintIconController)?.iconLayoutParamsSize =
-                    it.getSensorDiameter(scaleFactorProvider?.provide() ?: 1.0f)
+            val sensorDiameter = it.getSensorDiameter(scaleFactorProvider?.provide() ?: 1.0f)
+            (mIconController as? AuthBiometricFingerprintIconController)?.iconLayoutParamSize =
+                    Pair(sensorDiameter, sensorDiameter)
         }
     }
 

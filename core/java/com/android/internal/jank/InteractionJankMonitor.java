@@ -55,7 +55,6 @@ import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_IN
 import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__SHADE_APP_LAUNCH_FROM_SETTINGS_BUTTON;
 import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__SHADE_CLEAR_ALL;
 import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__SHADE_DIALOG_OPEN;
-import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__SHADE_EXPAND_COLLAPSE_LOCK;
 import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__SHADE_HEADS_UP_APPEAR;
 import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__SHADE_HEADS_UP_DISAPPEAR;
 import static com.android.internal.util.FrameworkStatsLog.UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__SHADE_NOTIFICATION_ADD;
@@ -88,6 +87,7 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.UiThread;
 import android.annotation.WorkerThread;
+import android.app.ActivityThread;
 import android.content.Context;
 import android.os.Build;
 import android.os.Handler;
@@ -150,12 +150,15 @@ public class InteractionJankMonitor {
     private static final int DEFAULT_TRACE_THRESHOLD_MISSED_FRAMES = 3;
     private static final int DEFAULT_TRACE_THRESHOLD_FRAME_TIME_MILLIS = 64;
 
+    @VisibleForTesting
+    public static final int MAX_LENGTH_OF_CUJ_NAME = 80;
+    private static final int MAX_LENGTH_SESSION_NAME = 100;
+
     public static final String ACTION_SESSION_END = ACTION_PREFIX + ".ACTION_SESSION_END";
     public static final String ACTION_SESSION_CANCEL = ACTION_PREFIX + ".ACTION_SESSION_CANCEL";
 
     // Every value must have a corresponding entry in CUJ_STATSD_INTERACTION_TYPE.
     public static final int CUJ_NOTIFICATION_SHADE_EXPAND_COLLAPSE = 0;
-    public static final int CUJ_NOTIFICATION_SHADE_EXPAND_COLLAPSE_LOCK = 1;
     public static final int CUJ_NOTIFICATION_SHADE_SCROLL_FLING = 2;
     public static final int CUJ_NOTIFICATION_SHADE_ROW_EXPAND = 3;
     public static final int CUJ_NOTIFICATION_SHADE_ROW_SWIPE = 4;
@@ -226,7 +229,7 @@ public class InteractionJankMonitor {
     public static final int[] CUJ_TO_STATSD_INTERACTION_TYPE = {
             // This should be mapping to CUJ_NOTIFICATION_SHADE_EXPAND_COLLAPSE.
             UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__NOTIFICATION_SHADE_SWIPE,
-            UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__SHADE_EXPAND_COLLAPSE_LOCK,
+            NO_STATSD_LOGGING, // This is deprecated.
             UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__SHADE_SCROLL_FLING,
             UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__SHADE_ROW_EXPAND,
             UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__SHADE_ROW_SWIPE,
@@ -290,7 +293,10 @@ public class InteractionJankMonitor {
             UIINTERACTION_FRAME_INFO_REPORTED__INTERACTION_TYPE__SHADE_CLEAR_ALL,
     };
 
-    private static volatile InteractionJankMonitor sInstance;
+    private static class InstanceHolder {
+        public static final InteractionJankMonitor INSTANCE =
+            new InteractionJankMonitor(new HandlerThread(DEFAULT_WORKER_NAME));
+    }
 
     private final DeviceConfig.OnPropertiesChangedListener mPropertiesChangedListener =
             this::updateProperties;
@@ -310,7 +316,6 @@ public class InteractionJankMonitor {
     /** @hide */
     @IntDef({
             CUJ_NOTIFICATION_SHADE_EXPAND_COLLAPSE,
-            CUJ_NOTIFICATION_SHADE_EXPAND_COLLAPSE_LOCK,
             CUJ_NOTIFICATION_SHADE_SCROLL_FLING,
             CUJ_NOTIFICATION_SHADE_ROW_EXPAND,
             CUJ_NOTIFICATION_SHADE_ROW_SWIPE,
@@ -383,15 +388,7 @@ public class InteractionJankMonitor {
      * @return instance of InteractionJankMonitor
      */
     public static InteractionJankMonitor getInstance() {
-        // Use DCL here since this method might be invoked very often.
-        if (sInstance == null) {
-            synchronized (InteractionJankMonitor.class) {
-                if (sInstance == null) {
-                    sInstance = new InteractionJankMonitor(new HandlerThread(DEFAULT_WORKER_NAME));
-                }
-            }
-        }
-        return sInstance;
+        return InstanceHolder.INSTANCE;
     }
 
     /**
@@ -401,6 +398,11 @@ public class InteractionJankMonitor {
      */
     @VisibleForTesting
     public InteractionJankMonitor(@NonNull HandlerThread worker) {
+        // Check permission early.
+        DeviceConfig.enforceReadPermission(
+            ActivityThread.currentApplication().getApplicationContext(),
+            DeviceConfig.NAMESPACE_INTERACTION_JANK_MONITOR);
+
         mRunningTrackers = new SparseArray<>();
         mTimeoutActions = new SparseArray<>();
         mWorker = worker;
@@ -735,11 +737,12 @@ public class InteractionJankMonitor {
      * @return the name of the cuj type
      */
     public static String getNameOfCuj(int cujType) {
+        // Please note:
+        // 1. The length of the returned string shouldn't exceed MAX_LENGTH_OF_CUJ_NAME.
+        // 2. The returned string should be the same with the name defined in atoms.proto.
         switch (cujType) {
             case CUJ_NOTIFICATION_SHADE_EXPAND_COLLAPSE:
                 return "SHADE_EXPAND_COLLAPSE";
-            case CUJ_NOTIFICATION_SHADE_EXPAND_COLLAPSE_LOCK:
-                return "SHADE_EXPAND_COLLAPSE_LOCK";
             case CUJ_NOTIFICATION_SHADE_SCROLL_FLING:
                 return "SHADE_SCROLL_FLING";
             case CUJ_NOTIFICATION_SHADE_ROW_EXPAND:
@@ -1111,9 +1114,27 @@ public class InteractionJankMonitor {
         public Session(@CujType int cujType, @NonNull String postfix) {
             mCujType = cujType;
             mTimeStamp = System.nanoTime();
-            mName = TextUtils.isEmpty(postfix)
-                    ? String.format("J<%s>", getNameOfCuj(mCujType))
-                    : String.format("J<%s::%s>", getNameOfCuj(mCujType), postfix);
+            mName = generateSessionName(getNameOfCuj(cujType), postfix);
+        }
+
+        private String generateSessionName(@NonNull String cujName, @NonNull String cujPostfix) {
+            final boolean hasPostfix = !TextUtils.isEmpty(cujPostfix);
+            // We assert that the cujName shouldn't exceed MAX_LENGTH_OF_CUJ_NAME.
+            if (cujName.length() > MAX_LENGTH_OF_CUJ_NAME) {
+                throw new IllegalArgumentException(TextUtils.formatSimple(
+                        "The length of cuj name <%s> exceeds %d", cujName, MAX_LENGTH_OF_CUJ_NAME));
+            }
+            if (hasPostfix) {
+                final int remaining = MAX_LENGTH_SESSION_NAME - cujName.length();
+                if (cujPostfix.length() > remaining) {
+                    cujPostfix = cujPostfix.substring(0, remaining - 3).concat("...");
+                }
+            }
+            // The max length of the whole string should be:
+            // 105 with postfix, 83 without postfix
+            return hasPostfix
+                    ? TextUtils.formatSimple("J<%s::%s>", cujName, cujPostfix)
+                    : TextUtils.formatSimple("J<%s>", cujName);
         }
 
         @CujType

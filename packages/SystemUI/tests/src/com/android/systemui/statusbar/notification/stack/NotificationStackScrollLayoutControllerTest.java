@@ -52,6 +52,7 @@ import com.android.systemui.media.KeyguardMediaController;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin.OnMenuEventListener;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
+import com.android.systemui.shade.ShadeController;
 import com.android.systemui.shade.transition.ShadeTransitionController;
 import com.android.systemui.statusbar.LockscreenShadeTransitionController;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
@@ -66,6 +67,7 @@ import com.android.systemui.statusbar.notification.collection.NotifCollection;
 import com.android.systemui.statusbar.notification.collection.NotifPipeline;
 import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy;
 import com.android.systemui.statusbar.notification.collection.legacy.VisualStabilityManager;
+import com.android.systemui.statusbar.notification.collection.render.GroupExpansionManager;
 import com.android.systemui.statusbar.notification.collection.render.NotificationVisibilityProvider;
 import com.android.systemui.statusbar.notification.collection.render.SectionHeaderController;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
@@ -75,7 +77,6 @@ import com.android.systemui.statusbar.phone.CentralSurfaces;
 import com.android.systemui.statusbar.phone.HeadsUpManagerPhone;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.ScrimController;
-import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.ZenModeController;
@@ -121,7 +122,8 @@ public class NotificationStackScrollLayoutControllerTest extends SysuiTestCase {
     @Mock private NotificationSwipeHelper mNotificationSwipeHelper;
     @Mock private CentralSurfaces mCentralSurfaces;
     @Mock private ScrimController mScrimController;
-    @Mock private NotificationGroupManagerLegacy mLegacyGroupManager;
+    @Mock private NotificationGroupManagerLegacy mGroupManagerLegacy;
+    @Mock private GroupExpansionManager mGroupExpansionManager;
     @Mock private SectionHeaderController mSilentHeaderController;
     @Mock private NotifPipelineFlags mNotifPipelineFlags;
     @Mock private NotifPipeline mNotifPipeline;
@@ -174,8 +176,8 @@ public class NotificationStackScrollLayoutControllerTest extends SysuiTestCase {
                 mNotificationSwipeHelperBuilder,
                 mCentralSurfaces,
                 mScrimController,
-                mLegacyGroupManager,
-                mLegacyGroupManager,
+                mGroupManagerLegacy,
+                mGroupExpansionManager,
                 mSilentHeaderController,
                 mNotifPipeline,
                 mNotifCollection,
@@ -184,7 +186,6 @@ public class NotificationStackScrollLayoutControllerTest extends SysuiTestCase {
                 mShadeTransitionController,
                 mUiEventLogger,
                 mRemoteInputManager,
-                mVisualStabilityManager,
                 mShadeController,
                 mJankMonitor,
                 mStackLogger,

@@ -19,6 +19,8 @@ package com.android.server.tare;
 import static android.text.format.DateUtils.DAY_IN_MILLIS;
 
 import static com.android.server.tare.EconomicPolicy.REGULATION_BASIC_INCOME;
+import static com.android.server.tare.EconomicPolicy.REGULATION_BG_RESTRICTED;
+import static com.android.server.tare.EconomicPolicy.REGULATION_BG_UNRESTRICTED;
 import static com.android.server.tare.EconomicPolicy.REGULATION_BIRTHRIGHT;
 import static com.android.server.tare.EconomicPolicy.REGULATION_DEMOTION;
 import static com.android.server.tare.EconomicPolicy.REGULATION_PROMOTION;
@@ -34,8 +36,6 @@ import static com.android.server.tare.TareUtils.getCurrentTimeMillis;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.Context;
-import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageInfo;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
@@ -46,6 +46,7 @@ import android.util.IndentingPrintWriter;
 import android.util.Log;
 import android.util.Slog;
 import android.util.SparseArrayMap;
+import android.util.SparseSetArray;
 import android.util.TimeUtils;
 
 import com.android.internal.annotations.GuardedBy;
@@ -284,6 +285,7 @@ class Agent {
 
         for (int i = 0; i < pkgNames.size(); ++i) {
             final String pkgName = pkgNames.valueAt(i);
+            final boolean isVip = mIrs.isVip(userId, pkgName);
             SparseArrayMap<String, OngoingEvent> ongoingEvents =
                     mCurrentOngoingEvents.get(userId, pkgName);
             if (ongoingEvents != null) {
@@ -298,8 +300,8 @@ class Agent {
                     for (int n = 0; n < size; ++n) {
                         final ActionAffordabilityNote note = actionAffordabilityNotes.valueAt(n);
                         note.recalculateCosts(economicPolicy, userId, pkgName);
-                        final boolean isAffordable =
-                                isAffordableLocked(newBalance,
+                        final boolean isAffordable = isVip
+                                || isAffordableLocked(newBalance,
                                         note.getCachedModifiedPrice(), note.getCtp());
                         if (note.isCurrentlyAffordable() != isAffordable) {
                             note.setNewAffordability(isAffordable);
@@ -308,6 +310,51 @@ class Agent {
                     }
                 }
                 scheduleBalanceCheckLocked(userId, pkgName);
+            }
+        }
+    }
+
+    @GuardedBy("mLock")
+    void onVipStatusChangedLocked(final int userId, @NonNull String pkgName) {
+        final long now = getCurrentTimeMillis();
+        final long nowElapsed = SystemClock.elapsedRealtime();
+        final CompleteEconomicPolicy economicPolicy = mIrs.getCompleteEconomicPolicyLocked();
+
+        final boolean isVip = mIrs.isVip(userId, pkgName);
+        SparseArrayMap<String, OngoingEvent> ongoingEvents =
+                mCurrentOngoingEvents.get(userId, pkgName);
+        if (ongoingEvents != null) {
+            mOngoingEventUpdater.reset(userId, pkgName, now, nowElapsed);
+            ongoingEvents.forEach(mOngoingEventUpdater);
+        }
+        final ArraySet<ActionAffordabilityNote> actionAffordabilityNotes =
+                mActionAffordabilityNotes.get(userId, pkgName);
+        if (actionAffordabilityNotes != null) {
+            final int size = actionAffordabilityNotes.size();
+            final long newBalance =
+                    mScribe.getLedgerLocked(userId, pkgName).getCurrentBalance();
+            for (int n = 0; n < size; ++n) {
+                final ActionAffordabilityNote note = actionAffordabilityNotes.valueAt(n);
+                note.recalculateCosts(economicPolicy, userId, pkgName);
+                final boolean isAffordable = isVip
+                        || isAffordableLocked(newBalance,
+                        note.getCachedModifiedPrice(), note.getCtp());
+                if (note.isCurrentlyAffordable() != isAffordable) {
+                    note.setNewAffordability(isAffordable);
+                    mIrs.postAffordabilityChanged(userId, pkgName, note);
+                }
+            }
+        }
+        scheduleBalanceCheckLocked(userId, pkgName);
+    }
+
+    @GuardedBy("mLock")
+    void onVipStatusChangedLocked(@NonNull SparseSetArray<String> pkgs) {
+        for (int u = pkgs.size() - 1; u >= 0; --u) {
+            final int userId = pkgs.keyAt(u);
+
+            for (int p = pkgs.sizeAt(u) - 1; p >= 0; --p) {
+                onVipStatusChangedLocked(userId, pkgs.valueAt(u, p));
             }
         }
     }
@@ -349,11 +396,12 @@ class Agent {
                 if (actionAffordabilityNotes != null) {
                     final int size = actionAffordabilityNotes.size();
                     final long newBalance = getBalanceLocked(userId, pkgName);
+                    final boolean isVip = mIrs.isVip(userId, pkgName);
                     for (int n = 0; n < size; ++n) {
                         final ActionAffordabilityNote note = actionAffordabilityNotes.valueAt(n);
                         note.recalculateCosts(economicPolicy, userId, pkgName);
-                        final boolean isAffordable =
-                                isAffordableLocked(newBalance,
+                        final boolean isAffordable = isVip
+                                || isAffordableLocked(newBalance,
                                         note.getCachedModifiedPrice(), note.getCtp());
                         if (note.isCurrentlyAffordable() != isAffordable) {
                             note.setNewAffordability(isAffordable);
@@ -454,14 +502,22 @@ class Agent {
                     "Tried to adjust system balance for " + appToString(userId, pkgName));
             return;
         }
+        if (mIrs.isVip(userId, pkgName)) {
+            // This could happen if the app was made a VIP after it started performing actions.
+            // Continue recording the transaction for debugging purposes, but don't let it change
+            // any numbers.
+            transaction = new Ledger.Transaction(
+                    transaction.startTimeMs, transaction.endTimeMs,
+                    transaction.eventId, transaction.tag, 0 /* delta */, transaction.ctp);
+        }
         final CompleteEconomicPolicy economicPolicy = mIrs.getCompleteEconomicPolicyLocked();
         final long originalBalance = ledger.getCurrentBalance();
+        final long maxBalance = economicPolicy.getMaxSatiatedBalance(userId, pkgName);
         if (transaction.delta > 0
-                && originalBalance + transaction.delta > economicPolicy.getMaxSatiatedBalance()) {
+                && originalBalance + transaction.delta > maxBalance) {
             // Set lower bound at 0 so we don't accidentally take away credits when we were trying
             // to _give_ the app credits.
-            final long newDelta =
-                    Math.max(0, economicPolicy.getMaxSatiatedBalance() - originalBalance);
+            final long newDelta = Math.max(0, maxBalance - originalBalance);
             Slog.i(TAG, "Would result in becoming too rich. Decreasing transaction "
                     + eventToString(transaction.eventId)
                     + (transaction.tag == null ? "" : ":" + transaction.tag)
@@ -479,10 +535,11 @@ class Agent {
                     mActionAffordabilityNotes.get(userId, pkgName);
             if (actionAffordabilityNotes != null) {
                 final long newBalance = ledger.getCurrentBalance();
+                final boolean isVip = mIrs.isVip(userId, pkgName);
                 for (int i = 0; i < actionAffordabilityNotes.size(); ++i) {
                     final ActionAffordabilityNote note = actionAffordabilityNotes.valueAt(i);
-                    final boolean isAffordable =
-                            isAffordableLocked(newBalance,
+                    final boolean isAffordable = isVip
+                            || isAffordableLocked(newBalance,
                                     note.getCachedModifiedPrice(), note.getCtp());
                     if (note.isCurrentlyAffordable() != isAffordable) {
                         note.setNewAffordability(isAffordable);
@@ -605,16 +662,57 @@ class Agent {
         }
     }
 
+    /**
+     * Reclaim all ARCs from an app that was just restricted.
+     */
+    @GuardedBy("mLock")
+    void onAppRestrictedLocked(final int userId, @NonNull final String pkgName) {
+        final long curBalance = getBalanceLocked(userId, pkgName);
+        final long minBalance = mIrs.getMinBalanceLocked(userId, pkgName);
+        if (curBalance <= minBalance) {
+            return;
+        }
+        if (DEBUG) {
+            Slog.i(TAG, "App restricted! Taking " + curBalance
+                    + " from " + appToString(userId, pkgName));
+        }
+
+        final long now = getCurrentTimeMillis();
+        final Ledger ledger = mScribe.getLedgerLocked(userId, pkgName);
+        recordTransactionLocked(userId, pkgName, ledger,
+                new Ledger.Transaction(now, now, REGULATION_BG_RESTRICTED, null, -curBalance, 0),
+                true);
+    }
+
+    /**
+     * Give an app that was just unrestricted some ARCs.
+     */
+    @GuardedBy("mLock")
+    void onAppUnrestrictedLocked(final int userId, @NonNull final String pkgName) {
+        final Ledger ledger = mScribe.getLedgerLocked(userId, pkgName);
+        if (ledger.getCurrentBalance() > 0) {
+            Slog.wtf(TAG, "App " + pkgName + " had credits while it was restricted");
+            // App already got credits somehow. Move along.
+            return;
+        }
+
+        final long now = getCurrentTimeMillis();
+
+        recordTransactionLocked(userId, pkgName, ledger,
+                new Ledger.Transaction(now, now, REGULATION_BG_UNRESTRICTED, null,
+                        mIrs.getMinBalanceLocked(userId, pkgName), 0), true);
+    }
+
     /** Returns true if an app should be given credits in the general distributions. */
-    private boolean shouldGiveCredits(@NonNull PackageInfo packageInfo) {
-        final ApplicationInfo applicationInfo = packageInfo.applicationInfo;
+    private boolean shouldGiveCredits(@NonNull InstalledPackageInfo packageInfo) {
         // Skip apps that wouldn't be doing any work. Giving them ARCs would be wasteful.
-        if (applicationInfo == null || !applicationInfo.hasCode()) {
+        if (!packageInfo.hasCode) {
             return false;
         }
-        final int userId = UserHandle.getUserId(packageInfo.applicationInfo.uid);
+        final int userId = UserHandle.getUserId(packageInfo.uid);
         // No point allocating ARCs to the system. It can do whatever it wants.
-        return !mIrs.isSystem(userId, packageInfo.packageName);
+        return !mIrs.isSystem(userId, packageInfo.packageName)
+                && !mIrs.isPackageRestricted(userId, packageInfo.packageName);
     }
 
     void onCreditSupplyChanged() {
@@ -623,25 +721,28 @@ class Agent {
 
     @GuardedBy("mLock")
     void distributeBasicIncomeLocked(int batteryLevel) {
-        List<PackageInfo> pkgs = mIrs.getInstalledPackages();
+        final SparseArrayMap<String, InstalledPackageInfo> pkgs = mIrs.getInstalledPackages();
 
         final long now = getCurrentTimeMillis();
-        for (int i = 0; i < pkgs.size(); ++i) {
-            final PackageInfo pkgInfo = pkgs.get(i);
-            if (!shouldGiveCredits(pkgInfo)) {
-                continue;
-            }
-            final int userId = UserHandle.getUserId(pkgInfo.applicationInfo.uid);
-            final String pkgName = pkgInfo.packageName;
-            final Ledger ledger = mScribe.getLedgerLocked(userId, pkgName);
-            final long minBalance = mIrs.getMinBalanceLocked(userId, pkgName);
-            final double perc = batteryLevel / 100d;
-            // TODO: maybe don't give credits to bankrupt apps until battery level >= 50%
-            final long shortfall = minBalance - ledger.getCurrentBalance();
-            if (shortfall > 0) {
-                recordTransactionLocked(userId, pkgName, ledger,
-                        new Ledger.Transaction(now, now, REGULATION_BASIC_INCOME,
-                                null, (long) (perc * shortfall), 0), true);
+        for (int uIdx = pkgs.numMaps() - 1; uIdx >= 0; --uIdx) {
+            final int userId = pkgs.keyAt(uIdx);
+
+            for (int pIdx = pkgs.numElementsForKeyAt(uIdx) - 1; pIdx >= 0; --pIdx) {
+                final InstalledPackageInfo pkgInfo = pkgs.valueAt(uIdx, pIdx);
+                if (!shouldGiveCredits(pkgInfo)) {
+                    continue;
+                }
+                final String pkgName = pkgInfo.packageName;
+                final Ledger ledger = mScribe.getLedgerLocked(userId, pkgName);
+                final long minBalance = mIrs.getMinBalanceLocked(userId, pkgName);
+                final double perc = batteryLevel / 100d;
+                // TODO: maybe don't give credits to bankrupt apps until battery level >= 50%
+                final long shortfall = minBalance - ledger.getCurrentBalance();
+                if (shortfall > 0) {
+                    recordTransactionLocked(userId, pkgName, ledger,
+                            new Ledger.Transaction(now, now, REGULATION_BASIC_INCOME,
+                                    null, (long) (perc * shortfall), 0), true);
+                }
             }
         }
     }
@@ -659,11 +760,11 @@ class Agent {
 
     @GuardedBy("mLock")
     void grantBirthrightsLocked(final int userId) {
-        final List<PackageInfo> pkgs = mIrs.getInstalledPackages(userId);
+        final List<InstalledPackageInfo> pkgs = mIrs.getInstalledPackages(userId);
         final long now = getCurrentTimeMillis();
 
         for (int i = 0; i < pkgs.size(); ++i) {
-            final PackageInfo packageInfo = pkgs.get(i);
+            final InstalledPackageInfo packageInfo = pkgs.get(i);
             if (!shouldGiveCredits(packageInfo)) {
                 continue;
             }
@@ -869,7 +970,7 @@ class Agent {
     private void scheduleBalanceCheckLocked(final int userId, @NonNull final String pkgName) {
         SparseArrayMap<String, OngoingEvent> ongoingEvents =
                 mCurrentOngoingEvents.get(userId, pkgName);
-        if (ongoingEvents == null) {
+        if (ongoingEvents == null || mIrs.isVip(userId, pkgName)) {
             // No ongoing transactions. No reason to schedule
             mBalanceThresholdAlarmQueue.removeAlarmForKey(new Package(userId, pkgName));
             return;
@@ -1062,9 +1163,10 @@ class Agent {
                 note.setNewAffordability(true);
                 return;
             }
+            final boolean isVip = mIrs.isVip(userId, pkgName);
             note.recalculateCosts(economicPolicy, userId, pkgName);
-            note.setNewAffordability(
-                    isAffordableLocked(getBalanceLocked(userId, pkgName),
+            note.setNewAffordability(isVip
+                    || isAffordableLocked(getBalanceLocked(userId, pkgName),
                             note.getCachedModifiedPrice(), note.getCtp()));
             mIrs.postAffordabilityChanged(userId, pkgName, note);
             // Update ongoing alarm
@@ -1203,11 +1305,12 @@ class Agent {
                         if (actionAffordabilityNotes != null
                                 && actionAffordabilityNotes.size() > 0) {
                             final long newBalance = getBalanceLocked(userId, pkgName);
+                            final boolean isVip = mIrs.isVip(userId, pkgName);
 
                             for (int i = 0; i < actionAffordabilityNotes.size(); ++i) {
                                 final ActionAffordabilityNote note =
                                         actionAffordabilityNotes.valueAt(i);
-                                final boolean isAffordable = isAffordableLocked(
+                                final boolean isAffordable = isVip || isAffordableLocked(
                                         newBalance, note.getCachedModifiedPrice(), note.getCtp());
                                 if (note.isCurrentlyAffordable() != isAffordable) {
                                     note.setNewAffordability(isAffordable);
@@ -1225,7 +1328,6 @@ class Agent {
 
     @GuardedBy("mLock")
     void dumpLocked(IndentingPrintWriter pw) {
-        pw.println();
         mBalanceThresholdAlarmQueue.dump(pw);
 
         pw.println();

@@ -2151,6 +2151,8 @@ pid_t zygote::ForkCommon(JNIEnv* env, bool is_system_server,
 
     // Reset the fd to the unsolicited zygote socket
     gSystemServerSocketFd = -1;
+  } else if (pid == -1) {
+    ALOGE("Failed to fork child process: %s (%d)", strerror(errno), errno);
   } else {
     ALOGD("Forked child process %d", pid);
   }

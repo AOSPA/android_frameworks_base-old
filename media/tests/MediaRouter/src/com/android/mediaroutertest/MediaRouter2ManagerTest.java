@@ -32,13 +32,13 @@ import static com.android.mediaroutertest.StubMediaRoute2ProviderService.ROUTE_I
 import static com.android.mediaroutertest.StubMediaRoute2ProviderService.ROUTE_ID_FIXED_VOLUME;
 import static com.android.mediaroutertest.StubMediaRoute2ProviderService.ROUTE_ID_SPECIAL_FEATURE;
 import static com.android.mediaroutertest.StubMediaRoute2ProviderService.ROUTE_ID_VARIABLE_VOLUME;
-import static com.android.mediaroutertest.StubMediaRoute2ProviderService.ROUTE_NAME2;
 import static com.android.mediaroutertest.StubMediaRoute2ProviderService.VOLUME_MAX;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import android.Manifest;
@@ -55,10 +55,10 @@ import android.media.RoutingSessionInfo;
 import android.os.Bundle;
 import android.text.TextUtils;
 
-import androidx.test.InstrumentationRegistry;
+import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.filters.LargeTest;
 import androidx.test.filters.SmallTest;
-import androidx.test.runner.AndroidJUnit4;
+import androidx.test.platform.app.InstrumentationRegistry;
 
 import com.android.compatibility.common.util.PollingCheck;
 
@@ -68,6 +68,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -114,14 +115,14 @@ public class MediaRouter2ManagerTest {
 
     @Before
     public void setUp() throws Exception {
-        mContext = InstrumentationRegistry.getTargetContext();
+        mContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
         mUiAutomation = InstrumentationRegistry.getInstrumentation().getUiAutomation();
         mUiAutomation.adoptShellPermissionIdentity(Manifest.permission.MEDIA_CONTENT_CONTROL,
                 Manifest.permission.MODIFY_AUDIO_ROUTING);
         MediaRouter2ManagerTestActivity.startActivity(mContext);
 
         mManager = MediaRouter2Manager.getInstance(mContext);
-        mManager.startScan();
+        mManager.registerScanRequest();
         mRouter2 = MediaRouter2.getInstance(mContext);
 
         // If we need to support thread pool executors, change this to thread pool executor.
@@ -152,7 +153,7 @@ public class MediaRouter2ManagerTest {
 
     @After
     public void tearDown() {
-        mManager.stopScan();
+        mManager.unregisterScanRequest();
 
         // order matters (callbacks should be cleared at the last)
         releaseAllSessions();
@@ -169,51 +170,95 @@ public class MediaRouter2ManagerTest {
     }
 
     @Test
-    public void testOnRoutesRemovedAndAdded() throws Exception {
-        RouteCallback routeCallback = new RouteCallback() {};
-        mRouteCallbacks.add(routeCallback);
-        mRouter2.registerRouteCallback(mExecutor, routeCallback,
-                new RouteDiscoveryPreference.Builder(FEATURES_ALL, true).build());
+    public void testOnRoutesUpdated() throws Exception {
+        final String routeId0 = "routeId0";
+        final String routeName0 = "routeName0";
+        final String routeId1 = "routeId1";
+        final String routeName1 = "routeName1";
+        final List<String> features = Collections.singletonList("customFeature");
 
-        Map<String, MediaRoute2Info> routes = waitAndGetRoutesWithManager(FEATURES_ALL);
+        final int newConnectionState = MediaRoute2Info.CONNECTION_STATE_CONNECTED;
 
-        CountDownLatch removedLatch = new CountDownLatch(1);
+        final List<MediaRoute2Info> routes = new ArrayList<>();
+        routes.add(new MediaRoute2Info.Builder(routeId0, routeName0).addFeatures(features).build());
+        routes.add(new MediaRoute2Info.Builder(routeId1, routeName1).addFeatures(features).build());
+
         CountDownLatch addedLatch = new CountDownLatch(1);
+        CountDownLatch changedLatch = new CountDownLatch(1);
+        CountDownLatch removedLatch = new CountDownLatch(1);
 
-        addManagerCallback(new MediaRouter2Manager.Callback() {
-            @Override
-            public void onRoutesRemoved(List<MediaRoute2Info> routes) {
-                assertTrue(routes.size() > 0);
-                for (MediaRoute2Info route : routes) {
-                    if (route.getOriginalId().equals(ROUTE_ID2)
-                            && route.getName().equals(ROUTE_NAME2)) {
-                        removedLatch.countDown();
+        addManagerCallback(
+                new MediaRouter2Manager.Callback() {
+                    @Override
+                    public void onRoutesUpdated() {
+                        if (addedLatch.getCount() == 1
+                                && checkRoutesMatch(mManager.getAllRoutes(), routes)) {
+                            addedLatch.countDown();
+                        } else if (changedLatch.getCount() == 1
+                                && checkRoutesMatch(
+                                        mManager.getAllRoutes(), routes.subList(1, 2))) {
+                            changedLatch.countDown();
+                        } else if (removedLatch.getCount() == 1
+                                && checkRoutesRemoved(mManager.getAllRoutes(), routes)) {
+                            removedLatch.countDown();
+                        }
                     }
-                }
+                });
+
+        mService.addRoutes(routes);
+        assertTrue(
+                "Added routes not found or onRoutesUpdated() never called.",
+                addedLatch.await(TIMEOUT_MS, TimeUnit.MILLISECONDS));
+
+        MediaRoute2Info newRoute2 =
+                new MediaRoute2Info.Builder(routes.get(1))
+                        .setConnectionState(newConnectionState)
+                        .build();
+        routes.set(1, newRoute2);
+        mService.addRoute(routes.get(1));
+        assertTrue(
+                "Modified route not found or onRoutesUpdated() never called.",
+                changedLatch.await(TIMEOUT_MS, TimeUnit.MILLISECONDS));
+
+        List<String> routeIds = new ArrayList<>();
+        routeIds.add(routeId0);
+        routeIds.add(routeId1);
+
+        mService.removeRoutes(routeIds);
+        assertTrue(
+                "Removed routes not found or onRoutesUpdated() never called.",
+                removedLatch.await(TIMEOUT_MS, TimeUnit.MILLISECONDS));
+    }
+
+    private static boolean checkRoutesMatch(
+            List<MediaRoute2Info> routesReceived, List<MediaRoute2Info> expectedRoutes) {
+        for (MediaRoute2Info expectedRoute : expectedRoutes) {
+            MediaRoute2Info matchingRoute =
+                    routesReceived.stream()
+                            .filter(r -> r.getOriginalId().equals(expectedRoute.getOriginalId()))
+                            .findFirst()
+                            .orElse(null);
+
+            if (matchingRoute == null) {
+                return false;
             }
-            @Override
-            public void onRoutesAdded(List<MediaRoute2Info> routes) {
-                assertTrue(routes.size() > 0);
-                if (removedLatch.getCount() > 0) {
-                    return;
-                }
-                for (MediaRoute2Info route : routes) {
-                    if (route.getOriginalId().equals(ROUTE_ID2)
-                            && route.getName().equals(ROUTE_NAME2)) {
-                        addedLatch.countDown();
-                    }
-                }
+            assertTrue(TextUtils.equals(expectedRoute.getName(), matchingRoute.getName()));
+            assertEquals(expectedRoute.getFeatures(), matchingRoute.getFeatures());
+            assertEquals(expectedRoute.getConnectionState(), matchingRoute.getConnectionState());
+        }
+
+        return true;
+    }
+
+    private static boolean checkRoutesRemoved(
+            List<MediaRoute2Info> routesReceived, List<MediaRoute2Info> routesRemoved) {
+        for (MediaRoute2Info removedRoute : routesRemoved) {
+            if (routesReceived.stream()
+                    .anyMatch(r -> r.getOriginalId().equals(removedRoute.getOriginalId()))) {
+                return false;
             }
-        });
-
-        MediaRoute2Info routeToRemove = routes.get(ROUTE_ID2);
-        assertNotNull(routeToRemove);
-
-        mService.removeRoute(ROUTE_ID2);
-        assertTrue(removedLatch.await(TIMEOUT_MS, TimeUnit.MILLISECONDS));
-
-        mService.addRoute(routeToRemove);
-        assertTrue(addedLatch.await(TIMEOUT_MS, TimeUnit.MILLISECONDS));
+        }
+        return true;
     }
 
     @Test
@@ -818,6 +863,13 @@ public class MediaRouter2ManagerTest {
         assertFalse(failureLatch.await(WAIT_TIME_MS, TimeUnit.MILLISECONDS));
     }
 
+    @Test
+    public void unregisterScanRequest_enforcesANonNegativeCount() {
+        mManager.unregisterScanRequest(); // One request was made in the test setup.
+        assertThrows(IllegalStateException.class, () -> mManager.unregisterScanRequest());
+        mManager.registerScanRequest(); // So that the cleanup doesn't fail.
+    }
+
     /**
      * Tests if getSelectableRoutes and getDeselectableRoutes filter routes based on
      * selected routes
@@ -866,28 +918,31 @@ public class MediaRouter2ManagerTest {
 
         // A dummy callback is required to send route feature info.
         RouteCallback routeCallback = new RouteCallback() {};
-        MediaRouter2Manager.Callback managerCallback = new MediaRouter2Manager.Callback() {
-            @Override
-            public void onRoutesAdded(List<MediaRoute2Info> routes) {
-                for (MediaRoute2Info route : routes) {
-                    if (!route.isSystemRoute()
-                            && hasMatchingFeature(route.getFeatures(), preference
-                            .getPreferredFeatures())) {
-                        addedLatch.countDown();
-                        break;
+        MediaRouter2Manager.Callback managerCallback =
+                new MediaRouter2Manager.Callback() {
+                    @Override
+                    public void onRoutesUpdated() {
+                        List<MediaRoute2Info> routes = mManager.getAllRoutes();
+                        for (MediaRoute2Info route : routes) {
+                            if (!route.isSystemRoute()
+                                    && hasMatchingFeature(
+                                            route.getFeatures(),
+                                            preference.getPreferredFeatures())) {
+                                addedLatch.countDown();
+                                break;
+                            }
+                        }
                     }
-                }
-            }
 
-            @Override
-            public void onDiscoveryPreferenceChanged(String packageName,
-                    RouteDiscoveryPreference discoveryPreference) {
-                if (TextUtils.equals(mPackageName, packageName)
-                        && Objects.equals(preference, discoveryPreference)) {
-                    preferenceLatch.countDown();
-                }
-            }
-        };
+                    @Override
+                    public void onDiscoveryPreferenceChanged(
+                            String packageName, RouteDiscoveryPreference discoveryPreference) {
+                        if (TextUtils.equals(mPackageName, packageName)
+                                && Objects.equals(preference, discoveryPreference)) {
+                            preferenceLatch.countDown();
+                        }
+                    }
+                };
         mManager.registerCallback(mExecutor, managerCallback);
         mRouter2.registerRouteCallback(mExecutor, routeCallback, preference);
 
@@ -915,15 +970,17 @@ public class MediaRouter2ManagerTest {
     void awaitOnRouteChangedManager(Runnable task, String routeId,
             Predicate<MediaRoute2Info> predicate) throws Exception {
         CountDownLatch latch = new CountDownLatch(1);
-        MediaRouter2Manager.Callback callback = new MediaRouter2Manager.Callback() {
-            @Override
-            public void onRoutesChanged(List<MediaRoute2Info> changed) {
-                MediaRoute2Info route = createRouteMap(changed).get(routeId);
-                if (route != null && predicate.test(route)) {
-                    latch.countDown();
-                }
-            }
-        };
+        MediaRouter2Manager.Callback callback =
+                new MediaRouter2Manager.Callback() {
+                    @Override
+                    public void onRoutesUpdated() {
+                        MediaRoute2Info route =
+                                createRouteMap(mManager.getAllRoutes()).get(routeId);
+                        if (route != null && predicate.test(route)) {
+                            latch.countDown();
+                        }
+                    }
+                };
         mManager.registerCallback(mExecutor, callback);
         try {
             task.run();

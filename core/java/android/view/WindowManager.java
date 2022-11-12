@@ -824,15 +824,19 @@ public interface WindowManager extends ViewManager {
      * provide consent for their app to allow OEMs to manually provide ActivityEmbedding split
      * rule configuration on behalf of the app.
      *
-     * <p>If {@code true}, the system CAN override the windowing behaviors for the app, such as
+     * <p>If {@code true}, the system can override the windowing behaviors for the app, such as
      * showing some activities side-by-side. In this case, it will report that ActivityEmbedding
      * APIs are disabled for the app to avoid conflict.
      *
-     * <p>If {@code false}, the system MUST NOT override the window behavior for the app. It should
+     * <p>If {@code false}, the system can't override the window behavior for the app. It should
      * be used if the app wants to provide their own ActivityEmbedding split rules, or if the app
      * wants to opt-out of system overrides for any other reason.
      *
      * <p>Default is {@code false}.
+     *
+     * <p>The system enforcement is added in Android 14, but some devices may start following the
+     * requirement before that. The best practice for apps is to always explicitly set this
+     * property in AndroidManifest instead of relying on the default value.
      *
      * <p>Example usage:
      * <pre>
@@ -1048,6 +1052,14 @@ public interface WindowManager extends ViewManager {
                 }
                 return "UNKNOWN(" + type + ")";
         }
+    }
+
+    /**
+     * Ensure scales are between 0 and 20.
+     * @hide
+     */
+    static float fixScale(float scale) {
+        return Math.max(Math.min(scale, 20), 0);
     }
 
     public static class LayoutParams extends ViewGroup.LayoutParams implements Parcelable {
@@ -2401,6 +2413,14 @@ public interface WindowManager extends ViewManager {
         public static final int SYSTEM_FLAG_SHOW_FOR_ALL_USERS = 0x00000010;
 
         /**
+         * Flag to allow this window to have unrestricted gesture exclusion.
+         *
+         * @see View#setSystemGestureExclusionRects(List)
+         * @hide
+         */
+        public static final int PRIVATE_FLAG_UNRESTRICTED_GESTURE_EXCLUSION = 0x00000020;
+
+        /**
          * Never animate position changes of the window.
          *
          * {@hide}
@@ -2620,6 +2640,7 @@ public interface WindowManager extends ViewManager {
                 PRIVATE_FLAG_FORCE_HARDWARE_ACCELERATED,
                 PRIVATE_FLAG_WANTS_OFFSET_NOTIFICATIONS,
                 SYSTEM_FLAG_SHOW_FOR_ALL_USERS,
+                PRIVATE_FLAG_UNRESTRICTED_GESTURE_EXCLUSION,
                 PRIVATE_FLAG_NO_MOVE_ANIMATION,
                 PRIVATE_FLAG_COMPATIBLE_WINDOW,
                 PRIVATE_FLAG_SYSTEM_ERROR,
@@ -2666,6 +2687,10 @@ public interface WindowManager extends ViewManager {
                         mask = SYSTEM_FLAG_SHOW_FOR_ALL_USERS,
                         equals = SYSTEM_FLAG_SHOW_FOR_ALL_USERS,
                         name = "SHOW_FOR_ALL_USERS"),
+                @ViewDebug.FlagToString(
+                        mask = PRIVATE_FLAG_UNRESTRICTED_GESTURE_EXCLUSION,
+                        equals = PRIVATE_FLAG_UNRESTRICTED_GESTURE_EXCLUSION,
+                        name = "UNRESTRICTED_GESTURE_EXCLUSION"),
                 @ViewDebug.FlagToString(
                         mask = PRIVATE_FLAG_NO_MOVE_ANIMATION,
                         equals = PRIVATE_FLAG_NO_MOVE_ANIMATION,
@@ -4453,10 +4478,22 @@ public interface WindowManager extends ViewManager {
                 changes |= LAYOUT_CHANGED;
             }
 
-            if (!Arrays.equals(paramsForRotation, o.paramsForRotation)) {
+            if (paramsForRotation != o.paramsForRotation) {
+                if ((changes & LAYOUT_CHANGED) == 0) {
+                    if (paramsForRotation != null && o.paramsForRotation != null
+                            && paramsForRotation.length == o.paramsForRotation.length) {
+                        for (int i = paramsForRotation.length - 1; i >= 0; i--) {
+                            if (hasLayoutDiff(paramsForRotation[i], o.paramsForRotation[i])) {
+                                changes |= LAYOUT_CHANGED;
+                                break;
+                            }
+                        }
+                    } else {
+                        changes |= LAYOUT_CHANGED;
+                    }
+                }
                 paramsForRotation = o.paramsForRotation;
                 checkNonRecursiveParams();
-                changes |= LAYOUT_CHANGED;
             }
 
             if (mWallpaperTouchEventsEnabled != o.mWallpaperTouchEventsEnabled) {
@@ -4465,6 +4502,21 @@ public interface WindowManager extends ViewManager {
             }
 
             return changes;
+        }
+
+        /**
+         * Returns {@code true} if the 2 params may have difference results of
+         * {@link WindowLayout#computeFrames}.
+         */
+        private static boolean hasLayoutDiff(LayoutParams a, LayoutParams b) {
+            return a.width != b.width || a.height != b.height || a.x != b.x || a.y != b.y
+                    || a.horizontalMargin != b.horizontalMargin
+                    || a.verticalMargin != b.verticalMargin
+                    || a.layoutInDisplayCutoutMode != b.layoutInDisplayCutoutMode
+                    || a.gravity != b.gravity || !Arrays.equals(a.providedInsets, b.providedInsets)
+                    || a.mFitInsetsTypes != b.mFitInsetsTypes
+                    || a.mFitInsetsSides != b.mFitInsetsSides
+                    || a.mFitInsetsIgnoringVisibility != b.mFitInsetsIgnoringVisibility;
         }
 
         @Override

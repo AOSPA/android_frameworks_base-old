@@ -62,6 +62,7 @@ import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.os.RemoteException;
 import android.os.SystemClock;
+import android.util.Log;
 import android.view.Display;
 import android.view.Surface;
 import android.view.SurfaceControl;
@@ -126,7 +127,7 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
     private final PipBoundsAlgorithm mPipBoundsAlgorithm;
     private final @NonNull PipMenuController mPipMenuController;
     private final PipAnimationController mPipAnimationController;
-    private final PipTransitionController mPipTransitionController;
+    protected final PipTransitionController mPipTransitionController;
     protected final PipParamsChangedForwarder mPipParamsChangedForwarder;
     private final PipUiEventLogger mPipUiEventLoggerLogger;
     private final int mEnterAnimationDuration;
@@ -195,6 +196,26 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
         }
     };
 
+    @VisibleForTesting
+    final PipTransitionController.PipTransitionCallback mPipTransitionCallback =
+            new PipTransitionController.PipTransitionCallback() {
+                @Override
+                public void onPipTransitionStarted(int direction, Rect pipBounds) {}
+
+                @Override
+                public void onPipTransitionFinished(int direction) {
+                    // Apply the deferred RunningTaskInfo if applicable after all proper callbacks
+                    // are sent.
+                    if (direction == TRANSITION_DIRECTION_TO_PIP && mDeferredTaskInfo != null) {
+                        onTaskInfoChanged(mDeferredTaskInfo);
+                        mDeferredTaskInfo = null;
+                    }
+                }
+
+                @Override
+                public void onPipTransitionCanceled(int direction) {}
+            };
+
     private final PipAnimationController.PipTransactionHandler mPipTransactionHandler =
             new PipAnimationController.PipTransactionHandler() {
                 @Override
@@ -215,7 +236,7 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
     private ActivityManager.RunningTaskInfo mDeferredTaskInfo;
     private WindowContainerToken mToken;
     private SurfaceControl mLeash;
-    private PipTransitionState mPipTransitionState;
+    protected PipTransitionState mPipTransitionState;
     private @PipAnimationController.AnimationType int mOneShotAnimationType = ANIM_TYPE_BOUNDS;
     private long mLastOneShotAlphaAnimationTime;
     private PipSurfaceTransactionHelper.SurfaceControlTransactionFactory
@@ -283,7 +304,8 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
         mSurfaceTransactionHelper = surfaceTransactionHelper;
         mPipAnimationController = pipAnimationController;
         mPipUiEventLoggerLogger = pipUiEventLogger;
-        mSurfaceControlTransactionFactory = SurfaceControl.Transaction::new;
+        mSurfaceControlTransactionFactory =
+                new PipSurfaceTransactionHelper.VsyncSurfaceControlTransactionFactory();
         mSplitScreenOptional = splitScreenOptional;
         mTaskOrganizer = shellTaskOrganizer;
         mMainExecutor = mainExecutor;
@@ -295,6 +317,7 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
         mTaskOrganizer.addFocusListener(this);
         mPipTransitionController.setPipOrganizer(this);
         displayController.addDisplayWindowListener(this);
+        pipTransitionController.registerPipTransitionCallback(mPipTransitionCallback);
     }
 
     public PipTransitionController getTransitionController() {
@@ -444,7 +467,7 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
             // When exit to fullscreen with Shell transition enabled, we update the Task windowing
             // mode directly so that it can also trigger display rotation and visibility update in
             // the same transition if there will be any.
-            wct.setWindowingMode(mToken, WINDOWING_MODE_UNDEFINED);
+            wct.setWindowingMode(mToken, getOutPipWindowingMode());
             // We can inherit the parent bounds as it is going to be fullscreen. The
             // destinationBounds calculated above will be incorrect if this is with rotation.
             wct.setBounds(mToken, null);
@@ -543,7 +566,7 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
         if (Transitions.ENABLE_SHELL_TRANSITIONS) {
             final WindowContainerTransaction wct = new WindowContainerTransaction();
             wct.setBounds(mToken, null);
-            wct.setWindowingMode(mToken, WINDOWING_MODE_UNDEFINED);
+            wct.setWindowingMode(mToken, getOutPipWindowingMode());
             wct.reorder(mToken, false);
             mPipTransitionController.startExitTransition(TRANSIT_REMOVE_PIP, wct,
                     null /* destinationBounds */);
@@ -772,11 +795,6 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
             mPipTransitionState.setTransitionState(PipTransitionState.ENTERED_PIP);
         }
         mPipTransitionController.sendOnPipTransitionFinished(direction);
-        // Apply the deferred RunningTaskInfo if applicable after all proper callbacks are sent.
-        if (direction == TRANSITION_DIRECTION_TO_PIP && mDeferredTaskInfo != null) {
-            onTaskInfoChanged(mDeferredTaskInfo);
-            mDeferredTaskInfo = null;
-        }
     }
 
     private void sendOnPipTransitionCancelled(
@@ -930,6 +948,12 @@ public class PipTaskOrganizer implements ShellTaskOrganizer.TaskListener,
 
     /** Called when exiting PIP transition is finished to do the state cleanup. */
     void onExitPipFinished(TaskInfo info) {
+        if (mLeash == null) {
+            // TODO(239461594): Remove once the double call to onExitPipFinished() is fixed
+            Log.w(TAG, "Warning, onExitPipFinished() called multiple times in the same sessino");
+            return;
+        }
+
         clearWaitForFixedRotation();
         if (mSwipePipToHomeOverlay != null) {
             removeContentOverlay(mSwipePipToHomeOverlay, null /* callback */);

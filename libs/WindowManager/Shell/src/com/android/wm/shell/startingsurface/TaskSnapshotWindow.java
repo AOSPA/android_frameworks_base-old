@@ -228,12 +228,13 @@ public class TaskSnapshotWindow {
 
         final InsetsState tmpInsetsState = new InsetsState();
         final InputChannel tmpInputChannel = new InputChannel();
+        final float[] sizeCompatScale = { 1f };
 
         try {
             Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "TaskSnapshot#addToDisplay");
             final int res = session.addToDisplay(window, layoutParams, View.GONE, displayId,
                     info.requestedVisibilities, tmpInputChannel, tmpInsetsState, tmpControls,
-                    new Rect());
+                    new Rect(), sizeCompatScale);
             Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
             if (res < 0) {
                 Slog.w(TAG, "Failed to add snapshot starting window res=" + res);
@@ -245,7 +246,7 @@ public class TaskSnapshotWindow {
         window.setOuter(snapshotSurface);
         try {
             Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "TaskSnapshot#relayout");
-            session.relayout(window, layoutParams, -1, -1, View.VISIBLE, 0,
+            session.relayout(window, layoutParams, -1, -1, View.VISIBLE, 0, 0, 0,
                     tmpFrames, tmpMergedConfiguration, surfaceControl, tmpInsetsState,
                     tmpControls, new Bundle());
             Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);

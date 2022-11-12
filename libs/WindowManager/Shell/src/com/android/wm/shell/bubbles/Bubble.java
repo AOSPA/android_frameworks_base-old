@@ -452,6 +452,7 @@ public class Bubble implements BubbleViewProvider {
      */
     void setEntry(@NonNull final BubbleEntry entry) {
         Objects.requireNonNull(entry);
+        boolean showingDotPreviously = showDot();
         mLastUpdated = entry.getStatusBarNotification().getPostTime();
         mIsBubble = entry.getStatusBarNotification().getNotification().isBubbleNotification();
         mPackageName = entry.getStatusBarNotification().getPackageName();
@@ -498,6 +499,10 @@ public class Bubble implements BubbleViewProvider {
         mShouldSuppressNotificationDot = entry.shouldSuppressNotificationDot();
         mShouldSuppressNotificationList = entry.shouldSuppressNotificationList();
         mShouldSuppressPeek = entry.shouldSuppressPeek();
+        if (showingDotPreviously != showDot()) {
+            // This will update the UI if needed
+            setShowDot(showDot());
+        }
     }
 
     @Nullable
@@ -816,7 +821,7 @@ public class Bubble implements BubbleViewProvider {
     /**
      * Description of current bubble state.
      */
-    public void dump(@NonNull PrintWriter pw, @NonNull String[] args) {
+    public void dump(@NonNull PrintWriter pw) {
         pw.print("key: "); pw.println(mKey);
         pw.print("  showInShade:   "); pw.println(showInShade());
         pw.print("  showDot:       "); pw.println(showDot());
@@ -826,7 +831,7 @@ public class Bubble implements BubbleViewProvider {
         pw.print("  suppressNotif: "); pw.println(shouldSuppressNotification());
         pw.print("  autoExpand:    "); pw.println(shouldAutoExpand());
         if (mExpandedView != null) {
-            mExpandedView.dump(pw, args);
+            mExpandedView.dump(pw);
         }
     }
 

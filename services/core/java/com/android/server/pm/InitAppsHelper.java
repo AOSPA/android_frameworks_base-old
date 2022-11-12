@@ -46,6 +46,7 @@ import android.util.EventLog;
 import android.util.Slog;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.content.om.OverlayConfig;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.EventLogTags;
@@ -116,7 +117,7 @@ final class InitAppsHelper {
             mScanFlags = scanFlags;
         }
         mSystemParseFlags = mPm.getDefParseFlags() | ParsingPackageUtils.PARSE_IS_SYSTEM_DIR;
-        mSystemScanFlags = scanFlags | SCAN_AS_SYSTEM;
+        mSystemScanFlags = mScanFlags | SCAN_AS_SYSTEM;
         mExecutorService = ParallelPackageParser.makeExecutorService();
     }
 
@@ -400,5 +401,10 @@ final class InitAppsHelper {
 
     public List<ScanPartition> getDirsToScanAsSystem() {
         return mDirsToScanAsSystem;
+    }
+
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PRIVATE)
+    public int getSystemScanFlags() {
+        return mSystemScanFlags;
     }
 }

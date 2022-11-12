@@ -343,6 +343,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     BLASTSyncEngine.SyncGroup mSyncGroup = null;
     final SurfaceControl.Transaction mSyncTransaction;
     @SyncState int mSyncState = SYNC_STATE_NONE;
+    int mSyncMethodOverride = BLASTSyncEngine.METHOD_UNDEFINED;
 
     private final List<WindowContainerListener> mListeners = new ArrayList<>();
 
@@ -2829,6 +2830,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      */
     void initializeChangeTransition(Rect startBounds, @Nullable SurfaceControl freezeTarget) {
         if (mDisplayContent.mTransitionController.isShellTransitionsEnabled()) {
+            mDisplayContent.mTransitionController.collectVisibleChange(this);
             // TODO(b/207070762): request shell transition for activityEmbedding change.
             return;
         }
@@ -3019,6 +3021,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
                 final float windowCornerRadius = !inMultiWindowMode()
                         ? getDisplayContent().getWindowCornerRadius()
                         : 0;
+                if (asActivityRecord() != null
+                        && asActivityRecord().isNeedsLetterboxedAnimation()) {
+                    asActivityRecord().getLetterboxInnerBounds(mTmpRect);
+                }
                 AnimationAdapter adapter = new LocalAnimationAdapter(
                         new WindowAnimationSpec(a, mTmpPoint, mTmpRect,
                                 getDisplayContent().mAppTransition.canSkipFirstFrame(),
@@ -3389,6 +3395,13 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             pw.println(prefix + "mLastOrientationSource=" + mLastOrientationSource);
             pw.println(prefix + "deepestLastOrientationSource=" + getLastOrientationSource());
         }
+        if (mLocalInsetsSourceProviders != null && mLocalInsetsSourceProviders.size() != 0) {
+            pw.println(prefix + mLocalInsetsSourceProviders.size() + " LocalInsetsSourceProviders");
+            final String childPrefix = prefix + "  ";
+            for (int i = 0; i < mLocalInsetsSourceProviders.size(); ++i) {
+                mLocalInsetsSourceProviders.valueAt(i).dump(pw, childPrefix);
+            }
+        }
     }
 
     final void updateSurfacePositionNonOrganized() {
@@ -3651,6 +3664,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     boolean onSyncFinishedDrawing() {
         if (mSyncState == SYNC_STATE_NONE) return false;
         mSyncState = SYNC_STATE_READY;
+        mSyncMethodOverride = BLASTSyncEngine.METHOD_UNDEFINED;
         mWmService.mWindowPlacerLocked.requestTraversal();
         ProtoLog.v(WM_DEBUG_SYNC_ENGINE, "onSyncFinishedDrawing %s", this);
         return true;
@@ -3667,6 +3681,13 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             }
         }
         mSyncGroup = group;
+    }
+
+    @Nullable
+    BLASTSyncEngine.SyncGroup getSyncGroup() {
+        if (mSyncGroup != null) return mSyncGroup;
+        if (mParent != null) return mParent.getSyncGroup();
+        return null;
     }
 
     /**
@@ -3708,6 +3729,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         }
         if (cancel && mSyncGroup != null) mSyncGroup.onCancelSync(this);
         mSyncState = SYNC_STATE_NONE;
+        mSyncMethodOverride = BLASTSyncEngine.METHOD_UNDEFINED;
         mSyncGroup = null;
     }
 
@@ -3769,9 +3791,9 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         // Check if this is changing displays. If so, mark the old display as "ready" for
         // transitions. This is to work around the problem where setting readiness against this
         // container will only set the new display as ready and leave the old display as unready.
-        if (mSyncState != SYNC_STATE_NONE && oldParent != null
-                && oldParent.getDisplayContent() != null && (newParent == null
-                        || oldParent.getDisplayContent() != newParent.getDisplayContent())) {
+        if (mSyncState != SYNC_STATE_NONE && oldParent != null && newParent != null
+                && oldParent.getDisplayContent() != null && newParent.getDisplayContent() != null
+                && oldParent.getDisplayContent() != newParent.getDisplayContent()) {
             mTransitionController.setReady(oldParent.getDisplayContent());
         }
 
@@ -3810,6 +3832,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         // disable this when shell transitions is disabled.
         if (mTransitionController.isShellTransitionsEnabled()) {
             mSyncState = SYNC_STATE_NONE;
+            mSyncMethodOverride = BLASTSyncEngine.METHOD_UNDEFINED;
         }
         prepareSync();
     }

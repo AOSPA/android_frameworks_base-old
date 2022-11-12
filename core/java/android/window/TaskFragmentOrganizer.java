@@ -16,8 +16,16 @@
 
 package android.window;
 
+import static android.window.TaskFragmentTransaction.TYPE_ACTIVITY_REPARENTED_TO_TASK;
+import static android.window.TaskFragmentTransaction.TYPE_TASK_FRAGMENT_APPEARED;
+import static android.window.TaskFragmentTransaction.TYPE_TASK_FRAGMENT_ERROR;
+import static android.window.TaskFragmentTransaction.TYPE_TASK_FRAGMENT_INFO_CHANGED;
+import static android.window.TaskFragmentTransaction.TYPE_TASK_FRAGMENT_PARENT_INFO_CHANGED;
+import static android.window.TaskFragmentTransaction.TYPE_TASK_FRAGMENT_VANISHED;
+
 import android.annotation.CallSuper;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.TestApi;
 import android.content.Intent;
 import android.content.res.Configuration;
@@ -26,6 +34,7 @@ import android.os.IBinder;
 import android.os.RemoteException;
 import android.view.RemoteAnimationDefinition;
 
+import java.util.List;
 import java.util.concurrent.Executor;
 
 /**
@@ -39,16 +48,23 @@ public class TaskFragmentOrganizer extends WindowOrganizer {
      * Key to the exception in {@link Bundle} in {@link ITaskFragmentOrganizer#onTaskFragmentError}.
      */
     private static final String KEY_ERROR_CALLBACK_EXCEPTION = "fragment_exception";
+    private static final String KEY_ERROR_CALLBACK_TASK_FRAGMENT_INFO = "task_fragment_info";
+    private static final String KEY_ERROR_CALLBACK_OP_TYPE = "operation_type";
 
     /**
-     * Creates a {@link Bundle} with an exception that can be passed to
-     * {@link ITaskFragmentOrganizer#onTaskFragmentError}.
+     * Creates a {@link Bundle} with an exception, operation type and TaskFragmentInfo (if any)
+     * that can be passed to {@link ITaskFragmentOrganizer#onTaskFragmentError}.
      * @hide
      */
-    public static Bundle putExceptionInBundle(@NonNull Throwable exception) {
-        final Bundle exceptionBundle = new Bundle();
-        exceptionBundle.putSerializable(KEY_ERROR_CALLBACK_EXCEPTION, exception);
-        return exceptionBundle;
+    public static @NonNull Bundle putErrorInfoInBundle(@NonNull Throwable exception,
+            @Nullable TaskFragmentInfo info, int opType) {
+        final Bundle errorBundle = new Bundle();
+        errorBundle.putSerializable(KEY_ERROR_CALLBACK_EXCEPTION, exception);
+        if (info != null) {
+            errorBundle.putParcelable(KEY_ERROR_CALLBACK_TASK_FRAGMENT_INFO, info);
+        }
+        errorBundle.putInt(KEY_ERROR_CALLBACK_OP_TYPE, opType);
+        return errorBundle;
     }
 
     /**
@@ -123,14 +139,57 @@ public class TaskFragmentOrganizer extends WindowOrganizer {
         }
     }
 
-    /** Called when a TaskFragment is created and organized by this organizer. */
-    public void onTaskFragmentAppeared(@NonNull TaskFragmentInfo taskFragmentInfo) {}
+    /**
+     * Notifies the server that the organizer has finished handling the given transaction. The
+     * server should apply the given {@link WindowContainerTransaction} for the necessary changes.
+     *
+     * @param transactionToken  {@link TaskFragmentTransaction#getTransactionToken()} from
+     *                          {@link #onTransactionReady(TaskFragmentTransaction)}
+     * @param wct               {@link WindowContainerTransaction} that the server should apply for
+     *                          update of the transaction.
+     * @see com.android.server.wm.WindowOrganizerController#enforceTaskPermission for permission
+     * requirement.
+     * @hide
+     */
+    public void onTransactionHandled(@NonNull IBinder transactionToken,
+            @NonNull WindowContainerTransaction wct) {
+        wct.setTaskFragmentOrganizer(mInterface);
+        try {
+            getController().onTransactionHandled(mInterface, transactionToken, wct);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
 
-    /** Called when the status of an organized TaskFragment is changed. */
-    public void onTaskFragmentInfoChanged(@NonNull TaskFragmentInfo taskFragmentInfo) {}
+    /**
+     * Called when a TaskFragment is created and organized by this organizer.
+     *
+     * @param wct   The {@link WindowContainerTransaction} to make any changes with if needed. No
+     *              need to call {@link #applyTransaction} as it will be applied by the caller.
+     * @param taskFragmentInfo  Info of the TaskFragment that is created.
+     */
+    public void onTaskFragmentAppeared(@NonNull WindowContainerTransaction wct,
+            @NonNull TaskFragmentInfo taskFragmentInfo) {}
 
-    /** Called when an organized TaskFragment is removed. */
-    public void onTaskFragmentVanished(@NonNull TaskFragmentInfo taskFragmentInfo) {}
+    /**
+     * Called when the status of an organized TaskFragment is changed.
+     *
+     * @param wct   The {@link WindowContainerTransaction} to make any changes with if needed. No
+     *              need to call {@link #applyTransaction} as it will be applied by the caller.
+     * @param taskFragmentInfo  Info of the TaskFragment that is changed.
+     */
+    public void onTaskFragmentInfoChanged(@NonNull WindowContainerTransaction wct,
+            @NonNull TaskFragmentInfo taskFragmentInfo) {}
+
+    /**
+     * Called when an organized TaskFragment is removed.
+     *
+     * @param wct   The {@link WindowContainerTransaction} to make any changes with if needed. No
+     *              need to call {@link #applyTransaction} as it will be applied by the caller.
+     * @param taskFragmentInfo  Info of the TaskFragment that is removed.
+     */
+    public void onTaskFragmentVanished(@NonNull WindowContainerTransaction wct,
+            @NonNull TaskFragmentInfo taskFragmentInfo) {}
 
     /**
      * Called when the parent leaf Task of organized TaskFragments is changed.
@@ -140,27 +199,41 @@ public class TaskFragmentOrganizer extends WindowOrganizer {
      * For case like screen size change, it will trigger onTaskFragmentParentInfoChanged with new
      * Task bounds, but may not trigger onTaskFragmentInfoChanged because there can be an override
      * bounds.
+     *
+     * @param wct   The {@link WindowContainerTransaction} to make any changes with if needed. No
+     *              need to call {@link #applyTransaction} as it will be applied by the caller.
+     * @param taskId    Id of the parent Task that is changed.
+     * @param parentConfig  Config of the parent Task.
      */
-    public void onTaskFragmentParentInfoChanged(
-            @NonNull IBinder fragmentToken, @NonNull Configuration parentConfig) {}
+    public void onTaskFragmentParentInfoChanged(@NonNull WindowContainerTransaction wct, int taskId,
+            @NonNull Configuration parentConfig) {}
 
     /**
      * Called when the {@link WindowContainerTransaction} created with
      * {@link WindowContainerTransaction#setErrorCallbackToken(IBinder)} failed on the server side.
      *
+     * @param wct   The {@link WindowContainerTransaction} to make any changes with if needed. No
+     *              need to call {@link #applyTransaction} as it will be applied by the caller.
      * @param errorCallbackToken    token set in
      *                             {@link WindowContainerTransaction#setErrorCallbackToken(IBinder)}
+     * @param taskFragmentInfo  The {@link TaskFragmentInfo}. This could be {@code null} if no
+     *                          TaskFragment created.
+     * @param opType            The {@link WindowContainerTransaction.HierarchyOp} of the failed
+     *                          transaction operation.
      * @param exception             exception from the server side.
      */
-    public void onTaskFragmentError(
-            @NonNull IBinder errorCallbackToken, @NonNull Throwable exception) {}
+    public void onTaskFragmentError(@NonNull WindowContainerTransaction wct,
+            @NonNull IBinder errorCallbackToken, @Nullable TaskFragmentInfo taskFragmentInfo,
+            int opType, @NonNull Throwable exception) {}
 
     /**
      * Called when an Activity is reparented to the Task with organized TaskFragment. For example,
      * when an Activity enters and then exits Picture-in-picture, it will be reparented back to its
-     * orginial Task. In this case, we need to notify the organizer so that it can check if the
+     * original Task. In this case, we need to notify the organizer so that it can check if the
      * Activity matches any split rule.
      *
+     * @param wct   The {@link WindowContainerTransaction} to make any changes with if needed. No
+     *              need to call {@link #applyTransaction} as it will be applied by the caller.
      * @param taskId            The Task that the activity is reparented to.
      * @param activityIntent    The intent that the activity is original launched with.
      * @param activityToken     If the activity belongs to the same process as the organizer, this
@@ -168,10 +241,60 @@ public class TaskFragmentOrganizer extends WindowOrganizer {
      *                          different process, the server will generate a temporary token that
      *                          the organizer can use to reparent the activity through
      *                          {@link WindowContainerTransaction} if needed.
+     */
+    public void onActivityReparentedToTask(@NonNull WindowContainerTransaction wct,
+            int taskId, @NonNull Intent activityIntent, @NonNull IBinder activityToken) {}
+
+    /**
+     * Called when the transaction is ready so that the organizer can update the TaskFragments based
+     * on the changes in transaction.
      * @hide
      */
-    public void onActivityReparentToTask(int taskId, @NonNull Intent activityIntent,
-            @NonNull IBinder activityToken) {}
+    public void onTransactionReady(@NonNull TaskFragmentTransaction transaction) {
+        final WindowContainerTransaction wct = new WindowContainerTransaction();
+        final List<TaskFragmentTransaction.Change> changes = transaction.getChanges();
+        for (TaskFragmentTransaction.Change change : changes) {
+            final int taskId = change.getTaskId();
+            switch (change.getType()) {
+                case TYPE_TASK_FRAGMENT_APPEARED:
+                    onTaskFragmentAppeared(wct, change.getTaskFragmentInfo());
+                    break;
+                case TYPE_TASK_FRAGMENT_INFO_CHANGED:
+                    onTaskFragmentInfoChanged(wct, change.getTaskFragmentInfo());
+                    break;
+                case TYPE_TASK_FRAGMENT_VANISHED:
+                    onTaskFragmentVanished(wct, change.getTaskFragmentInfo());
+                    break;
+                case TYPE_TASK_FRAGMENT_PARENT_INFO_CHANGED:
+                    onTaskFragmentParentInfoChanged(wct, taskId, change.getTaskConfiguration());
+                    break;
+                case TYPE_TASK_FRAGMENT_ERROR:
+                    final Bundle errorBundle = change.getErrorBundle();
+                    onTaskFragmentError(
+                            wct,
+                            change.getErrorCallbackToken(),
+                            errorBundle.getParcelable(
+                                    KEY_ERROR_CALLBACK_TASK_FRAGMENT_INFO, TaskFragmentInfo.class),
+                            errorBundle.getInt(KEY_ERROR_CALLBACK_OP_TYPE),
+                            errorBundle.getSerializable(KEY_ERROR_CALLBACK_EXCEPTION,
+                                    java.lang.Throwable.class));
+                    break;
+                case TYPE_ACTIVITY_REPARENTED_TO_TASK:
+                    onActivityReparentedToTask(
+                            wct,
+                            change.getTaskId(),
+                            change.getActivityIntent(),
+                            change.getActivityToken());
+                    break;
+                default:
+                    throw new IllegalArgumentException(
+                            "Unknown TaskFragmentEvent=" + change.getType());
+            }
+        }
+
+        // Notify the server, and the server should apply the WindowContainerTransaction.
+        onTransactionHandled(transaction.getTransactionToken(), wct);
+    }
 
     @Override
     public void applyTransaction(@NonNull WindowContainerTransaction t) {
@@ -190,45 +313,8 @@ public class TaskFragmentOrganizer extends WindowOrganizer {
 
     private final ITaskFragmentOrganizer mInterface = new ITaskFragmentOrganizer.Stub() {
         @Override
-        public void onTaskFragmentAppeared(@NonNull TaskFragmentInfo taskFragmentInfo) {
-            mExecutor.execute(
-                    () -> TaskFragmentOrganizer.this.onTaskFragmentAppeared(taskFragmentInfo));
-        }
-
-        @Override
-        public void onTaskFragmentInfoChanged(@NonNull TaskFragmentInfo taskFragmentInfo) {
-            mExecutor.execute(
-                    () -> TaskFragmentOrganizer.this.onTaskFragmentInfoChanged(taskFragmentInfo));
-        }
-
-        @Override
-        public void onTaskFragmentVanished(@NonNull TaskFragmentInfo taskFragmentInfo) {
-            mExecutor.execute(
-                    () -> TaskFragmentOrganizer.this.onTaskFragmentVanished(taskFragmentInfo));
-        }
-
-        @Override
-        public void onTaskFragmentParentInfoChanged(
-                @NonNull IBinder fragmentToken, @NonNull Configuration parentConfig) {
-            mExecutor.execute(
-                    () -> TaskFragmentOrganizer.this.onTaskFragmentParentInfoChanged(
-                            fragmentToken, parentConfig));
-        }
-
-        @Override
-        public void onTaskFragmentError(
-                @NonNull IBinder errorCallbackToken, @NonNull Bundle exceptionBundle) {
-            mExecutor.execute(() -> TaskFragmentOrganizer.this.onTaskFragmentError(
-                    errorCallbackToken,
-                    (Throwable) exceptionBundle.getSerializable(KEY_ERROR_CALLBACK_EXCEPTION, java.lang.Throwable.class)));
-        }
-
-        @Override
-        public void onActivityReparentToTask(int taskId, @NonNull Intent activityIntent,
-                @NonNull IBinder activityToken) {
-            mExecutor.execute(
-                    () -> TaskFragmentOrganizer.this.onActivityReparentToTask(
-                            taskId, activityIntent, activityToken));
+        public void onTransactionReady(@NonNull TaskFragmentTransaction transaction) {
+            mExecutor.execute(() -> TaskFragmentOrganizer.this.onTransactionReady(transaction));
         }
     };
 

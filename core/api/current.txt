@@ -275,6 +275,7 @@ package android {
   public static final class R.attr {
     ctor public R.attr();
     field public static final int absListViewStyle = 16842858; // 0x101006a
+    field public static final int accessibilityDataPrivate;
     field public static final int accessibilityEventTypes = 16843648; // 0x1010380
     field public static final int accessibilityFeedbackType = 16843650; // 0x1010382
     field public static final int accessibilityFlags = 16843652; // 0x1010384
@@ -4596,6 +4597,7 @@ package android.app {
     method public boolean canScheduleExactAlarms();
     method public void cancel(android.app.PendingIntent);
     method public void cancel(android.app.AlarmManager.OnAlarmListener);
+    method public void cancelAll();
     method public android.app.AlarmManager.AlarmClockInfo getNextAlarmClock();
     method public void set(int, long, android.app.PendingIntent);
     method public void set(int, long, String, android.app.AlarmManager.OnAlarmListener, android.os.Handler);
@@ -11219,9 +11221,9 @@ package android.content.pm {
     field public int requiresSmallestWidthDp;
     field public String[] sharedLibraryFiles;
     field public String sourceDir;
-    field public String[] splitNames;
-    field public String[] splitPublicSourceDirs;
-    field public String[] splitSourceDirs;
+    field @Nullable public String[] splitNames;
+    field @Nullable public String[] splitPublicSourceDirs;
+    field @Nullable public String[] splitSourceDirs;
     field public java.util.UUID storageUuid;
     field public int targetSdkVersion;
     field public String taskAffinity;
@@ -11522,6 +11524,7 @@ package android.content.pm {
     field public static final int INSTALL_LOCATION_INTERNAL_ONLY = 1; // 0x1
     field public static final int INSTALL_LOCATION_PREFER_EXTERNAL = 2; // 0x2
     field public static final int REQUESTED_PERMISSION_GRANTED = 2; // 0x2
+    field public static final int REQUESTED_PERMISSION_IMPLICIT = 4; // 0x4
     field public static final int REQUESTED_PERMISSION_NEVER_FOR_LOCATION = 65536; // 0x10000
     field public android.content.pm.ActivityInfo[] activities;
     field public android.content.pm.ApplicationInfo applicationInfo;
@@ -12443,6 +12446,16 @@ package android.content.pm {
     method public boolean hasPastSigningCertificates();
     method public void writeToParcel(android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.content.pm.SigningInfo> CREATOR;
+  }
+
+  public final class UserProperties implements android.os.Parcelable {
+    method public int describeContents();
+    method public int getShowInLauncher();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.content.pm.UserProperties> CREATOR;
+    field public static final int SHOW_IN_LAUNCHER_NO = 2; // 0x2
+    field public static final int SHOW_IN_LAUNCHER_SEPARATE = 1; // 0x1
+    field public static final int SHOW_IN_LAUNCHER_WITH_PARENT = 0; // 0x0
   }
 
   public final class VersionedPackage implements android.os.Parcelable {
@@ -14003,49 +14016,49 @@ package android.graphics {
 
   public final class Bitmap implements android.os.Parcelable {
     method @NonNull public android.graphics.Bitmap asShared();
-    method @WorkerThread public boolean compress(android.graphics.Bitmap.CompressFormat, int, java.io.OutputStream);
-    method public android.graphics.Bitmap copy(android.graphics.Bitmap.Config, boolean);
-    method public void copyPixelsFromBuffer(java.nio.Buffer);
-    method public void copyPixelsToBuffer(java.nio.Buffer);
-    method public static android.graphics.Bitmap createBitmap(@NonNull android.graphics.Bitmap);
-    method public static android.graphics.Bitmap createBitmap(@NonNull android.graphics.Bitmap, int, int, int, int);
-    method public static android.graphics.Bitmap createBitmap(@NonNull android.graphics.Bitmap, int, int, int, int, @Nullable android.graphics.Matrix, boolean);
-    method public static android.graphics.Bitmap createBitmap(int, int, @NonNull android.graphics.Bitmap.Config);
-    method public static android.graphics.Bitmap createBitmap(@Nullable android.util.DisplayMetrics, int, int, @NonNull android.graphics.Bitmap.Config);
-    method public static android.graphics.Bitmap createBitmap(int, int, @NonNull android.graphics.Bitmap.Config, boolean);
-    method public static android.graphics.Bitmap createBitmap(int, int, @NonNull android.graphics.Bitmap.Config, boolean, @NonNull android.graphics.ColorSpace);
-    method public static android.graphics.Bitmap createBitmap(@Nullable android.util.DisplayMetrics, int, int, @NonNull android.graphics.Bitmap.Config, boolean);
-    method public static android.graphics.Bitmap createBitmap(@Nullable android.util.DisplayMetrics, int, int, @NonNull android.graphics.Bitmap.Config, boolean, @NonNull android.graphics.ColorSpace);
-    method public static android.graphics.Bitmap createBitmap(@ColorInt @NonNull int[], int, int, int, int, @NonNull android.graphics.Bitmap.Config);
-    method public static android.graphics.Bitmap createBitmap(@NonNull android.util.DisplayMetrics, @ColorInt @NonNull int[], int, int, int, int, @NonNull android.graphics.Bitmap.Config);
-    method public static android.graphics.Bitmap createBitmap(@ColorInt @NonNull int[], int, int, android.graphics.Bitmap.Config);
-    method public static android.graphics.Bitmap createBitmap(@Nullable android.util.DisplayMetrics, @ColorInt @NonNull int[], int, int, @NonNull android.graphics.Bitmap.Config);
+    method @WorkerThread public boolean compress(@NonNull android.graphics.Bitmap.CompressFormat, int, @NonNull java.io.OutputStream);
+    method public android.graphics.Bitmap copy(@NonNull android.graphics.Bitmap.Config, boolean);
+    method public void copyPixelsFromBuffer(@NonNull java.nio.Buffer);
+    method public void copyPixelsToBuffer(@NonNull java.nio.Buffer);
+    method @NonNull public static android.graphics.Bitmap createBitmap(@NonNull android.graphics.Bitmap);
+    method @NonNull public static android.graphics.Bitmap createBitmap(@NonNull android.graphics.Bitmap, int, int, int, int);
+    method @NonNull public static android.graphics.Bitmap createBitmap(@NonNull android.graphics.Bitmap, int, int, int, int, @Nullable android.graphics.Matrix, boolean);
+    method @NonNull public static android.graphics.Bitmap createBitmap(int, int, @NonNull android.graphics.Bitmap.Config);
+    method @NonNull public static android.graphics.Bitmap createBitmap(@Nullable android.util.DisplayMetrics, int, int, @NonNull android.graphics.Bitmap.Config);
+    method @NonNull public static android.graphics.Bitmap createBitmap(int, int, @NonNull android.graphics.Bitmap.Config, boolean);
+    method @NonNull public static android.graphics.Bitmap createBitmap(int, int, @NonNull android.graphics.Bitmap.Config, boolean, @NonNull android.graphics.ColorSpace);
+    method @NonNull public static android.graphics.Bitmap createBitmap(@Nullable android.util.DisplayMetrics, int, int, @NonNull android.graphics.Bitmap.Config, boolean);
+    method @NonNull public static android.graphics.Bitmap createBitmap(@Nullable android.util.DisplayMetrics, int, int, @NonNull android.graphics.Bitmap.Config, boolean, @NonNull android.graphics.ColorSpace);
+    method @NonNull public static android.graphics.Bitmap createBitmap(@ColorInt @NonNull int[], int, int, int, int, @NonNull android.graphics.Bitmap.Config);
+    method @NonNull public static android.graphics.Bitmap createBitmap(@NonNull android.util.DisplayMetrics, @ColorInt @NonNull int[], int, int, int, int, @NonNull android.graphics.Bitmap.Config);
+    method @NonNull public static android.graphics.Bitmap createBitmap(@ColorInt @NonNull int[], int, int, android.graphics.Bitmap.Config);
+    method @NonNull public static android.graphics.Bitmap createBitmap(@Nullable android.util.DisplayMetrics, @ColorInt @NonNull int[], int, int, @NonNull android.graphics.Bitmap.Config);
     method @NonNull public static android.graphics.Bitmap createBitmap(@NonNull android.graphics.Picture);
     method @NonNull public static android.graphics.Bitmap createBitmap(@NonNull android.graphics.Picture, int, int, @NonNull android.graphics.Bitmap.Config);
-    method public static android.graphics.Bitmap createScaledBitmap(@NonNull android.graphics.Bitmap, int, int, boolean);
+    method @NonNull public static android.graphics.Bitmap createScaledBitmap(@NonNull android.graphics.Bitmap, int, int, boolean);
     method public int describeContents();
     method public void eraseColor(@ColorInt int);
     method public void eraseColor(@ColorLong long);
-    method @CheckResult public android.graphics.Bitmap extractAlpha();
-    method @CheckResult public android.graphics.Bitmap extractAlpha(android.graphics.Paint, int[]);
+    method @CheckResult @NonNull public android.graphics.Bitmap extractAlpha();
+    method @CheckResult @NonNull public android.graphics.Bitmap extractAlpha(@Nullable android.graphics.Paint, int[]);
     method public int getAllocationByteCount();
     method public int getByteCount();
     method @NonNull public android.graphics.Color getColor(int, int);
     method @Nullable public android.graphics.ColorSpace getColorSpace();
-    method public android.graphics.Bitmap.Config getConfig();
+    method @NonNull public android.graphics.Bitmap.Config getConfig();
     method public int getDensity();
     method public int getGenerationId();
     method @NonNull public android.hardware.HardwareBuffer getHardwareBuffer();
     method public int getHeight();
-    method public byte[] getNinePatchChunk();
+    method @Nullable public byte[] getNinePatchChunk();
     method @ColorInt public int getPixel(int, int);
-    method public void getPixels(@ColorInt int[], int, int, int, int, int, int);
+    method public void getPixels(@ColorInt @NonNull int[], int, int, int, int, int, int);
     method public int getRowBytes();
-    method public int getScaledHeight(android.graphics.Canvas);
-    method public int getScaledHeight(android.util.DisplayMetrics);
+    method public int getScaledHeight(@NonNull android.graphics.Canvas);
+    method public int getScaledHeight(@NonNull android.util.DisplayMetrics);
     method public int getScaledHeight(int);
-    method public int getScaledWidth(android.graphics.Canvas);
-    method public int getScaledWidth(android.util.DisplayMetrics);
+    method public int getScaledWidth(@NonNull android.graphics.Canvas);
+    method public int getScaledWidth(@NonNull android.util.DisplayMetrics);
     method public int getScaledWidth(int);
     method public int getWidth();
     method public boolean hasAlpha();
@@ -14054,21 +14067,21 @@ package android.graphics {
     method public boolean isPremultiplied();
     method public boolean isRecycled();
     method public void prepareToDraw();
-    method public void reconfigure(int, int, android.graphics.Bitmap.Config);
+    method public void reconfigure(int, int, @NonNull android.graphics.Bitmap.Config);
     method public void recycle();
-    method public boolean sameAs(android.graphics.Bitmap);
+    method @WorkerThread public boolean sameAs(@Nullable android.graphics.Bitmap);
     method public void setColorSpace(@NonNull android.graphics.ColorSpace);
-    method public void setConfig(android.graphics.Bitmap.Config);
+    method public void setConfig(@NonNull android.graphics.Bitmap.Config);
     method public void setDensity(int);
     method public void setHasAlpha(boolean);
     method public void setHasMipMap(boolean);
     method public void setHeight(int);
     method public void setPixel(int, int, @ColorInt int);
-    method public void setPixels(@ColorInt int[], int, int, int, int, int, int);
+    method public void setPixels(@ColorInt @NonNull int[], int, int, int, int, int, int);
     method public void setPremultiplied(boolean);
     method public void setWidth(int);
     method @Nullable public static android.graphics.Bitmap wrapHardwareBuffer(@NonNull android.hardware.HardwareBuffer, @Nullable android.graphics.ColorSpace);
-    method public void writeToParcel(android.os.Parcel, int);
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.graphics.Bitmap> CREATOR;
     field public static final int DENSITY_NONE = 0; // 0x0
   }
@@ -16900,6 +16913,7 @@ package android.hardware {
     method public int describeContents();
     method public int getFormat();
     method public int getHeight();
+    method public long getId();
     method public int getLayers();
     method public long getUsage();
     method public int getWidth();
@@ -18903,6 +18917,7 @@ package android.inputmethodservice {
     method public void onUnbindInput();
     method @Deprecated public void onUpdateCursor(android.graphics.Rect);
     method public void onUpdateCursorAnchorInfo(android.view.inputmethod.CursorAnchorInfo);
+    method public void onUpdateEditorToolType(int);
     method public void onUpdateExtractedText(int, android.view.inputmethod.ExtractedText);
     method public void onUpdateExtractingViews(android.view.inputmethod.EditorInfo);
     method public void onUpdateExtractingVisibility(android.view.inputmethod.EditorInfo);
@@ -23185,9 +23200,10 @@ package android.media {
 
   public abstract static class MediaRouter2.RouteCallback {
     ctor public MediaRouter2.RouteCallback();
-    method public void onRoutesAdded(@NonNull java.util.List<android.media.MediaRoute2Info>);
-    method public void onRoutesChanged(@NonNull java.util.List<android.media.MediaRoute2Info>);
-    method public void onRoutesRemoved(@NonNull java.util.List<android.media.MediaRoute2Info>);
+    method @Deprecated public void onRoutesAdded(@NonNull java.util.List<android.media.MediaRoute2Info>);
+    method @Deprecated public void onRoutesChanged(@NonNull java.util.List<android.media.MediaRoute2Info>);
+    method @Deprecated public void onRoutesRemoved(@NonNull java.util.List<android.media.MediaRoute2Info>);
+    method public void onRoutesUpdated(@NonNull java.util.List<android.media.MediaRoute2Info>);
   }
 
   public class MediaRouter2.RoutingController {
@@ -31613,7 +31629,7 @@ package android.os {
 
   public interface OutcomeReceiver<R, E extends java.lang.Throwable> {
     method public default void onError(@NonNull E);
-    method public void onResult(@NonNull R);
+    method public void onResult(R);
   }
 
   public final class Parcel {
@@ -32245,8 +32261,10 @@ package android.os {
     method public android.os.UserHandle getUserForSerialNumber(long);
     method @NonNull @RequiresPermission(anyOf={"android.permission.MANAGE_USERS", "android.permission.CREATE_USERS", "android.permission.QUERY_USERS", android.Manifest.permission.GET_ACCOUNTS_PRIVILEGED}) public String getUserName();
     method public java.util.List<android.os.UserHandle> getUserProfiles();
+    method @NonNull @RequiresPermission(anyOf={"android.permission.MANAGE_USERS", "android.permission.QUERY_USERS", "android.permission.INTERACT_ACROSS_USERS"}, conditional=true) public android.content.pm.UserProperties getUserProperties(@NonNull android.os.UserHandle);
     method public android.os.Bundle getUserRestrictions();
     method @RequiresPermission(anyOf={"android.permission.MANAGE_USERS", "android.permission.INTERACT_ACROSS_USERS"}, conditional=true) public android.os.Bundle getUserRestrictions(android.os.UserHandle);
+    method @NonNull @RequiresPermission(anyOf={"android.permission.MANAGE_USERS", "android.permission.INTERACT_ACROSS_USERS"}) public java.util.List<android.os.UserHandle> getVisibleUsers();
     method public boolean hasUserRestriction(String);
     method public boolean isDemoUser();
     method public static boolean isHeadlessSystemUserMode();
@@ -32260,6 +32278,7 @@ package android.os {
     method @RequiresPermission(anyOf={"android.permission.MANAGE_USERS", "android.permission.INTERACT_ACROSS_USERS"}, conditional=true) public boolean isUserRunningOrStopping(android.os.UserHandle);
     method public boolean isUserUnlocked();
     method @RequiresPermission(anyOf={"android.permission.MANAGE_USERS", "android.permission.INTERACT_ACROSS_USERS"}, conditional=true) public boolean isUserUnlocked(android.os.UserHandle);
+    method public boolean isUserVisible();
     method @RequiresPermission(anyOf={"android.permission.MANAGE_USERS", "android.permission.MODIFY_QUIET_MODE"}, conditional=true) public boolean requestQuietModeEnabled(boolean, @NonNull android.os.UserHandle);
     method public boolean requestQuietModeEnabled(boolean, @NonNull android.os.UserHandle, int);
     method @Deprecated public boolean setRestrictionsChallenge(String);
@@ -41336,6 +41355,8 @@ package android.telephony {
     field public static final String KEY_CARRIER_INSTANT_LETTERING_ESCAPED_CHARS_STRING = "carrier_instant_lettering_escaped_chars_string";
     field public static final String KEY_CARRIER_INSTANT_LETTERING_INVALID_CHARS_STRING = "carrier_instant_lettering_invalid_chars_string";
     field public static final String KEY_CARRIER_INSTANT_LETTERING_LENGTH_LIMIT_INT = "carrier_instant_lettering_length_limit_int";
+    field public static final String KEY_CARRIER_METERED_APN_TYPES_STRINGS = "carrier_metered_apn_types_strings";
+    field public static final String KEY_CARRIER_METERED_ROAMING_APN_TYPES_STRINGS = "carrier_metered_roaming_apn_types_strings";
     field public static final String KEY_CARRIER_NAME_OVERRIDE_BOOL = "carrier_name_override_bool";
     field public static final String KEY_CARRIER_NAME_STRING = "carrier_name_string";
     field public static final String KEY_CARRIER_NR_AVAILABILITIES_INT_ARRAY = "carrier_nr_availabilities_int_array";
@@ -45090,6 +45111,7 @@ package android.text {
     ctor protected Layout(CharSequence, android.text.TextPaint, int, android.text.Layout.Alignment, float, float);
     method public void draw(android.graphics.Canvas);
     method public void draw(android.graphics.Canvas, android.graphics.Path, android.graphics.Paint, int);
+    method public void fillCharacterBounds(@IntRange(from=0) int, @IntRange(from=0) int, @NonNull float[], @IntRange(from=0) int);
     method public final android.text.Layout.Alignment getAlignment();
     method public abstract int getBottomPadding();
     method public void getCursorPath(int, android.graphics.Path, CharSequence);
@@ -45244,6 +45266,8 @@ package android.text {
     method public static boolean extendRight(android.text.Spannable, android.text.Layout);
     method public static final void extendSelection(android.text.Spannable, int);
     method public static boolean extendToLeftEdge(android.text.Spannable, android.text.Layout);
+    method public static boolean extendToParagraphEnd(@NonNull android.text.Spannable);
+    method public static boolean extendToParagraphStart(@NonNull android.text.Spannable);
     method public static boolean extendToRightEdge(android.text.Spannable, android.text.Layout);
     method public static boolean extendUp(android.text.Spannable, android.text.Layout);
     method public static final int getSelectionEnd(CharSequence);
@@ -45252,6 +45276,8 @@ package android.text {
     method public static boolean moveLeft(android.text.Spannable, android.text.Layout);
     method public static boolean moveRight(android.text.Spannable, android.text.Layout);
     method public static boolean moveToLeftEdge(android.text.Spannable, android.text.Layout);
+    method public static boolean moveToParagraphEnd(@NonNull android.text.Spannable, @NonNull android.text.Layout);
+    method public static boolean moveToParagraphStart(@NonNull android.text.Spannable, @NonNull android.text.Layout);
     method public static boolean moveToRightEdge(android.text.Spannable, android.text.Layout);
     method public static boolean moveUp(android.text.Spannable, android.text.Layout);
     method public static final void removeSelection(android.text.Spannable);
@@ -45700,6 +45726,7 @@ package android.text.method {
     method protected boolean left(android.widget.TextView, android.text.Spannable);
     method protected boolean lineEnd(android.widget.TextView, android.text.Spannable);
     method protected boolean lineStart(android.widget.TextView, android.text.Spannable);
+    method public boolean nextParagraph(@NonNull android.widget.TextView, @NonNull android.text.Spannable);
     method public boolean onGenericMotionEvent(android.widget.TextView, android.text.Spannable, android.view.MotionEvent);
     method public boolean onKeyDown(android.widget.TextView, android.text.Spannable, int, android.view.KeyEvent);
     method public boolean onKeyOther(android.widget.TextView, android.text.Spannable, android.view.KeyEvent);
@@ -45709,6 +45736,7 @@ package android.text.method {
     method public boolean onTrackballEvent(android.widget.TextView, android.text.Spannable, android.view.MotionEvent);
     method protected boolean pageDown(android.widget.TextView, android.text.Spannable);
     method protected boolean pageUp(android.widget.TextView, android.text.Spannable);
+    method public boolean previousParagraph(@NonNull android.widget.TextView, @NonNull android.text.Spannable);
     method protected boolean right(android.widget.TextView, android.text.Spannable);
     method protected boolean top(android.widget.TextView, android.text.Spannable);
     method protected boolean up(android.widget.TextView, android.text.Spannable);
@@ -49219,6 +49247,10 @@ package android.view {
   }
 
   public final class PixelCopy {
+    method @NonNull public static android.view.PixelCopy.Request ofSurface(@NonNull android.view.Surface, @NonNull java.util.concurrent.Executor, @NonNull java.util.function.Consumer<android.view.PixelCopy.CopyResult>);
+    method @NonNull public static android.view.PixelCopy.Request ofSurface(@NonNull android.view.SurfaceView, @NonNull java.util.concurrent.Executor, @NonNull java.util.function.Consumer<android.view.PixelCopy.CopyResult>);
+    method @NonNull public static android.view.PixelCopy.Request ofWindow(@NonNull android.view.Window, @NonNull java.util.concurrent.Executor, @NonNull java.util.function.Consumer<android.view.PixelCopy.CopyResult>);
+    method @NonNull public static android.view.PixelCopy.Request ofWindow(@NonNull android.view.View, @NonNull java.util.concurrent.Executor, @NonNull java.util.function.Consumer<android.view.PixelCopy.CopyResult>);
     method public static void request(@NonNull android.view.SurfaceView, @NonNull android.graphics.Bitmap, @NonNull android.view.PixelCopy.OnPixelCopyFinishedListener, @NonNull android.os.Handler);
     method public static void request(@NonNull android.view.SurfaceView, @Nullable android.graphics.Rect, @NonNull android.graphics.Bitmap, @NonNull android.view.PixelCopy.OnPixelCopyFinishedListener, @NonNull android.os.Handler);
     method public static void request(@NonNull android.view.Surface, @NonNull android.graphics.Bitmap, @NonNull android.view.PixelCopy.OnPixelCopyFinishedListener, @NonNull android.os.Handler);
@@ -49233,8 +49265,19 @@ package android.view {
     field public static final int SUCCESS = 0; // 0x0
   }
 
+  public static final class PixelCopy.CopyResult {
+    method @NonNull public android.graphics.Bitmap getBitmap();
+    method public int getStatus();
+  }
+
   public static interface PixelCopy.OnPixelCopyFinishedListener {
     method public void onPixelCopyFinished(int);
+  }
+
+  public static final class PixelCopy.Request {
+    method public void request();
+    method @NonNull public android.view.PixelCopy.Request setDestinationBitmap(@Nullable android.graphics.Bitmap);
+    method @NonNull public android.view.PixelCopy.Request setSourceRect(@Nullable android.graphics.Rect);
   }
 
   public final class PointerIcon implements android.os.Parcelable {
@@ -49929,6 +49972,7 @@ package android.view {
     method public void invalidate();
     method public void invalidateDrawable(@NonNull android.graphics.drawable.Drawable);
     method public void invalidateOutline();
+    method public boolean isAccessibilityDataPrivate();
     method public boolean isAccessibilityFocused();
     method public boolean isAccessibilityHeading();
     method public boolean isActivated();
@@ -50106,6 +50150,7 @@ package android.view {
     method public void scrollTo(int, int);
     method public void sendAccessibilityEvent(int);
     method public void sendAccessibilityEventUnchecked(android.view.accessibility.AccessibilityEvent);
+    method public void setAccessibilityDataPrivate(int);
     method public void setAccessibilityDelegate(@Nullable android.view.View.AccessibilityDelegate);
     method public void setAccessibilityHeading(boolean);
     method public void setAccessibilityLiveRegion(int);
@@ -50286,6 +50331,9 @@ package android.view {
     method @CallSuper protected boolean verifyDrawable(@NonNull android.graphics.drawable.Drawable);
     method @Deprecated public boolean willNotCacheDrawing();
     method public boolean willNotDraw();
+    field public static final int ACCESSIBILITY_DATA_PRIVATE_AUTO = 0; // 0x0
+    field public static final int ACCESSIBILITY_DATA_PRIVATE_NO = 2; // 0x2
+    field public static final int ACCESSIBILITY_DATA_PRIVATE_YES = 1; // 0x1
     field public static final int ACCESSIBILITY_LIVE_REGION_ASSERTIVE = 2; // 0x2
     field public static final int ACCESSIBILITY_LIVE_REGION_NONE = 0; // 0x0
     field public static final int ACCESSIBILITY_LIVE_REGION_POLITE = 1; // 0x1
@@ -51738,9 +51786,11 @@ package android.view.accessibility {
     method public int getSpeechStateChangeTypes();
     method public int getWindowChanges();
     method public void initFromParcel(android.os.Parcel);
+    method public boolean isAccessibilityDataPrivate();
     method @Deprecated public static android.view.accessibility.AccessibilityEvent obtain(int);
     method @Deprecated public static android.view.accessibility.AccessibilityEvent obtain(android.view.accessibility.AccessibilityEvent);
     method @Deprecated public static android.view.accessibility.AccessibilityEvent obtain();
+    method public void setAccessibilityDataPrivate(boolean);
     method public void setAction(int);
     method public void setContentChangeTypes(int);
     method public void setEventTime(long);
@@ -51831,6 +51881,7 @@ package android.view.accessibility {
     method public static boolean isAccessibilityButtonSupported();
     method public boolean isAudioDescriptionRequested();
     method public boolean isEnabled();
+    method public boolean isRequestFromAccessibilityTool();
     method public boolean isTouchExplorationEnabled();
     method public void removeAccessibilityRequestPreparer(android.view.accessibility.AccessibilityRequestPreparer);
     method public boolean removeAccessibilityServicesStateChangeListener(@NonNull android.view.accessibility.AccessibilityManager.AccessibilityServicesStateChangeListener);
@@ -51937,6 +51988,7 @@ package android.view.accessibility {
     method public boolean isTextEntryKey();
     method public boolean isTextSelectable();
     method public boolean isVisibleToUser();
+    method public void makeQueryableFromAppProcess(@NonNull android.view.View);
     method @Deprecated public static android.view.accessibility.AccessibilityNodeInfo obtain(android.view.View);
     method @Deprecated public static android.view.accessibility.AccessibilityNodeInfo obtain(android.view.View, int);
     method @Deprecated public static android.view.accessibility.AccessibilityNodeInfo obtain();
@@ -52943,6 +52995,22 @@ package android.view.inputmethod {
     method public android.view.inputmethod.CursorAnchorInfo.Builder setSelectionRange(int, int);
   }
 
+  public final class DeleteGesture extends android.view.inputmethod.HandwritingGesture implements android.os.Parcelable {
+    method public int describeContents();
+    method @NonNull public android.graphics.RectF getDeletionArea();
+    method public int getGranularity();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.view.inputmethod.DeleteGesture> CREATOR;
+  }
+
+  public static final class DeleteGesture.Builder {
+    ctor public DeleteGesture.Builder();
+    method @NonNull public android.view.inputmethod.DeleteGesture build();
+    method @NonNull public android.view.inputmethod.DeleteGesture.Builder setDeletionArea(@NonNull android.graphics.RectF);
+    method @NonNull public android.view.inputmethod.DeleteGesture.Builder setFallbackText(@Nullable String);
+    method @NonNull public android.view.inputmethod.DeleteGesture.Builder setGranularity(int);
+  }
+
   public final class EditorBoundsInfo implements android.os.Parcelable {
     method public int describeContents();
     method @Nullable public android.graphics.RectF getEditorBounds();
@@ -52966,9 +53034,13 @@ package android.view.inputmethod {
     method @Nullable public android.view.inputmethod.SurroundingText getInitialSurroundingText(@IntRange(from=0) int, @IntRange(from=0) int, int);
     method @Nullable public CharSequence getInitialTextAfterCursor(@IntRange(from=0) int, int);
     method @Nullable public CharSequence getInitialTextBeforeCursor(@IntRange(from=0) int, int);
+    method public int getInitialToolType();
+    method @NonNull public java.util.List<java.lang.Class<? extends android.view.inputmethod.HandwritingGesture>> getSupportedHandwritingGestures();
     method public final void makeCompatible(int);
     method public void setInitialSurroundingSubText(@NonNull CharSequence, int);
     method public void setInitialSurroundingText(@NonNull CharSequence);
+    method public void setInitialToolType(int);
+    method public void setSupportedHandwritingGestures(@NonNull java.util.List<java.lang.Class<? extends android.view.inputmethod.HandwritingGesture>>);
     method public void writeToParcel(android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.view.inputmethod.EditorInfo> CREATOR;
     field public static final int IME_ACTION_DONE = 6; // 0x6
@@ -53033,6 +53105,16 @@ package android.view.inputmethod {
     field public int hintMaxChars;
     field public int hintMaxLines;
     field public int token;
+  }
+
+  public abstract class HandwritingGesture {
+    method @Nullable public String getFallbackText();
+    field public static final int GESTURE_TYPE_DELETE = 4; // 0x4
+    field public static final int GESTURE_TYPE_INSERT = 2; // 0x2
+    field public static final int GESTURE_TYPE_NONE = 0; // 0x0
+    field public static final int GESTURE_TYPE_SELECT = 1; // 0x1
+    field public static final int GRANULARITY_CHARACTER = 2; // 0x2
+    field public static final int GRANULARITY_WORD = 1; // 0x1
   }
 
   public final class InlineSuggestion implements android.os.Parcelable {
@@ -53125,6 +53207,7 @@ package android.view.inputmethod {
     method @Nullable public CharSequence getTextBeforeCursor(@IntRange(from=0) int, int);
     method public boolean performContextMenuAction(int);
     method public boolean performEditorAction(int);
+    method public default void performHandwritingGesture(@NonNull android.view.inputmethod.HandwritingGesture, @Nullable java.util.concurrent.Executor, @Nullable java.util.function.IntConsumer);
     method public boolean performPrivateCommand(String, android.os.Bundle);
     method public default boolean performSpellCheck();
     method public boolean reportFullscreenMode(boolean);
@@ -53145,6 +53228,12 @@ package android.view.inputmethod {
     field public static final int CURSOR_UPDATE_MONITOR = 2; // 0x2
     field public static final int GET_EXTRACTED_TEXT_MONITOR = 1; // 0x1
     field public static final int GET_TEXT_WITH_STYLES = 1; // 0x1
+    field public static final int HANDWRITING_GESTURE_RESULT_CANCELLED = 4; // 0x4
+    field public static final int HANDWRITING_GESTURE_RESULT_FAILED = 3; // 0x3
+    field public static final int HANDWRITING_GESTURE_RESULT_FALLBACK = 5; // 0x5
+    field public static final int HANDWRITING_GESTURE_RESULT_SUCCESS = 1; // 0x1
+    field public static final int HANDWRITING_GESTURE_RESULT_UNKNOWN = 0; // 0x0
+    field public static final int HANDWRITING_GESTURE_RESULT_UNSUPPORTED = 2; // 0x2
     field public static final int INPUT_CONTENT_GRANT_READ_URI_PERMISSION = 1; // 0x1
   }
 
@@ -53344,6 +53433,38 @@ package android.view.inputmethod {
     method public android.view.inputmethod.InputMethodSubtype.InputMethodSubtypeBuilder setSubtypeLocale(String);
     method public android.view.inputmethod.InputMethodSubtype.InputMethodSubtypeBuilder setSubtypeMode(String);
     method public android.view.inputmethod.InputMethodSubtype.InputMethodSubtypeBuilder setSubtypeNameResId(int);
+  }
+
+  public final class InsertGesture extends android.view.inputmethod.HandwritingGesture implements android.os.Parcelable {
+    method public int describeContents();
+    method @Nullable public android.graphics.PointF getInsertionPoint();
+    method @Nullable public String getTextToInsert();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.view.inputmethod.InsertGesture> CREATOR;
+  }
+
+  public static final class InsertGesture.Builder {
+    ctor public InsertGesture.Builder();
+    method @NonNull public android.view.inputmethod.InsertGesture build();
+    method @NonNull public android.view.inputmethod.InsertGesture.Builder setFallbackText(@Nullable String);
+    method @NonNull public android.view.inputmethod.InsertGesture.Builder setInsertionPoint(@NonNull android.graphics.PointF);
+    method @NonNull public android.view.inputmethod.InsertGesture.Builder setTextToInsert(@NonNull String);
+  }
+
+  public final class SelectGesture extends android.view.inputmethod.HandwritingGesture implements android.os.Parcelable {
+    method public int describeContents();
+    method public int getGranularity();
+    method @NonNull public android.graphics.RectF getSelectionArea();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.view.inputmethod.SelectGesture> CREATOR;
+  }
+
+  public static final class SelectGesture.Builder {
+    ctor public SelectGesture.Builder();
+    method @NonNull public android.view.inputmethod.SelectGesture build();
+    method @NonNull public android.view.inputmethod.SelectGesture.Builder setFallbackText(@Nullable String);
+    method @NonNull public android.view.inputmethod.SelectGesture.Builder setGranularity(int);
+    method @NonNull public android.view.inputmethod.SelectGesture.Builder setSelectionArea(@NonNull android.graphics.RectF);
   }
 
   public final class SurroundingText implements android.os.Parcelable {

@@ -211,9 +211,6 @@
     <color name="Red_700">#ffc53929</color>
     <color name="Red_800">#ffb93221</color>
 
-    <!-- Status bar color for semi transparent mode. -->
-    <color name="system_bar_background_semi_transparent">#66000000</color> <!-- 40% black -->
-
     <color name="resize_shadow_start_color">#2a000000</color>
     <color name="resize_shadow_end_color">#00000000</color>
 
@@ -454,4 +451,14 @@
     <!-- Lily Language Picker language item view colors -->
     <color name="language_picker_item_text_color">#202124</color>
     <color name="language_picker_item_text_color_secondary">#5F6368</color>
+    <color name="language_picker_item_text_color_selected">#202124</color>
+    <color name="language_picker_item_text_color_secondary_selected">#5F6368</color>
+    <color name="language_picker_item_selected_indicator">#4285F4</color>
+    <color name="language_picker_item_selected_bg">#E8F0FE</color>
+    <color name="language_picker_item_selected_stroke">#4C8DF6</color>
+
+    <!-- Color for side fps toast light theme -->
+    <color name="side_fps_toast_background">#F7F9FA</color>
+    <color name="side_fps_text_color">#191C1D</color>
+    <color name="side_fps_button_color">#00677E</color>
 </resources>

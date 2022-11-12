@@ -42,7 +42,6 @@ package android {
     field public static final String SET_AND_VERIFY_LOCKSCREEN_CREDENTIALS = "android.permission.SET_AND_VERIFY_LOCKSCREEN_CREDENTIALS";
     field public static final String SET_GAME_SERVICE = "android.permission.SET_GAME_SERVICE";
     field public static final String SET_KEYBOARD_LAYOUT = "android.permission.SET_KEYBOARD_LAYOUT";
-    field public static final String START_TASKS_FROM_RECENTS = "android.permission.START_TASKS_FROM_RECENTS";
     field public static final String SUSPEND_APPS = "android.permission.SUSPEND_APPS";
     field public static final String TEST_BIOMETRIC = "android.permission.TEST_BIOMETRIC";
     field public static final String TEST_MANAGE_ROLLBACKS = "android.permission.TEST_MANAGE_ROLLBACKS";
@@ -90,6 +89,7 @@ package android.accessibilityservice {
 
   public class AccessibilityServiceInfo implements android.os.Parcelable {
     method @NonNull public android.content.ComponentName getComponentName();
+    method public void setAccessibilityTool(boolean);
   }
 
 }
@@ -131,6 +131,7 @@ package android.app {
     method public static void resumeAppSwitches() throws android.os.RemoteException;
     method @RequiresPermission(android.Manifest.permission.CHANGE_CONFIGURATION) public void scheduleApplicationInfoChanged(java.util.List<java.lang.String>, int);
     method @RequiresPermission(anyOf={android.Manifest.permission.MANAGE_USERS, android.Manifest.permission.INTERACT_ACROSS_USERS}) public void setStopUserOnSwitch(int);
+    method @RequiresPermission(anyOf={android.Manifest.permission.MANAGE_USERS, android.Manifest.permission.CREATE_USERS}) public boolean startUserInBackgroundOnSecondaryDisplay(int, int);
     method @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS_FULL) public boolean stopUser(int, boolean);
     method @RequiresPermission(android.Manifest.permission.CHANGE_CONFIGURATION) public boolean updateMccMncConfiguration(@NonNull String, @NonNull String);
     method @RequiresPermission(android.Manifest.permission.DUMP) public void waitForBroadcastIdle();
@@ -670,6 +671,7 @@ package android.app.usage {
 
   public final class UsageStatsManager {
     method public void forceUsageSourceSettingRead();
+    method public boolean isAppStandbyEnabled();
   }
 
 }
@@ -796,6 +798,7 @@ package android.content.pm {
     field public static final long OVERRIDE_MIN_ASPECT_RATIO_MEDIUM = 180326845L; // 0xabf91bdL
     field public static final float OVERRIDE_MIN_ASPECT_RATIO_MEDIUM_VALUE = 1.5f;
     field public static final long OVERRIDE_MIN_ASPECT_RATIO_PORTRAIT_ONLY = 203647190L; // 0xc2368d6L
+    field public static final long OVERRIDE_MIN_ASPECT_RATIO_TO_ALIGN_WITH_SPLIT_SCREEN = 208648326L; // 0xc6fb886L
     field public static final int RESIZE_MODE_RESIZEABLE = 2; // 0x2
   }
 
@@ -823,6 +826,8 @@ package android.content.pm {
   }
 
   public abstract class PackageManager {
+    method public abstract void addCrossProfileIntentFilter(@NonNull android.content.IntentFilter, int, int, int);
+    method public abstract void clearCrossProfileIntentFilters(int);
     method @Deprecated @Nullable public final String getContentCaptureServicePackageName();
     method @Nullable public String getDefaultTextClassifierPackageName();
     method @RequiresPermission(android.Manifest.permission.INJECT_EVENTS) public android.os.IBinder getHoldLockToken();
@@ -1026,6 +1031,7 @@ package android.graphics {
   }
 
   public class Typeface {
+    method @NonNull public static android.util.Pair<java.util.List<android.graphics.Typeface>,java.util.List<android.graphics.Typeface>> changeDefaultFontForTest(@NonNull java.util.List<android.graphics.Typeface>, @NonNull java.util.List<android.graphics.Typeface>);
     method @NonNull public static long[] deserializeFontMap(@NonNull java.nio.ByteBuffer, @NonNull java.util.Map<java.lang.String,android.graphics.Typeface>) throws java.io.IOException;
     method @Nullable public static android.os.SharedMemory getSystemFontMapSharedMemory();
     method @NonNull public static android.os.SharedMemory serializeFontMap(@NonNull java.util.Map<java.lang.String,android.graphics.Typeface>) throws android.system.ErrnoException, java.io.IOException;
@@ -1795,6 +1801,7 @@ package android.os {
   }
 
   public final class PowerManager {
+    method public boolean areAutoPowerSaveModesEnabled();
     method @RequiresPermission(anyOf={android.Manifest.permission.MANAGE_LOW_POWER_STANDBY, android.Manifest.permission.DEVICE_POWER}) public void forceLowPowerStandbyActive(boolean);
     field public static final String ACTION_ENHANCED_DISCHARGE_PREDICTION_CHANGED = "android.os.action.ENHANCED_DISCHARGE_PREDICTION_CHANGED";
     field @RequiresPermission(android.Manifest.permission.DEVICE_POWER) public static final int SYSTEM_WAKELOCK = -2147483648; // 0x80000000
@@ -1869,6 +1876,7 @@ package android.os {
     method @NonNull @RequiresPermission(anyOf={android.Manifest.permission.MANAGE_USERS, android.Manifest.permission.CREATE_USERS}) public java.util.List<android.content.pm.UserInfo> getUsers(boolean, boolean, boolean);
     method @RequiresPermission(anyOf={android.Manifest.permission.MANAGE_USERS, android.Manifest.permission.CREATE_USERS}) public boolean hasBaseUserRestriction(@NonNull String, @NonNull android.os.UserHandle);
     method public static boolean isSplitSystemUser();
+    method public static boolean isUsersOnSecondaryDisplaysEnabled();
     method @NonNull @RequiresPermission(anyOf={android.Manifest.permission.MANAGE_USERS, android.Manifest.permission.CREATE_USERS}) public android.content.pm.UserInfo preCreateUser(@NonNull String) throws android.os.UserManager.UserOperationException;
   }
 
@@ -3092,6 +3100,10 @@ package android.view.displayhash {
 
 package android.view.inputmethod {
 
+  public abstract class HandwritingGesture {
+    method public int getGestureType();
+  }
+
   public final class InlineSuggestion implements android.os.Parcelable {
     method @NonNull public static android.view.inputmethod.InlineSuggestion newInlineSuggestion(@NonNull android.view.inputmethod.InlineSuggestionInfo);
   }
@@ -3194,6 +3206,11 @@ package android.widget {
 
   public class PopupMenu {
     method public android.widget.ListView getMenuListView();
+  }
+
+  public class RatingBar extends android.widget.AbsSeekBar {
+    field public static final String PLURALS_MAX = "max";
+    field public static final String PLURALS_RATING = "rating";
   }
 
   public class Spinner extends android.widget.AbsSpinner implements android.content.DialogInterface.OnClickListener {
@@ -3325,11 +3342,12 @@ package android.window {
     ctor public TaskFragmentOrganizer(@NonNull java.util.concurrent.Executor);
     method @NonNull public java.util.concurrent.Executor getExecutor();
     method @NonNull public android.window.TaskFragmentOrganizerToken getOrganizerToken();
-    method public void onTaskFragmentAppeared(@NonNull android.window.TaskFragmentInfo);
-    method public void onTaskFragmentError(@NonNull android.os.IBinder, @NonNull Throwable);
-    method public void onTaskFragmentInfoChanged(@NonNull android.window.TaskFragmentInfo);
-    method public void onTaskFragmentParentInfoChanged(@NonNull android.os.IBinder, @NonNull android.content.res.Configuration);
-    method public void onTaskFragmentVanished(@NonNull android.window.TaskFragmentInfo);
+    method public void onActivityReparentedToTask(@NonNull android.window.WindowContainerTransaction, int, @NonNull android.content.Intent, @NonNull android.os.IBinder);
+    method public void onTaskFragmentAppeared(@NonNull android.window.WindowContainerTransaction, @NonNull android.window.TaskFragmentInfo);
+    method public void onTaskFragmentError(@NonNull android.window.WindowContainerTransaction, @NonNull android.os.IBinder, @Nullable android.window.TaskFragmentInfo, int, @NonNull Throwable);
+    method public void onTaskFragmentInfoChanged(@NonNull android.window.WindowContainerTransaction, @NonNull android.window.TaskFragmentInfo);
+    method public void onTaskFragmentParentInfoChanged(@NonNull android.window.WindowContainerTransaction, int, @NonNull android.content.res.Configuration);
+    method public void onTaskFragmentVanished(@NonNull android.window.WindowContainerTransaction, @NonNull android.window.TaskFragmentInfo);
     method @CallSuper public void registerOrganizer();
     method @CallSuper public void unregisterOrganizer();
   }

@@ -30,6 +30,7 @@ import com.android.keyguard.dagger.KeyguardQsUserSwitchComponent;
 import com.android.keyguard.dagger.KeyguardStatusBarViewComponent;
 import com.android.keyguard.dagger.KeyguardStatusViewComponent;
 import com.android.keyguard.dagger.KeyguardUserSwitcherComponent;
+import com.android.keyguard.logging.KeyguardViewMediatorLogger;
 import com.android.keyguard.mediator.ScreenOnCoordinator;
 import com.android.systemui.animation.ActivityLaunchAnimator;
 import com.android.systemui.broadcast.BroadcastDispatcher;
@@ -42,6 +43,8 @@ import com.android.systemui.dump.DumpManager;
 import com.android.systemui.keyguard.DismissCallbackRegistry;
 import com.android.systemui.keyguard.KeyguardUnlockAnimationController;
 import com.android.systemui.keyguard.KeyguardViewMediator;
+import com.android.systemui.keyguard.data.repository.KeyguardRepositoryModule;
+import com.android.systemui.keyguard.domain.quickaffordance.KeyguardQuickAffordanceModule;
 import com.android.systemui.navigationbar.NavigationModeController;
 import com.android.systemui.statusbar.NotificationShadeDepthController;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
@@ -66,7 +69,11 @@ import dagger.Provides;
         KeyguardStatusBarViewComponent.class,
         KeyguardStatusViewComponent.class,
         KeyguardUserSwitcherComponent.class},
-        includes = {FalsingModule.class})
+        includes = {
+            FalsingModule.class,
+            KeyguardQuickAffordanceModule.class,
+            KeyguardRepositoryModule.class,
+        })
 public class KeyguardModule {
     /**
      * Provides our instance of KeyguardViewMediator which is considered optional.
@@ -99,7 +106,8 @@ public class KeyguardModule {
             InteractionJankMonitor interactionJankMonitor,
             DreamOverlayStateController dreamOverlayStateController,
             Lazy<NotificationShadeWindowController> notificationShadeWindowController,
-            Lazy<ActivityLaunchAnimator> activityLaunchAnimator) {
+            Lazy<ActivityLaunchAnimator> activityLaunchAnimator,
+            KeyguardViewMediatorLogger logger) {
         return new KeyguardViewMediator(
                 context,
                 falsingCollector,
@@ -126,7 +134,8 @@ public class KeyguardModule {
                 interactionJankMonitor,
                 dreamOverlayStateController,
                 notificationShadeWindowController,
-                activityLaunchAnimator);
+                activityLaunchAnimator,
+                logger);
     }
 
     /** */

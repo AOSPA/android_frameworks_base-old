@@ -77,9 +77,11 @@ import static com.android.server.am.PlatformCompatCache.CACHED_COMPAT_CHANGE_USE
 import static com.android.server.am.ProcessList.TAG_PROCESS_OBSERVERS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_SWITCH;
 
+import android.annotation.IntDef;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.ActivityThread;
+import android.app.AppProtoEnums;
 import android.app.ApplicationExitInfo;
 import android.app.usage.UsageEvents;
 import android.compat.annotation.ChangeId;
@@ -116,6 +118,8 @@ import com.android.server.wm.ActivityServiceConnectionsHolder;
 import com.android.server.wm.WindowProcessController;
 
 import java.io.PrintWriter;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -125,20 +129,97 @@ import java.util.Arrays;
  */
 public class OomAdjuster {
     static final String TAG = "OomAdjuster";
-    static final String OOM_ADJ_REASON_METHOD = "updateOomAdj";
-    static final String OOM_ADJ_REASON_NONE = OOM_ADJ_REASON_METHOD + "_meh";
-    static final String OOM_ADJ_REASON_ACTIVITY = OOM_ADJ_REASON_METHOD + "_activityChange";
-    static final String OOM_ADJ_REASON_FINISH_RECEIVER = OOM_ADJ_REASON_METHOD + "_finishReceiver";
-    static final String OOM_ADJ_REASON_START_RECEIVER = OOM_ADJ_REASON_METHOD + "_startReceiver";
-    static final String OOM_ADJ_REASON_BIND_SERVICE = OOM_ADJ_REASON_METHOD + "_bindService";
-    static final String OOM_ADJ_REASON_UNBIND_SERVICE = OOM_ADJ_REASON_METHOD + "_unbindService";
-    static final String OOM_ADJ_REASON_START_SERVICE = OOM_ADJ_REASON_METHOD + "_startService";
-    static final String OOM_ADJ_REASON_GET_PROVIDER = OOM_ADJ_REASON_METHOD + "_getProvider";
-    static final String OOM_ADJ_REASON_REMOVE_PROVIDER = OOM_ADJ_REASON_METHOD + "_removeProvider";
-    static final String OOM_ADJ_REASON_UI_VISIBILITY = OOM_ADJ_REASON_METHOD + "_uiVisibility";
-    static final String OOM_ADJ_REASON_ALLOWLIST = OOM_ADJ_REASON_METHOD + "_allowlistChange";
-    static final String OOM_ADJ_REASON_PROCESS_BEGIN = OOM_ADJ_REASON_METHOD + "_processBegin";
-    static final String OOM_ADJ_REASON_PROCESS_END = OOM_ADJ_REASON_METHOD + "_processEnd";
+
+    static final int OOM_ADJ_REASON_NONE = 0;
+    static final int OOM_ADJ_REASON_ACTIVITY = 1;
+    static final int OOM_ADJ_REASON_FINISH_RECEIVER = 2;
+    static final int OOM_ADJ_REASON_START_RECEIVER = 3;
+    static final int OOM_ADJ_REASON_BIND_SERVICE = 4;
+    static final int OOM_ADJ_REASON_UNBIND_SERVICE = 5;
+    static final int OOM_ADJ_REASON_START_SERVICE = 6;
+    static final int OOM_ADJ_REASON_GET_PROVIDER = 7;
+    static final int OOM_ADJ_REASON_REMOVE_PROVIDER = 8;
+    static final int OOM_ADJ_REASON_UI_VISIBILITY = 9;
+    static final int OOM_ADJ_REASON_ALLOWLIST = 10;
+    static final int OOM_ADJ_REASON_PROCESS_BEGIN = 11;
+    static final int OOM_ADJ_REASON_PROCESS_END = 12;
+
+    @IntDef(prefix = {"OOM_ADJ_REASON_"},
+            value = {OOM_ADJ_REASON_NONE, OOM_ADJ_REASON_ACTIVITY, OOM_ADJ_REASON_FINISH_RECEIVER,
+                    OOM_ADJ_REASON_START_RECEIVER, OOM_ADJ_REASON_BIND_SERVICE,
+                    OOM_ADJ_REASON_UNBIND_SERVICE, OOM_ADJ_REASON_START_SERVICE,
+                    OOM_ADJ_REASON_GET_PROVIDER, OOM_ADJ_REASON_REMOVE_PROVIDER,
+                    OOM_ADJ_REASON_UI_VISIBILITY, OOM_ADJ_REASON_ALLOWLIST,
+                    OOM_ADJ_REASON_PROCESS_BEGIN, OOM_ADJ_REASON_PROCESS_END})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface OomAdjReason {}
+
+    public static final int oomAdjReasonToProto(@OomAdjReason int oomReason) {
+        switch (oomReason) {
+            case OOM_ADJ_REASON_NONE:
+                return AppProtoEnums.OOM_ADJ_REASON_NONE;
+            case OOM_ADJ_REASON_ACTIVITY:
+                return AppProtoEnums.OOM_ADJ_REASON_ACTIVITY;
+            case OOM_ADJ_REASON_FINISH_RECEIVER:
+                return AppProtoEnums.OOM_ADJ_REASON_FINISH_RECEIVER;
+            case OOM_ADJ_REASON_START_RECEIVER:
+                return AppProtoEnums.OOM_ADJ_REASON_START_RECEIVER;
+            case OOM_ADJ_REASON_BIND_SERVICE:
+                return AppProtoEnums.OOM_ADJ_REASON_BIND_SERVICE;
+            case OOM_ADJ_REASON_UNBIND_SERVICE:
+                return AppProtoEnums.OOM_ADJ_REASON_UNBIND_SERVICE;
+            case OOM_ADJ_REASON_START_SERVICE:
+                return AppProtoEnums.OOM_ADJ_REASON_START_SERVICE;
+            case OOM_ADJ_REASON_GET_PROVIDER:
+                return AppProtoEnums.OOM_ADJ_REASON_GET_PROVIDER;
+            case OOM_ADJ_REASON_REMOVE_PROVIDER:
+                return AppProtoEnums.OOM_ADJ_REASON_REMOVE_PROVIDER;
+            case OOM_ADJ_REASON_UI_VISIBILITY:
+                return AppProtoEnums.OOM_ADJ_REASON_UI_VISIBILITY;
+            case OOM_ADJ_REASON_ALLOWLIST:
+                return AppProtoEnums.OOM_ADJ_REASON_ALLOWLIST;
+            case OOM_ADJ_REASON_PROCESS_BEGIN:
+                return AppProtoEnums.OOM_ADJ_REASON_PROCESS_BEGIN;
+            case OOM_ADJ_REASON_PROCESS_END:
+                return AppProtoEnums.OOM_ADJ_REASON_PROCESS_END;
+            default:
+                return AppProtoEnums.OOM_ADJ_REASON_UNKNOWN_TO_PROTO;
+        }
+    }
+
+    public static final String oomAdjReasonToString(@OomAdjReason int oomReason) {
+        final String OOM_ADJ_REASON_METHOD = "updateOomAdj";
+        switch (oomReason) {
+            case OOM_ADJ_REASON_NONE:
+                return OOM_ADJ_REASON_METHOD + "_meh";
+            case OOM_ADJ_REASON_ACTIVITY:
+                return OOM_ADJ_REASON_METHOD + "_activityChange";
+            case OOM_ADJ_REASON_FINISH_RECEIVER:
+                return OOM_ADJ_REASON_METHOD + "_finishReceiver";
+            case OOM_ADJ_REASON_START_RECEIVER:
+                return OOM_ADJ_REASON_METHOD + "_startReceiver";
+            case OOM_ADJ_REASON_BIND_SERVICE:
+                return OOM_ADJ_REASON_METHOD + "_bindService";
+            case OOM_ADJ_REASON_UNBIND_SERVICE:
+                return OOM_ADJ_REASON_METHOD + "_unbindService";
+            case OOM_ADJ_REASON_START_SERVICE:
+                return OOM_ADJ_REASON_METHOD + "_startService";
+            case OOM_ADJ_REASON_GET_PROVIDER:
+                return OOM_ADJ_REASON_METHOD + "_getProvider";
+            case OOM_ADJ_REASON_REMOVE_PROVIDER:
+                return OOM_ADJ_REASON_METHOD + "_removeProvider";
+            case OOM_ADJ_REASON_UI_VISIBILITY:
+                return OOM_ADJ_REASON_METHOD + "_uiVisibility";
+            case OOM_ADJ_REASON_ALLOWLIST:
+                return OOM_ADJ_REASON_METHOD + "_allowlistChange";
+            case OOM_ADJ_REASON_PROCESS_BEGIN:
+                return OOM_ADJ_REASON_METHOD + "_processBegin";
+            case OOM_ADJ_REASON_PROCESS_END:
+                return OOM_ADJ_REASON_METHOD + "_processEnd";
+            default:
+                return "_unknown";
+        }
+    }
 
     /**
      * Flag {@link android.content.Context#BIND_INCLUDE_CAPABILITIES} is used
@@ -405,7 +486,7 @@ public class OomAdjuster {
      */
     @GuardedBy({"mService", "mProcLock"})
     private boolean performUpdateOomAdjLSP(ProcessRecord app, int cachedAdj,
-            ProcessRecord topApp, long now) {
+            ProcessRecord topApp, long now, @OomAdjReason int oomAdjReason) {
         if (app.getThread() == null) {
             return false;
         }
@@ -449,21 +530,21 @@ public class OomAdjuster {
             }
         }
 
-        return applyOomAdjLSP(app, false, now, SystemClock.elapsedRealtime());
+        return applyOomAdjLSP(app, false, now, SystemClock.elapsedRealtime(), oomAdjReason);
     }
 
     /**
      * Update OomAdj for all processes in LRU list
      */
     @GuardedBy("mService")
-    void updateOomAdjLocked(String oomAdjReason) {
+    void updateOomAdjLocked(@OomAdjReason int oomAdjReason) {
         synchronized (mProcLock) {
             updateOomAdjLSP(oomAdjReason);
         }
     }
 
     @GuardedBy({"mService", "mProcLock"})
-    private void updateOomAdjLSP(String oomAdjReason) {
+    private void updateOomAdjLSP(@OomAdjReason int oomAdjReason) {
         if (checkAndEnqueueOomAdjTargetLocked(null)) {
             // Simply return as there is an oomAdjUpdate ongoing
             return;
@@ -479,7 +560,7 @@ public class OomAdjuster {
     }
 
     @GuardedBy({"mService", "mProcLock"})
-    private void performUpdateOomAdjLSP(String oomAdjReason) {
+    private void performUpdateOomAdjLSP(@OomAdjReason int oomAdjReason) {
         final ProcessRecord topApp = mService.getTopApp();
         // Clear any pending ones because we are doing a full update now.
         mPendingProcessSet.clear();
@@ -496,14 +577,14 @@ public class OomAdjuster {
      * @param oomAdjReason
      */
     @GuardedBy("mService")
-    boolean updateOomAdjLocked(ProcessRecord app, String oomAdjReason) {
+    boolean updateOomAdjLocked(ProcessRecord app, @OomAdjReason int oomAdjReason) {
         synchronized (mProcLock) {
             return updateOomAdjLSP(app, oomAdjReason);
         }
     }
 
     @GuardedBy({"mService", "mProcLock"})
-    private boolean updateOomAdjLSP(ProcessRecord app, String oomAdjReason) {
+    private boolean updateOomAdjLSP(ProcessRecord app, @OomAdjReason int oomAdjReason) {
         if (app == null || !mConstants.OOMADJ_UPDATE_QUICK) {
             updateOomAdjLSP(oomAdjReason);
             return true;
@@ -525,10 +606,10 @@ public class OomAdjuster {
     }
 
     @GuardedBy({"mService", "mProcLock"})
-    private boolean performUpdateOomAdjLSP(ProcessRecord app, String oomAdjReason) {
+    private boolean performUpdateOomAdjLSP(ProcessRecord app, @OomAdjReason int oomAdjReason) {
         final ProcessRecord topApp = mService.getTopApp();
 
-        Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, oomAdjReason);
+        Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, oomAdjReasonToString(oomAdjReason));
         mService.mOomAdjProfiler.oomAdjStarted();
         mAdjSeq++;
 
@@ -547,8 +628,9 @@ public class OomAdjuster {
         state.setCurBoundByNonBgRestrictedApp(false);
         // Check if this process is in the pending list too, remove from pending list if so.
         mPendingProcessSet.remove(app);
+        app.mOptRecord.setLastOomAdjChangeReason(oomAdjReason);
         boolean success = performUpdateOomAdjLSP(app, cachedAdj, topApp,
-                SystemClock.uptimeMillis());
+                SystemClock.uptimeMillis(), oomAdjReason);
         // The 'app' here itself might or might not be in the cycle, for example,
         // the case A <=> B vs. A -> B <=> C; anyway, if we spot a cycle here, re-compute them.
         if (!success || (wasCached == state.isCached() && oldAdj != ProcessList.INVALID_ADJ
@@ -601,7 +683,7 @@ public class OomAdjuster {
             processes.add(app);
             assignCachedAdjIfNecessary(processes);
             applyOomAdjLSP(app, false, SystemClock.uptimeMillis(),
-                    SystemClock.elapsedRealtime());
+                    SystemClock.elapsedRealtime(), oomAdjReason);
         }
         mTmpProcessList.clear();
         mService.mOomAdjProfiler.oomAdjEnded();
@@ -726,7 +808,7 @@ public class OomAdjuster {
      * {@link #enqueueOomAdjTargetLocked}.
      */
     @GuardedBy("mService")
-    void updateOomAdjPendingTargetsLocked(String oomAdjReason) {
+    void updateOomAdjPendingTargetsLocked(@OomAdjReason int oomAdjReason) {
         // First check if there is pending full update
         if (mPendingFullOomAdjUpdate) {
             mPendingFullOomAdjUpdate = false;
@@ -754,10 +836,11 @@ public class OomAdjuster {
     }
 
     @GuardedBy("mService")
-    private void performUpdateOomAdjPendingTargetsLocked(String oomAdjReason) {
+    private void performUpdateOomAdjPendingTargetsLocked(
+            @OomAdjuster.OomAdjReason int oomAdjReason) {
         final ProcessRecord topApp = mService.getTopApp();
 
-        Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, oomAdjReason);
+        Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, oomAdjReasonToString(oomAdjReason));
         mService.mOomAdjProfiler.oomAdjStarted();
 
         final ArrayList<ProcessRecord> processes = mTmpProcessList;
@@ -779,11 +862,11 @@ public class OomAdjuster {
      * get evaluated recursively here.
      */
     @GuardedBy({"mService", "mProcLock"})
-    private void updateOomAdjInnerLSP(String oomAdjReason, final ProcessRecord topApp,
+    private void updateOomAdjInnerLSP(@OomAdjReason int oomAdjReason, final ProcessRecord topApp,
             ArrayList<ProcessRecord> processes, ActiveUids uids, boolean potentialCycles,
             boolean startProfiling) {
         if (startProfiling) {
-            Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, oomAdjReason);
+            Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, oomAdjReasonToString(oomAdjReason));
             mService.mOomAdjProfiler.oomAdjStarted();
         }
         final long now = SystemClock.uptimeMillis();
@@ -844,6 +927,7 @@ public class OomAdjuster {
             final ProcessStateRecord state = app.mState;
             if (!app.isKilledByAm() && app.getThread() != null) {
                 state.setProcStateChanged(false);
+                app.mOptRecord.setLastOomAdjChangeReason(oomAdjReason);
                 computeOomAdjLSP(app, ProcessList.UNKNOWN_ADJ, topApp, fullUpdate, now, false,
                         computeClients); // It won't enter cycle if not computing clients.
                 // if any app encountered a cycle, we need to perform an additional loop later
@@ -895,7 +979,8 @@ public class OomAdjuster {
         mNumNonCachedProcs = 0;
         mNumCachedHiddenProcs = 0;
 
-        boolean allChanged = updateAndTrimProcessLSP(now, nowElapsed, oldTime, activeUids);
+        boolean allChanged = updateAndTrimProcessLSP(now, nowElapsed, oldTime, activeUids,
+                oomAdjReason);
         mNumServiceProcs = mNewNumServiceProcs;
 
         if (mService.mAlwaysFinishActivities) {
@@ -1073,7 +1158,7 @@ public class OomAdjuster {
 
     @GuardedBy({"mService", "mProcLock"})
     private boolean updateAndTrimProcessLSP(final long now, final long nowElapsed,
-            final long oldTime, final ActiveUids activeUids) {
+            final long oldTime, final ActiveUids activeUids, @OomAdjReason int oomAdjReason) {
         ArrayList<ProcessRecord> lruList = mProcessList.getLruProcessesLOSP();
         final int numLru = lruList.size();
 
@@ -1132,7 +1217,7 @@ public class OomAdjuster {
             if (!app.isKilledByAm() && app.getThread() != null) {
                 // We don't need to apply the update for the process which didn't get computed
                 if (state.getCompletedAdjSeq() == mAdjSeq) {
-                    applyOomAdjLSP(app, true, now, nowElapsed);
+                    applyOomAdjLSP(app, true, now, nowElapsed, oomAdjReason);
                 }
 
                 final ProcessServiceRecord psr = app.mServices;
@@ -2653,7 +2738,7 @@ public class OomAdjuster {
     /** Applies the computed oomadj, procstate and sched group values and freezes them in set* */
     @GuardedBy({"mService", "mProcLock"})
     private boolean applyOomAdjLSP(ProcessRecord app, boolean doingAll, long now,
-            long nowElapsed) {
+            long nowElapsed, @OomAdjReason int oomAdjReson) {
         boolean success = true;
         final ProcessStateRecord state = app.mState;
         final UidRecord uidRec = app.getUidRecord();
@@ -2679,11 +2764,13 @@ public class OomAdjuster {
                         // processing of the requests. As a result, there is throttling both here
                         // and in CachedAppOptimizer.
                         && mCachedAppOptimizer.shouldCompactPersistent(app, now)) {
-                    mCachedAppOptimizer.compactAppPersistent(app);
+                    mCachedAppOptimizer.compactApp(app, CachedAppOptimizer.CompactProfile.FULL,
+                            CachedAppOptimizer.CompactSource.PERSISTENT, false);
                 } else if (state.getCurProcState()
                                 == ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE
                         && mCachedAppOptimizer.shouldCompactBFGS(app, now)) {
-                    mCachedAppOptimizer.compactAppBfgs(app);
+                    mCachedAppOptimizer.compactApp(app, CachedAppOptimizer.CompactProfile.FULL,
+                            CachedAppOptimizer.CompactSource.BFGS, false);
                 }
             }
         }
@@ -2835,7 +2922,7 @@ public class OomAdjuster {
             changes |= ActivityManagerService.ProcessChangeItem.CHANGE_ACTIVITIES;
         }
 
-        updateAppFreezeStateLSP(app);
+        updateAppFreezeStateLSP(app, oomAdjReson);
 
         if (state.getReportedProcState() != state.getCurProcState()) {
             state.setReportedProcState(state.getCurProcState());
@@ -3196,7 +3283,7 @@ public class OomAdjuster {
     }
 
     @GuardedBy({"mService", "mProcLock"})
-    private void updateAppFreezeStateLSP(ProcessRecord app) {
+    private void updateAppFreezeStateLSP(ProcessRecord app, @OomAdjReason int oomAdjReason) {
         if (!mCachedAppOptimizer.useFreezer()) {
             return;
         }
@@ -3208,7 +3295,7 @@ public class OomAdjuster {
         final ProcessCachedOptimizerRecord opt = app.mOptRecord;
         // if an app is already frozen and shouldNotFreeze becomes true, immediately unfreeze
         if (opt.isFrozen() && opt.shouldNotFreeze()) {
-            mCachedAppOptimizer.unfreezeAppLSP(app);
+            mCachedAppOptimizer.unfreezeAppLSP(app, oomAdjReason);
             return;
         }
 
@@ -3218,7 +3305,7 @@ public class OomAdjuster {
                 && !opt.shouldNotFreeze()) {
             mCachedAppOptimizer.freezeAppAsyncLSP(app);
         } else if (state.getSetAdj() < ProcessList.CACHED_APP_MIN_ADJ) {
-            mCachedAppOptimizer.unfreezeAppLSP(app);
+            mCachedAppOptimizer.unfreezeAppLSP(app, oomAdjReason);
         }
     }
 }

@@ -45,6 +45,8 @@ import android.window.RemoteTransition;
 import android.window.TransitionInfo;
 import android.window.TransitionRequestInfo;
 
+import com.android.internal.annotations.GuardedBy;
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.protolog.ProtoLogGroup;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.server.LocalServices;
@@ -63,6 +65,11 @@ class TransitionController {
     private static final boolean SHELL_TRANSITIONS_ROTATION =
             SystemProperties.getBoolean("persist.wm.debug.shell_transit_rotate", false);
 
+    /** Which sync method to use for transition syncs. */
+    static final int SYNC_METHOD =
+            android.os.SystemProperties.getBoolean("persist.wm.debug.shell_transit_blast", true)
+                    ? BLASTSyncEngine.METHOD_BLAST : BLASTSyncEngine.METHOD_NONE;
+
     /** The same as legacy APP_TRANSITION_TIMEOUT_MS. */
     private static final int DEFAULT_TIMEOUT_MS = 5000;
     /** Less duration for CHANGE type because it does not involve app startup. */
@@ -77,9 +84,10 @@ class TransitionController {
     final TransitionMetricsReporter mTransitionMetricsReporter = new TransitionMetricsReporter();
     final TransitionTracer mTransitionTracer;
 
-    private IApplicationThread mTransitionPlayerThread;
+    private WindowProcessController mTransitionPlayerProc;
     final ActivityTaskManagerService mAtm;
     final TaskSnapshotController mTaskSnapshotController;
+    final RemotePlayer mRemotePlayer;
 
     private final ArrayList<WindowManagerInternal.AppTransitionListener> mLegacyListeners =
             new ArrayList<>();
@@ -112,6 +120,7 @@ class TransitionController {
             TaskSnapshotController taskSnapshotController,
             TransitionTracer transitionTracer) {
         mAtm = atm;
+        mRemotePlayer = new RemotePlayer(atm);
         mStatusBar = LocalServices.getService(StatusBarManagerInternal.class);
         mTaskSnapshotController = taskSnapshotController;
         mTransitionTracer = transitionTracer;
@@ -123,6 +132,8 @@ class TransitionController {
                 }
                 mPlayingTransitions.clear();
                 mTransitionPlayer = null;
+                mTransitionPlayerProc = null;
+                mRemotePlayer.clear();
                 mRunningLock.doNotifyLocked();
             }
         };
@@ -155,6 +166,12 @@ class TransitionController {
 
     /** Starts Collecting */
     void moveToCollecting(@NonNull Transition transition) {
+        moveToCollecting(transition, SYNC_METHOD);
+    }
+
+    /** Starts Collecting */
+    @VisibleForTesting
+    void moveToCollecting(@NonNull Transition transition, int method) {
         if (mCollectingTransition != null) {
             throw new IllegalStateException("Simultaneous transition collection not supported.");
         }
@@ -162,14 +179,14 @@ class TransitionController {
         // Distinguish change type because the response time is usually expected to be not too long.
         final long timeoutMs =
                 transition.mType == TRANSIT_CHANGE ? CHANGE_TIMEOUT_MS : DEFAULT_TIMEOUT_MS;
-        mCollectingTransition.startCollecting(timeoutMs);
+        mCollectingTransition.startCollecting(timeoutMs, method);
         ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS, "Start collecting in Transition: %s",
                 mCollectingTransition);
         dispatchLegacyAppTransitionPending();
     }
 
     void registerTransitionPlayer(@Nullable ITransitionPlayer player,
-            @Nullable IApplicationThread appThread) {
+            @Nullable WindowProcessController playerProc) {
         try {
             // Note: asBinder() can be null if player is same process (likely in a test).
             if (mTransitionPlayer != null) {
@@ -182,7 +199,7 @@ class TransitionController {
                 player.asBinder().linkToDeath(mTransitionPlayerDeath, 0);
             }
             mTransitionPlayer = player;
-            mTransitionPlayerThread = appThread;
+            mTransitionPlayerProc = playerProc;
         } catch (RemoteException e) {
             throw new RuntimeException("Unable to set transition player");
         }
@@ -210,6 +227,17 @@ class TransitionController {
     }
 
     /**
+     * @return the collecting transition sync Id. This should only be called when there is a
+     * collecting transition.
+     */
+    int getCollectingTransitionId() {
+        if (mCollectingTransition == null) {
+            throw new IllegalStateException("There is no collecting transition");
+        }
+        return mCollectingTransition.getSyncId();
+    }
+
+    /**
      * @return {@code true} if transition is actively collecting changes and `wc` is one of them.
      *                      This is {@code false} once a transition is playing.
      */
@@ -223,10 +251,7 @@ class TransitionController {
      */
     boolean inCollectingTransition(@NonNull WindowContainer wc) {
         if (!isCollecting()) return false;
-        for (WindowContainer p = wc; p != null; p = p.getParent()) {
-            if (mCollectingTransition.mParticipants.contains(p)) return true;
-        }
-        return false;
+        return mCollectingTransition.isInTransition(wc);
     }
 
     /**
@@ -242,9 +267,7 @@ class TransitionController {
      */
     boolean inPlayingTransition(@NonNull WindowContainer wc) {
         for (int i = mPlayingTransitions.size() - 1; i >= 0; --i) {
-            for (WindowContainer p = wc; p != null; p = p.getParent()) {
-                if (mPlayingTransitions.get(i).mParticipants.contains(p)) return true;
-            }
+            if (mPlayingTransitions.get(i).isInTransition(wc)) return true;
         }
         return false;
     }
@@ -421,6 +444,7 @@ class TransitionController {
             }
             mTransitionPlayer.requestStartTransition(transition, new TransitionRequestInfo(
                     transition.mType, info, remoteTransition, displayChange));
+            transition.setRemoteTransition(remoteTransition);
         } catch (RemoteException e) {
             Slog.e(TAG, "Error requesting transition", e);
             transition.start();
@@ -457,26 +481,40 @@ class TransitionController {
     }
 
     /**
-     * Collects the window containers which need to be synced with the changing display (e.g.
-     * rotating) to the given transition or the current collecting transition.
+     * Collects the window containers which need to be synced with the changing display area into
+     * the current collecting transition.
      */
-    void collectForDisplayChange(@NonNull DisplayContent dc, @Nullable Transition incoming) {
-        if (incoming == null) incoming = mCollectingTransition;
-        if (incoming == null) return;
-        final Transition transition = incoming;
+    void collectForDisplayAreaChange(@NonNull DisplayArea<?> wc) {
+        final Transition transition = mCollectingTransition;
+        if (transition == null || !transition.mParticipants.contains(wc)) return;
+        transition.collectVisibleChange(wc);
         // Collect all visible tasks.
-        dc.forAllLeafTasks(task -> {
+        wc.forAllLeafTasks(task -> {
             if (task.isVisible()) {
                 transition.collect(task);
             }
         }, true /* traverseTopToBottom */);
         // Collect all visible non-app windows which need to be drawn before the animation starts.
-        dc.forAllWindows(w -> {
-            if (w.mActivityRecord == null && w.isVisible() && !isCollecting(w.mToken)
-                    && dc.shouldSyncRotationChange(w)) {
-                transition.collect(w.mToken);
-            }
-        }, true /* traverseTopToBottom */);
+        final DisplayContent dc = wc.asDisplayContent();
+        if (dc != null) {
+            final boolean noAsyncRotation = dc.getAsyncRotationController() == null;
+            wc.forAllWindows(w -> {
+                if (w.mActivityRecord == null && w.isVisible() && !isCollecting(w.mToken)
+                        && (noAsyncRotation || !AsyncRotationController.canBeAsync(w.mToken))) {
+                    transition.collect(w.mToken);
+                }
+            }, true /* traverseTopToBottom */);
+        }
+    }
+
+    /**
+     * Records that a particular container is changing visibly (ie. something about it is changing
+     * while it remains visible). This only effects windows that are already in the collecting
+     * transition.
+     */
+    void collectVisibleChange(WindowContainer wc) {
+        if (!isCollecting()) return;
+        mCollectingTransition.collectVisibleChange(wc);
     }
 
     /** @see Transition#mStatusBarTransitionDelay */
@@ -534,9 +572,7 @@ class TransitionController {
         }
         ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS, "Finish Transition: %s", record);
         mPlayingTransitions.remove(record);
-        if (mPlayingTransitions.isEmpty()) {
-            setAnimationRunning(false /* running */);
-        }
+        updateRunningRemoteAnimation(record, false /* isPlaying */);
         record.finishTransition();
         mRunningLock.doNotifyLocked();
     }
@@ -546,21 +582,27 @@ class TransitionController {
             throw new IllegalStateException("Trying to move non-collecting transition to playing");
         }
         mCollectingTransition = null;
-        if (mPlayingTransitions.isEmpty()) {
-            setAnimationRunning(true /* running */);
-        }
         mPlayingTransitions.add(transition);
+        updateRunningRemoteAnimation(transition, true /* isPlaying */);
         mTransitionTracer.logState(transition);
     }
 
-    private void setAnimationRunning(boolean running) {
-        if (mTransitionPlayerThread == null) return;
-        final WindowProcessController wpc = mAtm.getProcessController(mTransitionPlayerThread);
-        if (wpc == null) {
-            Slog.w(TAG, "Unable to find process for player thread=" + mTransitionPlayerThread);
+    /** Updates the process state of animation player. */
+    private void updateRunningRemoteAnimation(Transition transition, boolean isPlaying) {
+        if (mTransitionPlayerProc == null) return;
+        if (isPlaying) {
+            mTransitionPlayerProc.setRunningRemoteAnimation(true);
+        } else if (mPlayingTransitions.isEmpty()) {
+            mTransitionPlayerProc.setRunningRemoteAnimation(false);
+            mRemotePlayer.clear();
             return;
         }
-        wpc.setRunningRemoteAnimation(running);
+        final RemoteTransition remote = transition.getRemoteTransition();
+        if (remote == null) return;
+        final IApplicationThread appThread = remote.getAppThread();
+        final WindowProcessController delegate = mAtm.getProcessController(appThread);
+        if (delegate == null) return;
+        mRemotePlayer.update(delegate, isPlaying, true /* predict */);
     }
 
     void abort(Transition transition) {
@@ -624,11 +666,9 @@ class TransitionController {
     }
 
     void dispatchLegacyAppTransitionStarting(TransitionInfo info, long statusBarTransitionDelay) {
-        final boolean keyguardGoingAway = info.isKeyguardGoingAway();
         for (int i = 0; i < mLegacyListeners.size(); ++i) {
             // TODO(shell-transitions): handle (un)occlude transition.
-            mLegacyListeners.get(i).onAppTransitionStartingLocked(keyguardGoingAway,
-                    false /* keyguardOcclude */, 0 /* durationHint */,
+            mLegacyListeners.get(i).onAppTransitionStartingLocked(
                     SystemClock.uptimeMillis() + statusBarTransitionDelay,
                     AnimationAdapter.STATUS_BAR_TRANSITION_DURATION);
         }
@@ -643,7 +683,7 @@ class TransitionController {
     void dispatchLegacyAppTransitionCancelled() {
         for (int i = 0; i < mLegacyListeners.size(); ++i) {
             mLegacyListeners.get(i).onAppTransitionCancelledLocked(
-                    false /* keyguardGoingAway */);
+                    false /* keyguardGoingAwayCancelled */);
         }
     }
 
@@ -661,6 +701,95 @@ class TransitionController {
         }
         proto.write(AppTransitionProto.APP_TRANSITION_STATE, state);
         proto.end(token);
+    }
+
+    /**
+     * This manages the animating state of processes that are running remote animations for
+     * {@link #mTransitionPlayerProc}.
+     */
+    static class RemotePlayer {
+        private static final long REPORT_RUNNING_GRACE_PERIOD_MS = 100;
+        @GuardedBy("itself")
+        private final ArrayMap<IBinder, DelegateProcess> mDelegateProcesses = new ArrayMap<>();
+        private final ActivityTaskManagerService mAtm;
+
+        private class DelegateProcess implements Runnable {
+            final WindowProcessController mProc;
+            /** Requires {@link RemotePlayer#reportRunning} to confirm it is really running. */
+            boolean mNeedReport;
+
+            DelegateProcess(WindowProcessController proc) {
+                mProc = proc;
+            }
+
+            /** This runs when the remote player doesn't report running in time. */
+            @Override
+            public void run() {
+                synchronized (mAtm.mGlobalLockWithoutBoost) {
+                    update(mProc, false /* running */, false /* predict */);
+                }
+            }
+        }
+
+        RemotePlayer(ActivityTaskManagerService atm) {
+            mAtm = atm;
+        }
+
+        void update(@NonNull WindowProcessController delegate, boolean running, boolean predict) {
+            if (!running) {
+                synchronized (mDelegateProcesses) {
+                    boolean removed = false;
+                    for (int i = mDelegateProcesses.size() - 1; i >= 0; i--) {
+                        if (mDelegateProcesses.valueAt(i).mProc == delegate) {
+                            mDelegateProcesses.removeAt(i);
+                            removed = true;
+                            break;
+                        }
+                    }
+                    if (!removed) return;
+                }
+                delegate.setRunningRemoteAnimation(false);
+                return;
+            }
+            if (delegate.isRunningRemoteTransition() || !delegate.hasThread()) return;
+            delegate.setRunningRemoteAnimation(true);
+            final DelegateProcess delegateProc = new DelegateProcess(delegate);
+            // If "predict" is true, that means the remote animation is set from
+            // ActivityOptions#makeRemoteAnimation(). But it is still up to shell side to decide
+            // whether to use the remote animation, so there is a timeout to cancel the prediction
+            // if the remote animation doesn't happen.
+            if (predict) {
+                delegateProc.mNeedReport = true;
+                mAtm.mH.postDelayed(delegateProc, REPORT_RUNNING_GRACE_PERIOD_MS);
+            }
+            synchronized (mDelegateProcesses) {
+                mDelegateProcesses.put(delegate.getThread().asBinder(), delegateProc);
+            }
+        }
+
+        void clear() {
+            synchronized (mDelegateProcesses) {
+                for (int i = mDelegateProcesses.size() - 1; i >= 0; i--) {
+                    mDelegateProcesses.valueAt(i).mProc.setRunningRemoteAnimation(false);
+                }
+                mDelegateProcesses.clear();
+            }
+        }
+
+        /** Returns {@code true} if the app is known to be running remote transition. */
+        boolean reportRunning(@NonNull IApplicationThread appThread) {
+            final DelegateProcess delegate;
+            synchronized (mDelegateProcesses) {
+                delegate = mDelegateProcesses.get(appThread.asBinder());
+                if (delegate != null && delegate.mNeedReport) {
+                    // It was predicted to run remote transition. Now it is really requesting so
+                    // remove the timeout of restoration.
+                    delegate.mNeedReport = false;
+                    mAtm.mH.removeCallbacks(delegate);
+                }
+            }
+            return delegate != null;
+        }
     }
 
     static class TransitionMetricsReporter extends ITransitionMetricsReporter.Stub {

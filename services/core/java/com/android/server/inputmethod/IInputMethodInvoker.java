@@ -109,13 +109,11 @@ final class IInputMethodInvoker {
 
     @AnyThread
     void initializeInternal(IBinder token, IInputMethodPrivilegedOperations privilegedOperations,
-            int configChanges, boolean stylusHandWritingSupported,
-            @InputMethodNavButtonFlags int navigationBarFlags) {
+            int configChanges, @InputMethodNavButtonFlags int navigationBarFlags) {
         final IInputMethod.InitParams params = new IInputMethod.InitParams();
         params.token = token;
         params.privilegedOperations = privilegedOperations;
         params.configChanges = configChanges;
-        params.stylusHandWritingSupported = stylusHandWritingSupported;
         params.navigationBarFlags = navigationBarFlags;
         try {
             mTarget.initializeInternal(params);
@@ -223,6 +221,17 @@ final class IInputMethodInvoker {
     }
 
     @AnyThread
+    boolean updateEditorToolType(int toolType) {
+        try {
+            mTarget.updateEditorToolType(toolType);
+        } catch (RemoteException e) {
+            logRemoteException(e);
+            return false;
+        }
+        return true;
+    }
+
+    @AnyThread
     void changeInputMethodSubtype(InputMethodSubtype subtype) {
         try {
             mTarget.changeInputMethodSubtype(subtype);
@@ -264,6 +273,15 @@ final class IInputMethodInvoker {
     void finishStylusHandwriting() {
         try {
             mTarget.finishStylusHandwriting();
+        } catch (RemoteException e) {
+            logRemoteException(e);
+        }
+    }
+
+    @AnyThread
+    void removeStylusHandwritingWindow() {
+        try {
+            mTarget.removeStylusHandwritingWindow();
         } catch (RemoteException e) {
             logRemoteException(e);
         }

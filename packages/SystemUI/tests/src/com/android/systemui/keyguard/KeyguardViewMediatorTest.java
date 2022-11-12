@@ -48,6 +48,7 @@ import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.KeyguardDisplayManager;
 import com.android.keyguard.KeyguardSecurityView;
 import com.android.keyguard.KeyguardUpdateMonitor;
+import com.android.keyguard.logging.KeyguardViewMediatorLogger;
 import com.android.keyguard.mediator.ScreenOnCoordinator;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.animation.ActivityLaunchAnimator;
@@ -109,6 +110,7 @@ public class KeyguardViewMediatorTest extends SysuiTestCase {
     private @Mock Lazy<NotificationShadeWindowController> mNotificationShadeWindowControllerLazy;
     private @Mock DreamOverlayStateController mDreamOverlayStateController;
     private @Mock ActivityLaunchAnimator mActivityLaunchAnimator;
+    private @Mock KeyguardViewMediatorLogger mLogger;
     private @Mock FoldAodAnimationController mFoldAodAnimationController;
     private @Mock UnfoldLightRevealOverlayAnimation mUnfoldAnimation;
     private DeviceConfigProxy mDeviceConfig = new DeviceConfigProxyFake();
@@ -231,7 +233,8 @@ public class KeyguardViewMediatorTest extends SysuiTestCase {
                 mInteractionJankMonitor,
                 mDreamOverlayStateController,
                 mNotificationShadeWindowControllerLazy,
-                () -> mActivityLaunchAnimator);
+                () -> mActivityLaunchAnimator,
+                mLogger);
         mViewMediator.start();
     }
 }

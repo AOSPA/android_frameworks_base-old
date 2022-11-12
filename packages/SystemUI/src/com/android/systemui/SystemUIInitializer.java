@@ -79,11 +79,6 @@ public abstract class SystemUIInitializer {
 
         // Stand up WMComponent
         setupWmComponent(mContext);
-        if (initializeComponents) {
-            // Only initialize when not starting from tests since this currently initializes some
-            // components that shouldn't be run in the test environment
-            mWMComponent.init();
-        }
 
         // And finally, retrieve whatever SysUI needs from WMShell and build SysUI.
         SysUIComponent.Builder builder = mRootComponent.getSysUIComponent();
@@ -96,13 +91,16 @@ public abstract class SystemUIInitializer {
                     .setSplitScreen(mWMComponent.getSplitScreen())
                     .setOneHanded(mWMComponent.getOneHanded())
                     .setBubbles(mWMComponent.getBubbles())
-                    .setShellCommandHandler(mWMComponent.getShellCommandHandler())
                     .setTaskViewFactory(mWMComponent.getTaskViewFactory())
                     .setTransitions(mWMComponent.getTransitions())
                     .setStartingSurface(mWMComponent.getStartingSurface())
                     .setDisplayAreaHelper(mWMComponent.getDisplayAreaHelper())
                     .setRecentTasks(mWMComponent.getRecentTasks())
                     .setBackAnimation(mWMComponent.getBackAnimation());
+
+            // Only initialize when not starting from tests since this currently initializes some
+            // components that shouldn't be run in the test environment
+            mWMComponent.init();
         } else {
             // TODO: Call on prepareSysUIComponentBuilder but not with real components. Other option
             // is separating this logic into newly creating SystemUITestsFactory.
@@ -112,7 +110,6 @@ public abstract class SystemUIInitializer {
                     .setSplitScreen(Optional.ofNullable(null))
                     .setOneHanded(Optional.ofNullable(null))
                     .setBubbles(Optional.ofNullable(null))
-                    .setShellCommandHandler(Optional.ofNullable(null))
                     .setTaskViewFactory(Optional.ofNullable(null))
                     .setTransitions(new ShellTransitions() {})
                     .setDisplayAreaHelper(Optional.ofNullable(null))

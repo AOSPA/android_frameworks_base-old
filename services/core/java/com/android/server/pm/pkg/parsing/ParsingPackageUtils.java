@@ -91,9 +91,12 @@ import com.android.internal.os.ClassLoaderFactory;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.XmlUtils;
 import com.android.server.pm.SharedUidMigration;
+import com.android.server.pm.parsing.pkg.PackageImpl;
+import com.android.server.pm.parsing.pkg.ParsedPackage;
 import com.android.server.pm.permission.CompatibilityPermissionInfo;
 import com.android.server.pm.pkg.component.ComponentMutateUtils;
 import com.android.server.pm.pkg.component.ComponentParseUtils;
+import com.android.server.pm.pkg.component.InstallConstraintsTagParser;
 import com.android.server.pm.pkg.component.ParsedActivity;
 import com.android.server.pm.pkg.component.ParsedActivityUtils;
 import com.android.server.pm.pkg.component.ParsedApexSystemService;
@@ -168,9 +171,11 @@ public class ParsingPackageUtils {
 
     public static final String TAG_ADOPT_PERMISSIONS = "adopt-permissions";
     public static final String TAG_APPLICATION = "application";
+    public static final String TAG_ATTRIBUTION = "attribution";
     public static final String TAG_COMPATIBLE_SCREENS = "compatible-screens";
     public static final String TAG_EAT_COMMENT = "eat-comment";
     public static final String TAG_FEATURE_GROUP = "feature-group";
+    public static final String TAG_INSTALL_CONSTRAINTS = "install-constraints";
     public static final String TAG_INSTRUMENTATION = "instrumentation";
     public static final String TAG_KEY_SETS = "key-sets";
     public static final String TAG_MANIFEST = "manifest";
@@ -178,15 +183,16 @@ public class ParsingPackageUtils {
     public static final String TAG_OVERLAY = "overlay";
     public static final String TAG_PACKAGE = "package";
     public static final String TAG_PACKAGE_VERIFIER = "package-verifier";
-    public static final String TAG_ATTRIBUTION = "attribution";
     public static final String TAG_PERMISSION = "permission";
     public static final String TAG_PERMISSION_GROUP = "permission-group";
     public static final String TAG_PERMISSION_TREE = "permission-tree";
+    public static final String TAG_PROFILEABLE = "profileable";
     public static final String TAG_PROTECTED_BROADCAST = "protected-broadcast";
     public static final String TAG_QUERIES = "queries";
+    public static final String TAG_RECEIVER = "receiver";
     public static final String TAG_RESTRICT_UPDATE = "restrict-update";
-    public static final String TAG_SUPPORT_SCREENS = "supports-screens";
     public static final String TAG_SUPPORTS_INPUT = "supports-input";
+    public static final String TAG_SUPPORT_SCREENS = "supports-screens";
     public static final String TAG_USES_CONFIGURATION = "uses-configuration";
     public static final String TAG_USES_FEATURE = "uses-feature";
     public static final String TAG_USES_GL_TEXTURE = "uses-gl-texture";
@@ -195,8 +201,6 @@ public class ParsingPackageUtils {
     public static final String TAG_USES_PERMISSION_SDK_M = "uses-permission-sdk-m";
     public static final String TAG_USES_SDK = "uses-sdk";
     public static final String TAG_USES_SPLIT = "uses-split";
-    public static final String TAG_PROFILEABLE = "profileable";
-    public static final String TAG_RECEIVER = "receiver";
 
     public static final String METADATA_MAX_ASPECT_RATIO = "android.max_aspect";
     public static final String METADATA_SUPPORTS_SIZE_CHANGES = "android.supports_size_changes";
@@ -262,7 +266,7 @@ public class ParsingPackageUtils {
      * @see #parseDefault(ParseInput, File, int, List, boolean)
      */
     @NonNull
-    public static ParseResult<ParsingPackage> parseDefaultOneTime(File file,
+    public static ParseResult<ParsedPackage> parseDefaultOneTime(File file,
             @ParseFlags int parseFlags,
             @NonNull List<PermissionManager.SplitPermissionInfo> splitPermissions,
             boolean collectCertificates) {
@@ -276,11 +280,11 @@ public class ParsingPackageUtils {
      * feature support.
      */
     @NonNull
-    public static ParseResult<ParsingPackage> parseDefault(ParseInput input, File file,
+    public static ParseResult<ParsedPackage> parseDefault(ParseInput input, File file,
             @ParseFlags int parseFlags,
             @NonNull List<PermissionManager.SplitPermissionInfo> splitPermissions,
             boolean collectCertificates) {
-        ParseResult<ParsingPackage> result;
+        ParseResult<ParsedPackage> result;
 
         ParsingPackageUtils parser = new ParsingPackageUtils(null /*separateProcesses*/,
                 null /*displayMetrics*/, splitPermissions, new Callback() {
@@ -299,15 +303,17 @@ public class ParsingPackageUtils {
                     @NonNull String baseApkPath,
                     @NonNull String path,
                     @NonNull TypedArray manifestArray, boolean isCoreApp) {
-                return new ParsingPackageImpl(packageName, baseApkPath, path, manifestArray);
+                return PackageImpl.forParsing(packageName, baseApkPath, path, manifestArray,
+                        isCoreApp);
             }
         });
-        result = parser.parsePackage(input, file, parseFlags, /* frameworkSplits= */ null);
-        if (result.isError()) {
-            return input.error(result);
+        var parseResult = parser.parsePackage(input, file, parseFlags, /* frameworkSplits= */ null);
+        if (parseResult.isError()) {
+            return input.error(parseResult);
         }
 
-        final ParsingPackage pkg = result.getResult();
+        var pkg = parseResult.getResult().hideAsParsed();
+
         if (collectCertificates) {
             final ParseResult<SigningDetails> ret =
                     ParsingPackageUtils.getSigningDetails(input, pkg, false /*skipVerify*/);
@@ -316,9 +322,6 @@ public class ParsingPackageUtils {
             }
             pkg.setSigningDetails(ret.getResult());
         }
-
-        // Need to call this to finish the parsing stage
-        pkg.hideAsParsed();
 
         return input.success(pkg);
     }
@@ -346,7 +349,7 @@ public class ParsingPackageUtils {
      * package name and version codes, a single base APK, and unique split names.
      * <p>
      * Note that this <em>does not</em> perform signature verification; that must be done separately
-     * in {@link #getSigningDetails(ParseInput, ParsingPackageRead, boolean)}.
+     * in {@link #getSigningDetails(ParseInput, ParsedPackage, boolean)}.
      * <p>
      * If {@code useCaches} is true, the package parser might return a cached result from a previous
      * parse of the same {@code packageFile} with the same {@code flags}. Note that this method does
@@ -378,7 +381,7 @@ public class ParsingPackageUtils {
      * differences.
      * <p>
      * Note that this <em>does not</em> perform signature verification; that must be done separately
-     * in {@link #getSigningDetails(ParseInput, ParsingPackageRead, boolean)}.
+     * in {@link #getSigningDetails(ParseInput, ParsedPackage, boolean)}.
      */
     private ParseResult<ParsingPackage> parseClusterPackage(ParseInput input, File packageDir,
             List<File> frameworkSplits, int flags) {
@@ -455,7 +458,7 @@ public class ParsingPackageUtils {
      * Parse the given APK file, treating it as as a single monolithic package.
      * <p>
      * Note that this <em>does not</em> perform signature verification; that must be done separately
-     * in {@link #getSigningDetails(ParseInput, ParsingPackageRead, boolean)}.
+     * in {@link #getSigningDetails(ParseInput, ParsedPackage, boolean)}.
      */
     private ParseResult<ParsingPackage> parseMonolithicPackage(ParseInput input, File apkFile,
             int flags) {
@@ -1026,6 +1029,8 @@ public class ParsingPackageUtils {
                 return input.success(pkg);
             case TAG_RESTRICT_UPDATE:
                 return parseRestrictUpdateHash(flags, input, pkg, res, parser);
+            case TAG_INSTALL_CONSTRAINTS:
+                return parseInstallConstraints(input, pkg, res, parser);
             case TAG_QUERIES:
                 return parseQueries(input, pkg, res, parser);
             default:
@@ -1252,6 +1257,18 @@ public class ParsingPackageUtils {
         return input.success(pkg.addPermission(result.getResult()));
     }
 
+    private int parseMinOrMaxSdkVersion(TypedArray sa, int attr, int defaultValue) {
+        int val = defaultValue;
+        TypedValue peekVal = sa.peekValue(attr);
+        if (peekVal != null) {
+            if (peekVal.type >= TypedValue.TYPE_FIRST_INT
+                    && peekVal.type <= TypedValue.TYPE_LAST_INT) {
+                val = peekVal.data;
+            }
+        }
+        return val;
+    }
+
     private ParseResult<ParsingPackage> parseUsesPermission(ParseInput input,
             ParsingPackage pkg, Resources res, XmlResourceParser parser)
             throws IOException, XmlPullParserException {
@@ -1262,14 +1279,13 @@ public class ParsingPackageUtils {
             String name = sa.getNonResourceString(
                     R.styleable.AndroidManifestUsesPermission_name);
 
-            int maxSdkVersion = 0;
-            TypedValue val = sa.peekValue(
-                    R.styleable.AndroidManifestUsesPermission_maxSdkVersion);
-            if (val != null) {
-                if (val.type >= TypedValue.TYPE_FIRST_INT && val.type <= TypedValue.TYPE_LAST_INT) {
-                    maxSdkVersion = val.data;
-                }
-            }
+            int minSdkVersion =  parseMinOrMaxSdkVersion(sa,
+                    R.styleable.AndroidManifestUsesPermission_minSdkVersion,
+                    Integer.MIN_VALUE);
+
+            int maxSdkVersion =  parseMinOrMaxSdkVersion(sa,
+                    R.styleable.AndroidManifestUsesPermission_maxSdkVersion,
+                    Integer.MAX_VALUE);
 
             final ArraySet<String> requiredFeatures = new ArraySet<>();
             String feature = sa.getNonConfigurationString(
@@ -1334,7 +1350,8 @@ public class ParsingPackageUtils {
                 return success;
             }
 
-            if ((maxSdkVersion != 0) && (maxSdkVersion < Build.VERSION.RESOURCES_SDK_INT)) {
+            if (Build.VERSION.RESOURCES_SDK_INT < minSdkVersion
+                    || Build.VERSION.RESOURCES_SDK_INT > maxSdkVersion) {
                 return success;
             }
 
@@ -1717,6 +1734,12 @@ public class ParsingPackageUtils {
             }
         }
         return input.success(pkg);
+    }
+
+    private static ParseResult<ParsingPackage> parseInstallConstraints(
+            ParseInput input, ParsingPackage pkg, Resources res, XmlResourceParser parser)
+            throws IOException, XmlPullParserException {
+        return InstallConstraintsTagParser.parseInstallConstraints(input, pkg, res, parser);
     }
 
     private static ParseResult<ParsingPackage> parseQueries(ParseInput input, ParsingPackage pkg,
@@ -3045,18 +3068,41 @@ public class ParsingPackageUtils {
      */
     @CheckResult
     public static ParseResult<SigningDetails> getSigningDetails(ParseInput input,
-            ParsingPackageRead pkg, boolean skipVerify) {
+            ParsedPackage pkg, boolean skipVerify) {
+        return getSigningDetails(input, pkg.getBaseApkPath(), pkg.isStaticSharedLibrary(),
+                pkg.getTargetSdkVersion(), pkg.getSplitCodePaths(), skipVerify);
+    }
+
+    @CheckResult
+    private static ParseResult<SigningDetails> getSigningDetails(ParseInput input,
+            ParsingPackage pkg, boolean skipVerify) {
+        return getSigningDetails(input, pkg.getBaseApkPath(), pkg.isStaticSharedLibrary(),
+                pkg.getTargetSdkVersion(), pkg.getSplitCodePaths(), skipVerify);
+    }
+
+    /**
+     * Collect certificates from all the APKs described in the given package. Also asserts that
+     * all APK contents are signed correctly and consistently.
+     *
+     * TODO(b/155513789): Remove this in favor of collecting certificates during the original parse
+     *  call if requested. Leaving this as an optional method for the caller means we have to
+     *  construct a dummy ParseInput.
+     */
+    @CheckResult
+    public static ParseResult<SigningDetails> getSigningDetails(ParseInput input,
+            String baseApkPath, boolean isStaticSharedLibrary, int targetSdkVersion,
+            String[] splitCodePaths, boolean skipVerify) {
         SigningDetails signingDetails = SigningDetails.UNKNOWN;
 
         Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "collectCertificates");
         try {
             ParseResult<SigningDetails> result = getSigningDetails(
                     input,
-                    pkg.getBaseApkPath(),
+                    baseApkPath,
                     skipVerify,
-                    pkg.isStaticSharedLibrary(),
+                    isStaticSharedLibrary,
                     signingDetails,
-                    pkg.getTargetSdkVersion()
+                    targetSdkVersion
             );
             if (result.isError()) {
                 return input.error(result);
@@ -3066,17 +3112,16 @@ public class ParsingPackageUtils {
             final File frameworkRes = new File(Environment.getRootDirectory(),
                     "framework/framework-res.apk");
             boolean isFrameworkResSplit = frameworkRes.getAbsolutePath()
-                    .equals(pkg.getBaseApkPath());
-            String[] splitCodePaths = pkg.getSplitCodePaths();
+                    .equals(baseApkPath);
             if (!ArrayUtils.isEmpty(splitCodePaths) && !isFrameworkResSplit) {
                 for (int i = 0; i < splitCodePaths.length; i++) {
                     result = getSigningDetails(
                             input,
                             splitCodePaths[i],
                             skipVerify,
-                            pkg.isStaticSharedLibrary(),
+                            isStaticSharedLibrary,
                             signingDetails,
-                            pkg.getTargetSdkVersion()
+                            targetSdkVersion
                     );
                     if (result.isError()) {
                         return input.error(result);
@@ -3289,7 +3334,6 @@ public class ParsingPackageUtils {
 
         return keySetMapping;
     }
-
 
     /**
      * Callback interface for retrieving information that may be needed while parsing

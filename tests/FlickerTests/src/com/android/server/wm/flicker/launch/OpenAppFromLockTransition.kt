@@ -22,7 +22,7 @@ import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.navBarLayerPositionAtEnd
 import com.android.server.wm.flicker.statusBarLayerPositionAtEnd
-import com.android.server.wm.traces.common.ComponentMatcher
+import com.android.server.wm.traces.common.ComponentNameMatcher
 import org.junit.Assume
 import org.junit.Ignore
 import org.junit.Test
@@ -77,9 +77,9 @@ abstract class OpenAppFromLockTransition(testSpec: FlickerTestParameter) :
         testSpec.assertWm {
             this.hasNoVisibleAppWindow()
                     .then()
-                    .isAppWindowOnTop(ComponentMatcher.SNAPSHOT, isOptional = true)
+                    .isAppWindowOnTop(ComponentNameMatcher.SNAPSHOT, isOptional = true)
                     .then()
-                    .isAppWindowOnTop(ComponentMatcher.SPLASH_SCREEN, isOptional = true)
+                    .isAppWindowOnTop(ComponentNameMatcher.SPLASH_SCREEN, isOptional = true)
                     .then()
                     .isAppWindowOnTop(testApp)
         }
@@ -102,18 +102,22 @@ abstract class OpenAppFromLockTransition(testSpec: FlickerTestParameter) :
     override fun appWindowBecomesVisible() = super.appWindowBecomesVisible()
 
     /** {@inheritDoc} */
+    @Test
     @Ignore("Not applicable to this CUJ. Display starts off and app is full screen at the end")
     override fun navBarLayerPositionAtStartAndEnd() { }
 
     /** {@inheritDoc} */
+    @Test
     @Ignore("Not applicable to this CUJ. Display starts off and app is full screen at the end")
     override fun statusBarLayerPositionAtStartAndEnd() { }
 
     /** {@inheritDoc} */
+    @Test
     @Ignore("Not applicable to this CUJ. Display starts off and app is full screen at the end")
     override fun taskBarLayerIsVisibleAtStartAndEnd() { }
 
     /** {@inheritDoc} */
+    @Test
     @Ignore("Not applicable to this CUJ. Display starts off and app is full screen at the end")
     override fun taskBarWindowIsAlwaysVisible() { }
 
@@ -135,6 +139,7 @@ abstract class OpenAppFromLockTransition(testSpec: FlickerTestParameter) :
     fun statusBarLayerPositionAtEnd() = testSpec.statusBarLayerPositionAtEnd()
 
     /** {@inheritDoc} */
+    @Test
     @Ignore("Not applicable to this CUJ. Display starts off and app is full screen at the end")
     override fun statusBarLayerIsVisibleAtStartAndEnd() { }
 
@@ -147,7 +152,7 @@ abstract class OpenAppFromLockTransition(testSpec: FlickerTestParameter) :
     @Test
     fun statusBarLayerIsVisibleAtEnd() {
         testSpec.assertLayersEnd {
-            this.isVisible(ComponentMatcher.STATUS_BAR)
+            this.isVisible(ComponentNameMatcher.STATUS_BAR)
         }
     }
 }

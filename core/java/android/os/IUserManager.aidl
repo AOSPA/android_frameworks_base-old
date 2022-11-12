@@ -23,6 +23,7 @@ import android.os.PersistableBundle;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.content.pm.UserInfo;
+import android.content.pm.UserProperties;
 import android.content.IntentSender;
 import android.content.RestrictionEntry;
 import android.graphics.Bitmap;
@@ -71,9 +72,11 @@ interface IUserManager {
     boolean isUserOfType(int userId, in String userType);
     @UnsupportedAppUsage
     UserInfo getUserInfo(int userId);
+    UserProperties getUserPropertiesCopy(int userId);
     String getUserAccount(int userId);
     void setUserAccount(int userId, String accountName);
     long getUserCreationTime(int userId);
+    boolean isUserSwitcherEnabled(int mUserId);
     boolean isRestricted(int userId);
     boolean canHaveRestrictedProfile(int userId);
     int getUserSerialNumber(int userId);
@@ -125,6 +128,8 @@ interface IUserManager {
     boolean isUserUnlocked(int userId);
     boolean isUserRunning(int userId);
     boolean isUserForeground(int userId);
+    boolean isUserVisible(int userId);
+    List<UserHandle> getVisibleUsers();
     boolean isUserNameSet(int userId);
     boolean hasRestrictedProfiles(int userId);
     boolean requestQuietModeEnabled(String callingPackage, boolean enableQuietMode, int userId, in IntentSender target, int flags);

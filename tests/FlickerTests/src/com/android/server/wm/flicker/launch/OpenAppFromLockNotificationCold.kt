@@ -26,7 +26,6 @@ import com.android.server.wm.flicker.annotation.Group1
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.navBarLayerPositionAtEnd
 import com.android.server.wm.flicker.statusBarLayerPositionAtEnd
-import com.android.server.wm.traces.common.ComponentMatcher
 import org.junit.Assume
 import org.junit.FixMethodOrder
 import org.junit.Ignore
@@ -91,6 +90,7 @@ open class OpenAppFromLockNotificationCold(testSpec: FlickerTestParameter) :
     override fun appWindowBecomesTopWindow() = super.appWindowBecomesTopWindow()
 
     /** {@inheritDoc} */
+    @Test
     @Ignore("Display is off at the start")
     override fun navBarLayerPositionAtStartAndEnd() { }
 
@@ -105,6 +105,7 @@ open class OpenAppFromLockNotificationCold(testSpec: FlickerTestParameter) :
     }
 
     /** {@inheritDoc} */
+    @Test
     @Ignore("Display is off at the start")
     override fun statusBarLayerPositionAtStartAndEnd() { }
 

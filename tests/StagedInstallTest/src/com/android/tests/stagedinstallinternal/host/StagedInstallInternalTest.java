@@ -123,16 +123,27 @@ public class StagedInstallInternalTest extends BaseHostJUnit4Test {
         }
 
         boolean found = false;
+        boolean remountSystem = false;
+        boolean remountVendor = false;
         for (String file : files) {
             CommandResult result = getDevice().executeShellV2Command("ls " + file);
             if (result.getStatus() == CommandStatus.SUCCESS) {
                 found = true;
-                break;
+                if (file.startsWith("/system")) {
+                    remountSystem = true;
+                } else if (file.startsWith("/vendor")) {
+                    remountVendor = true;
+                }
             }
         }
 
         if (found) {
-            getDevice().remountSystemWritable();
+            if (remountSystem) {
+                getDevice().remountSystemWritable();
+            }
+            if (remountVendor) {
+                getDevice().remountVendorWritable();
+            }
             for (String file : files) {
                 getDevice().executeShellCommand("rm -rf " + file);
             }
@@ -150,15 +161,25 @@ public class StagedInstallInternalTest extends BaseHostJUnit4Test {
         if (!getDevice().isAdbRoot()) {
             getDevice().enableAdbRoot();
         }
-        getDevice().remountSystemWritable();
+        if ("system".equals(partition)) {
+            getDevice().remountSystemWritable();
+        } else if ("vendor".equals(partition)) {
+            getDevice().remountVendorWritable();
+        }
         assertTrue(getDevice().pushFile(apex, "/" + partition + "/apex/" + fileName));
+    }
+
+    private void installTestApex(String fileName, String... extraArgs) throws Exception {
+        CompatibilityBuildHelper buildHelper = new CompatibilityBuildHelper(getBuild());
+        final File apex = buildHelper.getTestFile(fileName);
+        getDevice().installPackage(apex, false, extraArgs);
     }
 
     private void pushTestVendorApexAllowList(String installerPackageName) throws Exception {
         if (!getDevice().isAdbRoot()) {
             getDevice().enableAdbRoot();
         }
-        getDevice().remountSystemWritable();
+        getDevice().remountVendorWritable();
         File file = File.createTempFile("test-vendor-apex-allow-list", ".xml");
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
             final String fmt =
@@ -536,7 +557,7 @@ public class StagedInstallInternalTest extends BaseHostJUnit4Test {
         pushTestApex(REBOOTLESS_V1, "vendor");
         getDevice().reboot();
         runPhase("testVendorApex_VerifyFactory");
-        installPackage(REBOOTLESS_V2, "--staged");
+        installTestApex(REBOOTLESS_V2, "--staged");
         getDevice().reboot();
         runPhase("testVendorApex_VerifyData");
     }
@@ -550,7 +571,7 @@ public class StagedInstallInternalTest extends BaseHostJUnit4Test {
         pushTestApex(REBOOTLESS_V1, "vendor");
         getDevice().reboot();
         runPhase("testVendorApex_VerifyFactory");
-        installPackage(REBOOTLESS_V2, "--force-non-staged");
+        installTestApex(REBOOTLESS_V2, "--force-non-staged");
         runPhase("testVendorApex_VerifyData");
     }
 

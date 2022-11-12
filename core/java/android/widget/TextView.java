@@ -4887,20 +4887,28 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     /**
-     * Set the line break style for text wrapping.
+     * Sets the line-break style for text wrapping.
      *
-     * The line break style to indicates the line break strategies can be used when
-     * calculating the text wrapping. The line break style affects rule-based breaking. It
-     * specifies the strictness of line-breaking rules.
-     * There are several types for the line break style:
-     * {@link LineBreakConfig#LINE_BREAK_STYLE_LOOSE},
-     * {@link LineBreakConfig#LINE_BREAK_STYLE_NORMAL} and
-     * {@link LineBreakConfig#LINE_BREAK_STYLE_STRICT}. The default values of the line break style
-     * is {@link LineBreakConfig#LINE_BREAK_STYLE_NONE}, indicating no breaking rule is specified.
-     * See <a href="https://www.w3.org/TR/css-text-3/#line-break-property">
-     *         the line-break property</a>
+     * <p>Line-break style specifies the line-break strategies that can be used
+     * for text wrapping. The line-break style affects rule-based line breaking
+     * by specifying the strictness of line-breaking rules.
      *
-     * @param lineBreakStyle the line break style for the text.
+     * <p>The following are types of line-break styles:
+     * <ul>
+     *   <li>{@link LineBreakConfig#LINE_BREAK_STYLE_LOOSE}
+     *   <li>{@link LineBreakConfig#LINE_BREAK_STYLE_NORMAL}
+     *   <li>{@link LineBreakConfig#LINE_BREAK_STYLE_STRICT}
+     * </ul>
+     *
+     * <p>The default line-break style is
+     * {@link LineBreakConfig#LINE_BREAK_STYLE_NONE}, which specifies that no
+     * line-breaking rules are used.
+     *
+     * <p>See the
+     * <a href="https://www.w3.org/TR/css-text-3/#line-break-property" class="external">
+     * line-break property</a> for more information.
+     *
+     * @param lineBreakStyle The line-break style for the text.
      */
     public void setLineBreakStyle(@LineBreakConfig.LineBreakStyle int lineBreakStyle) {
         if (mLineBreakStyle != lineBreakStyle) {
@@ -4914,17 +4922,22 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     /**
-     * Set the line break word style for text wrapping.
+     * Sets the line-break word style for text wrapping.
      *
-     * The line break word style affects dictionary-based breaking and provide phrase-based
-     * breaking opportunities. The type for the line break word style is
-     * {@link LineBreakConfig#LINE_BREAK_WORD_STYLE_PHRASE}. The default values of the line break
-     * word style is {@link LineBreakConfig#LINE_BREAK_WORD_STYLE_NONE}, indicating no breaking rule
-     * is specified.
-     * See <a href="https://www.w3.org/TR/css-text-3/#word-break-property">
-     *         the word-break property</a>
+     * <p>The line-break word style affects dictionary-based line breaking by
+     * providing phrase-based line-breaking opportunities. Use
+     * {@link LineBreakConfig#LINE_BREAK_WORD_STYLE_PHRASE} to specify
+     * phrase-based line breaking.
      *
-     * @param lineBreakWordStyle the line break word style for the tet
+     * <p>The default line-break word style is
+     * {@link LineBreakConfig#LINE_BREAK_WORD_STYLE_NONE}, which specifies that
+     * no line-breaking word style is used.
+     *
+     * <p>See the
+     * <a href="https://www.w3.org/TR/css-text-3/#word-break-property" class="external">
+     * word-break property</a> for more information.
+     *
+     * @param lineBreakWordStyle The line-break word style for the text.
      */
     public void setLineBreakWordStyle(@LineBreakConfig.LineBreakWordStyle int lineBreakWordStyle) {
         mUserSpeficiedLineBreakwordStyle = true;
@@ -4939,18 +4952,18 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     /**
-     * Get the current line break style for text wrapping.
+     * Gets the current line-break style for text wrapping.
      *
-     * @return the current line break style to be used for text wrapping.
+     * @return The line-break style to be used for text wrapping.
      */
     public @LineBreakConfig.LineBreakStyle int getLineBreakStyle() {
         return mLineBreakStyle;
     }
 
     /**
-     * Get the current line word break style for text wrapping.
+     * Gets the current line-break word style for text wrapping.
      *
-     * @return the current line break word style to be used for text wrapping.
+     * @return The line-break word style to be used for text wrapping.
      */
     public @LineBreakConfig.LineBreakWordStyle int getLineBreakWordStyle() {
         return mLineBreakWordStyle;
@@ -12076,6 +12089,13 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     public void onPopulateAccessibilityEventInternal(AccessibilityEvent event) {
         super.onPopulateAccessibilityEventInternal(event);
 
+        if (this.isAccessibilityDataPrivate() && !event.isAccessibilityDataPrivate()) {
+            // This view's accessibility data is private, but another view that generated this event
+            // is not, so don't append this view's text to the event in order to prevent sharing
+            // this view's contents with non-accessibility-tool services.
+            return;
+        }
+
         final CharSequence text = getTextForAccessibility();
         if (!TextUtils.isEmpty(text)) {
             event.getText().add(text);
@@ -12480,7 +12500,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             RectF[] boundingRects = new RectF[positionInfoLength];
             final CursorAnchorInfo.Builder builder = new CursorAnchorInfo.Builder();
             populateCharacterBounds(builder, positionInfoStartIndex,
-                    positionInfoStartIndex + positionInfoLength,
+                    Math.min(positionInfoStartIndex + positionInfoLength, length()),
                     viewportToContentHorizontalOffset(), viewportToContentVerticalOffset());
             CursorAnchorInfo cursorAnchorInfo = builder.setMatrix(null).build();
             for (int i = 0; i < positionInfoLength; i++) {
@@ -12521,64 +12541,38 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     public void populateCharacterBounds(CursorAnchorInfo.Builder builder,
             int startIndex, int endIndex, float viewportToContentHorizontalOffset,
             float viewportToContentVerticalOffset) {
-        final int minLine = mLayout.getLineForOffset(startIndex);
-        final int maxLine = mLayout.getLineForOffset(endIndex - 1);
         final Rect rect = new Rect();
         getLocalVisibleRect(rect);
         final RectF visibleRect = new RectF(rect);
-        for (int line = minLine; line <= maxLine; ++line) {
-            final int lineStart = mLayout.getLineStart(line);
-            final int lineEnd = mLayout.getLineEnd(line);
-            final int offsetStart = Math.max(lineStart, startIndex);
-            final int offsetEnd = Math.min(lineEnd, endIndex);
-            final boolean ltrLine =
-                    mLayout.getParagraphDirection(line) == Layout.DIR_LEFT_TO_RIGHT;
-            final float[] widths = new float[offsetEnd - offsetStart];
-            mLayout.getPaint().getTextWidths(mTransformed, offsetStart, offsetEnd, widths);
-            final float top = mLayout.getLineTop(line);
-            final float bottom = mLayout.getLineBottom(line);
-            for (int offset = offsetStart; offset < offsetEnd; ++offset) {
-                final float charWidth = widths[offset - offsetStart];
-                final boolean isRtl = mLayout.isRtlCharAt(offset);
-                // TODO: This doesn't work perfectly for text with custom styles and
-                // TAB chars.
-                final float left;
-                if (ltrLine) {
-                    if (isRtl) {
-                        left = mLayout.getSecondaryHorizontal(offset) - charWidth;
-                    } else {
-                        left = mLayout.getPrimaryHorizontal(offset);
-                    }
-                } else {
-                    if (!isRtl) {
-                        left = mLayout.getSecondaryHorizontal(offset);
-                    } else {
-                        left = mLayout.getPrimaryHorizontal(offset) - charWidth;
-                    }
-                }
-                final float right = left + charWidth;
-                // TODO: Check top-right and bottom-left as well.
-                final float localLeft = left + viewportToContentHorizontalOffset;
-                final float localRight = right + viewportToContentHorizontalOffset;
-                final float localTop = top + viewportToContentVerticalOffset;
-                final float localBottom = bottom + viewportToContentVerticalOffset;
-                final boolean isTopLeftVisible = visibleRect.contains(localLeft, localTop);
-                final boolean isBottomRightVisible =
-                        visibleRect.contains(localRight, localBottom);
-                int characterBoundsFlags = 0;
-                if (isTopLeftVisible || isBottomRightVisible) {
-                    characterBoundsFlags |= FLAG_HAS_VISIBLE_REGION;
-                }
-                if (!isTopLeftVisible || !isBottomRightVisible) {
-                    characterBoundsFlags |= CursorAnchorInfo.FLAG_HAS_INVISIBLE_REGION;
-                }
-                if (isRtl) {
-                    characterBoundsFlags |= CursorAnchorInfo.FLAG_IS_RTL;
-                }
-                // Here offset is the index in Java chars.
-                builder.addCharacterBounds(offset, localLeft, localTop, localRight,
-                        localBottom, characterBoundsFlags);
+
+        final float[] characterBounds = new float[4 * (endIndex - startIndex)];
+        mLayout.fillCharacterBounds(startIndex, endIndex, characterBounds, 0);
+        final int limit = endIndex - startIndex;
+        for (int offset = 0; offset < limit; ++offset) {
+            final float left =
+                    characterBounds[offset * 4] + viewportToContentHorizontalOffset;
+            final float top =
+                    characterBounds[offset * 4 + 1] + viewportToContentVerticalOffset;
+            final float right =
+                    characterBounds[offset * 4 + 2] + viewportToContentHorizontalOffset;
+            final float bottom =
+                    characterBounds[offset * 4 + 3] + viewportToContentVerticalOffset;
+
+            final boolean hasVisibleRegion = visibleRect.intersects(left, top, right, bottom);
+            final boolean hasInVisibleRegion = !visibleRect.contains(left, top, right, bottom);
+            int characterBoundsFlags = 0;
+            if (hasVisibleRegion) {
+                characterBoundsFlags |= FLAG_HAS_VISIBLE_REGION;
             }
+            if (hasInVisibleRegion) {
+                characterBoundsFlags |= CursorAnchorInfo.FLAG_HAS_INVISIBLE_REGION;
+            }
+
+            if (mLayout.isRtlCharAt(offset)) {
+                characterBoundsFlags |= CursorAnchorInfo.FLAG_IS_RTL;
+            }
+            builder.addCharacterBounds(offset + startIndex, left, top, right, bottom,
+                    characterBoundsFlags);
         }
     }
 

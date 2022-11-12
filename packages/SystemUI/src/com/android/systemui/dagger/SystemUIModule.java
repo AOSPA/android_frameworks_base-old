@@ -18,6 +18,7 @@ package com.android.systemui.dagger;
 
 import android.app.INotificationManager;
 import android.content.Context;
+import android.service.dreams.IDreamManager;
 
 import androidx.annotation.Nullable;
 
@@ -48,9 +49,14 @@ import com.android.systemui.navigationbar.NavigationBarComponent;
 import com.android.systemui.people.PeopleModule;
 import com.android.systemui.plugins.BcSmartspaceDataPlugin;
 import com.android.systemui.privacy.PrivacyModule;
+import com.android.systemui.qs.FgsManagerController;
+import com.android.systemui.qs.FgsManagerControllerImpl;
+import com.android.systemui.qs.footer.dagger.FooterActionsModule;
 import com.android.systemui.recents.Recents;
 import com.android.systemui.screenshot.dagger.ScreenshotModule;
+import com.android.systemui.security.data.repository.SecurityRepositoryModule;
 import com.android.systemui.settings.dagger.MultiUserUtilsModule;
+import com.android.systemui.shade.ShadeController;
 import com.android.systemui.smartspace.dagger.SmartspaceModule;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
@@ -68,9 +74,8 @@ import com.android.systemui.statusbar.notification.row.dagger.ExpandableNotifica
 import com.android.systemui.statusbar.notification.row.dagger.NotificationRowComponent;
 import com.android.systemui.statusbar.notification.row.dagger.NotificationShelfComponent;
 import com.android.systemui.statusbar.phone.CentralSurfaces;
-import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.phone.dagger.CentralSurfacesComponent;
-import com.android.systemui.statusbar.policy.ConfigurationController;
+import com.android.systemui.statusbar.pipeline.dagger.StatusBarPipelineModule;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.statusbar.policy.ZenModeController;
@@ -91,7 +96,6 @@ import com.android.systemui.wallet.dagger.WalletModule;
 import com.android.systemui.wmshell.BubblesManager;
 import com.android.wm.shell.bubbles.Bubbles;
 import com.android.wm.shell.dagger.DynamicOverride;
-import com.android.wm.shell.sysui.ShellController;
 
 import java.util.Optional;
 import java.util.concurrent.Executor;
@@ -122,6 +126,7 @@ import dagger.Provides;
             DemoModeModule.class,
             FalsingModule.class,
             FlagsModule.class,
+            FooterActionsModule.class,
             LogModule.class,
             MediaProjectionModule.class,
             PeopleHubModule.class,
@@ -132,9 +137,11 @@ import dagger.Provides;
             ScreenshotModule.class,
             SensorModule.class,
             MultiUserUtilsModule.class,
+            SecurityRepositoryModule.class,
             SettingsUtilModule.class,
             SmartRepliesInflationModule.class,
             SmartspaceModule.class,
+            StatusBarPipelineModule.class,
             StatusBarPolicyModule.class,
             StatusBarWindowModule.class,
             SysUIConcurrencyModule.class,
@@ -213,6 +220,7 @@ public abstract class SystemUIModule {
             ShadeController shadeController,
             @Nullable IStatusBarService statusBarService,
             INotificationManager notificationManager,
+            IDreamManager dreamManager,
             NotificationVisibilityProvider visibilityProvider,
             NotificationInterruptStateProvider interruptionStateProvider,
             ZenModeController zenModeController,
@@ -230,6 +238,7 @@ public abstract class SystemUIModule {
                 shadeController,
                 statusBarService,
                 notificationManager,
+                dreamManager,
                 visibilityProvider,
                 interruptionStateProvider,
                 zenModeController,
@@ -238,7 +247,6 @@ public abstract class SystemUIModule {
                 notifCollection,
                 notifPipeline,
                 sysUiState,
-                dumpManager,
                 sysuiMainExecutor));
     }
 
@@ -256,4 +264,7 @@ public abstract class SystemUIModule {
             return Optional.empty();
         }
     }
+
+    @Binds
+    abstract FgsManagerController bindFgsManagerController(FgsManagerControllerImpl impl);
 }

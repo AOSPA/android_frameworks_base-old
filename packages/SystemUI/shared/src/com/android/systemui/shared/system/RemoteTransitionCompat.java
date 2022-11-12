@@ -128,9 +128,10 @@ public class RemoteTransitionCompat implements Parcelable {
                     IRemoteTransitionFinishedCallback finishedCallback) {
                 final ArrayMap<SurfaceControl, SurfaceControl> leashMap = new ArrayMap<>();
                 final RemoteAnimationTargetCompat[] apps =
-                        RemoteAnimationTargetCompat.wrap(info, false /* wallpapers */, t, leashMap);
+                        RemoteAnimationTargetCompat.wrapApps(info, t, leashMap);
                 final RemoteAnimationTargetCompat[] wallpapers =
-                        RemoteAnimationTargetCompat.wrap(info, true /* wallpapers */, t, leashMap);
+                        RemoteAnimationTargetCompat.wrapNonApps(
+                                info, true /* wallpapers */, t, leashMap);
                 // TODO(b/177438007): Move this set-up logic into launcher's animation impl.
                 mToken = transition;
                 // This transition is for opening recents, so recents is on-top. We want to draw
@@ -230,6 +231,7 @@ public class RemoteTransitionCompat implements Parcelable {
         private IBinder mTransition = null;
         private boolean mKeyguardLocked = false;
         private RemoteAnimationTargetCompat[] mAppearedTargets;
+        private boolean mWillFinishToHome = false;
 
         void setup(RecentsAnimationControllerCompat wrapped, TransitionInfo info,
                 IRemoteTransitionFinishedCallback finishCB,
@@ -392,7 +394,7 @@ public class RemoteTransitionCompat implements Parcelable {
                 if (toHome) wct.reorder(mRecentsTask, true /* toTop */);
                 else wct.restoreTransientOrder(mRecentsTask);
             }
-            if (!toHome && mPausingTasks != null && mOpeningLeashes == null) {
+            if (!toHome && !mWillFinishToHome && mPausingTasks != null && mOpeningLeashes == null) {
                 // The gesture went back to opening the app rather than continuing with
                 // recents, so end the transition by moving the app back to the top (and also
                 // re-showing it's task).
@@ -476,6 +478,7 @@ public class RemoteTransitionCompat implements Parcelable {
         }
 
         @Override public void setWillFinishToHome(boolean willFinishToHome) {
+            mWillFinishToHome = willFinishToHome;
             if (mWrapped != null) mWrapped.setWillFinishToHome(willFinishToHome);
         }
 

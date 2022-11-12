@@ -29,6 +29,7 @@ import static com.android.server.tare.TareUtils.getCurrentTimeMillis;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.AlarmManager;
+import android.app.AppOpsManager;
 import android.app.tare.IEconomyManager;
 import android.app.usage.UsageEvents;
 import android.app.usage.UsageStatsManagerInternal;
@@ -48,6 +49,7 @@ import android.os.Handler;
 import android.os.IDeviceIdleController;
 import android.os.Looper;
 import android.os.Message;
+import android.os.ParcelFileDescriptor;
 import android.os.PowerManager;
 import android.os.RemoteException;
 import android.os.ServiceManager;
@@ -63,6 +65,8 @@ import android.util.SparseArrayMap;
 import android.util.SparseSetArray;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.app.IAppOpsCallback;
+import com.android.internal.app.IAppOpsService;
 import com.android.internal.os.SomeArgs;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.DumpUtils;
@@ -118,6 +122,7 @@ public class InternalResourceService extends SystemService {
     private final PackageManager mPackageManager;
     private final PackageManagerInternal mPackageManagerInternal;
 
+    private IAppOpsService mAppOpsService;
     private IDeviceIdleController mDeviceIdleController;
 
     private final Agent mAgent;
@@ -131,7 +136,7 @@ public class InternalResourceService extends SystemService {
 
     @NonNull
     @GuardedBy("mLock")
-    private final List<PackageInfo> mPkgCache = new ArrayList<>();
+    private final SparseArrayMap<String, InstalledPackageInfo> mPkgCache = new SparseArrayMap<>();
 
     /** Cached mapping of UIDs (for all users) to a list of packages in the UID. */
     @GuardedBy("mLock")
@@ -144,10 +149,19 @@ public class InternalResourceService extends SystemService {
     private final CopyOnWriteArraySet<TareStateChangeListener> mStateChangeListeners =
             new CopyOnWriteArraySet<>();
 
+    /**
+     * List of packages that are fully restricted and shouldn't be allowed to run in the background.
+     */
+    @GuardedBy("mLock")
+    private final SparseSetArray<String> mRestrictedApps = new SparseSetArray<>();
+
     /** List of packages that are "exempted" from battery restrictions. */
     // TODO(144864180): include userID
     @GuardedBy("mLock")
     private ArraySet<String> mExemptedApps = new ArraySet<>();
+
+    @GuardedBy("mLock")
+    private final SparseArrayMap<String, Boolean> mVipOverrides = new SparseArrayMap<>();
 
     private volatile boolean mIsEnabled;
     private volatile int mBootPhase;
@@ -155,6 +169,30 @@ public class InternalResourceService extends SystemService {
     // In the range [0,100] to represent 0% to 100% battery.
     @GuardedBy("mLock")
     private int mCurrentBatteryLevel;
+
+    private final IAppOpsCallback mApbListener = new IAppOpsCallback.Stub() {
+        @Override
+        public void opChanged(int op, int uid, String packageName) {
+            boolean restricted = false;
+            try {
+                restricted = mAppOpsService.checkOperation(
+                        AppOpsManager.OP_RUN_ANY_IN_BACKGROUND, uid, packageName)
+                        != AppOpsManager.MODE_ALLOWED;
+            } catch (RemoteException e) {
+                // Shouldn't happen
+            }
+            final int userId = UserHandle.getUserId(uid);
+            synchronized (mLock) {
+                if (restricted) {
+                    if (mRestrictedApps.add(userId, packageName)) {
+                        mAgent.onAppRestrictedLocked(userId, packageName);
+                    }
+                } else if (mRestrictedApps.remove(UserHandle.getUserId(uid), packageName)) {
+                    mAgent.onAppUnrestrictedLocked(userId, packageName);
+                }
+            }
+        }
+    };
 
     private final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
         @Nullable
@@ -274,24 +312,21 @@ public class InternalResourceService extends SystemService {
     public void onBootPhase(int phase) {
         mBootPhase = phase;
 
-        if (PHASE_SYSTEM_SERVICES_READY == phase) {
-            mConfigObserver.start();
-            mDeviceIdleController = IDeviceIdleController.Stub.asInterface(
-                    ServiceManager.getService(Context.DEVICE_IDLE_CONTROLLER));
-            setupEverything();
-        } else if (PHASE_BOOT_COMPLETED == phase) {
-            if (!mExemptListLoaded) {
-                synchronized (mLock) {
-                    try {
-                        mExemptedApps =
-                                new ArraySet<>(mDeviceIdleController.getFullPowerWhitelist());
-                    } catch (RemoteException e) {
-                        // Shouldn't happen.
-                        Slog.wtf(TAG, e);
-                    }
-                    mExemptListLoaded = true;
-                }
-            }
+        switch (phase) {
+            case PHASE_SYSTEM_SERVICES_READY:
+                mAppOpsService = IAppOpsService.Stub.asInterface(
+                        ServiceManager.getService(Context.APP_OPS_SERVICE));
+                mDeviceIdleController = IDeviceIdleController.Stub.asInterface(
+                        ServiceManager.getService(Context.DEVICE_IDLE_CONTROLLER));
+                mConfigObserver.start();
+                onBootPhaseSystemServicesReady();
+                break;
+            case PHASE_THIRD_PARTY_APPS_CAN_START:
+                onBootPhaseThirdPartyAppsCanStart();
+                break;
+            case PHASE_BOOT_COMPLETED:
+                onBootPhaseBootCompleted();
+                break;
         }
     }
 
@@ -308,7 +343,7 @@ public class InternalResourceService extends SystemService {
     }
 
     @NonNull
-    List<PackageInfo> getInstalledPackages() {
+    SparseArrayMap<String, InstalledPackageInfo> getInstalledPackages() {
         synchronized (mLock) {
             return mPkgCache;
         }
@@ -316,15 +351,16 @@ public class InternalResourceService extends SystemService {
 
     /** Returns the installed packages for the specified user. */
     @NonNull
-    List<PackageInfo> getInstalledPackages(final int userId) {
-        final List<PackageInfo> userPkgs = new ArrayList<>();
+    List<InstalledPackageInfo> getInstalledPackages(final int userId) {
+        final List<InstalledPackageInfo> userPkgs = new ArrayList<>();
         synchronized (mLock) {
-            for (int i = 0; i < mPkgCache.size(); ++i) {
-                final PackageInfo packageInfo = mPkgCache.get(i);
-                if (packageInfo.applicationInfo != null
-                        && UserHandle.getUserId(packageInfo.applicationInfo.uid) == userId) {
-                    userPkgs.add(packageInfo);
-                }
+            final int uIdx = mPkgCache.indexOfKey(userId);
+            if (uIdx < 0) {
+                return userPkgs;
+            }
+            for (int p = mPkgCache.numElementsForKeyAt(uIdx) - 1; p >= 0; --p) {
+                final InstalledPackageInfo packageInfo = mPkgCache.valueAt(uIdx, p);
+                userPkgs.add(packageInfo);
             }
         }
         return userPkgs;
@@ -367,11 +403,32 @@ public class InternalResourceService extends SystemService {
         }
     }
 
+    boolean isPackageRestricted(final int userId, @NonNull String pkgName) {
+        synchronized (mLock) {
+            return mRestrictedApps.contains(userId, pkgName);
+        }
+    }
+
     boolean isSystem(final int userId, @NonNull String pkgName) {
         if ("android".equals(pkgName)) {
             return true;
         }
         return UserHandle.isCore(getUid(userId, pkgName));
+    }
+
+    boolean isVip(final int userId, @NonNull String pkgName) {
+        synchronized (mLock) {
+            final Boolean override = mVipOverrides.get(userId, pkgName);
+            if (override != null) {
+                return override;
+            }
+        }
+        if (isSystem(userId, pkgName)) {
+            // The government, I mean the system, can create ARCs as it needs to in order to
+            // operate.
+            return true;
+        }
+        return false;
     }
 
     void onBatteryLevelChanged() {
@@ -403,10 +460,9 @@ public class InternalResourceService extends SystemService {
             final ArraySet<String> added = new ArraySet<>();
             try {
                 mExemptedApps = new ArraySet<>(mDeviceIdleController.getFullPowerWhitelist());
+                mExemptListLoaded = true;
             } catch (RemoteException e) {
                 // Shouldn't happen.
-                Slog.wtf(TAG, e);
-                return;
             }
 
             for (int i = mExemptedApps.size() - 1; i >= 0; --i) {
@@ -457,7 +513,7 @@ public class InternalResourceService extends SystemService {
             mPackageToUidCache.add(userId, pkgName, uid);
         }
         synchronized (mLock) {
-            mPkgCache.add(packageInfo);
+            mPkgCache.add(userId, pkgName, new InstalledPackageInfo(packageInfo));
             mUidToPackageCache.add(uid, pkgName);
             // TODO: only do this when the user first launches the app (app leaves stopped state)
             mAgent.grantBirthrightLocked(userId, pkgName);
@@ -477,14 +533,8 @@ public class InternalResourceService extends SystemService {
         }
         synchronized (mLock) {
             mUidToPackageCache.remove(uid, pkgName);
-            for (int i = 0; i < mPkgCache.size(); ++i) {
-                PackageInfo pkgInfo = mPkgCache.get(i);
-                if (UserHandle.getUserId(pkgInfo.applicationInfo.uid) == userId
-                        && pkgName.equals(pkgInfo.packageName)) {
-                    mPkgCache.remove(i);
-                    break;
-                }
-            }
+            mVipOverrides.delete(userId, pkgName);
+            mPkgCache.delete(userId, pkgName);
             mAgent.onPackageRemovedLocked(userId, pkgName);
         }
     }
@@ -502,24 +552,29 @@ public class InternalResourceService extends SystemService {
 
     void onUserAdded(final int userId) {
         synchronized (mLock) {
-            mPkgCache.addAll(
-                    mPackageManager.getInstalledPackagesAsUser(PACKAGE_QUERY_FLAGS, userId));
+            final List<PackageInfo> pkgs =
+                    mPackageManager.getInstalledPackagesAsUser(PACKAGE_QUERY_FLAGS, userId);
+            for (int i = pkgs.size() - 1; i >= 0; --i) {
+                final InstalledPackageInfo ipo = new InstalledPackageInfo(pkgs.get(i));
+                mPkgCache.add(userId, ipo.packageName, ipo);
+            }
             mAgent.grantBirthrightsLocked(userId);
         }
     }
 
     void onUserRemoved(final int userId) {
         synchronized (mLock) {
+            mVipOverrides.delete(userId);
             ArrayList<String> removedPkgs = new ArrayList<>();
-            for (int i = mPkgCache.size() - 1; i >= 0; --i) {
-                PackageInfo pkgInfo = mPkgCache.get(i);
-                if (UserHandle.getUserId(pkgInfo.applicationInfo.uid) == userId) {
+            final int uIdx = mPkgCache.indexOfKey(userId);
+            if (uIdx >= 0) {
+                for (int p = mPkgCache.numElementsForKeyAt(uIdx) - 1; p >= 0; --p) {
+                    final InstalledPackageInfo pkgInfo = mPkgCache.valueAt(uIdx, p);
                     removedPkgs.add(pkgInfo.packageName);
-                    mUidToPackageCache.remove(pkgInfo.applicationInfo.uid);
-                    mPkgCache.remove(i);
-                    break;
+                    mUidToPackageCache.remove(pkgInfo.uid);
                 }
             }
+            mPkgCache.delete(userId);
             mAgent.onUserRemovedLocked(userId, removedPkgs);
         }
     }
@@ -665,8 +720,12 @@ public class InternalResourceService extends SystemService {
                 LocalServices.getService(UserManagerInternal.class);
         final int[] userIds = userManagerInternal.getUserIds();
         for (int userId : userIds) {
-            mPkgCache.addAll(
-                    mPackageManager.getInstalledPackagesAsUser(PACKAGE_QUERY_FLAGS, userId));
+            final List<PackageInfo> pkgs =
+                    mPackageManager.getInstalledPackagesAsUser(PACKAGE_QUERY_FLAGS, userId);
+            for (int i = pkgs.size() - 1; i >= 0; --i) {
+                final InstalledPackageInfo ipo = new InstalledPackageInfo(pkgs.get(i));
+                mPkgCache.add(userId, ipo.packageName, ipo);
+            }
         }
     }
 
@@ -691,21 +750,22 @@ public class InternalResourceService extends SystemService {
 
         UsageStatsManagerInternal usmi = LocalServices.getService(UsageStatsManagerInternal.class);
         usmi.registerListener(mSurveillanceAgent);
+
+        try {
+            mAppOpsService
+                    .startWatchingMode(AppOpsManager.OP_RUN_ANY_IN_BACKGROUND, null, mApbListener);
+        } catch (RemoteException e) {
+            // shouldn't happen.
+        }
     }
 
     /** Perform long-running and/or heavy setup work. This should be called off the main thread. */
     private void setupHeavyWork() {
+        if (mBootPhase < PHASE_THIRD_PARTY_APPS_CAN_START || !mIsEnabled) {
+            return;
+        }
         synchronized (mLock) {
             loadInstalledPackageListLocked();
-            if (mBootPhase >= PHASE_BOOT_COMPLETED && !mExemptListLoaded) {
-                try {
-                    mExemptedApps = new ArraySet<>(mDeviceIdleController.getFullPowerWhitelist());
-                } catch (RemoteException e) {
-                    // Shouldn't happen.
-                    Slog.wtf(TAG, e);
-                }
-                mExemptListLoaded = true;
-            }
             final boolean isFirstSetup = !mScribe.recordExists();
             if (isFirstSetup) {
                 mAgent.grantBirthrightsLocked();
@@ -720,21 +780,63 @@ public class InternalResourceService extends SystemService {
                     // Reset the consumption limit since several factors may have changed.
                     mScribe.setConsumptionLimitLocked(
                             mCompleteEconomicPolicy.getInitialSatiatedConsumptionLimit());
+                } else {
+                    // Adjust the supply in case battery level changed while the device was off.
+                    adjustCreditSupplyLocked(true);
                 }
             }
             scheduleUnusedWealthReclamationLocked();
         }
     }
 
-    private void setupEverything() {
+    private void onBootPhaseSystemServicesReady() {
         if (mBootPhase < PHASE_SYSTEM_SERVICES_READY || !mIsEnabled) {
             return;
         }
         synchronized (mLock) {
             registerListeners();
             mCurrentBatteryLevel = getCurrentBatteryLevel();
+        }
+    }
+
+    private void onBootPhaseThirdPartyAppsCanStart() {
+        if (mBootPhase < PHASE_THIRD_PARTY_APPS_CAN_START || !mIsEnabled) {
+            return;
+        }
+        synchronized (mLock) {
             mHandler.post(this::setupHeavyWork);
             mCompleteEconomicPolicy.setup(mConfigObserver.getAllDeviceConfigProperties());
+        }
+    }
+
+    private void onBootPhaseBootCompleted() {
+        if (mBootPhase < PHASE_BOOT_COMPLETED || !mIsEnabled) {
+            return;
+        }
+        synchronized (mLock) {
+            if (!mExemptListLoaded) {
+                try {
+                    mExemptedApps = new ArraySet<>(mDeviceIdleController.getFullPowerWhitelist());
+                    mExemptListLoaded = true;
+                } catch (RemoteException e) {
+                    // Shouldn't happen.
+                }
+            }
+        }
+    }
+
+    private void setupEverything() {
+        if (!mIsEnabled) {
+            return;
+        }
+        if (mBootPhase >= PHASE_SYSTEM_SERVICES_READY) {
+            onBootPhaseSystemServicesReady();
+        }
+        if (mBootPhase >= PHASE_THIRD_PARTY_APPS_CAN_START) {
+            onBootPhaseThirdPartyAppsCanStart();
+        }
+        if (mBootPhase >= PHASE_BOOT_COMPLETED) {
+            onBootPhaseBootCompleted();
         }
     }
 
@@ -762,6 +864,11 @@ public class InternalResourceService extends SystemService {
             UsageStatsManagerInternal usmi =
                     LocalServices.getService(UsageStatsManagerInternal.class);
             usmi.unregisterListener(mSurveillanceAgent);
+            try {
+                mAppOpsService.stopWatchingMode(mApbListener);
+            } catch (RemoteException e) {
+                // shouldn't happen.
+            }
         }
         synchronized (mPackageToUidCache) {
             mPackageToUidCache.clear();
@@ -854,6 +961,15 @@ public class InternalResourceService extends SystemService {
                 Binder.restoreCallingIdentity(identityToken);
             }
         }
+
+        @Override
+        public int handleShellCommand(@NonNull ParcelFileDescriptor in,
+                @NonNull ParcelFileDescriptor out, @NonNull ParcelFileDescriptor err,
+                @NonNull String[] args) {
+            return (new TareShellCommand(InternalResourceService.this)).exec(
+                    this, in.getFileDescriptor(), out.getFileDescriptor(), err.getFileDescriptor(),
+                    args);
+        }
     }
 
     private final class LocalService implements EconomyManagerInternal {
@@ -905,9 +1021,9 @@ public class InternalResourceService extends SystemService {
             if (!mIsEnabled) {
                 return true;
             }
-            if (isSystem(userId, pkgName)) {
+            if (isVip(userId, pkgName)) {
                 // The government, I mean the system, can create ARCs as it needs to in order to
-                // operate.
+                // allow VIPs to operate.
                 return true;
             }
             // TODO: take temp-allowlist into consideration
@@ -933,7 +1049,7 @@ public class InternalResourceService extends SystemService {
             if (!mIsEnabled) {
                 return FOREVER_MS;
             }
-            if (isSystem(userId, pkgName)) {
+            if (isVip(userId, pkgName)) {
                 return FOREVER_MS;
             }
             long totalCostPerSecond = 0;
@@ -1066,7 +1182,6 @@ public class InternalResourceService extends SystemService {
             // User setting should override DeviceConfig setting.
             // NOTE: There's currently no way for a user to reset the value (via UI), so if a user
             // manually toggles TARE via UI, we'll always defer to the user's current setting
-            // TODO: add a "reset" value if the user toggle is an issue
             final boolean isTareEnabledDC = DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_TARE,
                     KEY_DC_ENABLE_TARE, Settings.Global.DEFAULT_ENABLE_TARE == 1);
             final boolean isTareEnabled = Settings.Global.getInt(mContentResolver,
@@ -1104,6 +1219,47 @@ public class InternalResourceService extends SystemService {
         }
     }
 
+    // Shell command infrastructure
+    int executeClearVip(@NonNull PrintWriter pw) {
+        synchronized (mLock) {
+            final SparseSetArray<String> changedPkgs = new SparseSetArray<>();
+            for (int u = mVipOverrides.numMaps() - 1; u >= 0; --u) {
+                final int userId = mVipOverrides.keyAt(u);
+
+                for (int p = mVipOverrides.numElementsForKeyAt(u) - 1; p >= 0; --p) {
+                    changedPkgs.add(userId, mVipOverrides.keyAt(u, p));
+                }
+            }
+            mVipOverrides.clear();
+            if (mIsEnabled) {
+                mAgent.onVipStatusChangedLocked(changedPkgs);
+            }
+        }
+        pw.println("Cleared all VIP statuses");
+        return TareShellCommand.COMMAND_SUCCESS;
+    }
+
+    int executeSetVip(@NonNull PrintWriter pw,
+            int userId, @NonNull String pkgName, @Nullable Boolean newVipState) {
+        final boolean changed;
+        synchronized (mLock) {
+            final boolean wasVip = isVip(userId, pkgName);
+            if (newVipState == null) {
+                mVipOverrides.delete(userId, pkgName);
+            } else {
+                mVipOverrides.add(userId, pkgName, newVipState);
+            }
+            changed = isVip(userId, pkgName) != wasVip;
+            if (mIsEnabled && changed) {
+                mAgent.onVipStatusChangedLocked(userId, pkgName);
+            }
+        }
+        pw.println(appToString(userId, pkgName) + " VIP status set to " + newVipState + "."
+                + " Final VIP state changed? " + changed);
+        return TareShellCommand.COMMAND_SUCCESS;
+    }
+
+    // Dump infrastructure
     private static void dumpHelp(PrintWriter pw) {
         pw.println("Resource Economy (economy) dump options:");
         pw.println("  [-h|--help] [package] ...");
@@ -1139,6 +1295,29 @@ public class InternalResourceService extends SystemService {
 
             pw.println();
             pw.print("Exempted apps", mExemptedApps);
+            pw.println();
+
+            boolean printedVips = false;
+            pw.println();
+            pw.print("VIPs:");
+            for (int u = 0; u < mVipOverrides.numMaps(); ++u) {
+                final int userId = mVipOverrides.keyAt(u);
+
+                for (int p = 0; p < mVipOverrides.numElementsForKeyAt(u); ++p) {
+                    final String pkgName = mVipOverrides.keyAt(u, p);
+
+                    printedVips = true;
+                    pw.println();
+                    pw.print(appToString(userId, pkgName));
+                    pw.print("=");
+                    pw.print(mVipOverrides.valueAt(u, p));
+                }
+            }
+            if (printedVips) {
+                pw.println();
+            } else {
+                pw.print(" None");
+            }
             pw.println();
 
             pw.println();

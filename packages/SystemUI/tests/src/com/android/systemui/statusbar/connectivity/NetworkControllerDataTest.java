@@ -144,8 +144,8 @@ public class NetworkControllerDataTest extends NetworkControllerBaseTest {
                 mDemoModeController,
                 mock(CarrierConfigTracker.class),
                 mWifiStatusTrackerFactory,
+                mMobileFactory,
                 new Handler(TestableLooper.get(this).getLooper()),
-                mFeatureFlags,
                 mock(LogBuffer.class));
         setupNetworkController();
 

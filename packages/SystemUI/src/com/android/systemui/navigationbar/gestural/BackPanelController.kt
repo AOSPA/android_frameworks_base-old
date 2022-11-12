@@ -34,7 +34,6 @@ import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
 import android.view.animation.PathInterpolator
-import android.window.BackEvent
 import androidx.dynamicanimation.animation.DynamicAnimation
 import androidx.dynamicanimation.animation.SpringForce
 import com.android.internal.util.LatencyTracker
@@ -43,7 +42,6 @@ import com.android.systemui.plugins.NavigationEdgeBackPlugin
 import com.android.systemui.statusbar.VibratorHelper
 import com.android.systemui.statusbar.policy.ConfigurationController
 import com.android.systemui.util.ViewController
-import com.android.wm.shell.back.BackAnimation
 import java.io.PrintWriter
 import javax.inject.Inject
 import kotlin.math.abs
@@ -97,7 +95,6 @@ private val DECELERATE_INTERPOLATOR_SLOW = DecelerateInterpolator(0.7f)
 
 class BackPanelController private constructor(
     context: Context,
-    private var backAnimation: BackAnimation?,
     private val windowManager: WindowManager,
     private val viewConfiguration: ViewConfiguration,
     @Main private val mainHandler: Handler,
@@ -121,10 +118,9 @@ class BackPanelController private constructor(
         private val latencyTracker: LatencyTracker
     ) {
         /** Construct a [BackPanelController].  */
-        fun create(context: Context, backAnimation: BackAnimation?): BackPanelController {
+        fun create(context: Context): BackPanelController {
             val backPanelController = BackPanelController(
                 context,
-                backAnimation,
                 windowManager,
                 viewConfiguration,
                 mainHandler,
@@ -266,7 +262,6 @@ class BackPanelController private constructor(
      */
     private fun updateConfiguration() {
         params.update(resources)
-        updateBackAnimationSwipeThresholds()
         mView.updateArrowPaint(params.arrowThickness)
     }
 
@@ -298,13 +293,6 @@ class BackPanelController private constructor(
     }
 
     override fun onMotionEvent(event: MotionEvent) {
-        backAnimation?.onBackMotion(
-            event.x,
-            event.y,
-            event.actionMasked,
-            if (mView.isLeftPanel) BackEvent.EDGE_LEFT else BackEvent.EDGE_RIGHT
-        )
-
         velocityTracker!!.addMovement(event)
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
@@ -429,6 +417,7 @@ class BackPanelController private constructor(
                 stretchEntryBackIndicator(preThresholdStretchProgress(xTranslation))
             GestureState.INACTIVE ->
                 mView.resetStretch()
+            else -> {}
         }
 
         // set y translation
@@ -483,18 +472,6 @@ class BackPanelController private constructor(
         )
     }
 
-    fun setBackAnimation(backAnimation: BackAnimation?) {
-        this.backAnimation = backAnimation
-        updateBackAnimationSwipeThresholds()
-    }
-
-    private fun updateBackAnimationSwipeThresholds() {
-        backAnimation?.setSwipeThresholds(
-            params.swipeTriggerThreshold,
-            fullyStretchedThreshold
-        )
-    }
-
     override fun onDestroy() {
         cancelFailsafe()
         windowManager.removeView(mView)
@@ -533,7 +510,6 @@ class BackPanelController private constructor(
     private fun playCommitBackAnimation() {
         // Check if we should vibrate again
         if (previousState != GestureState.FLUNG) {
-            backCallback.triggerBack()
             velocityTracker!!.computeCurrentVelocity(1000)
             val isSlow = abs(velocityTracker!!.xVelocity) < 500
             val hasNotVibratedRecently =
@@ -542,6 +518,10 @@ class BackPanelController private constructor(
                 vibratorHelper.vibrate(VibrationEffect.EFFECT_CLICK)
             }
         }
+        // Dispatch the actual back trigger
+        if (DEBUG) Log.d(TAG, "playCommitBackAnimation() invoked triggerBack() on backCallback")
+        backCallback.triggerBack()
+
         playAnimation(setGoneEndListener)
     }
 
@@ -567,7 +547,6 @@ class BackPanelController private constructor(
         totalTouchDelta = 0f
         vibrationTime = 0
         cancelFailsafe()
-        backAnimation?.setTriggerBack(false)
     }
 
     private fun updateYPosition(touchY: Float) {
@@ -580,7 +559,6 @@ class BackPanelController private constructor(
     override fun setDisplaySize(displaySize: Point) {
         this.displaySize.set(displaySize.x, displaySize.y)
         fullyStretchedThreshold = min(displaySize.x.toFloat(), params.swipeProgressThreshold)
-        updateBackAnimationSwipeThresholds()
     }
 
     /**
@@ -626,7 +604,7 @@ class BackPanelController private constructor(
                             if (currentState == GestureState.INACTIVE ||
                                 currentState == GestureState.CANCELLED
                             )
-                                params.entryIndicator.backgroundDimens.edgeCornerRadius
+                                params.cancelledEdgeCornerRadius
                             else
                                 params.activeIndicator.backgroundDimens.edgeCornerRadius
                         )
@@ -664,7 +642,6 @@ class BackPanelController private constructor(
                 updateRestingArrowDimens(animated = true, currentState)
             }
             GestureState.ACTIVE -> {
-                backAnimation?.setTriggerBack(true)
                 updateRestingArrowDimens(animated = true, currentState)
                 // Vibrate the first time we transition to ACTIVE
                 if (!hasHapticPlayed) {
@@ -674,7 +651,6 @@ class BackPanelController private constructor(
                 }
             }
             GestureState.INACTIVE -> {
-                backAnimation?.setTriggerBack(false)
                 updateRestingArrowDimens(animated = true, currentState)
             }
             GestureState.FLUNG -> playFlingBackAnimation()

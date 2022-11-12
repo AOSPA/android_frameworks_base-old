@@ -21,7 +21,6 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import android.os.PowerManager
-import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -31,7 +30,8 @@ import androidx.test.filters.SmallTest
 import com.android.systemui.R
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.dagger.qualifiers.Main
-import com.android.systemui.statusbar.gesture.TapGestureDetector
+import com.android.systemui.statusbar.policy.ConfigurationController
+import com.android.systemui.statusbar.policy.ConfigurationController.ConfigurationListener
 import com.android.systemui.util.concurrency.DelayableExecutor
 import com.android.systemui.util.concurrency.FakeExecutor
 import com.android.systemui.util.mockito.any
@@ -53,7 +53,7 @@ import org.mockito.MockitoAnnotations
 
 @SmallTest
 class MediaTttChipControllerCommonTest : SysuiTestCase() {
-    private lateinit var controllerCommon: MediaTttChipControllerCommon<ChipInfo>
+    private lateinit var controllerCommon: TestControllerCommon
 
     private lateinit var fakeClock: FakeSystemClock
     private lateinit var fakeExecutor: FakeExecutor
@@ -68,11 +68,11 @@ class MediaTttChipControllerCommonTest : SysuiTestCase() {
     @Mock
     private lateinit var accessibilityManager: AccessibilityManager
     @Mock
+    private lateinit var configurationController: ConfigurationController
+    @Mock
     private lateinit var windowManager: WindowManager
     @Mock
     private lateinit var viewUtil: ViewUtil
-    @Mock
-    private lateinit var tapGestureDetector: TapGestureDetector
     @Mock
     private lateinit var powerManager: PowerManager
 
@@ -98,35 +98,49 @@ class MediaTttChipControllerCommonTest : SysuiTestCase() {
         fakeExecutor = FakeExecutor(fakeClock)
 
         controllerCommon = TestControllerCommon(
-            context,
-            logger,
-            windowManager,
-            viewUtil,
-            fakeExecutor,
-            accessibilityManager,
-            tapGestureDetector,
-            powerManager
+                context,
+                logger,
+                windowManager,
+                viewUtil,
+                fakeExecutor,
+                accessibilityManager,
+                configurationController,
+                powerManager,
         )
     }
 
     @Test
-    fun displayChip_chipAddedAndGestureDetectionStartedAndScreenOn() {
+    fun displayChip_chipAdded() {
         controllerCommon.displayChip(getState())
 
         verify(windowManager).addView(any(), any())
-        verify(tapGestureDetector).addOnGestureDetectedCallback(any(), any())
+    }
+
+    @Test
+    fun displayChip_screenOff_screenWakes() {
+        whenever(powerManager.isScreenOn).thenReturn(false)
+
+        controllerCommon.displayChip(getState())
+
         verify(powerManager).wakeUp(any(), any(), any())
     }
 
     @Test
-    fun displayChip_twice_chipAndGestureDetectionNotAddedTwice() {
+    fun displayChip_screenAlreadyOn_screenNotWoken() {
+        whenever(powerManager.isScreenOn).thenReturn(true)
+
+        controllerCommon.displayChip(getState())
+
+        verify(powerManager, never()).wakeUp(any(), any(), any())
+    }
+
+    @Test
+    fun displayChip_twice_chipNotAddedTwice() {
         controllerCommon.displayChip(getState())
         reset(windowManager)
-        reset(tapGestureDetector)
 
         controllerCommon.displayChip(getState())
         verify(windowManager, never()).addView(any(), any())
-        verify(tapGestureDetector, never()).addOnGestureDetectedCallback(any(), any())
     }
 
     @Test
@@ -186,7 +200,20 @@ class MediaTttChipControllerCommonTest : SysuiTestCase() {
     }
 
     @Test
-    fun removeChip_chipRemovedAndGestureDetectionStoppedAndRemovalLogged() {
+    fun displayScaleChange_chipReinflatedWithMostRecentState() {
+        controllerCommon.displayChip(getState(name = "First name"))
+        controllerCommon.displayChip(getState(name = "Second name"))
+        reset(windowManager)
+
+        getConfigurationListener().onDensityOrFontScaleChanged()
+
+        verify(windowManager).removeView(any())
+        verify(windowManager).addView(any(), any())
+        assertThat(controllerCommon.mostRecentChipInfo?.name).isEqualTo("Second name")
+    }
+
+    @Test
+    fun removeChip_chipRemovedAndRemovalLogged() {
         // First, add the chip
         controllerCommon.displayChip(getState())
 
@@ -195,7 +222,6 @@ class MediaTttChipControllerCommonTest : SysuiTestCase() {
         controllerCommon.removeChip(reason)
 
         verify(windowManager).removeView(any())
-        verify(tapGestureDetector).removeOnGestureDetectedCallback(any())
         verify(logger).logChipRemoval(reason)
     }
 
@@ -307,41 +333,7 @@ class MediaTttChipControllerCommonTest : SysuiTestCase() {
         assertThat(chipView.getAppIconView().measuredHeight).isEqualTo(ICON_SIZE)
     }
 
-    @Test
-    fun tapGestureDetected_outsideViewBounds_viewHidden() {
-        controllerCommon.displayChip(getState())
-        whenever(viewUtil.touchIsWithinView(any(), any(), any())).thenReturn(false)
-        val gestureCallbackCaptor = argumentCaptor<(MotionEvent) -> Unit>()
-        verify(tapGestureDetector).addOnGestureDetectedCallback(
-            any(), capture(gestureCallbackCaptor)
-        )
-        val callback = gestureCallbackCaptor.value!!
-
-        callback.invoke(
-            MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 0f, 0f, 0)
-        )
-
-        verify(windowManager).removeView(any())
-    }
-
-    @Test
-    fun tapGestureDetected_insideViewBounds_viewNotHidden() {
-        controllerCommon.displayChip(getState())
-        whenever(viewUtil.touchIsWithinView(any(), any(), any())).thenReturn(true)
-        val gestureCallbackCaptor = argumentCaptor<(MotionEvent) -> Unit>()
-        verify(tapGestureDetector).addOnGestureDetectedCallback(
-            any(), capture(gestureCallbackCaptor)
-        )
-        val callback = gestureCallbackCaptor.value!!
-
-        callback.invoke(
-            MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 0f, 0f, 0)
-        )
-
-        verify(windowManager, never()).removeView(any())
-    }
-
-    private fun getState() = ChipInfo()
+    private fun getState(name: String = "name") = ChipInfo(name)
 
     private fun getChipView(): ViewGroup {
         val viewCaptor = ArgumentCaptor.forClass(View::class.java)
@@ -351,6 +343,12 @@ class MediaTttChipControllerCommonTest : SysuiTestCase() {
 
     private fun ViewGroup.getAppIconView() = this.requireViewById<ImageView>(R.id.app_icon)
 
+    private fun getConfigurationListener(): ConfigurationListener {
+        val callbackCaptor = argumentCaptor<ConfigurationListener>()
+        verify(configurationController).addCallback(capture(callbackCaptor))
+        return callbackCaptor.value
+    }
+
     inner class TestControllerCommon(
         context: Context,
         logger: MediaTttLogger,
@@ -358,8 +356,8 @@ class MediaTttChipControllerCommonTest : SysuiTestCase() {
         viewUtil: ViewUtil,
         @Main mainExecutor: DelayableExecutor,
         accessibilityManager: AccessibilityManager,
-        tapGestureDetector: TapGestureDetector,
-        powerManager: PowerManager
+        configurationController: ConfigurationController,
+        powerManager: PowerManager,
     ) : MediaTttChipControllerCommon<ChipInfo>(
         context,
         logger,
@@ -367,16 +365,21 @@ class MediaTttChipControllerCommonTest : SysuiTestCase() {
         viewUtil,
         mainExecutor,
         accessibilityManager,
-        tapGestureDetector,
+        configurationController,
         powerManager,
-        R.layout.media_ttt_chip
+        R.layout.media_ttt_chip,
     ) {
+        var mostRecentChipInfo: ChipInfo? = null
+
         override val windowLayoutParams = commonWindowLayoutParams
-        override fun updateChipView(chipInfo: ChipInfo, currentChipView: ViewGroup) {}
+        override fun updateChipView(newChipInfo: ChipInfo, currentChipView: ViewGroup) {
+            super.updateChipView(newChipInfo, currentChipView)
+            mostRecentChipInfo = newChipInfo
+        }
         override fun getIconSize(isAppIcon: Boolean): Int = ICON_SIZE
     }
 
-    inner class ChipInfo : ChipInfoCommon {
+    inner class ChipInfo(val name: String) : ChipInfoCommon {
         override fun getTimeoutMs() = 1L
     }
 }

@@ -17,7 +17,6 @@
 package com.android.wm.shell.flicker.pip
 
 import android.platform.test.annotations.FlakyTest
-import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
@@ -90,36 +89,60 @@ open class PipRotationTest(testSpec: FlickerTestParameter) : PipTransition(testS
     /**
      * Checks that all parts of the screen are covered at the start and end of the transition
      */
-    @Presubmit
+    @FlakyTest(bugId = 240499181)
     @Test
     override fun entireScreenCovered() = testSpec.entireScreenCovered()
 
     /**
      * Checks the position of the navigation bar at the start and end of the transition
      */
-    @FlakyTest
+    @FlakyTest(bugId = 240499181)
     @Test
     override fun navBarLayerPositionAtStartAndEnd() = super.navBarLayerPositionAtStartAndEnd()
 
     /**
      * Checks that [fixedApp] layer is within [screenBoundsStart] at the start of the transition
      */
-    @Presubmit
+    @FlakyTest(bugId = 240499181)
     @Test
-    fun appLayerRotates_StartingBounds() {
+    fun fixedAppLayer_StartingBounds() {
         testSpec.assertLayersStart {
-            visibleRegion(fixedApp).coversExactly(screenBoundsStart)
+            visibleRegion(fixedApp).coversAtMost(screenBoundsStart)
         }
     }
 
     /**
      * Checks that [fixedApp] layer is within [screenBoundsEnd] at the end of the transition
      */
-    @Presubmit
+    @FlakyTest(bugId = 240499181)
     @Test
-    fun appLayerRotates_EndingBounds() {
+    fun fixedAppLayer_EndingBounds() {
         testSpec.assertLayersEnd {
-            visibleRegion(fixedApp).coversExactly(screenBoundsEnd)
+            visibleRegion(fixedApp).coversAtMost(screenBoundsEnd)
+        }
+    }
+
+    /**
+     * Checks that [fixedApp] plus [pipApp] layers are within [screenBoundsEnd] at the start
+     * of the transition
+     */
+    @FlakyTest(bugId = 240499181)
+    @Test
+    fun appLayers_StartingBounds() {
+        testSpec.assertLayersStart {
+            visibleRegion(fixedApp.or(pipApp)).coversExactly(screenBoundsStart)
+        }
+    }
+
+    /**
+     * Checks that [fixedApp] plus [pipApp] layers are within [screenBoundsEnd] at the end
+     * of the transition
+     */
+    @FlakyTest(bugId = 240499181)
+    @Test
+    fun appLayers_EndingBounds() {
+        testSpec.assertLayersEnd {
+            visibleRegion(fixedApp.or(pipApp)).coversExactly(screenBoundsEnd)
         }
     }
 
@@ -135,7 +158,7 @@ open class PipRotationTest(testSpec: FlickerTestParameter) : PipTransition(testS
     /**
      * Checks that [pipApp] layer is within [screenBoundsStart] at the start of the transition
      */
-    @Presubmit
+    @FlakyTest(bugId = 240499181)
     @Test
     fun pipLayerRotates_StartingBounds() {
         pipLayerRotates_StartingBounds_internal()
@@ -144,7 +167,7 @@ open class PipRotationTest(testSpec: FlickerTestParameter) : PipTransition(testS
     /**
      * Checks that [pipApp] layer is within [screenBoundsEnd] at the end of the transition
      */
-    @Presubmit
+    @FlakyTest(bugId = 240499181)
     @Test
     fun pipLayerRotates_EndingBounds() {
         testSpec.assertLayersEnd {
@@ -156,7 +179,7 @@ open class PipRotationTest(testSpec: FlickerTestParameter) : PipTransition(testS
      * Ensure that the [pipApp] window does not obscure the [fixedApp] at the start of the
      * transition
      */
-    @Presubmit
+    @FlakyTest(bugId = 240499181)
     @Test
     fun pipIsAboveFixedAppWindow_Start() {
         testSpec.assertWmStart {
@@ -168,12 +191,66 @@ open class PipRotationTest(testSpec: FlickerTestParameter) : PipTransition(testS
      * Ensure that the [pipApp] window does not obscure the [fixedApp] at the end of the
      * transition
      */
-    @Presubmit
+    @FlakyTest(bugId = 240499181)
     @Test
     fun pipIsAboveFixedAppWindow_End() {
         testSpec.assertWmEnd {
             isAboveWindow(pipApp, fixedApp)
         }
+    }
+
+    @FlakyTest(bugId = 240499181)
+    @Test
+    override fun navBarLayerIsVisibleAtStartAndEnd() {
+        super.navBarLayerIsVisibleAtStartAndEnd()
+    }
+
+    @FlakyTest(bugId = 240499181)
+    @Test
+    override fun navBarWindowIsAlwaysVisible() {
+        super.navBarWindowIsAlwaysVisible()
+    }
+
+    @FlakyTest(bugId = 240499181)
+    @Test
+    override fun statusBarLayerIsVisibleAtStartAndEnd() {
+        super.statusBarLayerIsVisibleAtStartAndEnd()
+    }
+
+    @FlakyTest(bugId = 240499181)
+    @Test
+    override fun statusBarLayerPositionAtStartAndEnd() {
+        super.statusBarLayerPositionAtStartAndEnd()
+    }
+
+    @FlakyTest(bugId = 240499181)
+    @Test
+    override fun statusBarWindowIsAlwaysVisible() {
+        super.statusBarWindowIsAlwaysVisible()
+    }
+
+    @FlakyTest(bugId = 240499181)
+    @Test
+    override fun taskBarLayerIsVisibleAtStartAndEnd() {
+        super.taskBarLayerIsVisibleAtStartAndEnd()
+    }
+
+    @FlakyTest(bugId = 240499181)
+    @Test
+    override fun taskBarWindowIsAlwaysVisible() {
+        super.taskBarWindowIsAlwaysVisible()
+    }
+
+    @FlakyTest(bugId = 240499181)
+    @Test
+    override fun visibleLayersShownMoreThanOneConsecutiveEntry() {
+        super.visibleLayersShownMoreThanOneConsecutiveEntry()
+    }
+
+    @FlakyTest(bugId = 240499181)
+    @Test
+    override fun visibleWindowsShownMoreThanOneConsecutiveEntry() {
+        super.visibleWindowsShownMoreThanOneConsecutiveEntry()
     }
 
     companion object {
@@ -188,7 +265,8 @@ open class PipRotationTest(testSpec: FlickerTestParameter) : PipTransition(testS
         fun getParams(): Collection<FlickerTestParameter> {
             return FlickerTestParameterFactory.getInstance().getConfigRotationTests(
                 supportedRotations = listOf(Surface.ROTATION_0, Surface.ROTATION_90),
-                repetitions = 3)
+                repetitions = 3
+            )
         }
     }
 }

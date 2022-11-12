@@ -21,7 +21,6 @@ import android.platform.test.annotations.Presubmit
 import androidx.test.platform.app.InstrumentationRegistry
 import com.android.launcher3.tapl.LauncherInstrumentation
 import com.android.server.wm.flicker.dsl.FlickerBuilder
-import com.android.server.wm.traces.common.ComponentMatcher
 import com.android.server.wm.traces.parser.windowmanager.WindowManagerStateHelper
 import org.junit.Assume
 import org.junit.Test
@@ -38,8 +37,12 @@ abstract class BaseTest @JvmOverloads constructor(
 ) {
     init {
         testSpec.setIsTablet(
-            WindowManagerStateHelper(instrumentation).currentState.wmState.isTablet
+            WindowManagerStateHelper(
+                instrumentation,
+                clearCacheAfterParsing = false
+            ).currentState.wmState.isTablet
         )
+        tapl.setExpectedRotationCheckEnabled(true)
     }
 
     /**
@@ -107,7 +110,8 @@ abstract class BaseTest @JvmOverloads constructor(
     }
 
     /**
-     * Checks that the [ComponentMatcher.TASK_BAR] layer is visible during the whole transition
+     * Checks that the [ComponentMatcher.TASK_BAR] window is visible at the start and end of the
+     * transition
      *
      * Note: Large screen only
      */
@@ -131,7 +135,8 @@ abstract class BaseTest @JvmOverloads constructor(
     }
 
     /**
-     * Checks that the [ComponentMatcher.STATUS_BAR] layer is visible during the whole transition
+     * Checks that the [ComponentMatcher.STATUS_BAR] layer is visible at the start and end
+     * of the transition
      */
     @Presubmit
     @Test

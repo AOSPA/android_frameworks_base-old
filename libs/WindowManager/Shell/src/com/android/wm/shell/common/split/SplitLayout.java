@@ -493,11 +493,9 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
         final Rect insets = stableInsets != null ? stableInsets : getDisplayInsets(context);
 
         // Make split axis insets value same as the larger one to avoid bounds1 and bounds2
-        // have difference after split switching for solving issues on non-resizable app case.
-        if (isLandscape) {
-            final int largerInsets = Math.max(insets.left, insets.right);
-            insets.set(largerInsets, insets.top, largerInsets, insets.bottom);
-        } else {
+        // have difference for avoiding size-compat mode when switching unresizable apps in
+        // landscape while they are letterboxed.
+        if (!isLandscape) {
             final int largerInsets = Math.max(insets.top, insets.bottom);
             insets.set(insets.left, largerInsets, insets.right, largerInsets);
         }
@@ -727,31 +725,23 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
             ActivityManager.RunningTaskInfo taskInfo1, ActivityManager.RunningTaskInfo taskInfo2) {
         if (offsetX == 0 && offsetY == 0) {
             wct.setBounds(taskInfo1.token, mBounds1);
-            wct.setAppBounds(taskInfo1.token, null);
             wct.setScreenSizeDp(taskInfo1.token,
                     SCREEN_WIDTH_DP_UNDEFINED, SCREEN_HEIGHT_DP_UNDEFINED);
 
             wct.setBounds(taskInfo2.token, mBounds2);
-            wct.setAppBounds(taskInfo2.token, null);
             wct.setScreenSizeDp(taskInfo2.token,
                     SCREEN_WIDTH_DP_UNDEFINED, SCREEN_HEIGHT_DP_UNDEFINED);
         } else {
-            mTempRect.set(taskInfo1.configuration.windowConfiguration.getBounds());
+            getBounds1(mTempRect);
             mTempRect.offset(offsetX, offsetY);
             wct.setBounds(taskInfo1.token, mTempRect);
-            mTempRect.set(taskInfo1.configuration.windowConfiguration.getAppBounds());
-            mTempRect.offset(offsetX, offsetY);
-            wct.setAppBounds(taskInfo1.token, mTempRect);
             wct.setScreenSizeDp(taskInfo1.token,
                     taskInfo1.configuration.screenWidthDp,
                     taskInfo1.configuration.screenHeightDp);
 
-            mTempRect.set(taskInfo2.configuration.windowConfiguration.getBounds());
+            getBounds2(mTempRect);
             mTempRect.offset(offsetX, offsetY);
             wct.setBounds(taskInfo2.token, mTempRect);
-            mTempRect.set(taskInfo2.configuration.windowConfiguration.getAppBounds());
-            mTempRect.offset(offsetX, offsetY);
-            wct.setAppBounds(taskInfo2.token, mTempRect);
             wct.setScreenSizeDp(taskInfo2.token,
                     taskInfo2.configuration.screenWidthDp,
                     taskInfo2.configuration.screenHeightDp);
@@ -1138,16 +1128,16 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
             boolean adjusted = false;
             if (mYOffsetForIme != 0) {
                 if (dividerLeash != null) {
-                    mTempRect.set(mDividerBounds);
+                    getRefDividerBounds(mTempRect);
                     mTempRect.offset(0, mYOffsetForIme);
                     t.setPosition(dividerLeash, mTempRect.left, mTempRect.top);
                 }
 
-                mTempRect.set(mBounds1);
+                getRefBounds1(mTempRect);
                 mTempRect.offset(0, mYOffsetForIme);
                 t.setPosition(leash1, mTempRect.left, mTempRect.top);
 
-                mTempRect.set(mBounds2);
+                getRefBounds2(mTempRect);
                 mTempRect.offset(0, mYOffsetForIme);
                 t.setPosition(leash2, mTempRect.left, mTempRect.top);
                 adjusted = true;

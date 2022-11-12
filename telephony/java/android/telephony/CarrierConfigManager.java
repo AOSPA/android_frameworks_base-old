@@ -1215,14 +1215,55 @@ public class CarrierConfigManager {
             "carrier_data_call_permanent_failure_strings";
 
     /**
-     * Default APN types that are metered by the carrier
-     * @hide
+     * A string array indicating the default APN types that are metered by the carrier.
+     *
+     * The string in the array is the name of the APN type. For example, "default" for
+     * {@link ApnSetting#TYPE_DEFAULT}, "mms" for {@link ApnSetting#TYPE_MMS}, etc.
+     *
+     * The default value is {@code {"default", "mms", "dun", "supl"}}.
+     *
+     * @see ApnSetting#TYPE_DEFAULT
+     * @see ApnSetting#TYPE_MMS
+     * @see ApnSetting#TYPE_SUPL
+     * @see ApnSetting#TYPE_DUN
+     * @see ApnSetting#TYPE_HIPRI
+     * @see ApnSetting#TYPE_FOTA
+     * @see ApnSetting#TYPE_IMS
+     * @see ApnSetting#TYPE_CBS
+     * @see ApnSetting#TYPE_IA
+     * @see ApnSetting#TYPE_EMERGENCY
+     * @see ApnSetting#TYPE_MCX
+     * @see ApnSetting#TYPE_XCAP
+     * @see ApnSetting#TYPE_BIP
+     * @see ApnSetting#TYPE_VSIM
+     * @see ApnSetting#TYPE_ENTERPRISE
      */
     public static final String KEY_CARRIER_METERED_APN_TYPES_STRINGS =
             "carrier_metered_apn_types_strings";
+
     /**
-     * Default APN types that are roaming-metered by the carrier
-     * @hide
+     * A string array indicating the default APN types that are roaming-metered by the carrier.
+     *
+     * The string in the array is the name of the APN type. For example, "default" for
+     * {@link ApnSetting#TYPE_DEFAULT}, "mms" for {@link ApnSetting#TYPE_MMS}, etc.
+     *
+     * The default value is {@code {"default", "mms", "dun", "supl"}}.
+     *
+     * @see ApnSetting#TYPE_DEFAULT
+     * @see ApnSetting#TYPE_MMS
+     * @see ApnSetting#TYPE_SUPL
+     * @see ApnSetting#TYPE_DUN
+     * @see ApnSetting#TYPE_HIPRI
+     * @see ApnSetting#TYPE_FOTA
+     * @see ApnSetting#TYPE_IMS
+     * @see ApnSetting#TYPE_CBS
+     * @see ApnSetting#TYPE_IA
+     * @see ApnSetting#TYPE_EMERGENCY
+     * @see ApnSetting#TYPE_MCX
+     * @see ApnSetting#TYPE_XCAP
+     * @see ApnSetting#TYPE_BIP
+     * @see ApnSetting#TYPE_VSIM
+     * @see ApnSetting#TYPE_ENTERPRISE
      */
     public static final String KEY_CARRIER_METERED_ROAMING_APN_TYPES_STRINGS =
             "carrier_metered_roaming_apn_types_strings";
@@ -8710,6 +8751,13 @@ public class CarrierConfigManager {
      * IWLAN handover rules that determine whether handover is allowed or disallowed between
      * cellular and IWLAN.
      *
+     * Rule syntax: "source=[GERAN|UTRAN|EUTRAN|NGRAN|IWLAN|UNKNOWN], target=[GERAN|UTRAN|EUTRAN
+     * |NGRAN|IWLAN], type=[allowed|disallowed], roaming=[true|false], capabilities=[INTERNET|MMS
+     * |FOTA|IMS|CBS|SUPL|EIMS|XCAP|DUN]"
+     *
+     * Note that UNKNOWN can be only specified in the source access network and can be only used
+     * in the disallowed rule.
+     *
      * The handover rules will be matched in the order. Here are some sample rules.
      * <string-array name="iwlan_handover_rules" num="5">
      *     <!-- Handover from IWLAN to 2G/3G is not allowed -->
@@ -8773,6 +8821,81 @@ public class CarrierConfigManager {
      */
     public static final String KEY_USE_SMS_CALLBACK_MODE_BOOL =
             "use_sms_callback_mode_bool";
+
+    /**
+     * Determines the SIB2 value for showing the 5G Ultra Wideband icon.
+     * The rest of the NR Ultra Wideband configs will be considere only if this value is 1. A value
+     * of 0 means the other NR Ultra Wideband configs will not be considered.
+     *
+     * @hide
+     */
+    public static final String KEY_NR_ULTRA_WIDEBAND_ICON_SIB2_VALUE =
+            "5g_ultra_wideband_icon_sib2_value";
+
+    /**
+     * Determines the minimum aggregate bandwidth for showing the 5G Ultra Wideband icon.
+     *
+     * @hide
+     */
+    public static final String KEY_NR_ULTRA_WIDEBAND_ICON_MIN_BANDWIDTH_VALUE =
+            "5g_ultra_wideband_icon_min_bandwidth_value";
+
+    /**
+     * Determines the minimum aggregate bandwidth mode for which the 5G Ultra Wideband icon will be
+     * shown. The following modes are allowed: NONE, CONNECTED, IDLE, CONNECTED_AND_IDLE
+     *
+     * @hide
+     */
+    public static final String KEY_NR_ULTRA_WIDEBAND_ICON_MIN_BANDWIDTH_MODE =
+            "5g_ultra_wideband_icon_min_bandwidth_mode";
+
+    /**
+     * Determines the 5G Ultra Wideband icon refresh timer type (key) and the refresh timer value
+     * (value) in seconds.
+     * The following types are allowed for the type: SCG_TO_MCG, IDLE_TO_CONNECT, IDLE
+     *
+     * @hide
+     */
+    public static final String KEY_NR_ULTRA_WIDEBAND_ICON_REFRESH_TIMER_MAP =
+            "5g_ultra_wideband_icon_refresh_timer_map";
+
+    /**
+     * Determines the mode in which the 5G Ultra Wideband icon will be shown for 5G NSA bands.
+     * The following modes are allowed: NONE, CONNECTED, IDLE, CONNECTED_AND_IDLE
+     *
+     * @hide
+     */
+    public static final String KEY_NR_ULTRA_WIDEBAND_ICON_NSA_BAND_MODE =
+            "5g_ultra_wideband_icon_nsa_band_mode";
+
+    /**
+     * Determines the list of 5G NSA bands for which 5G Ultra Wideband icons must be shown.
+     * For each list entry, the allowed values are either enabled (show the 5G Ultra Wideband icon)
+     * or disabled (do not show the 5G Ultra Wideband icon).
+     *
+     * @hide
+     */
+    public static final String KEY_NR_ULTRA_WIDEBAND_ICON_NSA_BAND_ARRAY =
+            "5g_ultra_wideband_icon_nsa_band_array";
+
+    /**
+     * Determines the mode in which the 5G Ultra Wideband icon will be shown for 5G SA bands.
+     * The following modes are allowed: NONE, CONNECTED, IDLE, CONNECTED_AND_IDLE
+     *
+     * @hide
+     */
+    public static final String KEY_NR_ULTRA_WIDEBAND_ICON_SA_BAND_MODE =
+            "5g_ultra_wideband_icon_sa_band_mode";
+
+    /**
+     * Determines the list of 5G SA bands for which 5G Ultra Wideband icons must be shown.
+     * For each list entry, the allowed values are either enabled (show the 5G Ultra Wideband icon)
+     * or disabled (do not show the 5G Ultra Wideband icon).
+     *
+     * @hide
+     */
+    public static final String KEY_NR_ULTRA_WIDEBAND_ICON_SA_BAND_ARRAY =
+            "5g_ultra_wideband_icon_sa_band_array";
 
     /** The default value for every variable. */
     private final static PersistableBundle sDefaults;
@@ -8937,11 +9060,11 @@ public class CarrierConfigManager {
                 new String[]{"default", "mms", "dun", "supl"});
         sDefaults.putStringArray(KEY_CARRIER_METERED_ROAMING_APN_TYPES_STRINGS,
                 new String[]{"default", "mms", "dun", "supl"});
-        sDefaults.putBoolean(KEY_CDMA_CW_CF_ENABLED_BOOL, false);
         sDefaults.putStringArray(KEY_CARRIER_WWAN_DISALLOWED_APN_TYPES_STRING_ARRAY,
                 new String[]{""});
         sDefaults.putStringArray(KEY_CARRIER_WLAN_DISALLOWED_APN_TYPES_STRING_ARRAY,
                 new String[]{""});
+        sDefaults.putBoolean(KEY_CDMA_CW_CF_ENABLED_BOOL, false);
         sDefaults.putIntArray(KEY_ONLY_SINGLE_DC_ALLOWED_INT_ARRAY,
                 new int[] {TelephonyManager.NETWORK_TYPE_CDMA, TelephonyManager.NETWORK_TYPE_1xRTT,
                         TelephonyManager.NETWORK_TYPE_EVDO_0, TelephonyManager.NETWORK_TYPE_EVDO_A,
@@ -9380,6 +9503,15 @@ public class CarrierConfigManager {
                 "enterprise:0", "default:1", "mms:2", "supl:2", "dun:2", "hipri:3", "fota:2",
                 "ims:2", "cbs:2", "ia:2", "emergency:2", "mcx:3", "xcap:3"
         });
+        sDefaults.putInt(KEY_NR_ULTRA_WIDEBAND_ICON_SIB2_VALUE, Integer.MAX_VALUE);
+        sDefaults.putInt(KEY_NR_ULTRA_WIDEBAND_ICON_MIN_BANDWIDTH_VALUE, Integer.MAX_VALUE);
+        sDefaults.putInt(KEY_NR_ULTRA_WIDEBAND_ICON_MIN_BANDWIDTH_MODE, Integer.MAX_VALUE);
+        sDefaults.putPersistableBundle(KEY_NR_ULTRA_WIDEBAND_ICON_REFRESH_TIMER_MAP,
+                PersistableBundle.EMPTY);
+        sDefaults.putInt(KEY_NR_ULTRA_WIDEBAND_ICON_NSA_BAND_MODE, Integer.MAX_VALUE);
+        sDefaults.putIntArray(KEY_NR_ULTRA_WIDEBAND_ICON_SA_BAND_ARRAY, new int[]{});
+        sDefaults.putInt(KEY_NR_ULTRA_WIDEBAND_ICON_SA_BAND_MODE, Integer.MAX_VALUE);
+        sDefaults.putIntArray(KEY_NR_ULTRA_WIDEBAND_ICON_NSA_BAND_ARRAY, new int[]{});
 
         // Do not modify the priority unless you know what you are doing. This will have significant
         // impacts on the order of data network setup.

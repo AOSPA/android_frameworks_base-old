@@ -78,7 +78,7 @@ public class MediaOutputAdapterTest extends SysuiTestCase {
 
         when(mMediaOutputController.getMediaDevices()).thenReturn(mMediaDevices);
         when(mMediaOutputController.hasAdjustVolumeUserRestriction()).thenReturn(false);
-        when(mMediaOutputController.isTransferring()).thenReturn(false);
+        when(mMediaOutputController.isAnyDeviceTransferring()).thenReturn(false);
         when(mMediaOutputController.getDeviceIconCompat(mMediaDevice1)).thenReturn(mIconCompat);
         when(mMediaOutputController.getDeviceIconCompat(mMediaDevice2)).thenReturn(mIconCompat);
         when(mMediaOutputController.getCurrentConnectedMediaDevice()).thenReturn(mMediaDevice1);
@@ -208,7 +208,7 @@ public class MediaOutputAdapterTest extends SysuiTestCase {
 
     @Test
     public void onBindViewHolder_inTransferring_bindTransferringDevice_verifyView() {
-        when(mMediaOutputController.isTransferring()).thenReturn(true);
+        when(mMediaOutputController.isAnyDeviceTransferring()).thenReturn(true);
         when(mMediaDevice1.getState()).thenReturn(
                 LocalMediaManager.MediaDeviceState.STATE_CONNECTING);
         mMediaOutputAdapter.onBindViewHolder(mViewHolder, 0);
@@ -224,7 +224,7 @@ public class MediaOutputAdapterTest extends SysuiTestCase {
 
     @Test
     public void onBindViewHolder_inTransferring_bindNonTransferringDevice_verifyView() {
-        when(mMediaOutputController.isTransferring()).thenReturn(true);
+        when(mMediaOutputController.isAnyDeviceTransferring()).thenReturn(true);
         when(mMediaDevice2.getState()).thenReturn(
                 LocalMediaManager.MediaDeviceState.STATE_CONNECTING);
         mMediaOutputAdapter.onBindViewHolder(mViewHolder, 0);
@@ -253,5 +253,31 @@ public class MediaOutputAdapterTest extends SysuiTestCase {
         mViewHolder.mContainerLayout.performClick();
 
         verify(mMediaOutputController).connectDevice(mMediaDevice2);
+    }
+
+    @Test
+    public void onItemClick_onGroupActionTriggered_verifySeekbarDisabled() {
+        when(mMediaOutputController.getSelectedMediaDevice()).thenReturn(mMediaDevices);
+        List<MediaDevice> selectableDevices = new ArrayList<>();
+        selectableDevices.add(mMediaDevice1);
+        when(mMediaOutputController.getSelectableMediaDevice()).thenReturn(selectableDevices);
+        when(mMediaOutputController.hasAdjustVolumeUserRestriction()).thenReturn(true);
+        mMediaOutputAdapter.onBindViewHolder(mViewHolder, 0);
+
+        mViewHolder.mContainerLayout.performClick();
+
+        assertThat(mViewHolder.mSeekBar.isEnabled()).isFalse();
+    }
+
+    @Test
+    public void onBindViewHolder_volumeControlChangeToEnabled_enableSeekbarAgain() {
+        when(mMediaOutputController.isVolumeControlEnabled(mMediaDevice1)).thenReturn(false);
+        mMediaOutputAdapter.onBindViewHolder(mViewHolder, 0);
+        assertThat(mViewHolder.mSeekBar.isEnabled()).isFalse();
+
+        when(mMediaOutputController.isVolumeControlEnabled(mMediaDevice1)).thenReturn(true);
+        mMediaOutputAdapter.onBindViewHolder(mViewHolder, 0);
+
+        assertThat(mViewHolder.mSeekBar.isEnabled()).isTrue();
     }
 }

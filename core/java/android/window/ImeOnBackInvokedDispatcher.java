@@ -81,6 +81,7 @@ public class ImeOnBackInvokedDispatcher implements OnBackInvokedDispatcher, Parc
             @OnBackInvokedDispatcher.Priority int priority,
             @NonNull OnBackInvokedCallback callback) {
         final Bundle bundle = new Bundle();
+        // Always invoke back for ime without checking the window focus.
         final IOnBackInvokedCallback iCallback =
                 new WindowOnBackInvokedDispatcher.OnBackInvokedCallbackWrapper(callback);
         bundle.putBinder(RESULT_KEY_CALLBACK, iCallback.asBinder());
@@ -219,8 +220,6 @@ public class ImeOnBackInvokedDispatcher implements OnBackInvokedDispatcher, Parc
      * @param previous the previously focused {@link ViewRootImpl}.
      * @param current the currently focused {@link ViewRootImpl}.
      */
-    // TODO(b/232845902): Add CTS to test IME back behavior when there's root view change while
-    // IME is up.
     public void switchRootView(ViewRootImpl previous, ViewRootImpl current) {
         for (ImeOnBackInvokedCallback imeCallback : mImeCallbacks) {
             if (previous != null) {

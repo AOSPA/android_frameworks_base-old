@@ -54,7 +54,8 @@
     <uses-permission android:name="android.permission.REGISTER_WINDOW_MANAGER_LISTENERS" />
     <uses-permission android:name="android.permission.MODIFY_PHONE_STATE" />
 
-    <application android:debuggable="true" android:largeHeap="true">
+    <application android:debuggable="true" android:largeHeap="true"
+            android:enableOnBackInvokedCallback="true" >
         <uses-library android:name="android.test.runner" />
 
         <receiver android:name="com.android.systemui.SliceBroadcastRelayHandlerTest$Receiver"

@@ -799,7 +799,7 @@
     <!-- Message shown when lock screen is tapped or face authentication fails. [CHAR LIMIT=60] -->
     <string name="keyguard_unlock">Swipe up to open</string>
 
-    <!-- Message shown when lock screen is unlocked (ie: by trust agent) and the user taps the empty space on the lock screen and UDFPS is supported. Provides extra instructions for how the user can enter their device [CHAR LIMIT=60] -->
+    <!-- Message shown when lock screen is unlocked (ie: by trust agent or face auth). Provides extra instructions for how the user can enter their device [CHAR LIMIT=60] -->
     <string name="keyguard_unlock_press">Press the unlock icon to open</string>
 
     <!-- Message shown when non-bypass face authentication succeeds. Provides extra instructions for how the user can enter their device [CHAR LIMIT=60] -->
@@ -813,6 +813,10 @@
     <!-- Message shown when non-bypass face authentication succeeds and UDFPS is supported. Provides extra instructions for how the user can enter their device [CHAR LIMIT=60] -->
     <string name="keyguard_face_successful_unlock_press_alt_3">Face recognized. Press the unlock icon to open.</string>
 
+    <!-- Message shown when non-bypass face authentication succeeds. [CHAR LIMIT=60] -->
+    <string name="keyguard_face_successful_unlock">Unlocked by face</string>
+    <!-- Message shown when non-bypass face authentication succeeds. [CHAR LIMIT=60] -->
+    <string name="keyguard_face_successful_unlock_alt1">Face recognized</string>
 
     <!-- Messages shown when users press outside of udfps region during -->
     <string-array name="udfps_accessibility_touch_hints">
@@ -880,14 +884,15 @@
     <string name="keyguard_indication_charging_time_slowly"><xliff:g id="percentage">%2$s</xliff:g> • Charging slowly • Full in <xliff:g id="charging_time_left" example="4 hr, 2 min">%1$s</xliff:g></string>
 
     <!-- Indication on the keyguard that is shown when the device is dock charging. [CHAR LIMIT=80]-->
-    <string name="keyguard_indication_charging_time_dock"><xliff:g id="percentage" example="20%">%2$s</xliff:g> • Charging Dock • Full in <xliff:g id="charging_time_left" example="4 hr, 2 min">%1$s</xliff:g></string>
+    <string name="keyguard_indication_charging_time_dock"><xliff:g id="percentage" example="20%">%2$s</xliff:g> • Charging • Full in <xliff:g id="charging_time_left" example="4 hr, 2 min">%1$s</xliff:g></string>
 
     <!-- Related to user switcher --><skip/>
 
     <!-- Accessibility label for the button that opens the user switcher. -->
     <string name="accessibility_multi_user_switch_switcher">Switch user</string>
 
-    <!-- Accessibility label for the button that opens the user switcher and announces the current user. -->
+    <!-- Accessibility role description for the element that opens the user switcher list. -->
+    <string name="accessibility_multi_user_list_switcher">pulldown menu</string>
 
     <!-- Accessibility label for the user icon on the lock screen. -->
 
@@ -2106,6 +2111,41 @@
     <string name="magnification_mode_switch_state_window">Magnify part of screen</string>
     <!-- Click action label for magnification switch. [CHAR LIMIT=NONE] -->
     <string name="magnification_mode_switch_click_label">Switch</string>
+
+    <!-- Title of the magnification option button allow diagonal scrolling [CHAR LIMIT=NONE]-->
+    <string name="accessibility_allow_diagonal_scrolling">Allow diagonal scrolling</string>
+    <!-- Title of the magnification option button Resize [CHAR LIMIT=NONE]-->
+    <string name="accessibility_resize">Resize</string>
+    <!-- Title of the magnification option button Change type [CHAR LIMIT=NONE]-->
+    <string name="accessibility_change_magnification_type">Change magnification type</string>
+    <!-- Title of the magnification option button End resizing [CHAR LIMIT=NONE]-->
+    <string name="accessibility_magnification_end_resizing">End resizing</string>
+
+    <!-- Description of the window magnification Top handle [CHAR LIMIT=NONE]-->
+    <string name="accessibility_magnification_top_handle">Top handle</string>
+    <!-- Description of the window magnification Left handle [CHAR LIMIT=NONE]-->
+    <string name="accessibility_magnification_left_handle">Left handle</string>
+    <!-- Description of the window magnification Right handle [CHAR LIMIT=NONE]-->
+    <string name="accessibility_magnification_right_handle">Right handle</string>
+    <!-- Description of the window magnification Bottom handle [CHAR LIMIT=NONE]-->
+    <string name="accessibility_magnification_bottom_handle">Bottom handle</string>
+
+    <!-- Title of the window magnification panel option Magnifier size [CHAR LIMIT=NONE]-->
+    <string name="accessibility_magnifier_size">Magnifier size</string>
+    <!-- Title of the window magnification panel option Zoom [CHAR LIMIT=NONE]-->
+    <string name="accessibility_magnification_zoom">Zoom</string>
+    <!-- Click action label for magnification panel medium size [CHAR LIMIT=NONE]-->
+    <string name="accessibility_magnification_medium">Medium</string>
+    <!-- Click action label for magnification panel small size [CHAR LIMIT=NONE]-->
+    <string name="accessibility_magnification_small">Small</string>
+    <!-- Click action label for magnification panel large size [CHAR LIMIT=NONE]-->
+    <string name="accessibility_magnification_large">Large</string>
+    <!-- Click action label for magnification panel Close [CHAR LIMIT=NONE]-->
+    <string name="accessibility_magnification_close">Close</string>
+    <!-- Click action label for edit magnification size [CHAR LIMIT=NONE]-->
+    <string name="accessibility_magnifier_edit">Edit</string>
+    <!-- Click action label for magnification panel settings [CHAR LIMIT=NONE]-->
+    <string name="accessibility_magnification_magnifier_window_settings">Magnifier window settings</string>
 
     <!-- Accessibility floating menu strings -->
     <!-- Message for the accessibility floating button migration tooltip. It shows when the user use gestural navigation then upgrade their system. It will tell the user they could customize or replace the floating button in Settings. [CHAR LIMIT=100] -->

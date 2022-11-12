@@ -69,6 +69,7 @@ import android.os.WorkSource;
 import android.service.voice.IVoiceInteractionSession;
 import android.view.IRecentsAnimationRunner;
 import android.view.IRemoteAnimationRunner;
+import android.view.IWindowFocusObserver;
 import android.view.RemoteAnimationDefinition;
 import android.view.RemoteAnimationAdapter;
 import android.window.IWindowOrganizerController;
@@ -157,7 +158,7 @@ interface IActivityTaskManager {
     boolean removeTask(int taskId);
     void removeAllVisibleRecentTasks();
     List<ActivityManager.RunningTaskInfo> getTasks(int maxNum, boolean filterOnlyVisibleRecents,
-            boolean keepIntentExtra);
+            boolean keepIntentExtra, int displayId);
     void moveTaskToFront(in IApplicationThread app, in String callingPackage, int task,
             int flags, in Bundle options);
     ParceledListSlice<ActivityManager.RecentTaskInfo> getRecentTasks(int maxNum, int flags,
@@ -230,7 +231,7 @@ interface IActivityTaskManager {
             in IBinder activityToken, int flags);
     boolean isAssistDataAllowedOnCurrentActivity();
     boolean requestAssistDataForTask(in IAssistDataReceiver receiver, int taskId,
-            in String callingPackageName);
+            in String callingPackageName, String callingAttributionTag);
 
     /**
      * Notify the system that the keyguard is going away.
@@ -352,6 +353,8 @@ interface IActivityTaskManager {
      * Prepare the back navigation in the server. This setups the leashed for sysui to animate
      * the back gesture and returns the data needed for the animation.
      * @param requestAnimation true if the caller wishes to animate the back navigation
+     * @param focusObserver a remote callback to nofify shell when the focused window lost focus.
      */
-    android.window.BackNavigationInfo startBackNavigation(in boolean requestAnimation);
+    android.window.BackNavigationInfo startBackNavigation(in boolean requestAnimation,
+            in IWindowFocusObserver focusObserver);
 }

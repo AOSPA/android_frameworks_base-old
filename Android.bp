@@ -72,7 +72,6 @@ filegroup {
         ":framework-keystore-sources",
         ":framework-identity-sources",
         ":framework-location-sources",
-        ":framework-lowpan-sources",
         ":framework-mca-effect-sources",
         ":framework-mca-filterfw-sources",
         ":framework-mca-filterpacks-sources",
@@ -168,7 +167,6 @@ java_defaults {
             "identity/java",
             "keystore/java",
             "location/java",
-            "lowpan/java",
             "media/java",
             "media/mca/effect/java",
             "media/mca/filterfw/java",
@@ -280,7 +278,11 @@ bredr_vs_btadva_java_defaults {
 
 java_defaults {
     name: "framework-minus-apex-defaults",
-    defaults: ["framework-aidl-export-defaults", "btadva_fwk_java_defaults"],
+    defaults: [
+        "framework-aidl-export-defaults",
+        "latest_android_hardware_soundtrigger3_java_static",
+        "btadva_fwk_java_defaults"
+    ],
     srcs: [
         ":framework-non-updatable-sources",
         ":framework-bluetooth-sources", // TODO(b/214988855) : Remove once framework-bluetooth jar is ready
@@ -301,7 +303,6 @@ java_defaults {
             ":framework-keystore-sources",
             ":framework-identity-sources",
             ":framework-location-sources",
-            ":framework-lowpan-sources",
             ":framework-mca-effect-sources",
             ":framework-mca-filterfw-sources",
             ":framework-mca-filterpacks-sources",
@@ -391,8 +392,6 @@ java_defaults {
     sdk_version: "core_platform",
     static_libs: [
         "android.hardware.common.fmq-V1-java",
-        // TODO(b/184162091)
-        "android.hardware.soundtrigger3-V1-java",
         "bouncycastle-repackaged-unbundled",
         "framework-internal-utils",
         // If MimeMap ever becomes its own APEX, then this dependency would need to be removed

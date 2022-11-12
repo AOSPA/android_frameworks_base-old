@@ -31,6 +31,7 @@ import static android.os.Build.VERSION_CODES.P;
 import static android.os.Build.VERSION_CODES.Q;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.FLAG_PRIVATE;
+import static android.view.Display.INVALID_DISPLAY;
 import static android.view.DisplayCutout.BOUNDS_POSITION_TOP;
 import static android.view.DisplayCutout.fromBoundingRect;
 import static android.view.InsetsState.ITYPE_IME;
@@ -47,8 +48,10 @@ import static android.view.WindowManager.LayoutParams.FLAG_LAYOUT_INSET_DECOR;
 import static android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
 import static android.view.WindowManager.LayoutParams.FLAG_SECURE;
+import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
 import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_NO_MOVE_ANIMATION;
+import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_UNRESTRICTED_GESTURE_EXCLUSION;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_ATTACHED_DIALOG;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
@@ -168,7 +171,7 @@ import java.util.List;
 @RunWith(WindowTestRunner.class)
 public class DisplayContentTests extends WindowTestsBase {
 
-    @UseTestDisplay(addAllCommonWindows = true)
+    @SetupWindows(addAllCommonWindows = true)
     @Test
     public void testForAllWindows() {
         final WindowState exitingAppWindow = createWindow(null, TYPE_BASE_APPLICATION,
@@ -201,7 +204,7 @@ public class DisplayContentTests extends WindowTestsBase {
         assertForAllWindowsOrder(windows);
     }
 
-    @UseTestDisplay(addAllCommonWindows = true)
+    @SetupWindows(addAllCommonWindows = true)
     @Test
     public void testForAllWindows_WithAppImeTarget() {
         final WindowState imeAppTarget =
@@ -223,7 +226,7 @@ public class DisplayContentTests extends WindowTestsBase {
                 mNavBarWindow));
     }
 
-    @UseTestDisplay(addAllCommonWindows = true)
+    @SetupWindows(addAllCommonWindows = true)
     @Test
     public void testForAllWindows_WithChildWindowImeTarget() throws Exception {
         mDisplayContent.setImeLayeringTarget(mChildAppWindowAbove);
@@ -241,7 +244,7 @@ public class DisplayContentTests extends WindowTestsBase {
                 mNavBarWindow));
     }
 
-    @UseTestDisplay(addAllCommonWindows = true)
+    @SetupWindows(addAllCommonWindows = true)
     @Test
     public void testForAllWindows_WithStatusBarImeTarget() throws Exception {
         mDisplayContent.setImeLayeringTarget(mStatusBarWindow);
@@ -259,7 +262,7 @@ public class DisplayContentTests extends WindowTestsBase {
                 mNavBarWindow));
     }
 
-    @UseTestDisplay(addAllCommonWindows = true)
+    @SetupWindows(addAllCommonWindows = true)
     @Test
     public void testForAllWindows_WithNotificationShadeImeTarget() throws Exception {
         mDisplayContent.setImeLayeringTarget(mNotificationShadeWindow);
@@ -277,7 +280,7 @@ public class DisplayContentTests extends WindowTestsBase {
                 mNavBarWindow));
     }
 
-    @UseTestDisplay(addAllCommonWindows = true)
+    @SetupWindows(addAllCommonWindows = true)
     @Test
     public void testForAllWindows_WithInBetweenWindowToken() {
         // This window is set-up to be z-ordered between some windows that go in the same token like
@@ -299,7 +302,7 @@ public class DisplayContentTests extends WindowTestsBase {
                 mNavBarWindow));
     }
 
-    @UseTestDisplay(addAllCommonWindows = true)
+    @SetupWindows(addAllCommonWindows = true)
     @Test
     public void testComputeImeTarget() {
         // Verify that an app window can be an ime target.
@@ -319,7 +322,7 @@ public class DisplayContentTests extends WindowTestsBase {
         assertEquals(childWin, imeTarget);
     }
 
-    @UseTestDisplay(addAllCommonWindows = true)
+    @SetupWindows(addAllCommonWindows = true)
     @Test
     public void testComputeImeTarget_startingWindow() {
         ActivityRecord activity = createActivityRecord(mDisplayContent);
@@ -983,7 +986,7 @@ public class DisplayContentTests extends WindowTestsBase {
         assertFalse(isOptionsPanelAtRight(landscapeDisplay.getDisplayId()));
     }
 
-    @UseTestDisplay(addWindows = W_INPUT_METHOD)
+    @SetupWindows(addWindows = W_INPUT_METHOD)
     @Test
     public void testInputMethodTargetUpdateWhenSwitchingOnDisplays() {
         final DisplayContent newDisplay = createNewDisplay();
@@ -1018,7 +1021,7 @@ public class DisplayContentTests extends WindowTestsBase {
                 mDisplayContent.getImeTarget(IME_TARGET_LAYERING));
     }
 
-    @UseTestDisplay(addWindows = W_INPUT_METHOD)
+    @SetupWindows(addWindows = W_INPUT_METHOD)
     @Test
     public void testInputMethodSet_listenOnDisplayAreaConfigurationChanged() {
         spyOn(mAtm);
@@ -1157,7 +1160,7 @@ public class DisplayContentTests extends WindowTestsBase {
         assertEquals(dc.getImeContainer().getParentSurfaceControl(), dc.computeImeParent());
     }
 
-    @UseTestDisplay(addWindows = W_ACTIVITY)
+    @SetupWindows(addWindows = W_ACTIVITY)
     @Test
     public void testComputeImeParent_app_notMatchParentBounds() {
         spyOn(mAppWindow.mActivityRecord);
@@ -1176,7 +1179,7 @@ public class DisplayContentTests extends WindowTestsBase {
         assertEquals(dc.getImeContainer().getParentSurfaceControl(), dc.computeImeParent());
     }
 
-    @UseTestDisplay(addWindows = W_ACTIVITY)
+    @SetupWindows(addWindows = W_ACTIVITY)
     @Test
     public void testComputeImeParent_inputTargetNotUpdate() throws Exception {
         WindowState app1 = createWindow(null, TYPE_BASE_APPLICATION, "app1");
@@ -1191,7 +1194,7 @@ public class DisplayContentTests extends WindowTestsBase {
         assertNull(mDisplayContent.computeImeParent());
     }
 
-    @UseTestDisplay(addWindows = W_ACTIVITY)
+    @SetupWindows(addWindows = W_ACTIVITY)
     @Test
     public void testComputeImeParent_updateParentWhenTargetNotUseIme() throws Exception {
         WindowState overlay = createWindow(null, TYPE_APPLICATION_OVERLAY, "overlay");
@@ -1249,7 +1252,15 @@ public class DisplayContentTests extends WindowTestsBase {
     public void testComputeImeControlTarget() throws Exception {
         final DisplayContent dc = createNewDisplay();
         dc.setRemoteInsetsController(createDisplayWindowInsetsController());
-        dc.setImeInputTarget(createWindow(null, TYPE_BASE_APPLICATION, "app"));
+        dc.mCurrentFocus = createWindow(null, TYPE_BASE_APPLICATION, "app");
+
+        // Expect returning null IME control target when the focus window has not yet been the
+        // IME input target (e.g. IME is restarting) in fullscreen windowing mode.
+        dc.setImeInputTarget(null);
+        assertFalse(dc.mCurrentFocus.inMultiWindowMode());
+        assertNull(dc.computeImeControlTarget());
+
+        dc.setImeInputTarget(dc.mCurrentFocus);
         dc.setImeLayeringTarget(dc.getImeInputTarget().getWindowState());
         assertEquals(dc.getImeInputTarget().getWindowState(), dc.computeImeControlTarget());
     }
@@ -1266,7 +1277,7 @@ public class DisplayContentTests extends WindowTestsBase {
                 dc.computeImeControlTarget());
     }
 
-    @UseTestDisplay(addWindows = W_INPUT_METHOD)
+    @SetupWindows(addWindows = W_INPUT_METHOD)
     @Test
     public void testImeSecureFlagGetUpdatedAfterImeInputTarget() {
         // Verify IME window can get up-to-date secure flag update when the IME input target
@@ -1280,7 +1291,7 @@ public class DisplayContentTests extends WindowTestsBase {
         verify(t).setSecure(eq(mDisplayContent.mInputMethodWindow.mSurfaceControl), eq(true));
     }
 
-    @UseTestDisplay(addWindows = W_ACTIVITY)
+    @SetupWindows(addWindows = W_ACTIVITY)
     @Test
     public void testComputeImeControlTarget_notMatchParentBounds() throws Exception {
         spyOn(mAppWindow.mActivityRecord);
@@ -1402,7 +1413,29 @@ public class DisplayContentTests extends WindowTestsBase {
         win.setHasSurface(false);
     }
 
-    @UseTestDisplay(addWindows = { W_ABOVE_ACTIVITY, W_ACTIVITY})
+    @Test
+    public void testCalculateSystemGestureExclusion_unrestricted() throws Exception {
+        mWm.mConstants.mSystemGestureExcludedByPreQStickyImmersive = true;
+
+        final DisplayContent dc = createNewDisplay();
+        final WindowState win = createWindow(null, TYPE_BASE_APPLICATION, dc, "win");
+        win.getAttrs().flags |= FLAG_LAYOUT_IN_SCREEN | FLAG_LAYOUT_INSET_DECOR;
+        win.getAttrs().layoutInDisplayCutoutMode = LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+        win.getAttrs().privateFlags |= PRIVATE_FLAG_UNRESTRICTED_GESTURE_EXCLUSION;
+        win.setSystemGestureExclusion(Collections.singletonList(dc.getBounds()));
+
+        performLayout(dc);
+
+        win.setHasSurface(true);
+
+        final Region expected = Region.obtain();
+        expected.set(dc.getBounds());
+        assertEquals(expected, calculateSystemGestureExclusion(dc));
+
+        win.setHasSurface(false);
+    }
+
+    @SetupWindows(addWindows = { W_ABOVE_ACTIVITY, W_ACTIVITY })
     @Test
     public void testRequestResizeForEmptyFrames() {
         final WindowState win = mChildAppWindowAbove;
@@ -1477,11 +1510,12 @@ public class DisplayContentTests extends WindowTestsBase {
         assertNull(displayContent.getAsyncRotationController());
     }
 
-    @UseTestDisplay(addWindows = { W_ACTIVITY, W_WALLPAPER, W_STATUS_BAR, W_NAVIGATION_BAR,
+    @SetupWindows(addWindows = { W_ACTIVITY, W_WALLPAPER, W_STATUS_BAR, W_NAVIGATION_BAR,
             W_INPUT_METHOD, W_NOTIFICATION_SHADE })
     @Test
     public void testApplyTopFixedRotationTransform() {
         final DisplayPolicy displayPolicy = mDisplayContent.getDisplayPolicy();
+        spyOn(displayPolicy);
         // Only non-movable (gesture) navigation bar will be animated by fixed rotation animation.
         doReturn(false).when(displayPolicy).navigationBarCanMove();
         displayPolicy.addWindowLw(mStatusBarWindow, mStatusBarWindow.mAttrs);
@@ -1600,6 +1634,8 @@ public class DisplayContentTests extends WindowTestsBase {
         // The display should be rotated after the launch is finished.
         doReturn(false).when(app).isAnimating(anyInt(), anyInt());
         mDisplayContent.mAppTransition.notifyAppTransitionFinishedLocked(app.token);
+        mStatusBarWindow.finishSeamlessRotation(t);
+        mNavBarWindow.finishSeamlessRotation(t);
 
         // The fixed rotation should be cleared and the new rotation is applied to display.
         assertFalse(app.hasFixedRotationTransform());
@@ -1631,7 +1667,7 @@ public class DisplayContentTests extends WindowTestsBase {
         assertFalse(mDisplayContent.hasTopFixedRotationLaunchingApp());
     }
 
-    @UseTestDisplay(addWindows = W_ACTIVITY)
+    @SetupWindows(addWindows = W_ACTIVITY)
     @Test
     public void testRotateSeamlesslyWithFixedRotation() {
         final DisplayRotation displayRotation = mDisplayContent.getDisplayRotation();
@@ -1796,19 +1832,18 @@ public class DisplayContentTests extends WindowTestsBase {
 
     @Test
     public void testRemoteRotation() {
-        DisplayContent dc = createNewDisplay();
-
+        final DisplayContent dc = mDisplayContent;
         final DisplayRotation dr = dc.getDisplayRotation();
-        doCallRealMethod().when(dr).updateRotationUnchecked(anyBoolean());
+        spyOn(dr);
         // Rotate 180 degree so the display doesn't have configuration change. This condition is
         // used for the later verification of stop-freezing (without setting mWaitingForConfig).
         doReturn((dr.getRotation() + 2) % 4).when(dr).rotationForOrientation(anyInt(), anyInt());
         final boolean[] continued = new boolean[1];
-        doAnswer(
-                invocation -> {
-                    continued[0] = true;
-                    return true;
-                }).when(dc).updateDisplayOverrideConfigurationLocked();
+        doAnswer(invocation -> {
+            continued[0] = true;
+            mAtm.addWindowLayoutReasons(ActivityTaskManagerService.LAYOUT_REASON_CONFIG_CHANGED);
+            return true;
+        }).when(dc).updateDisplayOverrideConfigurationLocked();
         final boolean[] called = new boolean[1];
         mWm.mDisplayChangeController =
                 new IDisplayChangeWindowController.Stub() {
@@ -1881,10 +1916,10 @@ public class DisplayContentTests extends WindowTestsBase {
         testPlayer.start();
         assertNotEquals(origRot, dc.getConfiguration().windowConfiguration.getRotation());
         assertNotNull(testPlayer.mLastReady);
-        assertEquals(dc, DisplayRotation.getDisplayFromTransition(testPlayer.mLastTransit));
         WindowContainerToken dcToken = dc.mRemoteToken.toWindowContainerToken();
         assertNotEquals(testPlayer.mLastReady.getChange(dcToken).getEndRotation(),
                 testPlayer.mLastReady.getChange(dcToken).getStartRotation());
+        assertTrue(testPlayer.mLastTransit.applyDisplayChangeIfNeeded());
         testPlayer.finish();
     }
 
@@ -2057,7 +2092,7 @@ public class DisplayContentTests extends WindowTestsBase {
         verifySizes(dc, forcedWidth, forcedHeight, forcedDensity);
     }
 
-    @UseTestDisplay(addWindows = { W_ACTIVITY, W_INPUT_METHOD })
+    @SetupWindows(addWindows = { W_ACTIVITY, W_INPUT_METHOD })
     @Test
     public void testComputeImeTarget_shouldNotCheckOutdatedImeTargetLayerWhenRemoved() {
         final WindowState child1 = createWindow(mAppWindow, FIRST_SUB_WINDOW, "child1");
@@ -2080,7 +2115,7 @@ public class DisplayContentTests extends WindowTestsBase {
         verify(child1, never()).needsRelativeLayeringToIme();
     }
 
-    @UseTestDisplay(addWindows = {W_INPUT_METHOD}, addAllCommonWindows = true)
+    @SetupWindows(addWindows = W_INPUT_METHOD)
     @Test
     public void testAttachAndShowImeScreenshotOnTarget() {
         // Preparation: Simulate screen state is on.
@@ -2131,7 +2166,7 @@ public class DisplayContentTests extends WindowTestsBase {
         assertNotNull(mDisplayContent.mImeScreenshot);
     }
 
-    @UseTestDisplay(addWindows = {W_INPUT_METHOD}, addAllCommonWindows = true)
+    @SetupWindows(addWindows = W_INPUT_METHOD)
     @Test
     public void testShowImeScreenshot() {
         final Task rootTask = createTask(mDisplayContent);
@@ -2157,7 +2192,7 @@ public class DisplayContentTests extends WindowTestsBase {
         verify(mDisplayContent, never()).showImeScreenshot();
     }
 
-    @UseTestDisplay(addWindows = {W_INPUT_METHOD})
+    @SetupWindows(addWindows = W_INPUT_METHOD)
     @Test
     public void testShowImeScreenshot_removeCurSnapshotBeforeCreateNext() {
         final Task rootTask = createTask(mDisplayContent);
@@ -2181,6 +2216,52 @@ public class DisplayContentTests extends WindowTestsBase {
         verify(curSnapshot).detach(any());
         assertNotNull(mDisplayContent.mImeScreenshot);
         assertNotEquals(curSnapshot, mDisplayContent.mImeScreenshot);
+    }
+
+    @UseTestDisplay(addWindows = {W_INPUT_METHOD})
+    @Test
+    public void testRemoveImeScreenshot_whenTargetSurfaceWasInvisible() {
+        final Task rootTask = createTask(mDisplayContent);
+        final Task task = createTaskInRootTask(rootTask, 0 /* userId */);
+        final ActivityRecord activity = createActivityRecord(mDisplayContent, task);
+        final WindowState win = createWindow(null, TYPE_BASE_APPLICATION, activity, "win");
+        win.onSurfaceShownChanged(true);
+        makeWindowVisible(win, mDisplayContent.mInputMethodWindow);
+        task.getDisplayContent().prepareAppTransition(TRANSIT_CLOSE);
+        doReturn(true).when(task).okToAnimate();
+        ArrayList<WindowContainer> sources = new ArrayList<>();
+        sources.add(activity);
+
+        mDisplayContent.setImeLayeringTarget(win);
+        mDisplayContent.setImeInputTarget(win);
+        mDisplayContent.getInsetsStateController().getImeSourceProvider().setImeShowing(true);
+        task.applyAnimation(null, TRANSIT_OLD_TASK_CLOSE, false /* enter */,
+                false /* isVoiceInteraction */, sources);
+        assertNotNull(mDisplayContent.mImeScreenshot);
+
+        win.onSurfaceShownChanged(false);
+        assertNull(mDisplayContent.mImeScreenshot);
+    }
+
+    @UseTestDisplay(addWindows = {W_INPUT_METHOD})
+    @Test
+    public void testRemoveImeScreenshot_whenWindowRemoveImmediately() {
+        final Task rootTask = createTask(mDisplayContent);
+        final Task task = createTaskInRootTask(rootTask, 0 /* userId */);
+        final ActivityRecord activity = createActivityRecord(mDisplayContent, task);
+        final WindowState win = createWindow(null, TYPE_BASE_APPLICATION, activity, "win");
+        makeWindowVisible(mDisplayContent.mInputMethodWindow);
+
+        mDisplayContent.setImeLayeringTarget(win);
+        mDisplayContent.setImeInputTarget(win);
+        mDisplayContent.getInsetsStateController().getImeSourceProvider().setImeShowing(true);
+        mDisplayContent.showImeScreenshot();
+        assertNotNull(mDisplayContent.mImeScreenshot);
+
+        // Expect IME snapshot will be removed when the win is IME layering target and invoked
+        // removeImeSurfaceByTarget.
+        win.removeImmediately();
+        assertNull(mDisplayContent.mImeScreenshot);
     }
 
     @Test
@@ -2401,7 +2482,7 @@ public class DisplayContentTests extends WindowTestsBase {
                 ACTIVITY_TYPE_STANDARD));
     }
 
-    @UseTestDisplay(addWindows = W_INPUT_METHOD)
+    @SetupWindows(addWindows = W_INPUT_METHOD)
     @Test
     public void testImeChildWindowFocusWhenImeLayeringTargetChanges() {
         final WindowState imeChildWindow =
@@ -2426,7 +2507,7 @@ public class DisplayContentTests extends WindowTestsBase {
         assertNotEquals(imeChildWindow, mDisplayContent.findFocusedWindow());
     }
 
-    @UseTestDisplay(addWindows = W_INPUT_METHOD)
+    @SetupWindows(addWindows = W_INPUT_METHOD)
     @Test
     public void testImeMenuDialogFocusWhenImeLayeringTargetChanges() {
         final WindowState imeMenuDialog =
@@ -2512,6 +2593,43 @@ public class DisplayContentTests extends WindowTestsBase {
         // THEN mirroring is initiated for the default display's DisplayArea.
         assertThat(actualDC.isCurrentlyRecording()).isTrue();
 
+        display.release();
+    }
+
+    @Test
+    public void testVirtualDisplayContent_displayMirroring() {
+        // GIVEN MediaProjection has already initialized the WindowToken of the DisplayArea to
+        // mirror.
+        final IBinder tokenToMirror = setUpDefaultTaskDisplayAreaWindowToken();
+
+        // GIVEN SurfaceControl can successfully mirror the provided surface.
+        Point surfaceSize = new Point(
+                mDefaultDisplay.getDefaultTaskDisplayArea().getBounds().width(),
+                mDefaultDisplay.getDefaultTaskDisplayArea().getBounds().height());
+        surfaceControlMirrors(surfaceSize);
+        // Initially disable getDisplayIdToMirror since the DMS may create the DC outside the direct
+        // call in the test. We need to spy on the DC before updateRecording is called or we can't
+        // verify setDisplayMirroring is called
+        doReturn(INVALID_DISPLAY).when(mWm.mDisplayManagerInternal).getDisplayIdToMirror(anyInt());
+
+        // GIVEN a new VirtualDisplay with an associated surface.
+        final VirtualDisplay display = createVirtualDisplay(surfaceSize, new Surface());
+        final int displayId = display.getDisplay().getDisplayId();
+
+        // GIVEN a session for this display.
+        mWm.mRoot.onDisplayAdded(displayId);
+
+        // WHEN getting the DisplayContent for the new virtual display.
+        DisplayContent actualDC = mWm.mRoot.getDisplayContent(displayId);
+        spyOn(actualDC);
+        // Return the default display as the value to mirror to ensure the VD with flag mirroring
+        // creates a ContentRecordingSession automatically.
+        doReturn(DEFAULT_DISPLAY).when(mWm.mDisplayManagerInternal).getDisplayIdToMirror(anyInt());
+        actualDC.updateRecording();
+
+        // THEN mirroring is initiated for the default display's DisplayArea.
+        verify(actualDC).setDisplayMirroring();
+        assertThat(actualDC.isCurrentlyRecording()).isTrue();
         display.release();
     }
 

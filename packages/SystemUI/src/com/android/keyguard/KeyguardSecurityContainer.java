@@ -236,7 +236,12 @@ public class KeyguardSecurityContainer extends FrameLayout {
 
     // Used to notify the container when something interesting happens.
     public interface SecurityCallback {
-        boolean dismiss(boolean authenticated, int targetUserId, boolean bypassSecondaryLockScreen);
+        /**
+         * Potentially dismiss the current security screen, after validating that all device
+         * security has been unlocked. Otherwise show the next screen.
+         */
+        boolean dismiss(boolean authenticated, int targetUserId, boolean bypassSecondaryLockScreen,
+                SecurityMode expectedSecurityMode);
 
         void userActivity();
 
@@ -1124,11 +1129,13 @@ public class KeyguardSecurityContainer extends FrameLayout {
                 Log.e(TAG, "Current user in user switcher is null.");
                 return;
             }
+            final String currentUserName = mUserSwitcherController.getCurrentUserName();
             Drawable userIcon = findUserIcon(currentUser.info.id);
             ((ImageView) mView.findViewById(R.id.user_icon)).setImageDrawable(userIcon);
-            mUserSwitcher.setText(mUserSwitcherController.getCurrentUserName());
+            mUserSwitcher.setText(currentUserName);
 
-            ViewGroup anchor = mView.findViewById(R.id.user_switcher_anchor);
+            KeyguardUserSwitcherAnchor anchor = mView.findViewById(R.id.user_switcher_anchor);
+
             BaseUserAdapter adapter = new BaseUserAdapter(mUserSwitcherController) {
                 @Override
                 public View getView(int position, View convertView, ViewGroup parent) {
@@ -1208,7 +1215,6 @@ public class KeyguardSecurityContainer extends FrameLayout {
 
             anchor.setOnClickListener((v) -> {
                 if (mFalsingManager.isFalseTap(LOW_PENALTY)) return;
-
                 mPopup = new KeyguardUserSwitcherPopupMenu(v.getContext(), mFalsingManager);
                 mPopup.setAnchorView(anchor);
                 mPopup.setAdapter(adapter);

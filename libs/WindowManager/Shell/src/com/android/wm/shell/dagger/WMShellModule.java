@@ -20,12 +20,14 @@ import android.content.Context;
 import android.content.pm.LauncherApps;
 import android.os.Handler;
 import android.os.UserManager;
+import android.view.Choreographer;
 import android.view.WindowManager;
 
 import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.logging.UiEventLogger;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.launcher3.icons.IconProvider;
+import com.android.wm.shell.RootDisplayAreaOrganizer;
 import com.android.wm.shell.RootTaskDisplayAreaOrganizer;
 import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.TaskViewTransitions;
@@ -47,8 +49,13 @@ import com.android.wm.shell.common.TaskStackListenerImpl;
 import com.android.wm.shell.common.TransactionPool;
 import com.android.wm.shell.common.annotations.ShellBackgroundThread;
 import com.android.wm.shell.common.annotations.ShellMainThread;
+import com.android.wm.shell.desktopmode.DesktopModeConstants;
+import com.android.wm.shell.desktopmode.DesktopModeController;
 import com.android.wm.shell.draganddrop.DragAndDropController;
+import com.android.wm.shell.freeform.FreeformComponents;
 import com.android.wm.shell.freeform.FreeformTaskListener;
+import com.android.wm.shell.freeform.FreeformTaskTransitionHandler;
+import com.android.wm.shell.fullscreen.FullscreenTaskListener;
 import com.android.wm.shell.onehanded.OneHandedController;
 import com.android.wm.shell.pip.Pip;
 import com.android.wm.shell.pip.PipAnimationController;
@@ -71,7 +78,10 @@ import com.android.wm.shell.pip.phone.PipMotionHelper;
 import com.android.wm.shell.pip.phone.PipTouchHandler;
 import com.android.wm.shell.recents.RecentTasksController;
 import com.android.wm.shell.splitscreen.SplitScreenController;
+import com.android.wm.shell.sysui.ShellCommandHandler;
 import com.android.wm.shell.sysui.ShellController;
+import com.android.wm.shell.sysui.ShellInit;
+import com.android.wm.shell.transition.SplitscreenPipMixedHandler;
 import com.android.wm.shell.transition.Transitions;
 import com.android.wm.shell.unfold.ShellUnfoldProgressProvider;
 import com.android.wm.shell.unfold.UnfoldAnimationController;
@@ -135,6 +145,8 @@ public abstract class WMShellModule {
     @WMSingleton
     @Provides
     static BubbleController provideBubbleController(Context context,
+            ShellInit shellInit,
+            ShellCommandHandler shellCommandHandler,
             ShellController shellController,
             BubbleData data,
             FloatingContentCoordinator floatingContentCoordinator,
@@ -155,8 +167,8 @@ public abstract class WMShellModule {
             @ShellBackgroundThread ShellExecutor bgExecutor,
             TaskViewTransitions taskViewTransitions,
             SyncTransactionQueue syncQueue) {
-        return new BubbleController(context, shellController, data, null /* synchronizer */,
-                floatingContentCoordinator,
+        return new BubbleController(context, shellInit, shellCommandHandler, shellController, data,
+                null /* synchronizer */, floatingContentCoordinator,
                 new BubbleDataRepository(context, launcherApps, mainExecutor),
                 statusBarService, windowManager, windowManagerShellWrapper, userManager,
                 launcherApps, logger, taskStackListener, organizer, positioner, displayController,
@@ -173,12 +185,14 @@ public abstract class WMShellModule {
     static WindowDecorViewModel<?> provideWindowDecorViewModel(
             Context context,
             @ShellMainThread Handler mainHandler,
+            @ShellMainThread Choreographer mainChoreographer,
             ShellTaskOrganizer taskOrganizer,
             DisplayController displayController,
             SyncTransactionQueue syncQueue) {
         return new CaptionWindowDecorViewModel(
                         context,
                         mainHandler,
+                        mainChoreographer,
                         taskOrganizer,
                         displayController,
                         syncQueue);
@@ -191,10 +205,44 @@ public abstract class WMShellModule {
     @WMSingleton
     @Provides
     @DynamicOverride
+    static FreeformComponents provideFreeformComponents(
+            FreeformTaskListener<?> taskListener,
+            FreeformTaskTransitionHandler transitionHandler) {
+        return new FreeformComponents(taskListener, Optional.of(transitionHandler));
+    }
+
+    @WMSingleton
+    @Provides
     static FreeformTaskListener<?> provideFreeformTaskListener(
+            Context context,
+            ShellInit shellInit,
+            ShellTaskOrganizer shellTaskOrganizer,
+            WindowDecorViewModel<?> windowDecorViewModel) {
+        // TODO(b/238217847): Temporarily add this check here until we can remove the dynamic
+        //                    override for this controller from the base module
+        ShellInit init = FreeformComponents.isFreeformEnabled(context)
+                ? shellInit
+                : null;
+        return new FreeformTaskListener<>(init, shellTaskOrganizer,
+                windowDecorViewModel);
+    }
+
+    @WMSingleton
+    @Provides
+    static FreeformTaskTransitionHandler provideFreeformTaskTransitionHandler(
+            Context context,
+            ShellInit shellInit,
+            Transitions transitions,
             WindowDecorViewModel<?> windowDecorViewModel,
-            SyncTransactionQueue syncQueue) {
-        return new FreeformTaskListener<>(windowDecorViewModel, syncQueue);
+            FullscreenTaskListener<?> fullscreenTaskListener,
+            FreeformTaskListener<?> freeformTaskListener) {
+        // TODO(b/238217847): Temporarily add this check here until we can remove the dynamic
+        //                    override for this controller from the base module
+        ShellInit init = FreeformComponents.isFreeformEnabled(context)
+                ? shellInit
+                : null;
+        return new FreeformTaskTransitionHandler(init, transitions,
+                windowDecorViewModel, fullscreenTaskListener, freeformTaskListener);
     }
 
     //
@@ -207,14 +255,20 @@ public abstract class WMShellModule {
     @Provides
     @DynamicOverride
     static OneHandedController provideOneHandedController(Context context,
+            ShellInit shellInit,
+            ShellCommandHandler shellCommandHandler,
             ShellController shellController,
-            WindowManager windowManager, DisplayController displayController,
-            DisplayLayout displayLayout, TaskStackListenerImpl taskStackListener,
-            UiEventLogger uiEventLogger, InteractionJankMonitor jankMonitor,
-            @ShellMainThread ShellExecutor mainExecutor, @ShellMainThread Handler mainHandler) {
-        return OneHandedController.create(context, shellController, windowManager,
-                displayController, displayLayout, taskStackListener, jankMonitor, uiEventLogger,
-                mainExecutor, mainHandler);
+            WindowManager windowManager,
+            DisplayController displayController,
+            DisplayLayout displayLayout,
+            TaskStackListenerImpl taskStackListener,
+            UiEventLogger uiEventLogger,
+            InteractionJankMonitor jankMonitor,
+            @ShellMainThread ShellExecutor mainExecutor,
+            @ShellMainThread Handler mainHandler) {
+        return OneHandedController.create(context, shellInit, shellCommandHandler, shellController,
+                windowManager, displayController, displayLayout, taskStackListener, jankMonitor,
+                uiEventLogger, mainExecutor, mainHandler);
     }
 
     //
@@ -225,20 +279,26 @@ public abstract class WMShellModule {
     @Provides
     @DynamicOverride
     static SplitScreenController provideSplitScreenController(
+            Context context,
+            ShellInit shellInit,
+            ShellCommandHandler shellCommandHandler,
             ShellController shellController,
             ShellTaskOrganizer shellTaskOrganizer,
-            SyncTransactionQueue syncQueue, Context context,
+            SyncTransactionQueue syncQueue,
             RootTaskDisplayAreaOrganizer rootTaskDisplayAreaOrganizer,
-            @ShellMainThread ShellExecutor mainExecutor,
             DisplayController displayController,
             DisplayImeController displayImeController,
-            DisplayInsetsController displayInsetsController, Transitions transitions,
-            TransactionPool transactionPool, IconProvider iconProvider,
-            Optional<RecentTasksController> recentTasks) {
-        return new SplitScreenController(shellController, shellTaskOrganizer, syncQueue, context,
-                rootTaskDisplayAreaOrganizer, mainExecutor, displayController, displayImeController,
-                displayInsetsController, transitions, transactionPool, iconProvider,
-                recentTasks);
+            DisplayInsetsController displayInsetsController,
+            DragAndDropController dragAndDropController,
+            Transitions transitions,
+            TransactionPool transactionPool,
+            IconProvider iconProvider,
+            Optional<RecentTasksController> recentTasks,
+            @ShellMainThread ShellExecutor mainExecutor) {
+        return new SplitScreenController(context, shellInit, shellCommandHandler, shellController,
+                shellTaskOrganizer, syncQueue, rootTaskDisplayAreaOrganizer, displayController,
+                displayImeController, displayInsetsController, dragAndDropController, transitions,
+                transactionPool, iconProvider, recentTasks, mainExecutor);
     }
 
     //
@@ -248,24 +308,33 @@ public abstract class WMShellModule {
     @WMSingleton
     @Provides
     static Optional<Pip> providePip(Context context,
-            ShellController shellController, DisplayController displayController,
-            PipAppOpsListener pipAppOpsListener, PipBoundsAlgorithm pipBoundsAlgorithm,
-            PipKeepClearAlgorithm pipKeepClearAlgorithm, PipBoundsState pipBoundsState,
-            PipMotionHelper pipMotionHelper, PipMediaController pipMediaController,
-            PhonePipMenuController phonePipMenuController, PipTaskOrganizer pipTaskOrganizer,
+            ShellInit shellInit,
+            ShellCommandHandler shellCommandHandler,
+            ShellController shellController,
+            DisplayController displayController,
+            PipAppOpsListener pipAppOpsListener,
+            PipBoundsAlgorithm pipBoundsAlgorithm,
+            PipKeepClearAlgorithm pipKeepClearAlgorithm,
+            PipBoundsState pipBoundsState,
+            PipMotionHelper pipMotionHelper,
+            PipMediaController pipMediaController,
+            PhonePipMenuController phonePipMenuController,
+            PipTaskOrganizer pipTaskOrganizer,
             PipTransitionState pipTransitionState,
-            PipTouchHandler pipTouchHandler, PipTransitionController pipTransitionController,
+            PipTouchHandler pipTouchHandler,
+            PipTransitionController pipTransitionController,
             WindowManagerShellWrapper windowManagerShellWrapper,
             TaskStackListenerImpl taskStackListener,
             PipParamsChangedForwarder pipParamsChangedForwarder,
             Optional<OneHandedController> oneHandedController,
             @ShellMainThread ShellExecutor mainExecutor) {
-        return Optional.ofNullable(PipController.create(context, shellController, displayController,
-                pipAppOpsListener, pipBoundsAlgorithm, pipKeepClearAlgorithm, pipBoundsState,
-                pipMotionHelper,
-                pipMediaController, phonePipMenuController, pipTaskOrganizer, pipTransitionState,
-                pipTouchHandler, pipTransitionController, windowManagerShellWrapper,
-                taskStackListener, pipParamsChangedForwarder, oneHandedController, mainExecutor));
+        return Optional.ofNullable(PipController.create(
+                context, shellInit, shellCommandHandler, shellController,
+                displayController, pipAppOpsListener, pipBoundsAlgorithm, pipKeepClearAlgorithm,
+                pipBoundsState, pipMotionHelper, pipMediaController, phonePipMenuController,
+                pipTaskOrganizer, pipTransitionState, pipTouchHandler, pipTransitionController,
+                windowManagerShellWrapper, taskStackListener, pipParamsChangedForwarder,
+                oneHandedController, mainExecutor));
     }
 
     @WMSingleton
@@ -310,14 +379,16 @@ public abstract class WMShellModule {
     @WMSingleton
     @Provides
     static PipTouchHandler providePipTouchHandler(Context context,
-            PhonePipMenuController menuPhoneController, PipBoundsAlgorithm pipBoundsAlgorithm,
+            ShellInit shellInit,
+            PhonePipMenuController menuPhoneController,
+            PipBoundsAlgorithm pipBoundsAlgorithm,
             PipBoundsState pipBoundsState,
             PipTaskOrganizer pipTaskOrganizer,
             PipMotionHelper pipMotionHelper,
             FloatingContentCoordinator floatingContentCoordinator,
             PipUiEventLogger pipUiEventLogger,
             @ShellMainThread ShellExecutor mainExecutor) {
-        return new PipTouchHandler(context, menuPhoneController, pipBoundsAlgorithm,
+        return new PipTouchHandler(context, shellInit, menuPhoneController, pipBoundsAlgorithm,
                 pipBoundsState, pipTaskOrganizer, pipMotionHelper,
                 floatingContentCoordinator, pipUiEventLogger, mainExecutor);
     }
@@ -361,15 +432,15 @@ public abstract class WMShellModule {
     @WMSingleton
     @Provides
     static PipTransitionController providePipTransitionController(Context context,
-            Transitions transitions, ShellTaskOrganizer shellTaskOrganizer,
+            ShellInit shellInit, ShellTaskOrganizer shellTaskOrganizer, Transitions transitions,
             PipAnimationController pipAnimationController, PipBoundsAlgorithm pipBoundsAlgorithm,
             PipBoundsState pipBoundsState, PipTransitionState pipTransitionState,
             PhonePipMenuController pipMenuController,
             PipSurfaceTransactionHelper pipSurfaceTransactionHelper,
             Optional<SplitScreenController> splitScreenOptional) {
-        return new PipTransition(context, pipBoundsState, pipTransitionState, pipMenuController,
-                pipBoundsAlgorithm, pipAnimationController, transitions, shellTaskOrganizer,
-                pipSurfaceTransactionHelper, splitScreenOptional);
+        return new PipTransition(context, shellInit, shellTaskOrganizer, transitions,
+                pipBoundsState, pipTransitionState, pipMenuController, pipBoundsAlgorithm,
+                pipAnimationController, pipSurfaceTransactionHelper, splitScreenOptional);
     }
 
     @WMSingleton
@@ -392,9 +463,31 @@ public abstract class WMShellModule {
                 floatingContentCoordinator);
     }
 
+    @WMSingleton
+    @Provides
+    static PipParamsChangedForwarder providePipParamsChangedForwarder() {
+        return new PipParamsChangedForwarder();
+    }
+
+    //
+    // Transitions
+    //
+
+    @WMSingleton
+    @Provides
+    static SplitscreenPipMixedHandler provideSplitscreenPipMixedHandler(
+            ShellInit shellInit,
+            Optional<SplitScreenController> splitScreenOptional,
+            Optional<PipTouchHandler> pipTouchHandlerOptional,
+            Transitions transitions) {
+        return new SplitscreenPipMixedHandler(shellInit, splitScreenOptional,
+                pipTouchHandlerOptional, transitions);
+    }
+
     //
     // Unfold transition
     //
+
     @WMSingleton
     @Provides
     @DynamicOverride
@@ -404,6 +497,7 @@ public abstract class WMShellModule {
             @UnfoldTransition SplitTaskUnfoldAnimator splitAnimator,
             FullscreenUnfoldTaskAnimator fullscreenAnimator,
             Lazy<Optional<UnfoldTransitionHandler>> unfoldTransitionHandler,
+            ShellInit shellInit,
             @ShellMainThread ShellExecutor mainExecutor
     ) {
         final List<UnfoldTaskAnimator> animators = new ArrayList<>();
@@ -411,6 +505,7 @@ public abstract class WMShellModule {
         animators.add(fullscreenAnimator);
 
         return new UnfoldAnimationController(
+                        shellInit,
                         transactionPool,
                         progressProvider.get(),
                         animators,
@@ -418,7 +513,6 @@ public abstract class WMShellModule {
                         mainExecutor
                 );
     }
-
 
     @Provides
     static FullscreenUnfoldTaskAnimator provideFullscreenUnfoldTaskAnimator(
@@ -438,6 +532,10 @@ public abstract class WMShellModule {
             Lazy<Optional<SplitScreenController>> splitScreenOptional,
             DisplayInsetsController displayInsetsController
     ) {
+        // TODO(b/238217847): The lazy reference here causes some dependency issues since it
+        // immediately registers a listener on that controller on init.  We should reference the
+        // controller directly once we refactor ShellTaskOrganizer to not depend on the unfold
+        // animation controller directly.
         return new SplitTaskUnfoldAnimator(context, executor, splitScreenOptional,
                 backgroundController, displayInsetsController);
     }
@@ -463,8 +561,9 @@ public abstract class WMShellModule {
             @UnfoldShellTransition SplitTaskUnfoldAnimator unfoldAnimator,
             TransactionPool transactionPool,
             Transitions transitions,
-            @ShellMainThread ShellExecutor executor) {
-        return new UnfoldTransitionHandler(progressProvider.get(), animator,
+            @ShellMainThread ShellExecutor executor,
+            ShellInit shellInit) {
+        return new UnfoldTransitionHandler(shellInit, progressProvider.get(), animator,
                 unfoldAnimator, transactionPool, executor, transitions);
     }
 
@@ -480,9 +579,39 @@ public abstract class WMShellModule {
         );
     }
 
+    //
+    // Desktop mode (optional feature)
+    //
+
     @WMSingleton
     @Provides
-    static PipParamsChangedForwarder providePipParamsChangedForwarder() {
-        return new PipParamsChangedForwarder();
+    static Optional<DesktopModeController> provideDesktopModeController(
+            Context context, ShellInit shellInit,
+            ShellTaskOrganizer shellTaskOrganizer,
+            RootDisplayAreaOrganizer rootDisplayAreaOrganizer,
+            @ShellMainThread Handler mainHandler
+    ) {
+        if (DesktopModeConstants.IS_FEATURE_ENABLED) {
+            return Optional.of(new DesktopModeController(context, shellInit, shellTaskOrganizer,
+                    rootDisplayAreaOrganizer,
+                    mainHandler));
+        } else {
+            return Optional.empty();
+        }
+    }
+
+    //
+    // Misc
+    //
+
+    // TODO: Temporarily move dependencies to this instead of ShellInit since that is needed to add
+    // the callback. We will be moving to a different explicit startup mechanism in a follow- up CL.
+    @WMSingleton
+    @ShellCreateTriggerOverride
+    @Provides
+    static Object provideIndependentShellComponentsToCreate(
+            SplitscreenPipMixedHandler splitscreenPipMixedHandler,
+            Optional<DesktopModeController> desktopModeController) {
+        return new Object();
     }
 }

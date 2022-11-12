@@ -19,10 +19,10 @@ package com.android.server.tare;
 import static android.text.format.DateUtils.HOUR_IN_MILLIS;
 
 import static com.android.server.tare.TareUtils.appToString;
+import static com.android.server.tare.TareUtils.cakeToString;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.content.pm.PackageInfo;
 import android.os.Environment;
 import android.os.UserHandle;
 import android.util.ArraySet;
@@ -62,15 +62,14 @@ public class Scribe {
     private static final int MAX_NUM_TRANSACTION_DUMP = 25;
     /**
      * The maximum amount of time we'll keep a transaction around for.
-     * For now, only keep transactions we actually have a use for. We can increase it if we want
-     * to use older transactions or provide older transactions to apps.
      */
-    private static final long MAX_TRANSACTION_AGE_MS = 24 * HOUR_IN_MILLIS;
+    private static final long MAX_TRANSACTION_AGE_MS = 8 * 24 * HOUR_IN_MILLIS;
 
     private static final String XML_TAG_HIGH_LEVEL_STATE = "irs-state";
     private static final String XML_TAG_LEDGER = "ledger";
     private static final String XML_TAG_TARE = "tare";
     private static final String XML_TAG_TRANSACTION = "transaction";
+    private static final String XML_TAG_REWARD_BUCKET = "rewardBucket";
     private static final String XML_TAG_USER = "user";
     private static final String XML_TAG_PERIOD_REPORT = "report";
 
@@ -138,9 +137,15 @@ public class Scribe {
 
     @GuardedBy("mIrs.getLock()")
     void adjustRemainingConsumableCakesLocked(long delta) {
-        if (delta != 0) {
-            // No point doing any work if the change is 0.
-            mRemainingConsumableCakes += delta;
+        final long staleCakes = mRemainingConsumableCakes;
+        mRemainingConsumableCakes += delta;
+        if (mRemainingConsumableCakes < 0) {
+            Slog.w(TAG, "Overdrew consumable cakes by " + cakeToString(-mRemainingConsumableCakes));
+            // A negative value would interfere with allowing free actions, so set the minimum as 0.
+            mRemainingConsumableCakes = 0;
+        }
+        if (mRemainingConsumableCakes != staleCakes) {
+            // No point doing any work if there was no functional change.
             postWrite();
         }
     }
@@ -211,17 +216,21 @@ public class Scribe {
         mRemainingConsumableCakes = 0;
 
         final SparseArray<ArraySet<String>> installedPackagesPerUser = new SparseArray<>();
-        final List<PackageInfo> installedPackages = mIrs.getInstalledPackages();
-        for (int i = 0; i < installedPackages.size(); ++i) {
-            final PackageInfo packageInfo = installedPackages.get(i);
-            if (packageInfo.applicationInfo != null) {
-                final int userId = UserHandle.getUserId(packageInfo.applicationInfo.uid);
-                ArraySet<String> pkgsForUser = installedPackagesPerUser.get(userId);
-                if (pkgsForUser == null) {
-                    pkgsForUser = new ArraySet<>();
-                    installedPackagesPerUser.put(userId, pkgsForUser);
+        final SparseArrayMap<String, InstalledPackageInfo> installedPackages =
+                mIrs.getInstalledPackages();
+        for (int uIdx = installedPackages.numMaps() - 1; uIdx >= 0; --uIdx) {
+            final int userId = installedPackages.keyAt(uIdx);
+
+            for (int pIdx = installedPackages.numElementsForKeyAt(uIdx) - 1; pIdx >= 0; --pIdx) {
+                final InstalledPackageInfo packageInfo = installedPackages.valueAt(uIdx, pIdx);
+                if (packageInfo.uid != InstalledPackageInfo.NO_UID) {
+                    ArraySet<String> pkgsForUser = installedPackagesPerUser.get(userId);
+                    if (pkgsForUser == null) {
+                        pkgsForUser = new ArraySet<>();
+                        installedPackagesPerUser.put(userId, pkgsForUser);
+                    }
+                    pkgsForUser.add(packageInfo.packageName);
                 }
-                pkgsForUser.add(packageInfo.packageName);
             }
         }
 
@@ -346,8 +355,8 @@ public class Scribe {
                 for (int pIdx = mLedgers.numElementsForKey(userId) - 1; pIdx >= 0; --pIdx) {
                     final String pkgName = mLedgers.keyAt(uIdx, pIdx);
                     final Ledger ledger = mLedgers.get(userId, pkgName);
-                    ledger.removeOldTransactions(MAX_TRANSACTION_AGE_MS);
-                    Ledger.Transaction transaction = ledger.getEarliestTransaction();
+                    final Ledger.Transaction transaction =
+                            ledger.removeOldTransactions(MAX_TRANSACTION_AGE_MS);
                     if (transaction != null) {
                         earliestEndTime = Math.min(earliestEndTime, transaction.endTimeMs);
                     }
@@ -370,6 +379,7 @@ public class Scribe {
         final String pkgName;
         final long curBalance;
         final List<Ledger.Transaction> transactions = new ArrayList<>();
+        final List<Ledger.RewardBucket> rewardBuckets = new ArrayList<>();
 
         pkgName = parser.getAttributeValue(null, XML_ATTR_PACKAGE_NAME);
         curBalance = parser.getAttributeLong(null, XML_ATTR_CURRENT_BALANCE);
@@ -391,8 +401,7 @@ public class Scribe {
                 }
                 continue;
             }
-            if (eventType != XmlPullParser.START_TAG || !XML_TAG_TRANSACTION.equals(tagName)) {
-                // Expecting only "transaction" tags.
+            if (eventType != XmlPullParser.START_TAG || tagName == null) {
                 Slog.e(TAG, "Unexpected event: (" + eventType + ") " + tagName);
                 return null;
             }
@@ -402,25 +411,37 @@ public class Scribe {
             if (DEBUG) {
                 Slog.d(TAG, "Starting ledger tag: " + tagName);
             }
-            final String tag = parser.getAttributeValue(null, XML_ATTR_TAG);
-            final long startTime = parser.getAttributeLong(null, XML_ATTR_START_TIME);
-            final long endTime = parser.getAttributeLong(null, XML_ATTR_END_TIME);
-            final int eventId = parser.getAttributeInt(null, XML_ATTR_EVENT_ID);
-            final long delta = parser.getAttributeLong(null, XML_ATTR_DELTA);
-            final long ctp = parser.getAttributeLong(null, XML_ATTR_CTP);
-            if (endTime <= endTimeCutoff) {
-                if (DEBUG) {
-                    Slog.d(TAG, "Skipping event because it's too old.");
-                }
-                continue;
+            switch (tagName) {
+                case XML_TAG_TRANSACTION:
+                    final long endTime = parser.getAttributeLong(null, XML_ATTR_END_TIME);
+                    if (endTime <= endTimeCutoff) {
+                        if (DEBUG) {
+                            Slog.d(TAG, "Skipping event because it's too old.");
+                        }
+                        continue;
+                    }
+                    final String tag = parser.getAttributeValue(null, XML_ATTR_TAG);
+                    final long startTime = parser.getAttributeLong(null, XML_ATTR_START_TIME);
+                    final int eventId = parser.getAttributeInt(null, XML_ATTR_EVENT_ID);
+                    final long delta = parser.getAttributeLong(null, XML_ATTR_DELTA);
+                    final long ctp = parser.getAttributeLong(null, XML_ATTR_CTP);
+                    transactions.add(
+                            new Ledger.Transaction(startTime, endTime, eventId, tag, delta, ctp));
+                    break;
+                case XML_TAG_REWARD_BUCKET:
+                    rewardBuckets.add(readRewardBucketFromXml(parser));
+                    break;
+                default:
+                    // Expecting only "transaction" and "rewardBucket" tags.
+                    Slog.e(TAG, "Unexpected event: (" + eventType + ") " + tagName);
+                    return null;
             }
-            transactions.add(new Ledger.Transaction(startTime, endTime, eventId, tag, delta, ctp));
         }
 
         if (!isInstalled) {
             return null;
         }
-        return Pair.create(pkgName, new Ledger(curBalance, transactions));
+        return Pair.create(pkgName, new Ledger(curBalance, transactions, rewardBuckets));
     }
 
     /**
@@ -506,6 +527,44 @@ public class Scribe {
                 parser.getAttributeInt(null, XML_ATTR_PR_NUM_NEG_REGULATIONS);
 
         return report;
+    }
+
+    /**
+     * @param parser Xml parser at the beginning of a {@value #XML_TAG_REWARD_BUCKET} tag. The next
+     *               "parser.next()" call will take the parser into the body of the tag.
+     * @return Newly instantiated {@link Ledger.RewardBucket} holding all the information we just
+     * read out of the xml tag.
+     */
+    @Nullable
+    private static Ledger.RewardBucket readRewardBucketFromXml(TypedXmlPullParser parser)
+            throws XmlPullParserException, IOException {
+
+        final Ledger.RewardBucket rewardBucket = new Ledger.RewardBucket();
+
+        rewardBucket.startTimeMs = parser.getAttributeLong(null, XML_ATTR_START_TIME);
+
+        for (int eventType = parser.next(); eventType != XmlPullParser.END_DOCUMENT;
+                eventType = parser.next()) {
+            final String tagName = parser.getName();
+            if (eventType == XmlPullParser.END_TAG) {
+                if (XML_TAG_REWARD_BUCKET.equals(tagName)) {
+                    // We've reached the end of the rewardBucket tag.
+                    break;
+                }
+                continue;
+            }
+            if (eventType != XmlPullParser.START_TAG || !XML_ATTR_DELTA.equals(tagName)) {
+                // Expecting only delta tags.
+                Slog.e(TAG, "Unexpected event: (" + eventType + ") " + tagName);
+                return null;
+            }
+
+            final int eventId = parser.getAttributeInt(null, XML_ATTR_EVENT_ID);
+            final long delta = parser.getAttributeLong(null, XML_ATTR_DELTA);
+            rewardBucket.cumulativeDelta.put(eventId, delta);
+        }
+
+        return rewardBucket;
     }
 
     private void scheduleCleanup(long earliestEndTime) {
@@ -595,6 +654,11 @@ public class Scribe {
                 }
                 writeTransaction(out, transaction);
             }
+
+            final List<Ledger.RewardBucket> rewardBuckets = ledger.getRewardBuckets();
+            for (int r = 0; r < rewardBuckets.size(); ++r) {
+                writeRewardBucket(out, rewardBuckets.get(r));
+            }
             out.endTag(null, XML_TAG_LEDGER);
         }
         out.endTag(null, XML_TAG_USER);
@@ -614,6 +678,23 @@ public class Scribe {
         out.attributeLong(null, XML_ATTR_DELTA, transaction.delta);
         out.attributeLong(null, XML_ATTR_CTP, transaction.ctp);
         out.endTag(null, XML_TAG_TRANSACTION);
+    }
+
+    private static void writeRewardBucket(@NonNull TypedXmlSerializer out,
+            @NonNull Ledger.RewardBucket rewardBucket) throws IOException {
+        final int numEvents = rewardBucket.cumulativeDelta.size();
+        if (numEvents == 0) {
+            return;
+        }
+        out.startTag(null, XML_TAG_REWARD_BUCKET);
+        out.attributeLong(null, XML_ATTR_START_TIME, rewardBucket.startTimeMs);
+        for (int i = 0; i < numEvents; ++i) {
+            out.startTag(null, XML_ATTR_DELTA);
+            out.attributeInt(null, XML_ATTR_EVENT_ID, rewardBucket.cumulativeDelta.keyAt(i));
+            out.attributeLong(null, XML_ATTR_DELTA, rewardBucket.cumulativeDelta.valueAt(i));
+            out.endTag(null, XML_ATTR_DELTA);
+        }
+        out.endTag(null, XML_TAG_REWARD_BUCKET);
     }
 
     private static void writeReport(@NonNull TypedXmlSerializer out,

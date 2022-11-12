@@ -33,7 +33,6 @@ import static com.android.systemui.statusbar.phone.NotificationIconAreaControlle
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Point;
-import android.graphics.PointF;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.provider.Settings;
@@ -69,6 +68,7 @@ import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin.OnMenuEventListener;
 import com.android.systemui.plugins.statusbar.NotificationSwipeActionHelper;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
+import com.android.systemui.shade.ShadeController;
 import com.android.systemui.shade.transition.ShadeTransitionController;
 import com.android.systemui.statusbar.LockscreenShadeTransitionController;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
@@ -89,7 +89,6 @@ import com.android.systemui.statusbar.notification.collection.PipelineDumpable;
 import com.android.systemui.statusbar.notification.collection.PipelineDumper;
 import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy;
 import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy.OnGroupChangeListener;
-import com.android.systemui.statusbar.notification.collection.legacy.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.collection.notifcollection.DismissedByUserStats;
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifCollectionListener;
 import com.android.systemui.statusbar.notification.collection.render.GroupExpansionManager;
@@ -111,7 +110,6 @@ import com.android.systemui.statusbar.phone.HeadsUpManagerPhone;
 import com.android.systemui.statusbar.phone.HeadsUpTouchHelper;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.ScrimController;
-import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.phone.dagger.CentralSurfacesComponent;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.ConfigurationController.ConfigurationListener;
@@ -162,7 +160,6 @@ public class NotificationStackScrollLayoutController {
     private final NotificationEntryManager mNotificationEntryManager;
     private final UiEventLogger mUiEventLogger;
     private final NotificationRemoteInputManager mRemoteInputManager;
-    private final VisualStabilityManager mVisualStabilityManager;
     private final ShadeController mShadeController;
     private final KeyguardMediaController mKeyguardMediaController;
     private final SysuiStatusBarStateController mStatusBarStateController;
@@ -325,6 +322,13 @@ public class NotificationStackScrollLayoutController {
             updateFooter();
         }
     };
+
+    /**
+     * Recalculate sensitiveness without animation; called when waking up while keyguard occluded.
+     */
+    public void updateSensitivenessForOccludedWakeup() {
+        mView.updateSensitiveness(false, mLockscreenUserManager.isAnyProfilePublicMode());
+    }
 
     /**
      * Set the overexpansion of the panel to be applied to the view.
@@ -639,7 +643,6 @@ public class NotificationStackScrollLayoutController {
             ShadeTransitionController shadeTransitionController,
             UiEventLogger uiEventLogger,
             NotificationRemoteInputManager remoteInputManager,
-            VisualStabilityManager visualStabilityManager,
             ShadeController shadeController,
             InteractionJankMonitor jankMonitor,
             StackStateLogger stackLogger,
@@ -686,7 +689,6 @@ public class NotificationStackScrollLayoutController {
         mNotificationEntryManager = notificationEntryManager;
         mUiEventLogger = uiEventLogger;
         mRemoteInputManager = remoteInputManager;
-        mVisualStabilityManager = visualStabilityManager;
         mShadeController = shadeController;
         updateResources();
     }
@@ -757,8 +759,6 @@ public class NotificationStackScrollLayoutController {
 
         mNotificationRoundnessManager.setOnRoundingChangedCallback(mView::invalidate);
         mView.addOnExpandedHeightChangedListener(mNotificationRoundnessManager::setExpanded);
-
-        mVisualStabilityManager.setVisibilityLocationProvider(this::isInVisibleLocation);
 
         mTunerService.addTunable(
                 (key, newValue) -> {
@@ -1234,8 +1234,8 @@ public class NotificationStackScrollLayoutController {
         mView.setAnimationsEnabled(enabled);
     }
 
-    public void setDozing(boolean dozing, boolean animate, PointF wakeUpTouchLocation) {
-        mView.setDozing(dozing, animate, wakeUpTouchLocation);
+    public void setDozing(boolean dozing, boolean animate) {
+        mView.setDozing(dozing, animate);
     }
 
     public void setPulsing(boolean pulsing, boolean animatePulse) {

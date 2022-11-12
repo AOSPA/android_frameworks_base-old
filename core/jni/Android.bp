@@ -52,6 +52,7 @@ cc_library_shared {
         "android_util_jar_StrictJarFile.cpp",
 	"com_android_internal_app_ActivityTrigger.cpp",
         "com_android_internal_util_VirtualRefBasePtr.cpp",
+        "core_jni_helpers.cpp",
         ":deviceproductinfoconstants_aidl",
     ],
 
@@ -79,6 +80,10 @@ cc_library_shared {
     export_include_dirs: [
         ".",
         "include",
+    ],
+
+    defaults: [
+        "latest_android_media_audio_common_types_cpp_target_shared",
     ],
 
     target: {
@@ -244,7 +249,6 @@ cc_library_shared {
             ],
 
             shared_libs: [
-                "android.media.audio.common.types-V1-cpp",
                 "audioclient-types-aidl-cpp",
                 "audioflinger-aidl-cpp",
                 "audiopolicy-types-aidl-cpp",

@@ -51,6 +51,7 @@ import com.android.internal.annotations.CompositeRWLock;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.os.ProcessCpuTracker;
+import com.android.internal.os.TimeoutRecord;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.am.trace.SmartTraceUtils;
 import com.android.server.ResourcePressureUtil;
@@ -269,7 +270,9 @@ class ProcessErrorStateRecord {
 
     void appNotResponding(String activityShortComponentName, ApplicationInfo aInfo,
             String parentShortComponentName, WindowProcessController parentProcess,
-            boolean aboveSystem, String annotation, boolean onlyDumpSelf) {
+            boolean aboveSystem, TimeoutRecord timeoutRecord,
+            boolean onlyDumpSelf) {
+        String annotation = timeoutRecord.mReason;
         ArrayList<Integer> firstPids = new ArrayList<>(5);
         SparseArray<Boolean> lastPids = new SparseArray<>(20);
 
@@ -492,7 +495,7 @@ class ProcessErrorStateRecord {
                                  + " ANR, delay "+delay+" ms  ");
                 mApp.mService.mAnrHelper.deferAppNotResponding(mApp, activityShortComponentName,
                       aInfo, parentShortComponentName, parentProcess,
-                      aboveSystem, annotation, delay);
+                      aboveSystem, timeoutRecord, delay);
                 synchronized (mProcLock) {
                     setDefered(true);
                     setNotResponding(false);
@@ -678,7 +681,9 @@ class ProcessErrorStateRecord {
                         mService.mContext, mApp.info.packageName, mApp.info.flags);
             }
         }
-        mService.skipCurrentReceiverLocked(mApp);
+        for (BroadcastQueue queue : mService.mBroadcastQueues) {
+            queue.onApplicationProblemLocked(mApp);
+        }
     }
 
     @GuardedBy("mService")

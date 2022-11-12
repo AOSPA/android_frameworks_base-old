@@ -29,6 +29,7 @@ import static org.mockito.Mockito.when;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.os.Handler;
+import android.os.HandlerExecutor;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.service.quicksettings.IQSTileService;
@@ -44,6 +45,7 @@ import com.android.systemui.dump.DumpManager;
 import com.android.systemui.qs.QSTileHost;
 import com.android.systemui.qs.logging.QSLogger;
 import com.android.systemui.qs.tileimpl.QSFactoryImpl;
+import com.android.systemui.settings.UserFileManager;
 import com.android.systemui.settings.UserTracker;
 import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.statusbar.CommandQueue;
@@ -65,6 +67,7 @@ import org.mockito.MockitoAnnotations;
 
 import java.util.ArrayList;
 import java.util.Optional;
+import java.util.concurrent.Executor;
 
 import javax.inject.Provider;
 
@@ -116,6 +119,8 @@ public class TileServicesTest extends SysuiTestCase {
     private TileLifecycleManager.Factory mTileLifecycleManagerFactory;
     @Mock
     private TileLifecycleManager mTileLifecycleManager;
+    @Mock
+    private UserFileManager mUserFileManager;
 
     @Before
     public void setUp() throws Exception {
@@ -130,17 +135,16 @@ public class TileServicesTest extends SysuiTestCase {
                 .thenReturn(mTileLifecycleManager);
 
         Provider<Handler> provider = () -> new Handler(mTestableLooper.getLooper());
+        Executor executor = new HandlerExecutor(provider.get());
 
         QSTileHost host = new QSTileHost(mContext,
                 mStatusBarIconController,
                 mQSFactory,
-                provider.get(),
-                mTestableLooper.getLooper(),
+                executor,
                 mPluginManager,
                 mTunerService,
                 () -> mAutoTileManager,
                 mDumpManager,
-                mock(BroadcastDispatcher.class),
                 Optional.of(mCentralSurfaces),
                 mQSLogger,
                 mUiEventLogger,
@@ -148,7 +152,8 @@ public class TileServicesTest extends SysuiTestCase {
                 mSecureSettings,
                 mock(CustomTileStatePersister.class),
                 mTileServiceRequestControllerBuilder,
-                mTileLifecycleManagerFactory);
+                mTileLifecycleManagerFactory,
+                mUserFileManager);
         mTileService = new TestTileServices(host, provider, mBroadcastDispatcher,
                 mUserTracker, mKeyguardStateController, mCommandQueue);
     }

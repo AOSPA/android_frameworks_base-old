@@ -61,8 +61,10 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
@@ -82,16 +84,20 @@ import android.os.UserHandle;
 import android.platform.test.annotations.Presubmit;
 import android.provider.DeviceConfig;
 import android.provider.DeviceConfig.Properties;
+import android.view.InsetsVisibilities;
 import android.view.WindowManager;
 
 import androidx.test.filters.MediumTest;
 
 import com.android.internal.policy.SystemBarUtils;
+import com.android.internal.statusbar.LetterboxDetails;
+import com.android.server.statusbar.StatusBarManagerInternal;
 
 import libcore.junit.util.compat.CoreCompatChangeRule.DisableCompatChanges;
 import libcore.junit.util.compat.CoreCompatChangeRule.EnableCompatChanges;
 
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -1532,6 +1538,108 @@ public class SizeCompatTests extends WindowTestsBase {
     }
 
     @Test
+    @EnableCompatChanges({ActivityInfo.OVERRIDE_MIN_ASPECT_RATIO,
+            ActivityInfo.OVERRIDE_MIN_ASPECT_RATIO_TO_ALIGN_WITH_SPLIT_SCREEN})
+    public void testOverrideSplitScreenAspectRatioForUnresizablePortraitApps() {
+        final int displayWidth = 1400;
+        final int displayHeight = 1600;
+        setUpDisplaySizeWithApp(displayWidth, displayHeight);
+        final ActivityRecord activity = new ActivityBuilder(mAtm)
+                .setTask(mTask)
+                .setComponent(ComponentName.createRelative(mContext,
+                        SizeCompatTests.class.getName()))
+                .setMinAspectRatio(1.1f)
+                .setUid(android.os.Process.myUid())
+                .build();
+        // Setup Letterbox Configuration
+        activity.mDisplayContent.setIgnoreOrientationRequest(true /* ignoreOrientationRequest */);
+        activity.mWmService.mLetterboxConfiguration.setFixedOrientationLetterboxAspectRatio(1.5f);
+        // Non-resizable portrait activity
+        prepareUnresizable(activity, ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+        float expectedAspectRatio = 1f * displayWidth / getExpectedSplitSize(displayHeight);
+        final Rect afterBounds = activity.getBounds();
+        final float afterAspectRatio = (float) (afterBounds.height()) / afterBounds.width();
+        Assert.assertEquals(expectedAspectRatio, afterAspectRatio, 0.001f);
+    }
+
+    @Test
+    @EnableCompatChanges({ActivityInfo.OVERRIDE_MIN_ASPECT_RATIO,
+            ActivityInfo.OVERRIDE_MIN_ASPECT_RATIO_TO_ALIGN_WITH_SPLIT_SCREEN})
+    public void testOverrideSplitScreenAspectRatioForUnresizablePortraitAppsFromLandscape() {
+        final int displayWidth = 1600;
+        final int displayHeight = 1400;
+        setUpDisplaySizeWithApp(displayWidth, displayHeight);
+        final ActivityRecord activity = new ActivityBuilder(mAtm)
+                .setTask(mTask)
+                .setComponent(ComponentName.createRelative(mContext,
+                        SizeCompatTests.class.getName()))
+                .setMinAspectRatio(1.1f)
+                .setUid(android.os.Process.myUid())
+                .build();
+        // Setup Letterbox Configuration
+        activity.mDisplayContent.setIgnoreOrientationRequest(true /* ignoreOrientationRequest */);
+        activity.mWmService.mLetterboxConfiguration.setFixedOrientationLetterboxAspectRatio(1.5f);
+        // Non-resizable portrait activity
+        prepareUnresizable(activity, ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+        float expectedAspectRatio = 1f * displayHeight / getExpectedSplitSize(displayWidth);
+        final Rect afterBounds = activity.getBounds();
+        final float afterAspectRatio = (float) (afterBounds.height()) / afterBounds.width();
+        Assert.assertEquals(expectedAspectRatio, afterAspectRatio, 0.001f);
+    }
+
+    @Test
+    @EnableCompatChanges({ActivityInfo.OVERRIDE_MIN_ASPECT_RATIO,
+            ActivityInfo.OVERRIDE_MIN_ASPECT_RATIO_TO_ALIGN_WITH_SPLIT_SCREEN})
+    @DisableCompatChanges({ActivityInfo.OVERRIDE_MIN_ASPECT_RATIO_PORTRAIT_ONLY})
+    public void testOverrideSplitScreenAspectRatioForUnresizableLandscapeApps() {
+        final int displayWidth = 1400;
+        final int displayHeight = 1600;
+        setUpDisplaySizeWithApp(displayWidth, displayHeight);
+        final ActivityRecord activity = new ActivityBuilder(mAtm)
+                .setTask(mTask)
+                .setComponent(ComponentName.createRelative(mContext,
+                        SizeCompatTests.class.getName()))
+                .setMinAspectRatio(1.1f)
+                .setUid(android.os.Process.myUid())
+                .build();
+        // Setup Letterbox Configuration
+        activity.mDisplayContent.setIgnoreOrientationRequest(true /* ignoreOrientationRequest */);
+        activity.mWmService.mLetterboxConfiguration.setFixedOrientationLetterboxAspectRatio(1.5f);
+        // Non-resizable portrait activity
+        prepareUnresizable(activity, ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+        float expectedAspectRatio = 1f * displayWidth / getExpectedSplitSize(displayHeight);
+        final Rect afterBounds = activity.getBounds();
+        final float afterAspectRatio = (float) (afterBounds.width()) / afterBounds.height();
+        Assert.assertEquals(expectedAspectRatio, afterAspectRatio, 0.001f);
+    }
+
+    @Test
+    @EnableCompatChanges({ActivityInfo.OVERRIDE_MIN_ASPECT_RATIO,
+            ActivityInfo.OVERRIDE_MIN_ASPECT_RATIO_TO_ALIGN_WITH_SPLIT_SCREEN})
+    @DisableCompatChanges({ActivityInfo.OVERRIDE_MIN_ASPECT_RATIO_PORTRAIT_ONLY})
+    public void testOverrideSplitScreenAspectRatioForUnresizableLandscapeAppsFromLandscape() {
+        final int displayWidth = 1600;
+        final int displayHeight = 1400;
+        setUpDisplaySizeWithApp(displayWidth, displayHeight);
+        final ActivityRecord activity = new ActivityBuilder(mAtm)
+                .setTask(mTask)
+                .setComponent(ComponentName.createRelative(mContext,
+                        SizeCompatTests.class.getName()))
+                .setMinAspectRatio(1.1f)
+                .setUid(android.os.Process.myUid())
+                .build();
+        // Setup Letterbox Configuration
+        activity.mDisplayContent.setIgnoreOrientationRequest(true /* ignoreOrientationRequest */);
+        activity.mWmService.mLetterboxConfiguration.setFixedOrientationLetterboxAspectRatio(1.5f);
+        // Non-resizable portrait activity
+        prepareUnresizable(activity, ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+        float expectedAspectRatio = 1f * displayHeight / getExpectedSplitSize(displayWidth);
+        final Rect afterBounds = activity.getBounds();
+        final float afterAspectRatio = (float) (afterBounds.width()) / afterBounds.height();
+        Assert.assertEquals(expectedAspectRatio, afterAspectRatio, 0.001f);
+    }
+
+    @Test
     public void testSplitAspectRatioForUnresizableLandscapeApps() {
         // Set up a display in portrait and ignoring orientation request.
         int screenWidth = 1400;
@@ -2113,6 +2221,138 @@ public class SizeCompatTests extends WindowTestsBase {
         assertLetterboxSurfacesDrawnBetweenActivityAndParentBounds(organizer.mPrimary.getBounds());
     }
 
+    @Test
+    public void testLetterboxDetailsForStatusBar_noLetterbox() {
+        setUpDisplaySizeWithApp(2800, 1000);
+        addStatusBar(mActivity.mDisplayContent);
+        addWindowToActivity(mActivity); // Add a window to the activity so that we can get an
+        // appearance inside letterboxDetails
+
+        DisplayPolicy displayPolicy = mActivity.getDisplayContent().getDisplayPolicy();
+        StatusBarManagerInternal statusBar = displayPolicy.getStatusBarManagerInternal();
+        // We should get a null LetterboxDetails object as there is no letterboxed activity, so
+        // nothing will get passed to SysUI
+        verify(statusBar, never()).onSystemBarAttributesChanged(anyInt(), anyInt(),
+                any(), anyBoolean(), anyInt(),
+                any(InsetsVisibilities.class), isNull(), isNull());
+
+    }
+
+    @Test
+    public void testLetterboxDetailsForStatusBar_letterboxedForMaxAspectRatio() {
+        setUpDisplaySizeWithApp(2800, 1000);
+        addStatusBar(mActivity.mDisplayContent);
+        addWindowToActivity(mActivity); // Add a window to the activity so that we can get an
+        // appearance inside letterboxDetails
+        // Prepare unresizable activity with max aspect ratio
+        prepareUnresizable(mActivity, /* maxAspect */ 1.1f, SCREEN_ORIENTATION_UNSPECIFIED);
+        // Refresh the letterbox
+        mActivity.mRootWindowContainer.performSurfacePlacement();
+
+        Rect mBounds = new Rect(mActivity.getWindowConfiguration().getBounds());
+        assertEquals(mBounds, new Rect(850, 0, 1950, 1000));
+
+        DisplayPolicy displayPolicy = mActivity.getDisplayContent().getDisplayPolicy();
+        LetterboxDetails[] expectedLetterboxDetails = {new LetterboxDetails(
+                mBounds,
+                mActivity.getDisplayContent().getBounds(),
+                mActivity.findMainWindow().mAttrs.insetsFlags.appearance
+        )};
+
+        // Check that letterboxDetails actually gets passed to SysUI
+        StatusBarManagerInternal statusBar = displayPolicy.getStatusBarManagerInternal();
+        verify(statusBar).onSystemBarAttributesChanged(anyInt(), anyInt(),
+                any(), anyBoolean(), anyInt(),
+                any(InsetsVisibilities.class), isNull(), eq(expectedLetterboxDetails));
+    }
+
+    @Test
+    public void testLetterboxDetailsForStatusBar_letterboxNotOverlappingStatusBar() {
+        final DisplayContent display = new TestDisplayContent.Builder(mAtm, 1000, 2800)
+                .setNotch(100)
+                .build();
+        setUpApp(display);
+        TestWindowState statusBar = addStatusBar(mActivity.mDisplayContent);
+        spyOn(statusBar);
+        doReturn(new Rect(0, 0, statusBar.mRequestedWidth, statusBar.mRequestedHeight))
+                .when(statusBar).getFrame();
+        addWindowToActivity(mActivity); // Add a window to the activity so that we can get an
+        // appearance inside letterboxDetails
+        // Prepare unresizable activity with max aspect ratio
+        prepareUnresizable(mActivity, /* maxAspect */ 1.1f, SCREEN_ORIENTATION_UNSPECIFIED);
+        // Refresh the letterbox
+        mActivity.mRootWindowContainer.performSurfacePlacement();
+
+        Rect mBounds = new Rect(mActivity.getWindowConfiguration().getBounds());
+        assertEquals(mBounds, new Rect(0, 750, 1000, 1950));
+
+        DisplayPolicy displayPolicy = mActivity.getDisplayContent().getDisplayPolicy();
+        LetterboxDetails[] expectedLetterboxDetails = {new LetterboxDetails(
+                mBounds,
+                mActivity.getDisplayContent().getBounds(),
+                mActivity.findMainWindow().mAttrs.insetsFlags.appearance
+        )};
+
+        // Check that letterboxDetails actually gets passed to SysUI
+        StatusBarManagerInternal statusBarManager = displayPolicy.getStatusBarManagerInternal();
+        verify(statusBarManager).onSystemBarAttributesChanged(anyInt(), anyInt(),
+                any(), anyBoolean(), anyInt(),
+                any(InsetsVisibilities.class), isNull(), eq(expectedLetterboxDetails));
+    }
+
+    @Test
+    public void testSplitScreenLetterboxDetailsForStatusBar_twoLetterboxedApps() {
+        mAtm.mDevEnableNonResizableMultiWindow = true;
+        setUpDisplaySizeWithApp(2800, 1000);
+        addStatusBar(mActivity.mDisplayContent);
+        // Create another task for the second activity
+        final Task newTask = new TaskBuilder(mSupervisor).setDisplay(mActivity.getDisplayContent())
+                .setCreateActivity(true).build();
+        ActivityRecord newActivity = newTask.getTopNonFinishingActivity();
+
+        final TestSplitOrganizer organizer =
+                new TestSplitOrganizer(mAtm, mActivity.getDisplayContent());
+
+        // Move first activity to split screen which takes half of the screen.
+        organizer.mPrimary.setBounds(0, 0, 1400, 1000);
+        organizer.putTaskToPrimary(mTask, true);
+        // Move second activity to split screen which takes half of the screen.
+        organizer.mSecondary.setBounds(1400, 0, 2800, 1000);
+        organizer.putTaskToSecondary(newTask, true);
+
+        addWindowToActivity(mActivity); // Add a window to the activity so that we can get an
+        // appearance inside letterboxDetails
+        // Prepare unresizable activity with max aspect ratio
+        prepareUnresizable(mActivity, /* maxAspect */ 1.1f, SCREEN_ORIENTATION_UNSPECIFIED);
+        addWindowToActivity(newActivity);
+        prepareUnresizable(newActivity, /* maxAspect */ 1.1f, SCREEN_ORIENTATION_UNSPECIFIED);
+
+        // Refresh the letterboxes
+        newActivity.mRootWindowContainer.performSurfacePlacement();
+
+        Rect mBounds = new Rect(mActivity.getWindowConfiguration().getBounds());
+        assertEquals(mBounds, new Rect(150, 0, 1250, 1000));
+        final Rect newBounds = new Rect(newActivity.getWindowConfiguration().getBounds());
+        assertEquals(newBounds, new Rect(1550, 0, 2650, 1000));
+
+        DisplayPolicy displayPolicy = mActivity.getDisplayContent().getDisplayPolicy();
+        LetterboxDetails[] expectedLetterboxDetails = { new LetterboxDetails(
+                mBounds,
+                organizer.mPrimary.getBounds(),
+                mActivity.findMainWindow().mAttrs.insetsFlags.appearance
+        ), new LetterboxDetails(
+                newBounds,
+                organizer.mSecondary.getBounds(),
+                newActivity.findMainWindow().mAttrs.insetsFlags.appearance
+        )};
+
+        // Check that letterboxDetails actually gets passed to SysUI
+        StatusBarManagerInternal statusBar = displayPolicy.getStatusBarManagerInternal();
+        verify(statusBar).onSystemBarAttributesChanged(anyInt(), anyInt(),
+                any(), anyBoolean(), anyInt(),
+                any(InsetsVisibilities.class), isNull(), eq(expectedLetterboxDetails));
+    }
+
     private void recomputeNaturalConfigurationOfUnresizableActivity() {
         // Recompute the natural configuration of the non-resizable activity and the split screen.
         mActivity.clearSizeCompatMode();
@@ -2681,7 +2921,7 @@ public class SizeCompatTests extends WindowTestsBase {
         return w;
     }
 
-    private static void addStatusBar(DisplayContent displayContent) {
+    private static TestWindowState addStatusBar(DisplayContent displayContent) {
         final DisplayPolicy displayPolicy = displayContent.getDisplayPolicy();
         doReturn(true).when(displayPolicy).hasStatusBar();
         displayPolicy.onConfigurationChanged();
@@ -2702,6 +2942,7 @@ public class SizeCompatTests extends WindowTestsBase {
 
         displayPolicy.addWindowLw(statusBar, attrs);
         displayPolicy.layoutWindowLw(statusBar, null, displayContent.mDisplayFrames);
+        return statusBar;
     }
 
     /**

@@ -139,24 +139,19 @@ public class SubscriptionManager {
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     public static final Uri CONTENT_URI = SimInfo.CONTENT_URI;
 
-    /** @hide */
-    public static final String CACHE_KEY_DEFAULT_SUB_ID_PROPERTY =
+    private static final String CACHE_KEY_DEFAULT_SUB_ID_PROPERTY =
             "cache_key.telephony.get_default_sub_id";
 
-    /** @hide */
-    public static final String CACHE_KEY_DEFAULT_DATA_SUB_ID_PROPERTY =
+    private static final String CACHE_KEY_DEFAULT_DATA_SUB_ID_PROPERTY =
             "cache_key.telephony.get_default_data_sub_id";
 
-    /** @hide */
-    public static final String CACHE_KEY_DEFAULT_SMS_SUB_ID_PROPERTY =
+    private static final String CACHE_KEY_DEFAULT_SMS_SUB_ID_PROPERTY =
             "cache_key.telephony.get_default_sms_sub_id";
 
-    /** @hide */
-    public static final String CACHE_KEY_ACTIVE_DATA_SUB_ID_PROPERTY =
+    private static final String CACHE_KEY_ACTIVE_DATA_SUB_ID_PROPERTY =
             "cache_key.telephony.get_active_data_sub_id";
 
-    /** @hide */
-    public static final String CACHE_KEY_SLOT_INDEX_PROPERTY =
+    private static final String CACHE_KEY_SLOT_INDEX_PROPERTY =
             "cache_key.telephony.get_slot_index";
 
     /** @hide */
@@ -194,13 +189,24 @@ public class SubscriptionManager {
         }
 
         @Override
-        public T recompute(Void aVoid) {
+        public T recompute(Void query) {
+            // This always throws on any error.  The exceptions must be handled outside
+            // the cache.
+            try {
+                return mInterfaceMethod.applyOrThrow(TelephonyManager.getSubscriptionService());
+            } catch (Exception re) {
+                throw new RuntimeException(re);
+            }
+        }
+
+        @Override
+        public T query(Void query) {
             T result = mDefaultValue;
 
             try {
                 ISub iSub = TelephonyManager.getSubscriptionService();
                 if (iSub != null) {
-                    result = mInterfaceMethod.applyOrThrow(iSub);
+                    result = super.query(query);
                 }
             } catch (Exception ex) {
                 Rlog.w(LOG_TAG, "Failed to recompute cache key for " + mCacheKeyProperty);
@@ -229,12 +235,24 @@ public class SubscriptionManager {
 
         @Override
         public T recompute(Integer query) {
+            // This always throws on any error.  The exceptions must be handled outside
+            // the cache.
+            try {
+                return mInterfaceMethod.applyOrThrow(
+                    TelephonyManager.getSubscriptionService(), query);
+            } catch (Exception re) {
+                throw new RuntimeException(re);
+            }
+        }
+
+        @Override
+        public T query(Integer query) {
             T result = mDefaultValue;
 
             try {
                 ISub iSub = TelephonyManager.getSubscriptionService();
                 if (iSub != null) {
-                    result = mInterfaceMethod.applyOrThrow(iSub, query);
+                    result = super.query(query);
                 }
             } catch (Exception ex) {
                 Rlog.w(LOG_TAG, "Failed to recompute cache key for " + mCacheKeyProperty);
@@ -3121,8 +3139,9 @@ public class SubscriptionManager {
      * @param callback Callback will be triggered once it succeeds or failed.
      *                 Pass null if don't care about the result.
      *
+     * @throws IllegalStateException when subscription manager service is not available.
+     * @throws SecurityException when clients do not have MODIFY_PHONE_STATE permission.
      * @hide
-     *
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
@@ -3132,7 +3151,9 @@ public class SubscriptionManager {
         if (VDBG) logd("[setPreferredDataSubscriptionId]+ subId:" + subId);
         try {
             ISub iSub = TelephonyManager.getSubscriptionService();
-            if (iSub == null) return;
+            if (iSub == null) {
+                throw new IllegalStateException("subscription manager service is null.");
+            }
 
             ISetOpportunisticDataCallback callbackStub = new ISetOpportunisticDataCallback.Stub() {
                 @Override
@@ -3152,7 +3173,8 @@ public class SubscriptionManager {
             };
             iSub.setPreferredDataSubscriptionId(subId, needValidation, callbackStub);
         } catch (RemoteException ex) {
-            // ignore it
+            loge("setPreferredDataSubscriptionId RemoteException=" + ex);
+            ex.rethrowFromSystemServer();
         }
     }
 
@@ -4114,4 +4136,3 @@ public class SubscriptionManager {
                         usageSetting, subscriptionId, mContext.getOpPackageName()));
     }
 }
-

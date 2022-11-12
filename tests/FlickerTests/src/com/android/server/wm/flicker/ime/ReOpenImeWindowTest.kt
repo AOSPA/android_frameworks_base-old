@@ -16,7 +16,6 @@
 
 package com.android.server.wm.flicker.ime
 
-import android.platform.test.annotations.FlakyTest
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import androidx.test.filters.RequiresDevice
@@ -30,8 +29,7 @@ import com.android.server.wm.flicker.helpers.ImeAppAutoFocusHelper
 import com.android.server.wm.flicker.helpers.isShellTransitionsEnabled
 import com.android.server.wm.flicker.helpers.reopenAppFromOverview
 import com.android.server.wm.flicker.helpers.setRotation
-import com.android.server.wm.traces.common.ComponentMatcher
-import com.android.server.wm.traces.common.ComponentMatcher.Companion.LAUNCHER
+import com.android.server.wm.traces.common.ComponentNameMatcher
 import org.junit.Assume
 import org.junit.FixMethodOrder
 import org.junit.Test
@@ -69,6 +67,7 @@ open class ReOpenImeWindowTest(testSpec: FlickerTestParameter) : BaseTest(testSp
         transitions {
             device.reopenAppFromOverview(wmHelper)
             wmHelper.StateSyncBuilder()
+                .withFullScreenApp(testApp)
                 .withImeShown()
                 .waitForAndVerify()
         }
@@ -80,22 +79,16 @@ open class ReOpenImeWindowTest(testSpec: FlickerTestParameter) : BaseTest(testSp
     }
 
     /** {@inheritDoc} */
-    @FlakyTest(bugId = 206753786)
-    @Test
-    override fun statusBarLayerPositionAtStartAndEnd() =
-        super.statusBarLayerPositionAtStartAndEnd()
-
-    /** {@inheritDoc} */
     @Presubmit
     @Test
     override fun visibleLayersShownMoreThanOneConsecutiveEntry() {
         // depends on how much of the animation transactions are sent to SF at once
         // sometimes this layer appears for 2-3 frames, sometimes for only 1
-        val recentTaskComponent = ComponentMatcher("", "RecentTaskScreenshotSurface")
+        val recentTaskComponent = ComponentNameMatcher("", "RecentTaskScreenshotSurface")
         testSpec.assertLayers {
             this.visibleLayersShownMoreThanOneConsecutiveEntry(
-                listOf(ComponentMatcher.SPLASH_SCREEN,
-                    ComponentMatcher.SNAPSHOT, recentTaskComponent)
+                listOf(ComponentNameMatcher.SPLASH_SCREEN,
+                    ComponentNameMatcher.SNAPSHOT, recentTaskComponent)
             )
         }
     }
@@ -104,11 +97,11 @@ open class ReOpenImeWindowTest(testSpec: FlickerTestParameter) : BaseTest(testSp
     @Presubmit
     @Test
     override fun visibleWindowsShownMoreThanOneConsecutiveEntry() {
-        val component = ComponentMatcher("", "RecentTaskScreenshotSurface")
+        val component = ComponentNameMatcher("", "RecentTaskScreenshotSurface")
         testSpec.assertWm {
             this.visibleWindowsShownMoreThanOneConsecutiveEntry(
-                    ignoreWindows = listOf(ComponentMatcher.SPLASH_SCREEN,
-                        ComponentMatcher.SNAPSHOT,
+                    ignoreWindows = listOf(ComponentNameMatcher.SPLASH_SCREEN,
+                        ComponentNameMatcher.SNAPSHOT,
                         component)
             )
         }
@@ -118,9 +111,9 @@ open class ReOpenImeWindowTest(testSpec: FlickerTestParameter) : BaseTest(testSp
     @Test
     fun launcherWindowBecomesInvisible() {
         testSpec.assertWm {
-            this.isAppWindowVisible(LAUNCHER)
+            this.isAppWindowVisible(ComponentNameMatcher.LAUNCHER)
                     .then()
-                    .isAppWindowInvisible(LAUNCHER)
+                    .isAppWindowInvisible(ComponentNameMatcher.LAUNCHER)
         }
     }
 
@@ -146,9 +139,9 @@ open class ReOpenImeWindowTest(testSpec: FlickerTestParameter) : BaseTest(testSp
         }
     }
 
-    @FlakyTest(bugId = 204570898)
+    @Presubmit
     @Test
-    fun imeAppWindowVisibility() {
+    fun imeAppWindowIsAlwaysVisibleShellTransit() {
         Assume.assumeTrue(isShellTransitionsEnabled)
         // the app starts visible in live tile, and stays visible for the duration of entering
         // and exiting overview. Since we log 1x per frame, sometimes the activity visibility
@@ -164,20 +157,20 @@ open class ReOpenImeWindowTest(testSpec: FlickerTestParameter) : BaseTest(testSp
     fun imeLayerIsBecomesVisibleLegacy() {
         Assume.assumeFalse(isShellTransitionsEnabled)
         testSpec.assertLayers {
-            this.isVisible(ComponentMatcher.IME)
+            this.isVisible(ComponentNameMatcher.IME)
                     .then()
-                    .isInvisible(ComponentMatcher.IME)
+                    .isInvisible(ComponentNameMatcher.IME)
                     .then()
-                    .isVisible(ComponentMatcher.IME)
+                    .isVisible(ComponentNameMatcher.IME)
         }
     }
 
-    @FlakyTest(bugId = 204570898)
+    @Presubmit
     @Test
-    fun imeLayerIsBecomesVisible() {
+    fun imeLayerBecomesVisibleShellTransit() {
         Assume.assumeTrue(isShellTransitionsEnabled)
         testSpec.assertLayers {
-            this.isVisible(ComponentMatcher.IME)
+            this.isVisible(ComponentNameMatcher.IME)
         }
     }
 
@@ -185,9 +178,9 @@ open class ReOpenImeWindowTest(testSpec: FlickerTestParameter) : BaseTest(testSp
     @Test
     fun appLayerReplacesLauncher() {
         testSpec.assertLayers {
-            this.isVisible(ComponentMatcher.LAUNCHER)
+            this.isVisible(ComponentNameMatcher.LAUNCHER)
                 .then()
-                .isVisible(ComponentMatcher.SNAPSHOT, isOptional = true)
+                .isVisible(ComponentNameMatcher.SNAPSHOT, isOptional = true)
                 .then()
                 .isVisible(testApp)
         }

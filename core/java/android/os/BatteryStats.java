@@ -77,7 +77,7 @@ import java.util.Map;
  * except where indicated otherwise.
  * @hide
  */
-public abstract class BatteryStats implements Parcelable {
+public abstract class BatteryStats {
 
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     public BatteryStats() {}
@@ -2326,11 +2326,6 @@ public abstract class BatteryStats implements Parcelable {
     public abstract void finishIteratingHistoryLocked();
 
     /**
-     * Return the base time offset for the battery history.
-     */
-    public abstract long getHistoryBaseTime();
-
-    /**
      * Returns the number of times the device has been started.
      */
     public abstract int getStartCount();
@@ -3515,8 +3510,6 @@ public abstract class BatteryStats implements Parcelable {
 
 
     public abstract LongSparseArray<? extends Timer> getKernelMemoryStats();
-
-    public abstract void writeToParcelWithoutUids(Parcel out, int flags);
 
     private final static void formatTimeRaw(StringBuilder out, long seconds) {
         long days = seconds / (60 * 60 * 24);
@@ -7616,8 +7609,6 @@ public abstract class BatteryStats implements Parcelable {
         dumpLine(pw, 0 /* uid */, "i" /* category */, VERSION_DATA,
                 CHECKIN_VERSION, getParcelVersion(), getStartPlatformVersion(),
                 getEndPlatformVersion());
-
-        long now = getHistoryBaseTime() + SystemClock.elapsedRealtime();
 
         if ((flags & (DUMP_INCLUDE_HISTORY | DUMP_HISTORY_ONLY)) != 0) {
             if (startIteratingHistoryLocked()) {

@@ -52,17 +52,6 @@
       ]
     },
     {
-      "name": "SystemUIGoogleScreenshotTests",
-      "options": [
-        {
-          "exclude-annotation": "org.junit.Ignore"
-        },
-        {
-          "exclude-annotation": "androidx.test.filters.FlakyTest"
-        }
-      ]
-    },
-    {
       // Permission indicators
       "name": "CtsPermission4TestCases",
       "options": [
@@ -133,6 +122,22 @@
         },
         {
             "exclude-annotation": "org.junit.Ignore"
+        }
+      ]
+    }
+  ],
+  "ironwood-postsubmit": [
+    {
+      "name": "PlatformScenarioTests",
+      "options": [
+        {
+            "include-annotation": "android.platform.test.annotations.IwTest"
+        },
+        {
+            "exclude-annotation": "org.junit.Ignore"
+        },
+        {
+            "include-filter": "android.platform.test.scenario.sysui"
         }
       ]
     }

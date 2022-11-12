@@ -836,7 +836,7 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
 
             // schedule launch ticks to collect information about slow apps.
             r.startLaunchTickingLocked();
-
+            r.lastLaunchTime = SystemClock.uptimeMillis();
             r.setProcess(proc);
 
             // Ensure activity is allowed to be resumed after process has set.
@@ -882,8 +882,6 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
             final IActivityClientController activityClientController =
                     proc.hasEverLaunchedActivity() ? null : mService.mActivityClientController;
             r.launchCount++;
-            r.lastLaunchTime = SystemClock.uptimeMillis();
-            proc.setLastActivityLaunchTime(r.lastLaunchTime);
 
             if (DEBUG_ALL) Slog.v(TAG, "Launching: " + r);
 
@@ -922,7 +920,6 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
                         r.intent.getComponent().getPackageName(), NOTIFY_PACKAGE_USE_ACTIVITY);
                 r.forceNewConfig = false;
                 mService.getAppWarningsLocked().onStartActivity(r);
-                r.compat = mService.compatibilityInfoForPackageLocked(r.info.applicationInfo);
 
                 // Because we could be starting an Activity in the system process this may not go
                 // across a Binder interface which would create a new Configuration. Consequently
@@ -934,11 +931,12 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
 
                 logIfTransactionTooLarge(r.intent, r.getSavedState());
 
-                if (r.isEmbedded()) {
+                final TaskFragment organizedTaskFragment = r.getOrganizedTaskFragment();
+                if (organizedTaskFragment != null) {
                     // Sending TaskFragmentInfo to client to ensure the info is updated before
                     // the activity creation.
                     mService.mTaskFragmentOrganizerController.dispatchPendingInfoChangedEvent(
-                            r.getOrganizedTaskFragment());
+                            organizedTaskFragment);
                 }
 
                 // Create activity launch transaction.
@@ -952,7 +950,7 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
                         // TODO: Have this take the merged configuration instead of separate global
                         // and override configs.
                         mergedConfiguration.getGlobalConfiguration(),
-                        mergedConfiguration.getOverrideConfiguration(), r.compat,
+                        mergedConfiguration.getOverrideConfiguration(),
                         r.getFilteredReferrer(r.launchedFromPackage), task.voiceInteractor,
                         proc.getReportedProcState(), r.getSavedState(), r.getPersistentSavedState(),
                         results, newIntents, r.takeOptions(), isTransitionForward,
@@ -2018,6 +2016,9 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
         // End power mode launch before going sleep
         mService.endLaunchPowerMode(ActivityTaskManagerService.POWER_MODE_REASON_ALL);
 
+        // Rank task layers to make sure the {@link Task#mLayerRank} is updated.
+        mRootWindowContainer.rankTaskLayers();
+
         removeSleepTimeouts();
 
         if (mGoingToSleepWakeLock.isHeld()) {
@@ -2225,7 +2226,7 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
      * activity releases the top state and reports back, message about acquiring top state will be
      * sent to the new top resumed activity.
      */
-    void updateTopResumedActivityIfNeeded() {
+    void updateTopResumedActivityIfNeeded(String reason) {
         final ActivityRecord prevTopActivity = mTopResumedActivity;
         final Task topRootTask = mRootWindowContainer.getTopDisplayFocusedRootTask();
         if (topRootTask == null || topRootTask.getTopResumedActivity() == prevTopActivity) {
@@ -2260,6 +2261,12 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
                 mTopResumedActivity.app.addToPendingTop();
             }
             mService.updateOomAdj();
+        }
+        // Update the last resumed activity and focused app when the top resumed activity changed
+        // because the new top resumed activity might be already resumed and thus won't have
+        // activity state change to update the records to AMS.
+        if (mTopResumedActivity != null) {
+            mService.setLastResumedActivityUncheckLocked(mTopResumedActivity, reason);
         }
         scheduleTopResumedActivityStateIfNeeded();
 
@@ -2794,11 +2801,11 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
 
         @Override
         public void accept(ActivityRecord r) {
-            if (r.finishing) {
-                return;
-            }
             if (r.mLaunchCookie != null) {
                 mInfo.addLaunchCookie(r.mLaunchCookie);
+            }
+            if (r.finishing) {
+                return;
             }
             mInfo.numActivities++;
             mInfo.baseActivity = r.mActivityComponent;

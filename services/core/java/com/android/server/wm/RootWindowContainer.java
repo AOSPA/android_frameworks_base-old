@@ -212,10 +212,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     // Map from the PID to the top most app which has a focused window of the process.
     final ArrayMap<Integer, ActivityRecord> mTopFocusedAppByProcess = new ArrayMap<>();
 
-    // Only a separate transaction until we separate the apply surface changes
-    // transaction from the global transaction.
-    private final SurfaceControl.Transaction mDisplayTransaction;
-
     // The tag for the token to put root tasks on the displays to sleep.
     private static final String DISPLAY_OFF_SLEEP_TOKEN_TAG = "Display-off";
 
@@ -466,7 +462,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
     RootWindowContainer(WindowManagerService service) {
         super(service);
-        mDisplayTransaction = service.mTransactionFactory.get();
         mHandler = new MyHandler(service.mH.getLooper());
         mService = service.mAtmService;
         mTaskSupervisor = mService.mTaskSupervisor;
@@ -525,7 +520,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     void onChildPositionChanged(WindowContainer child) {
         mWmService.updateFocusedWindowLocked(UPDATE_FOCUS_NORMAL,
                 !mWmService.mPerDisplayFocusEnabled /* updateInputWindows */);
-        mTaskSupervisor.updateTopResumedActivityIfNeeded();
+        mTaskSupervisor.updateTopResumedActivityIfNeeded("onChildPositionChanged");
     }
 
     @Override
@@ -785,6 +780,10 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         return leakedSurface || killedApps;
     }
 
+    /**
+     * This method should only be called from {@link WindowSurfacePlacer}. Otherwise the recursion
+     * check and {@link WindowSurfacePlacer#isInLayout()} won't take effect.
+     */
     void performSurfacePlacement() {
         Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "performSurfacePlacement");
         try {
@@ -1007,19 +1006,20 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         mObscuringWindow = null;
 
         // TODO(multi-display): Support these features on secondary screens.
-        final DisplayContent defaultDc = mWmService.getDefaultDisplayContentLocked();
+        final DisplayContent defaultDc = mDefaultDisplay;
         final DisplayInfo defaultInfo = defaultDc.getDisplayInfo();
         final int defaultDw = defaultInfo.logicalWidth;
         final int defaultDh = defaultInfo.logicalHeight;
+        final SurfaceControl.Transaction t = defaultDc.getSyncTransaction();
         if (mWmService.mWatermark != null) {
-            mWmService.mWatermark.positionSurface(defaultDw, defaultDh, mDisplayTransaction);
+            mWmService.mWatermark.positionSurface(defaultDw, defaultDh, t);
         }
         if (mWmService.mStrictModeFlash != null) {
-            mWmService.mStrictModeFlash.positionSurface(defaultDw, defaultDh, mDisplayTransaction);
+            mWmService.mStrictModeFlash.positionSurface(defaultDw, defaultDh, t);
         }
         if (mWmService.mEmulatorDisplayOverlay != null) {
             mWmService.mEmulatorDisplayOverlay.positionSurface(defaultDw, defaultDh,
-                    mWmService.getDefaultDisplayRotation(), mDisplayTransaction);
+                    defaultDc.getRotation(), t);
         }
 
         final int count = mChildren.size();
@@ -1030,8 +1030,10 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
         // Give the display manager a chance to adjust properties like display rotation if it needs
         // to.
-        mWmService.mDisplayManagerInternal.performTraversal(mDisplayTransaction);
-        SurfaceControl.mergeToGlobalTransaction(mDisplayTransaction);
+        mWmService.mDisplayManagerInternal.performTraversal(t);
+        if (t != defaultDc.mSyncTransaction) {
+            SurfaceControl.mergeToGlobalTransaction(t);
+        }
     }
 
     /**
@@ -1824,6 +1826,10 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         // The top focused root task might not have a resumed activity yet - look on all displays in
         // focus order.
         return getItemFromTaskDisplayAreas(TaskDisplayArea::getFocusedActivity);
+    }
+
+    boolean hasResumedActivity(int uid) {
+        return forAllActivities(ar -> ar.isState(RESUMED) && ar.getUid() == uid);
     }
 
     boolean isTopDisplayFocusedRootTask(Task task) {
@@ -3432,9 +3438,16 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
     @VisibleForTesting
     void getRunningTasks(int maxNum, List<ActivityManager.RunningTaskInfo> list,
-            int flags, int callingUid, ArraySet<Integer> profileIds) {
-        mTaskSupervisor.getRunningTasks().getTasks(maxNum, list, flags, this, callingUid,
-                profileIds);
+            int flags, int callingUid, ArraySet<Integer> profileIds, int displayId) {
+        WindowContainer root = this;
+        if (displayId != INVALID_DISPLAY) {
+            root = getDisplayContent(displayId);
+            if (root == null) {
+                return;
+            }
+        }
+        mTaskSupervisor.getRunningTasks().getTasks(maxNum, list, flags, mService.getRecentTasks(),
+                root, callingUid, profileIds);
     }
 
     void startPowerModeLaunchIfNeeded(boolean forceSend, ActivityRecord targetActivity) {

@@ -84,8 +84,8 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
                 mDemoModeController,
                 mCarrierConfigTracker,
                 mWifiStatusTrackerFactory,
+                mMobileFactory,
                 mMainHandler,
-                mFeatureFlags,
                 mock(LogBuffer.class)
         );
         TestableLooper.get(this).processAllMessages();
@@ -119,8 +119,8 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
                 mDemoModeController,
                 mCarrierConfigTracker,
                 mWifiStatusTrackerFactory,
+                mMobileFactory,
                 mMainHandler,
-                mFeatureFlags,
                 mock(LogBuffer.class));
         TestableLooper.get(this).processAllMessages();
 
@@ -152,8 +152,8 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
                 mDemoModeController,
                 mock(CarrierConfigTracker.class),
                 mWifiStatusTrackerFactory,
+                mMobileFactory,
                 mMainHandler,
-                mFeatureFlags,
                 mock(LogBuffer.class));
         setupNetworkController();
 
@@ -188,8 +188,8 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
                 mDemoModeController,
                 mock(CarrierConfigTracker.class),
                 mWifiStatusTrackerFactory,
+                mMobileFactory,
                 mMainHandler,
-                mFeatureFlags,
                 mock(LogBuffer.class));
         mNetworkController.registerListeners();
 
@@ -272,8 +272,8 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
                 mDemoModeController,
                 mock(CarrierConfigTracker.class),
                 mWifiStatusTrackerFactory,
+                mMobileFactory,
                 mMainHandler,
-                mFeatureFlags,
                 mock(LogBuffer.class));
         setupNetworkController();
 

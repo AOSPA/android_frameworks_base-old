@@ -25,9 +25,11 @@ import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
 import com.android.server.wm.flicker.annotation.Group1
 import com.android.server.wm.flicker.dsl.FlickerBuilder
+import com.android.server.wm.flicker.navBarLayerIsVisibleAtEnd
 import com.android.server.wm.flicker.navBarLayerPositionAtEnd
+import com.android.server.wm.flicker.navBarWindowIsVisibleAtEnd
 import com.android.server.wm.flicker.statusBarLayerPositionAtEnd
-import com.android.server.wm.traces.common.ComponentMatcher
+import com.android.server.wm.traces.common.ComponentNameMatcher
 import org.junit.Assume
 import org.junit.FixMethodOrder
 import org.junit.Ignore
@@ -86,9 +88,9 @@ open class OpenAppFromLockNotificationWarm(testSpec: FlickerTestParameter) :
         testSpec.assertWm {
             this.hasNoVisibleAppWindow()
                     .then()
-                    .isAppWindowOnTop(ComponentMatcher.SNAPSHOT, isOptional = true)
+                    .isAppWindowOnTop(ComponentNameMatcher.SNAPSHOT, isOptional = true)
                     .then()
-                    .isAppWindowOnTop(ComponentMatcher.SPLASH_SCREEN, isOptional = true)
+                    .isAppWindowOnTop(ComponentNameMatcher.SPLASH_SCREEN, isOptional = true)
                     .then()
                     .isAppWindowOnTop(testApp)
         }
@@ -100,8 +102,8 @@ open class OpenAppFromLockNotificationWarm(testSpec: FlickerTestParameter) :
     @Test
     @Postsubmit
     fun screenLockedStart() {
-        testSpec.assertLayersStart {
-            isEmpty()
+        testSpec.assertWmStart {
+            isKeyguardShowing()
         }
     }
 
@@ -117,11 +119,12 @@ open class OpenAppFromLockNotificationWarm(testSpec: FlickerTestParameter) :
         super.visibleWindowsShownMoreThanOneConsecutiveEntry()
 
     /** {@inheritDoc} */
-    @Ignore("Not applicable to this CUJ. Display starts off and app is full screen at the end")
+    @Test
+    @Ignore("Not applicable to this CUJ. Display starts locked and app is full screen at the end")
     override fun navBarLayerPositionAtStartAndEnd() { }
 
     /**
-     * Checks the position of the [ComponentMatcher.NAV_BAR] at the end of the transition
+     * Checks the position of the [ComponentNameMatcher.NAV_BAR] at the end of the transition
      */
     @Postsubmit
     @Test
@@ -131,11 +134,12 @@ open class OpenAppFromLockNotificationWarm(testSpec: FlickerTestParameter) :
     }
 
     /** {@inheritDoc} */
+    @Test
     @Ignore("Not applicable to this CUJ. Display starts off and app is full screen at the end")
     override fun statusBarLayerPositionAtStartAndEnd() { }
 
     /**
-     * Checks the position of the [ComponentMatcher.STATUS_BAR] at the start and end of the
+     * Checks the position of the [ComponentNameMatcher.STATUS_BAR] at the start and end of the
      * transition
      */
     @Postsubmit
@@ -143,14 +147,24 @@ open class OpenAppFromLockNotificationWarm(testSpec: FlickerTestParameter) :
     fun statusBarLayerPositionEnd() = testSpec.statusBarLayerPositionAtEnd()
 
     /** {@inheritDoc} */
-    @Postsubmit
     @Test
-    override fun navBarLayerIsVisibleAtStartAndEnd() = super.navBarLayerIsVisibleAtStartAndEnd()
+    @Ignore("Not applicable to this CUJ. Display starts locked and app is full screen at the end")
+    override fun navBarLayerIsVisibleAtStartAndEnd() =
+        super.navBarLayerIsVisibleAtStartAndEnd()
 
     /** {@inheritDoc} */
     @Postsubmit
     @Test
+    fun navBarLayerIsVisibleAtEnd() = testSpec.navBarLayerIsVisibleAtEnd()
+
+    /** {@inheritDoc} */
+    @Test
+    @Ignore("Not applicable to this CUJ. Display starts locked and app is full screen at the end")
     override fun navBarWindowIsAlwaysVisible() = super.navBarWindowIsAlwaysVisible()
+
+    @Postsubmit
+    @Test
+    fun navBarWindowIsVisibleAtEnd() = testSpec.navBarWindowIsVisibleAtEnd()
 
     /** {@inheritDoc} */
     @Postsubmit

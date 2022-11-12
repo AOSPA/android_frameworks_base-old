@@ -239,6 +239,7 @@ import com.android.server.utils.Watcher;
 
 import dalvik.system.VMRuntime;
 
+import libcore.util.EmptyArray;
 import libcore.util.HexEncoding;
 
 import java.io.ByteArrayInputStream;
@@ -521,6 +522,9 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
     static final String PACKAGE_SCHEME = "package";
 
     private static final String COMPANION_PACKAGE_NAME = "com.android.companiondevicemanager";
+
+    // How many required verifiers can be on the system.
+    private static final int REQUIRED_VERIFIERS_MAX_COUNT = 2;
 
     // Compilation reasons.
     public static final int REASON_FIRST_BOOT = 0;
@@ -907,7 +911,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
     final SparseArray<PostInstallData> mRunningInstalls = new SparseArray<>();
     int mNextInstallToken = 1;  // nonzero; will be wrapped back to 1 when ++ overflows
 
-    final @Nullable String mRequiredVerifierPackage;
+    final @NonNull String[] mRequiredVerifierPackages;
     final @Nullable String mOptionalVerifierPackage;
     final @NonNull String mRequiredInstallerPackage;
     final @NonNull String mRequiredUninstallerPackage;
@@ -1613,7 +1617,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         mSharedLibraries = injector.getSharedLibrariesImpl();
 
         mApexManager = testParams.apexManager;
-        mApexPackageInfo = new ApexPackageInfo();
+        mApexPackageInfo = new ApexPackageInfo(this);
         mArtManagerService = testParams.artManagerService;
         mAvailableFeatures = testParams.availableFeatures;
         mBackgroundDexOptService = testParams.backgroundDexOptService;
@@ -1644,7 +1648,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         mProtectedPackages = testParams.protectedPackages;
         mSeparateProcesses = testParams.separateProcesses;
         mViewCompiler = testParams.viewCompiler;
-        mRequiredVerifierPackage = testParams.requiredVerifierPackage;
+        mRequiredVerifierPackages = testParams.requiredVerifierPackages;
         mOptionalVerifierPackage = testParams.optionalVerifierPackage;
         mRequiredInstallerPackage = testParams.requiredInstallerPackage;
         mRequiredUninstallerPackage = testParams.requiredUninstallerPackage;
@@ -1814,7 +1818,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         mProtectedPackages = new ProtectedPackages(mContext);
 
         mApexManager = injector.getApexManager();
-        mApexPackageInfo = new ApexPackageInfo();
+        mApexPackageInfo = new ApexPackageInfo(this);
         mAppsFilter = mInjector.getAppsFilter();
 
         mInstantAppRegistry = new InstantAppRegistry(mContext, mPermissionManager,
@@ -1832,8 +1836,6 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         mAppDataHelper = new AppDataHelper(this);
         mInstallPackageHelper = new InstallPackageHelper(this, mAppDataHelper);
         mRemovePackageHelper = new RemovePackageHelper(this, mAppDataHelper);
-        mInitAppsHelper = new InitAppsHelper(this, mApexManager, mApexPackageInfo,
-                mInstallPackageHelper, mInjector.getSystemPartitions());
         mDeletePackageHelper = new DeletePackageHelper(this, mRemovePackageHelper,
                 mAppDataHelper);
         mSharedLibraries.setDeletePackageHelper(mDeletePackageHelper);
@@ -1953,6 +1955,9 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                 PackageManagerServiceUtils.logCriticalInfo(Log.INFO, "Upgrading from "
                         + ver.fingerprint + " to " + PackagePartitions.FINGERPRINT);
             }
+
+            mInitAppsHelper = new InitAppsHelper(this, mApexManager, mApexPackageInfo,
+                mInstallPackageHelper, mInjector.getSystemPartitions());
 
             // when upgrading from pre-M, promote system app permissions from install to runtime
             mPromoteSystemApps =
@@ -2128,7 +2133,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
             EventLog.writeEvent(EventLogTags.BOOT_PROGRESS_PMS_READY,
                     SystemClock.uptimeMillis());
 
-            mRequiredVerifierPackage = getRequiredButNotReallyRequiredVerifierLPr(computer);
+            mRequiredVerifierPackages = getRequiredButNotReallyRequiredVerifiersLPr(computer);
             mOptionalVerifierPackage = getOptionalVerifierLPr(computer);
             mRequiredInstallerPackage = getRequiredInstallerLPr(computer);
             mRequiredUninstallerPackage = getRequiredUninstallerLPr(computer);
@@ -2268,8 +2273,8 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                 "persist.pm.mock-upgrade", false /* default */);
     }
 
-    @Nullable
-    private String getRequiredButNotReallyRequiredVerifierLPr(@NonNull Computer computer) {
+    @NonNull
+    private String[] getRequiredButNotReallyRequiredVerifiersLPr(@NonNull Computer computer) {
         final Intent intent = new Intent(Intent.ACTION_PACKAGE_NEEDS_VERIFICATION);
 
         final List<ResolveInfo> matches =
@@ -2277,21 +2282,23 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                         PACKAGE_MIME_TYPE,
                         MATCH_SYSTEM_ONLY | MATCH_DIRECT_BOOT_AWARE | MATCH_DIRECT_BOOT_UNAWARE,
                         UserHandle.USER_SYSTEM, Binder.getCallingUid());
-        if (matches.size() == 1) {
-            return matches.get(0).getComponentInfo().packageName;
-        } else if (matches.size() > 1) {
-                String optionalVerifierName = mContext.getResources().getString(R.string.config_optionalPackageVerifierName);
-                if (TextUtils.isEmpty(optionalVerifierName))
-                    return matches.get(0).getComponentInfo().packageName;
-            for (int i = 0; i < matches.size(); i++) {
-                if (!matches.get(i).getComponentInfo().packageName.contains(optionalVerifierName))
-                    return matches.get(i).getComponentInfo().packageName;
-            }
-        } else if (matches.size() == 0) {
+        final int size = matches.size();
+        if (size == 0) {
             Log.w(TAG, "There should probably be a verifier, but, none were found");
-            return null;
+            return EmptyArray.STRING;
+        } else if (size <= REQUIRED_VERIFIERS_MAX_COUNT) {
+            String[] verifiers = new String[size];
+            for (int i = 0; i < size; ++i) {
+                verifiers[i] = matches.get(i).getComponentInfo().packageName;
+                if (TextUtils.isEmpty(verifiers[i])) {
+                    throw new RuntimeException("Invalid verifier: " + matches);
+                }
+            }
+            return verifiers;
         }
-        throw new RuntimeException("There must be exactly one verifier; found " + matches);
+        throw new RuntimeException(
+                "There must be no more than " + REQUIRED_VERIFIERS_MAX_COUNT + " verifiers; found "
+                        + matches);
     }
 
     private @Nullable String getOptionalVerifierLPr(@NonNull Computer computer) {
@@ -2964,7 +2971,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
             @Nullable Bundle bOptions) {
         mHandler.post(() -> mBroadcastHelper.sendPackageBroadcast(action, pkg, extras, flags,
                 targetPkg, finishedReceiver, userIds, instantUserIds, broadcastAllowList,
-                bOptions));
+                null /* filterExtrasForReceiver */, bOptions));
     }
 
     @Override
@@ -3184,8 +3191,12 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
 
     boolean isCallerVerifier(@NonNull Computer snapshot, int callingUid) {
         final int callingUserId = UserHandle.getUserId(callingUid);
-        return mRequiredVerifierPackage != null && callingUid == snapshot.getPackageUid(
-                mRequiredVerifierPackage, 0, callingUserId);
+        for (String requiredVerifierPackage : mRequiredVerifierPackages) {
+            if (callingUid == snapshot.getPackageUid(requiredVerifierPackage, 0, callingUserId)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public boolean isPackageDeviceAdminOnAnyUser(@NonNull Computer snapshot, String packageName) {
@@ -3363,6 +3374,12 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                         android.Manifest.permission.INTERACT_ACROSS_USERS_FULL, null);
         int callingUid = Binder.getCallingUid();
         enforceOwnerRights(snapshot, ownerPackage, callingUid);
+
+        // Verifying that current calling uid should be able to add {@link CrossProfileIntentFilter}
+        // for source and target user
+        mUserManager.enforceCrossProfileIntentFilterAccess(sourceUserId, targetUserId, callingUid,
+                /* addCrossProfileIntentFilter */ true);
+
         PackageManagerServiceUtils.enforceShellRestriction(mInjector.getUserManagerInternal(),
                 UserManager.DISALLOW_DEBUGGING_FEATURES, callingUid, sourceUserId);
         if (intentFilter.countActions() == 0) {
@@ -3371,7 +3388,8 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         }
         synchronized (mLock) {
             CrossProfileIntentFilter newFilter = new CrossProfileIntentFilter(intentFilter,
-                    ownerPackage, targetUserId, flags);
+                    ownerPackage, targetUserId, flags, mUserManager
+                    .getCrossProfileIntentFilterAccessControl(sourceUserId, targetUserId));
             CrossProfileIntentResolver resolver =
                     mSettings.editCrossProfileIntentResolverLPw(sourceUserId);
             ArrayList<CrossProfileIntentFilter> existing = resolver.findFilters(intentFilter);
@@ -4586,7 +4604,11 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                 ArraySet<CrossProfileIntentFilter> set =
                         new ArraySet<>(resolver.filterSet());
                 for (CrossProfileIntentFilter filter : set) {
-                    if (filter.getOwnerPackage().equals(ownerPackage)) {
+                    //Only remove if calling user is allowed based on access control of
+                    // {@link CrossProfileIntentFilter}
+                    if (filter.getOwnerPackage().equals(ownerPackage)
+                            && mUserManager.isCrossProfileIntentFilterAccessible(sourceUserId,
+                            filter.mTargetUserId, /* addCrossProfileIntentFilter */ false)) {
                         resolver.removeFilter(filter);
                     }
                 }
@@ -4697,15 +4719,28 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         }
 
         @Override
-        public void extendVerificationTimeout(int id, int verificationCodeAtTimeout,
+        public void extendVerificationTimeout(int verificationId, int verificationCodeAtTimeout,
                 long millisecondsToDelay) {
-            mContext.enforceCallingOrSelfPermission(
-                    Manifest.permission.PACKAGE_VERIFICATION_AGENT,
-                    "Only package verification agents can extend verification timeouts");
+            // Negative ids correspond to testing verifiers and will be silently enforced in
+            // the handler thread.
+            if (verificationId >= 0) {
+                mContext.enforceCallingOrSelfPermission(
+                        Manifest.permission.PACKAGE_VERIFICATION_AGENT,
+                        "Only package verification agents can extend verification timeouts");
+            }
             final int callingUid = Binder.getCallingUid();
 
             mHandler.post(() -> {
+                final int id = verificationId >= 0 ? verificationId : -verificationId;
                 final PackageVerificationState state = mPendingVerification.get(id);
+                if (state == null || state.timeoutExtended() || !state.checkRequiredVerifierUid(
+                        callingUid)) {
+                    // Only allow calls from required verifiers.
+                    return;
+                }
+
+                state.extendTimeout();
+
                 final PackageVerificationResponse response = new PackageVerificationResponse(
                         verificationCodeAtTimeout, callingUid);
 
@@ -4717,14 +4752,10 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                     delay = 0;
                 }
 
-                if ((state != null) && !state.timeoutExtended()) {
-                    state.extendTimeout();
-
-                    final Message msg = mHandler.obtainMessage(PackageManagerService.PACKAGE_VERIFIED);
-                    msg.arg1 = id;
-                    msg.obj = response;
-                    mHandler.sendMessageDelayed(msg, delay);
-                }
+                final Message msg = mHandler.obtainMessage(PackageManagerService.PACKAGE_VERIFIED);
+                msg.arg1 = id;
+                msg.obj = response;
+                mHandler.sendMessageDelayed(msg, delay);
             });
         }
 
@@ -5466,10 +5497,16 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
 
             final long callingId = Binder.clearCallingIdentity();
             try {
-                final PackageStateInternal packageState =
-                        snapshot.getPackageStateForInstalledAndFiltered(
-                                packageName, callingUid, userId);
+                final PackageStateInternal packageState = snapshot.getPackageStateInternal(
+                        packageName);
                 if (packageState == null) {
+                    return false;
+                }
+
+                final PackageUserStateInternal userState = packageState.getUserStateOrDefault(
+                        userId);
+                if (userState.isHidden() == hidden || !userState.isInstalled()
+                        || snapshot.shouldFilterApplication(packageState, callingUid, userId)) {
                     return false;
                 }
 
@@ -5499,10 +5536,6 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                 if (hidden && !UserHandle.isSameApp(callingUid, packageState.getAppId())
                         && mProtectedPackages.isPackageStateProtected(userId, packageName)) {
                     Slog.w(TAG, "Not hiding protected package: " + packageName);
-                    return false;
-                }
-
-                if (packageState.getUserStateOrDefault(userId).isHidden() == hidden) {
                     return false;
                 }
 
@@ -5894,18 +5927,32 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         }
 
         @Override
-        public void verifyPendingInstall(int id, int verificationCode) throws RemoteException {
-            mContext.enforceCallingOrSelfPermission(
-                    Manifest.permission.PACKAGE_VERIFICATION_AGENT,
-                    "Only package verification agents can verify applications");
+        public void verifyPendingInstall(int verificationId, int verificationCode)
+                throws RemoteException {
+            // Negative ids correspond to testing verifiers and will be silently enforced in
+            // the handler thread.
+            if (verificationId >= 0) {
+                mContext.enforceCallingOrSelfPermission(
+                        Manifest.permission.PACKAGE_VERIFICATION_AGENT,
+                        "Only package verification agents can verify applications");
+            }
             final int callingUid = Binder.getCallingUid();
 
-            final Message msg = mHandler.obtainMessage(PackageManagerService.PACKAGE_VERIFIED);
-            final PackageVerificationResponse response = new PackageVerificationResponse(
-                    verificationCode, callingUid);
-            msg.arg1 = id;
-            msg.obj = response;
-            mHandler.sendMessage(msg);
+            mHandler.post(() -> {
+                final int id = verificationId >= 0 ? verificationId : -verificationId;
+                final PackageVerificationState state = mPendingVerification.get(id);
+                if (state == null || !state.checkRequiredVerifierUid(callingUid)) {
+                    // Only allow calls from required verifiers.
+                    return;
+                }
+
+                final Message msg = mHandler.obtainMessage(PackageManagerService.PACKAGE_VERIFIED);
+                final PackageVerificationResponse response = new PackageVerificationResponse(
+                        verificationCode, callingUid);
+                msg.arg1 = id;
+                msg.obj = response;
+                mHandler.sendMessage(msg);
+            });
         }
 
         @Override
@@ -5960,7 +6007,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                     mRequiredInstallerPackage,
                     mRequiredUninstallerPackage,
                     mSetupWizardPackage,
-                    mRequiredVerifierPackage,
+                    mRequiredVerifierPackages,
                     mDefaultTextClassifierPackage,
                     mSystemTextClassifierPackageName,
                     mRequiredPermissionControllerPackage,
@@ -5981,7 +6028,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                 protectedBroadcasts = new ArraySet<>(mProtectedBroadcasts);
             }
             new DumpHelper(mPermissionManager, mStorageEventHelper,
-                    mDomainVerificationManager, mInstallerService, mRequiredVerifierPackage,
+                    mDomainVerificationManager, mInstallerService, mRequiredVerifierPackages,
                     knownPackages, mChangedPackagesTracker, availableFeatures, protectedBroadcasts,
                     getPerUidReadTimeouts(snapshot)
             ).doDump(snapshot, fd, pw, args);
@@ -6287,21 +6334,6 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
             }
         }
 
-        /**
-         * Ask the package manager to compile layouts in the given package.
-         */
-        @Override
-        public boolean compileLayouts(String packageName) {
-            AndroidPackage pkg;
-            synchronized (mLock) {
-                pkg = mPackages.get(packageName);
-                if (pkg == null) {
-                    return false;
-                }
-            }
-            return mArtManagerService.compileLayouts(pkg);
-        }
-
         @Nullable
         @Override
         public String removeLegacyDefaultBrowserPackageName(int userId) {
@@ -6401,6 +6433,8 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
 
         @Override
         public void setVisibilityLogging(String packageName, boolean enable) {
+            PackageManagerServiceUtils.enforceSystemOrRootOrShell(
+                    "Only the system or shell can set visibility logging.");
             final PackageStateInternal packageState =
                     snapshot().getPackageStateInternal(packageName);
             if (packageState == null) {
@@ -6988,7 +7022,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                 mRequiredInstallerPackage,
                 mRequiredUninstallerPackage,
                 mSetupWizardPackage,
-                mRequiredVerifierPackage,
+                mRequiredVerifierPackages,
                 mDefaultTextClassifierPackage,
                 mSystemTextClassifierPackageName,
                 mRequiredPermissionControllerPackage,
@@ -7053,7 +7087,8 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
             mResolveActivity.processName = pkg.getProcessName();
             mResolveActivity.launchMode = ActivityInfo.LAUNCH_MULTIPLE;
             mResolveActivity.flags = ActivityInfo.FLAG_EXCLUDE_FROM_RECENTS
-                    | ActivityInfo.FLAG_FINISH_ON_CLOSE_SYSTEM_DIALOGS;
+                    | ActivityInfo.FLAG_FINISH_ON_CLOSE_SYSTEM_DIALOGS
+                    | ActivityInfo.FLAG_CAN_DISPLAY_ON_REMOTE_DEVICES;
             mResolveActivity.theme = 0;
             mResolveActivity.exported = true;
             mResolveActivity.enabled = true;
@@ -7086,7 +7121,8 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                 mResolveActivity.launchMode = ActivityInfo.LAUNCH_MULTIPLE;
                 mResolveActivity.documentLaunchMode = ActivityInfo.DOCUMENT_LAUNCH_NEVER;
                 mResolveActivity.flags = ActivityInfo.FLAG_EXCLUDE_FROM_RECENTS
-                        | ActivityInfo.FLAG_RELINQUISH_TASK_IDENTITY;
+                        | ActivityInfo.FLAG_RELINQUISH_TASK_IDENTITY
+                        | ActivityInfo.FLAG_CAN_DISPLAY_ON_REMOTE_DEVICES;
                 mResolveActivity.theme = R.style.Theme_Material_Dialog_Alert;
                 mResolveActivity.exported = true;
                 mResolveActivity.enabled = true;

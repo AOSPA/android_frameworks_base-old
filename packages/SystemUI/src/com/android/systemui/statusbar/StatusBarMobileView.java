@@ -62,7 +62,6 @@ public class StatusBarMobileView extends FrameLayout implements DarkReceiver,
     private int mVisibleState = -1;
     private DualToneHandler mDualToneHandler;
     private boolean mForceHidden;
-    private boolean mProviderModel;
     private ImageView mVolte;
 
     /**
@@ -70,14 +69,13 @@ public class StatusBarMobileView extends FrameLayout implements DarkReceiver,
      */
     public static StatusBarMobileView fromContext(
             Context context,
-            String slot,
-            boolean providerModel
+            String slot
     ) {
         LayoutInflater inflater = LayoutInflater.from(context);
         StatusBarMobileView v = (StatusBarMobileView)
                 inflater.inflate(R.layout.status_bar_mobile_signal_group, null);
         v.setSlot(slot);
-        v.init(providerModel);
+        v.init();
         v.setVisibleState(STATE_ICON);
         return v;
     }
@@ -110,17 +108,12 @@ public class StatusBarMobileView extends FrameLayout implements DarkReceiver,
         outRect.bottom += translationY;
     }
 
-    private void init(boolean providerModel) {
-        mProviderModel = providerModel;
+    private void init() {
         mDualToneHandler = new DualToneHandler(getContext());
         mMobileGroup = findViewById(R.id.mobile_group);
         mMobile = findViewById(R.id.mobile_signal);
         mMobileType = findViewById(R.id.mobile_type);
-        if (mProviderModel) {
-            mMobileRoaming = findViewById(R.id.mobile_roaming_large);
-        } else {
-            mMobileRoaming = findViewById(R.id.mobile_roaming);
-        }
+        mMobileRoaming = findViewById(R.id.mobile_roaming);
         mMobileRoamingSpace = findViewById(R.id.mobile_roaming_space);
         mIn = findViewById(R.id.mobile_in);
         mOut = findViewById(R.id.mobile_out);

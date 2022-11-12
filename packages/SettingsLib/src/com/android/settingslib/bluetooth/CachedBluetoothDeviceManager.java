@@ -307,6 +307,9 @@ public class CachedBluetoothDeviceManager {
                 cachedDevice.mTwspBatteryState = -1;
                 cachedDevice.mTwspBatteryLevel = -1;
             }
+
+            // To clear the SetMemberPair flag when the Bluetooth is turning off.
+            mOngoingSetMemberPair = null;
         }
     }
 

@@ -16,6 +16,7 @@
 
 package com.android.systemui.statusbar.phone;
 
+import static com.android.internal.util.Preconditions.checkNotNull;
 import static com.android.systemui.controls.dagger.ControlsComponent.Visibility.AVAILABLE;
 import static com.android.systemui.doze.util.BurnInHelperKt.getBurnInOffset;
 import static com.android.systemui.wallet.controller.QuickAccessWalletController.WalletChangeEvent.DEFAULT_PAYMENT_APP_CHANGE;
@@ -58,6 +59,8 @@ import com.android.systemui.controls.dagger.ControlsComponent;
 import com.android.systemui.controls.management.ControlsListingController;
 import com.android.systemui.controls.ui.ControlsActivity;
 import com.android.systemui.controls.ui.ControlsUiController;
+import com.android.systemui.keyguard.ui.binder.KeyguardBottomAreaViewBinder;
+import com.android.systemui.keyguard.ui.viewmodel.KeyguardBottomAreaViewModel;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.qrcodescanner.controller.QRCodeScannerController;
@@ -127,6 +130,9 @@ public class KeyguardBottomAreaView extends FrameLayout {
         }
     };
 
+    @Nullable private KeyguardBottomAreaViewBinder.Binding mBinding;
+    private boolean mUsesBinder;
+
     public KeyguardBottomAreaView(Context context) {
         this(context, null);
     }
@@ -144,13 +150,36 @@ public class KeyguardBottomAreaView extends FrameLayout {
         super(context, attrs, defStyleAttr, defStyleRes);
     }
 
-    /** Initializes the {@link KeyguardBottomAreaView} with the given dependencies */
+    /**
+     * Initializes the view.
+     */
+    public void init(
+            final KeyguardBottomAreaViewModel viewModel,
+            final FalsingManager falsingManager) {
+        Log.i(TAG, System.identityHashCode(this) + " initialized with a binder");
+        mUsesBinder = true;
+        mBinding = KeyguardBottomAreaViewBinder.bind(this, viewModel, falsingManager);
+    }
+
+    /**
+     * Initializes the {@link KeyguardBottomAreaView} with the given dependencies
+     *
+     * @deprecated Use
+     * {@link #init(KeyguardBottomAreaViewModel, FalsingManager)} instead
+     */
+    @Deprecated
     public void init(
             FalsingManager falsingManager,
             QuickAccessWalletController controller,
             ControlsComponent controlsComponent,
             QRCodeScannerController qrCodeScannerController) {
+        if (mUsesBinder) {
+            return;
+        }
+
+        Log.i(TAG, "initialized without a binder");
         mFalsingManager = falsingManager;
+
         mQuickAccessWalletController = controller;
         mQuickAccessWalletController.setupWalletChangeObservers(
                 mCardRetriever, WALLET_PREFERENCE_CHANGE, DEFAULT_PAYMENT_APP_CHANGE);
@@ -176,6 +205,10 @@ public class KeyguardBottomAreaView extends FrameLayout {
      * another {@link KeyguardBottomAreaView}
      */
     public void initFrom(KeyguardBottomAreaView oldBottomArea) {
+        if (mUsesBinder) {
+            return;
+        }
+
         // if it exists, continue to use the original ambient indication container
         // instead of the newly inflated one
         if (mAmbientIndicationArea != null) {
@@ -203,6 +236,9 @@ public class KeyguardBottomAreaView extends FrameLayout {
     @Override
     protected void onFinishInflate() {
         super.onFinishInflate();
+        if (mUsesBinder) {
+            return;
+        }
         mEmergencyCarrierArea = (EmergencyCarrierArea) findViewById(R.id.keyguard_selector_fade_container);
         mOverlayContainer = findViewById(R.id.overlay_container);
         mWalletButton = findViewById(R.id.wallet_button);
@@ -232,6 +268,10 @@ public class KeyguardBottomAreaView extends FrameLayout {
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
+        if (mUsesBinder) {
+            return;
+        }
+
         final IntentFilter filter = new IntentFilter();
         filter.addAction(DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED);
         mKeyguardStateController.addCallback(mKeyguardStateCallback);
@@ -240,6 +280,10 @@ public class KeyguardBottomAreaView extends FrameLayout {
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        if (mUsesBinder) {
+            return;
+        }
+
         mKeyguardStateController.removeCallback(mKeyguardStateCallback);
 
         if (mQuickAccessWalletController != null) {
@@ -262,6 +306,13 @@ public class KeyguardBottomAreaView extends FrameLayout {
     @Override
     protected void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
+        if (mUsesBinder) {
+            if (mBinding != null) {
+                mBinding.onConfigurationChanged();
+            }
+            return;
+        }
+
         mIndicationBottomMargin = getResources().getDimensionPixelSize(
                 R.dimen.keyguard_indication_margin_bottom);
         mBurnInYOffset = getResources().getDimensionPixelSize(
@@ -304,6 +355,10 @@ public class KeyguardBottomAreaView extends FrameLayout {
     }
 
     private void updateWalletVisibility() {
+        if (mUsesBinder) {
+            return;
+        }
+
         if (mDozing
                 || mQuickAccessWalletController == null
                 || !mQuickAccessWalletController.isWalletEnabled()
@@ -321,6 +376,10 @@ public class KeyguardBottomAreaView extends FrameLayout {
     }
 
     private void updateControlsVisibility() {
+        if (mUsesBinder) {
+            return;
+        }
+
         if (mControlsComponent == null) return;
 
         mControlsButton.setImageResource(mControlsComponent.getTileImageId());
@@ -347,6 +406,10 @@ public class KeyguardBottomAreaView extends FrameLayout {
     }
 
     public void setDarkAmount(float darkAmount) {
+        if (mUsesBinder) {
+            return;
+        }
+
         if (darkAmount == mDarkAmount) {
             return;
         }
@@ -358,6 +421,10 @@ public class KeyguardBottomAreaView extends FrameLayout {
      * Returns a list of animators to use to animate the indication areas.
      */
     public List<ViewPropertyAnimator> getIndicationAreaAnimators() {
+        if (mUsesBinder) {
+            return checkNotNull(mBinding).getIndicationAreaAnimators();
+        }
+
         List<ViewPropertyAnimator> animators =
                 new ArrayList<>(mAmbientIndicationArea != null ? 2 : 1);
         animators.add(mIndicationArea.animate());
@@ -397,6 +464,10 @@ public class KeyguardBottomAreaView extends FrameLayout {
     }
 
     public void setDozing(boolean dozing, boolean animate) {
+        if (mUsesBinder) {
+            return;
+        }
+
         mDozing = dozing;
 
         updateWalletVisibility();
@@ -416,6 +487,10 @@ public class KeyguardBottomAreaView extends FrameLayout {
     }
 
     public void dozeTimeTick() {
+        if (mUsesBinder) {
+            return;
+        }
+
         int burnInYOffset = getBurnInOffset(mBurnInYOffset * 2, false /* xAxis */)
                 - mBurnInYOffset;
         mIndicationArea.setTranslationY(burnInYOffset * mDarkAmount);
@@ -425,6 +500,10 @@ public class KeyguardBottomAreaView extends FrameLayout {
     }
 
     public void setAntiBurnInOffsetX(int burnInXOffset) {
+        if (mUsesBinder) {
+            return;
+        }
+
         if (mBurnInXOffset == burnInXOffset) {
             return;
         }
@@ -440,6 +519,10 @@ public class KeyguardBottomAreaView extends FrameLayout {
      * action buttons. Does not set the alpha of the lock icon.
      */
     public void setComponentAlphas(float alpha) {
+        if (mUsesBinder) {
+            return;
+        }
+
         setImportantForAccessibility(
                 alpha == 0f
                         ? View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
@@ -467,6 +550,10 @@ public class KeyguardBottomAreaView extends FrameLayout {
     }
 
     private void updateQRCodeButtonVisibility() {
+        if (mUsesBinder) {
+            return;
+        }
+
         if (mQuickAccessWalletController != null
                 && mQuickAccessWalletController.isWalletEnabled()) {
             // Don't enable if quick access wallet is enabled
@@ -487,6 +574,10 @@ public class KeyguardBottomAreaView extends FrameLayout {
     }
 
     private void onQRCodeScannerClicked(View view) {
+        if (mUsesBinder) {
+            return;
+        }
+
         Intent intent = mQRCodeScannerController.getIntent();
         if (intent != null) {
             try {
@@ -506,6 +597,10 @@ public class KeyguardBottomAreaView extends FrameLayout {
     }
 
     private void updateAffordanceColors() {
+        if (mUsesBinder) {
+            return;
+        }
+
         int iconColor = Utils.getColorAttrDefaultColor(
                 mContext,
                 com.android.internal.R.attr.textColorPrimary);
@@ -522,6 +617,10 @@ public class KeyguardBottomAreaView extends FrameLayout {
     }
 
     private void onWalletClick(View v) {
+        if (mUsesBinder) {
+            return;
+        }
+
         // More coming here; need to inform the user about how to proceed
         if (mFalsingManager.isFalseTap(FalsingManager.LOW_PENALTY)) {
             return;
@@ -537,6 +636,10 @@ public class KeyguardBottomAreaView extends FrameLayout {
     }
 
     private void onControlsClick(View v) {
+        if (mUsesBinder) {
+            return;
+        }
+
         if (mFalsingManager.isFalseTap(FalsingManager.LOW_PENALTY)) {
             return;
         }

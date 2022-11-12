@@ -29,13 +29,15 @@ import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_S
 import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_STATUS_BAR_KEYGUARD_SHOWING_OCCLUDED;
 
 import android.content.Context;
+import android.content.pm.UserInfo;
 import android.content.res.Configuration;
 import android.graphics.Rect;
-import android.graphics.drawable.Drawable;
 import android.inputmethodservice.InputMethodService;
 import android.os.IBinder;
 import android.os.ParcelFileDescriptor;
 import android.view.KeyEvent;
+
+import androidx.annotation.NonNull;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.keyguard.KeyguardUpdateMonitor;
@@ -47,14 +49,13 @@ import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.keyguard.ScreenLifecycle;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
 import com.android.systemui.model.SysUiState;
+import com.android.systemui.settings.UserTracker;
 import com.android.systemui.shared.tracing.ProtoTraceable;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
-import com.android.systemui.statusbar.policy.UserInfoController;
 import com.android.systemui.tracing.ProtoTracer;
 import com.android.systemui.tracing.nano.SystemUiTraceProto;
-import com.android.wm.shell.ShellCommandHandler;
 import com.android.wm.shell.nano.WmShellTraceProto;
 import com.android.wm.shell.onehanded.OneHanded;
 import com.android.wm.shell.onehanded.OneHandedEventCallback;
@@ -67,6 +68,7 @@ import com.android.wm.shell.sysui.ShellInterface;
 
 import java.io.PrintWriter;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Executor;
 
@@ -107,7 +109,6 @@ public final class WMShell extends CoreStartable
     private final Optional<Pip> mPipOptional;
     private final Optional<SplitScreen> mSplitScreenOptional;
     private final Optional<OneHanded> mOneHandedOptional;
-    private final Optional<ShellCommandHandler> mShellCommandHandler;
 
     private final CommandQueue mCommandQueue;
     private final ConfigurationController mConfigurationController;
@@ -117,11 +118,49 @@ public final class WMShell extends CoreStartable
     private final SysUiState mSysUiState;
     private final WakefulnessLifecycle mWakefulnessLifecycle;
     private final ProtoTracer mProtoTracer;
-    private final UserInfoController mUserInfoController;
+    private final UserTracker mUserTracker;
     private final Executor mSysUiMainExecutor;
 
+    // Listeners and callbacks. Note that we prefer member variable over anonymous class here to
+    // avoid the situation that some implementations, like KeyguardUpdateMonitor, use WeakReference
+    // internally and anonymous class could be released after registration.
+    private final ConfigurationController.ConfigurationListener mConfigurationListener =
+            new ConfigurationController.ConfigurationListener() {
+                @Override
+                public void onConfigChanged(Configuration newConfig) {
+                    mShell.onConfigurationChanged(newConfig);
+                }
+            };
+    private final KeyguardStateController.Callback mKeyguardStateCallback =
+            new KeyguardStateController.Callback() {
+                @Override
+                public void onKeyguardShowingChanged() {
+                    mShell.onKeyguardVisibilityChanged(mKeyguardStateController.isShowing(),
+                            mKeyguardStateController.isOccluded(),
+                            mKeyguardStateController.isAnimatingBetweenKeyguardAndSurfaceBehind());
+                }
+            };
+    private final KeyguardUpdateMonitorCallback mKeyguardUpdateMonitorCallback =
+            new KeyguardUpdateMonitorCallback() {
+                @Override
+                public void onKeyguardDismissAnimationFinished() {
+                    mShell.onKeyguardDismissAnimationFinished();
+                }
+            };
+    private final UserTracker.Callback mUserChangedCallback =
+            new UserTracker.Callback() {
+                @Override
+                public void onUserChanged(int newUser, @NonNull Context userContext) {
+                    mShell.onUserChanged(newUser, userContext);
+                }
+
+                @Override
+                public void onProfilesChanged(@NonNull List<UserInfo> profiles) {
+                    mShell.onUserProfilesChanged(profiles);
+                }
+            };
+
     private boolean mIsSysUiStateValid;
-    private KeyguardUpdateMonitorCallback mOneHandedKeyguardCallback;
     private WakefulnessLifecycle.Observer mWakefulnessObserver;
 
     @Inject
@@ -130,7 +169,6 @@ public final class WMShell extends CoreStartable
             Optional<Pip> pipOptional,
             Optional<SplitScreen> splitScreenOptional,
             Optional<OneHanded> oneHandedOptional,
-            Optional<ShellCommandHandler> shellCommandHandler,
             CommandQueue commandQueue,
             ConfigurationController configurationController,
             KeyguardStateController keyguardStateController,
@@ -139,7 +177,7 @@ public final class WMShell extends CoreStartable
             SysUiState sysUiState,
             ProtoTracer protoTracer,
             WakefulnessLifecycle wakefulnessLifecycle,
-            UserInfoController userInfoController,
+            UserTracker userTracker,
             @Main Executor sysUiMainExecutor) {
         super(context);
         mShell = shell;
@@ -154,8 +192,7 @@ public final class WMShell extends CoreStartable
         mOneHandedOptional = oneHandedOptional;
         mWakefulnessLifecycle = wakefulnessLifecycle;
         mProtoTracer = protoTracer;
-        mShellCommandHandler = shellCommandHandler;
-        mUserInfoController = userInfoController;
+        mUserTracker = userTracker;
         mSysUiMainExecutor = sysUiMainExecutor;
     }
 
@@ -163,31 +200,15 @@ public final class WMShell extends CoreStartable
     public void start() {
         // Notify with the initial configuration and subscribe for new config changes
         mShell.onConfigurationChanged(mContext.getResources().getConfiguration());
-        mConfigurationController.addCallback(new ConfigurationController.ConfigurationListener() {
-            @Override
-            public void onConfigChanged(Configuration newConfig) {
-                mShell.onConfigurationChanged(newConfig);
-            }
-        });
+        mConfigurationController.addCallback(mConfigurationListener);
 
         // Subscribe to keyguard changes
-        mKeyguardStateController.addCallback(new KeyguardStateController.Callback() {
-            @Override
-            public void onKeyguardShowingChanged() {
-                mShell.onKeyguardVisibilityChanged(mKeyguardStateController.isShowing(),
-                        mKeyguardStateController.isOccluded(),
-                        mKeyguardStateController.isAnimatingBetweenKeyguardAndSurfaceBehind());
-            }
-        });
-        mKeyguardUpdateMonitor.registerCallback(new KeyguardUpdateMonitorCallback() {
-            @Override
-            public void onKeyguardDismissAnimationFinished() {
-                mShell.onKeyguardDismissAnimationFinished();
-            }
-        });
+        mKeyguardStateController.addCallback(mKeyguardStateCallback);
+        mKeyguardUpdateMonitor.registerCallback(mKeyguardUpdateMonitorCallback);
 
-        // TODO: Consider piping config change and other common calls to a shell component to
-        //  delegate internally
+        // Subscribe to user changes
+        mUserTracker.addCallback(mUserChangedCallback, mContext.getMainExecutor());
+
         mProtoTracer.add(this);
         mCommandQueue.addCallback(this);
         mPipOptional.ifPresent(this::initPip);
@@ -208,10 +229,6 @@ public final class WMShell extends CoreStartable
             mIsSysUiStateValid = (sysUiStateFlag & INVALID_SYSUI_STATE_MASK) == 0;
             pip.onSystemUiStateChanged(mIsSysUiStateValid, sysUiStateFlag);
         });
-
-        // The media session listener needs to be re-registered when switching users
-        mUserInfoController.addCallback((String name, Drawable picture, String userAccount) ->
-                pip.registerSessionListenerForCurrentUser());
     }
 
     @VisibleForTesting
@@ -260,15 +277,6 @@ public final class WMShell extends CoreStartable
                                 KeyEvent.KEYCODE_SYSTEM_NAVIGATION_DOWN));
             }
         });
-
-        // TODO: Either move into ShellInterface or register a receiver on the Shell side directly
-        mOneHandedKeyguardCallback = new KeyguardUpdateMonitorCallback() {
-            @Override
-            public void onUserSwitchComplete(int userId) {
-                oneHanded.onUserSwitch(userId);
-            }
-        };
-        mKeyguardUpdateMonitor.registerCallback(mOneHandedKeyguardCallback);
 
         mWakefulnessObserver =
                 new WakefulnessLifecycle.Observer() {
@@ -325,8 +333,7 @@ public final class WMShell extends CoreStartable
     @Override
     public void dump(PrintWriter pw, String[] args) {
         // Handle commands if provided
-        if (mShellCommandHandler.isPresent()
-                && mShellCommandHandler.get().handleCommand(args, pw)) {
+        if (mShell.handleCommand(args, pw)) {
             return;
         }
         // Handle logging commands if provided
@@ -334,8 +341,7 @@ public final class WMShell extends CoreStartable
             return;
         }
         // Dump WMShell stuff here if no commands were handled
-        mShellCommandHandler.ifPresent(
-                shellCommandHandler -> shellCommandHandler.dump(pw));
+        mShell.dump(pw);
     }
 
     @Override

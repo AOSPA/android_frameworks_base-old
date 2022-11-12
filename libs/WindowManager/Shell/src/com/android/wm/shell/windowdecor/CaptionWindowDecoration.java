@@ -25,6 +25,7 @@ import android.graphics.Rect;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.VectorDrawable;
 import android.os.Handler;
+import android.view.Choreographer;
 import android.view.SurfaceControl;
 import android.view.View;
 import android.window.WindowContainerTransaction;
@@ -33,6 +34,7 @@ import com.android.wm.shell.R;
 import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.common.DisplayController;
 import com.android.wm.shell.common.SyncTransactionQueue;
+import com.android.wm.shell.desktopmode.DesktopModeConstants;
 
 /**
  * Defines visuals and behaviors of a window decoration of a caption bar and shadows. It works with
@@ -59,6 +61,7 @@ public class CaptionWindowDecoration extends WindowDecoration<WindowDecorLinearL
             RESIZE_HANDLE_IN_DIP, RESIZE_HANDLE_IN_DIP, RESIZE_HANDLE_IN_DIP, RESIZE_HANDLE_IN_DIP);
 
     private final Handler mHandler;
+    private final Choreographer mChoreographer;
     private final SyncTransactionQueue mSyncQueue;
 
     private View.OnClickListener mOnCaptionButtonClickListener;
@@ -77,10 +80,12 @@ public class CaptionWindowDecoration extends WindowDecoration<WindowDecorLinearL
             ActivityManager.RunningTaskInfo taskInfo,
             SurfaceControl taskSurface,
             Handler handler,
+            Choreographer choreographer,
             SyncTransactionQueue syncQueue) {
         super(context, displayController, taskOrganizer, taskInfo, taskSurface);
 
         mHandler = handler;
+        mChoreographer = choreographer;
         mSyncQueue = syncQueue;
     }
 
@@ -97,6 +102,16 @@ public class CaptionWindowDecoration extends WindowDecoration<WindowDecorLinearL
 
     @Override
     void relayout(ActivityManager.RunningTaskInfo taskInfo) {
+        final SurfaceControl.Transaction t = new SurfaceControl.Transaction();
+        relayout(taskInfo, t, t);
+        mSyncQueue.runInSync(transaction -> {
+            transaction.merge(t);
+            t.close();
+        });
+    }
+
+    void relayout(ActivityManager.RunningTaskInfo taskInfo,
+            SurfaceControl.Transaction startT, SurfaceControl.Transaction finishT) {
         final int shadowRadiusDp = taskInfo.isFocused
                 ? DECOR_SHADOW_FOCUSED_THICKNESS_IN_DIP : DECOR_SHADOW_UNFOCUSED_THICKNESS_IN_DIP;
         final boolean isFreeform = mTaskInfo.configuration.windowConfiguration.getWindowingMode()
@@ -106,18 +121,12 @@ public class CaptionWindowDecoration extends WindowDecoration<WindowDecorLinearL
 
         WindowDecorLinearLayout oldRootView = mResult.mRootView;
         final SurfaceControl oldDecorationSurface = mDecorationContainerSurface;
-        final SurfaceControl.Transaction t = new SurfaceControl.Transaction();
         final WindowContainerTransaction wct = new WindowContainerTransaction();
         relayout(taskInfo, R.layout.caption_window_decoration, oldRootView,
-                DECOR_CAPTION_HEIGHT_IN_DIP, outset, shadowRadiusDp, t, wct, mResult);
+                DECOR_CAPTION_HEIGHT_IN_DIP, outset, shadowRadiusDp, startT, finishT, wct, mResult);
         taskInfo = null; // Clear it just in case we use it accidentally
 
-        mSyncQueue.runInSync(transaction -> {
-            transaction.merge(t);
-            t.close();
-
-            mTaskOrganizer.applyTransaction(wct);
-        });
+        mTaskOrganizer.applyTransaction(wct);
 
         if (mResult.mRootView == null) {
             // This means something blocks the window decor from showing, e.g. the task is hidden.
@@ -133,11 +142,12 @@ public class CaptionWindowDecoration extends WindowDecoration<WindowDecorLinearL
             return;
         }
 
-        if (oldDecorationSurface != mDecorationContainerSurface) {
+        if (oldDecorationSurface != mDecorationContainerSurface || mDragResizeListener == null) {
             closeDragResizeListener();
             mDragResizeListener = new DragResizeInputListener(
                     mContext,
                     mHandler,
+                    mChoreographer,
                     mDisplay.getDisplayId(),
                     mDecorationContainerSurface,
                     mDragResizeCallback);
@@ -152,12 +162,19 @@ public class CaptionWindowDecoration extends WindowDecoration<WindowDecorLinearL
      */
     private void setupRootView() {
         View caption = mResult.mRootView.findViewById(R.id.caption);
-
         caption.setOnTouchListener(mOnCaptionTouchListener);
         View maximize = caption.findViewById(R.id.maximize_window);
-        maximize.setOnClickListener(mOnCaptionButtonClickListener);
+        if (DesktopModeConstants.IS_FEATURE_ENABLED) {
+            // Hide maximize button when desktop mode is available
+            maximize.setVisibility(View.GONE);
+        } else {
+            maximize.setVisibility(View.VISIBLE);
+            maximize.setOnClickListener(mOnCaptionButtonClickListener);
+        }
         View close = caption.findViewById(R.id.close_window);
         close.setOnClickListener(mOnCaptionButtonClickListener);
+        View minimize = caption.findViewById(R.id.minimize_window);
+        minimize.setOnClickListener(mOnCaptionButtonClickListener);
     }
 
     void setCaptionColor(int captionColor) {

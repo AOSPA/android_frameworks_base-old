@@ -20,9 +20,9 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.view.WindowManager.TRANSIT_TO_BACK;
 import static android.window.TransitionInfo.FLAG_IS_WALLPAPER;
 
+import static com.android.wm.shell.common.split.SplitScreenConstants.FLAG_IS_DIVIDER_BAR;
 import static com.android.wm.shell.splitscreen.SplitScreen.STAGE_TYPE_UNDEFINED;
 import static com.android.wm.shell.splitscreen.SplitScreenController.EXIT_REASON_CHILD_TASK_ENTER_PIP;
-import static com.android.wm.shell.splitscreen.StageCoordinator.FLAG_IS_DIVIDER_BAR;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -274,7 +274,8 @@ public class DefaultMixedHandler implements Transitions.TransitionHandler {
     }
 
     @Override
-    public void onTransitionConsumed(@NonNull IBinder transition, boolean aborted) {
+    public void onTransitionConsumed(@NonNull IBinder transition, boolean aborted,
+            @Nullable SurfaceControl.Transaction finishT) {
         MixedTransition mixed = null;
         for (int i = mActiveTransitions.size() - 1; i >= 0; --i) {
             if (mActiveTransitions.get(i).mTransition != transition) continue;
@@ -283,7 +284,7 @@ public class DefaultMixedHandler implements Transitions.TransitionHandler {
         }
         if (mixed == null) return;
         if (mixed.mType == MixedTransition.TYPE_ENTER_PIP_FROM_SPLIT) {
-            mPipHandler.onTransitionConsumed(transition, aborted);
+            mPipHandler.onTransitionConsumed(transition, aborted, finishT);
         }
     }
 }

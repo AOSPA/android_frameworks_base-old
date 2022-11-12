@@ -90,10 +90,10 @@ final class IInputMethodManagerInvoker {
     @AnyThread
     @NonNull
     List<InputMethodSubtype> getEnabledInputMethodSubtypeList(@Nullable String imiId,
-            boolean allowsImplicitlySelectedSubtypes) {
+            boolean allowsImplicitlySelectedSubtypes, @UserIdInt int userId) {
         try {
             return mTarget.getEnabledInputMethodSubtypeList(imiId,
-                    allowsImplicitlySelectedSubtypes);
+                    allowsImplicitlySelectedSubtypes, userId);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -101,9 +101,9 @@ final class IInputMethodManagerInvoker {
 
     @AnyThread
     @Nullable
-    InputMethodSubtype getLastInputMethodSubtype() {
+    InputMethodSubtype getLastInputMethodSubtype(@UserIdInt int userId) {
         try {
-            return mTarget.getLastInputMethodSubtype();
+            return mTarget.getLastInputMethodSubtype(userId);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -111,10 +111,11 @@ final class IInputMethodManagerInvoker {
 
     @AnyThread
     boolean showSoftInput(@NonNull IInputMethodClient client, @Nullable IBinder windowToken,
-            int flags, @Nullable ResultReceiver resultReceiver,
+            int flags, int lastClickToolType, @Nullable ResultReceiver resultReceiver,
             @SoftInputShowHideReason int reason) {
         try {
-            return mTarget.showSoftInput(client, windowToken, flags, resultReceiver, reason);
+            return mTarget.showSoftInput(
+                    client, windowToken, flags, lastClickToolType, resultReceiver, reason);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -139,11 +140,13 @@ final class IInputMethodManagerInvoker {
             @WindowManager.LayoutParams.Flags int windowFlags, @Nullable EditorInfo editorInfo,
             @Nullable IRemoteInputConnection remoteInputConnection,
             @Nullable IRemoteAccessibilityInputConnection remoteAccessibilityInputConnection,
-            int unverifiedTargetSdkVersion, @NonNull ImeOnBackInvokedDispatcher imeDispatcher) {
+            int unverifiedTargetSdkVersion, @UserIdInt int userId,
+            @NonNull ImeOnBackInvokedDispatcher imeDispatcher) {
         try {
             return mTarget.startInputOrWindowGainedFocus(startInputReason, client, windowToken,
                     startInputFlags, softInputMode, windowFlags, editorInfo, remoteInputConnection,
-                    remoteAccessibilityInputConnection, unverifiedTargetSdkVersion, imeDispatcher);
+                    remoteAccessibilityInputConnection, unverifiedTargetSdkVersion, userId,
+                    imeDispatcher);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -180,9 +183,9 @@ final class IInputMethodManagerInvoker {
 
     @AnyThread
     @Nullable
-    InputMethodSubtype getCurrentInputMethodSubtype() {
+    InputMethodSubtype getCurrentInputMethodSubtype(@UserIdInt int userId) {
         try {
-            return mTarget.getCurrentInputMethodSubtype();
+            return mTarget.getCurrentInputMethodSubtype(userId);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -190,9 +193,9 @@ final class IInputMethodManagerInvoker {
 
     @AnyThread
     void setAdditionalInputMethodSubtypes(@NonNull String imeId,
-            @NonNull InputMethodSubtype[] subtypes) {
+            @NonNull InputMethodSubtype[] subtypes, @UserIdInt int userId) {
         try {
-            mTarget.setAdditionalInputMethodSubtypes(imeId, subtypes);
+            mTarget.setAdditionalInputMethodSubtypes(imeId, subtypes, userId);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

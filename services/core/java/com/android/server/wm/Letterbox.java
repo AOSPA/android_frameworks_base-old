@@ -56,6 +56,7 @@ public class Letterbox {
     private final Supplier<Boolean> mHasWallpaperBackgroundSupplier;
     private final Supplier<Integer> mBlurRadiusSupplier;
     private final Supplier<Float> mDarkScrimAlphaSupplier;
+    private final Supplier<SurfaceControl> mParentSurfaceSupplier;
 
     private final Rect mOuter = new Rect();
     private final Rect mInner = new Rect();
@@ -87,7 +88,8 @@ public class Letterbox {
             Supplier<Integer> blurRadiusSupplier,
             Supplier<Float> darkScrimAlphaSupplier,
             IntConsumer doubleTapCallbackX,
-            IntConsumer doubleTapCallbackY) {
+            IntConsumer doubleTapCallbackY,
+            Supplier<SurfaceControl> parentSurface) {
         mSurfaceControlFactory = surfaceControlFactory;
         mTransactionFactory = transactionFactory;
         mAreCornersRounded = areCornersRounded;
@@ -97,6 +99,7 @@ public class Letterbox {
         mDarkScrimAlphaSupplier = darkScrimAlphaSupplier;
         mDoubleTapCallbackX = doubleTapCallbackX;
         mDoubleTapCallbackY = doubleTapCallbackY;
+        mParentSurfaceSupplier = parentSurface;
     }
 
     /**
@@ -121,7 +124,6 @@ public class Letterbox {
         mFullWindowSurface.layout(outer.left, outer.top, outer.right, outer.bottom, surfaceOrigin);
     }
 
-
     /**
      * Gets the insets between the outer and inner rects.
      */
@@ -136,6 +138,11 @@ public class Letterbox {
     /** @return The frame that used to place the content. */
     Rect getInnerFrame() {
         return mInner;
+    }
+
+    /** @return The frame that contains the inner frame and the insets. */
+    Rect getOuterFrame() {
+        return mOuter;
     }
 
     /**
@@ -328,6 +335,7 @@ public class Letterbox {
         private SurfaceControl mSurface;
         private Color mColor;
         private boolean mHasWallpaperBackground;
+        private SurfaceControl mParentSurface;
 
         private final Rect mSurfaceFrameRelative = new Rect();
         private final Rect mLayoutFrameGlobal = new Rect();
@@ -398,10 +406,12 @@ public class Letterbox {
                 }
 
                 mColor = mColorSupplier.get();
+                mParentSurface = mParentSurfaceSupplier.get();
                 t.setColor(mSurface, getRgbColorArray());
                 t.setPosition(mSurface, mSurfaceFrameRelative.left, mSurfaceFrameRelative.top);
                 t.setWindowCrop(mSurface, mSurfaceFrameRelative.width(),
                         mSurfaceFrameRelative.height());
+                t.reparent(mSurface, mParentSurface);
 
                 mHasWallpaperBackground = mHasWallpaperBackgroundSupplier.get();
                 updateAlphaAndBlur(t);
@@ -447,12 +457,13 @@ public class Letterbox {
 
         public boolean needsApplySurfaceChanges() {
             return !mSurfaceFrameRelative.equals(mLayoutFrameRelative)
-                    // If mSurfaceFrameRelative is empty then mHasWallpaperBackground and mColor
-                    // may never be updated in applySurfaceChanges but this doesn't mean that
-                    // update is needed.
+                    // If mSurfaceFrameRelative is empty then mHasWallpaperBackground, mColor,
+                    // and mParentSurface may never be updated in applySurfaceChanges but this
+                    // doesn't mean that update is needed.
                     || !mSurfaceFrameRelative.isEmpty()
                     && (mHasWallpaperBackgroundSupplier.get() != mHasWallpaperBackground
-                    || !mColorSupplier.get().equals(mColor));
+                    || !mColorSupplier.get().equals(mColor)
+                    || mParentSurfaceSupplier.get() != mParentSurface);
         }
     }
 }

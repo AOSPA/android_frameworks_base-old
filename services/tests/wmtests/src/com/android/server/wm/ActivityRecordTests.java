@@ -49,6 +49,7 @@ import static android.os.InputConstants.DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
 import static android.os.Process.NOBODY_UID;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.InsetsState.ITYPE_IME;
+import static android.view.WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.FIRST_SUB_WINDOW;
 import static android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
 import static android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD;
@@ -157,6 +158,7 @@ import androidx.test.filters.MediumTest;
 
 import com.android.internal.R;
 import com.android.server.wm.ActivityRecord.State;
+import com.android.server.wm.utils.WmDisplayCutout;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -550,7 +552,8 @@ public class ActivityRecordTests extends WindowTestsBase {
         final Rect insets = new Rect();
         final DisplayInfo displayInfo = task.mDisplayContent.getDisplayInfo();
         final DisplayPolicy policy = task.mDisplayContent.getDisplayPolicy();
-        policy.getNonDecorInsetsLw(displayInfo.rotation, displayInfo.displayCutout, insets);
+        policy.getNonDecorInsetsLw(displayInfo.rotation, displayInfo.logicalWidth,
+                displayInfo.logicalHeight, WmDisplayCutout.NO_CUTOUT, insets);
         policy.convertNonDecorInsetsToStableInsets(insets, displayInfo.rotation);
         Task.intersectWithInsetsIfFits(stableRect, stableRect, insets);
 
@@ -591,7 +594,8 @@ public class ActivityRecordTests extends WindowTestsBase {
         final Rect insets = new Rect();
         final DisplayInfo displayInfo = rootTask.mDisplayContent.getDisplayInfo();
         final DisplayPolicy policy = rootTask.mDisplayContent.getDisplayPolicy();
-        policy.getNonDecorInsetsLw(displayInfo.rotation, displayInfo.displayCutout, insets);
+        policy.getNonDecorInsetsLw(displayInfo.rotation, displayInfo.logicalWidth,
+                displayInfo.logicalHeight, WmDisplayCutout.NO_CUTOUT, insets);
         policy.convertNonDecorInsetsToStableInsets(insets, displayInfo.rotation);
         Task.intersectWithInsetsIfFits(stableRect, stableRect, insets);
 
@@ -2002,7 +2006,7 @@ public class ActivityRecordTests extends WindowTestsBase {
                     anyInt() /* viewVisibility */, anyInt() /* displayId */,
                     any() /* requestedVisibilities */, any() /* outInputChannel */,
                     any() /* outInsetsState */, any() /* outActiveControls */,
-                    any() /* outAttachedFrame */);
+                    any() /* outAttachedFrame */, any() /* outSizeCompatScale */);
             mAtm.mWindowManager.mStartingSurfaceController
                     .createTaskSnapshotSurface(activity, snapshot);
         } catch (RemoteException ignored) {
@@ -2313,6 +2317,8 @@ public class ActivityRecordTests extends WindowTestsBase {
 
         assertEquals(launchCookie, activity2.mLaunchCookie);
         assertNull(activity1.mLaunchCookie);
+        activity2.makeFinishingLocked();
+        assertTrue(activity1.getTask().getTaskInfo().launchCookies.contains(launchCookie));
     }
 
     private void verifyProcessInfoUpdate(ActivityRecord activity, State state,
@@ -2414,7 +2420,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         activity.removeImmediately();
     }
 
-    @UseTestDisplay(addWindows = W_ACTIVITY)
+    @SetupWindows(addWindows = W_ACTIVITY)
     @Test
     public void testLandscapeSeascapeRotationByApp() {
         final Task task = new TaskBuilder(mSupervisor)
@@ -2447,14 +2453,14 @@ public class ActivityRecordTests extends WindowTestsBase {
         appWindow.removeImmediately();
     }
 
-    @UseTestDisplay(addWindows = W_ACTIVITY)
+    @SetupWindows(addWindows = W_ACTIVITY)
     @Test
     public void testLandscapeSeascapeRotationByPolicy() {
         final Task task = new TaskBuilder(mSupervisor)
                 .setDisplay(mDisplayContent).setCreateActivity(true).build();
         final ActivityRecord activity = task.getTopNonFinishingActivity();
-        // This instance has been spied in {@link TestDisplayContent}.
         final DisplayRotation displayRotation = mDisplayContent.getDisplayRotation();
+        spyOn(displayRotation);
 
         final WindowManager.LayoutParams attrs = new WindowManager.LayoutParams(
                 TYPE_BASE_APPLICATION);
@@ -2463,6 +2469,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         activity.addWindow(appWindow);
         spyOn(appWindow);
         doNothing().when(appWindow).onStartFreezingScreen();
+        doNothing().when(mWm).startFreezingDisplay(anyInt(), anyInt(), any(), anyInt());
 
         // Set initial orientation and update.
         performRotation(displayRotation, Surface.ROTATION_90);
@@ -2471,8 +2478,6 @@ public class ActivityRecordTests extends WindowTestsBase {
         // Update the rotation to perform 180 degree rotation and check that resize was reported.
         performRotation(displayRotation, Surface.ROTATION_270);
         assertTrue(appWindow.mResizeReported);
-
-        appWindow.removeImmediately();
     }
 
     private void performRotation(DisplayRotation spiedRotation, int rotationToReport) {
@@ -2538,6 +2543,21 @@ public class ActivityRecordTests extends WindowTestsBase {
     }
 
     @Test
+    public void testStuckExitingWindow() {
+        final WindowState closingWindow = createWindow(null, FIRST_APPLICATION_WINDOW,
+                "closingWindow");
+        closingWindow.mAnimatingExit = true;
+        closingWindow.mRemoveOnExit = true;
+        closingWindow.mActivityRecord.commitVisibility(
+                false /* visible */, true /* performLayout */);
+
+        // We pretended that we were running an exit animation, but that should have been cleared up
+        // by changing visibility of ActivityRecord
+        closingWindow.removeIfPossible();
+        assertTrue(closingWindow.mRemoved);
+    }
+
+    @Test
     public void testSetOrientation() {
         final ActivityRecord activity = new ActivityBuilder(mAtm).setCreateTask(true).build();
         activity.setVisible(true);
@@ -2556,7 +2576,6 @@ public class ActivityRecordTests extends WindowTestsBase {
         mWm.mDisplayFrozen = false;
     }
 
-    @UseTestDisplay
     @Test
     public void testRespectTopFullscreenOrientation() {
         final ActivityRecord activity = new ActivityBuilder(mAtm).setCreateTask(true).build();
@@ -2579,7 +2598,6 @@ public class ActivityRecordTests extends WindowTestsBase {
         assertEquals(Configuration.ORIENTATION_LANDSCAPE, activityConfig.orientation);
     }
 
-    @UseTestDisplay
     @Test
     public void testReportOrientationChange() {
         final Task task = new TaskBuilder(mSupervisor)
@@ -3103,7 +3121,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         assertFalse(app.mActivityRecord.mImeInsetsFrozenUntilStartInput);
     }
 
-    @UseTestDisplay(addWindows = W_INPUT_METHOD)
+    @SetupWindows(addWindows = W_INPUT_METHOD)
     @Test
     public void testImeInsetsFrozenFlag_resetWhenResized() {
         final WindowState app = createWindow(null, TYPE_APPLICATION, "app");
@@ -3121,7 +3139,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         assertFalse(app.mActivityRecord.mImeInsetsFrozenUntilStartInput);
     }
 
-    @UseTestDisplay(addWindows = W_INPUT_METHOD)
+    @SetupWindows(addWindows = W_INPUT_METHOD)
     @Test
     public void testImeInsetsFrozenFlag_resetWhenNoImeFocusableInActivity() {
         final WindowState app = createWindow(null, TYPE_APPLICATION, "app");
@@ -3133,7 +3151,6 @@ public class ActivityRecordTests extends WindowTestsBase {
         mDisplayContent.mOpeningApps.clear();
         app.mActivityRecord.commitVisibility(false, false);
         app.mActivityRecord.onWindowsGone();
-        mDisplayContent.computeImeTargetIfNeeded(app.mActivityRecord);
 
         assertTrue(app.mActivityRecord.mLastImeShown);
         assertTrue(app.mActivityRecord.mImeInsetsFrozenUntilStartInput);
@@ -3150,7 +3167,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         assertFalse(app.mActivityRecord.mImeInsetsFrozenUntilStartInput);
     }
 
-    @UseTestDisplay(addWindows = W_INPUT_METHOD)
+    @SetupWindows(addWindows = W_INPUT_METHOD)
     @Test
     public void testImeInsetsFrozenFlag_resetWhenReportedToBeImeInputTarget() {
         final WindowState app = createWindow(null, TYPE_APPLICATION, "app");
@@ -3187,7 +3204,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         assertEquals(state.getSource(ITYPE_IME).getFrame(), imeSource.getFrame());
     }
 
-    @UseTestDisplay(addWindows = {W_ACTIVITY, W_INPUT_METHOD})
+    @SetupWindows(addWindows = { W_ACTIVITY, W_INPUT_METHOD })
     @Test
     public void testImeInsetsFrozenFlag_noDispatchVisibleInsetsWhenAppNotRequest()
             throws RemoteException {
