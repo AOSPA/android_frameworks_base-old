@@ -16,6 +16,7 @@
 
 package com.android.settingslib.spa.gallery
 
+import android.content.Context
 import com.android.settingslib.spa.framework.common.LocalLogger
 import com.android.settingslib.spa.framework.common.SettingsPageProviderRepository
 import com.android.settingslib.spa.framework.common.SpaEnvironment
@@ -23,6 +24,7 @@ import com.android.settingslib.spa.framework.common.createSettingsPage
 import com.android.settingslib.spa.gallery.button.ActionButtonPageProvider
 import com.android.settingslib.spa.gallery.home.HomePageProvider
 import com.android.settingslib.spa.gallery.page.ArgumentPageProvider
+import com.android.settingslib.spa.gallery.page.ChartPageProvider
 import com.android.settingslib.spa.gallery.page.FooterPageProvider
 import com.android.settingslib.spa.gallery.page.IllustrationPageProvider
 import com.android.settingslib.spa.gallery.page.ProgressBarPageProvider
@@ -49,7 +51,7 @@ enum class SettingsPageProviderEnum(val displayName: String) {
     // Add your SPPs
 }
 
-object GallerySpaEnvironment : SpaEnvironment() {
+class GallerySpaEnvironment(context: Context) : SpaEnvironment(context) {
     override val pageProviderRepository = lazy {
         SettingsPageProviderRepository(
             allPageProviders = listOf(
@@ -68,6 +70,7 @@ object GallerySpaEnvironment : SpaEnvironment() {
                 CategoryPageProvider,
                 ActionButtonPageProvider,
                 ProgressBarPageProvider,
+                ChartPageProvider,
             ),
             rootPages = listOf(
                 HomePageProvider.createSettingsPage(),

@@ -39,4 +39,12 @@ abstract class StartKeyguardTransitionModule {
     @Binds
     @IntoSet
     abstract fun aodLockscreen(impl: AodLockscreenTransitionInteractor): TransitionInteractor
+
+    @Binds @IntoSet abstract fun goneAod(impl: GoneAodTransitionInteractor): TransitionInteractor
+
+    @Binds @IntoSet abstract fun aodGone(impl: AodToGoneTransitionInteractor): TransitionInteractor
+
+    @Binds
+    @IntoSet
+    abstract fun lockscreenGone(impl: LockscreenGoneTransitionInteractor): TransitionInteractor
 }

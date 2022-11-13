@@ -27,11 +27,16 @@ import android.os.Trace;
 import android.util.Slog;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.os.TimeoutRecord;
 import com.android.server.FgThread;
 import com.android.server.wm.WindowProcessController;
 
 import java.util.ArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -54,6 +59,14 @@ class AnrHelper {
      */
     private static final long CONSECUTIVE_ANR_TIME_MS = TimeUnit.MINUTES.toMillis(2);
 
+    /**
+     * The keep alive time for the threads in the helper threadpool executor
+    */
+    private static final int AUX_THREAD_KEEP_ALIVE_SECOND = 10;
+
+    private static final ThreadFactory sDefaultThreadFactory =  r ->
+            new Thread(r, "AnrAuxiliaryTaskExecutor");
+
     @GuardedBy("mAnrRecords")
     private final ArrayList<AnrRecord> mAnrRecords = new ArrayList<>();
     private final AtomicBoolean mRunning = new AtomicBoolean(false);
@@ -69,30 +82,40 @@ class AnrHelper {
     @GuardedBy("mAnrRecords")
     private int mProcessingPid = -1;
 
+    private final ExecutorService mAuxiliaryTaskExecutor;
+
     AnrHelper(final ActivityManagerService service) {
+        this(service, new ThreadPoolExecutor(/* corePoolSize= */ 0, /* maximumPoolSize= */ 1,
+                /* keepAliveTime= */ AUX_THREAD_KEEP_ALIVE_SECOND, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(), sDefaultThreadFactory));
+    }
+
+    @VisibleForTesting
+    AnrHelper(ActivityManagerService service, ExecutorService auxExecutor) {
         mService = service;
+        mAuxiliaryTaskExecutor = auxExecutor;
     }
 
     void appNotResponding(ProcessRecord anrProcess, TimeoutRecord timeoutRecord) {
         appNotResponding(anrProcess, null /* activityShortComponentName */, null /* aInfo */,
                 null /* parentShortComponentName */, null /* parentProcess */,
-                false /* aboveSystem */, timeoutRecord);
+                false /* aboveSystem */, null/*auxiliaryTaskExecutor*/, timeoutRecord);
     }
 
     void appNotResponding(ProcessRecord anrProcess, String activityShortComponentName,
          ApplicationInfo aInfo, String parentShortComponentName,
          WindowProcessController parentProcess, boolean aboveSystem,
-         TimeoutRecord timeoutRecord) {
+         ExecutorService auxiliaryTaskExecutor, TimeoutRecord timeoutRecord) {
          appNotResponding(new AnrRecord(anrProcess, activityShortComponentName, aInfo,
-                   parentShortComponentName, parentProcess, aboveSystem, timeoutRecord));
+                   parentShortComponentName, parentProcess, aboveSystem, auxiliaryTaskExecutor, timeoutRecord));
     }
 
     void deferAppNotResponding(ProcessRecord anrProcess, String activityShortComponentName,
         ApplicationInfo aInfo, String parentShortComponentName,
         WindowProcessController parentProcess, boolean aboveSystem,
-        TimeoutRecord timeoutRecord, long delayInMillis) {
+        ExecutorService auxiliaryTaskExecutor, TimeoutRecord timeoutRecord, long delayInMillis) {
         AnrRecord anrRecord = new AnrRecord(anrProcess, activityShortComponentName, aInfo,
-                parentShortComponentName, parentProcess, aboveSystem, timeoutRecord);
+                parentShortComponentName, parentProcess, aboveSystem, auxiliaryTaskExecutor, timeoutRecord);
         Message msg = Message.obtain();
         msg.what = APP_NOT_RESPONDING_DEFER_MSG;
         msg.obj = anrRecord;
@@ -227,11 +250,12 @@ class AnrHelper {
         final ApplicationInfo mAppInfo;
         final WindowProcessController mParentProcess;
         final boolean mAboveSystem;
+        final ExecutorService mAuxiliaryTaskExecutor;
         final long mTimestamp = SystemClock.uptimeMillis();
         AnrRecord(ProcessRecord anrProcess, String activityShortComponentName,
                 ApplicationInfo aInfo, String parentShortComponentName,
                 WindowProcessController parentProcess, boolean aboveSystem,
-                TimeoutRecord timeoutRecord) {
+                ExecutorService auxiliaryTaskExecutor, TimeoutRecord timeoutRecord) {
             mApp = anrProcess;
             mPid = anrProcess.mPid;
             mActivityShortComponentName = activityShortComponentName;
@@ -240,6 +264,7 @@ class AnrHelper {
             mAppInfo = aInfo;
             mParentProcess = parentProcess;
             mAboveSystem = aboveSystem;
+            mAuxiliaryTaskExecutor = auxiliaryTaskExecutor;
         }
 
         void appNotResponding(boolean onlyDumpSelf) {
@@ -247,7 +272,7 @@ class AnrHelper {
                 mTimeoutRecord.mLatencyTracker.anrProcessingStarted();
                 mApp.mErrorState.appNotResponding(mActivityShortComponentName, mAppInfo,
                         mParentShortComponentName, mParentProcess, mAboveSystem,
-                        mTimeoutRecord, onlyDumpSelf);
+                        mTimeoutRecord, mAuxiliaryTaskExecutor, onlyDumpSelf);
             } finally {
                 mTimeoutRecord.mLatencyTracker.anrProcessingEnded();
             }

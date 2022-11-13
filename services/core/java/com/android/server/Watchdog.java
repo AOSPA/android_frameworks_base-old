@@ -49,7 +49,7 @@ import android.util.Dumpable;
 import android.util.EventLog;
 import android.util.Log;
 import android.util.Slog;
-import android.util.SparseArray;
+import android.util.SparseBooleanArray;
 
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.os.ProcessCpuTracker;
@@ -78,6 +78,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.Date;
 import java.text.SimpleDateFormat;
@@ -901,7 +902,8 @@ public class Watchdog implements Dumpable {
             // We've waited half the deadlock-detection interval.  Pull a stack
             // trace and wait another half.
             initialStack = ActivityManagerService.dumpStackTraces(pids, null, null,
-                    nativePids, null, subject, criticalEvents, /* latencyTracker= */null);
+                    CompletableFuture.completedFuture(nativePids), null, subject,
+                    criticalEvents, Runnable::run,/* latencyTracker= */null);
             if (initialStack != null){
                 SmartTraceUtils.dumpStackTraces(Process.myPid(), pids,
                     nativePids, initialStack);
@@ -923,8 +925,9 @@ public class Watchdog implements Dumpable {
         ProcessCpuTracker processCpuTracker = new ProcessCpuTracker(false);
         StringWriter tracesFileException = new StringWriter();
         final File finalStack = ActivityManagerService.dumpStackTraces(
-                pids, processCpuTracker, new SparseArray<>(), getInterestingNativePids(),
-                tracesFileException, subject, criticalEvents, /* latencyTracker= */null);
+                pids, processCpuTracker, new SparseBooleanArray(),
+                CompletableFuture.completedFuture(getInterestingNativePids()), tracesFileException,
+                subject, criticalEvents, Runnable::run, /* latencyTracker= */null);
         if (finalStack != null){
             SmartTraceUtils.dumpStackTraces(Process.myPid(), pids, nativePids, finalStack);
         }

@@ -5063,6 +5063,13 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     private boolean mHoveringTouchDelegate = false;
 
     /**
+     * Configuration for this view to act as a handwriting initiation delegate. This allows
+     * handwriting mode for a delegator editor view to be initiated by stylus movement on this
+     * delegate view.
+     */
+    private HandwritingDelegateConfiguration mHandwritingDelegateConfiguration;
+
+    /**
      * Solid color to use as a background when creating the drawing cache. Enables
      * the cache to use 16 bit bitmaps instead of 32 bit.
      */
@@ -12255,6 +12262,30 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
+     * Configures this view to act as a handwriting initiation delegate. This allows handwriting
+     * mode for a delegator editor view to be initiated by stylus movement on this delegate view.
+     *
+     * <p>If {@code null} is passed, this view will no longer act as a handwriting initiation
+     * delegate.
+     */
+    public void setHandwritingDelegateConfiguration(
+            @Nullable HandwritingDelegateConfiguration configuration) {
+        mHandwritingDelegateConfiguration = configuration;
+        if (configuration != null) {
+            setHandwritingArea(new Rect(0, 0, getWidth(), getHeight()));
+        }
+    }
+
+    /**
+     * If this view has been configured as a handwriting initiation delegate, returns the delegate
+     * configuration.
+     */
+    @Nullable
+    public HandwritingDelegateConfiguration getHandwritingDelegateConfiguration() {
+        return mHandwritingDelegateConfiguration;
+    }
+
+    /**
      * Gets the coordinates of this view in the coordinate space of the
      * {@link Surface} that contains the view.
      *
@@ -17407,7 +17438,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * (but after its own view has been drawn).
      * @param canvas the canvas on which to draw the view
      */
-    protected void dispatchDraw(Canvas canvas) {
+    protected void dispatchDraw(@NonNull Canvas canvas) {
 
     }
 
@@ -20692,7 +20723,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         out.bottom = mScrollY + mBottom - mTop;
     }
 
-    private void onDrawScrollIndicators(Canvas c) {
+    private void onDrawScrollIndicators(@NonNull Canvas c) {
         if ((mPrivateFlags3 & SCROLL_INDICATORS_PFLAG3_MASK) == 0) {
             // No scroll indicators enabled.
             return;
@@ -20876,7 +20907,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @see #awakenScrollBars(int)
      */
-    protected final void onDrawScrollBars(Canvas canvas) {
+    protected final void onDrawScrollBars(@NonNull Canvas canvas) {
         // scrollbars are drawn only when the animation is running
         final ScrollabilityCache cache = mScrollCache;
 
@@ -20988,7 +21019,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @hide
      */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-    protected void onDrawHorizontalScrollBar(Canvas canvas, Drawable scrollBar,
+    protected void onDrawHorizontalScrollBar(@NonNull Canvas canvas, Drawable scrollBar,
             int l, int t, int r, int b) {
         scrollBar.setBounds(l, t, r, b);
         scrollBar.draw(canvas);
@@ -21008,7 +21039,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @hide
      */
     @UnsupportedAppUsage
-    protected void onDrawVerticalScrollBar(Canvas canvas, Drawable scrollBar,
+    protected void onDrawVerticalScrollBar(@NonNull Canvas canvas, Drawable scrollBar,
             int l, int t, int r, int b) {
         scrollBar.setBounds(l, t, r, b);
         scrollBar.draw(canvas);
@@ -21019,7 +21050,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @param canvas the canvas on which the background will be drawn
      */
-    protected void onDraw(Canvas canvas) {
+    protected void onDraw(@NonNull Canvas canvas) {
     }
 
     /*
@@ -23134,7 +23165,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @hide
      */
-    protected final boolean drawsWithRenderNode(Canvas canvas) {
+    protected final boolean drawsWithRenderNode(@NonNull Canvas canvas) {
         return mAttachInfo != null
                 && mAttachInfo.mHardwareAccelerated
                 && canvas.isHardwareAccelerated();
@@ -23146,7 +23177,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * This is where the View specializes rendering behavior based on layer type,
      * and hardware acceleration.
      */
-    boolean draw(Canvas canvas, ViewGroup parent, long drawingTime) {
+    boolean draw(@NonNull Canvas canvas, ViewGroup parent, long drawingTime) {
 
         final boolean hardwareAcceleratedCanvas = canvas.isHardwareAccelerated();
 
@@ -23434,7 +23465,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         return (int) (dips * scale + 0.5f);
     }
 
-    final private void debugDrawFocus(Canvas canvas) {
+    private void debugDrawFocus(@NonNull Canvas canvas) {
         if (isFocused()) {
             final int cornerSquareSize = dipsToPixels(DEBUG_CORNERS_SIZE_DIP);
             final int l = mScrollX;
@@ -23469,7 +23500,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @param canvas The Canvas to which the View is rendered.
      */
     @CallSuper
-    public void draw(Canvas canvas) {
+    public void draw(@NonNull Canvas canvas) {
         final int privateFlags = mPrivateFlags;
         mPrivateFlags = (privateFlags & ~PFLAG_DIRTY_MASK) | PFLAG_DRAWN;
 
@@ -23704,7 +23735,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @param canvas Canvas on which to draw the background
      */
     @UnsupportedAppUsage
-    private void drawBackground(Canvas canvas) {
+    private void drawBackground(@NonNull Canvas canvas) {
         final Drawable background = mBackground;
         if (background == null) {
             return;
@@ -24209,7 +24240,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             }
         }
         rebuildOutline();
-        if (onCheckIsTextEditor()) {
+        if (onCheckIsTextEditor() || mHandwritingDelegateConfiguration != null) {
             setHandwritingArea(new Rect(0, 0, newWidth, newHeight));
         }
     }
@@ -24604,7 +24635,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * Draw the default focus highlight onto the canvas if there is one and this view is focused.
      * @param canvas the canvas where we're drawing the highlight.
      */
-    private void drawDefaultFocusHighlight(Canvas canvas) {
+    private void drawDefaultFocusHighlight(@NonNull Canvas canvas) {
         if (mDefaultFocusHighlight != null && isFocused()) {
             if (mDefaultFocusHighlightSizeChanged) {
                 mDefaultFocusHighlightSizeChanged = false;
@@ -25402,7 +25433,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @param canvas canvas to draw into
      */
-    public void onDrawForeground(Canvas canvas) {
+    public void onDrawForeground(@NonNull Canvas canvas) {
         onDrawScrollIndicators(canvas);
         onDrawScrollBars(canvas);
 
@@ -27460,7 +27491,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
          *
          * @param canvas A {@link android.graphics.Canvas} object in which to draw the shadow image.
          */
-        public void onDrawShadow(Canvas canvas) {
+        public void onDrawShadow(@NonNull Canvas canvas) {
             final View view = mView.get();
             if (view != null) {
                 view.draw(canvas);

@@ -227,6 +227,12 @@ public abstract class ActivityManagerInternal {
     public abstract boolean isModernQueueEnabled();
 
     /**
+     * Enforce capability restrictions on use of the given BroadcastOptions
+     */
+    public abstract void enforceBroadcastOptionsPermissions(@Nullable Bundle options,
+            int callingUid);
+
+    /**
      * Returns package name given pid.
      *
      * @param pid The pid we are searching package name for.
@@ -300,7 +306,7 @@ public abstract class ActivityManagerInternal {
     public abstract int handleIncomingUser(int callingPid, int callingUid, @UserIdInt int userId,
             boolean allowAll, int allowMode, String name, String callerPackage);
 
-    /** Checks if the calling binder pid as the permission. */
+    /** Checks if the calling binder pid/uid has the given permission. */
     @PermissionMethod
     public abstract void enforceCallingPermission(@PermissionName String permission, String func);
 
@@ -389,6 +395,10 @@ public abstract class ActivityManagerInternal {
      */
     public abstract boolean isAppStartModeDisabled(int uid, String packageName);
 
+    /**
+     * Returns the ids of the current user and all of its profiles (if any), regardless of the
+     * running state of the profiles.
+     */
     public abstract int[] getCurrentProfileIds();
     public abstract UserInfo getCurrentUser();
     public abstract void ensureNotSpecialUser(@UserIdInt int userId);
@@ -639,6 +649,8 @@ public abstract class ActivityManagerInternal {
      * using the rules of package visibility. Returns extras with legitimate package info that the
      * receiver is able to access, or {@code null} if none of the packages is visible to the
      * receiver.
+     * @param serialized Specifies whether or not the broadcast should be delivered to the
+     *                   receivers in a serial order.
      *
      * @see com.android.server.am.ActivityManagerService#broadcastIntentWithFeature(
      *      IApplicationThread, String, Intent, String, IIntentReceiver, int, String, Bundle,
@@ -647,6 +659,19 @@ public abstract class ActivityManagerInternal {
     public abstract int broadcastIntent(Intent intent,
             IIntentReceiver resultTo,
             String[] requiredPermissions, boolean serialized,
+            int userId, int[] appIdAllowList,
+            @Nullable BiFunction<Integer, Bundle, Bundle> filterExtrasForReceiver,
+            @Nullable Bundle bOptions);
+
+    /**
+     * Variant of
+     * {@link #broadcastIntent(Intent, IIntentReceiver, String[], boolean, int, int[], BiFunction, Bundle)}
+     * that allows sender to receive a finish callback once the broadcast delivery is completed,
+     * but provides no ordering guarantee for how the broadcast is delivered to receivers.
+     */
+    public abstract int broadcastIntentWithCallback(Intent intent,
+            IIntentReceiver resultTo,
+            String[] requiredPermissions,
             int userId, int[] appIdAllowList,
             @Nullable BiFunction<Integer, Bundle, Bundle> filterExtrasForReceiver,
             @Nullable Bundle bOptions);

@@ -23,6 +23,7 @@ import com.android.settingslib.spa.framework.common.SettingsEntry
 import com.android.settingslib.spa.framework.common.SettingsEntryBuilder
 import com.android.settingslib.spa.framework.common.SettingsPage
 import com.android.settingslib.spa.framework.common.SettingsPageProvider
+import com.android.settingslib.spa.framework.common.SpaEnvironmentFactory
 import com.android.settingslib.spa.framework.common.createSettingsPage
 import com.android.settingslib.spa.framework.theme.SettingsTheme
 import com.android.settingslib.spa.gallery.SettingsPageProviderEnum
@@ -98,9 +99,13 @@ object ArgumentPageProvider : SettingsPageProvider {
             }
     }
 
+    override fun getTitle(arguments: Bundle?): String {
+        return ArgumentPageModel.genPageTitle()
+    }
+
     @Composable
     override fun Page(arguments: Bundle?) {
-        RegularScaffold(title = ArgumentPageModel.create(arguments).genPageTitle()) {
+        RegularScaffold(title = getTitle(arguments)) {
             for (entry in buildEntry(arguments)) {
                 if (entry.toPage != null) {
                     entry.UiLayout(ArgumentPageModel.buildNextArgument(arguments))
@@ -115,6 +120,7 @@ object ArgumentPageProvider : SettingsPageProvider {
 @Preview(showBackground = true)
 @Composable
 private fun ArgumentPagePreview() {
+    SpaEnvironmentFactory.resetForPreview()
     SettingsTheme {
         ArgumentPageProvider.Page(
             ArgumentPageModel.buildArgument(stringParam = "foo", intParam = 0)

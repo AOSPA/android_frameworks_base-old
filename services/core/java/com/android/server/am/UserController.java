@@ -120,6 +120,7 @@ import com.android.server.SystemService.UserCompletedEventType;
 import com.android.server.SystemServiceManager;
 import com.android.server.am.UserState.KeyEvictedCallback;
 import com.android.server.pm.UserManagerInternal;
+import com.android.server.pm.UserManagerInternal.UserLifecycleListener;
 import com.android.server.pm.UserManagerService;
 import com.android.server.utils.Slogf;
 import com.android.server.utils.TimingsTraceAndSlog;
@@ -320,8 +321,12 @@ class UserController implements Handler.Callback {
     @GuardedBy("mLock")
     private int[] mStartedUserArray = new int[] { 0 };
 
-    // If there are multiple profiles for the current user, their ids are here
-    // Currently only the primary user can have managed profiles
+    /**
+     * Contains the current user and its profiles (if any).
+     *
+     * <p><b>NOTE: </b>it lists all profiles, regardless of their running state (i.e., they're in
+     * this list even if not running).
+     */
     @GuardedBy("mLock")
     private int[] mCurrentProfileIds = new int[] {};
 
@@ -435,6 +440,18 @@ class UserController implements Handler.Callback {
      */
     @GuardedBy("mLock")
     private final SparseBooleanArray mVisibleUsers = new SparseBooleanArray();
+
+    private final UserLifecycleListener mUserLifecycleListener = new UserLifecycleListener() {
+        @Override
+        public void onUserCreated(UserInfo user, Object token) {
+            onUserAdded(user);
+        }
+
+        @Override
+        public void onUserRemoved(UserInfo user) {
+            UserController.this.onUserRemoved(user.id);
+        }
+    };
 
     UserController(ActivityManagerService service) {
         this(new Injector(service));
@@ -1667,7 +1684,7 @@ class UserController implements Handler.Callback {
                     userSwitchUiEnabled = mUserSwitchUiEnabled;
                 }
                 mInjector.updateUserConfiguration();
-                updateCurrentProfileIds();
+                updateProfileRelatedCaches();
                 mInjector.getWindowManager().setCurrentUser(userId);
                 mInjector.reportCurWakefulnessUsageEvent();
                 // Once the internal notion of the active user has switched, we lock the device
@@ -1681,7 +1698,7 @@ class UserController implements Handler.Callback {
                 }
             } else {
                 final Integer currentUserIdInt = mCurrentUserId;
-                updateCurrentProfileIds();
+                updateProfileRelatedCaches();
                 synchronized (mLock) {
                     mUserLru.remove(currentUserIdInt);
                     mUserLru.add(currentUserIdInt);
@@ -2168,14 +2185,12 @@ class UserController implements Handler.Callback {
         mHandler.sendMessage(mHandler.obtainMessage(COMPLETE_USER_SWITCH_MSG, newUserId, 0));
 
         uss.switching = false;
-        mHandler.removeMessages(REPORT_USER_SWITCH_COMPLETE_MSG);
-        mHandler.sendMessage(mHandler.obtainMessage(REPORT_USER_SWITCH_COMPLETE_MSG, newUserId, 0));
         stopGuestOrEphemeralUserIfBackground(oldUserId);
         stopUserOnSwitchIfEnforced(oldUserId);
         if (oldUserId == UserHandle.USER_SYSTEM) {
             // System user is never stopped, but its visibility is changed (as it is brought to the
             // background)
-            updateSystemUserVisibility(/* visible= */ false);
+            updateSystemUserVisibility(t, /* visible= */ false);
         }
 
         t.traceEnd(); // end continueUserSwitch
@@ -2183,21 +2198,22 @@ class UserController implements Handler.Callback {
 
     @VisibleForTesting
     void completeUserSwitch(int newUserId) {
-        if (isUserSwitchUiEnabled()) {
-            // If there is no challenge set, dismiss the keyguard right away
-            if (!mInjector.getKeyguardManager().isDeviceSecure(newUserId)) {
-                // Wait until the keyguard is dismissed to unfreeze
-                mInjector.dismissKeyguard(
-                        new Runnable() {
-                            public void run() {
-                                unfreezeScreen();
-                            }
-                        },
-                        "User Switch");
-                return;
-            } else {
+        final boolean isUserSwitchUiEnabled = isUserSwitchUiEnabled();
+        final Runnable runnable = () -> {
+            if (isUserSwitchUiEnabled) {
                 unfreezeScreen();
             }
+            mHandler.removeMessages(REPORT_USER_SWITCH_COMPLETE_MSG);
+            mHandler.sendMessage(mHandler.obtainMessage(
+                    REPORT_USER_SWITCH_COMPLETE_MSG, newUserId, 0));
+        };
+
+        // If there is no challenge set, dismiss the keyguard right away
+        if (isUserSwitchUiEnabled && !mInjector.getKeyguardManager().isDeviceSecure(newUserId)) {
+            // Wait until the keyguard is dismissed to unfreeze
+            mInjector.dismissKeyguard(runnable, "User Switch");
+        } else {
+            runnable.run();
         }
     }
 
@@ -2526,16 +2542,22 @@ class UserController implements Handler.Callback {
             Slogf.d(TAG, "onSystemReady()");
 
         }
-        updateCurrentProfileIds();
+        mInjector.getUserManagerInternal().addUserLifecycleListener(mUserLifecycleListener);
+        updateProfileRelatedCaches();
         mInjector.reportCurWakefulnessUsageEvent();
     }
 
     // TODO(b/242195409): remove this method if initial system user boot logic is refactored?
     void onSystemUserStarting() {
-        updateSystemUserVisibility(/* visible= */ !UserManager.isHeadlessSystemUserMode());
+        if (!UserManager.isHeadlessSystemUserMode()) {
+            // Don't need to call on HSUM because it will be called when the system user is
+            // restarted on background
+            mInjector.onUserStarting(UserHandle.USER_SYSTEM, /* visible= */ true);
+        }
     }
 
-    private void updateSystemUserVisibility(boolean visible) {
+    private void updateSystemUserVisibility(TimingsTraceAndSlog t, boolean visible) {
+        t.traceBegin("update-system-userVisibility-" + visible);
         if (DEBUG_MU) {
             Slogf.d(TAG, "updateSystemUserVisibility(): visible=%b", visible);
         }
@@ -2547,17 +2569,18 @@ class UserController implements Handler.Callback {
                 mVisibleUsers.delete(userId);
             }
         }
-        mInjector.onUserStarting(userId, visible);
+        mInjector.notifySystemUserVisibilityChanged(visible);
+        t.traceEnd();
     }
 
     /**
-     * Refreshes the list of users related to the current user when either a
-     * user switch happens or when a new related user is started in the
-     * background.
+     * Refreshes the internal caches related to user profiles.
+     *
+     * <p>It's called every time a user is started.
      */
-    private void updateCurrentProfileIds() {
+    private void updateProfileRelatedCaches() {
         final List<UserInfo> profiles = mInjector.getUserManager().getProfiles(getCurrentUserId(),
-                false /* enabledOnly */);
+                /* enabledOnly= */ false);
         int[] currentProfileIds = new int[profiles.size()]; // profiles will not be null
         for (int i = 0; i < currentProfileIds.length; i++) {
             currentProfileIds[i] = profiles.get(i).id;
@@ -2824,6 +2847,18 @@ class UserController implements Handler.Callback {
         }
     }
 
+    private void onUserAdded(UserInfo user) {
+        if (!user.isProfile()) {
+            return;
+        }
+        synchronized (mLock) {
+            if (user.profileGroupId == mCurrentUserId) {
+                mCurrentProfileIds = ArrayUtils.appendInt(mCurrentProfileIds, user.id);
+            }
+            mUserProfileGroupIds.put(user.id, user.profileGroupId);
+        }
+    }
+
     void onUserRemoved(@UserIdInt int userId) {
         synchronized (mLock) {
             int size = mUserProfileGroupIds.size();
@@ -2938,6 +2973,10 @@ class UserController implements Handler.Callback {
             for (int i = 0; i < mVisibleUsers.size(); i++) {
                 proto.write(UserControllerProto.VISIBLE_USERS_ARRAY, mVisibleUsers.keyAt(i));
             }
+            proto.write(UserControllerProto.CURRENT_USER, mCurrentUserId);
+            for (int i = 0; i < mCurrentProfileIds.length; i++) {
+                proto.write(UserControllerProto.CURRENT_PROFILES, mCurrentProfileIds[i]);
+            }
             proto.end(token);
         }
     }
@@ -2975,6 +3014,7 @@ class UserController implements Handler.Callback {
                     pw.println(mUserProfileGroupIds.valueAt(i));
                 }
             }
+            pw.println("  mCurrentProfileIds:" + Arrays.toString(mCurrentProfileIds));
             pw.println("  mCurrentUserId:" + mCurrentUserId);
             pw.println("  mTargetUserId:" + mTargetUserId);
             pw.println("  mLastActiveUsers:" + mLastActiveUsers);
@@ -3638,6 +3678,9 @@ class UserController implements Handler.Callback {
         void onUserStarting(int userId, boolean visible) {
             getSystemServiceManager().onUserStarting(TimingsTraceAndSlog.newAsyncLog(), userId,
                     visible);
+        }
+        void notifySystemUserVisibilityChanged(boolean visible) {
+            getSystemServiceManager().onSystemUserVisibilityChanged(visible);
         }
     }
 }

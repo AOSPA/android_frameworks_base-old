@@ -28,8 +28,11 @@ import static java.lang.annotation.RetentionPolicy.SOURCE;
 import android.annotation.AnyThread;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.graphics.RectF;
 import android.os.Bundle;
+import android.os.CancellationSignal;
 import android.os.Handler;
+import android.os.ICancellationSignal;
 import android.os.Looper;
 import android.os.ResultReceiver;
 import android.os.Trace;
@@ -982,62 +985,9 @@ final class RemoteInputConnectionImpl extends IRemoteInputConnection.Stub {
 
     @Dispatching(cancellable = true)
     @Override
-    public void performHandwritingSelectGesture(
-            InputConnectionCommandHeader header, SelectGesture gesture,
+    public void performHandwritingGesture(
+            InputConnectionCommandHeader header, ParcelableHandwritingGesture gestureContainer,
             ResultReceiver resultReceiver) {
-        performHandwritingGestureInternal(header, gesture, resultReceiver);
-    }
-
-    @Dispatching(cancellable = true)
-    @Override
-    public void performHandwritingSelectRangeGesture(
-            InputConnectionCommandHeader header, SelectRangeGesture gesture,
-            ResultReceiver resultReceiver) {
-        performHandwritingGestureInternal(header, gesture, resultReceiver);
-    }
-
-    @Dispatching(cancellable = true)
-    @Override
-    public void performHandwritingInsertGesture(
-            InputConnectionCommandHeader header, InsertGesture gesture,
-            ResultReceiver resultReceiver) {
-        performHandwritingGestureInternal(header, gesture, resultReceiver);
-    }
-
-    @Dispatching(cancellable = true)
-    @Override
-    public void performHandwritingDeleteGesture(
-            InputConnectionCommandHeader header, DeleteGesture gesture,
-            ResultReceiver resultReceiver) {
-        performHandwritingGestureInternal(header, gesture, resultReceiver);
-    }
-
-    @Dispatching(cancellable = true)
-    @Override
-    public void performHandwritingDeleteRangeGesture(
-            InputConnectionCommandHeader header, DeleteRangeGesture gesture,
-            ResultReceiver resultReceiver) {
-        performHandwritingGestureInternal(header, gesture, resultReceiver);
-    }
-
-    @Dispatching(cancellable = true)
-    @Override
-    public void performHandwritingRemoveSpaceGesture(
-            InputConnectionCommandHeader header, RemoveSpaceGesture gesture,
-            ResultReceiver resultReceiver) {
-        performHandwritingGestureInternal(header, gesture, resultReceiver);
-    }
-
-    @Dispatching(cancellable = true)
-    @Override
-    public void performHandwritingJoinOrSplitGesture(
-            InputConnectionCommandHeader header, JoinOrSplitGesture gesture,
-            ResultReceiver resultReceiver) {
-        performHandwritingGestureInternal(header, gesture, resultReceiver);
-    }
-
-    private <T extends HandwritingGesture> void performHandwritingGestureInternal(
-            InputConnectionCommandHeader header,  T gesture, ResultReceiver resultReceiver) {
         dispatchWithTracing("performHandwritingGesture", () -> {
             if (header.mSessionId != mCurrentSessionId.get()) {
                 if (resultReceiver != null) {
@@ -1059,7 +1009,7 @@ final class RemoteInputConnectionImpl extends IRemoteInputConnection.Stub {
             // TODO(210039666): implement Cleaner to return HANDWRITING_GESTURE_RESULT_UNKNOWN if
             //  editor doesn't return any type.
             ic.performHandwritingGesture(
-                    gesture,
+                    gestureContainer.get(),
                     resultReceiver != null ? Runnable::run : null,
                     resultReceiver != null
                             ? (resultCode) -> resultReceiver.send(resultCode, null /* resultData */)
@@ -1067,24 +1017,31 @@ final class RemoteInputConnectionImpl extends IRemoteInputConnection.Stub {
         });
     }
 
-    /**
-     * Dispatches {@link InputConnection#requestCursorUpdates(int)}.
-     *
-     * <p>This method is intended to be called only from {@link InputMethodManager}.</p>
-     * @param cursorUpdateMode the mode for {@link InputConnection#requestCursorUpdates(int, int)}
-     * @param cursorUpdateFilter the filter for
-     *      {@link InputConnection#requestCursorUpdates(int, int)}
-     * @param imeDisplayId displayId on which IME is displayed.
-     */
     @Dispatching(cancellable = true)
-    public void requestCursorUpdatesFromImm(int cursorUpdateMode, int cursorUpdateFilter,
-            int imeDisplayId) {
-        final int currentSessionId = mCurrentSessionId.get();
-        dispatchWithTracing("requestCursorUpdatesFromImm", () -> {
-            if (currentSessionId != mCurrentSessionId.get()) {
+    @Override
+    public void previewHandwritingGesture(
+            InputConnectionCommandHeader header, ParcelableHandwritingGesture gestureContainer,
+            ICancellationSignal transport) {
+
+        // TODO(b/254727073): Implement CancellationSignal receiver
+        final CancellationSignal cancellationSignal = CancellationSignal.fromTransport(transport);
+        // Previews always use PreviewableHandwritingGesture but if incorrectly wrong class is
+        // passed, ClassCastException will be sent back to caller.
+        final PreviewableHandwritingGesture gesture =
+                (PreviewableHandwritingGesture) gestureContainer.get();
+
+        dispatchWithTracing("previewHandwritingGesture", () -> {
+            if (header.mSessionId != mCurrentSessionId.get()
+                    || (cancellationSignal != null && cancellationSignal.isCanceled())) {
                 return;  // cancelled
             }
-            requestCursorUpdatesInternal(cursorUpdateMode, cursorUpdateFilter, imeDisplayId);
+            InputConnection ic = getInputConnection();
+            if (ic == null || !isActive()) {
+                Log.w(TAG, "previewHandwritingGesture on inactive InputConnection");
+                return; // cancelled
+            }
+
+            ic.previewHandwritingGesture(gesture, cancellationSignal);
         });
     }
 
@@ -1123,7 +1080,8 @@ final class RemoteInputConnectionImpl extends IRemoteInputConnection.Stub {
             Log.w(TAG, "requestCursorAnchorInfo on inactive InputConnection");
             return false;
         }
-        if (mParentInputMethodManager.getDisplayId() != imeDisplayId
+        if (mParentInputMethodManager.mRequestCursorUpdateDisplayIdCheck.get()
+                && mParentInputMethodManager.getDisplayId() != imeDisplayId
                 && !mParentInputMethodManager.hasVirtualDisplayToScreenMatrix()) {
             // requestCursorUpdates() is not currently supported across displays.
             return false;
@@ -1143,6 +1101,36 @@ final class RemoteInputConnectionImpl extends IRemoteInputConnection.Stub {
             mHasPendingImmediateCursorAnchorInfoUpdate.set(result && hasImmediate);
             mIsCursorAnchorInfoMonitoring.set(result && hasMonitoring);
         }
+    }
+
+    @Dispatching(cancellable = true)
+    @Override
+    public void requestTextBoundsInfo(
+            InputConnectionCommandHeader header, RectF rectF,
+            @NonNull ResultReceiver resultReceiver) {
+        dispatchWithTracing("requestTextBoundsInfo", () -> {
+            if (header.mSessionId != mCurrentSessionId.get()) {
+                resultReceiver.send(TextBoundsInfoResult.CODE_CANCELLED, null);
+                return;  // cancelled
+            }
+            InputConnection ic = getInputConnection();
+            if (ic == null || !isActive()) {
+                Log.w(TAG, "requestTextBoundsInfo on inactive InputConnection");
+                resultReceiver.send(TextBoundsInfoResult.CODE_CANCELLED, null);
+                return;
+            }
+
+            ic.requestTextBoundsInfo(
+                    rectF,
+                    Runnable::run,
+                    (textBoundsInfoResult) -> {
+                        final int resultCode = textBoundsInfoResult.getResultCode();
+                        final TextBoundsInfo textBoundsInfo =
+                                textBoundsInfoResult.getTextBoundsInfo();
+                        resultReceiver.send(resultCode,
+                                textBoundsInfo == null ? null : textBoundsInfo.toBundle());
+                    });
+        });
     }
 
     @Dispatching(cancellable = true)

@@ -70,23 +70,23 @@ public class RequestInfo implements Parcelable {
     private final boolean mIsFirstUsage;
 
     @NonNull
-    private final String mAppDisplayName;
+    private final String mAppPackageName;
 
     /** Creates new {@code RequestInfo} for a create-credential flow. */
     public static RequestInfo newCreateRequestInfo(
             @NonNull IBinder token, @NonNull CreateCredentialRequest createCredentialRequest,
-            boolean isFirstUsage, @NonNull String appDisplayName) {
+            boolean isFirstUsage, @NonNull String appPackageName) {
         return new RequestInfo(
-                token, TYPE_CREATE, isFirstUsage, appDisplayName,
+                token, TYPE_CREATE, isFirstUsage, appPackageName,
                 createCredentialRequest, null);
     }
 
     /** Creates new {@code RequestInfo} for a get-credential flow. */
     public static RequestInfo newGetRequestInfo(
             @NonNull IBinder token, @NonNull GetCredentialRequest getCredentialRequest,
-            boolean isFirstUsage, @NonNull String appDisplayName) {
+            boolean isFirstUsage, @NonNull String appPackageName) {
         return new RequestInfo(
-                token, TYPE_GET, isFirstUsage, appDisplayName,
+                token, TYPE_GET, isFirstUsage, appPackageName,
                 null, getCredentialRequest);
     }
 
@@ -115,8 +115,8 @@ public class RequestInfo implements Parcelable {
 
     /** Returns the display name of the app that made this request. */
     @NonNull
-    public String getAppDisplayName() {
-        return mAppDisplayName;
+    public String getAppPackageName() {
+        return mAppPackageName;
     }
 
     /**
@@ -138,13 +138,13 @@ public class RequestInfo implements Parcelable {
     }
 
     private RequestInfo(@NonNull IBinder token, @NonNull @RequestType String type,
-            boolean isFirstUsage, @NonNull String appDisplayName,
+            boolean isFirstUsage, @NonNull String appPackageName,
             @Nullable CreateCredentialRequest createCredentialRequest,
             @Nullable GetCredentialRequest getCredentialRequest) {
         mToken = token;
         mType = type;
         mIsFirstUsage = isFirstUsage;
-        mAppDisplayName = appDisplayName;
+        mAppPackageName = appPackageName;
         mCreateCredentialRequest = createCredentialRequest;
         mGetCredentialRequest = getCredentialRequest;
     }
@@ -153,7 +153,7 @@ public class RequestInfo implements Parcelable {
         IBinder token = in.readStrongBinder();
         String type = in.readString8();
         boolean isFirstUsage = in.readBoolean();
-        String appDisplayName = in.readString8();
+        String appPackageName = in.readString8();
         CreateCredentialRequest createCredentialRequest =
                 in.readTypedObject(CreateCredentialRequest.CREATOR);
         GetCredentialRequest getCredentialRequest =
@@ -164,8 +164,8 @@ public class RequestInfo implements Parcelable {
         mType = type;
         AnnotationValidations.validate(NonNull.class, null, mType);
         mIsFirstUsage = isFirstUsage;
-        mAppDisplayName = appDisplayName;
-        AnnotationValidations.validate(NonNull.class, null, mAppDisplayName);
+        mAppPackageName = appPackageName;
+        AnnotationValidations.validate(NonNull.class, null, mAppPackageName);
         mCreateCredentialRequest = createCredentialRequest;
         mGetCredentialRequest = getCredentialRequest;
     }
@@ -175,7 +175,7 @@ public class RequestInfo implements Parcelable {
         dest.writeStrongBinder(mToken);
         dest.writeString8(mType);
         dest.writeBoolean(mIsFirstUsage);
-        dest.writeString8(mAppDisplayName);
+        dest.writeString8(mAppPackageName);
         dest.writeTypedObject(mCreateCredentialRequest, flags);
         dest.writeTypedObject(mGetCredentialRequest, flags);
     }

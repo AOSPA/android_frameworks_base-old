@@ -41,12 +41,14 @@ import com.android.systemui.demomode.dagger.DemoModeModule;
 import com.android.systemui.doze.dagger.DozeComponent;
 import com.android.systemui.dreams.dagger.DreamModule;
 import com.android.systemui.dump.DumpManager;
+import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.flags.FlagsModule;
 import com.android.systemui.fragments.FragmentService;
 import com.android.systemui.keyguard.data.BouncerViewModule;
 import com.android.systemui.log.dagger.LogModule;
 import com.android.systemui.mediaprojection.appselector.MediaProjectionModule;
 import com.android.systemui.model.SysUiState;
+import com.android.systemui.motiontool.MotionToolModule;
 import com.android.systemui.navigationbar.NavigationBarComponent;
 import com.android.systemui.notetask.NoteTaskModule;
 import com.android.systemui.people.PeopleModule;
@@ -58,7 +60,6 @@ import com.android.systemui.qs.footer.dagger.FooterActionsModule;
 import com.android.systemui.recents.Recents;
 import com.android.systemui.screenshot.dagger.ScreenshotModule;
 import com.android.systemui.security.data.repository.SecurityRepositoryModule;
-import com.android.systemui.settings.dagger.MultiUserUtilsModule;
 import com.android.systemui.shade.ShadeController;
 import com.android.systemui.smartspace.dagger.SmartspaceModule;
 import com.android.systemui.statusbar.CommandQueue;
@@ -134,13 +135,13 @@ import dagger.Provides;
             FooterActionsModule.class,
             LogModule.class,
             MediaProjectionModule.class,
+            MotionToolModule.class,
             PeopleHubModule.class,
             PeopleModule.class,
             PluginModule.class,
             PrivacyModule.class,
             ScreenshotModule.class,
             SensorModule.class,
-            MultiUserUtilsModule.class,
             SecurityRepositoryModule.class,
             SettingsUtilModule.class,
             SmartRepliesInflationModule.class,
@@ -240,6 +241,7 @@ public abstract class SystemUIModule {
             CommonNotifCollection notifCollection,
             NotifPipeline notifPipeline,
             SysUiState sysUiState,
+            FeatureFlags featureFlags,
             @Main Executor sysuiMainExecutor) {
         return Optional.ofNullable(BubblesManager.create(context,
                 bubblesOptional,
@@ -256,6 +258,7 @@ public abstract class SystemUIModule {
                 notifCollection,
                 notifPipeline,
                 sysUiState,
+                featureFlags,
                 sysuiMainExecutor));
     }
 

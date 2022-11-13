@@ -1913,8 +1913,9 @@ public final class DisplayManagerService extends SystemService {
                 if (displayDevice == null) {
                     return;
                 }
-                if (mLogicalDisplayMapper.getDisplayLocked(displayDevice)
-                        .getDisplayInfoLocked().type == Display.TYPE_INTERNAL) {
+                if (mLogicalDisplayMapper.getDisplayLocked(displayDevice) != null
+                        && mLogicalDisplayMapper.getDisplayLocked(displayDevice)
+                        .getDisplayInfoLocked().type == Display.TYPE_INTERNAL && c != null) {
                     FrameworkStatsLog.write(FrameworkStatsLog.BRIGHTNESS_CONFIGURATION_UPDATED,
                                 c.getCurve().first,
                                 c.getCurve().second,
@@ -2642,7 +2643,8 @@ public final class DisplayManagerService extends SystemService {
             // initPowerManagement has not yet been called.
             return;
         }
-        if (mBrightnessTracker == null) {
+
+        if (mBrightnessTracker == null && display.getDisplayIdLocked() == Display.DEFAULT_DISPLAY) {
             mBrightnessTracker = new BrightnessTracker(mContext, null);
         }
 

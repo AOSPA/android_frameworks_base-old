@@ -78,11 +78,7 @@ import static android.window.DisplayAreaOrganizer.FEATURE_UNDEFINED;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ANIM;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_SCREEN_ON;
 import static com.android.server.policy.PhoneWindowManager.TOAST_WINDOW_TIMEOUT;
-import static com.android.server.policy.WindowManagerPolicy.TRANSIT_ENTER;
-import static com.android.server.policy.WindowManagerPolicy.TRANSIT_EXIT;
-import static com.android.server.policy.WindowManagerPolicy.TRANSIT_HIDE;
 import static com.android.server.policy.WindowManagerPolicy.TRANSIT_PREVIEW_DONE;
-import static com.android.server.policy.WindowManagerPolicy.TRANSIT_SHOW;
 import static com.android.server.policy.WindowManagerPolicy.WindowManagerFuncs.LID_ABSENT;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYOUT;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
@@ -125,11 +121,9 @@ import android.view.InsetsFrameProvider;
 import android.view.InsetsSource;
 import android.view.InsetsState;
 import android.view.InsetsState.InternalInsetsType;
-import android.view.InsetsVisibilities;
 import android.view.Surface;
 import android.view.View;
 import android.view.ViewDebug;
-import android.view.WindowInsets;
 import android.view.WindowInsets.Type;
 import android.view.WindowInsets.Type.InsetsType;
 import android.view.WindowLayout;
@@ -337,7 +331,6 @@ public class DisplayPolicy {
     private int mLastAppearance;
     private int mLastBehavior;
     private int mLastRequestedVisibleTypes = Type.defaultVisible();
-    private InsetsVisibilities mRequestedVisibilities = new InsetsVisibilities();
     private AppearanceRegion[] mLastStatusBarAppearanceRegions;
     private LetterboxDetails[] mLastLetterboxDetails;
 
@@ -1498,90 +1491,6 @@ public class DisplayPolicy {
      */
     int selectAnimation(WindowState win, int transit) {
         ProtoLog.i(WM_DEBUG_ANIM, "selectAnimation in %s: transit=%d", win, transit);
-        if (win == mStatusBar) {
-            if (transit == TRANSIT_EXIT
-                    || transit == TRANSIT_HIDE) {
-                return R.anim.dock_top_exit;
-            } else if (transit == TRANSIT_ENTER
-                    || transit == TRANSIT_SHOW) {
-                return R.anim.dock_top_enter;
-            }
-        } else if (win == mNavigationBar) {
-            if (win.getAttrs().windowAnimations != 0) {
-                return ANIMATION_STYLEABLE;
-            }
-            // This can be on either the bottom or the right or the left.
-            if (mNavigationBarPosition == NAV_BAR_BOTTOM) {
-                if (transit == TRANSIT_EXIT
-                        || transit == TRANSIT_HIDE) {
-                    if (mService.mPolicy.isKeyguardShowingAndNotOccluded()) {
-                        return R.anim.dock_bottom_exit_keyguard;
-                    } else {
-                        return R.anim.dock_bottom_exit;
-                    }
-                } else if (transit == TRANSIT_ENTER
-                        || transit == TRANSIT_SHOW) {
-                    return R.anim.dock_bottom_enter;
-                }
-            } else if (mNavigationBarPosition == NAV_BAR_RIGHT) {
-                if (transit == TRANSIT_EXIT
-                        || transit == TRANSIT_HIDE) {
-                    return R.anim.dock_right_exit;
-                } else if (transit == TRANSIT_ENTER
-                        || transit == TRANSIT_SHOW) {
-                    return R.anim.dock_right_enter;
-                }
-            } else if (mNavigationBarPosition == NAV_BAR_LEFT) {
-                if (transit == TRANSIT_EXIT
-                        || transit == TRANSIT_HIDE) {
-                    return R.anim.dock_left_exit;
-                } else if (transit == TRANSIT_ENTER
-                        || transit == TRANSIT_SHOW) {
-                    return R.anim.dock_left_enter;
-                }
-            }
-        } else if (win == mStatusBarAlt || win == mNavigationBarAlt || win == mClimateBarAlt
-                || win == mExtraNavBarAlt) {
-            if (win.getAttrs().windowAnimations != 0) {
-                return ANIMATION_STYLEABLE;
-            }
-
-            int pos = (win == mStatusBarAlt) ? mStatusBarAltPosition : mNavigationBarAltPosition;
-
-            boolean isExitOrHide = transit == TRANSIT_EXIT || transit == TRANSIT_HIDE;
-            boolean isEnterOrShow = transit == TRANSIT_ENTER || transit == TRANSIT_SHOW;
-
-            switch (pos) {
-                case ALT_BAR_LEFT:
-                    if (isExitOrHide) {
-                        return R.anim.dock_left_exit;
-                    } else if (isEnterOrShow) {
-                        return R.anim.dock_left_enter;
-                    }
-                    break;
-                case ALT_BAR_RIGHT:
-                    if (isExitOrHide) {
-                        return R.anim.dock_right_exit;
-                    } else if (isEnterOrShow) {
-                        return R.anim.dock_right_enter;
-                    }
-                    break;
-                case ALT_BAR_BOTTOM:
-                    if (isExitOrHide) {
-                        return R.anim.dock_bottom_exit;
-                    } else if (isEnterOrShow) {
-                        return R.anim.dock_bottom_enter;
-                    }
-                    break;
-                case ALT_BAR_TOP:
-                    if (isExitOrHide) {
-                        return R.anim.dock_top_exit;
-                    } else if (isEnterOrShow) {
-                        return R.anim.dock_top_enter;
-                    }
-                    break;
-            }
-        }
 
         if (transit == TRANSIT_PREVIEW_DONE) {
             if (win.hasAppShownWindows()) {
@@ -2403,35 +2312,16 @@ public class DisplayPolicy {
             mService.mInputManager.setSystemUiLightsOut(
                     isFullscreen || (appearance & APPEARANCE_LOW_PROFILE_BARS) != 0);
         }
-        final InsetsVisibilities requestedVisibilities =
-                mLastRequestedVisibleTypes == requestedVisibleTypes
-                        ? mRequestedVisibilities
-                        : toInsetsVisibilities(requestedVisibleTypes);
         mLastAppearance = appearance;
         mLastBehavior = behavior;
         mLastRequestedVisibleTypes = requestedVisibleTypes;
-        mRequestedVisibilities = requestedVisibilities;
         mFocusedApp = focusedApp;
         mLastFocusIsFullscreen = isFullscreen;
         mLastStatusBarAppearanceRegions = statusBarAppearanceRegions;
         mLastLetterboxDetails = letterboxDetails;
         callStatusBarSafely(statusBar -> statusBar.onSystemBarAttributesChanged(displayId,
                 appearance, statusBarAppearanceRegions, isNavbarColorManagedByIme, behavior,
-                requestedVisibilities, focusedApp, letterboxDetails));
-    }
-
-    // TODO (253420890): Remove this when removing mRequestedVisibilities.
-    private static InsetsVisibilities toInsetsVisibilities(@InsetsType int requestedVisibleTypes) {
-        final @InsetsType int defaultVisibleTypes = WindowInsets.Type.defaultVisible();
-        final InsetsVisibilities insetsVisibilities = new InsetsVisibilities();
-        for (@InternalInsetsType int i = InsetsState.SIZE - 1; i >= 0; i--) {
-            @InsetsType int type = InsetsState.toPublicType(i);
-            if ((type & (requestedVisibleTypes ^ defaultVisibleTypes)) != 0) {
-                // We only set the visibility if it is different from the default one.
-                insetsVisibilities.setVisibility(i, (type & requestedVisibleTypes) != 0);
-            }
-        }
-        return insetsVisibilities;
+                requestedVisibleTypes, focusedApp, letterboxDetails));
     }
 
     private void callStatusBarSafely(Consumer<StatusBarManagerInternal> consumer) {

@@ -81,7 +81,7 @@ public class Transitions implements RemoteCallable<Transitions> {
 
     /** Set to {@code true} to enable shell transitions. */
     public static final boolean ENABLE_SHELL_TRANSITIONS =
-            SystemProperties.getBoolean("persist.wm.debug.shell_transit", false);
+            SystemProperties.getBoolean("persist.wm.debug.shell_transit", true);
     public static final boolean SHELL_TRANSITIONS_ROTATION = ENABLE_SHELL_TRANSITIONS
             && SystemProperties.getBoolean("persist.wm.debug.shell_transit_rotate", false);
 
@@ -175,6 +175,9 @@ public class Transitions implements RemoteCallable<Transitions> {
     }
 
     private void onInit() {
+        if (Transitions.ENABLE_SHELL_TRANSITIONS) {
+            mOrganizer.shareTransactionQueue();
+        }
         mShellController.addExternalInterface(KEY_EXTRA_SHELL_SHELL_TRANSITIONS,
                 this::createExternalInterface, this);
 
@@ -340,6 +343,15 @@ public class Transitions implements RemoteCallable<Transitions> {
             }
             final SurfaceControl leash = change.getLeash();
             final int mode = info.getChanges().get(i).getMode();
+
+            if (mode == TRANSIT_TO_FRONT
+                    && ((change.getStartAbsBounds().height() != change.getEndAbsBounds().height()
+                    || change.getStartAbsBounds().width() != change.getEndAbsBounds().width()))) {
+                // When the window is moved to front with a different size, make sure the crop is
+                // updated to prevent it from using the old crop.
+                t.setWindowCrop(leash, change.getEndAbsBounds().width(),
+                        change.getEndAbsBounds().height());
+            }
 
             // Don't move anything that isn't independent within its parents
             if (!TransitionInfo.isIndependent(change, info)) {

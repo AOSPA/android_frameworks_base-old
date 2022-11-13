@@ -322,8 +322,6 @@ public final class SystemServer implements Dumpable {
             "com.android.clockwork.displayoffload.DisplayOffloadService";
     private static final String WEAR_DISPLAY_SERVICE_CLASS =
             "com.android.clockwork.display.WearDisplayService";
-    private static final String WEAR_LEFTY_SERVICE_CLASS =
-            "com.google.android.clockwork.lefty.WearLeftyService";
     private static final String WEAR_TIME_SERVICE_CLASS =
             "com.android.clockwork.time.WearTimeService";
     private static final String WEAR_GLOBAL_ACTIONS_SERVICE_CLASS =
@@ -1408,7 +1406,6 @@ public final class SystemServer implements Dumpable {
                 false);
         boolean disableCameraService = SystemProperties.getBoolean("config.disable_cameraservice",
                 false);
-        boolean enableLeftyService = SystemProperties.getBoolean("config.enable_lefty", false);
 
         boolean isEmulator = SystemProperties.get("ro.boot.qemu").equals("1");
         boolean enableWigig = SystemProperties.getBoolean("persist.vendor.wigig.enable", false);
@@ -2535,12 +2532,6 @@ public final class SystemServer implements Dumpable {
             t.traceBegin("StartWearTimeService");
             mSystemServiceManager.startService(WEAR_TIME_SERVICE_CLASS);
             t.traceEnd();
-
-            if (enableLeftyService) {
-                t.traceBegin("StartWearLeftyService");
-                mSystemServiceManager.startService(WEAR_LEFTY_SERVICE_CLASS);
-                t.traceEnd();
-            }
 
             t.traceBegin("StartWearGlobalActionsService");
             mSystemServiceManager.startService(WEAR_GLOBAL_ACTIONS_SERVICE_CLASS);

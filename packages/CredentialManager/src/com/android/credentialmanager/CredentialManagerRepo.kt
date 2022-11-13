@@ -23,6 +23,8 @@ import android.content.Intent
 import android.credentials.CreateCredentialRequest
 import android.credentials.ui.Constants
 import android.credentials.ui.Entry
+import android.credentials.ui.CreateCredentialProviderData
+import android.credentials.ui.GetCredentialProviderData
 import android.credentials.ui.ProviderData
 import android.credentials.ui.RequestInfo
 import android.credentials.ui.BaseDialogResult
@@ -31,12 +33,14 @@ import android.graphics.drawable.Icon
 import android.os.Binder
 import android.os.Bundle
 import android.os.ResultReceiver
+import com.android.credentialmanager.createflow.ActiveEntry
 import com.android.credentialmanager.createflow.CreatePasskeyUiState
 import com.android.credentialmanager.createflow.CreateScreenState
+import com.android.credentialmanager.createflow.ProviderInfo
 import com.android.credentialmanager.createflow.RequestDisplayInfo
 import com.android.credentialmanager.getflow.GetCredentialUiState
 import com.android.credentialmanager.getflow.GetScreenState
-import com.android.credentialmanager.jetpack.CredentialEntryUi.Companion.TYPE_PUBLIC_KEY_CREDENTIAL
+import com.android.credentialmanager.jetpack.provider.CredentialEntryUi.Companion.TYPE_PUBLIC_KEY_CREDENTIAL
 
 // Consider repo per screen, similar to view model?
 class CredentialManagerRepo(
@@ -54,10 +58,22 @@ class CredentialManagerRepo(
       RequestInfo::class.java
     ) ?: testRequestInfo()
 
-    providerList = intent.extras?.getParcelableArrayList(
-      ProviderData.EXTRA_PROVIDER_DATA_LIST,
-      ProviderData::class.java
-    ) ?: testProviderList()
+    providerList = when (requestInfo.type) {
+      RequestInfo.TYPE_CREATE ->
+        intent.extras?.getParcelableArrayList(
+                ProviderData.EXTRA_ENABLED_PROVIDER_DATA_LIST,
+                CreateCredentialProviderData::class.java
+        ) ?: testCreateCredentialProviderList()
+      RequestInfo.TYPE_GET ->
+        intent.extras?.getParcelableArrayList(
+          ProviderData.EXTRA_ENABLED_PROVIDER_DATA_LIST,
+          GetCredentialProviderData::class.java
+        ) ?: testGetCredentialProviderList()
+      else -> {
+        // TODO: fail gracefully
+        throw IllegalStateException("Unrecognized request type: ${requestInfo.type}")
+      }
+    }
 
     resultReceiver = intent.getParcelableExtra(
       Constants.EXTRA_RESULT_RECEIVER,
@@ -84,7 +100,9 @@ class CredentialManagerRepo(
   }
 
   fun getCredentialInitialUiState(): GetCredentialUiState {
-    val providerList = GetFlowUtils.toProviderList(providerList, context)
+    val providerList = GetFlowUtils.toProviderList(
+      // TODO: handle runtime cast error
+      providerList as List<GetCredentialProviderData>, context)
     // TODO: covert from real requestInfo
     val requestDisplayInfo = com.android.credentialmanager.getflow.RequestDisplayInfo(
       "Elisa Beckett",
@@ -100,7 +118,14 @@ class CredentialManagerRepo(
   }
 
   fun createPasskeyInitialUiState(): CreatePasskeyUiState {
-    val providerList = CreateFlowUtils.toProviderList(providerList, context)
+    val providerList = CreateFlowUtils.toProviderList(
+      // Handle runtime cast error
+      providerList as List<CreateCredentialProviderData>, context)
+    var hasDefault = false
+    var defaultProvider: ProviderInfo = providerList.first()
+    providerList.forEach{providerInfo -> providerInfo.createOptions =
+      providerInfo.createOptions.sortedWith(compareBy { it.lastUsedTimeMillis }).reversed()
+      if (providerInfo.isDefault) {hasDefault = true; defaultProvider = providerInfo} }
     // TODO: covert from real requestInfo
     val requestDisplayInfo = RequestDisplayInfo(
       "Elisa Beckett",
@@ -109,8 +134,12 @@ class CredentialManagerRepo(
       "tribank")
     return CreatePasskeyUiState(
       providers = providerList,
-      currentScreenState = CreateScreenState.PASSKEY_INTRO,
+      if (hasDefault)
+      {CreateScreenState.CREATION_OPTION_SELECTION} else {CreateScreenState.PASSKEY_INTRO},
       requestDisplayInfo,
+      if (hasDefault) {
+        ActiveEntry(defaultProvider, defaultProvider.createOptions.first())
+      } else null
     )
   }
 
@@ -130,43 +159,64 @@ class CredentialManagerRepo(
   }
 
   // TODO: below are prototype functionalities. To be removed for productionization.
-  private fun testProviderList(): List<ProviderData> {
+  private fun testCreateCredentialProviderList(): List<CreateCredentialProviderData> {
     return listOf(
-      ProviderData.Builder(
-        "com.google",
-        "Google Password Manager",
-        Icon.createWithResource(context, R.drawable.ic_launcher_foreground))
+      CreateCredentialProviderData
+        .Builder("com.google/com.google.CredentialManagerService")
+        .setSaveEntries(
+          listOf<Entry>(
+            newEntry("key1", "subkey-1", "elisa.beckett@gmail.com",
+              20, 7, 27, 10000),
+            newEntry("key1", "subkey-2", "elisa.work@google.com",
+              20, 7, 27, 11000),
+          )
+        )
+        .setIsDefaultProvider(true)
+        .build(),
+      CreateCredentialProviderData
+        .Builder("com.dashlane/com.dashlane.CredentialManagerService")
+        .setSaveEntries(
+          listOf<Entry>(
+            newEntry("key1", "subkey-3", "elisa.beckett@dashlane.com",
+              20, 7, 27, 30000),
+            newEntry("key1", "subkey-4", "elisa.work@dashlane.com",
+              20, 7, 27, 31000),
+          )
+        )
+        .build(),
+    )
+  }
+
+  private fun testGetCredentialProviderList(): List<GetCredentialProviderData> {
+    return listOf(
+      GetCredentialProviderData.Builder("com.google/com.google.CredentialManagerService")
         .setCredentialEntries(
           listOf<Entry>(
             newEntry("key1", "subkey-1", "elisa.beckett@gmail.com",
-              "Elisa Backett", "20 passwords and 7 passkeys saved"),
+              20, 7, 27, 10000),
             newEntry("key1", "subkey-2", "elisa.work@google.com",
-              "Elisa Backett Work", "20 passwords and 7 passkeys saved"),
+              20, 7, 27, 11000),
           )
         ).setActionChips(
           listOf<Entry>(
-            newEntry("key2", "subkey-1", "Go to Settings", "",
-                     "20 passwords and 7 passkeys saved"),
-            newEntry("key2", "subkey-2", "Switch Account", "",
-                     "20 passwords and 7 passkeys saved"),
+            newEntry("key2", "subkey-1", "Go to Settings",
+              20, 7, 27, 20000),
+            newEntry("key2", "subkey-2", "Switch Account",
+              20, 7, 27, 21000),
           ),
         ).build(),
-      ProviderData.Builder(
-        "com.dashlane",
-        "Dashlane",
-        Icon.createWithResource(context, R.drawable.ic_launcher_foreground))
+      GetCredentialProviderData.Builder("com.dashlane/com.dashlane.CredentialManagerService")
         .setCredentialEntries(
           listOf<Entry>(
             newEntry("key1", "subkey-3", "elisa.beckett@dashlane.com",
-              "Elisa Backett", "20 passwords and 7 passkeys saved"),
+              20, 7, 27, 30000),
             newEntry("key1", "subkey-4", "elisa.work@dashlane.com",
-              "Elisa Backett Work", "20 passwords and 7 passkeys saved"),
+              20, 7, 27, 31000),
           )
         ).setActionChips(
           listOf<Entry>(
             newEntry("key2", "subkey-3", "Manage Accounts",
-              "Manage your accounts in the dashlane app",
-                     "20 passwords and 7 passkeys saved"),
+              20, 7, 27, 40000),
           ),
         ).build(),
     )
@@ -175,20 +225,32 @@ class CredentialManagerRepo(
   private fun newEntry(
     key: String,
     subkey: String,
-    title: String,
-    subtitle: String,
-    usageData: String
+    providerDisplayName: String,
+    passwordCount: Int,
+    passkeyCount: Int,
+    totalCredentialCount: Int,
+    lastUsedTimeMillis: Long,
   ): Entry {
     val slice = Slice.Builder(
       Entry.CREDENTIAL_MANAGER_ENTRY_URI, SliceSpec(Entry.VERSION, 1)
     )
-      .addText(title, null, listOf(Entry.HINT_TITLE))
-      .addText(subtitle, null, listOf(Entry.HINT_SUBTITLE))
+      .addText(
+        providerDisplayName, null, listOf(Entry.HINT_USER_PROVIDER_ACCOUNT_NAME))
       .addIcon(
         Icon.createWithResource(context, R.drawable.ic_passkey),
         null,
-        listOf(Entry.HINT_ICON))
-      .addText(usageData, Slice.SUBTYPE_MESSAGE, listOf(Entry.HINT_SUBTITLE))
+        listOf(Entry.HINT_CREDENTIAL_TYPE_ICON))
+      .addIcon(
+        Icon.createWithResource(context, R.drawable.ic_profile),
+        null,
+        listOf(Entry.HINT_PROFILE_ICON))
+      .addInt(
+        passwordCount, null, listOf(Entry.HINT_PASSWORD_COUNT))
+      .addInt(
+        passkeyCount, null, listOf(Entry.HINT_PASSKEY_COUNT))
+      .addInt(
+        totalCredentialCount, null, listOf(Entry.HINT_TOTAL_CREDENTIAL_COUNT))
+      .addLong(lastUsedTimeMillis, null, listOf(Entry.HINT_LAST_USED_TIME_MILLIS))
       .build()
     return Entry(
       key,

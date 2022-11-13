@@ -17,6 +17,7 @@
 package com.android.server.pm;
 
 import static android.app.AppOpsManager.MODE_DEFAULT;
+import static android.content.pm.PackageInstaller.SessionParams.MODE_INHERIT_EXISTING;
 import static android.content.pm.PackageManager.INSTALL_FAILED_INTERNAL_ERROR;
 import static android.content.pm.PackageManager.INSTALL_STAGED;
 import static android.content.pm.PackageManager.INSTALL_SUCCEEDED;
@@ -93,6 +94,7 @@ class InstallingSession {
     final PackageManagerService mPm;
     final InstallPackageHelper mInstallPackageHelper;
     final RemovePackageHelper mRemovePackageHelper;
+    final boolean mIsInherit;
 
     InstallingSession(OriginInfo originInfo, MoveInfo moveInfo, IPackageInstallObserver2 observer,
             int installFlags, InstallSource installSource, String volumeUuid,
@@ -121,6 +123,7 @@ class InstallingSession {
         mRequiredInstalledVersionCode = PackageManager.VERSION_CODE_HIGHEST;
         mPackageSource = packageSource;
         mPackageLite = packageLite;
+        mIsInherit = false;
     }
 
     InstallingSession(File stagedDir, IPackageInstallObserver2 observer,
@@ -151,6 +154,7 @@ class InstallingSession {
         mRequiredInstalledVersionCode = sessionParams.requiredInstalledVersionCode;
         mPackageSource = sessionParams.packageSource;
         mPackageLite = packageLite;
+        mIsInherit = sessionParams.mode == MODE_INHERIT_EXISTING;
     }
 
     @Override
@@ -506,6 +510,7 @@ class InstallingSession {
             mInstallPackageHelper.installPackagesTraced(installRequests);
 
             for (InstallRequest request : installRequests) {
+                request.onInstallCompleted();
                 doPostInstall(request);
             }
         }
@@ -531,7 +536,7 @@ class InstallingSession {
     }
 
     private void cleanUpForFailedInstall(InstallRequest request) {
-        if (request.isMoveInstall()) {
+        if (request.isInstallMove()) {
             mRemovePackageHelper.cleanUpForMoveInstall(request.getMoveToUuid(),
                     request.getMovePackageName(), request.getMoveFromCodePath());
         } else {
@@ -572,19 +577,15 @@ class InstallingSession {
             }
             try (PackageParser2 packageParser = mPm.mInjector.getScanningPackageParser()) {
                 ApexInfo apexInfo = mPm.mApexManager.installPackage(apexes[0]);
-                if (ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
-                    // APEX has been handled successfully by apexd. Let's continue the install flow
-                    // so it will be scanned and registered with the system.
-                    // TODO(b/225756739): Improve atomicity of rebootless APEX install.
-                    // The newly installed APEX will not be reverted even if
-                    // processApkInstallRequests() fails. Need a way to keep info stored in apexd
-                    // and PMS in sync in the face of install failures.
-                    request.setApexInfo(apexInfo);
-                    mPm.mHandler.post(() -> processApkInstallRequests(true, requests));
-                    return;
-                } else {
-                    mPm.mApexPackageInfo.notifyPackageInstalled(apexInfo, packageParser);
-                }
+                // APEX has been handled successfully by apexd. Let's continue the install flow
+                // so it will be scanned and registered with the system.
+                // TODO(b/225756739): Improve atomicity of rebootless APEX install.
+                // The newly installed APEX will not be reverted even if
+                // processApkInstallRequests() fails. Need a way to keep info stored in apexd
+                // and PMS in sync in the face of install failures.
+                request.setApexInfo(apexInfo);
+                mPm.mHandler.post(() -> processApkInstallRequests(true, requests));
+                return;
             }
         } catch (PackageManagerException e) {
             request.setError("APEX installation failed", e);

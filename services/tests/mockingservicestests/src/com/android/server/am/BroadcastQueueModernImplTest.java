@@ -16,6 +16,13 @@
 
 package com.android.server.am;
 
+import static com.android.server.am.BroadcastProcessQueue.REASON_CONTAINS_ALARM;
+import static com.android.server.am.BroadcastProcessQueue.REASON_CONTAINS_FOREGROUND;
+import static com.android.server.am.BroadcastProcessQueue.REASON_CONTAINS_INTERACTIVE;
+import static com.android.server.am.BroadcastProcessQueue.REASON_CONTAINS_MANIFEST;
+import static com.android.server.am.BroadcastProcessQueue.REASON_CONTAINS_ORDERED;
+import static com.android.server.am.BroadcastProcessQueue.REASON_CONTAINS_PRIORITIZED;
+import static com.android.server.am.BroadcastProcessQueue.REASON_CONTAINS_RESULT_TO;
 import static com.android.server.am.BroadcastProcessQueue.insertIntoRunnableList;
 import static com.android.server.am.BroadcastProcessQueue.removeFromRunnableList;
 import static com.android.server.am.BroadcastQueueTest.CLASS_GREEN;
@@ -25,6 +32,7 @@ import static com.android.server.am.BroadcastQueueTest.PACKAGE_RED;
 import static com.android.server.am.BroadcastQueueTest.PACKAGE_YELLOW;
 import static com.android.server.am.BroadcastQueueTest.getUidForPackage;
 import static com.android.server.am.BroadcastQueueTest.makeManifestReceiver;
+import static com.android.server.am.BroadcastQueueTest.withPriority;
 
 import static com.google.common.truth.Truth.assertThat;
 
@@ -35,19 +43,24 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
 
 import android.annotation.NonNull;
 import android.app.Activity;
 import android.app.AppOpsManager;
 import android.app.BroadcastOptions;
+import android.content.IIntentReceiver;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.ResolveInfo;
 import android.media.AudioManager;
 import android.os.Bundle;
 import android.os.BundleMerger;
 import android.os.HandlerThread;
+import android.os.SystemClock;
 import android.os.UserHandle;
 import android.provider.Settings;
+import android.util.IndentingPrintWriter;
 
 import androidx.test.filters.SmallTest;
 
@@ -59,6 +72,8 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.mockito.junit.MockitoJUnitRunner;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintWriter;
 import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.List;
@@ -135,6 +150,18 @@ public class BroadcastQueueModernImplTest {
         }
     }
 
+    private static Intent makeMockIntent() {
+        return mock(Intent.class);
+    }
+
+    private static ResolveInfo makeMockManifestReceiver() {
+        return mock(ResolveInfo.class);
+    }
+
+    private static BroadcastFilter makeMockRegisteredReceiver() {
+        return mock(BroadcastFilter.class);
+    }
+
     private BroadcastRecord makeBroadcastRecord(Intent intent) {
         return makeBroadcastRecord(intent, BroadcastOptions.makeBasic(),
                 List.of(makeManifestReceiver(PACKAGE_GREEN, CLASS_GREEN)), false);
@@ -145,6 +172,10 @@ public class BroadcastQueueModernImplTest {
                 List.of(makeManifestReceiver(PACKAGE_GREEN, CLASS_GREEN)), true);
     }
 
+    private BroadcastRecord makeBroadcastRecord(Intent intent, List receivers) {
+        return makeBroadcastRecord(intent, BroadcastOptions.makeBasic(), receivers, false);
+    }
+
     private BroadcastRecord makeBroadcastRecord(Intent intent, BroadcastOptions options) {
         return makeBroadcastRecord(intent, options,
                 List.of(makeManifestReceiver(PACKAGE_GREEN, CLASS_GREEN)), false);
@@ -152,8 +183,13 @@ public class BroadcastQueueModernImplTest {
 
     private BroadcastRecord makeBroadcastRecord(Intent intent, BroadcastOptions options,
             List receivers, boolean ordered) {
+        return makeBroadcastRecord(intent, options, receivers, null, ordered);
+    }
+
+    private BroadcastRecord makeBroadcastRecord(Intent intent, BroadcastOptions options,
+            List receivers, IIntentReceiver resultTo, boolean ordered) {
         return new BroadcastRecord(mImpl, intent, mProcess, PACKAGE_RED, null, 21, 42, false, null,
-                null, null, null, AppOpsManager.OP_NONE, options, receivers, null, null,
+                null, null, null, AppOpsManager.OP_NONE, options, receivers, null, resultTo,
                 Activity.RESULT_OK, null, null, ordered, false, false, UserHandle.USER_SYSTEM,
                 false, null, false, null);
     }
@@ -282,8 +318,9 @@ public class BroadcastQueueModernImplTest {
                 PACKAGE_GREEN, getUidForPackage(PACKAGE_GREEN));
 
         final Intent airplane = new Intent(Intent.ACTION_AIRPLANE_MODE_CHANGED);
-        final BroadcastRecord airplaneRecord = makeBroadcastRecord(airplane);
-        queue.enqueueOrReplaceBroadcast(airplaneRecord, 0, 0);
+        final BroadcastRecord airplaneRecord = makeBroadcastRecord(airplane,
+                List.of(makeMockRegisteredReceiver()));
+        queue.enqueueOrReplaceBroadcast(airplaneRecord, 0);
 
         queue.setProcessCached(false);
         final long notCachedRunnableAt = queue.getRunnableAt();
@@ -305,12 +342,12 @@ public class BroadcastQueueModernImplTest {
         // enqueue a bg-priority broadcast then a fg-priority one
         final Intent timezone = new Intent(Intent.ACTION_TIMEZONE_CHANGED);
         final BroadcastRecord timezoneRecord = makeBroadcastRecord(timezone);
-        queue.enqueueOrReplaceBroadcast(timezoneRecord, 0, 0);
+        queue.enqueueOrReplaceBroadcast(timezoneRecord, 0);
 
         final Intent airplane = new Intent(Intent.ACTION_AIRPLANE_MODE_CHANGED);
         airplane.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
         final BroadcastRecord airplaneRecord = makeBroadcastRecord(airplane);
-        queue.enqueueOrReplaceBroadcast(airplaneRecord, 0, 0);
+        queue.enqueueOrReplaceBroadcast(airplaneRecord, 0);
 
         // verify that:
         // (a) the queue is immediately runnable by existence of a fg-priority broadcast
@@ -339,9 +376,9 @@ public class BroadcastQueueModernImplTest {
 
         final Intent airplane = new Intent(Intent.ACTION_AIRPLANE_MODE_CHANGED);
         final BroadcastRecord airplaneRecord = makeBroadcastRecord(airplane, null,
-                List.of(makeManifestReceiver(PACKAGE_GREEN, CLASS_GREEN),
-                        makeManifestReceiver(PACKAGE_GREEN, CLASS_GREEN)), true);
-        queue.enqueueOrReplaceBroadcast(airplaneRecord, 1, 1);
+                List.of(withPriority(makeManifestReceiver(PACKAGE_GREEN, CLASS_GREEN), 10),
+                        withPriority(makeManifestReceiver(PACKAGE_GREEN, CLASS_GREEN), 0)), true);
+        queue.enqueueOrReplaceBroadcast(airplaneRecord, 1);
 
         assertFalse(queue.isRunnable());
         assertEquals(BroadcastProcessQueue.REASON_BLOCKED, queue.getRunnableAtReason());
@@ -362,8 +399,9 @@ public class BroadcastQueueModernImplTest {
                 PACKAGE_GREEN, getUidForPackage(PACKAGE_GREEN));
 
         final Intent airplane = new Intent(Intent.ACTION_AIRPLANE_MODE_CHANGED);
-        final BroadcastRecord airplaneRecord = makeBroadcastRecord(airplane);
-        queue.enqueueOrReplaceBroadcast(airplaneRecord, 0, 0);
+        final BroadcastRecord airplaneRecord = makeBroadcastRecord(airplane,
+                List.of(makeMockRegisteredReceiver()));
+        queue.enqueueOrReplaceBroadcast(airplaneRecord, 0);
 
         mConstants.MAX_PENDING_BROADCASTS = 128;
         queue.invalidateRunnableAt();
@@ -374,6 +412,129 @@ public class BroadcastQueueModernImplTest {
         queue.invalidateRunnableAt();
         assertThat(queue.getRunnableAt()).isAtMost(airplaneRecord.enqueueTime);
         assertEquals(BroadcastProcessQueue.REASON_MAX_PENDING, queue.getRunnableAtReason());
+    }
+
+    /**
+     * Verify that a cached process that would normally be delayed becomes
+     * immediately runnable when the given broadcast is enqueued.
+     */
+    private void doRunnableAt_Cached(BroadcastRecord testRecord, int testRunnableAtReason) {
+        final BroadcastProcessQueue queue = new BroadcastProcessQueue(mConstants,
+                PACKAGE_GREEN, getUidForPackage(PACKAGE_GREEN));
+        queue.setProcessCached(true);
+
+        final BroadcastRecord lazyRecord = makeBroadcastRecord(
+                new Intent(Intent.ACTION_AIRPLANE_MODE_CHANGED),
+                List.of(makeMockRegisteredReceiver()));
+
+        queue.enqueueOrReplaceBroadcast(lazyRecord, 0);
+        assertThat(queue.getRunnableAt()).isGreaterThan(lazyRecord.enqueueTime);
+        assertThat(queue.getRunnableAtReason()).isNotEqualTo(testRunnableAtReason);
+
+        queue.enqueueOrReplaceBroadcast(testRecord, 0);
+        assertThat(queue.getRunnableAt()).isAtMost(testRecord.enqueueTime);
+        assertThat(queue.getRunnableAtReason()).isEqualTo(testRunnableAtReason);
+    }
+
+    @Test
+    public void testRunnableAt_Cached_Manifest() {
+        doRunnableAt_Cached(makeBroadcastRecord(makeMockIntent(), null,
+                List.of(makeMockManifestReceiver()), null, false), REASON_CONTAINS_MANIFEST);
+    }
+
+    @Test
+    public void testRunnableAt_Cached_Ordered() {
+        doRunnableAt_Cached(makeBroadcastRecord(makeMockIntent(), null,
+                List.of(makeMockRegisteredReceiver()), null, true), REASON_CONTAINS_ORDERED);
+    }
+
+    @Test
+    public void testRunnableAt_Cached_ResultTo() {
+        final IIntentReceiver resultTo = mock(IIntentReceiver.class);
+        doRunnableAt_Cached(makeBroadcastRecord(makeMockIntent(), null,
+                List.of(makeMockRegisteredReceiver()), resultTo, false), REASON_CONTAINS_RESULT_TO);
+    }
+
+    @Test
+    public void testRunnableAt_Cached_Foreground() {
+        final Intent foregroundIntent = new Intent();
+        foregroundIntent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+        doRunnableAt_Cached(makeBroadcastRecord(foregroundIntent, null,
+                List.of(makeMockRegisteredReceiver()), null, false), REASON_CONTAINS_FOREGROUND);
+    }
+
+    @Test
+    public void testRunnableAt_Cached_Interactive() {
+        final BroadcastOptions options = BroadcastOptions.makeBasic();
+        options.setInteractiveBroadcast(true);
+        doRunnableAt_Cached(makeBroadcastRecord(makeMockIntent(), options,
+                List.of(makeMockRegisteredReceiver()), null, false), REASON_CONTAINS_INTERACTIVE);
+    }
+
+    @Test
+    public void testRunnableAt_Cached_Alarm() {
+        final BroadcastOptions options = BroadcastOptions.makeBasic();
+        options.setAlarmBroadcast(true);
+        doRunnableAt_Cached(makeBroadcastRecord(makeMockIntent(), options,
+                List.of(makeMockRegisteredReceiver()), null, false), REASON_CONTAINS_ALARM);
+    }
+
+    @Test
+    public void testRunnableAt_Cached_Prioritized() {
+        final List receivers = List.of(
+                withPriority(makeManifestReceiver(PACKAGE_RED, PACKAGE_RED), 10),
+                withPriority(makeManifestReceiver(PACKAGE_GREEN, PACKAGE_GREEN), -10));
+        doRunnableAt_Cached(makeBroadcastRecord(makeMockIntent(), null,
+                receivers, null, false), REASON_CONTAINS_PRIORITIZED);
+    }
+
+    /**
+     * Confirm that we always prefer running pending items marked as "urgent",
+     * then "normal", then "offload", dispatching by the relative ordering
+     * within each of those clustering groups.
+     */
+    @Test
+    public void testMakeActiveNextPending() {
+        BroadcastProcessQueue queue = new BroadcastProcessQueue(mConstants,
+                PACKAGE_GREEN, getUidForPackage(PACKAGE_GREEN));
+
+        queue.enqueueOrReplaceBroadcast(
+                makeBroadcastRecord(new Intent(Intent.ACTION_AIRPLANE_MODE_CHANGED)
+                        .addFlags(Intent.FLAG_RECEIVER_OFFLOAD)), 0);
+        queue.enqueueOrReplaceBroadcast(
+                makeBroadcastRecord(new Intent(Intent.ACTION_TIMEZONE_CHANGED)), 0);
+        queue.enqueueOrReplaceBroadcast(
+                makeBroadcastRecord(new Intent(Intent.ACTION_LOCKED_BOOT_COMPLETED)
+                        .addFlags(Intent.FLAG_RECEIVER_FOREGROUND)), 0);
+        queue.enqueueOrReplaceBroadcast(
+                makeBroadcastRecord(new Intent(Intent.ACTION_ALARM_CHANGED)
+                        .addFlags(Intent.FLAG_RECEIVER_OFFLOAD)), 0);
+        queue.enqueueOrReplaceBroadcast(
+                makeBroadcastRecord(new Intent(Intent.ACTION_TIME_TICK)), 0);
+        queue.enqueueOrReplaceBroadcast(
+                makeBroadcastRecord(new Intent(Intent.ACTION_LOCALE_CHANGED)
+                        .addFlags(Intent.FLAG_RECEIVER_FOREGROUND)), 0);
+
+        queue.makeActiveNextPending();
+        assertEquals(Intent.ACTION_LOCKED_BOOT_COMPLETED, queue.getActive().intent.getAction());
+
+        // To maximize test coverage, dump current state; we're not worried
+        // about the actual output, just that we don't crash
+        queue.getActive().setDeliveryState(0, BroadcastRecord.DELIVERY_SCHEDULED);
+        queue.dumpLocked(SystemClock.uptimeMillis(),
+                new IndentingPrintWriter(new PrintWriter(new ByteArrayOutputStream())));
+
+        queue.makeActiveNextPending();
+        assertEquals(Intent.ACTION_LOCALE_CHANGED, queue.getActive().intent.getAction());
+        queue.makeActiveNextPending();
+        assertEquals(Intent.ACTION_TIMEZONE_CHANGED, queue.getActive().intent.getAction());
+        queue.makeActiveNextPending();
+        assertEquals(Intent.ACTION_TIME_TICK, queue.getActive().intent.getAction());
+        queue.makeActiveNextPending();
+        assertEquals(Intent.ACTION_AIRPLANE_MODE_CHANGED, queue.getActive().intent.getAction());
+        queue.makeActiveNextPending();
+        assertEquals(Intent.ACTION_ALARM_CHANGED, queue.getActive().intent.getAction());
+        assertTrue(queue.isEmpty());
     }
 
     /**
