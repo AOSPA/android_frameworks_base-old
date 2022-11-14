@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "18e361ea_570da4e1",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2022-11-14T17:26:29Z",
+      "side": 1,
+      "message": "seems rejected in aosp (changes requested that never have been made)",
+      "revId": "eede9961e1a976b4be666d34f863038c78c9a1ae",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
