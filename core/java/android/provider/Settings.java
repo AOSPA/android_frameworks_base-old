@@ -5711,6 +5711,18 @@ public final class Settings {
         public static final String RINGTONE_VIBRATION_PATTERN = "ringtone_vibration_pattern";
 
         /**
+         * Which notification Vibration Pattern to use
+         * 0: default provided value
+         * 1: dzzz-da
+         * 2: mm-mm-mm
+         * 3: da-da-dzzz
+         * 4: da-dzzz-da
+         * @hide
+         */
+        @Readable
+        public static final String NOTIFICATION_VIBRATION_PATTERN = "notification_vibration_pattern";
+
+        /**
          * Keys we no longer back up under the current schema, but want to continue to
          * process when restoring historical backup datasets.
          *
