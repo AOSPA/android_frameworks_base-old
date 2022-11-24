@@ -402,10 +402,13 @@ public class InternetDialog extends SystemUIDialog implements
     /**
      * Do not allow the user to disable mobile data of DDS while there is an active
      * call on the nDDS.
+     * Whether device works under DSDA or DSDS mode, if temp DDS switch has happened,
+     * disabling mobile data won't be allowed.
      */
     private boolean shouldDisallowUserToDisableMobileData() {
         return mInternetDialogController.isMobileDataEnabled()
-                && !mInternetDialogController.isNonDdsCallStateIdle();
+                && !mInternetDialogController.isNonDdsCallStateIdle()
+                && mInternetDialogController.isTempDdsHappened();
     }
 
     private void setMobileDataLayout(boolean activeNetworkIsCellular,
@@ -851,6 +854,11 @@ public class InternetDialog extends SystemUIDialog implements
 
     @Override
     public void onNonDdsCallStateChanged(int callState) {
+        mHandler.post(() -> updateDialog(true /* shouldUpdateMobileNetwork */));
+    }
+
+    @Override
+    public void onTempDdsSwitchHappened() {
         mHandler.post(() -> updateDialog(true /* shouldUpdateMobileNetwork */));
     }
 
