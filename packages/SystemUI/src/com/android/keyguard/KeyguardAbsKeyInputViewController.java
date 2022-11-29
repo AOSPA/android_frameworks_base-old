@@ -180,7 +180,7 @@ public abstract class KeyguardAbsKeyInputViewController<T extends KeyguardAbsKey
             if (dismissKeyguard) {
                 mDismissing = true;
                 mLatencyTracker.onActionStart(LatencyTracker.ACTION_LOCKSCREEN_UNLOCK);
-                getKeyguardSecurityCallback().dismiss(true, userId);
+                getKeyguardSecurityCallback().dismiss(true, userId, getSecurityMode());
             }
         } else {
             if (isValidPassword) {
