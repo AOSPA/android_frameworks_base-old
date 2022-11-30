@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "6a015e85_31632c26",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000178
+      },
+      "writtenOn": "2022-11-30T09:55:26Z",
+      "side": 1,
+      "message": "Just for reference, missing code in VibrationManagerService, should be conditional and in aospa systemui module",
+      "revId": "ca0b62ee164485d8682ddf1ba0877a754470684d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
