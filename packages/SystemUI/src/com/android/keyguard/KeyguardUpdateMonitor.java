@@ -115,6 +115,7 @@ import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.telephony.TelephonyListenerManager;
 import com.android.systemui.util.Assert;
+import com.android.systemui.util.RichTapVibrationUtils;
 import com.android.systemui.keyguard.KeyguardViewMediator;
 
 import com.google.android.collect.Lists;
@@ -1527,6 +1528,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                             ActiveUnlockConfig.ACTIVE_UNLOCK_REQUEST_ORIGIN.BIOMETRIC_FAIL,
                             "fingerprintFailure");
                     handleFingerprintAuthFailed();
+                    RichTapVibrationUtils.getInstance(mContext).playVerityVibrate("/system/etc/richtapresources/NT_unlock_error.he");
                 }
 
                 @Override
@@ -1534,6 +1536,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                     Trace.beginSection("KeyguardUpdateMonitor#onAuthenticationSucceeded");
                     handleFingerprintAuthenticated(result.getUserId(), result.isStrongBiometric());
                     Trace.endSection();
+                    RichTapVibrationUtils.getInstance(mContext).playVerityVibrate("/system/etc/richtapresources/NT_unlock_successful.he");
+
                 }
 
                 @Override
@@ -1548,6 +1552,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                     Trace.beginSection("KeyguardUpdateMonitor#onAuthenticationError");
                     handleFingerprintError(errMsgId, errString.toString());
                     Trace.endSection();
+                    RichTapVibrationUtils.getInstance(mContext).playVerityVibrate("/system/etc/richtapresources/NT_unlock_error.he");
                 }
 
                 @Override
@@ -1596,6 +1601,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                                 "faceFailure-" + reason);
 
                     handleFaceAuthFailed();
+                    RichTapVibrationUtils.getInstance(mContext).playVerityVibrate("/system/etc/richtapresources/NT_unlock_error.he");
                 }
 
                 @Override
@@ -1603,6 +1609,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                     Trace.beginSection("KeyguardUpdateMonitor#onAuthenticationSucceeded");
                     handleFaceAuthenticated(result.getUserId(), result.isStrongBiometric());
                     Trace.endSection();
+                    RichTapVibrationUtils.getInstance(mContext).playVerityVibrate("/system/etc/richtapresources/NT_unlock_successful.he");
                 }
 
                 @Override
@@ -1619,6 +1626,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                                 ActiveUnlockConfig.ACTIVE_UNLOCK_REQUEST_ORIGIN.BIOMETRIC_FAIL,
                                 "faceError-" + errMsgId);
                     }
+                    RichTapVibrationUtils.getInstance(mContext).playVerityVibrate("/system/etc/richtapresources/NT_unlock_error.he");
                 }
 
                 @Override
