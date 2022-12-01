@@ -155,6 +155,10 @@ public class VibratorManagerService extends IVibratorManagerService.Stub {
     private final InputDeviceDelegate mInputDeviceDelegate;
     private final DeviceVibrationEffectAdapter mDeviceVibrationEffectAdapter;
 
+    IRichtapCallback mRichtapAidlCallback = new RichtapCallback();
+    private RichTapVibratorService mRichTapService = new RichTapVibratorService(true, mRichtapAidlCallback);
+
+
     private BroadcastReceiver mIntentReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -398,6 +402,11 @@ public class VibratorManagerService extends IVibratorManagerService.Stub {
             if (!isEffectValid(effect)) {
                 return null;
             }
+
+            if (RichTapVibrationEffect.isSupported() 
+                && mRichTapService.disposeRichtapEffectParams(effect)) {
+                return null;
+            }
             attrs = fixupVibrationAttributes(attrs, effect);
             Vibration vib = new Vibration(token, mNextVibrationId.getAndIncrement(), effect, attrs,
                     uid, opPkg, reason);
@@ -426,6 +435,31 @@ public class VibratorManagerService extends IVibratorManagerService.Stub {
                 }
 
                 final long ident = Binder.clearCallingIdentity();
+				if (RichTapVibrationEffect.isSupported()) {
+				    if (effect instanceof CombinedVibration.Mono) {
+                        VibrationEffect vibrationEffect = ((CombinedVibration.Mono) effect).getEffect();
+                        if (mRichTapService.checkIfEffectHe2_0(vibrationEffect)) {
+                            RichTapVibratorService.SenderId senderId = mRichTapService.getSenderId(vibrationEffect);
+                            boolean sameSenderId = mRichTapService.checkIfPrevPatternData(senderId);
+                            if (!sameSenderId) {
+                                boolean firstPackage = mRichTapService.checkIfFirstHe2_0Package(vibrationEffect);
+                                if (!firstPackage) {
+                                    Slog.d("VibratorManagerService", "Ignoring interrupted package,just abbandon");
+                                    Binder.restoreCallingIdentity(ident);
+                                    return;
+                                }
+                                doStopVibrateLocked();
+                                mRichTapService.setCurrentSenderId(senderId);
+                            }
+                        } else {
+                            doStopVibrateLocked();
+                            mRichTapService.resetCurrentSenderId();
+                        }
+                    } else {
+                        doStopVibrateLocked();
+                    }
+                }
+
                 try {
                     if (mCurrentVibration != null) {
                         mCurrentVibration.notifyCancelled(Vibration.Status.CANCELLED_SUPERSEDED,
@@ -635,11 +669,75 @@ public class VibratorManagerService extends IVibratorManagerService.Stub {
             vibrator.updateAlwaysOn(vib.alwaysOnId, effect);
         }
     }
+	
+	private void doVibratorOnEnvelope(int[] relativeTime, int[] scaleArr, int[] freqArr, boolean steepMode, int amplitude, int uid, VibrationAttributes attrs) {
+        synchronized (mRichTapService) {
+            mRichTapService.richTapVibratorOnEnvelope(relativeTime, scaleArr, freqArr, steepMode, amplitude);
+        }
+    }
+
+    private long doVibratorOnPatternHe(VibrationEffect effect, int uid) {
+        synchronized (mRichTapService) {
+            mRichTapService.richTapVibratorOnPatternHe(effect);
+        }
+        return 0L;
+    }
+
+    private void doStopVibrateLocked() {
+        synchronized (mRichTapService) {
+            Slog.d("VibratorManagerService", "time before vibratorStop : " + System.currentTimeMillis());
+            mRichTapService.richTapVibratorStop();
+            Slog.d("VibratorManagerService", "time after vibratorStop : " + System.currentTimeMillis());
+        }
+    }
+
+    private long doVibratorOnExtPrebakedEffectLocked(VibrationEffect effect) {
+        Trace.traceBegin(8388608L, "doVibratorOnExtPrebakedEffectLocked");
+        try {
+            RichTapVibrationEffect.ExtPrebaked prebaked = (RichTapVibrationEffect.ExtPrebaked) effect;
+            mRichTapService.richTapVibratorSetAmplitude(255);
+            mRichTapService.richTapVibratorPerform(prebaked.getId(), (byte) prebaked.getScale());
+            return 0L;
+        } finally {
+            Trace.traceEnd(8388608L);
+        }
+    }
 
     @GuardedBy("mLock")
     private Vibration.Status startVibrationLocked(Vibration vib) {
         Trace.traceBegin(Trace.TRACE_TAG_VIBRATOR, "startVibrationLocked");
         try {
+			if (RichTapVibrationEffect.isSupported()) {
+			    CombinedVibration.Mono effect = vib.getEffect();
+                if (effect instanceof CombinedVibration.Mono) {
+                    RichTapVibrationEffect.Envelope envelope = effect.getEffect();
+                    if (envelope instanceof RichTapVibrationEffect.ExtPrebaked) {
+                        if (mRichTapService != null) {
+                            doVibratorOnExtPrebakedEffectLocked(envelope);
+                            return Vibration.Status.RUNNING;
+                        }
+                        Slog.d("VibratorManagerService", "richTapService is null or current is calling state, ignore current ExtPrebaked");
+                        return Vibration.Status.IGNORED_RINGTONE;
+                    } else if (envelope instanceof RichTapVibrationEffect.Envelope) {
+                        if (mRichTapService == null) {
+                            Slog.d("VibratorManagerService", "richTapService is null or current is calling state, ignore current Envelope");
+                            return Vibration.Status.IGNORED_RINGTONE;
+                        }
+                        doVibratorOnEnvelope(envelope.getRelativeTimeArr(), envelope.getScaleArr(), envelope.getFreqArr(), envelope.isSteepMode(), envelope.getAmplitude(), vib.uid, vib.attrs);
+                        return Vibration.Status.RUNNING;
+                    } else if (envelope instanceof RichTapVibrationEffect.PatternHe) {
+                        if (mRichTapService == null) {
+                            Slog.d("VibratorManagerService", "richTapService is null or current is calling state, ignore current PatternHe");
+                            return Vibration.Status.IGNORED_RINGTONE;
+                        }
+                        RichTapVibrationEffect.PatternHe patternHe = (RichTapVibrationEffect.PatternHe) envelope;
+                        Slog.d("VibratorManagerService", "vibratorservice play he");
+                        doVibratorOnPatternHe(patternHe, vib.uid);
+                        return Vibration.Status.RUNNING;
+                    }
+                }
+            }
+
             vib.updateEffects(effect -> mVibrationScaler.scale(effect, vib.attrs.getUsage()));
             boolean inputDevicesAvailable = mInputDeviceDelegate.vibrateIfAvailable(
                     vib.uid, vib.opPkg, vib.getEffect(), vib.reason, vib.attrs);
