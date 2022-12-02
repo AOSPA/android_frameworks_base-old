@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "ab17a0f5_5d081f5e",
+        "filename": "packages/SystemUI/res/values/flags.xml",
+        "patchSetId": 1
+      },
+      "lineNbr": 33,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2022-12-02T07:11:51Z",
+      "side": 1,
+      "message": "pretty sure we can do this from the extension.  Even if not, RRO would be better, but Google uses the extension at SystemUIGo\nhttps://android-git.linaro.org/platform/packages/apps/SystemUIGo.git/tree/res/values/flags.xml",
+      "revId": "375246370eebcede12af530927f9dd09d1048626",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
