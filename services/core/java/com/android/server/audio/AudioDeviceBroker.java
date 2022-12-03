@@ -54,6 +54,7 @@ import android.os.PowerManager;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
 import android.os.SystemClock;
+import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.text.TextUtils;
 import android.util.Log;
@@ -2270,6 +2271,20 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
         if (preferredCommunicationDevice == null) {
             AudioDeviceAttributes defaultDevice = getDefaultCommunicationDevice();
+            boolean mVoipLeaWarEnabled =
+                    SystemProperties.getBoolean("persist.enable.bluetooth.voipleawar", false);
+            if (AudioService.DEBUG_COMM_RTE) {
+                Log.v(TAG, "onUpdateCommunicationRoute, voipLeaEnabled " + mVoipLeaWarEnabled);
+            }
+            if (mVoipLeaWarEnabled) {
+                AudioDeviceAttributes requestedDevice = requestedCommunicationDevice();
+                if (defaultDevice == null && requestedDevice != null &&
+                        requestedDevice.getType() == AudioDeviceInfo.TYPE_BLUETOOTH_SCO) {
+                    Log.w(TAG, "onUpdateCommunicationRoute, defaultDevice is null, set it to active BLE device");
+                    defaultDevice = mDeviceInventory.getDeviceOfType(AudioSystem.DEVICE_OUT_BLE_HEADSET);
+                }
+            }
+
             if (defaultDevice != null) {
                 mDeviceInventory.setPreferredDevicesForStrategyInt(
                         mCommunicationStrategyId, Arrays.asList(defaultDevice));
