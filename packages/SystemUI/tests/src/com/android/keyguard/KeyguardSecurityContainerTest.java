@@ -262,9 +262,12 @@ public class KeyguardSecurityContainerTest extends SysuiTestCase {
         ConstraintSet.Constraint userSwitcherConstraint =
                 getViewConstraint(R.id.keyguard_bouncer_user_switcher);
 
-        assertThat(viewFlipperConstraint.layout.topToTop).isEqualTo(PARENT_ID);
+        assertThat(viewFlipperConstraint.layout.topToBottom).isEqualTo(
+                R.id.keyguard_bouncer_user_switcher);
         assertThat(viewFlipperConstraint.layout.bottomToBottom).isEqualTo(PARENT_ID);
         assertThat(userSwitcherConstraint.layout.topToTop).isEqualTo(PARENT_ID);
+        assertThat(userSwitcherConstraint.layout.bottomToTop).isEqualTo(
+                mSecurityViewFlipper.getId());
         assertThat(userSwitcherConstraint.layout.topMargin).isEqualTo(
                 getContext().getResources().getDimensionPixelSize(
                         R.dimen.bouncer_user_switcher_y_trans));
@@ -305,6 +308,17 @@ public class KeyguardSecurityContainerTest extends SysuiTestCase {
         // THEN the UserSwitcher anchor should not be clickable
         ViewGroup anchor = mKeyguardSecurityContainer.findViewById(R.id.user_switcher_anchor);
         assertThat(anchor.isClickable()).isTrue();
+    }
+
+    @Test
+    public void testOnDensityOrFontScaleChanged() {
+        setupUserSwitcher();
+        View oldUserSwitcher = mKeyguardSecurityContainer.findViewById(
+                R.id.keyguard_bouncer_user_switcher);
+        mKeyguardSecurityContainer.onDensityOrFontScaleChanged();
+        View newUserSwitcher = mKeyguardSecurityContainer.findViewById(
+                R.id.keyguard_bouncer_user_switcher);
+        assertThat(oldUserSwitcher).isNotEqualTo(newUserSwitcher);
     }
 
     @Test

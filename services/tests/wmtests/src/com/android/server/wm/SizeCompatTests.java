@@ -25,6 +25,7 @@ import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
 import static android.provider.DeviceConfig.NAMESPACE_CONSTRAIN_DISPLAY_APIS;
+import static android.view.InsetsState.ITYPE_EXTRA_NAVIGATION_BAR;
 import static android.view.InsetsState.ITYPE_STATUS_BAR;
 import static android.view.InsetsState.ITYPE_TOP_MANDATORY_GESTURES;
 import static android.view.InsetsState.ITYPE_TOP_TAPPABLE_ELEMENT;
@@ -71,6 +72,7 @@ import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doCallRealMethod;
+import static org.mockito.Mockito.times;
 
 import android.annotation.Nullable;
 import android.app.ActivityManager;
@@ -87,6 +89,7 @@ import android.platform.test.annotations.Presubmit;
 import android.provider.DeviceConfig;
 import android.provider.DeviceConfig.Properties;
 import android.view.InsetsFrameProvider;
+import android.view.InsetsSource;
 import android.view.WindowManager;
 
 import androidx.test.filters.MediumTest;
@@ -105,6 +108,9 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
+
+import java.util.List;
 
 /**
  * Tests for Size Compatibility mode.
@@ -2368,6 +2374,48 @@ public class SizeCompatTests extends WindowTestsBase {
     }
 
     @Test
+    public void testLetterboxDetailsForTaskBar_letterboxNotOverlappingTaskBar() {
+        mAtm.mDevEnableNonResizableMultiWindow = true;
+        final int screenHeight = 2200;
+        final int screenWidth = 1400;
+        final int taskbarHeight = 200;
+        setUpDisplaySizeWithApp(screenWidth, screenHeight);
+
+        final TestSplitOrganizer organizer =
+                new TestSplitOrganizer(mAtm, mActivity.getDisplayContent());
+
+        // Move first activity to split screen which takes half of the screen.
+        organizer.mPrimary.setBounds(0, screenHeight / 2, screenWidth, screenHeight);
+        organizer.putTaskToPrimary(mTask, true);
+
+        final InsetsSource navSource = new InsetsSource(ITYPE_EXTRA_NAVIGATION_BAR);
+        navSource.setFrame(new Rect(0, screenHeight - taskbarHeight, screenWidth, screenHeight));
+
+        mActivity.mWmService.mLetterboxConfiguration.setLetterboxActivityCornersRadius(15);
+
+        final WindowState w1 = addWindowToActivity(mActivity);
+        w1.mAboveInsetsState.addSource(navSource);
+
+        // Prepare unresizable activity with max aspect ratio
+        prepareUnresizable(mActivity, /* maxAspect */ 1.1f, SCREEN_ORIENTATION_UNSPECIFIED);
+
+        // Refresh the letterboxes
+        mActivity.mRootWindowContainer.performSurfacePlacement();
+
+        final ArgumentCaptor<Rect> cropCapturer = ArgumentCaptor.forClass(Rect.class);
+        verify(mTransaction, times(2)).setWindowCrop(
+                eq(w1.getSurfaceControl()),
+                cropCapturer.capture()
+        );
+        final List<Rect> capturedCrops = cropCapturer.getAllValues();
+
+        final int expectedHeight = screenHeight / 2 - taskbarHeight;
+        assertEquals(2, capturedCrops.size());
+        assertEquals(expectedHeight, capturedCrops.get(0).bottom);
+        assertEquals(expectedHeight, capturedCrops.get(1).bottom);
+    }
+
+    @Test
     public void testSplitScreenLetterboxDetailsForStatusBar_twoLetterboxedApps() {
         mAtm.mDevEnableNonResizableMultiWindow = true;
         setUpDisplaySizeWithApp(2800, 1000);
@@ -3160,7 +3208,7 @@ public class SizeCompatTests extends WindowTestsBase {
     /** Asserts that the size of activity is larger than its parent so it is scaling. */
     private void assertScaled() {
         assertTrue(mActivity.inSizeCompatMode());
-        assertNotEquals(1f, mActivity.getSizeCompatScale(), 0.0001f /* delta */);
+        assertNotEquals(1f, mActivity.getCompatScale(), 0.0001f /* delta */);
     }
 
     /** Asserts that the activity is best fitted in the parent. */

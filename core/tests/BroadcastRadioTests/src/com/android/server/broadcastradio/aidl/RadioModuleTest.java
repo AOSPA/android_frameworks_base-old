@@ -19,9 +19,9 @@ package com.android.server.broadcastradio.aidl;
 import static com.google.common.truth.Truth.assertWithMessage;
 
 import static org.junit.Assert.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -47,6 +47,8 @@ import org.mockito.junit.MockitoJUnitRunner;
 public final class RadioModuleTest {
 
     private static final int TEST_ENABLED_TYPE = Announcement.TYPE_EVENT;
+    private static final RadioManager.ModuleProperties TEST_MODULE_PROPERTIES =
+            AidlTestUtils.makeDefaultModuleProperties();
 
     // Mocks
     @Mock
@@ -63,14 +65,7 @@ public final class RadioModuleTest {
 
     @Before
     public void setup() throws RemoteException {
-        mRadioModule = new RadioModule(mBroadcastRadioMock, new RadioManager.ModuleProperties(
-                /* id= */ 0, /* serviceName= */ "", /* classId= */ 0, /* implementor= */ "",
-                /* product= */ "", /* version= */ "", /* serial= */ "", /* numTuners= */ 0,
-                /* numAudioSources= */ 0, /* isInitializationRequired= */ false,
-                /* isCaptureSupported= */ false, /* bands= */ null, /* isBgScanSupported= */ false,
-                /* supportedProgramTypes= */ new int[]{},
-                /* supportedIdentifierTypes */ new int[]{},
-                /* dabFrequencyTable= */ null, /* vendorInfo= */ null), mLock);
+        mRadioModule = new RadioModule(mBroadcastRadioMock, TEST_MODULE_PROPERTIES, mLock);
 
         // TODO(b/241118988): test non-null image for getImage method
         when(mBroadcastRadioMock.getImage(anyInt())).thenReturn(null);
@@ -88,6 +83,12 @@ public final class RadioModuleTest {
     }
 
     @Test
+    public void getProperties() {
+        assertWithMessage("Module properties of radio module")
+                .that(mRadioModule.getProperties()).isEqualTo(TEST_MODULE_PROPERTIES);
+    }
+
+    @Test
     public void setInternalHalCallback_callbackSetInHal() throws Exception {
         mRadioModule.setInternalHalCallback();
 
@@ -100,7 +101,7 @@ public final class RadioModuleTest {
 
         Bitmap imageTest = mRadioModule.getImage(imageId);
 
-        assertWithMessage("Image got from radio module").that(imageTest).isNull();
+        assertWithMessage("Image from radio module").that(imageTest).isNull();
     }
 
     @Test

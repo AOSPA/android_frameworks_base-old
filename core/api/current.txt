@@ -84,6 +84,7 @@ package android {
     field public static final String DELETE_CACHE_FILES = "android.permission.DELETE_CACHE_FILES";
     field public static final String DELETE_PACKAGES = "android.permission.DELETE_PACKAGES";
     field public static final String DELIVER_COMPANION_MESSAGES = "android.permission.DELIVER_COMPANION_MESSAGES";
+    field public static final String DETECT_SCREEN_CAPTURE = "android.permission.DETECT_SCREEN_CAPTURE";
     field public static final String DIAGNOSTIC = "android.permission.DIAGNOSTIC";
     field public static final String DISABLE_KEYGUARD = "android.permission.DISABLE_KEYGUARD";
     field public static final String DUMP = "android.permission.DUMP";
@@ -8447,19 +8448,31 @@ package android.app.job {
 
   public abstract class JobService extends android.app.Service {
     ctor public JobService();
+    method public long getTransferredDownloadBytes();
+    method public long getTransferredDownloadBytes(@NonNull android.app.job.JobWorkItem);
+    method public long getTransferredUploadBytes();
+    method public long getTransferredUploadBytes(@NonNull android.app.job.JobWorkItem);
     method public final void jobFinished(android.app.job.JobParameters, boolean);
     method public final android.os.IBinder onBind(android.content.Intent);
     method public abstract boolean onStartJob(android.app.job.JobParameters);
     method public abstract boolean onStopJob(android.app.job.JobParameters);
+    method public final void updateEstimatedNetworkBytes(@NonNull android.app.job.JobParameters, long, long);
+    method public final void updateEstimatedNetworkBytes(@NonNull android.app.job.JobParameters, @NonNull android.app.job.JobWorkItem, long, long);
+    method public final void updateTransferredNetworkBytes(@NonNull android.app.job.JobParameters, long, long);
+    method public final void updateTransferredNetworkBytes(@NonNull android.app.job.JobParameters, @NonNull android.app.job.JobWorkItem, long, long);
     field public static final String PERMISSION_BIND = "android.permission.BIND_JOB_SERVICE";
   }
 
   public abstract class JobServiceEngine {
     ctor public JobServiceEngine(android.app.Service);
     method public final android.os.IBinder getBinder();
+    method public long getTransferredDownloadBytes(@NonNull android.app.job.JobParameters, @Nullable android.app.job.JobWorkItem);
+    method public long getTransferredUploadBytes(@NonNull android.app.job.JobParameters, @Nullable android.app.job.JobWorkItem);
     method public void jobFinished(android.app.job.JobParameters, boolean);
     method public abstract boolean onStartJob(android.app.job.JobParameters);
     method public abstract boolean onStopJob(android.app.job.JobParameters);
+    method public void updateEstimatedNetworkBytes(@NonNull android.app.job.JobParameters, @NonNull android.app.job.JobWorkItem, long, long);
+    method public void updateTransferredNetworkBytes(@NonNull android.app.job.JobParameters, @Nullable android.app.job.JobWorkItem, long, long);
   }
 
   public final class JobWorkItem implements android.os.Parcelable {
@@ -10392,6 +10405,7 @@ package android.content {
     field public static final String ACTION_SEND_MULTIPLE = "android.intent.action.SEND_MULTIPLE";
     field public static final String ACTION_SET_WALLPAPER = "android.intent.action.SET_WALLPAPER";
     field public static final String ACTION_SHOW_APP_INFO = "android.intent.action.SHOW_APP_INFO";
+    field public static final String ACTION_SHOW_OUTPUT_SWITCHER = "android.intent.action.SHOW_OUTPUT_SWITCHER";
     field public static final String ACTION_SHOW_WORK_APPS = "android.intent.action.SHOW_WORK_APPS";
     field public static final String ACTION_SHUTDOWN = "android.intent.action.ACTION_SHUTDOWN";
     field public static final String ACTION_SYNC = "android.intent.action.SYNC";
@@ -17770,6 +17784,7 @@ package android.hardware.camera2 {
     method @NonNull public <T> java.util.List<android.util.Size> getExtensionSupportedSizes(int, @NonNull Class<T>);
     method @NonNull public java.util.List<android.util.Size> getExtensionSupportedSizes(int, int);
     method @NonNull public java.util.List<java.lang.Integer> getSupportedExtensions();
+    method public boolean isCaptureProcessProgressAvailable(int);
     field public static final int EXTENSION_AUTOMATIC = 0; // 0x0
     field @Deprecated public static final int EXTENSION_BEAUTY = 1; // 0x1
     field public static final int EXTENSION_BOKEH = 2; // 0x2
@@ -17789,6 +17804,7 @@ package android.hardware.camera2 {
   public abstract static class CameraExtensionSession.ExtensionCaptureCallback {
     ctor public CameraExtensionSession.ExtensionCaptureCallback();
     method public void onCaptureFailed(@NonNull android.hardware.camera2.CameraExtensionSession, @NonNull android.hardware.camera2.CaptureRequest);
+    method public void onCaptureProcessProgressed(@NonNull android.hardware.camera2.CameraExtensionSession, @NonNull android.hardware.camera2.CaptureRequest, @IntRange(from=0, to=100) int);
     method public void onCaptureProcessStarted(@NonNull android.hardware.camera2.CameraExtensionSession, @NonNull android.hardware.camera2.CaptureRequest);
     method public void onCaptureResultAvailable(@NonNull android.hardware.camera2.CameraExtensionSession, @NonNull android.hardware.camera2.CaptureRequest, @NonNull android.hardware.camera2.TotalCaptureResult);
     method public void onCaptureSequenceAborted(@NonNull android.hardware.camera2.CameraExtensionSession, int);
@@ -32165,7 +32181,12 @@ package android.os {
   public static class PerformanceHintManager.Session implements java.io.Closeable {
     method public void close();
     method public void reportActualWorkDuration(long);
+    method public void sendHint(int);
     method public void updateTargetWorkDuration(long);
+    field public static final int CPU_LOAD_DOWN = 1; // 0x1
+    field public static final int CPU_LOAD_RESET = 2; // 0x2
+    field public static final int CPU_LOAD_RESUME = 3; // 0x3
+    field public static final int CPU_LOAD_UP = 0; // 0x0
   }
 
   public final class PersistableBundle extends android.os.BaseBundle implements java.lang.Cloneable android.os.Parcelable {
@@ -32538,7 +32559,7 @@ package android.os {
     method @NonNull @RequiresPermission(anyOf={"android.permission.MANAGE_USERS", "android.permission.QUERY_USERS", "android.permission.INTERACT_ACROSS_USERS"}, conditional=true) public android.content.pm.UserProperties getUserProperties(@NonNull android.os.UserHandle);
     method public android.os.Bundle getUserRestrictions();
     method @RequiresPermission(anyOf={"android.permission.MANAGE_USERS", "android.permission.INTERACT_ACROSS_USERS"}, conditional=true) public android.os.Bundle getUserRestrictions(android.os.UserHandle);
-    method @NonNull @RequiresPermission(anyOf={"android.permission.MANAGE_USERS", "android.permission.INTERACT_ACROSS_USERS"}) public java.util.List<android.os.UserHandle> getVisibleUsers();
+    method @NonNull @RequiresPermission(anyOf={"android.permission.MANAGE_USERS", "android.permission.INTERACT_ACROSS_USERS"}) public java.util.Set<android.os.UserHandle> getVisibleUsers();
     method public boolean hasUserRestriction(String);
     method public boolean isDemoUser();
     method public static boolean isHeadlessSystemUserMode();
@@ -32615,6 +32636,7 @@ package android.os {
     field public static final String DISALLOW_SHARING_ADMIN_CONFIGURED_WIFI = "no_sharing_admin_configured_wifi";
     field public static final String DISALLOW_SMS = "no_sms";
     field public static final String DISALLOW_SYSTEM_ERROR_DIALOGS = "no_system_error_dialogs";
+    field public static final String DISALLOW_ULTRA_WIDEBAND_RADIO = "no_ultra_wideband_radio";
     field public static final String DISALLOW_UNIFIED_PASSWORD = "no_unified_password";
     field public static final String DISALLOW_UNINSTALL_APPS = "no_uninstall_apps";
     field public static final String DISALLOW_UNMUTE_MICROPHONE = "no_unmute_microphone";
@@ -35797,6 +35819,7 @@ package android.provider {
     field public static final String ACTION_MANAGE_UNKNOWN_APP_SOURCES = "android.settings.MANAGE_UNKNOWN_APP_SOURCES";
     field public static final String ACTION_MANAGE_WRITE_SETTINGS = "android.settings.action.MANAGE_WRITE_SETTINGS";
     field public static final String ACTION_MEMORY_CARD_SETTINGS = "android.settings.MEMORY_CARD_SETTINGS";
+    field public static final String ACTION_MEMTAG_SETTINGS = "android.settings.MEMTAG_SETTINGS";
     field public static final String ACTION_NETWORK_OPERATOR_SETTINGS = "android.settings.NETWORK_OPERATOR_SETTINGS";
     field public static final String ACTION_NFCSHARING_SETTINGS = "android.settings.NFCSHARING_SETTINGS";
     field public static final String ACTION_NFC_PAYMENT_SETTINGS = "android.settings.NFC_PAYMENT_SETTINGS";
@@ -40366,7 +40389,6 @@ package android.telecom {
     field public static final String EVENT_DISPLAY_DIAGNOSTIC_MESSAGE = "android.telecom.event.DISPLAY_DIAGNOSTIC_MESSAGE";
     field public static final String EXTRA_DIAGNOSTIC_MESSAGE = "android.telecom.extra.DIAGNOSTIC_MESSAGE";
     field public static final String EXTRA_DIAGNOSTIC_MESSAGE_ID = "android.telecom.extra.DIAGNOSTIC_MESSAGE_ID";
-    field public static final String EXTRA_IS_SUPPRESSED_BY_DO_NOT_DISTURB = "android.telecom.extra.IS_SUPPRESSED_BY_DO_NOT_DISTURB";
     field public static final String EXTRA_LAST_EMERGENCY_CALLBACK_TIME_MILLIS = "android.telecom.extra.LAST_EMERGENCY_CALLBACK_TIME_MILLIS";
     field public static final String EXTRA_SILENT_RINGING_REQUESTED = "android.telecom.extra.SILENT_RINGING_REQUESTED";
     field public static final String EXTRA_SUGGESTED_PHONE_ACCOUNTS = "android.telecom.extra.SUGGESTED_PHONE_ACCOUNTS";
@@ -41719,7 +41741,7 @@ package android.telephony {
     field public static final String KEY_GSM_ROAMING_NETWORKS_STRING_ARRAY = "gsm_roaming_networks_string_array";
     field public static final String KEY_HAS_IN_CALL_NOISE_SUPPRESSION_BOOL = "has_in_call_noise_suppression_bool";
     field public static final String KEY_HIDE_CARRIER_NETWORK_SETTINGS_BOOL = "hide_carrier_network_settings_bool";
-    field public static final String KEY_HIDE_ENABLE_2G = "hide_enable_2g_bool";
+    field @Deprecated public static final String KEY_HIDE_ENABLE_2G = "hide_enable_2g_bool";
     field public static final String KEY_HIDE_ENHANCED_4G_LTE_BOOL = "hide_enhanced_4g_lte_bool";
     field public static final String KEY_HIDE_IMS_APN_BOOL = "hide_ims_apn_bool";
     field public static final String KEY_HIDE_LTE_PLUS_DATA_ICON_BOOL = "hide_lte_plus_data_icon_bool";
@@ -44057,7 +44079,6 @@ package android.telephony {
     field public static final long NETWORK_TYPE_BITMASK_HSPA = 512L; // 0x200L
     field public static final long NETWORK_TYPE_BITMASK_HSPAP = 16384L; // 0x4000L
     field public static final long NETWORK_TYPE_BITMASK_HSUPA = 256L; // 0x100L
-    field public static final long NETWORK_TYPE_BITMASK_IDEN = 1024L; // 0x400L
     field public static final long NETWORK_TYPE_BITMASK_IWLAN = 131072L; // 0x20000L
     field public static final long NETWORK_TYPE_BITMASK_LTE = 4096L; // 0x1000L
     field @Deprecated public static final long NETWORK_TYPE_BITMASK_LTE_CA = 262144L; // 0x40000L
@@ -44077,7 +44098,7 @@ package android.telephony {
     field public static final int NETWORK_TYPE_HSPA = 10; // 0xa
     field public static final int NETWORK_TYPE_HSPAP = 15; // 0xf
     field public static final int NETWORK_TYPE_HSUPA = 9; // 0x9
-    field public static final int NETWORK_TYPE_IDEN = 11; // 0xb
+    field @Deprecated public static final int NETWORK_TYPE_IDEN = 11; // 0xb
     field public static final int NETWORK_TYPE_IWLAN = 18; // 0x12
     field public static final int NETWORK_TYPE_LTE = 13; // 0xd
     field public static final int NETWORK_TYPE_NR = 20; // 0x14
@@ -44093,8 +44114,8 @@ package android.telephony {
     field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_ALREADY_PURCHASED = 3; // 0x3
     field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_CARRIER_DISABLED = 7; // 0x7
     field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_CARRIER_ERROR = 8; // 0x8
+    field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_ENTITLEMENT_CHECK_FAILED = 13; // 0xd
     field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_FEATURE_NOT_SUPPORTED = 10; // 0xa
-    field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_NETWORK_CONGESTED = 13; // 0xd
     field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_NETWORK_NOT_AVAILABLE = 12; // 0xc
     field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_NOT_DEFAULT_DATA_SUB = 14; // 0xe
     field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_OVERRIDDEN = 5; // 0x5
@@ -51904,6 +51925,7 @@ package android.view {
     method public static int statusBars();
     method public static int systemBars();
     method public static int systemGestures();
+    method public static int systemOverlays();
     method public static int tappableElement();
   }
 
@@ -52352,6 +52374,7 @@ package android.view.accessibility {
     method public android.view.accessibility.AccessibilityNodeInfo getLabeledBy();
     method public int getLiveRegion();
     method public int getMaxTextLength();
+    method public int getMinMillisBetweenContentChanges();
     method public int getMovementGranularities();
     method public CharSequence getPackageName();
     method @Nullable public CharSequence getPaneTitle();
@@ -52439,6 +52462,7 @@ package android.view.accessibility {
     method public void setLiveRegion(int);
     method public void setLongClickable(boolean);
     method public void setMaxTextLength(int);
+    method public void setMinMillisBetweenContentChanges(int);
     method public void setMovementGranularities(int);
     method public void setMultiLine(boolean);
     method public void setPackageName(CharSequence);
@@ -52518,11 +52542,13 @@ package android.view.accessibility {
     field public static final int FOCUS_ACCESSIBILITY = 2; // 0x2
     field public static final int FOCUS_INPUT = 1; // 0x1
     field public static final int MAX_NUMBER_OF_PREFETCHED_NODES = 50; // 0x32
+    field public static final int MINIMUM_MIN_MILLIS_BETWEEN_CONTENT_CHANGES = 100; // 0x64
     field public static final int MOVEMENT_GRANULARITY_CHARACTER = 1; // 0x1
     field public static final int MOVEMENT_GRANULARITY_LINE = 4; // 0x4
     field public static final int MOVEMENT_GRANULARITY_PAGE = 16; // 0x10
     field public static final int MOVEMENT_GRANULARITY_PARAGRAPH = 8; // 0x8
     field public static final int MOVEMENT_GRANULARITY_WORD = 2; // 0x2
+    field public static final int UNDEFINED_MIN_MILLIS_BETWEEN_CONTENT_CHANGES = -1; // 0xffffffff
   }
 
   public static final class AccessibilityNodeInfo.AccessibilityAction implements android.os.Parcelable {
@@ -53853,6 +53879,7 @@ package android.view.inputmethod {
     method @NonNull public String getLanguageTag();
     method @Deprecated @NonNull public String getLocale();
     method public String getMode();
+    method @NonNull public CharSequence getNameOverride();
     method public int getNameResId();
     method public boolean isAsciiCapable();
     method public boolean isAuxiliary();
@@ -53873,6 +53900,7 @@ package android.view.inputmethod {
     method public android.view.inputmethod.InputMethodSubtype.InputMethodSubtypeBuilder setSubtypeId(int);
     method public android.view.inputmethod.InputMethodSubtype.InputMethodSubtypeBuilder setSubtypeLocale(String);
     method public android.view.inputmethod.InputMethodSubtype.InputMethodSubtypeBuilder setSubtypeMode(String);
+    method @NonNull public android.view.inputmethod.InputMethodSubtype.InputMethodSubtypeBuilder setSubtypeNameOverride(@NonNull CharSequence);
     method public android.view.inputmethod.InputMethodSubtype.InputMethodSubtypeBuilder setSubtypeNameResId(int);
   }
 

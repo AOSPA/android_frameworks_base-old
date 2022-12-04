@@ -297,8 +297,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     private boolean mCredentialAttempted;
     private boolean mKeyguardGoingAway;
     private boolean mGoingToSleep;
-    private boolean mBouncerFullyShown;
-    private boolean mBouncerIsOrWillBeShowing;
+    private boolean mPrimaryBouncerFullyShown;
+    private boolean mPrimaryBouncerIsOrWillBeShowing;
     private boolean mUdfpsBouncerShowing;
     private boolean mAuthInterruptActive;
     private boolean mNeedsSlowUnlockTransition;
@@ -469,19 +469,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                     FACE_AUTH_TRIGGERED_TRUST_DISABLED);
         }
 
-        mLogger.logTrustChanged(wasTrusted, enabled, userId);
-        for (int i = 0; i < mCallbacks.size(); i++) {
-            KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
-            if (cb != null) {
-                cb.onTrustChanged(userId);
-                if (enabled && flags != 0) {
-                    cb.onTrustGrantedWithFlags(flags, userId);
-                }
-            }
-        }
-
+        String message = null;
         if (KeyguardUpdateMonitor.getCurrentUser() == userId) {
-            CharSequence message = null;
             final boolean userHasTrust = getUserHasTrust(userId);
             if (userHasTrust && trustGrantedMessages != null) {
                 for (String msg : trustGrantedMessages) {
@@ -491,14 +480,17 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                     }
                 }
             }
-
-            if (message != null) {
-                mLogger.logShowTrustGrantedMessage(message.toString());
-            }
-            for (int i = 0; i < mCallbacks.size(); i++) {
-                KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
-                if (cb != null) {
-                    cb.showTrustGrantedMessage(message);
+        }
+        mLogger.logTrustChanged(wasTrusted, enabled, userId);
+        if (message != null) {
+            mLogger.logShowTrustGrantedMessage(message.toString());
+        }
+        for (int i = 0; i < mCallbacks.size(); i++) {
+            KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
+            if (cb != null) {
+                cb.onTrustChanged(userId);
+                if (enabled) {
+                    cb.onTrustGrantedWithFlags(flags, userId, message);
                 }
             }
         }
@@ -1628,8 +1620,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                 public void onAuthenticationFailed() {
                         String reason =
                                 mKeyguardBypassController.canBypass() ? "bypass"
-                                        : mUdfpsBouncerShowing ? "udfpsBouncer" :
-                                                mBouncerFullyShown ? "bouncer" : "udfpsFpDown";
+                                        : mUdfpsBouncerShowing ? "udfpsBouncer"
+                                                : mPrimaryBouncerFullyShown ? "bouncer"
+                                                        : "udfpsFpDown";
                         requestActiveUnlock(
                                 ActiveUnlockConfig.ACTIVE_UNLOCK_REQUEST_ORIGIN.BIOMETRIC_FAIL,
                                 "faceFailure-" + reason);
@@ -2022,7 +2015,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                         handleKeyguardReset();
                         break;
                     case MSG_KEYGUARD_BOUNCER_CHANGED:
-                        handleKeyguardBouncerChanged(msg.arg1, msg.arg2);
+                        handlePrimaryBouncerChanged(msg.arg1, msg.arg2);
                         break;
                     case MSG_REPORT_EMERGENCY_CALL_ACTION:
                         handleReportEmergencyCallAction();
@@ -2492,7 +2485,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                 requestOrigin,
                 extraReason, canFaceBypass
                         || mUdfpsBouncerShowing
-                        || mBouncerFullyShown
+                        || mPrimaryBouncerFullyShown
                         || mAuthController.isUdfpsFingerDown());
     }
 
@@ -2513,7 +2506,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     private boolean shouldTriggerActiveUnlock() {
         // Triggers:
         final boolean triggerActiveUnlockForAssistant = shouldTriggerActiveUnlockForAssistant();
-        final boolean awakeKeyguard = mBouncerFullyShown || mUdfpsBouncerShowing
+        final boolean awakeKeyguard = mPrimaryBouncerFullyShown || mUdfpsBouncerShowing
                 || (isKeyguardVisible() && !mGoingToSleep
                 && mStatusBarState != StatusBarState.SHADE_LOCKED);
 
@@ -2592,7 +2585,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         final boolean shouldListenKeyguardState =
                 isKeyguardVisible()
                         || !mDeviceInteractive
-                        || (mBouncerIsOrWillBeShowing && !mKeyguardGoingAway)
+                        || (mPrimaryBouncerIsOrWillBeShowing && !mKeyguardGoingAway)
                         || mGoingToSleep
                         || shouldListenForFingerprintAssistant
                         || (mKeyguardOccluded && mIsDreaming)
@@ -2611,8 +2604,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                         && mIsPrimaryUser
                         && biometricEnabledForUser;
 
-        final boolean shouldListenBouncerState =
-                !(mFingerprintLockedOut && mBouncerIsOrWillBeShowing && mCredentialAttempted);
+        final boolean shouldListenBouncerState = !(mFingerprintLockedOut
+                && mPrimaryBouncerIsOrWillBeShowing && mCredentialAttempted);
 
         final boolean isEncryptedOrLockdownForUser = isEncryptedOrLockdown(user);
 
@@ -2637,7 +2630,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                     user,
                     shouldListen,
                     biometricEnabledForUser,
-                    mBouncerIsOrWillBeShowing,
+                        mPrimaryBouncerIsOrWillBeShowing,
                     userCanSkipBouncer,
                     mCredentialAttempted,
                     mDeviceInteractive,
@@ -2694,7 +2687,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         // Scan even when encrypted or timeout to show a preemptive bouncer when bypassing.
         // Lock-down mode shouldn't scan, since it is more explicit.
         boolean strongAuthAllowsScanning = (!isEncryptedOrTimedOut || canBypass
-                && !mBouncerFullyShown);
+                && !mPrimaryBouncerFullyShown);
 
         // If the device supports face detection (without authentication) and bypass is enabled,
         // allow face scanning to happen if the device is in lockdown mode.
@@ -2715,7 +2708,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         // Only listen if this KeyguardUpdateMonitor belongs to the primary user. There is an
         // instance of KeyguardUpdateMonitor for each user but KeyguardUpdateMonitor is user-aware.
         final boolean shouldListen =
-                (mBouncerFullyShown
+                (mPrimaryBouncerFullyShown
                         || mAuthInterruptActive
                         || mOccludingAppRequestingFace
                         || awakeKeyguard
@@ -2742,7 +2735,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                     mAuthInterruptActive,
                     becauseCannotSkipBouncer,
                     biometricEnabledForUser,
-                    mBouncerFullyShown,
+                        mPrimaryBouncerFullyShown,
                     faceAuthenticated,
                     faceDisabledForUser,
                     isFaceLockedOut(),
@@ -3288,17 +3281,19 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     /**
      * Handle {@link #MSG_KEYGUARD_BOUNCER_CHANGED}
      *
-     * @see #sendKeyguardBouncerChanged(boolean, boolean)
+     * @see #sendPrimaryBouncerChanged(boolean, boolean)
      */
-    private void handleKeyguardBouncerChanged(int bouncerIsOrWillBeShowing, int bouncerFullyShown) {
+    private void handlePrimaryBouncerChanged(int primaryBouncerIsOrWillBeShowing,
+            int primaryBouncerFullyShown) {
         Assert.isMainThread();
-        final boolean wasBouncerIsOrWillBeShowing = mBouncerIsOrWillBeShowing;
-        final boolean wasBouncerFullyShown = mBouncerFullyShown;
-        mBouncerIsOrWillBeShowing = bouncerIsOrWillBeShowing == 1;
-        mBouncerFullyShown = bouncerFullyShown == 1;
-        mLogger.logKeyguardBouncerChanged(mBouncerIsOrWillBeShowing, mBouncerFullyShown);
+        final boolean wasPrimaryBouncerIsOrWillBeShowing = mPrimaryBouncerIsOrWillBeShowing;
+        final boolean wasPrimaryBouncerFullyShown = mPrimaryBouncerFullyShown;
+        mPrimaryBouncerIsOrWillBeShowing = primaryBouncerIsOrWillBeShowing == 1;
+        mPrimaryBouncerFullyShown = primaryBouncerFullyShown == 1;
+        mLogger.logPrimaryKeyguardBouncerChanged(mPrimaryBouncerIsOrWillBeShowing,
+                mPrimaryBouncerFullyShown);
 
-        if (mBouncerFullyShown) {
+        if (mPrimaryBouncerFullyShown) {
             // If the bouncer is shown, always clear this flag. This can happen in the following
             // situations: 1) Default camera with SHOW_WHEN_LOCKED is not chosen yet. 2) Secure
             // camera requests dismiss keyguard (tapping on photos for example). When these happen,
@@ -3308,18 +3303,18 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
             mCredentialAttempted = false;
         }
 
-        if (wasBouncerIsOrWillBeShowing != mBouncerIsOrWillBeShowing) {
+        if (wasPrimaryBouncerIsOrWillBeShowing != mPrimaryBouncerIsOrWillBeShowing) {
             for (int i = 0; i < mCallbacks.size(); i++) {
                 KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
                 if (cb != null) {
-                    cb.onKeyguardBouncerStateChanged(mBouncerIsOrWillBeShowing);
+                    cb.onKeyguardBouncerStateChanged(mPrimaryBouncerIsOrWillBeShowing);
                 }
             }
             updateFingerprintListeningState(BIOMETRIC_ACTION_UPDATE);
         }
 
-        if (wasBouncerFullyShown != mBouncerFullyShown) {
-            if (mBouncerFullyShown) {
+        if (wasPrimaryBouncerFullyShown != mPrimaryBouncerFullyShown) {
+            if (mPrimaryBouncerFullyShown) {
                 requestActiveUnlock(
                         ActiveUnlockConfig.ACTIVE_UNLOCK_REQUEST_ORIGIN.UNLOCK_INTENT,
                         "bouncerFullyShown");
@@ -3327,7 +3322,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
             for (int i = 0; i < mCallbacks.size(); i++) {
                 KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
                 if (cb != null) {
-                    cb.onKeyguardBouncerFullyShowingChanged(mBouncerFullyShown);
+                    cb.onKeyguardBouncerFullyShowingChanged(mPrimaryBouncerFullyShown);
                 }
             }
             updateFaceListeningState(BIOMETRIC_ACTION_UPDATE,
@@ -3478,14 +3473,15 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     }
 
     /**
-     * @see #handleKeyguardBouncerChanged(int, int)
+     * @see #handlePrimaryBouncerChanged(int, int)
      */
-    public void sendKeyguardBouncerChanged(boolean bouncerIsOrWillBeShowing,
-            boolean bouncerFullyShown) {
-        mLogger.logSendKeyguardBouncerChanged(bouncerIsOrWillBeShowing, bouncerFullyShown);
+    public void sendPrimaryBouncerChanged(boolean primaryBouncerIsOrWillBeShowing,
+            boolean primaryBouncerFullyShown) {
+        mLogger.logSendPrimaryBouncerChanged(primaryBouncerIsOrWillBeShowing,
+                primaryBouncerFullyShown);
         Message message = mHandler.obtainMessage(MSG_KEYGUARD_BOUNCER_CHANGED);
-        message.arg1 = bouncerIsOrWillBeShowing ? 1 : 0;
-        message.arg2 = bouncerFullyShown ? 1 : 0;
+        message.arg1 = primaryBouncerIsOrWillBeShowing ? 1 : 0;
+        message.arg2 = primaryBouncerFullyShown ? 1 : 0;
         message.sendToTarget();
     }
 
@@ -3896,7 +3892,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
             if (isUdfpsSupported()) {
                 pw.println("        udfpsEnrolled=" + isUdfpsEnrolled());
                 pw.println("        shouldListenForUdfps=" + shouldListenForFingerprint(true));
-                pw.println("        mBouncerIsOrWillBeShowing=" + mBouncerIsOrWillBeShowing);
+                pw.println("        mPrimaryBouncerIsOrWillBeShowing="
+                        + mPrimaryBouncerIsOrWillBeShowing);
                 pw.println("        mStatusBarState=" + StatusBarState.toString(mStatusBarState));
                 pw.println("        mUdfpsBouncerShowing=" + mUdfpsBouncerShowing);
             } else if (isSfpsSupported()) {
@@ -3928,7 +3925,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
             pw.println("    mFaceLockedOutPermanent=" + mFaceLockedOutPermanent);
             pw.println("    enabledByUser=" + mBiometricEnabledForUser.get(userId));
             pw.println("    mSecureCameraLaunched=" + mSecureCameraLaunched);
-            pw.println("    mBouncerFullyShown=" + mBouncerFullyShown);
+            pw.println("    mPrimaryBouncerFullyShown=" + mPrimaryBouncerFullyShown);
             pw.println("    mNeedsSlowUnlockTransition=" + mNeedsSlowUnlockTransition);
         }
         mListenModels.print(pw);

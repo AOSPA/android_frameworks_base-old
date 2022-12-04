@@ -483,6 +483,7 @@
   <java-symbol type="array" name="config_deviceSpecificSystemServices" />
   <java-symbol type="string" name="config_deviceSpecificDevicePolicyManagerService" />
   <java-symbol type="string" name="config_deviceSpecificAudioService" />
+  <java-symbol type="string" name="config_deviceSpecificInputMethodManagerService" />
   <java-symbol type="integer" name="config_num_physical_slots" />
   <java-symbol type="integer" name="config_default_cellular_usage_setting" />
   <java-symbol type="array" name="config_supported_cellular_usage_settings" />
@@ -2280,6 +2281,7 @@
   <java-symbol type="string" name="config_customVpnAlwaysOnDisconnectedDialogComponent" />
   <java-symbol type="string" name="config_platformVpnConfirmDialogComponent" />
   <java-symbol type="string" name="config_carrierAppInstallDialogComponent" />
+  <java-symbol type="string" name="config_credentialManagerDialogComponent" />
   <java-symbol type="string" name="config_defaultNetworkScorerPackageName" />
   <java-symbol type="string" name="config_persistentDataPackageName" />
   <java-symbol type="string" name="config_deviceConfiguratorPackageName" />
@@ -3463,7 +3465,7 @@
   <java-symbol type="array" name="config_displayWhiteBalanceDisplayNominalWhite" />
   <java-symbol type="bool" name="config_displayWhiteBalanceLightModeAllowed" />
 
-  <!-- Default first user restrictions -->
+  <!-- Default user restrictions for the SYSTEM user -->
   <java-symbol type="array" name="config_defaultFirstUserRestrictions" />
 
   <java-symbol type="bool" name="config_permissionsIndividuallyControlled" />
