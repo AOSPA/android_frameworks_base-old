@@ -22,6 +22,7 @@ import android.os.Binder;
 import android.os.IVibratorStateListener;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
+import android.os.RichTapVibrationEffect;
 import android.os.VibratorInfo;
 import android.os.vibrator.PrebakedSegment;
 import android.os.vibrator.PrimitiveSegment;
@@ -30,6 +31,9 @@ import android.util.Slog;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+
+import java.util.HashMap;
+import java.util.Map;
 
 import libcore.util.NativeAllocationRegistry;
 
@@ -54,6 +58,7 @@ final class VibratorController {
     private volatile boolean mIsVibrating;
     private volatile boolean mIsUnderExternalControl;
     private volatile float mCurrentAmplitude;
+    private RichTapVibratorService mRichTapService;
 
     /** Listener for vibration completion callbacks from native. */
     public interface OnVibrationCompleteListener {
@@ -61,6 +66,40 @@ final class VibratorController {
         /** Callback triggered when vibration is complete. */
         void onComplete(int vibratorId, long vibrationId);
     }
+
+    static class RawEffect {
+        public static final Map<Integer, int[]> EFFECT_MAP = new HashMap<Integer, int[]>() {
+            {
+                put(0, new int[]{1, 4097, 0, 100, 65, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0});
+                put(1, new int[]{1, 4097, 0, 100, 80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4097, 70, 100, 80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0});
+                put(2, new int[]{1, 4097, 0, 100, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0});
+                put(3, new int[]{1, 4097, 0, 100, 50, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0});
+                put(4, new int[]{1, 4097, 0, 100, 65, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0});
+                put(5, new int[]{1, 4097, 0, 100, 57, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0});
+                put(21, new int[]{1, 4097, 0, 50, 33, 29, 0, 0, 0, 12, 59, 0, 22, 75, -21, 29, 0, 0, 4097, 30, 100, 30, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0});
+            }
+        };
+
+        RawEffect() {
+        }
+
+        public static int[] getInnerEffect(int id) {
+            switch (id) {
+                case 0:
+                case 1:
+                case 2:
+                case 3:
+                case 4:
+                case 5:
+                case 21:
+                    return EFFECT_MAP.get(Integer.valueOf(id));
+                default:
+                    Slog.d(TAG, "Exception encountered!", new IllegalStateException("Unexpected effect id: " + id));
+                    return null;
+            }
+        }
+    }
+
 
     VibratorController(int vibratorId, OnVibrationCompleteListener listener) {
         this(vibratorId, listener, new NativeWrapper());
@@ -74,6 +113,7 @@ final class VibratorController {
         VibratorInfo.Builder vibratorInfoBuilder = new VibratorInfo.Builder(vibratorId);
         mVibratorInfoLoadSuccessful = mNativeWrapper.getInfo(vibratorInfoBuilder);
         mVibratorInfo = vibratorInfoBuilder.build();
+        mRichTapService = new RichTapVibratorService(true, null);
 
         if (!mVibratorInfoLoadSuccessful) {
             Slog.e(TAG,
@@ -224,9 +264,15 @@ final class VibratorController {
     /** Set the vibration amplitude. This will NOT affect the state of {@link #isVibrating()}. */
     public void setAmplitude(float amplitude) {
         synchronized (mLock) {
-            if (mVibratorInfo.hasCapability(IVibrator.CAP_AMPLITUDE_CONTROL)) {
-                mNativeWrapper.setAmplitude(amplitude);
+			if (RichTapVibrationEffect.isSupported()) {
+                int strength = (int) (255.0f * amplitude);
+                mRichTapService.richTapVibratorSetAmplitude(strength);
+            } else {
+                if (mVibratorInfo.hasCapability(IVibrator.CAP_AMPLITUDE_CONTROL)) {
+                    mNativeWrapper.setAmplitude(amplitude);
+                }
             }
+
             if (mIsVibrating) {
                 mCurrentAmplitude = amplitude;
             }
@@ -244,9 +290,15 @@ final class VibratorController {
      */
     public long on(long milliseconds, long vibrationId) {
         synchronized (mLock) {
+            mCurrentAmplitude = -1;
+            if (RichTapVibrationEffect.isSupported()) {
+                mRichTapService.richTapVibratorOn(milliseconds);
+                notifyListenerOnVibrating(true);
+				return milliseconds;
+			}
+			
             long duration = mNativeWrapper.on(milliseconds, vibrationId);
             if (duration > 0) {
-                mCurrentAmplitude = -1;
                 notifyListenerOnVibrating(true);
             }
             return duration;
@@ -264,10 +316,21 @@ final class VibratorController {
      */
     public long on(PrebakedSegment prebaked, long vibrationId) {
         synchronized (mLock) {
-            long duration = mNativeWrapper.perform(prebaked.getEffectId(),
+            mCurrentAmplitude = -1;
+            long duration;
+			if (RichTapVibrationEffect.isSupported()) {
+                int[] pattern = RawEffect.getInnerEffect(prebaked.getEffectId());
+                if (pattern != null) {
+                    duration = 30;
+                    mRichTapService.richTapVibratorOnRawPattern(pattern, 255, 0);
+                    notifyListenerOnVibrating(true);
+                    return duration;
+				}
+			}
+
+			duration = mNativeWrapper.perform(prebaked.getEffectId(),
                     prebaked.getEffectStrength(), vibrationId);
             if (duration > 0) {
-                mCurrentAmplitude = -1;
                 notifyListenerOnVibrating(true);
             }
             return duration;
