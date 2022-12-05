@@ -106,4 +106,7 @@
     <!-- Whether to show WiFi/Hotspot standard -->
     <bool name="config_show_network_standard">false</bool>
 
+    <!-- Whether to use Richtap vibration -->
+    <bool name="config_usesRichtapVibration">false</bool>
+
 </resources>
