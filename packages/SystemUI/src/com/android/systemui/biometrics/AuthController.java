@@ -521,11 +521,9 @@ public class AuthController extends CoreStartable implements CommandQueue.Callba
      */
     private void updateSensorLocations() {
         mDisplay.getDisplayInfo(mCachedDisplayInfo);
-        final Display.Mode maxDisplayMode =
-                DisplayUtils.getMaximumResolutionDisplayMode(mCachedDisplayInfo.supportedModes);
         final float scaleFactor = android.util.DisplayUtils.getPhysicalPixelDisplaySizeRatio(
-                maxDisplayMode.getPhysicalWidth(), maxDisplayMode.getPhysicalHeight(),
-                mCachedDisplayInfo.getNaturalWidth(), mCachedDisplayInfo.getNaturalHeight());
+                mStableDisplaySize.x, mStableDisplaySize.y, displayInfo.getNaturalWidth(),
+                displayInfo.getNaturalHeight());
         if (scaleFactor == Float.POSITIVE_INFINITY) {
             mScaleFactor = 1f;
         } else {
@@ -1161,6 +1159,7 @@ public class AuthController extends CoreStartable implements CommandQueue.Callba
     @Override
     public void dump(@NonNull PrintWriter pw, @NonNull String[] args) {
         final AuthDialog dialog = mCurrentDialog;
+        pw.println("  stableDisplaySize=" + mStableDisplaySize);
         pw.println("  mCachedDisplayInfo=" + mCachedDisplayInfo);
         pw.println("  mScaleFactor=" + mScaleFactor);
         pw.println("  faceAuthSensorLocationDefault=" + mFaceSensorLocationDefault);
