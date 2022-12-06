@@ -820,6 +820,13 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     private AppSaturationInfo mLastAppSaturationInfo;
 
+    private final ActivityRecordInputSink mActivityRecordInputSink;
+
+    // Activities with this uid are allowed to not create an input sink while being in the same
+    // task and directly above this ActivityRecord. This field is updated whenever a new activity
+    // is launched from this ActivityRecord. Touches are always allowed within the same uid.
+    int mAllowedTouchUid;
+
     private final ColorDisplayService.ColorTransformController mColorTransformController =
             (matrix, translation) -> mWmService.mH.post(() -> {
                 synchronized (mWmService.mGlobalLock) {
@@ -1863,6 +1870,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
         if (mPerf == null)
             mPerf = new BoostFramework();
+
+        mActivityRecordInputSink = new ActivityRecordInputSink(this, sourceRecord);
     }
 
     /**
@@ -3799,6 +3808,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         } else {
             onRemovedFromDisplay();
         }
+        mActivityRecordInputSink.releaseSurfaceControl();
         super.removeImmediately();
     }
 
@@ -7062,6 +7072,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 getSyncTransaction().show(mSurfaceControl);
             } else if (!show && mLastSurfaceShowing) {
                 getSyncTransaction().hide(mSurfaceControl);
+            }
+            if (show) {
+                mActivityRecordInputSink.applyChangesToSurfaceIfChanged(getSyncTransaction());
             }
         }
         if (mThumbnail != null) {
