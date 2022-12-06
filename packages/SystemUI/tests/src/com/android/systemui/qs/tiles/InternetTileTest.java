@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/**
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+
 package com.android.systemui.qs.tiles;
 
 import static com.google.common.truth.Truth.assertThat;
@@ -39,6 +45,7 @@ import com.android.systemui.qs.logging.QSLogger;
 import com.android.systemui.qs.tiles.dialog.InternetDialogFactory;
 import com.android.systemui.statusbar.connectivity.AccessPointController;
 import com.android.systemui.statusbar.connectivity.NetworkController;
+import com.android.systemui.util.CarrierNameCustomization;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -59,6 +66,8 @@ public class InternetTileTest extends SysuiTestCase {
     private AccessPointController mAccessPointController;
     @Mock
     private InternetDialogFactory mInternetDialogFactory;
+    @Mock
+    private CarrierNameCustomization mCarrierNameCustomization;
 
     private TestableLooper mTestableLooper;
     private InternetTile mTile;
@@ -81,7 +90,8 @@ public class InternetTileTest extends SysuiTestCase {
             mock(QSLogger.class),
             mNetworkController,
             mAccessPointController,
-            mInternetDialogFactory
+            mInternetDialogFactory,
+            mCarrierNameCustomization
         );
 
         mTile.initialize();

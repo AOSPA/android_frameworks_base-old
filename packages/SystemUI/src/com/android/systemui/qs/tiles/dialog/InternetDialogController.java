@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/**
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+
 package com.android.systemui.qs.tiles.dialog;
 
 import static com.android.settingslib.mobile.MobileMappings.getIconKey;
@@ -88,6 +94,7 @@ import com.android.systemui.statusbar.policy.LocationController;
 import com.android.systemui.toast.SystemUIToast;
 import com.android.systemui.toast.ToastFactory;
 import com.android.systemui.util.CarrierConfigTracker;
+import com.android.systemui.util.CarrierNameCustomization;
 import com.android.systemui.util.settings.GlobalSettings;
 import com.android.wifitrackerlib.MergedCarrierEntry;
 import com.android.wifitrackerlib.WifiEntry;
@@ -204,6 +211,7 @@ public class InternetDialogController implements AccessPointController.AccessPoi
     protected boolean mHasEthernet = false;
     @VisibleForTesting
     protected ConnectedWifiInternetMonitor mConnectedWifiInternetMonitor;
+    private CarrierNameCustomization mCarrierNameCustomization;
 
     private final KeyguardUpdateMonitorCallback mKeyguardUpdateCallback =
             new KeyguardUpdateMonitorCallback() {
@@ -236,7 +244,8 @@ public class InternetDialogController implements AccessPointController.AccessPoi
             LocationController locationController,
             DialogLaunchAnimator dialogLaunchAnimator,
             WifiStateWorker wifiStateWorker,
-            FeatureFlags featureFlags
+            FeatureFlags featureFlags,
+            CarrierNameCustomization carrierNameCustomization
     ) {
         if (DEBUG) {
             Log.d(TAG, "Init InternetDialogController");
@@ -272,6 +281,7 @@ public class InternetDialogController implements AccessPointController.AccessPoi
         mWifiStateWorker = wifiStateWorker;
         mFeatureFlags = featureFlags;
         mNonDdsCallStateCallbacksMap = new HashMap<Integer, NonDdsCallStateCallback>();
+        mCarrierNameCustomization = carrierNameCustomization;
     }
 
     void onStart(@NonNull InternetDialogCallback callback, boolean canConfigWifi) {
@@ -657,7 +667,12 @@ public class InternetDialogController implements AccessPointController.AccessPoi
     }
 
     CharSequence getMobileNetworkTitle(int subId) {
-        return getUniqueSubscriptionDisplayName(subId, mContext);
+        if (mCarrierNameCustomization.isRoamingCustomizationEnabled()
+                && mCarrierNameCustomization.isRoaming(subId)) {
+            return mCarrierNameCustomization.getRoamingCarrierName(subId);
+        } else {
+            return getUniqueSubscriptionDisplayName(subId, mContext);
+        }
     }
 
     String getMobileNetworkSummary(int subId) {
