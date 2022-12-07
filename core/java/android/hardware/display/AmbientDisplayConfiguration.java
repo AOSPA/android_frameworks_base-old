@@ -92,7 +92,8 @@ public class AmbientDisplayConfiguration {
 
     /** @hide */
     public boolean pulseOnNotificationAvailable() {
-        return ambientDisplayAvailable();
+        return mContext.getResources().getBoolean(R.bool.config_pulseOnNotificationsAvailable)
+                && ambientDisplayAvailable();
     }
 
     /** @hide */

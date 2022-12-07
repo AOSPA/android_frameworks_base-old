@@ -76,7 +76,7 @@
     <item msgid="1963366694959681026">"avrcp16"</item>
   </string-array>
   <string-array name="bluetooth_map_versions">
-    <item msgid="8786402640610987099">"MAP 1.2 (predeterminada)"</item>
+    <item msgid="8786402640610987099">"MAP 1.2 (predeterminado)"</item>
     <item msgid="6817922176194686449">"MAP 1.3"</item>
     <item msgid="3423518690032737851">"MAP 1.4"</item>
   </string-array>
@@ -94,7 +94,8 @@
     <item msgid="3825367753087348007">"LDAC"</item>
     <item msgid="8711430979086781450">"Audio <xliff:g id="QUALCOMM">Qualcomm®</xliff:g> <xliff:g id="APTX_ADAPTIVE">aptX™ Adaptive</xliff:g>"</item>
     <item msgid="6486050771049225">"Audio <xliff:g id="QUALCOMM">Qualcomm®</xliff:g> <xliff:g id="APTX_TWSP">aptX™ TWS+</xliff:g>"</item>
-    <item msgid="4697138348259803104">"LC3"</item>
+    <item msgid="328951785723550863">"LC3"</item>
+    <item msgid="506175145534048710">"Opus"</item>
   </string-array>
   <string-array name="bluetooth_a2dp_codec_summaries">
     <item msgid="8868109554557331312">"Usa a selección do sistema (predeterminado)"</item>
@@ -105,6 +106,8 @@
     <item msgid="2553206901068987657">"LDAC"</item>
     <item msgid="102988075927343894">"Audio <xliff:g id="QUALCOMM">Qualcomm®</xliff:g> <xliff:g id="APTX_ADAPTIVE">aptX™ Adaptive</xliff:g>"</item>
     <item msgid="6486050771049481">"Audio <xliff:g id="QUALCOMM">Qualcomm®</xliff:g> <xliff:g id="APTX_TWSP">aptX™ TWS+</xliff:g>"</item>
+    <item msgid="3940992993241040716">"LC3"</item>
+    <item msgid="7940970833006181407">"Opus"</item>
   </string-array>
   <string-array name="bluetooth_a2dp_codec_sample_rate_titles">
     <item msgid="926809261293414607">"Usar selección do sistema (predeterminado)"</item>

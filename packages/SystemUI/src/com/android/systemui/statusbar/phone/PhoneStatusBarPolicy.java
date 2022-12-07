@@ -35,6 +35,7 @@ import android.media.AudioManager;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiManager;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.os.UserManager;
@@ -129,7 +130,7 @@ public class PhoneStatusBarPolicy
     private final DateFormatUtil mDateFormatUtil;
     private final TelecomManager mTelecomManager;
 
-    private final Handler mHandler = new Handler();
+    private final Handler mHandler;
     private final CastController mCast;
     private final HotspotController mHotspot;
     private final NextAlarmController mNextAlarmController;
@@ -168,7 +169,7 @@ public class PhoneStatusBarPolicy
     @Inject
     public PhoneStatusBarPolicy(StatusBarIconController iconController,
             CommandQueue commandQueue, BroadcastDispatcher broadcastDispatcher,
-            @UiBackground Executor uiBgExecutor, @Main Resources resources,
+            @UiBackground Executor uiBgExecutor, @Main Looper looper, @Main Resources resources,
             CastController castController, HotspotController hotspotController,
             BluetoothController bluetoothController, NextAlarmController nextAlarmController,
             UserInfoController userInfoController, RotationLockController rotationLockController,
@@ -187,6 +188,7 @@ public class PhoneStatusBarPolicy
         mIconController = iconController;
         mCommandQueue = commandQueue;
         mBroadcastDispatcher = broadcastDispatcher;
+        mHandler = new Handler(looper);
         mResources = resources;
         mCast = castController;
         mHotspot = hotspotController;
@@ -329,6 +331,7 @@ public class PhoneStatusBarPolicy
         mRotationLockController.addCallback(this);
         mBluetooth.addCallback(this);
         mProvisionedController.addCallback(this);
+        mCurrentUserSetup = mProvisionedController.isCurrentUserSetup();
         mZenController.addCallback(this);
         mCast.addCallback(mCastCallback);
         mHotspot.addCallback(mHotspotCallback);
@@ -563,6 +566,7 @@ public class PhoneStatusBarPolicy
                     mHandler.post(() -> {
                         updateAlarm();
                         updateManagedProfile();
+                        onUserSetupChanged();
                     });
                 }
             };

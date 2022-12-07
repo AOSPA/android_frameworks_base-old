@@ -52,7 +52,6 @@ import android.bluetooth.BluetoothProfile;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.DialogInterface;
-import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
@@ -259,6 +258,7 @@ public class VolumeDialogImpl implements VolumeDialog,
 
     private final ConfigurationController mConfigurationController;
     private final MediaOutputDialogFactory mMediaOutputDialogFactory;
+    private final VolumePanelFactory mVolumePanelFactory;
     private final ActivityStarter mActivityStarter;
 
     private boolean mShowing;
@@ -303,6 +303,7 @@ public class VolumeDialogImpl implements VolumeDialog,
             DeviceProvisionedController deviceProvisionedController,
             ConfigurationController configurationController,
             MediaOutputDialogFactory mediaOutputDialogFactory,
+            VolumePanelFactory volumePanelFactory,
             ActivityStarter activityStarter,
             InteractionJankMonitor interactionJankMonitor) {
         mContext =
@@ -314,6 +315,7 @@ public class VolumeDialogImpl implements VolumeDialog,
         mDeviceProvisionedController = deviceProvisionedController;
         mConfigurationController = configurationController;
         mMediaOutputDialogFactory = mediaOutputDialogFactory;
+        mVolumePanelFactory = volumePanelFactory;
         mActivityStarter = activityStarter;
         mShowActiveStreamOnly = showActiveStreamOnly();
         mHasSeenODICaptionsTooltip =

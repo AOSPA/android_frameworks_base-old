@@ -18,6 +18,12 @@ package com.android.systemui.doze;
 
 import static android.hardware.display.AmbientDisplayConfiguration.DOZE_NO_PROXIMITY_CHECK;
 
+import static android.app.StatusBarManager.SESSION_KEYGUARD;
+
+import static com.android.systemui.doze.DozeMachine.State.DOZE_SUSPEND_TRIGGERS;
+import static com.android.systemui.doze.DozeMachine.State.FINISH;
+import static com.android.systemui.doze.DozeMachine.State.UNINITIALIZED;
+
 import android.annotation.Nullable;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -32,19 +38,19 @@ import android.util.Log;
 import android.view.Display;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.logging.InstanceId;
 import com.android.internal.logging.UiEvent;
 import com.android.internal.logging.UiEventLogger;
 import com.android.systemui.biometrics.AuthController;
 import com.android.systemui.broadcast.BroadcastDispatcher;
-import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.doze.DozeMachine.State;
 import com.android.systemui.doze.dagger.DozeScope;
+import com.android.systemui.log.SessionTracker;
 import com.android.systemui.statusbar.phone.DozeParameters;
 import com.android.systemui.statusbar.policy.DevicePostureController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.Assert;
-import com.android.systemui.util.concurrency.DelayableExecutor;
 import com.android.systemui.util.sensors.AsyncSensorManager;
 import com.android.systemui.util.sensors.ProximityCheck;
 import com.android.systemui.util.sensors.ProximitySensor;
@@ -78,6 +84,7 @@ public class DozeTriggers implements DozeMachine.Part {
     private static final int PROXIMITY_TIMEOUT_DELAY_MS = 500;
 
     private final Context mContext;
+    private final SessionTracker mSessionTracker;
     private DozeMachine mMachine;
     private final DozeLog mDozeLog;
     private final DozeSensors mDozeSensors;
@@ -93,10 +100,8 @@ public class DozeTriggers implements DozeMachine.Part {
     private final ProximityCheck mProxCheck;
     private final BroadcastDispatcher mBroadcastDispatcher;
     private final AuthController mAuthController;
-    private final DelayableExecutor mMainExecutor;
     private final KeyguardStateController mKeyguardStateController;
     private final UiEventLogger mUiEventLogger;
-    private final DevicePostureController mDevicePostureController;
 
     private long mNotificationPulseTime;
     private boolean mPulsePending;
@@ -183,8 +188,8 @@ public class DozeTriggers implements DozeMachine.Part {
             ProximityCheck proxCheck,
             DozeLog dozeLog, BroadcastDispatcher broadcastDispatcher,
             SecureSettings secureSettings, AuthController authController,
-            @Main DelayableExecutor mainExecutor,
             UiEventLogger uiEventLogger,
+            SessionTracker sessionTracker,
             KeyguardStateController keyguardStateController,
             DevicePostureController devicePostureController) {
         mContext = context;
@@ -194,8 +199,8 @@ public class DozeTriggers implements DozeMachine.Part {
         mSensorManager = sensorManager;
         mWakeLock = wakeLock;
         mAllowPulseTriggers = true;
+        mSessionTracker = sessionTracker;
 
-        mDevicePostureController = devicePostureController;
         mDozeSensors = new DozeSensors(context, mSensorManager, dozeParameters,
                 config, wakeLock, this::onSensor, this::onProximityFar, dozeLog, proximitySensor,
                 secureSettings, authController, devicePostureController);
@@ -204,14 +209,9 @@ public class DozeTriggers implements DozeMachine.Part {
         mDozeLog = dozeLog;
         mBroadcastDispatcher = broadcastDispatcher;
         mAuthController = authController;
-        mMainExecutor = mainExecutor;
         mUiEventLogger = uiEventLogger;
         mKeyguardStateController = keyguardStateController;
     }
-    private final DevicePostureController.Callback mDevicePostureCallback =
-            posture -> {
-
-            };
 
     @Override
     public void setDozeMachine(DozeMachine dozeMachine) {
@@ -269,7 +269,7 @@ public class DozeTriggers implements DozeMachine.Part {
             mProxCheck.check(PROXIMITY_TIMEOUT_DELAY_MS, near -> {
                 final long end = SystemClock.uptimeMillis();
                 mDozeLog.traceProximityResult(
-                        near == null ? false : near,
+                        near != null && near,
                         end - start,
                         reason);
                 callback.accept(near);
@@ -352,17 +352,17 @@ public class DozeTriggers implements DozeMachine.Part {
         return mKeyguardStateController.isOccluded();
     }
 
-    private void gentleWakeUp(int reason) {
+    private void gentleWakeUp(@DozeLog.Reason int reason) {
         // Log screen wake up reason (lift/pickup, tap, double-tap)
         Optional.ofNullable(DozingUpdateUiEvent.fromReason(reason))
-                .ifPresent(mUiEventLogger::log);
+                .ifPresent(uiEventEnum -> mUiEventLogger.log(uiEventEnum, getKeyguardSessionId()));
         if (mDozeParameters.getDisplayNeedsBlanking()) {
             // Let's prepare the display to wake-up by drawing black.
             // This will cover the hardware wake-up sequence, where the display
             // becomes black for a few frames.
             mDozeHost.setAodDimmingScrim(1f);
         }
-        mMachine.wakeUp();
+        mMachine.wakeUp(reason);
     }
 
     private void onProximityFar(boolean far) {
@@ -382,11 +382,10 @@ public class DozeTriggers implements DozeMachine.Part {
 
         if (state == DozeMachine.State.DOZE_PULSING
                 || state == DozeMachine.State.DOZE_PULSING_BRIGHT) {
-            boolean ignoreTouch = near;
             if (DEBUG) {
-                Log.i(TAG, "Prox changed, ignore touch = " + ignoreTouch);
+                Log.i(TAG, "Prox changed, ignore touch = " + near);
             }
-            mDozeHost.onIgnoreTouchWhilePulsing(ignoreTouch);
+            mDozeHost.onIgnoreTouchWhilePulsing(near);
         }
 
         if (far && (paused || pausing)) {
@@ -422,7 +421,8 @@ public class DozeTriggers implements DozeMachine.Part {
                     mMachine.requestState(DozeMachine.State.DOZE_AOD);
                     // Log sensor triggered
                     Optional.ofNullable(DozingUpdateUiEvent.fromReason(reason))
-                            .ifPresent(mUiEventLogger::log);
+                            .ifPresent(uiEventEnum ->
+                                    mUiEventLogger.log(uiEventEnum, getKeyguardSessionId()));
                 }
             }, false /* alreadyPerformedProxCheck */, reason);
         } else {
@@ -439,14 +439,18 @@ public class DozeTriggers implements DozeMachine.Part {
 
     @Override
     public void transitionTo(DozeMachine.State oldState, DozeMachine.State newState) {
+        if (oldState == DOZE_SUSPEND_TRIGGERS && (newState != FINISH
+                && newState != UNINITIALIZED)) {
+            // Register callbacks that were unregistered when we switched to
+            // DOZE_SUSPEND_TRIGGERS state.
+            registerCallbacks();
+        }
         switch (newState) {
             case INITIALIZED:
                 mAodInterruptRunnable = null;
                 sWakeDisplaySensorState = true;
-                mBroadcastReceiver.register(mBroadcastDispatcher);
-                mDockManager.addListener(mDockEventListener);
+                registerCallbacks();
                 mDozeSensors.requestTemporaryDisable();
-                mDozeHost.addCallback(mHostCallback);
                 break;
             case DOZE:
             case DOZE_AOD:
@@ -474,19 +478,34 @@ public class DozeTriggers implements DozeMachine.Part {
             case DOZE_PULSE_DONE:
                 mDozeSensors.requestTemporaryDisable();
                 break;
+            case DOZE_SUSPEND_TRIGGERS:
             case FINISH:
-                mBroadcastReceiver.unregister(mBroadcastDispatcher);
-                mDozeHost.removeCallback(mHostCallback);
-                mDockManager.removeListener(mDockEventListener);
-                mDozeSensors.setListening(false, false);
-                mDozeSensors.setProxListening(false);
-                mWantSensors = false;
-                mWantProxSensor = false;
-                mWantTouchScreenSensors = false;
+                stopListeningToAllTriggers();
                 break;
             default:
         }
         mDozeSensors.setListening(mWantSensors, mWantTouchScreenSensors);
+    }
+
+    private void registerCallbacks() {
+        mBroadcastReceiver.register(mBroadcastDispatcher);
+        mDockManager.addListener(mDockEventListener);
+        mDozeHost.addCallback(mHostCallback);
+    }
+
+    private void unregisterCallbacks() {
+        mBroadcastReceiver.unregister(mBroadcastDispatcher);
+        mDozeHost.removeCallback(mHostCallback);
+        mDockManager.removeListener(mDockEventListener);
+    }
+
+    private void stopListeningToAllTriggers() {
+        unregisterCallbacks();
+        mDozeSensors.setListening(false, false);
+        mDozeSensors.setProxListening(false);
+        mWantSensors = false;
+        mWantProxSensor = false;
+        mWantTouchScreenSensors = false;
     }
 
     @Override
@@ -543,7 +562,7 @@ public class DozeTriggers implements DozeMachine.Part {
 
         // Logs request pulse reason on AOD screen.
         Optional.ofNullable(DozingUpdateUiEvent.fromReason(reason))
-                .ifPresent(mUiEventLogger::log);
+                .ifPresent(uiEventEnum -> mUiEventLogger.log(uiEventEnum, getKeyguardSessionId()));
     }
 
     private boolean canPulse() {
@@ -560,6 +579,11 @@ public class DozeTriggers implements DozeMachine.Part {
             return;
         }
         mMachine.requestPulse(reason);
+    }
+
+    @Nullable
+    private InstanceId getKeyguardSessionId() {
+        return mSessionTracker.getSessionId(SESSION_KEYGUARD);
     }
 
     @Override

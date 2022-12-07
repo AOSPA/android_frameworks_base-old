@@ -94,7 +94,8 @@
     <item msgid="3825367753087348007">"LDAC"</item>
     <item msgid="8711430979086781450">"<xliff:g id="QUALCOMM">Qualcomm®</xliff:g> <xliff:g id="APTX_ADAPTIVE">aptX™ Adaptive</xliff:g> অডিঅ\'"</item>
     <item msgid="6486050771049225">"<xliff:g id="QUALCOMM">Qualcomm®</xliff:g> <xliff:g id="APTX_TWSP">aptX™ TWS+</xliff:g> অডিঅ\'""</item>
-    <item msgid="4752291533062061265">"LC3"</item>
+    <item msgid="328951785723550863">"LC3"</item>
+    <item msgid="506175145534048710">"Opus"</item>
   </string-array>
   <string-array name="bluetooth_a2dp_codec_summaries">
     <item msgid="8868109554557331312">"ছিষ্টেমৰ বাছনি ব্যৱহাৰ কৰক (ডিফ\'ল্ট)"</item>
@@ -105,6 +106,8 @@
     <item msgid="2553206901068987657">"LDAC"</item>
     <item msgid="102988075927343894">"<xliff:g id="QUALCOMM">Qualcomm®</xliff:g> <xliff:g id="APTX_ADAPTIVE">aptX™ Adaptive</xliff:g> অডিঅ\'"</item>
     <item msgid="6486050771049481">"<xliff:g id="QUALCOMM">Qualcomm®</xliff:g> <xliff:g id="APTX_TWSP">aptX™ TWS+</xliff:g> অডিঅ\'""</item>
+    <item msgid="3940992993241040716">"LC3"</item>
+    <item msgid="7940970833006181407">"Opus"</item>
   </string-array>
   <string-array name="bluetooth_a2dp_codec_sample_rate_titles">
     <item msgid="926809261293414607">"ছিষ্টেমৰ বাছনি ব্যৱহাৰ কৰক (ডিফ\'ল্ট)"</item>

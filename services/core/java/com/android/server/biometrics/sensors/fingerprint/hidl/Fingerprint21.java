@@ -607,6 +607,11 @@ public class Fingerprint21 implements IHwBinder.DeathRecipient, ServiceProvider 
                 }
 
                 @Override
+                public void onBiometricAction(int action) {
+                    mBiometricStateCallback.onBiometricAction(action);
+                }
+
+                @Override
                 public void onClientFinished(@NonNull BaseClientMonitor clientMonitor,
                         boolean success) {
                     mBiometricStateCallback.onClientFinished(clientMonitor, success);
@@ -823,6 +828,11 @@ public class Fingerprint21 implements IHwBinder.DeathRecipient, ServiceProvider 
             }
             ((Udfps) client).onUiReady();
         });
+    }
+
+    @Override
+    public void onPowerPressed() {
+        Slog.e(TAG, "onPowerPressed not supported for HIDL clients");
     }
 
     @Override

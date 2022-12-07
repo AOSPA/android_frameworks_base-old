@@ -292,17 +292,12 @@ public class WifiSignalController extends SignalController<WifiState, IconGroup>
         mCurrentState.connected = mWifiTracker.connected;
         mCurrentState.ssid = mWifiTracker.ssid;
         mCurrentState.rssi = mWifiTracker.rssi;
-        boolean levelChanged = mCurrentState.level != mWifiTracker.level;
         mCurrentState.level = mWifiTracker.level;
         mCurrentState.statusLabel = mWifiTracker.statusLabel;
         mCurrentState.isCarrierMerged = mWifiTracker.isCarrierMerged;
         mCurrentState.subId = mWifiTracker.subId;
         mCurrentState.wifiStandard = mShowWifiStandard ? mWifiTracker.wifiStandard : -1;
         mCurrentState.iconGroup = mDefaultWifiIconGroup;
-
-        if (levelChanged) {
-            mNetworkController.notifyWifiLevelChange(mCurrentState.level);
-        }
     }
 
     boolean isCarrierMergedWifi(int subId) {

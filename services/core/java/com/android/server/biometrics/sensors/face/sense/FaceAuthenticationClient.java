@@ -102,7 +102,7 @@ class FaceAuthenticationClient extends AuthenticationClient<ISenseService> {
     @Override
     protected ClientMonitorCallback wrapCallbackForStart(@NonNull ClientMonitorCallback callback) {
         return new ClientMonitorCompositeCallback(
-                getLogger().createALSCallback(true /* startWithClient */), callback);
+                getLogger().getAmbientLightProbe(true /* startWithClient */), callback);
     }
 
     @Override
