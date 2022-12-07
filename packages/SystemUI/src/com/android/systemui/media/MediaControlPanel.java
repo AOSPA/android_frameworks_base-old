@@ -38,7 +38,9 @@ import android.graphics.Rect;
 import android.graphics.drawable.Animatable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.Icon;
+import android.graphics.drawable.LayerDrawable;
 import android.graphics.drawable.TransitionDrawable;
 import android.media.session.MediaController;
 import android.media.session.MediaSession;
@@ -82,6 +84,7 @@ import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.shared.system.SysUiStatsLog;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
+import com.android.systemui.util.ColorUtilKt;
 import com.android.systemui.util.animation.TransitionLayout;
 import com.android.systemui.util.time.SystemClock;
 
@@ -485,8 +488,8 @@ public class MediaControlPanel {
         TextView deviceName = mMediaViewHolder.getSeamlessText();
         final MediaDeviceData device = data.getDevice();
 
-        final boolean enabled;
-        final boolean seamlessDisabled;
+        final boolean isTapEnabled;
+        final boolean useDisabledAlpha;
         final int iconResource;
         CharSequence deviceString;
         if (showBroadcastButton) {
@@ -496,21 +499,25 @@ public class MediaControlPanel {
                     && TextUtils.equals(device.getName(),
                     MediaDataUtils.getAppLabel(mContext, mPackageName, mContext.getString(
                             R.string.bt_le_audio_broadcast_dialog_unknown_name)));
-            seamlessDisabled = !mIsCurrentBroadcastedApp;
+            useDisabledAlpha = !mIsCurrentBroadcastedApp;
             // Always be enabled if the broadcast button is shown
-            enabled = true;
+            isTapEnabled = true;
+
+            // Defaults for broadcasting state
             deviceString = mContext.getString(R.string.bt_le_audio_broadcast_dialog_unknown_name);
             iconResource = R.drawable.settings_input_antenna;
         } else {
             // Disable clicking on output switcher for invalid devices and resumption controls
-            seamlessDisabled = (device != null && !device.getEnabled()) || data.getResumption();
-            enabled = !seamlessDisabled;
+            useDisabledAlpha = (device != null && !device.getEnabled()) || data.getResumption();
+            isTapEnabled = !useDisabledAlpha;
+
+            // Defaults for non-broadcasting state
             deviceString = mContext.getString(R.string.media_seamless_other_device);
             iconResource = R.drawable.ic_media_home_devices;
         }
 
-        mMediaViewHolder.getSeamlessButton().setAlpha(seamlessDisabled ? DISABLED_ALPHA : 1.0f);
-        seamlessView.setEnabled(enabled);
+        mMediaViewHolder.getSeamlessButton().setAlpha(useDisabledAlpha ? DISABLED_ALPHA : 1.0f);
+        seamlessView.setEnabled(isTapEnabled);
 
         if (device != null) {
             Drawable icon = device.getIcon();
@@ -521,7 +528,9 @@ public class MediaControlPanel {
             } else {
                 iconView.setImageDrawable(icon);
             }
-            deviceString = device.getName();
+            if (device.getName() != null) {
+                deviceString = device.getName();
+            }
         } else {
             // Set to default icon
             iconView.setImageResource(iconResource);
@@ -696,7 +705,18 @@ public class MediaControlPanel {
             }
             if (wallpaperColors != null) {
                 mutableColorScheme = new ColorScheme(wallpaperColors, true, Style.CONTENT);
-                artwork = getScaledBackground(artworkIcon, width, height);
+                Drawable albumArt = getScaledBackground(artworkIcon, width, height);
+                GradientDrawable gradient = (GradientDrawable) mContext
+                        .getDrawable(R.drawable.qs_media_scrim);
+                gradient.setColors(new int[] {
+                        ColorUtilKt.getColorWithAlpha(
+                                MediaColorSchemesKt.backgroundStartFromScheme(mutableColorScheme),
+                                0.25f),
+                        ColorUtilKt.getColorWithAlpha(
+                                MediaColorSchemesKt.backgroundEndFromScheme(mutableColorScheme),
+                                0.9f),
+                });
+                artwork = new LayerDrawable(new Drawable[] { albumArt, gradient });
                 isArtworkBound = true;
             } else {
                 // If there's no artwork, use colors from the app icon
@@ -721,10 +741,14 @@ public class MediaControlPanel {
                 }
                 mArtworkBoundId = reqId;
 
+                // Transition Colors to current color scheme
+                boolean colorSchemeChanged = mColorSchemeTransition.updateColorScheme(colorScheme);
+
                 // Bind the album view to the artwork or a transition drawable
                 ImageView albumView = mMediaViewHolder.getAlbumView();
                 albumView.setPadding(0, 0, 0, 0);
-                if (updateBackground || (!mIsArtworkBound && isArtworkBound)) {
+                if (updateBackground || colorSchemeChanged
+                        || (!mIsArtworkBound && isArtworkBound)) {
                     if (mPrevArtwork == null) {
                         albumView.setImageDrawable(artwork);
                     } else {
@@ -746,9 +770,6 @@ public class MediaControlPanel {
                     mPrevArtwork = artwork;
                     mIsArtworkBound = isArtworkBound;
                 }
-
-                // Transition Colors to current color scheme
-                mColorSchemeTransition.updateColorScheme(colorScheme, mIsArtworkBound);
 
                 // App icon - use notification icon
                 ImageView appIconView = mMediaViewHolder.getAppIcon();
@@ -1004,16 +1025,13 @@ public class MediaControlPanel {
 
     private void bindScrubbingTime(MediaData data) {
         ConstraintSet expandedSet = mMediaViewController.getExpandedLayout();
-        ConstraintSet collapsedSet = mMediaViewController.getCollapsedLayout();
         int elapsedTimeId = mMediaViewHolder.getScrubbingElapsedTimeView().getId();
         int totalTimeId = mMediaViewHolder.getScrubbingTotalTimeView().getId();
 
         boolean visible = scrubbingTimeViewsEnabled(data.getSemanticActions()) && mIsScrubbing;
         setVisibleAndAlpha(expandedSet, elapsedTimeId, visible);
         setVisibleAndAlpha(expandedSet, totalTimeId, visible);
-        // Never show in collapsed
-        setVisibleAndAlpha(collapsedSet, elapsedTimeId, false);
-        setVisibleAndAlpha(collapsedSet, totalTimeId, false);
+        // Collapsed view is always GONE as set in XML, so doesn't need to be updated dynamically
     }
 
     private boolean scrubbingTimeViewsEnabled(@Nullable MediaButton semanticActions) {

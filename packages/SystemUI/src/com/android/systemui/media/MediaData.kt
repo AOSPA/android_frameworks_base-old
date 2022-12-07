@@ -233,6 +233,7 @@ data class MediaDeviceData
         return enabled == other.enabled &&
             name == other.name &&
             intent == other.intent &&
-            id == other.id
+            id == other.id &&
+            showBroadcastButton == other.showBroadcastButton
     }
 }
