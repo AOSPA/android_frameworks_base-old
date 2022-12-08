@@ -17,6 +17,8 @@
 package com.android.systemui.keyguard.data.repository
 
 import androidx.test.filters.SmallTest
+import com.android.keyguard.KeyguardUpdateMonitor
+import com.android.keyguard.KeyguardUpdateMonitorCallback
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.common.shared.model.Position
 import com.android.systemui.doze.DozeHost
@@ -48,6 +50,7 @@ class KeyguardRepositoryImplTest : SysuiTestCase() {
     @Mock private lateinit var dozeHost: DozeHost
     @Mock private lateinit var keyguardStateController: KeyguardStateController
     @Mock private lateinit var wakefulnessLifecycle: WakefulnessLifecycle
+    @Mock private lateinit var keyguardUpdateMonitor: KeyguardUpdateMonitor
     @Mock private lateinit var biometricUnlockController: BiometricUnlockController
 
     private lateinit var underTest: KeyguardRepositoryImpl
@@ -59,10 +62,11 @@ class KeyguardRepositoryImplTest : SysuiTestCase() {
         underTest =
             KeyguardRepositoryImpl(
                 statusBarStateController,
-                keyguardStateController,
                 dozeHost,
                 wakefulnessLifecycle,
                 biometricUnlockController,
+                keyguardStateController,
+                keyguardUpdateMonitor,
             )
     }
 
@@ -223,6 +227,15 @@ class KeyguardRepositoryImplTest : SysuiTestCase() {
     }
 
     @Test
+    fun isUdfpsSupported() = runBlockingTest {
+        whenever(keyguardUpdateMonitor.isUdfpsSupported).thenReturn(true)
+        assertThat(underTest.isUdfpsSupported()).isTrue()
+
+        whenever(keyguardUpdateMonitor.isUdfpsSupported).thenReturn(false)
+        assertThat(underTest.isUdfpsSupported()).isFalse()
+    }
+
+    @Test
     fun isBouncerShowing() = runBlockingTest {
         whenever(keyguardStateController.isBouncerShowing).thenReturn(false)
         var latest: Boolean? = null
@@ -239,6 +252,48 @@ class KeyguardRepositoryImplTest : SysuiTestCase() {
 
         whenever(keyguardStateController.isBouncerShowing).thenReturn(false)
         captor.value.onBouncerShowingChanged()
+        assertThat(latest).isFalse()
+
+        job.cancel()
+    }
+
+    @Test
+    fun isKeyguardGoingAway() = runBlockingTest {
+        whenever(keyguardStateController.isKeyguardGoingAway).thenReturn(false)
+        var latest: Boolean? = null
+        val job = underTest.isKeyguardGoingAway.onEach { latest = it }.launchIn(this)
+
+        assertThat(latest).isFalse()
+
+        val captor = argumentCaptor<KeyguardStateController.Callback>()
+        verify(keyguardStateController).addCallback(captor.capture())
+
+        whenever(keyguardStateController.isKeyguardGoingAway).thenReturn(true)
+        captor.value.onKeyguardGoingAwayChanged()
+        assertThat(latest).isTrue()
+
+        whenever(keyguardStateController.isKeyguardGoingAway).thenReturn(false)
+        captor.value.onKeyguardGoingAwayChanged()
+        assertThat(latest).isFalse()
+
+        job.cancel()
+    }
+
+    @Test
+    fun isDreaming() = runBlockingTest {
+        whenever(keyguardUpdateMonitor.isDreaming()).thenReturn(false)
+        var latest: Boolean? = null
+        val job = underTest.isDreaming.onEach { latest = it }.launchIn(this)
+
+        assertThat(latest).isFalse()
+
+        val captor = argumentCaptor<KeyguardUpdateMonitorCallback>()
+        verify(keyguardUpdateMonitor).registerCallback(captor.capture())
+
+        captor.value.onDreamingStateChanged(true)
+        assertThat(latest).isTrue()
+
+        captor.value.onDreamingStateChanged(false)
         assertThat(latest).isFalse()
 
         job.cancel()

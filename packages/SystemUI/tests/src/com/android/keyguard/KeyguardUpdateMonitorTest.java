@@ -629,7 +629,7 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
 
     @Test
     public void testNoStartAuthenticate_whenAboutToShowBouncer() {
-        mKeyguardUpdateMonitor.sendKeyguardBouncerChanged(
+        mKeyguardUpdateMonitor.sendPrimaryBouncerChanged(
                 /* bouncerIsOrWillBeShowing */ true, /* bouncerFullyShown */ false);
 
         verify(mFaceManager, never()).authenticate(any(), any(), any(), any(), anyInt(),
@@ -1291,7 +1291,10 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
                 Arrays.asList("Unlocked by wearable"));
 
         // THEN the showTrustGrantedMessage should be called with the first message
-        verify(mTestCallback).showTrustGrantedMessage("Unlocked by wearable");
+        verify(mTestCallback).onTrustGrantedWithFlags(
+                eq(0),
+                eq(KeyguardUpdateMonitor.getCurrentUser()),
+                eq("Unlocked by wearable"));
     }
 
     @Test
@@ -1829,7 +1832,7 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
     }
 
     private void setKeyguardBouncerVisibility(boolean isVisible) {
-        mKeyguardUpdateMonitor.sendKeyguardBouncerChanged(isVisible, isVisible);
+        mKeyguardUpdateMonitor.sendPrimaryBouncerChanged(isVisible, isVisible);
         mTestableLooper.processAllMessages();
     }
 

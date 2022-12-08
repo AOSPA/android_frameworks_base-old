@@ -69,7 +69,6 @@ import static android.view.WindowManager.TRANSIT_TO_FRONT;
 import static android.window.DisplayAreaOrganizer.FEATURE_UNDEFINED;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ADD_REMOVE;
-import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_BACK_PREVIEW;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_LOCKTASK;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_RECENTS_ANIMATIONS;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_STATES;
@@ -614,12 +613,6 @@ class Task extends TaskFragment {
 
     boolean mLastSurfaceShowing = true;
 
-    /**
-     * Tracks if a back gesture is in progress.
-     * Skips any system transition animations if this is set to {@code true}.
-     */
-    boolean mBackGestureStarted = false;
-
     private Task(ActivityTaskManagerService atmService, int _taskId, Intent _intent,
             Intent _affinityIntent, String _affinity, String _rootAffinity,
             ComponentName _realActivity, ComponentName _origActivity, boolean _rootWasReset,
@@ -687,7 +680,7 @@ class Task extends TaskFragment {
         mLaunchCookie = _launchCookie;
         mDeferTaskAppear = _deferTaskAppear;
         mRemoveWithTaskOrganizer = _removeWithTaskOrganizer;
-        EventLogTags.writeWmTaskCreated(mTaskId, isRootTask() ? INVALID_TASK_ID : getRootTaskId());
+        EventLogTags.writeWmTaskCreated(mTaskId);
     }
 
     static Task fromWindowContainerToken(WindowContainerToken token) {
@@ -1304,7 +1297,8 @@ class Task extends TaskFragment {
     }
 
     void updateTaskMovement(boolean toTop, int position) {
-        EventLogTags.writeWmTaskMoved(mTaskId, toTop ? 1 : 0, position);
+        EventLogTags.writeWmTaskMoved(mTaskId, getRootTaskId(), getDisplayId(), toTop ? 1 : 0,
+                position);
         final TaskDisplayArea taskDisplayArea = getDisplayArea();
         if (taskDisplayArea != null && isLeafTask()) {
             taskDisplayArea.onLeafTaskMoved(this, toTop);
@@ -2567,7 +2561,7 @@ class Task extends TaskFragment {
         }
         mRemoving = true;
 
-        EventLogTags.writeWmTaskRemoved(mTaskId, reason);
+        EventLogTags.writeWmTaskRemoved(mTaskId, getRootTaskId(), getDisplayId(), reason);
         clearPinnedTaskIfNeed();
         // If applicable let the TaskOrganizer know the Task is vanishing.
         setTaskOrganizer(null);
@@ -2580,7 +2574,8 @@ class Task extends TaskFragment {
     void reparent(Task rootTask, int position, boolean moveParents, String reason) {
         if (DEBUG_ROOT_TASK) Slog.i(TAG, "reParentTask: removing taskId=" + mTaskId
                 + " from rootTask=" + getRootTask());
-        EventLogTags.writeWmTaskRemoved(mTaskId, "reParentTask:" + reason);
+        EventLogTags.writeWmTaskRemoved(mTaskId, getRootTaskId(), getDisplayId(),
+                "reParentTask:" + reason);
 
         reparent(rootTask, position);
 
@@ -3338,14 +3333,6 @@ class Task extends TaskFragment {
                     }
                 });
             }
-        } else if (mBackGestureStarted) {
-            // Cancel playing transitions if a back navigation animation is in progress.
-            // This bit is set by {@link BackNavigationController} when a back gesture is started.
-            // It is used as a one-off transition overwrite that is cleared when the back gesture
-            // is committed and triggers a transition, or when the gesture is cancelled.
-            mBackGestureStarted = false;
-            mDisplayContent.mSkipAppTransitionAnimation = true;
-            ProtoLog.d(WM_DEBUG_BACK_PREVIEW, "Skipping app transition animation. task=%s", this);
         } else {
             super.applyAnimationUnchecked(lp, enter, transit, isVoiceInteraction, sources);
         }

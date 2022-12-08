@@ -19,14 +19,13 @@ package com.android.systemui.keyguard.ui.viewmodel
 import android.view.View
 import com.android.systemui.keyguard.data.BouncerView
 import com.android.systemui.keyguard.data.BouncerViewDelegate
-import com.android.systemui.keyguard.domain.interactor.BouncerInteractor
+import com.android.systemui.keyguard.domain.interactor.PrimaryBouncerInteractor
 import com.android.systemui.keyguard.shared.model.BouncerShowMessageModel
 import com.android.systemui.keyguard.shared.model.KeyguardBouncerModel
 import com.android.systemui.statusbar.phone.KeyguardBouncer.EXPANSION_VISIBLE
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 
 /** Models UI state for the lock screen bouncer; handles user input. */
@@ -34,7 +33,7 @@ class KeyguardBouncerViewModel
 @Inject
 constructor(
     private val view: BouncerView,
-    private val interactor: BouncerInteractor,
+    private val interactor: PrimaryBouncerInteractor,
 ) {
     /** Observe on bouncer expansion amount. */
     val bouncerExpansionAmount: Flow<Float> = interactor.panelExpansionAmount
@@ -44,13 +43,6 @@ constructor(
 
     /** Observe whether bouncer is showing. */
     val show: Flow<KeyguardBouncerModel> = interactor.show
-
-    /** Observe bouncer prompt when bouncer is showing. */
-    val showPromptReason: Flow<Int> = interactor.show.map { it.promptReason }
-
-    /** Observe bouncer error message when bouncer is showing. */
-    val showBouncerErrorMessage: Flow<CharSequence> =
-        interactor.show.map { it.errorMessage }.filterNotNull()
 
     /** Observe visible expansion when bouncer is showing. */
     val showWithFullExpansion: Flow<KeyguardBouncerModel> =

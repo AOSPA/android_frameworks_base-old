@@ -16,6 +16,8 @@
 
 package com.android.systemui.keyguard.data.repository
 
+import com.android.keyguard.KeyguardUpdateMonitor
+import com.android.keyguard.KeyguardUpdateMonitorCallback
 import com.android.systemui.common.coroutine.ChannelExt.trySendWithFailureLogging
 import com.android.systemui.common.coroutine.ConflatedCallbackFlow.conflatedCallbackFlow
 import com.android.systemui.common.shared.model.Position
@@ -68,6 +70,9 @@ interface KeyguardRepository {
      */
     val isKeyguardShowing: Flow<Boolean>
 
+    /** Observable for the signal that keyguard is about to go away. */
+    val isKeyguardGoingAway: Flow<Boolean>
+
     /** Observable for whether the bouncer is showing. */
     val isBouncerShowing: Flow<Boolean>
 
@@ -82,6 +87,14 @@ interface KeyguardRepository {
      * flow to check if it's greater than `0`
      */
     val isDozing: Flow<Boolean>
+
+    /**
+     * Observable for whether the device is dreaming.
+     *
+     * Dozing/AOD is a specific type of dream, but it is also possible for other non-systemui dreams
+     * to be active, such as screensavers.
+     */
+    val isDreaming: Flow<Boolean>
 
     /**
      * Observable for the amount of doze we are currently in.
@@ -123,6 +136,11 @@ interface KeyguardRepository {
      * Sets the relative offset of the lock-screen clock from its natural position on the screen.
      */
     fun setClockPosition(x: Int, y: Int)
+
+    /**
+     * Returns whether the keyguard bottom area should be constrained to the top of the lock icon
+     */
+    fun isUdfpsSupported(): Boolean
 }
 
 /** Encapsulates application state for the keyguard. */
@@ -131,10 +149,11 @@ class KeyguardRepositoryImpl
 @Inject
 constructor(
     statusBarStateController: StatusBarStateController,
-    private val keyguardStateController: KeyguardStateController,
     dozeHost: DozeHost,
     wakefulnessLifecycle: WakefulnessLifecycle,
     biometricUnlockController: BiometricUnlockController,
+    private val keyguardStateController: KeyguardStateController,
+    private val keyguardUpdateMonitor: KeyguardUpdateMonitor,
 ) : KeyguardRepository {
     private val _animateBottomAreaDozingTransitions = MutableStateFlow(false)
     override val animateBottomAreaDozingTransitions =
@@ -164,6 +183,29 @@ constructor(
             keyguardStateController.isShowing,
             TAG,
             "initial isKeyguardShowing"
+        )
+
+        awaitClose { keyguardStateController.removeCallback(callback) }
+    }
+
+    override val isKeyguardGoingAway: Flow<Boolean> = conflatedCallbackFlow {
+        val callback =
+            object : KeyguardStateController.Callback {
+                override fun onKeyguardGoingAwayChanged() {
+                    trySendWithFailureLogging(
+                        keyguardStateController.isKeyguardGoingAway,
+                        TAG,
+                        "updated isKeyguardGoingAway"
+                    )
+                }
+            }
+
+        keyguardStateController.addCallback(callback)
+        // Adding the callback does not send an initial update.
+        trySendWithFailureLogging(
+            keyguardStateController.isKeyguardGoingAway,
+            TAG,
+            "initial isKeyguardGoingAway"
         )
 
         awaitClose { keyguardStateController.removeCallback(callback) }
@@ -208,6 +250,25 @@ constructor(
                 )
 
                 awaitClose { dozeHost.removeCallback(callback) }
+            }
+            .distinctUntilChanged()
+
+    override val isDreaming: Flow<Boolean> =
+        conflatedCallbackFlow {
+                val callback =
+                    object : KeyguardUpdateMonitorCallback() {
+                        override fun onDreamingStateChanged(isDreaming: Boolean) {
+                            trySendWithFailureLogging(isDreaming, TAG, "updated isDreaming")
+                        }
+                    }
+                keyguardUpdateMonitor.registerCallback(callback)
+                trySendWithFailureLogging(
+                    keyguardUpdateMonitor.isDreaming,
+                    TAG,
+                    "initial isDreaming",
+                )
+
+                awaitClose { keyguardUpdateMonitor.removeCallback(callback) }
             }
             .distinctUntilChanged()
 
@@ -310,6 +371,8 @@ constructor(
     override fun setClockPosition(x: Int, y: Int) {
         _clockPosition.value = Position(x, y)
     }
+
+    override fun isUdfpsSupported(): Boolean = keyguardUpdateMonitor.isUdfpsSupported
 
     private fun statusBarStateIntToObject(value: Int): StatusBarState {
         return when (value) {

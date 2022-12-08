@@ -925,7 +925,7 @@ public class KeyguardIndicationController {
         }
 
         if (mStatusBarKeyguardViewManager.isBouncerShowing()) {
-            if (mStatusBarKeyguardViewManager.isShowingAlternateAuth()) {
+            if (mStatusBarKeyguardViewManager.isShowingAlternateBouncer()) {
                 return; // udfps affordance is highlighted, no need to show action to unlock
             } else if (mKeyguardUpdateMonitor.isFaceEnrolled()) {
                 String message = mContext.getString(R.string.keyguard_retry);
@@ -1179,16 +1179,14 @@ public class KeyguardIndicationController {
 
         @Override
         public void onTrustChanged(int userId) {
-            if (getCurrentUser() != userId) {
-                return;
-            }
+            if (!isCurrentUser(userId)) return;
             updateDeviceEntryIndication(false);
         }
 
         @Override
-        public void showTrustGrantedMessage(CharSequence message) {
-            mTrustGrantedIndication = message;
-            updateDeviceEntryIndication(false);
+        public void onTrustGrantedWithFlags(int flags, int userId, @Nullable String message) {
+            if (!isCurrentUser(userId)) return;
+            showTrustGrantedMessage(flags, message);
         }
 
         @Override
@@ -1248,6 +1246,15 @@ public class KeyguardIndicationController {
         }
     }
 
+    private boolean isCurrentUser(int userId) {
+        return getCurrentUser() == userId;
+    }
+
+    void showTrustGrantedMessage(int flags, @Nullable CharSequence message) {
+        mTrustGrantedIndication = message;
+        updateDeviceEntryIndication(false);
+    }
+
     private void handleFaceLockoutError(String errString) {
         int followupMsgId = canUnlockWithFingerprint() ? R.string.keyguard_suggest_fingerprint
                 : R.string.keyguard_unlock;
@@ -1263,7 +1270,8 @@ public class KeyguardIndicationController {
             showErrorMessageNowOrLater(errString, followupMessage);
         } else if (!mAuthController.isUdfpsFingerDown()) {
             // On subsequent lockouts, we show a more generic locked out message.
-            showBiometricMessage(mContext.getString(R.string.keyguard_face_unlock_unavailable),
+            showErrorMessageNowOrLater(
+                    mContext.getString(R.string.keyguard_face_unlock_unavailable),
                     followupMessage);
         }
     }

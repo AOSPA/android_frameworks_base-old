@@ -65,8 +65,7 @@ abstract class TemporaryViewDisplayController<T : TemporaryViewInfo, U : Tempora
         height = WindowManager.LayoutParams.WRAP_CONTENT
         type = WindowManager.LayoutParams.TYPE_SYSTEM_ERROR
         flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
         format = PixelFormat.TRANSLUCENT
         setTrustedOverlay()
     }
@@ -95,6 +94,13 @@ abstract class TemporaryViewDisplayController<T : TemporaryViewInfo, U : Tempora
     private var wakeReasonAcquired: String? = null
 
     /**
+     * A stack of pairs of device id and temporary view info. This is used when there may be
+     * multiple devices in range, and we want to always display the chip for the most recently
+     * active device.
+     */
+    internal val activeViews: ArrayDeque<Pair<String, T>> = ArrayDeque()
+
+    /**
      * Displays the view with the provided [newInfo].
      *
      * This method handles inflating and attaching the view, then delegates to [updateView] to
@@ -102,6 +108,12 @@ abstract class TemporaryViewDisplayController<T : TemporaryViewInfo, U : Tempora
      */
     fun displayView(newInfo: T) {
         val currentDisplayInfo = displayInfo
+
+        // Update our list of active devices by removing it if necessary, then adding back at the
+        // front of the list
+        val id = newInfo.id
+        val position = findAndRemoveFromActiveViewsList(id)
+        activeViews.addFirst(Pair(id, newInfo))
 
         if (currentDisplayInfo != null &&
             currentDisplayInfo.info.windowTitle == newInfo.windowTitle) {
@@ -114,27 +126,37 @@ abstract class TemporaryViewDisplayController<T : TemporaryViewInfo, U : Tempora
                 // We're already displaying information but that information is under a different
                 // window title. So, we need to remove the old window with the old title and add a
                 // new window with the new title.
-                removeView(removalReason = "New info has new window title: ${newInfo.windowTitle}")
+                removeView(
+                    id,
+                    removalReason = "New info has new window title: ${newInfo.windowTitle}"
+                )
             }
 
             // At this point, we're guaranteed to no longer be displaying a view.
             // So, set up all our callbacks and inflate the view.
             configurationController.addCallback(displayScaleListener)
-            // Wake the screen if necessary so the user will see the view. (Per b/239426653, we want
-            // the view to show over the dream state, so we should only wake up if the screen is
-            // completely off.)
-            if (!powerManager.isScreenOn) {
-                wakeLock = wakeLockBuilder
+
+            wakeLock = if (!powerManager.isScreenOn) {
+                // If the screen is off, fully wake it so the user can see the view.
+                wakeLockBuilder
                     .setTag(newInfo.windowTitle)
                     .setLevelsAndFlags(
-                        PowerManager.FULL_WAKE_LOCK or
-                        PowerManager.ACQUIRE_CAUSES_WAKEUP
+                            PowerManager.FULL_WAKE_LOCK or
+                                PowerManager.ACQUIRE_CAUSES_WAKEUP
                     )
                     .build()
-                wakeLock?.acquire(newInfo.wakeReason)
-                wakeReasonAcquired = newInfo.wakeReason
+            } else {
+                // Per b/239426653, we want the view to show over the dream state.
+                // If the screen is on, using screen bright level will leave screen on the dream
+                // state but ensure the screen will not go off before wake lock is released.
+                wakeLockBuilder
+                    .setTag(newInfo.windowTitle)
+                    .setLevelsAndFlags(PowerManager.SCREEN_BRIGHT_WAKE_LOCK)
+                    .build()
             }
-            logger.logViewAddition(newInfo.windowTitle)
+            wakeLock?.acquire(newInfo.wakeReason)
+            wakeReasonAcquired = newInfo.wakeReason
+            logger.logViewAddition(id, newInfo.windowTitle)
             inflateAndUpdateView(newInfo)
         }
 
@@ -145,9 +167,13 @@ abstract class TemporaryViewDisplayController<T : TemporaryViewInfo, U : Tempora
             // include it just to be safe.
             FLAG_CONTENT_ICONS or FLAG_CONTENT_TEXT or FLAG_CONTENT_CONTROLS
        )
-        cancelViewTimeout?.run()
+
+        // Only cancel timeout of the most recent view displayed, as it will be reset.
+        if (position == 0) {
+            cancelViewTimeout?.run()
+        }
         cancelViewTimeout = mainExecutor.executeDelayed(
-            { removeView(REMOVAL_REASON_TIMEOUT) },
+            { removeView(id, REMOVAL_REASON_TIMEOUT) },
             timeout.toLong()
         )
     }
@@ -190,13 +216,31 @@ abstract class TemporaryViewDisplayController<T : TemporaryViewInfo, U : Tempora
     }
 
     /**
-     * Hides the view.
+     * Hides the view given its [id].
      *
+     * @param id the id of the device responsible of displaying the temp view.
      * @param removalReason a short string describing why the view was removed (timeout, state
      *     change, etc.)
      */
-    fun removeView(removalReason: String) {
+    fun removeView(id: String, removalReason: String) {
         val currentDisplayInfo = displayInfo ?: return
+
+        val removalPosition = findAndRemoveFromActiveViewsList(id)
+        if (removalPosition == null) {
+            logger.logViewRemovalIgnored(id, "view not found in the list")
+            return
+        }
+        if (removalPosition != 0) {
+            logger.logViewRemovalIgnored(id, "most recent view is being displayed.")
+            return
+        }
+        logger.logViewRemoval(id, removalReason)
+
+        val newViewToDisplay = if (activeViews.isEmpty()) {
+            null
+        } else {
+            activeViews[0].second
+        }
 
         val currentView = currentDisplayInfo.view
         animateViewOut(currentView) {
@@ -204,14 +248,35 @@ abstract class TemporaryViewDisplayController<T : TemporaryViewInfo, U : Tempora
             wakeLock?.release(wakeReasonAcquired)
         }
 
-        logger.logViewRemoval(removalReason)
         configurationController.removeCallback(displayScaleListener)
         // Re-set to null immediately (instead as part of the animation end runnable) so
-        // that if a new view event comes in while this view is animating out, we still display the
-        // new view appropriately.
+        // that if a new view event comes in while this view is animating out, we still display
+        // the new view appropriately.
         displayInfo = null
         // No need to time the view out since it's already gone
         cancelViewTimeout?.run()
+
+        if (newViewToDisplay != null) {
+            mainExecutor.executeDelayed({ displayView(newViewToDisplay)}, DISPLAY_VIEW_DELAY)
+        }
+    }
+
+    /**
+     * Finds and removes the active view with the given [id] from the stack, or null if there is no
+     * active view with that ID
+     *
+     * @param id that temporary view belonged to.
+     *
+     * @return index of the view in the stack , otherwise null.
+     */
+    private fun findAndRemoveFromActiveViewsList(id: String): Int? {
+        for (i in 0 until activeViews.size) {
+            if (activeViews[i].first == id) {
+                activeViews.removeAt(i)
+                return i
+            }
+        }
+        return null
     }
 
     /**
@@ -252,6 +317,7 @@ abstract class TemporaryViewDisplayController<T : TemporaryViewInfo, U : Tempora
 }
 
 private const val REMOVAL_REASON_TIMEOUT = "TIMEOUT"
+const val DISPLAY_VIEW_DELAY = 50L
 
 private data class IconInfo(
     val iconName: String,
