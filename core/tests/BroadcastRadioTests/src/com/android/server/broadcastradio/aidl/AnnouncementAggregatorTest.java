@@ -19,7 +19,6 @@ package com.android.server.broadcastradio.aidl;
 import static com.google.common.truth.Truth.assertWithMessage;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -57,11 +56,8 @@ public final class AnnouncementAggregatorTest {
     private IAnnouncementListener mListenerMock;
     @Mock
     private IBinder mBinderMock;
-    // Array of mocked radio modules
     private RadioModule[] mRadioModuleMocks;
-    // Array of mocked close handles
     private ICloseHandle[] mCloseHandleMocks;
-    // Array of mocked announcements
     private Announcement[] mAnnouncementMocks;
 
     @Before
@@ -72,7 +68,7 @@ public final class AnnouncementAggregatorTest {
 
         mAnnouncementAggregator = new AnnouncementAggregator(mListenerMock, mLock);
 
-        verify(mBinderMock).linkToDeath(deathRecipientCaptor.capture(), anyInt());
+        verify(mBinderMock).linkToDeath(deathRecipientCaptor.capture(), eq(0));
         mDeathRecipient = deathRecipientCaptor.getValue();
     }
 
@@ -105,7 +101,8 @@ public final class AnnouncementAggregatorTest {
             moduleWatcherCaptor.getValue().onListUpdated(Arrays.asList(mAnnouncementMocks[index]));
 
             verify(mListenerMock, times(index + 1)).onListUpdated(announcementsCaptor.capture());
-            assertWithMessage("Number of announcements %s", announcementsCaptor.getValue())
+            assertWithMessage("Number of announcements %s after %s announcements were updated",
+                    announcementsCaptor.getValue(), index + 1)
                     .that(announcementsCaptor.getValue().size()).isEqualTo(index + 1);
         }
     }
@@ -117,7 +114,7 @@ public final class AnnouncementAggregatorTest {
         mAnnouncementAggregator.close();
 
         verify(mCloseHandleMocks[0]).close();
-        verify(mBinderMock).unlinkToDeath(eq(mDeathRecipient), anyInt());
+        verify(mBinderMock).unlinkToDeath(mDeathRecipient, 0);
     }
 
     @Test
@@ -140,7 +137,7 @@ public final class AnnouncementAggregatorTest {
         mAnnouncementAggregator.close();
 
         verify(mCloseHandleMocks[0]).close();
-        verify(mBinderMock).unlinkToDeath(eq(mDeathRecipient), anyInt());
+        verify(mBinderMock).unlinkToDeath(mDeathRecipient, 0);
     }
 
     @Test

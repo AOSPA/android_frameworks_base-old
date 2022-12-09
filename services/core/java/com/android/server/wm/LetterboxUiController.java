@@ -501,12 +501,16 @@ final class LetterboxUiController {
 
             if (hasVisibleTaskbar(mainWindow)) {
                 cropBounds = new Rect(mActivityRecord.getBounds());
+
+                // Rounded corners should be displayed above the taskbar.
+                // It is important to call adjustBoundsForTaskbarUnchecked before offsetTo
+                // because taskbar bounds are in screen coordinates
+                adjustBoundsForTaskbarUnchecked(mainWindow, cropBounds);
+
                 // Activity bounds are in screen coordinates while (0,0) for activity's surface
                 // control is at the top left corner of an app window so offsetting bounds
                 // accordingly.
                 cropBounds.offsetTo(0, 0);
-                // Rounded corners should be displayed above the taskbar.
-                adjustBoundsForTaskbarUnchecked(mainWindow, cropBounds);
             }
 
             transaction
@@ -576,9 +580,8 @@ final class LetterboxUiController {
         // Rounded corners should be displayed above the taskbar.
         bounds.bottom =
                 Math.min(bounds.bottom, getTaskbarInsetsSource(mainWindow).getFrame().top);
-        if (mActivityRecord.inSizeCompatMode()
-                && mActivityRecord.getSizeCompatScale() < 1.0f) {
-            bounds.scale(1.0f / mActivityRecord.getSizeCompatScale());
+        if (mActivityRecord.inSizeCompatMode() && mActivityRecord.getCompatScale() < 1.0f) {
+            bounds.scale(1.0f / mActivityRecord.getCompatScale());
         }
     }
 

@@ -3007,7 +3007,11 @@ public class TelephonyManager {
     public static final int NETWORK_TYPE_HSUPA = TelephonyProtoEnums.NETWORK_TYPE_HSUPA; // = 9.
     /** Current network is HSPA */
     public static final int NETWORK_TYPE_HSPA = TelephonyProtoEnums.NETWORK_TYPE_HSPA; // = 10.
-    /** Current network is iDen */
+    /**
+     * Current network is iDen
+     * @deprecated Legacy network type no longer being used.
+     */
+    @Deprecated
     public static final int NETWORK_TYPE_IDEN = TelephonyProtoEnums.NETWORK_TYPE_IDEN; // = 11.
     /** Current network is EVDO revision B*/
     public static final int NETWORK_TYPE_EVDO_B = TelephonyProtoEnums.NETWORK_TYPE_EVDO_B; // = 12.
@@ -14018,6 +14022,7 @@ public class TelephonyManager {
     public static final long NETWORK_TYPE_BITMASK_HSPA = (1 << (NETWORK_TYPE_HSPA -1));
     /**
      * network type bitmask indicating the support of radio tech iDen.
+     * @hide
      */
     public static final long NETWORK_TYPE_BITMASK_IDEN = (1 << (NETWORK_TYPE_IDEN - 1));
     /**
@@ -17354,14 +17359,14 @@ public class TelephonyManager {
     public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_NETWORK_NOT_AVAILABLE = 12;
 
     /**
-     * Purchase premium capability failed because the network is congested.
+     * Purchase premium capability failed because the entitlement check failed.
      * Subsequent attempts will be throttled for the amount of time specified by
      * {@link CarrierConfigManager
      * #KEY_PREMIUM_CAPABILITY_PURCHASE_CONDITION_BACKOFF_HYSTERESIS_TIME_MILLIS_LONG}
      * and return {@link #PURCHASE_PREMIUM_CAPABILITY_RESULT_THROTTLED}.
      * Throttling will be reevaluated when the network is no longer congested.
      */
-    public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_NETWORK_CONGESTED = 13;
+    public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_ENTITLEMENT_CHECK_FAILED = 13;
 
     /**
      * Purchase premium capability failed because the request was not made on the default data
@@ -17398,7 +17403,7 @@ public class TelephonyManager {
             PURCHASE_PREMIUM_CAPABILITY_RESULT_TIMEOUT,
             PURCHASE_PREMIUM_CAPABILITY_RESULT_FEATURE_NOT_SUPPORTED,
             PURCHASE_PREMIUM_CAPABILITY_RESULT_NETWORK_NOT_AVAILABLE,
-            PURCHASE_PREMIUM_CAPABILITY_RESULT_NETWORK_CONGESTED,
+            PURCHASE_PREMIUM_CAPABILITY_RESULT_ENTITLEMENT_CHECK_FAILED,
             PURCHASE_PREMIUM_CAPABILITY_RESULT_NOT_DEFAULT_DATA_SUB,
             PURCHASE_PREMIUM_CAPABILITY_RESULT_PENDING_NETWORK_SETUP})
     public @interface PurchasePremiumCapabilityResult {}
@@ -17437,8 +17442,8 @@ public class TelephonyManager {
                 return "REQUEST_FAILED";
             case PURCHASE_PREMIUM_CAPABILITY_RESULT_NETWORK_NOT_AVAILABLE:
                 return "NETWORK_NOT_AVAILABLE";
-            case PURCHASE_PREMIUM_CAPABILITY_RESULT_NETWORK_CONGESTED:
-                return "NETWORK_CONGESTED";
+            case PURCHASE_PREMIUM_CAPABILITY_RESULT_ENTITLEMENT_CHECK_FAILED:
+                return "ENTITLEMENT_CHECK_FAILED";
             case PURCHASE_PREMIUM_CAPABILITY_RESULT_NOT_DEFAULT_DATA_SUB:
                 return "NOT_DEFAULT_DATA_SUB";
             case PURCHASE_PREMIUM_CAPABILITY_RESULT_PENDING_NETWORK_SETUP:

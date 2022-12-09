@@ -258,8 +258,6 @@ public interface CentralSurfaces extends Dumpable, ActivityStarter, LifecycleOwn
 
     void onKeyguardViewManagerStatesUpdated();
 
-    void setPanelExpanded(boolean isExpanded);
-
     ViewGroup getNotificationScrollLayout();
 
     boolean isPulsing();
@@ -456,7 +454,11 @@ public interface CentralSurfaces extends Dumpable, ActivityStarter, LifecycleOwn
 
     void setTransitionToFullShadeProgress(float transitionToFullShadeProgress);
 
-    void setBouncerHiddenFraction(float expansion);
+    /**
+     * Sets the amount of progress to the bouncer being fully hidden/visible. 1 means the bouncer
+     * is fully hidden, while 0 means the bouncer is visible.
+     */
+    void setPrimaryBouncerHiddenFraction(float expansion);
 
     @VisibleForTesting
     void updateScrimController();

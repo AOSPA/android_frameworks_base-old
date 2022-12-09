@@ -40,6 +40,7 @@ import android.util.AtomicFile;
 import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
+import android.util.SparseBooleanArray;
 import android.util.SystemConfigFileCommitEventLogger;
 import android.util.Xml;
 
@@ -47,6 +48,7 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.BitUtils;
+import com.android.modules.utils.TypedXmlPullParser;
 import com.android.modules.utils.TypedXmlSerializer;
 import com.android.server.IoThread;
 import com.android.server.job.JobSchedulerInternal.JobStorePersistStats;
@@ -89,6 +91,8 @@ public final class JobStore {
 
     /** Threshold to adjust how often we want to write to the db. */
     private static final long JOB_PERSIST_DELAY = 2000L;
+    private static final String JOB_FILE_SPLIT_PREFIX = "jobs_";
+    private static final int ALL_UIDS = -1;
 
     final Object mLock;
     final Object mWriteScheduleLock;    // used solely for invariants around write scheduling
@@ -105,12 +109,19 @@ public final class JobStore {
     @GuardedBy("mWriteScheduleLock")
     private boolean mWriteInProgress;
 
+    @GuardedBy("mWriteScheduleLock")
+    private boolean mSplitFileMigrationNeeded;
+
     private static final Object sSingletonLock = new Object();
     private final SystemConfigFileCommitEventLogger mEventLogger;
     private final AtomicFile mJobsFile;
+    private final File mJobFileDirectory;
+    private final SparseBooleanArray mPendingJobWriteUids = new SparseBooleanArray();
     /** Handler backed by IoThread for writing to disk. */
     private final Handler mIoHandler = IoThread.getHandler();
     private static JobStore sSingleton;
+
+    private boolean mUseSplitFiles = JobSchedulerService.Constants.DEFAULT_PERSIST_IN_SPLIT_FILES;
 
     private JobStorePersistStats mPersistInfo = new JobStorePersistStats();
 
@@ -144,10 +155,10 @@ public final class JobStore {
         mContext = context;
 
         File systemDir = new File(dataDir, "system");
-        File jobDir = new File(systemDir, "job");
-        jobDir.mkdirs();
+        mJobFileDirectory = new File(systemDir, "job");
+        mJobFileDirectory.mkdirs();
         mEventLogger = new SystemConfigFileCommitEventLogger("jobs");
-        mJobsFile = new AtomicFile(new File(jobDir, "jobs.xml"), mEventLogger);
+        mJobsFile = createJobFile(new File(mJobFileDirectory, "jobs.xml"));
 
         mJobSet = new JobSet();
 
@@ -162,10 +173,19 @@ public final class JobStore {
         // an incorrect historical timestamp.  That's fine; at worst we'll reboot with
         // a *correct* timestamp, see a bunch of overdue jobs, and run them; then
         // settle into normal operation.
-        mXmlTimestamp = mJobsFile.getLastModifiedTime();
+        mXmlTimestamp = mJobsFile.exists()
+                ? mJobsFile.getLastModifiedTime() : mJobFileDirectory.lastModified();
         mRtcGood = (sSystemClock.millis() > mXmlTimestamp);
 
         readJobMapFromDisk(mJobSet, mRtcGood);
+    }
+
+    private AtomicFile createJobFile(String baseName) {
+        return createJobFile(new File(mJobFileDirectory, baseName + ".xml"));
+    }
+
+    private AtomicFile createJobFile(File file) {
+        return new AtomicFile(file, mEventLogger);
     }
 
     public boolean jobTimesInflatedValid() {
@@ -211,6 +231,7 @@ public final class JobStore {
     public void add(JobStatus jobStatus) {
         mJobSet.add(jobStatus);
         if (jobStatus.isPersisted()) {
+            mPendingJobWriteUids.put(jobStatus.getUid(), true);
             maybeWriteStatusToDiskAsync();
         }
         if (DEBUG) {
@@ -224,6 +245,9 @@ public final class JobStore {
     @VisibleForTesting
     public void addForTesting(JobStatus jobStatus) {
         mJobSet.add(jobStatus);
+        if (jobStatus.isPersisted()) {
+            mPendingJobWriteUids.put(jobStatus.getUid(), true);
+        }
     }
 
     boolean containsJob(JobStatus jobStatus) {
@@ -257,9 +281,21 @@ public final class JobStore {
             return false;
         }
         if (removeFromPersisted && jobStatus.isPersisted()) {
+            mPendingJobWriteUids.put(jobStatus.getUid(), true);
             maybeWriteStatusToDiskAsync();
         }
         return removed;
+    }
+
+    /**
+     * Like {@link #remove(JobStatus, boolean)}, but doesn't schedule a disk write.
+     */
+    @VisibleForTesting
+    public void removeForTesting(JobStatus jobStatus) {
+        mJobSet.remove(jobStatus);
+        if (jobStatus.isPersisted()) {
+            mPendingJobWriteUids.put(jobStatus.getUid(), true);
+        }
     }
 
     /**
@@ -273,6 +309,7 @@ public final class JobStore {
     @VisibleForTesting
     public void clear() {
         mJobSet.clear();
+        mPendingJobWriteUids.put(ALL_UIDS, true);
         maybeWriteStatusToDiskAsync();
     }
 
@@ -282,6 +319,36 @@ public final class JobStore {
     @VisibleForTesting
     public void clearForTesting() {
         mJobSet.clear();
+        mPendingJobWriteUids.put(ALL_UIDS, true);
+    }
+
+    void setUseSplitFiles(boolean useSplitFiles) {
+        synchronized (mLock) {
+            if (mUseSplitFiles != useSplitFiles) {
+                mUseSplitFiles = useSplitFiles;
+                migrateJobFilesAsync();
+            }
+        }
+    }
+
+    /**
+     * The same as above but does not schedule writing. This makes perf benchmarks more stable.
+     */
+    @VisibleForTesting
+    public void setUseSplitFilesForTesting(boolean useSplitFiles) {
+        final boolean changed;
+        synchronized (mLock) {
+            changed = mUseSplitFiles != useSplitFiles;
+            if (changed) {
+                mUseSplitFiles = useSplitFiles;
+                mPendingJobWriteUids.put(ALL_UIDS, true);
+            }
+        }
+        if (changed) {
+            synchronized (mWriteScheduleLock) {
+                mSplitFileMigrationNeeded = true;
+            }
+        }
     }
 
     /**
@@ -351,6 +418,16 @@ public final class JobStore {
     private static final String XML_TAG_PERIODIC = "periodic";
     private static final String XML_TAG_ONEOFF = "one-off";
     private static final String XML_TAG_EXTRAS = "extras";
+
+    private void migrateJobFilesAsync() {
+        synchronized (mLock) {
+            mPendingJobWriteUids.put(ALL_UIDS, true);
+        }
+        synchronized (mWriteScheduleLock) {
+            mSplitFileMigrationNeeded = true;
+            maybeWriteStatusToDiskAsync();
+        }
+    }
 
     /**
      * Every time the state changes we write all the jobs in one swath, instead of trying to
@@ -449,10 +526,38 @@ public final class JobStore {
      * NOTE: This Runnable locks on mLock
      */
     private final Runnable mWriteRunnable = new Runnable() {
+        private final SparseArray<AtomicFile> mJobFiles = new SparseArray<>();
+        private final CopyConsumer mPersistedJobCopier = new CopyConsumer();
+
+        class CopyConsumer implements Consumer<JobStatus> {
+            private final SparseArray<List<JobStatus>> mJobStoreCopy = new SparseArray<>();
+            private boolean mCopyAllJobs;
+
+            private void prepare() {
+                mCopyAllJobs = !mUseSplitFiles || mPendingJobWriteUids.get(ALL_UIDS);
+            }
+
+            @Override
+            public void accept(JobStatus jobStatus) {
+                final int uid = mUseSplitFiles ? jobStatus.getUid() : ALL_UIDS;
+                if (jobStatus.isPersisted() && (mCopyAllJobs || mPendingJobWriteUids.get(uid))) {
+                    List<JobStatus> uidJobList = mJobStoreCopy.get(uid);
+                    if (uidJobList == null) {
+                        uidJobList = new ArrayList<>();
+                        mJobStoreCopy.put(uid, uidJobList);
+                    }
+                    uidJobList.add(new JobStatus(jobStatus));
+                }
+            }
+
+            private void reset() {
+                mJobStoreCopy.clear();
+            }
+        }
+
         @Override
         public void run() {
             final long startElapsed = sElapsedRealtimeClock.millis();
-            final List<JobStatus> storeCopy = new ArrayList<JobStatus>();
             // Intentionally allow new scheduling of a write operation *before* we clone
             // the job set.  If we reset it to false after cloning, there's a window in
             // which no new write will be scheduled but mLock is not held, i.e. a new
@@ -469,31 +574,73 @@ public final class JobStore {
                 }
                 mWriteInProgress = true;
             }
+            final boolean useSplitFiles;
             synchronized (mLock) {
                 // Clone the jobs so we can release the lock before writing.
-                mJobSet.forEachJob(null, (job) -> {
-                    if (job.isPersisted()) {
-                        storeCopy.add(new JobStatus(job));
-                    }
-                });
+                useSplitFiles = mUseSplitFiles;
+                mPersistedJobCopier.prepare();
+                mJobSet.forEachJob(null, mPersistedJobCopier);
+                mPendingJobWriteUids.clear();
             }
-            writeJobsMapImpl(storeCopy);
+            mPersistInfo.countAllJobsSaved = 0;
+            mPersistInfo.countSystemServerJobsSaved = 0;
+            mPersistInfo.countSystemSyncManagerJobsSaved = 0;
+            for (int i = mPersistedJobCopier.mJobStoreCopy.size() - 1; i >= 0; --i) {
+                AtomicFile file;
+                if (useSplitFiles) {
+                    final int uid = mPersistedJobCopier.mJobStoreCopy.keyAt(i);
+                    file = mJobFiles.get(uid);
+                    if (file == null) {
+                        file = createJobFile(JOB_FILE_SPLIT_PREFIX + uid);
+                        mJobFiles.put(uid, file);
+                    }
+                } else {
+                    file = mJobsFile;
+                }
+                if (DEBUG) {
+                    Slog.d(TAG, "Writing for " + mPersistedJobCopier.mJobStoreCopy.keyAt(i)
+                            + " to " + file.getBaseFile().getName() + ": "
+                            + mPersistedJobCopier.mJobStoreCopy.valueAt(i).size() + " jobs");
+                }
+                writeJobsMapImpl(file, mPersistedJobCopier.mJobStoreCopy.valueAt(i));
+            }
             if (DEBUG) {
                 Slog.v(TAG, "Finished writing, took " + (sElapsedRealtimeClock.millis()
                         - startElapsed) + "ms");
             }
+            mPersistedJobCopier.reset();
+            if (!useSplitFiles) {
+                mJobFiles.clear();
+            }
+            // Update the last modified time of the directory to aid in RTC time verification
+            // (see the JobStore constructor).
+            mJobFileDirectory.setLastModified(sSystemClock.millis());
             synchronized (mWriteScheduleLock) {
+                if (mSplitFileMigrationNeeded) {
+                    final File[] files = mJobFileDirectory.listFiles();
+                    for (File file : files) {
+                        if (useSplitFiles) {
+                            if (!file.getName().startsWith(JOB_FILE_SPLIT_PREFIX)) {
+                                // Delete the now unused file so there's no confusion in the future.
+                                file.delete();
+                            }
+                        } else if (file.getName().startsWith(JOB_FILE_SPLIT_PREFIX)) {
+                            // Delete the now unused file so there's no confusion in the future.
+                            file.delete();
+                        }
+                    }
+                }
                 mWriteInProgress = false;
                 mWriteScheduleLock.notifyAll();
             }
         }
 
-        private void writeJobsMapImpl(List<JobStatus> jobList) {
+        private void writeJobsMapImpl(@NonNull AtomicFile file, @NonNull List<JobStatus> jobList) {
             int numJobs = 0;
             int numSystemJobs = 0;
             int numSyncJobs = 0;
             mEventLogger.setStartTime(SystemClock.uptimeMillis());
-            try (FileOutputStream fos = mJobsFile.startWrite()) {
+            try (FileOutputStream fos = file.startWrite()) {
                 TypedXmlSerializer out = Xml.resolveSerializer(fos);
                 out.startDocument(null, true);
                 out.setFeature("http://xmlpull.org/v1/doc/features.html#indent-output", true);
@@ -523,7 +670,7 @@ public final class JobStore {
                 out.endTag(null, "job-info");
                 out.endDocument();
 
-                mJobsFile.finishWrite(fos);
+                file.finishWrite(fos);
             } catch (IOException e) {
                 if (DEBUG) {
                     Slog.v(TAG, "Error writing out job data.", e);
@@ -533,9 +680,9 @@ public final class JobStore {
                     Slog.d(TAG, "Error persisting bundle.", e);
                 }
             } finally {
-                mPersistInfo.countAllJobsSaved = numJobs;
-                mPersistInfo.countSystemServerJobsSaved = numSystemJobs;
-                mPersistInfo.countSystemSyncManagerJobsSaved = numSyncJobs;
+                mPersistInfo.countAllJobsSaved += numJobs;
+                mPersistInfo.countSystemServerJobsSaved += numSystemJobs;
+                mPersistInfo.countSystemSyncManagerJobsSaved += numSyncJobs;
             }
         }
 
@@ -600,9 +747,11 @@ public final class JobStore {
          *       because currently store is not including everything (like, UIDs, bandwidth,
          *       signal strength etc. are lost).
          */
-        private void writeConstraintsToXml(XmlSerializer out, JobStatus jobStatus) throws IOException {
+        private void writeConstraintsToXml(TypedXmlSerializer out, JobStatus jobStatus)
+                throws IOException {
             out.startTag(null, XML_TAG_PARAMS_CONSTRAINTS);
             if (jobStatus.hasConnectivityConstraint()) {
+                final JobInfo job = jobStatus.getJob();
                 final NetworkRequest network = jobStatus.getJob().getRequiredNetwork();
                 out.attribute(null, "net-capabilities-csv", intArrayToString(
                         network.getCapabilities()));
@@ -610,6 +759,18 @@ public final class JobStore {
                         network.getForbiddenCapabilities()));
                 out.attribute(null, "net-transport-types-csv", intArrayToString(
                         network.getTransportTypes()));
+                if (job.getEstimatedNetworkDownloadBytes() != JobInfo.NETWORK_BYTES_UNKNOWN) {
+                    out.attributeLong(null, "estimated-download-bytes",
+                            job.getEstimatedNetworkDownloadBytes());
+                }
+                if (job.getEstimatedNetworkUploadBytes() != JobInfo.NETWORK_BYTES_UNKNOWN) {
+                    out.attributeLong(null, "estimated-upload-bytes",
+                            job.getEstimatedNetworkUploadBytes());
+                }
+                if (job.getMinimumNetworkChunkBytes() != JobInfo.NETWORK_BYTES_UNKNOWN) {
+                    out.attributeLong(null, "minimum-network-chunk-bytes",
+                            job.getMinimumNetworkChunkBytes());
+                }
             }
             if (jobStatus.hasIdleConstraint()) {
                 out.attribute(null, "idle", Boolean.toString(true));
@@ -720,54 +881,87 @@ public final class JobStore {
 
         @Override
         public void run() {
+            if (!mJobFileDirectory.isDirectory()) {
+                Slog.wtf(TAG, "jobs directory isn't a directory O.O");
+                mJobFileDirectory.mkdirs();
+                return;
+            }
+
             int numJobs = 0;
             int numSystemJobs = 0;
             int numSyncJobs = 0;
             List<JobStatus> jobs;
-            try (FileInputStream fis = mJobsFile.openRead()) {
-                synchronized (mLock) {
-                    jobs = readJobMapImpl(fis, rtcGood);
-                    if (jobs != null) {
-                        long now = sElapsedRealtimeClock.millis();
-                        for (int i=0; i<jobs.size(); i++) {
-                            JobStatus js = jobs.get(i);
-                            js.prepareLocked();
-                            js.enqueueTime = now;
-                            this.jobSet.add(js);
+            final File[] files;
+            try {
+                files = mJobFileDirectory.listFiles();
+            } catch (SecurityException e) {
+                Slog.wtf(TAG, "Not allowed to read job file directory", e);
+                return;
+            }
+            if (files == null) {
+                Slog.wtfStack(TAG, "Couldn't get job file list");
+                return;
+            }
+            boolean needFileMigration = false;
+            long now = sElapsedRealtimeClock.millis();
+            for (File file : files) {
+                final AtomicFile aFile = createJobFile(file);
+                try (FileInputStream fis = aFile.openRead()) {
+                    synchronized (mLock) {
+                        jobs = readJobMapImpl(fis, rtcGood);
+                        if (jobs != null) {
+                            for (int i = 0; i < jobs.size(); i++) {
+                                JobStatus js = jobs.get(i);
+                                js.prepareLocked();
+                                js.enqueueTime = now;
+                                this.jobSet.add(js);
 
-                            numJobs++;
-                            if (js.getUid() == Process.SYSTEM_UID) {
-                                numSystemJobs++;
-                                if (isSyncJob(js)) {
-                                    numSyncJobs++;
+                                numJobs++;
+                                if (js.getUid() == Process.SYSTEM_UID) {
+                                    numSystemJobs++;
+                                    if (isSyncJob(js)) {
+                                        numSyncJobs++;
+                                    }
                                 }
                             }
                         }
                     }
+                } catch (FileNotFoundException e) {
+                    // mJobFileDirectory.listFiles() gave us this file...why can't we find it???
+                    Slog.e(TAG, "Could not find jobs file: " + file.getName());
+                } catch (XmlPullParserException | IOException e) {
+                    Slog.wtf(TAG, "Error in " + file.getName(), e);
+                } catch (Exception e) {
+                    // Crashing at this point would result in a boot loop, so live with a general
+                    // Exception for system stability's sake.
+                    Slog.wtf(TAG, "Unexpected exception", e);
                 }
-            } catch (FileNotFoundException e) {
-                if (DEBUG) {
-                    Slog.d(TAG, "Could not find jobs file, probably there was nothing to load.");
-                }
-            } catch (XmlPullParserException | IOException e) {
-                Slog.wtf(TAG, "Error jobstore xml.", e);
-            } catch (Exception e) {
-                // Crashing at this point would result in a boot loop, so live with a general
-                // Exception for system stability's sake.
-                Slog.wtf(TAG, "Unexpected exception", e);
-            } finally {
-                if (mPersistInfo.countAllJobsLoaded < 0) { // Only set them once.
-                    mPersistInfo.countAllJobsLoaded = numJobs;
-                    mPersistInfo.countSystemServerJobsLoaded = numSystemJobs;
-                    mPersistInfo.countSystemSyncManagerJobsLoaded = numSyncJobs;
+                if (mUseSplitFiles) {
+                    if (!file.getName().startsWith(JOB_FILE_SPLIT_PREFIX)) {
+                        // We're supposed to be using the split file architecture, but we still have
+                        // the old job file around. Fully migrate and remove the old file.
+                        needFileMigration = true;
+                    }
+                } else if (file.getName().startsWith(JOB_FILE_SPLIT_PREFIX)) {
+                    // We're supposed to be using the legacy single file architecture, but we still
+                    // have some job split files around. Fully migrate and remove the split files.
+                    needFileMigration = true;
                 }
             }
+            if (mPersistInfo.countAllJobsLoaded < 0) { // Only set them once.
+                mPersistInfo.countAllJobsLoaded = numJobs;
+                mPersistInfo.countSystemServerJobsLoaded = numSystemJobs;
+                mPersistInfo.countSystemSyncManagerJobsLoaded = numSyncJobs;
+            }
             Slog.i(TAG, "Read " + numJobs + " jobs");
+            if (needFileMigration) {
+                migrateJobFilesAsync();
+            }
         }
 
         private List<JobStatus> readJobMapImpl(InputStream fis, boolean rtcIsGood)
                 throws XmlPullParserException, IOException {
-            XmlPullParser parser = Xml.resolvePullParser(fis);
+            TypedXmlPullParser parser = Xml.resolvePullParser(fis);
 
             int eventType = parser.getEventType();
             while (eventType != XmlPullParser.START_TAG &&
@@ -827,7 +1021,7 @@ public final class JobStore {
          *               will take the parser into the body of the job tag.
          * @return Newly instantiated job holding all the information we just read out of the xml tag.
          */
-        private JobStatus restoreJobFromXml(boolean rtcIsGood, XmlPullParser parser,
+        private JobStatus restoreJobFromXml(boolean rtcIsGood, TypedXmlPullParser parser,
                 int schemaVersion) throws XmlPullParserException, IOException {
             JobInfo.Builder jobBuilder;
             int uid, sourceUserId;
@@ -1073,7 +1267,7 @@ public final class JobStore {
          * reading, but in order to avoid issues with OEM-defined flags, the accepted capabilities
          * are limited to that(maxNetCapabilityInR & maxTransportInR) defined in R.
          */
-        private void buildConstraintsFromXml(JobInfo.Builder jobBuilder, XmlPullParser parser)
+        private void buildConstraintsFromXml(JobInfo.Builder jobBuilder, TypedXmlPullParser parser)
                 throws XmlPullParserException, IOException {
             String val;
             String netCapabilitiesLong = null;
@@ -1110,7 +1304,17 @@ public final class JobStore {
                 for (int transport : stringToIntArray(netTransportTypesIntArray)) {
                     builder.addTransportType(transport);
                 }
-                jobBuilder.setRequiredNetwork(builder.build());
+                jobBuilder
+                        .setRequiredNetwork(builder.build())
+                        .setEstimatedNetworkBytes(
+                                parser.getAttributeLong(null,
+                                        "estimated-download-bytes", JobInfo.NETWORK_BYTES_UNKNOWN),
+                                parser.getAttributeLong(null,
+                                        "estimated-upload-bytes", JobInfo.NETWORK_BYTES_UNKNOWN))
+                        .setMinimumNetworkChunkBytes(
+                                parser.getAttributeLong(null,
+                                        "minimum-network-chunk-bytes",
+                                        JobInfo.NETWORK_BYTES_UNKNOWN));
             } else if (netCapabilitiesLong != null && netTransportTypesLong != null) {
                 // Format used on R- builds. Drop any unexpected capabilities and transports.
                 final NetworkRequest.Builder builder = new NetworkRequest.Builder()
@@ -1138,6 +1342,8 @@ public final class JobStore {
                     }
                 }
                 jobBuilder.setRequiredNetwork(builder.build());
+                // Estimated bytes weren't persisted on R- builds, so no point querying for the
+                // attributes here.
             } else {
                 // Read legacy values
                 val = parser.getAttributeValue(null, "connectivity");

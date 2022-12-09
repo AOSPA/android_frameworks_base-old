@@ -18,13 +18,26 @@ package com.android.credentialmanager.createflow
 
 import android.graphics.drawable.Drawable
 
-data class ProviderInfo(
+open class ProviderInfo(
   val icon: Drawable,
   val name: String,
   val displayName: String,
+)
+
+class EnabledProviderInfo(
+  icon: Drawable,
+  name: String,
+  displayName: String,
   var createOptions: List<CreateOptionInfo>,
   val isDefault: Boolean,
-)
+  var remoteEntry: RemoteInfo?,
+) : ProviderInfo(icon, name, displayName)
+
+class DisabledProviderInfo(
+  icon: Drawable,
+  name: String,
+  displayName: String,
+) : ProviderInfo(icon, name, displayName)
 
 open class EntryInfo (
   val entryKey: String,
@@ -34,13 +47,18 @@ open class EntryInfo (
 class CreateOptionInfo(
   entryKey: String,
   entrySubkey: String,
-  val userProviderDisplayName: String,
+  val userProviderDisplayName: String?,
   val credentialTypeIcon: Drawable,
   val profileIcon: Drawable,
-  val passwordCount: Int,
-  val passkeyCount: Int,
-  val totalCredentialCount: Int,
+  val passwordCount: Int?,
+  val passkeyCount: Int?,
+  val totalCredentialCount: Int?,
   val lastUsedTimeMillis: Long?,
+) : EntryInfo(entryKey, entrySubkey)
+
+class RemoteInfo(
+  entryKey: String,
+  entrySubkey: String,
 ) : EntryInfo(entryKey, entrySubkey)
 
 data class RequestDisplayInfo(
@@ -55,7 +73,7 @@ data class RequestDisplayInfo(
  * user selects a different entry on the more option page.
  */
 data class ActiveEntry (
-  val activeProvider: ProviderInfo,
+  val activeProvider: EnabledProviderInfo,
   val activeEntryInfo: EntryInfo,
 )
 

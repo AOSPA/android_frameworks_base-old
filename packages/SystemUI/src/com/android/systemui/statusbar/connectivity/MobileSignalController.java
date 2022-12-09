@@ -17,11 +17,9 @@ package com.android.systemui.statusbar.connectivity;
 
 import static android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_IWLAN;
 import static android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_NONE;
-import static com.android.settingslib.mobile.MobileMappings.getDefaultIcons;
-import static com.android.settingslib.mobile.MobileMappings.getIconKey;
-import static com.android.settingslib.mobile.MobileMappings.mapIconSets;
 import static com.android.settingslib.mobile.MobileMappings.toDisplayIconKey;
 import static com.android.settingslib.mobile.MobileMappings.toIconKey;
+import static android.telephony.TelephonyManager.UNKNOWN_CARRIER_ID;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -61,6 +59,7 @@ import com.android.settingslib.mobile.MobileStatusTracker.SubscriptionDefaults;
 import com.android.settingslib.mobile.TelephonyIcons;
 import com.android.settingslib.net.SignalStrengthUtil;
 import com.android.systemui.R;
+import com.android.systemui.statusbar.pipeline.mobile.util.MobileMappingsProxy;
 import com.android.systemui.statusbar.policy.FiveGServiceClient;
 import com.android.systemui.statusbar.policy.FiveGServiceClient.FiveGServiceState;
 import com.android.systemui.statusbar.policy.FiveGServiceClient.IFiveGStateListener;
@@ -82,6 +81,7 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
     private final CarrierConfigTracker mCarrierConfigTracker;
     private final ImsMmTelManager mImsMmTelManager;
     private final SubscriptionDefaults mDefaults;
+    private final MobileMappingsProxy mMobileMappingsProxy;
     private final String mNetworkNameDefault;
     private final String mNetworkNameSeparator;
     private final ContentObserver mObserver;
@@ -150,6 +150,7 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
             TelephonyManager phone,
             CallbackHandler callbackHandler,
             NetworkControllerImpl networkController,
+            MobileMappingsProxy mobileMappingsProxy,
             SubscriptionInfo info,
             SubscriptionDefaults defaults,
             Looper receiverLooper,
@@ -164,6 +165,7 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
         mPhone = phone;
         mDefaults = defaults;
         mSubscriptionInfo = info;
+        mMobileMappingsProxy = mobileMappingsProxy;
         mFiveGStateListener = new FiveGStateListener();
         mFiveGState = new FiveGServiceState();
         mNetworkNameSeparator = getTextIfExists(
@@ -171,8 +173,8 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
         mNetworkNameDefault = getTextIfExists(
                 com.android.internal.R.string.lockscreen_carrier_default).toString();
 
-        mNetworkToIconLookup = mapIconSets(mConfig);
-        mDefaultIcons = getDefaultIcons(mConfig);
+        mNetworkToIconLookup = mMobileMappingsProxy.mapIconSets(mConfig);
+        mDefaultIcons = mMobileMappingsProxy.getDefaultIcons(mConfig);
 
         String networkName = info.getCarrierName() != null ? info.getCarrierName().toString()
                 : mNetworkNameDefault;
@@ -194,8 +196,8 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
     void setConfiguration(Config config) {
         mConfig = config;
         updateInflateSignalStrength();
-        mNetworkToIconLookup = mapIconSets(mConfig);
-        mDefaultIcons = getDefaultIcons(mConfig);
+        mNetworkToIconLookup = mMobileMappingsProxy.mapIconSets(mConfig);
+        mDefaultIcons = mMobileMappingsProxy.getDefaultIcons(mConfig);
         updateTelephony();
     }
 
@@ -372,8 +374,9 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
             dataContentDescription = mContext.getString(R.string.data_connection_no_internet);
         }
 
-        final QsInfo qsInfo = getQsInfo(contentDescription, icons.dataType);
-        final SbInfo sbInfo = getSbInfo(contentDescription, icons.dataType);
+        int iconId = mCurrentState.getNetworkTypeIcon(mContext);
+        final QsInfo qsInfo = getQsInfo(contentDescription, iconId);
+        final SbInfo sbInfo = getSbInfo(contentDescription, iconId);
 
         int volteIcon = mConfig.showVolteIcon ? getVolteResId() : 0;
         MobileDataIndicators mobileDataIndicators = new MobileDataIndicators(
@@ -490,6 +493,10 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
         } else if (action.equals(TelephonyManager.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED)) {
             updateDataSim();
             notifyListenersIfNecessary();
+        } else if (action.equals(TelephonyManager.ACTION_SUBSCRIPTION_CARRIER_IDENTITY_CHANGED)) {
+            int carrierId = intent.getIntExtra(
+                    TelephonyManager.EXTRA_CARRIER_ID, UNKNOWN_CARRIER_ID);
+            mCurrentState.setCarrierId(carrierId);
         }
     }
 
@@ -615,7 +622,8 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
             }
         }
 
-        String iconKey = getIconKey(mCurrentState.telephonyDisplayInfo);
+        mCurrentState.setCarrierId(mPhone.getSimCarrierId());
+        String iconKey = mMobileMappingsProxy.getIconKey(mCurrentState.telephonyDisplayInfo);
         if (mNetworkToIconLookup.get(iconKey) != null) {
             mCurrentState.iconGroup = mNetworkToIconLookup.get(iconKey);
         } else {

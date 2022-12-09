@@ -174,6 +174,7 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
     private Display.Mode mDisplayMode;
     @VisibleForTesting
     protected DisplayInfo mDisplayInfo = new DisplayInfo();
+    private DisplayCutout mDisplayCutout;
 
     @VisibleForTesting
     protected void showCameraProtection(@NonNull Path protectionPath, @NonNull Rect bounds) {
@@ -388,6 +389,7 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
         mRotation = mDisplayInfo.rotation;
         mDisplayMode = mDisplayInfo.getMode();
         mDisplayUniqueId = mDisplayInfo.uniqueId;
+        mDisplayCutout = mDisplayInfo.displayCutout;
         mRoundedCornerResDelegate = new RoundedCornerResDelegate(mContext.getResources(),
                 mDisplayUniqueId);
         mRoundedCornerResDelegate.setPhysicalPixelDisplaySizeRatio(
@@ -1026,7 +1028,8 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
         mRoundedCornerResDelegate.dump(pw, args);
     }
 
-    private void updateConfiguration() {
+    @VisibleForTesting
+    void updateConfiguration() {
         Preconditions.checkState(mHandler.getLooper().getThread() == Thread.currentThread(),
                 "must call on " + mHandler.getLooper().getThread()
                         + ", but was " + Thread.currentThread());
@@ -1037,11 +1040,14 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
             mDotViewController.setNewRotation(newRotation);
         }
         final Display.Mode newMod = mDisplayInfo.getMode();
+        final DisplayCutout newCutout = mDisplayInfo.displayCutout;
 
         if (!mPendingConfigChange
-                && (newRotation != mRotation || displayModeChanged(mDisplayMode, newMod))) {
+                && (newRotation != mRotation || displayModeChanged(mDisplayMode, newMod)
+                || !Objects.equals(newCutout, mDisplayCutout))) {
             mRotation = newRotation;
             mDisplayMode = newMod;
+            mDisplayCutout = newCutout;
             mRoundedCornerResDelegate.setPhysicalPixelDisplaySizeRatio(
                     getPhysicalPixelDisplaySizeRatio());
             if (mScreenDecorHwcLayer != null) {
