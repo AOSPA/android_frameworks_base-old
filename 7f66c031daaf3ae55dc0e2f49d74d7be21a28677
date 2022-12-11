@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "9ae7b6c8_f167fe4a",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2022-12-11T02:50:33Z",
+      "side": 1,
+      "message": "This is not a full revert, I kept the config.xml \u0026 java symbol change",
+      "revId": "7f66c031daaf3ae55dc0e2f49d74d7be21a28677",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
