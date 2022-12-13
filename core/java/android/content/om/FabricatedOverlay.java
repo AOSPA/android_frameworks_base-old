@@ -20,11 +20,13 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.os.FabricatedOverlayInternal;
 import android.os.FabricatedOverlayInternalEntry;
+import android.os.ParcelFileDescriptor;
 import android.text.TextUtils;
 
 import com.android.internal.util.Preconditions;
 
 import java.util.ArrayList;
+import java.util.Objects;
 
 /**
  * Fabricated Runtime Resource Overlays (FRROs) are overlays generated ar runtime.
@@ -88,6 +90,27 @@ public class FabricatedOverlay {
         }
 
         /**
+         * Ensure the resource name is in the form [package]:type/entry.
+         *
+         * @param name name of the target resource to overlay (in the form [package]:type/entry)
+         * @return the valid name
+         */
+        private static String ensureValidResourceName(@NonNull String name) {
+            Objects.requireNonNull(name);
+            final int slashIndex = name.indexOf('/'); /* must contain '/' */
+            final int colonIndex = name.indexOf(':'); /* ':' should before '/' if ':' exist */
+
+            // The minimum length of resource type is "id".
+            Preconditions.checkArgument(
+                    slashIndex >= 0 /* It must contain the type name */
+                    && colonIndex != 0 /* 0 means the package name is empty */
+                    && (slashIndex - colonIndex) > 2 /* The shortest length of type is "id" */,
+                    "\"%s\" is invalid resource name",
+                    name);
+            return name;
+        }
+
+        /**
          * Sets the value of the fabricated overlay
          *
          * @param resourceName name of the target resource to overlay (in the form
@@ -98,6 +121,8 @@ public class FabricatedOverlay {
          * @see android.util.TypedValue#type
          */
         public Builder setResourceValue(@NonNull String resourceName, int dataType, int value) {
+            ensureValidResourceName(resourceName);
+
             final FabricatedOverlayInternalEntry entry = new FabricatedOverlayInternalEntry();
             entry.resourceName = resourceName;
             entry.dataType = dataType;
@@ -119,6 +144,8 @@ public class FabricatedOverlay {
          */
         public Builder setResourceValue(@NonNull String resourceName, int dataType, int value,
                 String configuration) {
+            ensureValidResourceName(resourceName);
+
             final FabricatedOverlayInternalEntry entry = new FabricatedOverlayInternalEntry();
             entry.resourceName = resourceName;
             entry.dataType = dataType;
@@ -139,6 +166,8 @@ public class FabricatedOverlay {
          * @see android.util.TypedValue#type
          */
         public Builder setResourceValue(@NonNull String resourceName, int dataType, String value) {
+            ensureValidResourceName(resourceName);
+
             final FabricatedOverlayInternalEntry entry = new FabricatedOverlayInternalEntry();
             entry.resourceName = resourceName;
             entry.dataType = dataType;
@@ -160,10 +189,32 @@ public class FabricatedOverlay {
          */
         public Builder setResourceValue(@NonNull String resourceName, int dataType, String value,
                 String configuration) {
+            ensureValidResourceName(resourceName);
+
             final FabricatedOverlayInternalEntry entry = new FabricatedOverlayInternalEntry();
             entry.resourceName = resourceName;
             entry.dataType = dataType;
             entry.stringData = value;
+            entry.configuration = configuration;
+            mEntries.add(entry);
+            return this;
+        }
+
+        /**
+         * Sets the value of the fabricated overlay
+         *
+         * @param resourceName name of the target resource to overlay (in the form
+         *                     [package]:type/entry)
+         * @param value the file descriptor whose contents are the value of the frro
+         * @param configuration The string representation of the config this overlay is enabled for
+         */
+        public Builder setResourceValue(@NonNull String resourceName, ParcelFileDescriptor value,
+                String configuration) {
+            ensureValidResourceName(resourceName);
+
+            final FabricatedOverlayInternalEntry entry = new FabricatedOverlayInternalEntry();
+            entry.resourceName = resourceName;
+            entry.binaryData = value;
             entry.configuration = configuration;
             mEntries.add(entry);
             return this;

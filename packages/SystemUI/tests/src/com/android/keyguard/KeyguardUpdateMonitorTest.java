@@ -29,6 +29,7 @@ import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.SOM
 import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STRONG_AUTH_REQUIRED_AFTER_BOOT;
 import static com.android.keyguard.FaceAuthApiRequestReason.NOTIFICATION_PANEL_CLICKED;
 import static com.android.keyguard.KeyguardUpdateMonitor.DEFAULT_CANCEL_SIGNAL_TIMEOUT;
+import static com.android.keyguard.KeyguardUpdateMonitor.getCurrentUser;
 
 import static com.google.common.truth.Truth.assertThat;
 
@@ -36,6 +37,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyObject;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
@@ -89,6 +91,7 @@ import android.os.RemoteException;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.service.dreams.IDreamManager;
+import android.service.trust.TrustAgentService;
 import android.telephony.ServiceState;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
@@ -113,6 +116,7 @@ import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.log.SessionTracker;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
+import com.android.systemui.settings.UserTracker;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.telephony.TelephonyListenerManager;
@@ -156,6 +160,8 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
     private static final int FACE_SENSOR_ID = 0;
     private static final int FINGERPRINT_SENSOR_ID = 1;
 
+    @Mock
+    private UserTracker mUserTracker;
     @Mock
     private DumpManager mDumpManager;
     @Mock
@@ -306,8 +312,7 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
         ExtendedMockito.doReturn(SubscriptionManager.INVALID_SUBSCRIPTION_ID)
                 .when(SubscriptionManager::getDefaultSubscriptionId);
         KeyguardUpdateMonitor.setCurrentUser(mCurrentUserId);
-        ExtendedMockito.doReturn(KeyguardUpdateMonitor.getCurrentUser())
-                .when(ActivityManager::getCurrentUser);
+        when(mUserTracker.getUserId()).thenReturn(mCurrentUserId);
         ExtendedMockito.doReturn(mActivityService).when(ActivityManager::getService);
 
         mFaceWakeUpTriggersConfig = new FaceWakeUpTriggersConfig(
@@ -351,7 +356,9 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
 
     @After
     public void tearDown() {
-        mMockitoSession.finishMocking();
+        if (mMockitoSession != null) {
+            mMockitoSession.finishMocking();
+        }
         cleanupKeyguardUpdateMonitor();
     }
 
@@ -1010,6 +1017,7 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
     @Test
     public void testSecondaryLockscreenRequirement() {
         KeyguardUpdateMonitor.setCurrentUser(UserHandle.myUserId());
+        when(mUserTracker.getUserId()).thenReturn(UserHandle.myUserId());
         int user = KeyguardUpdateMonitor.getCurrentUser();
         String packageName = "fake.test.package";
         String cls = "FakeService";
@@ -1291,9 +1299,9 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
                 Arrays.asList("Unlocked by wearable"));
 
         // THEN the showTrustGrantedMessage should be called with the first message
-        verify(mTestCallback).onTrustGrantedWithFlags(
-                eq(0),
-                eq(KeyguardUpdateMonitor.getCurrentUser()),
+        verify(mTestCallback).onTrustGrantedForCurrentUser(
+                anyBoolean(),
+                eq(new TrustGrantFlags(0)),
                 eq("Unlocked by wearable"));
     }
 
@@ -1345,6 +1353,29 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
         assertThat(mKeyguardUpdateMonitor.shouldListenForFace()).isTrue();
 
         triggerSuccessfulFaceAuth();
+        mTestableLooper.processAllMessages();
+
+        assertThat(mKeyguardUpdateMonitor.shouldListenForFace()).isFalse();
+    }
+
+    @Test
+    public void testShouldListenForFace_whenFpIsAlreadyAuthenticated_returnsFalse()
+            throws RemoteException {
+        // Face auth should run when the following is true.
+        bouncerFullyVisibleAndNotGoingToSleep();
+        keyguardNotGoingAway();
+        currentUserIsPrimary();
+        strongAuthNotRequired();
+        biometricsEnabledForCurrentUser();
+        currentUserDoesNotHaveTrust();
+        biometricsNotDisabledThroughDevicePolicyManager();
+        userNotCurrentlySwitching();
+
+        mTestableLooper.processAllMessages();
+
+        assertThat(mKeyguardUpdateMonitor.shouldListenForFace()).isTrue();
+
+        successfulFingerprintAuth();
         mTestableLooper.processAllMessages();
 
         assertThat(mKeyguardUpdateMonitor.shouldListenForFace()).isFalse();
@@ -1704,6 +1735,155 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
         verify(mFaceManager).authenticate(any(), any(), any(), any(), anyInt(), anyBoolean());
     }
 
+
+    @Test
+    public void testOnTrustGrantedForCurrentUser_dismissKeyguardRequested_deviceInteractive() {
+        // GIVEN device is interactive
+        deviceIsInteractive();
+
+        // GIVEN callback is registered
+        KeyguardUpdateMonitorCallback callback = mock(KeyguardUpdateMonitorCallback.class);
+        mKeyguardUpdateMonitor.registerCallback(callback);
+
+        // WHEN onTrustChanged with TRUST_DISMISS_KEYGUARD flag
+        mKeyguardUpdateMonitor.onTrustChanged(
+                true /* enabled */,
+                getCurrentUser() /* userId */,
+                TrustAgentService.FLAG_GRANT_TRUST_DISMISS_KEYGUARD /* flags */,
+                null /* trustGrantedMessages */);
+
+        // THEN onTrustGrantedForCurrentUser callback called
+        verify(callback).onTrustGrantedForCurrentUser(
+                eq(true) /* dismissKeyguard */,
+                eq(new TrustGrantFlags(TrustAgentService.FLAG_GRANT_TRUST_DISMISS_KEYGUARD)),
+                eq(null) /* message */
+        );
+    }
+
+    @Test
+    public void testOnTrustGrantedForCurrentUser_dismissKeyguardRequested_doesNotDismiss() {
+        // GIVEN device is NOT interactive
+
+        // GIVEN callback is registered
+        KeyguardUpdateMonitorCallback callback = mock(KeyguardUpdateMonitorCallback.class);
+        mKeyguardUpdateMonitor.registerCallback(callback);
+
+        // WHEN onTrustChanged with TRUST_DISMISS_KEYGUARD flag
+        mKeyguardUpdateMonitor.onTrustChanged(
+                true /* enabled */,
+                getCurrentUser() /* userId */,
+                TrustAgentService.FLAG_GRANT_TRUST_DISMISS_KEYGUARD /* flags */,
+                null /* trustGrantedMessages */);
+
+        // THEN onTrustGrantedForCurrentUser callback called
+        verify(callback).onTrustGrantedForCurrentUser(
+                eq(false) /* dismissKeyguard */,
+                eq(new TrustGrantFlags(TrustAgentService.FLAG_GRANT_TRUST_DISMISS_KEYGUARD)),
+                eq(null) /* message */
+        );
+    }
+
+    @Test
+    public void testOnTrustGrantedForCurrentUser_dismissKeyguardRequested_temporaryAndRenewable() {
+        // GIVEN device is interactive
+        deviceIsInteractive();
+
+        // GIVEN callback is registered
+        KeyguardUpdateMonitorCallback callback = mock(KeyguardUpdateMonitorCallback.class);
+        mKeyguardUpdateMonitor.registerCallback(callback);
+
+        // WHEN onTrustChanged for a different user
+        mKeyguardUpdateMonitor.onTrustChanged(
+                true /* enabled */,
+                546 /* userId, not the current userId */,
+                0 /* flags */,
+                null /* trustGrantedMessages */);
+
+        // THEN onTrustGrantedForCurrentUser callback called
+        verify(callback, never()).onTrustGrantedForCurrentUser(
+                anyBoolean() /* dismissKeyguard */,
+                anyObject() /* flags */,
+                anyString() /* message */
+        );
+    }
+
+    @Test
+    public void testOnTrustGranted_differentUser_noCallback() {
+        // GIVEN device is interactive
+
+        // GIVEN callback is registered
+        KeyguardUpdateMonitorCallback callback = mock(KeyguardUpdateMonitorCallback.class);
+        mKeyguardUpdateMonitor.registerCallback(callback);
+
+        // WHEN onTrustChanged with TRUST_DISMISS_KEYGUARD AND TRUST_TEMPORARY_AND_RENEWABLE
+        // flags (temporary & rewable is active unlock)
+        mKeyguardUpdateMonitor.onTrustChanged(
+                true /* enabled */,
+                getCurrentUser() /* userId */,
+                TrustAgentService.FLAG_GRANT_TRUST_DISMISS_KEYGUARD
+                        | TrustAgentService.FLAG_GRANT_TRUST_TEMPORARY_AND_RENEWABLE /* flags */,
+                null /* trustGrantedMessages */);
+
+        // THEN onTrustGrantedForCurrentUser callback called
+        verify(callback).onTrustGrantedForCurrentUser(
+                eq(true) /* dismissKeyguard */,
+                eq(new TrustGrantFlags(TrustAgentService.FLAG_GRANT_TRUST_DISMISS_KEYGUARD
+                        | TrustAgentService.FLAG_GRANT_TRUST_TEMPORARY_AND_RENEWABLE)),
+                eq(null) /* message */
+        );
+    }
+
+    @Test
+    public void testOnTrustGrantedForCurrentUser_bouncerShowing_initiatedByUser() {
+        // GIVEN device is interactive & bouncer is showing
+        deviceIsInteractive();
+        bouncerFullyVisible();
+
+        // GIVEN callback is registered
+        KeyguardUpdateMonitorCallback callback = mock(KeyguardUpdateMonitorCallback.class);
+        mKeyguardUpdateMonitor.registerCallback(callback);
+
+        // WHEN onTrustChanged with INITIATED_BY_USER flag
+        mKeyguardUpdateMonitor.onTrustChanged(
+                true /* enabled */,
+                getCurrentUser() /* userId, not the current userId */,
+                TrustAgentService.FLAG_GRANT_TRUST_INITIATED_BY_USER /* flags */,
+                null /* trustGrantedMessages */);
+
+        // THEN onTrustGrantedForCurrentUser callback called
+        verify(callback, never()).onTrustGrantedForCurrentUser(
+                eq(true) /* dismissKeyguard */,
+                eq(new TrustGrantFlags(TrustAgentService.FLAG_GRANT_TRUST_INITIATED_BY_USER)),
+                anyString() /* message */
+        );
+    }
+
+    @Test
+    public void testOnTrustGrantedForCurrentUser_bouncerShowing_temporaryRenewable() {
+        // GIVEN device is NOT interactive & bouncer is showing
+        bouncerFullyVisible();
+
+        // GIVEN callback is registered
+        KeyguardUpdateMonitorCallback callback = mock(KeyguardUpdateMonitorCallback.class);
+        mKeyguardUpdateMonitor.registerCallback(callback);
+
+        // WHEN onTrustChanged with INITIATED_BY_USER flag
+        mKeyguardUpdateMonitor.onTrustChanged(
+                true /* enabled */,
+                getCurrentUser() /* userId, not the current userId */,
+                TrustAgentService.FLAG_GRANT_TRUST_INITIATED_BY_USER
+                        | TrustAgentService.FLAG_GRANT_TRUST_TEMPORARY_AND_RENEWABLE /* flags */,
+                null /* trustGrantedMessages */);
+
+        // THEN onTrustGrantedForCurrentUser callback called
+        verify(callback, never()).onTrustGrantedForCurrentUser(
+                eq(true) /* dismissKeyguard */,
+                eq(new TrustGrantFlags(TrustAgentService.FLAG_GRANT_TRUST_INITIATED_BY_USER
+                        | TrustAgentService.FLAG_GRANT_TRUST_TEMPORARY_AND_RENEWABLE)),
+                anyString() /* message */
+        );
+    }
+
     private void cleanupKeyguardUpdateMonitor() {
         if (mKeyguardUpdateMonitor != null) {
             mKeyguardUpdateMonitor.removeCallback(mTestCallback);
@@ -1753,6 +1933,15 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
     private void fingerprintAcquireStart() {
         mKeyguardUpdateMonitor.mFingerprintAuthenticationCallback
                 .onAuthenticationAcquired(FINGERPRINT_ACQUIRED_START);
+    }
+
+    private void successfulFingerprintAuth() {
+        mKeyguardUpdateMonitor.mFingerprintAuthenticationCallback
+                .onAuthenticationSucceeded(
+                        new FingerprintManager.AuthenticationResult(null,
+                                null,
+                                mCurrentUserId,
+                                true));
     }
 
     private void triggerSuccessfulFaceAuth() {
@@ -1864,7 +2053,7 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
         AtomicBoolean mSimStateChanged = new AtomicBoolean(false);
 
         protected TestableKeyguardUpdateMonitor(Context context) {
-            super(context,
+            super(context, mUserTracker,
                     TestableLooper.get(KeyguardUpdateMonitorTest.this).getLooper(),
                     mBroadcastDispatcher, mSecureSettings, mDumpManager,
                     mBackgroundExecutor, mMainExecutor,

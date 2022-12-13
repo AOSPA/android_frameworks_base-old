@@ -27,8 +27,17 @@ import (
 const art = "art.module.public.api"
 const conscrypt = "conscrypt.module.public.api"
 const i18n = "i18n.module.public.api"
+const virtualization = "framework-virtualization"
 
 var core_libraries_modules = []string{art, conscrypt, i18n}
+
+// List of modules that are not yet updatable, and hence they can still compile
+// against hidden APIs. These modules are filtered out when building the
+// updatable-framework-module-impl (because updatable-framework-module-impl is
+// built against module_current SDK). Instead they are directly statically
+// linked into the all-framework-module-lib, which is building against hidden
+// APIs.
+var non_updatable_modules = []string{virtualization}
 
 // The intention behind this soong plugin is to generate a number of "merged"
 // API-related modules that would otherwise require a large amount of very
@@ -149,26 +158,26 @@ func createMergedStubsSrcjar(ctx android.LoadHookContext, modules []string) {
 }
 
 func createMergedAnnotationsFilegroups(ctx android.LoadHookContext, modules, system_server_modules []string) {
-	for _, i := range []struct{
+	for _, i := range []struct {
 		name    string
 		tag     string
 		modules []string
 	}{
 		{
-			name: "all-modules-public-annotations",
-			tag:  "{.public.annotations.zip}",
+			name:    "all-modules-public-annotations",
+			tag:     "{.public.annotations.zip}",
 			modules: modules,
 		}, {
-			name: "all-modules-system-annotations",
-			tag:  "{.system.annotations.zip}",
+			name:    "all-modules-system-annotations",
+			tag:     "{.system.annotations.zip}",
 			modules: modules,
 		}, {
-			name: "all-modules-module-lib-annotations",
-			tag:  "{.module-lib.annotations.zip}",
+			name:    "all-modules-module-lib-annotations",
+			tag:     "{.module-lib.annotations.zip}",
 			modules: modules,
 		}, {
-			name: "all-modules-system-server-annotations",
-			tag:  "{.system-server.annotations.zip}",
+			name:    "all-modules-system-server-annotations",
+			tag:     "{.system-server.annotations.zip}",
 			modules: system_server_modules,
 		},
 	} {
@@ -189,7 +198,7 @@ func createFilteredApiVersions(ctx android.LoadHookContext, modules []string) {
 	//    difficult to achieve.
 	modules = remove(modules, art)
 
-	for _, i := range []struct{
+	for _, i := range []struct {
 		name string
 		out  string
 		in   string
@@ -249,14 +258,33 @@ func createMergedSystemStubs(ctx android.LoadHookContext, modules []string) {
 func createMergedFrameworkImpl(ctx android.LoadHookContext, modules []string) {
 	// This module is for the "framework-all" module, which should not include the core libraries.
 	modules = removeAll(modules, core_libraries_modules)
-	// TODO(b/214988855): remove the line below when framework-bluetooth has an impl jar.
-	modules = remove(modules, "framework-bluetooth")
-	props := libraryProps{}
-	props.Name = proptools.StringPtr("all-framework-module-impl")
-	props.Static_libs = transformArray(modules, "", ".impl")
-	props.Sdk_version = proptools.StringPtr("module_current")
-	props.Visibility = []string{"//frameworks/base"}
-	ctx.CreateModule(java.LibraryFactory, &props)
+	// Remove the modules that belong to non-updatable APEXes since those are allowed to compile
+	// against unstable APIs.
+	modules = removeAll(modules, non_updatable_modules)
+	// First create updatable-framework-module-impl, which contains all updatable modules.
+	// This module compiles against module_lib SDK.
+	{
+		// TODO(b/214988855): remove the line below when framework-bluetooth has an impl jar.
+		modules = remove(modules, "framework-bluetooth")
+		props := libraryProps{}
+		props.Name = proptools.StringPtr("updatable-framework-module-impl")
+		props.Static_libs = transformArray(modules, "", ".impl")
+		props.Sdk_version = proptools.StringPtr("module_current")
+		props.Visibility = []string{"//frameworks/base"}
+		ctx.CreateModule(java.LibraryFactory, &props)
+	}
+
+	// Now create all-framework-module-impl, which contains updatable-framework-module-impl
+	// and all non-updatable modules. This module compiles against hidden APIs.
+	{
+		props := libraryProps{}
+		props.Name = proptools.StringPtr("all-framework-module-impl")
+		props.Static_libs = transformArray(non_updatable_modules, "", ".impl")
+		props.Static_libs = append(props.Static_libs, "updatable-framework-module-impl")
+		props.Sdk_version = proptools.StringPtr("core_platform")
+		props.Visibility = []string{"//frameworks/base"}
+		ctx.CreateModule(java.LibraryFactory, &props)
+	}
 }
 
 func createMergedFrameworkModuleLibStubs(ctx android.LoadHookContext, modules []string) {

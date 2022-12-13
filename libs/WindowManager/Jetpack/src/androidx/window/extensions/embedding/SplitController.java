@@ -96,7 +96,7 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
         ActivityEmbeddingComponent {
     static final String TAG = "SplitController";
     static final boolean ENABLE_SHELL_TRANSITIONS =
-            SystemProperties.getBoolean("persist.wm.debug.shell_transit", true);
+            SystemProperties.getBoolean("persist.wm.debug.shell_transit", false);
 
     @VisibleForTesting
     @GuardedBy("mLock")
@@ -193,7 +193,6 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
                         continue;
                     }
                     updateContainersInTask(wct, taskContainer);
-                    updateAnimationOverride(taskContainer);
                 }
                 // The WCT should be applied and merged to the device state change transition if
                 // there is one.
@@ -208,9 +207,6 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
         synchronized (mLock) {
             mSplitRules.clear();
             mSplitRules.addAll(rules);
-            for (int i = mTaskContainers.size() - 1; i >= 0; i--) {
-                updateAnimationOverride(mTaskContainers.valueAt(i));
-            }
         }
     }
 
@@ -388,6 +384,10 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
                 // Do not finish the dependents if this TaskFragment was cleared due to
                 // launching activity in the Task.
                 mTransactionManager.getCurrentTransactionRecord().setOriginType(TRANSIT_CLOSE);
+                mPresenter.cleanupContainer(wct, container, false /* shouldFinishDependent */);
+            } else if (taskFragmentInfo.isClearedForReorderActivityToFront()) {
+                // Do not finish the dependents if this TaskFragment was cleared to reorder
+                // the launching Activity to front of the Task.
                 mPresenter.cleanupContainer(wct, container, false /* shouldFinishDependent */);
             } else if (!container.isWaitingActivityAppear()) {
                 // Do not finish the container before the expected activity appear until
@@ -608,7 +608,6 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
             }
             if (taskContainer.isEmpty()) {
                 // Cleanup the TaskContainer if it becomes empty.
-                mPresenter.stopOverrideSplitAnimation(taskContainer.getTaskId());
                 mTaskContainers.remove(taskContainer.getTaskId());
             }
             return;
@@ -618,43 +617,7 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
     @GuardedBy("mLock")
     private void onTaskContainerInfoChanged(@NonNull TaskContainer taskContainer,
             @NonNull Configuration config) {
-        final boolean wasInPip = taskContainer.isInPictureInPicture();
-        final boolean isInPIp = isInPictureInPicture(config);
-
-        // We need to check the animation override when enter/exit PIP or has bounds changed.
-        boolean shouldUpdateAnimationOverride = wasInPip != isInPIp;
-        if (taskContainer.setTaskBounds(config.windowConfiguration.getBounds())
-                && !isInPIp) {
-            // We don't care the bounds change when it has already entered PIP.
-            shouldUpdateAnimationOverride = true;
-        }
-        if (shouldUpdateAnimationOverride) {
-            updateAnimationOverride(taskContainer);
-        }
-    }
-
-    /**
-     * Updates if we should override transition animation. We only want to override if the Task
-     * bounds is large enough for at least one split rule.
-     */
-    @GuardedBy("mLock")
-    private void updateAnimationOverride(@NonNull TaskContainer taskContainer) {
-        if (ENABLE_SHELL_TRANSITIONS) {
-            // TODO(b/207070762): cleanup with legacy app transition
-            // Animation will be handled by WM Shell with Shell transition enabled.
-            return;
-        }
-        if (!taskContainer.isTaskBoundsInitialized()) {
-            // We don't know about the Task bounds/windowingMode yet.
-            return;
-        }
-
-        // We only want to override if the TaskContainer may show split.
-        if (mayShowSplit(taskContainer)) {
-            mPresenter.startOverrideSplitAnimation(taskContainer.getTaskId());
-        } else {
-            mPresenter.stopOverrideSplitAnimation(taskContainer.getTaskId());
-        }
+        taskContainer.setTaskBounds(config.windowConfiguration.getBounds());
     }
 
     /** Returns whether the given {@link TaskContainer} may show in split. */
@@ -1279,7 +1242,6 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
                 Log.w(TAG, "Can't find bounds from activity=" + activityInTask);
             }
         }
-        updateAnimationOverride(taskContainer);
         return container;
     }
 

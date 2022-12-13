@@ -89,6 +89,7 @@ import com.android.systemui.statusbar.notification.collection.PipelineDumpable;
 import com.android.systemui.statusbar.notification.collection.PipelineDumper;
 import com.android.systemui.statusbar.notification.collection.notifcollection.DismissedByUserStats;
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifCollectionListener;
+import com.android.systemui.statusbar.notification.collection.provider.VisibilityLocationProviderDelegator;
 import com.android.systemui.statusbar.notification.collection.render.GroupExpansionManager;
 import com.android.systemui.statusbar.notification.collection.render.NotifStackController;
 import com.android.systemui.statusbar.notification.collection.render.NotifStats;
@@ -157,6 +158,7 @@ public class NotificationStackScrollLayoutController {
     private final NotifCollection mNotifCollection;
     private final UiEventLogger mUiEventLogger;
     private final NotificationRemoteInputManager mRemoteInputManager;
+    private final VisibilityLocationProviderDelegator mVisibilityLocationProviderDelegator;
     private final ShadeController mShadeController;
     private final KeyguardMediaController mKeyguardMediaController;
     private final SysuiStatusBarStateController mStatusBarStateController;
@@ -441,7 +443,11 @@ public class NotificationStackScrollLayoutController {
                     if (!row.isDismissed()) {
                         handleChildViewDismissed(view);
                     }
+
                     row.removeFromTransientContainer();
+                    if (row instanceof ExpandableNotificationRow) {
+                        ((ExpandableNotificationRow) row).removeChildrenWithKeepInParent();
+                    }
                 }
 
                 /**
@@ -638,6 +644,7 @@ public class NotificationStackScrollLayoutController {
             ShadeTransitionController shadeTransitionController,
             UiEventLogger uiEventLogger,
             NotificationRemoteInputManager remoteInputManager,
+            VisibilityLocationProviderDelegator visibilityLocationProviderDelegator,
             ShadeController shadeController,
             InteractionJankMonitor jankMonitor,
             StackStateLogger stackLogger,
@@ -679,6 +686,7 @@ public class NotificationStackScrollLayoutController {
         mNotifCollection = notifCollection;
         mUiEventLogger = uiEventLogger;
         mRemoteInputManager = remoteInputManager;
+        mVisibilityLocationProviderDelegator = visibilityLocationProviderDelegator;
         mShadeController = shadeController;
         mFeatureFlags = featureFlags;
         mNotificationTargetsHelper = notificationTargetsHelper;
@@ -749,6 +757,8 @@ public class NotificationStackScrollLayoutController {
         mFadeNotificationsOnDismiss = mFeatureFlags.isEnabled(Flags.NOTIFICATION_DISMISSAL_FADE);
         mNotificationRoundnessManager.setOnRoundingChangedCallback(mView::invalidate);
         mView.addOnExpandedHeightChangedListener(mNotificationRoundnessManager::setExpanded);
+
+        mVisibilityLocationProviderDelegator.setDelegate(this::isInVisibleLocation);
 
         mTunerService.addTunable(
                 (key, newValue) -> {

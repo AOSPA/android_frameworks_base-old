@@ -628,19 +628,19 @@ public class ActivityManager {
     public @interface ProcessCapability {}
 
     /** @hide Process does not have any capability */
-    @TestApi
+    @SystemApi
     public static final int PROCESS_CAPABILITY_NONE = 0;
 
     /** @hide Process can access location while in foreground */
-    @TestApi
+    @SystemApi
     public static final int PROCESS_CAPABILITY_FOREGROUND_LOCATION = 1 << 0;
 
     /** @hide Process can access camera while in foreground */
-    @TestApi
+    @SystemApi
     public static final int PROCESS_CAPABILITY_FOREGROUND_CAMERA = 1 << 1;
 
     /** @hide Process can access microphone while in foreground */
-    @TestApi
+    @SystemApi
     public static final int PROCESS_CAPABILITY_FOREGROUND_MICROPHONE = 1 << 2;
 
     /** @hide Process can access network despite any power saving resrictions */
@@ -4398,8 +4398,6 @@ public class ActivityManager {
      *
      * @throws UnsupportedOperationException if the device does not support background users on
      * secondary displays.
-     * @throws IllegalArgumentException if the display doesn't exist or is not a valid display to
-     * start secondary users on.
      *
      * @hide
      */

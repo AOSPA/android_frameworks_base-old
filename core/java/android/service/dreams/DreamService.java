@@ -312,7 +312,14 @@ public class DreamService extends Service implements Window.Callback {
         @Override
         public void onExitRequested() {
             // Simply finish dream when exit is requested.
-            finish();
+            mHandler.post(() -> finish());
+        }
+
+        @Override
+        public void onWakeUpComplete() {
+            // Finish the dream once overlay animations are complete. Execute on handler since
+            // this is coming in on the overlay binder.
+            mHandler.post(() -> finish());
         }
     };
 
@@ -975,7 +982,18 @@ public class DreamService extends Service implements Window.Callback {
      * </p>
      */
     public void onWakeUp() {
-        finish();
+        if (mOverlayConnection != null) {
+            mOverlayConnection.addConsumer(overlay -> {
+                try {
+                    overlay.wakeUp();
+                } catch (RemoteException e) {
+                    Slog.e(TAG, "Error waking the overlay service", e);
+                    finish();
+                }
+            });
+        } else {
+            finish();
+        }
     }
 
     /** {@inheritDoc} */
@@ -1294,7 +1312,7 @@ public class DreamService extends Service implements Window.Callback {
         if (!mWindowless) {
             Intent i = new Intent(this, DreamActivity.class);
             i.setPackage(getApplicationContext().getPackageName());
-            i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_USER_ACTION);
             i.putExtra(DreamActivity.EXTRA_CALLBACK, new DreamActivityCallbacks(mDreamToken));
             final ServiceInfo serviceInfo = fetchServiceInfo(this,
                     new ComponentName(this, getClass()));

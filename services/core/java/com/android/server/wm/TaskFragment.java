@@ -17,7 +17,9 @@
 package com.android.server.wm;
 
 import static android.app.ActivityTaskManager.INVALID_TASK_ID;
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_ASSISTANT;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.ROTATION_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
@@ -27,6 +29,8 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.content.pm.ActivityInfo.FLAG_ALLOW_UNTRUSTED_ACTIVITY_EMBEDDING;
 import static android.content.pm.ActivityInfo.FLAG_RESUME_WHILE_PAUSING;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
 import static android.content.res.Configuration.ORIENTATION_UNDEFINED;
@@ -76,6 +80,7 @@ import android.app.servertransaction.ClientTransaction;
 import android.app.servertransaction.NewIntentItem;
 import android.app.servertransaction.PauseActivityItem;
 import android.app.servertransaction.ResumeActivityItem;
+import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.graphics.Point;
 import android.graphics.Rect;
@@ -230,6 +235,14 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     private TaskFragment mAdjacentTaskFragment;
 
     /**
+     * Unlike the {@link mAdjacentTaskFragment}, the companion TaskFragment is not always visually
+     * adjacent to this one, but this TaskFragment will be removed by the organizer if the
+     * companion TaskFragment is removed.
+     */
+    @Nullable
+    private TaskFragment mCompanionTaskFragment;
+
+    /**
      * Prevents duplicate calls to onTaskAppeared.
      */
     boolean mTaskFragmentAppearedSent;
@@ -245,6 +258,12 @@ class TaskFragment extends WindowContainer<WindowContainer> {
      * is entering PiP.
      */
     boolean mClearedTaskFragmentForPip;
+
+    /**
+     * The last running activity of the TaskFragment was removed and added to the top-most of the
+     * Task because it was launched with FLAG_ACTIVITY_REORDER_TO_FRONT.
+     */
+    boolean mClearedForReorderActivityToFront;
 
     /**
      * When we are in the process of pausing an activity, before starting the
@@ -295,6 +314,12 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     /** Client assigned unique token for this TaskFragment if this is created by an organizer. */
     @Nullable
     private final IBinder mFragmentToken;
+
+    /**
+     * Whether to delay the call to {@link #updateOrganizedTaskFragmentSurface()} when there is a
+     * configuration change.
+     */
+    private boolean mDelayOrganizedTaskFragmentSurfaceUpdate;
 
     /**
      * Whether to delay the last activity of TaskFragment being immediately removed while finishing.
@@ -394,6 +419,14 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             mAdjacentTaskFragment = taskFragment;
             taskFragment.setAdjacentTaskFragment(this);
         }
+    }
+
+    void setCompanionTaskFragment(@Nullable TaskFragment companionTaskFragment) {
+        mCompanionTaskFragment = companionTaskFragment;
+    }
+
+    TaskFragment getCompanionTaskFragment() {
+        return mCompanionTaskFragment;
     }
 
     void resetAdjacentTaskFragment() {
@@ -561,15 +594,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
     @Override
     boolean isEmbedded() {
-        if (mIsEmbedded) {
-            return true;
-        }
-        final WindowContainer<?> parent = getParent();
-        if (parent != null) {
-            final TaskFragment taskFragment = parent.asTaskFragment();
-            return taskFragment != null && taskFragment.isEmbedded();
-        }
-        return false;
+        return mIsEmbedded;
     }
 
     @EmbeddingCheckResult
@@ -1821,6 +1846,51 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         }
     }
 
+    @ActivityInfo.ScreenOrientation
+    @Override
+    int getOrientation(@ActivityInfo.ScreenOrientation int candidate) {
+        if (shouldReportOrientationUnspecified()) {
+            return SCREEN_ORIENTATION_UNSPECIFIED;
+        }
+        if (canSpecifyOrientation()) {
+            return super.getOrientation(candidate);
+        }
+        return SCREEN_ORIENTATION_UNSET;
+    }
+
+    /**
+     * Whether or not to allow this container to specify an app requested orientation.
+     *
+     * This is different from {@link #providesOrientation()} that
+     * 1. The container may still provide an orientation even if it can't specify the app requested
+     *    one, such as {@link #shouldReportOrientationUnspecified()}
+     * 2. Even if the container can specify an app requested orientation, it may not be used by the
+     *    parent container if it is {@link ActivityInfo#SCREEN_ORIENTATION_UNSPECIFIED}.
+     */
+    boolean canSpecifyOrientation() {
+        final int windowingMode = getWindowingMode();
+        final int activityType = getActivityType();
+        return windowingMode == WINDOWING_MODE_FULLSCREEN
+                || activityType == ACTIVITY_TYPE_HOME
+                || activityType == ACTIVITY_TYPE_RECENTS
+                || activityType == ACTIVITY_TYPE_ASSISTANT;
+    }
+
+    /**
+     * Whether or not the parent container should use the orientation provided by this container
+     * even if it is {@link ActivityInfo#SCREEN_ORIENTATION_UNSPECIFIED}.
+     */
+    @Override
+    boolean providesOrientation() {
+        return super.providesOrientation() || shouldReportOrientationUnspecified();
+    }
+
+    private boolean shouldReportOrientationUnspecified() {
+        // Apps and their containers are not allowed to specify orientation from adjacent
+        // TaskFragment.
+        return getAdjacentTaskFragment() != null && isVisibleRequested();
+    }
+
     @Override
     void forAllTaskFragments(Consumer<TaskFragment> callback, boolean traverseTopToBottom) {
         super.forAllTaskFragments(callback, traverseTopToBottom);
@@ -1878,6 +1948,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         ActivityRecord r = topRunningActivity();
         mClearedTaskForReuse = false;
         mClearedTaskFragmentForPip = false;
+        mClearedForReorderActivityToFront = false;
 
         final ActivityRecord addingActivity = child.asActivityRecord();
         final boolean isAddingActivity = addingActivity != null;
@@ -2296,35 +2367,41 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
     @Override
     public void onConfigurationChanged(Configuration newParentConfig) {
-        // Task will animate differently.
-        if (mTaskFragmentOrganizer != null) {
-            mTmpPrevBounds.set(getBounds());
-        }
-
         super.onConfigurationChanged(newParentConfig);
 
-        final boolean shouldStartChangeTransition = shouldStartChangeTransition(mTmpPrevBounds);
-        if (shouldStartChangeTransition) {
-            initializeChangeTransition(mTmpPrevBounds);
-        }
         if (mTaskFragmentOrganizer != null) {
-            if (mTransitionController.isShellTransitionsEnabled()
-                    && !mTransitionController.isCollecting(this)) {
-                // TaskFragmentOrganizer doesn't have access to the surface for security reasons, so
-                // update the surface here if it is not collected by Shell transition.
-                updateOrganizedTaskFragmentSurface();
-            } else if (!mTransitionController.isShellTransitionsEnabled()
-                    && !shouldStartChangeTransition) {
-                // Update the surface here instead of in the organizer so that we can make sure
-                // it can be synced with the surface freezer for legacy app transition.
-                updateOrganizedTaskFragmentSurface();
-            }
+            updateOrganizedTaskFragmentSurface();
         }
 
         sendTaskFragmentInfoChanged();
     }
 
+    void deferOrganizedTaskFragmentSurfaceUpdate() {
+        mDelayOrganizedTaskFragmentSurfaceUpdate = true;
+    }
+
+    void continueOrganizedTaskFragmentSurfaceUpdate() {
+        mDelayOrganizedTaskFragmentSurfaceUpdate = false;
+        updateOrganizedTaskFragmentSurface();
+    }
+
     private void updateOrganizedTaskFragmentSurface() {
+        if (mDelayOrganizedTaskFragmentSurfaceUpdate) {
+            return;
+        }
+        if (mTransitionController.isShellTransitionsEnabled()
+                && !mTransitionController.isCollecting(this)) {
+            // TaskFragmentOrganizer doesn't have access to the surface for security reasons, so
+            // update the surface here if it is not collected by Shell transition.
+            updateOrganizedTaskFragmentSurfaceUnchecked();
+        } else if (!mTransitionController.isShellTransitionsEnabled() && !isAnimating()) {
+            // Update the surface here instead of in the organizer so that we can make sure
+            // it can be synced with the surface freezer for legacy app transition.
+            updateOrganizedTaskFragmentSurfaceUnchecked();
+        }
+    }
+
+    private void updateOrganizedTaskFragmentSurfaceUnchecked() {
         final SurfaceControl.Transaction t = getSyncTransaction();
         updateSurfacePosition(t);
         updateOrganizedTaskFragmentSurfaceSize(t, false /* forceUpdate */);
@@ -2378,7 +2455,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     }
 
     /** Whether we should prepare a transition for this {@link TaskFragment} bounds change. */
-    private boolean shouldStartChangeTransition(Rect startBounds) {
+    boolean shouldStartChangeTransition(Rect startBounds) {
         if (mTaskFragmentOrganizer == null || !canStartChangeTransition()) {
             return false;
         }
@@ -2398,7 +2475,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     void setSurfaceControl(SurfaceControl sc) {
         super.setSurfaceControl(sc);
         if (mTaskFragmentOrganizer != null) {
-            updateOrganizedTaskFragmentSurface();
+            updateOrganizedTaskFragmentSurfaceUnchecked();
             // If the TaskFragmentOrganizer was set before we created the SurfaceControl, we need to
             // emit the callbacks now.
             sendTaskFragmentAppeared();
@@ -2460,6 +2537,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                 positionInParent,
                 mClearedTaskForReuse,
                 mClearedTaskFragmentForPip,
+                mClearedForReorderActivityToFront,
                 calculateMinDimension());
     }
 
@@ -2504,6 +2582,22 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     /** Whether this is an organized {@link TaskFragment} and not a {@link Task}. */
     final boolean isOrganizedTaskFragment() {
         return mTaskFragmentOrganizer != null;
+    }
+
+    /**
+     * Whether this is an embedded {@link TaskFragment} that does not fill the parent {@link Task}.
+     */
+    boolean isEmbeddedWithBoundsOverride() {
+        if (!mIsEmbedded) {
+            return false;
+        }
+        final Task task = getTask();
+        if (task == null) {
+            return false;
+        }
+        final Rect taskBounds = task.getBounds();
+        final Rect taskFragBounds = getBounds();
+        return !taskBounds.equals(taskFragBounds) && taskBounds.contains(taskFragBounds);
     }
 
     /** Whether the Task should be visible. */
@@ -2744,6 +2838,16 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             return taskFragment;
         }
         return callback.test(this) ? this : null;
+    }
+
+    /**
+     * Moves the passed child to front
+     * @return whether it was actually moved (vs already being top).
+     */
+    boolean moveChildToFront(WindowContainer newTop) {
+        int origDist = getDistanceFromTop(newTop);
+        positionChildAt(POSITION_TOP, newTop, false /* includeParents */);
+        return getDistanceFromTop(newTop) != origDist;
     }
 
     String toFullString() {

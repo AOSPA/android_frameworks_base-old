@@ -348,6 +348,9 @@ class MediaRouter2ServiceImpl {
             @NonNull String uniqueSessionId, int volume) {
         Objects.requireNonNull(router, "router must not be null");
         Objects.requireNonNull(uniqueSessionId, "uniqueSessionId must not be null");
+        if (TextUtils.isEmpty(uniqueSessionId)) {
+            throw new IllegalArgumentException("uniqueSessionId must not be empty");
+        }
 
         final long token = Binder.clearCallingIdentity();
         try {
@@ -2443,10 +2446,9 @@ class MediaRouter2ServiceImpl {
             List<RouterRecord> routerRecords = getRouterRecords();
             List<ManagerRecord> managerRecords = getManagerRecords();
 
-            boolean shouldBindProviders = false;
-
+            boolean isManagerScanning = false;
             if (service.mPowerManager.isInteractive()) {
-                boolean isManagerScanning = managerRecords.stream().anyMatch(manager ->
+                isManagerScanning = managerRecords.stream().anyMatch(manager ->
                         manager.mIsScanning && service.mActivityManager
                                 .getPackageImportance(manager.mPackageName)
                                 <= PACKAGE_IMPORTANCE_FOR_DISCOVERY);
@@ -2455,7 +2457,6 @@ class MediaRouter2ServiceImpl {
                     discoveryPreferences = routerRecords.stream()
                             .map(record -> record.mDiscoveryPreference)
                             .collect(Collectors.toList());
-                    shouldBindProviders = true;
                 } else {
                     discoveryPreferences = routerRecords.stream().filter(record ->
                             service.mActivityManager.getPackageImportance(record.mPackageName)
@@ -2468,7 +2469,7 @@ class MediaRouter2ServiceImpl {
             for (MediaRoute2Provider provider : mRouteProviders) {
                 if (provider instanceof MediaRoute2ProviderServiceProxy) {
                     ((MediaRoute2ProviderServiceProxy) provider)
-                            .setManagerScanning(shouldBindProviders);
+                            .setManagerScanning(isManagerScanning);
                 }
             }
 
@@ -2484,7 +2485,7 @@ class MediaRouter2ServiceImpl {
                 activeScan |= preference.shouldPerformActiveScan();
             }
             RouteDiscoveryPreference newPreference = new RouteDiscoveryPreference.Builder(
-                    List.copyOf(preferredFeatures), activeScan).build();
+                    List.copyOf(preferredFeatures), activeScan || isManagerScanning).build();
 
             synchronized (service.mLock) {
                 if (newPreference.equals(mUserRecord.mCompositeDiscoveryPreference)) {

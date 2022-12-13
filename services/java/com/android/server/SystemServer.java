@@ -41,7 +41,6 @@ import android.app.usage.UsageStatsManagerInternal;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.IPackageManager;
 import android.content.pm.PackageItemInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManagerInternal;
@@ -55,6 +54,7 @@ import android.hardware.display.DisplayManagerInternal;
 import android.net.ConnectivityManager;
 import android.net.ConnectivityModuleConnector;
 import android.net.NetworkStackClient;
+import android.os.ArtModuleServiceManager;
 import android.os.BaseBundle;
 import android.os.Binder;
 import android.os.Build;
@@ -104,10 +104,12 @@ import com.android.internal.util.ConcurrentUtils;
 import com.android.internal.util.EmergencyAffordanceManager;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.widget.ILockSettings;
+import com.android.internal.widget.LockSettingsInternal;
 import com.android.server.am.ActivityManagerService;
 import com.android.server.ambientcontext.AmbientContextManagerService;
 import com.android.server.appbinding.AppBindingService;
 import com.android.server.art.ArtManagerLocal;
+import com.android.server.art.ArtModuleServiceInitializer;
 import com.android.server.attention.AttentionManagerService;
 import com.android.server.audio.AudioService;
 import com.android.server.biometrics.AuthService;
@@ -166,7 +168,6 @@ import com.android.server.pm.PackageManagerService;
 import com.android.server.pm.ShortcutService;
 import com.android.server.pm.UserManagerService;
 import com.android.server.pm.dex.OdsignStatsLogger;
-import com.android.server.pm.dex.SystemServerDexLoadReporter;
 import com.android.server.pm.verify.domain.DomainVerificationService;
 import com.android.server.policy.AppOpsPolicy;
 import com.android.server.policy.PermissionPolicyService;
@@ -466,6 +467,7 @@ public final class SystemServer implements Dumpable {
     private final long mRuntimeStartUptime;
 
     private static final String START_HIDL_SERVICES = "StartHidlServices";
+    private static final String START_SENSOR_MANAGER_SERVICE = "StartISensorManagerService";
     private static final String START_BLOB_STORE_SERVICE = "startBlobStoreManagerService";
 
     private static final String SYSPROP_START_COUNT = "sys.system_server.start_count";
@@ -483,6 +485,9 @@ public final class SystemServer implements Dumpable {
 
     /** Start the IStats services. This is a blocking call and can take time. */
     private static native void startIStatsService();
+
+    /** Start the ISensorManager service. This is a blocking call and can take time. */
+    private static native void startISensorManagerService();
 
     /**
      * Start the memtrack proxy service.
@@ -1205,23 +1210,15 @@ public final class SystemServer implements Dumpable {
         mSystemServiceManager.startService(domainVerificationService);
         t.traceEnd();
 
-        IPackageManager iPackageManager;
         t.traceBegin("StartPackageManagerService");
         try {
             Watchdog.getInstance().pauseWatchingCurrentThread("packagemanagermain");
-            Pair<PackageManagerService, IPackageManager> pmsPair = PackageManagerService.main(
+            mPackageManagerService = PackageManagerService.main(
                     mSystemContext, installer, domainVerificationService,
                     mFactoryTestMode != FactoryTest.FACTORY_TEST_OFF);
-            mPackageManagerService = pmsPair.first;
-            iPackageManager = pmsPair.second;
         } finally {
             Watchdog.getInstance().resumeWatchingCurrentThread("packagemanagermain");
         }
-
-        // Now that the package manager has started, register the dex load reporter to capture any
-        // dex files loaded by system server.
-        // These dex files will be optimized by the BackgroundDexOptService.
-        SystemServerDexLoadReporter.configureSystemServerDexReporter(iPackageManager);
 
         mFirstBoot = mPackageManagerService.isFirstBoot();
         mPackageManager = mSystemContext.getPackageManager();
@@ -1572,9 +1569,16 @@ public final class SystemServer implements Dumpable {
             wm.onInitReady();
             t.traceEnd();
 
-            // Start receiving calls from HIDL services. Start in in a separate thread
+            // Start receiving calls from SensorManager services. Start in a separate thread
             // because it need to connect to SensorManager. This has to start
             // after PHASE_WAIT_FOR_SENSOR_SERVICE is done.
+            SystemServerInitThreadPool.submit(() -> {
+                TimingsTraceAndSlog traceLog = TimingsTraceAndSlog.newAsyncLog();
+                traceLog.traceBegin(START_SENSOR_MANAGER_SERVICE);
+                startISensorManagerService();
+                traceLog.traceEnd();
+            }, START_SENSOR_MANAGER_SERVICE);
+
             SystemServerInitThreadPool.submit(() -> {
                 TimingsTraceAndSlog traceLog = TimingsTraceAndSlog.newAsyncLog();
                 traceLog.traceBegin(START_HIDL_SERVICES);
@@ -1803,17 +1807,18 @@ public final class SystemServer implements Dumpable {
             dpms = mSystemServiceManager.startService(DevicePolicyManagerService.Lifecycle.class);
             t.traceEnd();
 
-            if (!isWatch) {
-                t.traceBegin("StartStatusBarManagerService");
-                try {
-                    statusBar = new StatusBarManagerService(context);
-                    ServiceManager.addService(Context.STATUS_BAR_SERVICE, statusBar, false,
-                            DUMP_FLAG_PRIORITY_NORMAL | DUMP_FLAG_PROTO);
-                } catch (Throwable e) {
-                    reportWtf("starting StatusBarManagerService", e);
+            t.traceBegin("StartStatusBarManagerService");
+            try {
+                statusBar = new StatusBarManagerService(context);
+                if (!isWatch) {
+                    statusBar.publishGlobalActionsProvider();
                 }
-                t.traceEnd();
+                ServiceManager.addService(Context.STATUS_BAR_SERVICE, statusBar, false,
+                        DUMP_FLAG_PRIORITY_NORMAL | DUMP_FLAG_PROTO);
+            } catch (Throwable e) {
+                reportWtf("starting StatusBarManagerService", e);
             }
+            t.traceEnd();
 
             if (deviceHasConfigString(context,
                     R.string.config_defaultMusicRecognitionService)) {
@@ -2763,6 +2768,7 @@ public final class SystemServer implements Dumpable {
         t.traceEnd();
 
         t.traceBegin("ArtManagerLocal");
+        ArtModuleServiceInitializer.setArtModuleServiceManager(new ArtModuleServiceManager());
         LocalManagerRegistry.addManager(ArtManagerLocal.class, new ArtManagerLocal(context));
         t.traceEnd();
 
@@ -3071,6 +3077,14 @@ public final class SystemServer implements Dumpable {
             }
             t.traceEnd();
         }, t);
+
+        t.traceBegin("LockSettingsThirdPartyAppsStarted");
+        LockSettingsInternal lockSettingsInternal =
+            LocalServices.getService(LockSettingsInternal.class);
+        if (lockSettingsInternal != null) {
+            lockSettingsInternal.onThirdPartyAppsStarted();
+        }
+        t.traceEnd();
 
         t.traceBegin("StartSystemUI");
         try {

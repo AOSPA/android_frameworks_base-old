@@ -19,6 +19,7 @@ package com.android.systemui.keyguard.domain.interactor
 import android.os.Looper
 import android.testing.AndroidTestingRunner
 import android.testing.TestableLooper.RunWithLooper
+import android.view.View
 import androidx.test.filters.SmallTest
 import com.android.keyguard.KeyguardSecurityModel
 import com.android.keyguard.KeyguardUpdateMonitor
@@ -43,6 +44,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.Answers
+import org.mockito.ArgumentCaptor
 import org.mockito.Mock
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
@@ -105,6 +107,7 @@ class PrimaryBouncerInteractorTest : SysuiTestCase() {
         verify(repository).setPrimaryVisible(true)
         verify(repository).setPrimaryShow(any(KeyguardBouncerModel::class.java))
         verify(repository).setPrimaryShowingSoon(false)
+        verify(mPrimaryBouncerCallbackInteractor).dispatchVisibilityChanged(View.VISIBLE)
     }
 
     @Test
@@ -128,6 +131,7 @@ class PrimaryBouncerInteractorTest : SysuiTestCase() {
         verify(repository).setPrimaryVisible(false)
         verify(repository).setPrimaryHide(true)
         verify(repository).setPrimaryShow(null)
+        verify(mPrimaryBouncerCallbackInteractor).dispatchVisibilityChanged(View.INVISIBLE)
     }
 
     @Test
@@ -170,8 +174,10 @@ class PrimaryBouncerInteractorTest : SysuiTestCase() {
 
     @Test
     fun testShowMessage() {
+        val argCaptor = ArgumentCaptor.forClass(BouncerShowMessageModel::class.java)
         mPrimaryBouncerInteractor.showMessage("abc", null)
-        verify(repository).setShowMessage(BouncerShowMessageModel("abc", null))
+        verify(repository).setShowMessage(argCaptor.capture())
+        assertThat(argCaptor.value.message).isEqualTo("abc")
     }
 
     @Test
@@ -192,6 +198,12 @@ class PrimaryBouncerInteractorTest : SysuiTestCase() {
     fun testNotifyKeyguardAuthenticated() {
         mPrimaryBouncerInteractor.notifyKeyguardAuthenticated(true)
         verify(repository).setKeyguardAuthenticated(true)
+    }
+
+    @Test
+    fun testNotifyShowedMessage() {
+        mPrimaryBouncerInteractor.onMessageShown()
+        verify(repository).setShowMessage(null)
     }
 
     @Test

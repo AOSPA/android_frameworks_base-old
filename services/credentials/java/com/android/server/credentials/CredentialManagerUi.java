@@ -16,6 +16,7 @@
 package com.android.server.credentials;
 
 import android.annotation.NonNull;
+import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.credentials.ui.IntentFactory;
@@ -30,6 +31,7 @@ import android.util.Log;
 import android.util.Slog;
 
 import java.util.ArrayList;
+import java.util.UUID;
 
 /** Initiates the Credential Manager UI and receives results. */
 public class CredentialManagerUi {
@@ -37,6 +39,7 @@ public class CredentialManagerUi {
     @NonNull
     private final CredentialManagerUiCallback mCallbacks;
     @NonNull private final Context mContext;
+    // TODO : Use for starting the activity for this user
     private final int mUserId;
     @NonNull private final ResultReceiver mResultReceiver = new ResultReceiver(
             new Handler(Looper.getMainLooper())) {
@@ -56,7 +59,7 @@ public class CredentialManagerUi {
                 Slog.i(TAG, "No selection found in UI result");
             }
         } else if (resultCode == UserSelectionDialogResult.RESULT_CODE_DIALOG_CANCELED) {
-            mCallbacks.onUiCancelation();
+            mCallbacks.onUiCancellation();
         }
     }
 
@@ -67,7 +70,7 @@ public class CredentialManagerUi {
         /** Called when the user makes a selection. */
         void onUiSelection(UserSelectionDialogResult selection);
         /** Called when the user cancels the UI. */
-        void onUiCancelation();
+        void onUiCancellation();
     }
     public CredentialManagerUi(Context context, int userId,
             CredentialManagerUiCallback callbacks) {
@@ -78,15 +81,20 @@ public class CredentialManagerUi {
     }
 
     /**
-     * Surfaces the Credential Manager bottom sheet UI.
+     * Creates a {@link PendingIntent} to be used to invoke the credential manager selector UI,
+     * by the calling app process.
+     * @param requestInfo the information about the request
      * @param providerDataList the list of provider data from remote providers
      */
-    public void show(RequestInfo requestInfo, ArrayList<ProviderData> providerDataList) {
-        Log.i(TAG, "In show");
-        Intent intent = IntentFactory.newIntent(
-                requestInfo, providerDataList,
-                new ArrayList<>(), mResultReceiver);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        mContext.startActivity(intent);
+    public PendingIntent createPendingIntent(
+            RequestInfo requestInfo, ArrayList<ProviderData> providerDataList) {
+        Log.i(TAG, "In createPendingIntent");
+        Intent intent = IntentFactory.newIntent(requestInfo, providerDataList, new ArrayList<>(),
+                mResultReceiver)
+                .setAction(UUID.randomUUID().toString());
+        //TODO: Create unique pending intent using request code and cancel any pre-existing pending
+        // intents
+        return PendingIntent.getActivity(
+                mContext, /*requestCode=*/0, intent, PendingIntent.FLAG_IMMUTABLE);
     }
 }

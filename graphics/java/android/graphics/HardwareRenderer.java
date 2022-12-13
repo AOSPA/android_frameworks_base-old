@@ -25,6 +25,7 @@ import android.app.ActivityManager;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
+import android.hardware.OverlayProperties;
 import android.hardware.display.DisplayManager;
 import android.os.IBinder;
 import android.os.ParcelFileDescriptor;
@@ -982,6 +983,15 @@ public class HardwareRenderer {
     }
 
     /**
+     * Notifies the hardware renderer about pending choreographer callbacks.
+     *
+     * @hide
+     */
+    public void notifyCallbackPending() {
+        nNotifyCallbackPending(mNativeProxy);
+    }
+
+    /**
      * b/68769804, b/66945974: For low FPS experiments.
      *
      * @hide
@@ -1321,6 +1331,9 @@ public class HardwareRenderer {
             // memory policy in play will interpret these values differently.
             int largestWidth = activeMode.getPhysicalWidth();
             int largestHeight = activeMode.getPhysicalHeight();
+            final OverlayProperties overlayProperties = defaultDisplay.getOverlaySupport();
+            boolean supportFp16ForHdr = overlayProperties != null
+                    ? overlayProperties.supportFp16ForHdr() : false;
 
             for (int i = 0; i < allDisplays.length; i++) {
                 final Display display = allDisplays[i];
@@ -1348,7 +1361,7 @@ public class HardwareRenderer {
             nInitDisplayInfo(largestWidth, largestHeight, defaultDisplay.getRefreshRate(),
                     wideColorDataspace, defaultDisplay.getAppVsyncOffsetNanos(),
                     defaultDisplay.getPresentationDeadlineNanos(),
-                    defaultDisplay.getOverlaySupport().supportFp16ForHdr());
+                    supportFp16ForHdr);
 
             mDisplayInitialized = true;
         }
@@ -1536,4 +1549,6 @@ public class HardwareRenderer {
     private static native boolean nIsDrawingEnabled();
 
     private static native void nSetRtAnimationsEnabled(boolean rtAnimationsEnabled);
+
+    private static native void nNotifyCallbackPending(long nativeProxy);
 }

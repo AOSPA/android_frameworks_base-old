@@ -81,10 +81,10 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
     public static final int PARALLAX_DISMISSING = 1;
     public static final int PARALLAX_ALIGN_CENTER = 2;
 
-    private static final int FLING_RESIZE_DURATION = 250;
+    public static final int FLING_RESIZE_DURATION = 250;
     private static final int FLING_SWITCH_DURATION = 350;
-    private static final int FLING_ENTER_DURATION = 350;
-    private static final int FLING_EXIT_DURATION = 350;
+    private static final int FLING_ENTER_DURATION = 450;
+    private static final int FLING_EXIT_DURATION = 450;
 
     private int mDividerWindowWidth;
     private int mDividerInsets;
@@ -601,7 +601,7 @@ public final class SplitLayout implements DisplayInsetsController.OnInsetsChange
         animator.start();
     }
 
-    /** Swich both surface position with animation. */
+    /** Switch both surface position with animation. */
     public void splitSwitching(SurfaceControl.Transaction t, SurfaceControl leash1,
             SurfaceControl leash2, Consumer<Rect> finishCallback) {
         final boolean isLandscape = isLandscape();

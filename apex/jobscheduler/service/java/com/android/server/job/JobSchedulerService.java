@@ -47,6 +47,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.PermissionChecker;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
@@ -569,7 +570,7 @@ public class JobSchedulerService extends com.android.server.SystemService
         public static final long DEFAULT_RUNTIME_MIN_EJ_GUARANTEE_MS = 3 * MINUTE_IN_MILLIS;
         @VisibleForTesting
         static final long DEFAULT_RUNTIME_MIN_HIGH_PRIORITY_GUARANTEE_MS = 5 * MINUTE_IN_MILLIS;
-        static final boolean DEFAULT_PERSIST_IN_SPLIT_FILES = false;
+        static final boolean DEFAULT_PERSIST_IN_SPLIT_FILES = true;
         private static final boolean DEFAULT_USE_TARE_POLICY = false;
 
         /**
@@ -3407,6 +3408,39 @@ public class JobSchedulerService extends com.android.server.SystemService
             } finally {
                 Binder.restoreCallingIdentity(ident);
             }
+        }
+
+        @Override
+        public boolean canRunLongJobs(@NonNull String packageName) {
+            final int callingUid = Binder.getCallingUid();
+            final int userId = UserHandle.getUserId(callingUid);
+            final int packageUid = mLocalPM.getPackageUid(packageName, 0, userId);
+            if (callingUid != packageUid) {
+                throw new SecurityException("Uid " + callingUid
+                        + " cannot query canRunLongJobs for package " + packageName);
+            }
+
+            return checkRunLongJobsPermission(packageUid, packageName);
+        }
+
+        @Override
+        public boolean hasRunLongJobsPermission(@NonNull String packageName,
+                @UserIdInt int userId) {
+            final int uid = mLocalPM.getPackageUid(packageName, 0, userId);
+            final int callingUid = Binder.getCallingUid();
+            if (callingUid != uid && !UserHandle.isCore(callingUid)) {
+                throw new SecurityException("Uid " + callingUid
+                        + " cannot query canRunLongJobs for package " + packageName);
+            }
+
+            return checkRunLongJobsPermission(uid, packageName);
+        }
+
+        private boolean checkRunLongJobsPermission(int packageUid, String packageName) {
+            // Returns true if both the appop and permission are granted.
+            return PermissionChecker.checkPermissionForPreflight(getContext(),
+                    android.Manifest.permission.RUN_LONG_JOBS, PermissionChecker.PID_UNKNOWN,
+                    packageUid, packageName) == PermissionChecker.PERMISSION_GRANTED;
         }
 
         /**

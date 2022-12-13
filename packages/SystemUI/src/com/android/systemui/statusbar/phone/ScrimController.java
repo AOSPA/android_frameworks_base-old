@@ -53,7 +53,6 @@ import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.keyguard.KeyguardUnlockAnimationController;
-import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.scrim.ScrimView;
 import com.android.systemui.shade.NotificationPanelViewController;
 import com.android.systemui.statusbar.notification.stack.ViewState;
@@ -109,6 +108,12 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
      */
     public static final int OPAQUE = 2;
     private boolean mClipsQsScrim;
+
+    /**
+     * Whether an activity is launching over the lockscreen. During the launch animation, we want to
+     * delay certain scrim changes until after the animation ends.
+     */
+    private boolean mOccludeAnimationPlaying = false;
 
     /**
      * The amount of progress we are currently in if we're transitioning to the full shade.
@@ -205,7 +210,6 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
     private final ScreenOffAnimationController mScreenOffAnimationController;
     private final KeyguardUnlockAnimationController mKeyguardUnlockAnimationController;
     private final StatusBarKeyguardViewManager mStatusBarKeyguardViewManager;
-    private KeyguardViewMediator mKeyguardViewMediator;
 
     private GradientColors mColors;
     private boolean mNeedsDrawableColorUpdate;
@@ -275,8 +279,7 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
             @Main Executor mainExecutor,
             ScreenOffAnimationController screenOffAnimationController,
             KeyguardUnlockAnimationController keyguardUnlockAnimationController,
-            StatusBarKeyguardViewManager statusBarKeyguardViewManager,
-            KeyguardViewMediator keyguardViewMediator) {
+            StatusBarKeyguardViewManager statusBarKeyguardViewManager) {
         mScrimStateListener = lightBarController::setScrimState;
         mDefaultScrimAlpha = BUSY_SCRIM_ALPHA;
 
@@ -315,8 +318,6 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
             }
         });
         mColors = new GradientColors();
-
-        mKeyguardViewMediator = keyguardViewMediator;
     }
 
     /**
@@ -738,6 +739,11 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
         return mClipsQsScrim;
     }
 
+    public void setOccludeAnimationPlaying(boolean occludeAnimationPlaying) {
+        mOccludeAnimationPlaying = occludeAnimationPlaying;
+        applyAndDispatchState();
+    }
+
     private void setOrAdaptCurrentAnimation(@Nullable View scrim) {
         if (scrim == null) {
             return;
@@ -777,11 +783,15 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
         }
 
         if (mState == ScrimState.UNLOCKED || mState == ScrimState.DREAMING) {
-            // Darken scrim as you pull down the shade when unlocked, unless the shade is expanding
-            // because we're doing the screen off animation OR the shade is collapsing because
-            // we're playing the unlock animation
+            final boolean occluding =
+                    mOccludeAnimationPlaying || mState.mLaunchingAffordanceWithPreview;
+
+            // Darken scrim as it's pulled down while unlocked. If we're unlocked but playing the
+            // screen off/occlusion animations, ignore expansion changes while those animations
+            // play.
             if (!mScreenOffAnimationController.shouldExpandNotifications()
-                    && !mAnimatingPanelExpansionOnUnlock) {
+                    && !mAnimatingPanelExpansionOnUnlock
+                    && !occluding) {
                 float behindFraction = getInterpolatedFraction();
                 behindFraction = (float) Math.pow(behindFraction, 0.8f);
                 if (mClipsQsScrim) {
@@ -811,13 +821,6 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
                 mBehindTint = ColorUtils.blendARGB(ScrimState.BOUNCER.getBehindTint(),
                         mBehindTint,
                         interpolatedFraction);
-            }
-
-            // If we're unlocked but still playing the occlude animation, remain at the keyguard
-            // alpha temporarily.
-            if (mKeyguardViewMediator.isOccludeAnimationPlaying()
-                    || mState.mLaunchingAffordanceWithPreview) {
-                mNotificationsAlpha = KEYGUARD_SCRIM_ALPHA;
             }
         } else if (mState == ScrimState.AUTH_SCRIMMED_SHADE) {
             mNotificationsAlpha = (float) Math.pow(getInterpolatedFraction(), 0.8f);

@@ -43,6 +43,7 @@ import org.mockito.ArgumentMatchers.anyFloat
 import org.mockito.ArgumentMatchers.anyInt
 import org.mockito.ArgumentMatchers.notNull
 import org.mockito.Mock
+import org.mockito.Mockito.never
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when` as whenever
@@ -139,12 +140,19 @@ class DefaultClockProviderTest : SysuiTestCase() {
     }
 
     @Test
-    fun defaultClock_events_onFontSettingChanged() {
+    fun defaultSmallClock_events_onFontSettingChanged() {
         val clock = provider.createClock(DEFAULT_CLOCK_ID)
-        clock.events.onFontSettingChanged()
+        clock.smallClock.events.onFontSettingChanged(100f)
 
-        verify(mockSmallClockView).setTextSize(eq(TypedValue.COMPLEX_UNIT_PX), anyFloat())
-        verify(mockLargeClockView).setTextSize(eq(TypedValue.COMPLEX_UNIT_PX), anyFloat())
+        verify(mockSmallClockView).setTextSize(eq(TypedValue.COMPLEX_UNIT_PX), eq(100f))
+    }
+
+    @Test
+    fun defaultLargeClock_events_onFontSettingChanged() {
+        val clock = provider.createClock(DEFAULT_CLOCK_ID)
+        clock.largeClock.events.onFontSettingChanged(200f)
+
+        verify(mockLargeClockView).setTextSize(eq(TypedValue.COMPLEX_UNIT_PX), eq(200f))
         verify(mockLargeClockView).setLayoutParams(any())
     }
 
@@ -170,5 +178,13 @@ class DefaultClockProviderTest : SysuiTestCase() {
         verify(mockLargeClockView, times(2)).setLineSpacingScale(anyFloat())
         verify(mockSmallClockView, times(2)).refreshFormat()
         verify(mockLargeClockView, times(2)).refreshFormat()
+    }
+
+    @Test
+    fun test_aodClock_always_whiteColor() {
+        val clock = provider.createClock(DEFAULT_CLOCK_ID)
+        clock.animations.doze(0.9f) // set AOD mode to active
+        clock.smallClock.events.onRegionDarknessChanged(true)
+        verify((clock.smallClock.view as AnimatableClockView), never()).animateAppearOnLockscreen()
     }
 }

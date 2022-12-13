@@ -16,18 +16,30 @@
 
 package com.android.systemui.accessibility.floatingmenu;
 
+import static android.view.WindowInsets.Type.ime;
+
+import static androidx.core.view.WindowInsetsCompat.Type;
+
+import static com.android.internal.accessibility.common.ShortcutConstants.AccessibilityFragmentType.INVISIBLE_TOGGLE;
+import static com.android.internal.accessibility.util.AccessibilityUtils.getAccessibilityServiceFragmentType;
+import static com.android.internal.accessibility.util.AccessibilityUtils.setAccessibilityServiceState;
 import static com.android.systemui.accessibility.floatingmenu.MenuMessageView.Index;
 
+import android.accessibilityservice.AccessibilityServiceInfo;
 import android.annotation.IntDef;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.res.Configuration;
+import android.graphics.Rect;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.PluralsMessageFormatter;
 import android.view.MotionEvent;
+import android.view.WindowInsets;
 import android.view.WindowManager;
+import android.view.WindowMetrics;
 import android.view.accessibility.AccessibilityManager;
 import android.widget.FrameLayout;
 import android.widget.TextView;
@@ -57,14 +69,17 @@ import java.util.Map;
 class MenuViewLayer extends FrameLayout {
     private static final int SHOW_MESSAGE_DELAY_MS = 3000;
 
+    private final WindowManager mWindowManager;
     private final MenuView mMenuView;
     private final MenuMessageView mMessageView;
     private final DismissView mDismissView;
+    private final MenuViewAppearance mMenuViewAppearance;
     private final MenuAnimationController mMenuAnimationController;
     private final AccessibilityManager mAccessibilityManager;
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private final IAccessibilityFloatingMenu mFloatingMenu;
     private final DismissAnimationController mDismissAnimationController;
+    private final Rect mImeInsetsRect = new Rect();
 
     @IntDef({
             LayerIndex.MENU_VIEW,
@@ -82,8 +97,22 @@ class MenuViewLayer extends FrameLayout {
     final Runnable mDismissMenuAction = new Runnable() {
         @Override
         public void run() {
-            Settings.Secure.putString(getContext().getContentResolver(),
-                    Settings.Secure.ACCESSIBILITY_BUTTON_TARGETS, /* value= */ "");
+            Settings.Secure.putStringForUser(getContext().getContentResolver(),
+                    Settings.Secure.ACCESSIBILITY_BUTTON_TARGETS, /* value= */ "",
+                    UserHandle.USER_CURRENT);
+
+            // Should disable the corresponding service when the fragment type is
+            // INVISIBLE_TOGGLE, which will enable service when the shortcut is on.
+            final List<AccessibilityServiceInfo> serviceInfoList =
+                    mAccessibilityManager.getEnabledAccessibilityServiceList(
+                            AccessibilityServiceInfo.FEEDBACK_ALL_MASK);
+            serviceInfoList.forEach(info -> {
+                if (getAccessibilityServiceFragmentType(info) == INVISIBLE_TOGGLE) {
+                    setAccessibilityServiceState(mContext, info.getComponentName(), /* enabled= */
+                            false);
+                }
+            });
+
             mFloatingMenu.hide();
         }
     };
@@ -92,13 +121,13 @@ class MenuViewLayer extends FrameLayout {
             AccessibilityManager accessibilityManager, IAccessibilityFloatingMenu floatingMenu) {
         super(context);
 
+        mWindowManager = windowManager;
         mAccessibilityManager = accessibilityManager;
         mFloatingMenu = floatingMenu;
 
         final MenuViewModel menuViewModel = new MenuViewModel(context);
-        final MenuViewAppearance menuViewAppearance = new MenuViewAppearance(context,
-                windowManager);
-        mMenuView = new MenuView(context, menuViewModel, menuViewAppearance);
+        mMenuViewAppearance = new MenuViewAppearance(context, windowManager);
+        mMenuView = new MenuView(context, menuViewModel, mMenuViewAppearance);
         mMenuAnimationController = mMenuView.getMenuAnimationController();
         mMenuAnimationController.setDismissCallback(this::hideMenuAndShowMessage);
 
@@ -181,6 +210,7 @@ class MenuViewLayer extends FrameLayout {
         super.onAttachedToWindow();
 
         mMenuView.show();
+        setOnApplyWindowInsetsListener((view, insets) -> onWindowInsetsApplied(insets));
         mMessageView.setUndoListener(view -> undo());
         mContext.registerComponentCallbacks(mDismissAnimationController);
     }
@@ -190,8 +220,33 @@ class MenuViewLayer extends FrameLayout {
         super.onDetachedFromWindow();
 
         mMenuView.hide();
+        setOnApplyWindowInsetsListener(null);
         mHandler.removeCallbacksAndMessages(/* token= */ null);
         mContext.unregisterComponentCallbacks(mDismissAnimationController);
+    }
+
+    private WindowInsets onWindowInsetsApplied(WindowInsets insets) {
+        final WindowMetrics windowMetrics = mWindowManager.getCurrentWindowMetrics();
+        final WindowInsets windowInsets = windowMetrics.getWindowInsets();
+        final Rect imeInsetsRect = windowInsets.getInsets(ime()).toRect();
+        if (!imeInsetsRect.equals(mImeInsetsRect)) {
+            final Rect windowBounds = new Rect(windowMetrics.getBounds());
+            final Rect systemBarsAndDisplayCutoutInsetsRect =
+                    windowInsets.getInsetsIgnoringVisibility(
+                            Type.systemBars() | Type.displayCutout()).toRect();
+            final float imeTop =
+                    windowBounds.height() - systemBarsAndDisplayCutoutInsetsRect.top
+                            - imeInsetsRect.bottom;
+
+            mMenuViewAppearance.onImeVisibilityChanged(windowInsets.isVisible(ime()), imeTop);
+
+            mMenuView.onEdgeChanged();
+            mMenuView.onPositionChanged();
+
+            mImeInsetsRect.set(imeInsetsRect);
+        }
+
+        return insets;
     }
 
     private void hideMenuAndShowMessage() {

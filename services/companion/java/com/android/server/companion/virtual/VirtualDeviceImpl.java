@@ -227,6 +227,12 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
         return mParams.getName();
     }
 
+    /** Returns the policy specified for this policy type */
+    public @VirtualDeviceParams.DevicePolicy int getDevicePolicy(
+            @VirtualDeviceParams.PolicyType int policyType) {
+        return mParams.getDevicePolicy(policyType);
+    }
+
     /** Returns the unique device ID of this device. */
     @Override // Binder call
     public int getDeviceId() {
@@ -624,6 +630,7 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
                             mParams.getBlockedActivities(),
                             mParams.getDefaultActivityPolicy(),
                             createListenerAdapter(),
+                            this::onEnteringPipBlocked,
                             this::onActivityBlocked,
                             this::onSecureWindowShown,
                             mAssociationInfo.getDeviceProfile());
@@ -777,6 +784,11 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
 
     boolean isDisplayOwnedByVirtualDevice(int displayId) {
         return mVirtualDisplayIds.contains(displayId);
+    }
+
+    void onEnteringPipBlocked(int uid) {
+        showToastWhereUidIsRunning(uid, com.android.internal.R.string.vdm_pip_blocked,
+                Toast.LENGTH_LONG, mContext.getMainLooper());
     }
 
     interface OnDeviceCloseListener {

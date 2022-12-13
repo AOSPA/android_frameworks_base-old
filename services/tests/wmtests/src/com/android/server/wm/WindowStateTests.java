@@ -26,6 +26,7 @@ import static android.view.InsetsState.ITYPE_STATUS_BAR;
 import static android.view.Surface.ROTATION_0;
 import static android.view.Surface.ROTATION_270;
 import static android.view.Surface.ROTATION_90;
+import static android.view.WindowInsets.Type.ime;
 import static android.view.WindowInsets.Type.statusBars;
 import static android.view.WindowManager.LayoutParams.FIRST_SUB_WINDOW;
 import static android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
@@ -95,6 +96,8 @@ import android.view.InsetsSource;
 import android.view.InsetsState;
 import android.view.SurfaceControl;
 import android.view.WindowManager;
+import android.window.ITaskFragmentOrganizer;
+import android.window.TaskFragmentOrganizer;
 
 import androidx.test.filters.SmallTest;
 
@@ -800,6 +803,39 @@ public class WindowStateTests extends WindowTestsBase {
     }
 
     @Test
+    public void testEmbeddedActivityResizing_clearAllDrawn() {
+        final TaskFragmentOrganizer organizer = new TaskFragmentOrganizer(Runnable::run);
+        mAtm.mTaskFragmentOrganizerController.registerOrganizer(
+                ITaskFragmentOrganizer.Stub.asInterface(organizer.getOrganizerToken().asBinder()));
+        final Task task = createTask(mDisplayContent);
+        final TaskFragment embeddedTf = createTaskFragmentWithEmbeddedActivity(task, organizer);
+        final ActivityRecord embeddedActivity = embeddedTf.getTopMostActivity();
+        final WindowState win = createWindow(null /* parent */, TYPE_APPLICATION, embeddedActivity,
+                "App window");
+        doReturn(true).when(embeddedActivity).isVisible();
+        embeddedActivity.mVisibleRequested = true;
+        makeWindowVisible(win);
+        win.mLayoutSeq = win.getDisplayContent().mLayoutSeq;
+        // Set the bounds twice:
+        // 1. To make sure there is no orientation change after #reportResized, which can also cause
+        // #clearAllDrawn.
+        // 2. Make #isLastConfigReportedToClient to be false after #reportResized, so it can process
+        // to check if we need redraw.
+        embeddedTf.setWindowingMode(WINDOWING_MODE_MULTI_WINDOW);
+        embeddedTf.setBounds(0, 0, 1000, 2000);
+        win.reportResized();
+        embeddedTf.setBounds(500, 0, 1000, 2000);
+
+        // Clear all drawn when the embedded TaskFragment is in mDisplayContent.mChangingContainers.
+        win.updateResizingWindowIfNeeded();
+        verify(embeddedActivity, never()).clearAllDrawn();
+
+        mDisplayContent.mChangingContainers.add(embeddedTf);
+        win.updateResizingWindowIfNeeded();
+        verify(embeddedActivity).clearAllDrawn();
+    }
+
+    @Test
     public void testCantReceiveTouchWhenAppTokenHiddenRequested() {
         final WindowState win0 = createWindow(null, TYPE_APPLICATION, "win0");
         win0.mActivityRecord.mVisibleRequested = false;
@@ -999,8 +1035,9 @@ public class WindowStateTests extends WindowTestsBase {
         // Simulate app requests IME with updating all windows Insets State when IME is above app.
         mDisplayContent.setImeLayeringTarget(app);
         mDisplayContent.setImeInputTarget(app);
+        app.setRequestedVisibleTypes(ime(), ime());
         assertTrue(mDisplayContent.shouldImeAttachedToApp());
-        controller.getImeSourceProvider().scheduleShowImePostLayout(app);
+        controller.getImeSourceProvider().scheduleShowImePostLayout(app, null /* statsToken */);
         controller.getImeSourceProvider().getSource().setVisible(true);
         controller.updateAboveInsetsState(false);
 
@@ -1036,8 +1073,9 @@ public class WindowStateTests extends WindowTestsBase {
         app2.mActivityRecord.mImeInsetsFrozenUntilStartInput = true;
         mDisplayContent.setImeLayeringTarget(app);
         mDisplayContent.setImeInputTarget(app);
+        app.setRequestedVisibleTypes(ime(), ime());
         assertTrue(mDisplayContent.shouldImeAttachedToApp());
-        controller.getImeSourceProvider().scheduleShowImePostLayout(app);
+        controller.getImeSourceProvider().scheduleShowImePostLayout(app, null /* statsToken */);
         controller.getImeSourceProvider().getSource().setVisible(true);
         controller.updateAboveInsetsState(false);
 

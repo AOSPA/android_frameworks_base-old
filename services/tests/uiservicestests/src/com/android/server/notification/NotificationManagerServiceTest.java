@@ -1101,6 +1101,10 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
                 new NotificationChannel("id", "name", IMPORTANCE_HIGH);
         mBinderService.updateNotificationChannelForPackage(PKG, mUid, updatedChannel);
 
+        // pretend only this following part is called by the app (system permissions are required to
+        // update the notification channel on behalf of the user above)
+        mService.isSystemUid = false;
+
         // Recreating with a lower importance leaves channel unchanged.
         final NotificationChannel dupeChannel =
                 new NotificationChannel("id", "name", NotificationManager.IMPORTANCE_LOW);
@@ -1123,6 +1127,46 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         final NotificationChannel createdChannel =
                 mBinderService.getNotificationChannel(PKG, mContext.getUserId(), PKG, "id");
         assertEquals(IMPORTANCE_DEFAULT, createdChannel.getImportance());
+    }
+
+    @Test
+    public void testCreateNotificationChannels_fromAppCannotSetFields() throws Exception {
+        // Confirm that when createNotificationChannels is called from the relevant app and not
+        // system, then it cannot set fields that can't be set by apps
+        mService.isSystemUid = false;
+
+        final NotificationChannel channel =
+                new NotificationChannel("id", "name", IMPORTANCE_DEFAULT);
+        channel.setBypassDnd(true);
+        channel.setAllowBubbles(true);
+
+        mBinderService.createNotificationChannels(PKG,
+                new ParceledListSlice(Arrays.asList(channel)));
+
+        final NotificationChannel createdChannel =
+                mBinderService.getNotificationChannel(PKG, mContext.getUserId(), PKG, "id");
+        assertFalse(createdChannel.canBypassDnd());
+        assertFalse(createdChannel.canBubble());
+    }
+
+    @Test
+    public void testCreateNotificationChannels_fromSystemCanSetFields() throws Exception {
+        // Confirm that when createNotificationChannels is called from system,
+        // then it can set fields that can't be set by apps
+        mService.isSystemUid = true;
+
+        final NotificationChannel channel =
+                new NotificationChannel("id", "name", IMPORTANCE_DEFAULT);
+        channel.setBypassDnd(true);
+        channel.setAllowBubbles(true);
+
+        mBinderService.createNotificationChannels(PKG,
+                new ParceledListSlice(Arrays.asList(channel)));
+
+        final NotificationChannel createdChannel =
+                mBinderService.getNotificationChannel(PKG, mContext.getUserId(), PKG, "id");
+        assertTrue(createdChannel.canBypassDnd());
+        assertTrue(createdChannel.canBubble());
     }
 
     @Test
@@ -3088,6 +3132,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
     @Test
     public void testDeleteChannelGroupChecksForFgses() throws Exception {
+        // the setup for this test requires it to seem like it's coming from the app
+        mService.isSystemUid = false;
         when(mCompanionMgr.getAssociations(PKG, UserHandle.getUserId(mUid)))
                 .thenReturn(singletonList(mock(AssociationInfo.class)));
         CountDownLatch latch = new CountDownLatch(2);
@@ -3100,7 +3146,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
             ParceledListSlice<NotificationChannel> pls =
                     new ParceledListSlice(ImmutableList.of(notificationChannel));
             try {
-                mBinderService.createNotificationChannelsForPackage(PKG, mUid, pls);
+                mBinderService.createNotificationChannels(PKG, pls);
             } catch (RemoteException e) {
                 throw new RuntimeException(e);
             }
@@ -3119,8 +3165,10 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
                 ParceledListSlice<NotificationChannel> pls =
                         new ParceledListSlice(ImmutableList.of(notificationChannel));
                 try {
-                mBinderService.createNotificationChannelsForPackage(PKG, mUid, pls);
-                mBinderService.deleteNotificationChannelGroup(PKG, "group");
+                    // Because existing channels won't have their groups overwritten when the call
+                    // is from the app, this call won't take the channel out of the group
+                    mBinderService.createNotificationChannels(PKG, pls);
+                    mBinderService.deleteNotificationChannelGroup(PKG, "group");
                 } catch (RemoteException e) {
                     throw new RuntimeException(e);
                 }
@@ -7605,6 +7653,65 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     }
 
     @Test
+    public void testAddAutomaticZenRule_systemCallTakesPackageFromOwner() throws Exception {
+        mService.isSystemUid = true;
+        ZenModeHelper mockZenModeHelper = mock(ZenModeHelper.class);
+        when(mConditionProviders.isPackageOrComponentAllowed(anyString(), anyInt()))
+                .thenReturn(true);
+        mService.setZenHelper(mockZenModeHelper);
+        ComponentName owner = new ComponentName("android", "ProviderName");
+        ZenPolicy zenPolicy = new ZenPolicy.Builder().allowAlarms(true).build();
+        boolean isEnabled = true;
+        AutomaticZenRule rule = new AutomaticZenRule("test", owner, owner, mock(Uri.class),
+                zenPolicy, NotificationManager.INTERRUPTION_FILTER_PRIORITY, isEnabled);
+        mBinderService.addAutomaticZenRule(rule, "com.android.settings");
+
+        // verify that zen mode helper gets passed in a package name of "android"
+        verify(mockZenModeHelper).addAutomaticZenRule(eq("android"), eq(rule), anyString());
+    }
+
+    @Test
+    public void testAddAutomaticZenRule_systemAppIdCallTakesPackageFromOwner() throws Exception {
+        // The multi-user case: where the calling uid doesn't match the system uid, but the calling
+        // *appid* is the system.
+        mService.isSystemUid = false;
+        mService.isSystemAppId = true;
+        ZenModeHelper mockZenModeHelper = mock(ZenModeHelper.class);
+        when(mConditionProviders.isPackageOrComponentAllowed(anyString(), anyInt()))
+                .thenReturn(true);
+        mService.setZenHelper(mockZenModeHelper);
+        ComponentName owner = new ComponentName("android", "ProviderName");
+        ZenPolicy zenPolicy = new ZenPolicy.Builder().allowAlarms(true).build();
+        boolean isEnabled = true;
+        AutomaticZenRule rule = new AutomaticZenRule("test", owner, owner, mock(Uri.class),
+                zenPolicy, NotificationManager.INTERRUPTION_FILTER_PRIORITY, isEnabled);
+        mBinderService.addAutomaticZenRule(rule, "com.android.settings");
+
+        // verify that zen mode helper gets passed in a package name of "android"
+        verify(mockZenModeHelper).addAutomaticZenRule(eq("android"), eq(rule), anyString());
+    }
+
+    @Test
+    public void testAddAutomaticZenRule_nonSystemCallTakesPackageFromArg() throws Exception {
+        mService.isSystemUid = false;
+        mService.isSystemAppId = false;
+        ZenModeHelper mockZenModeHelper = mock(ZenModeHelper.class);
+        when(mConditionProviders.isPackageOrComponentAllowed(anyString(), anyInt()))
+                .thenReturn(true);
+        mService.setZenHelper(mockZenModeHelper);
+        ComponentName owner = new ComponentName("android", "ProviderName");
+        ZenPolicy zenPolicy = new ZenPolicy.Builder().allowAlarms(true).build();
+        boolean isEnabled = true;
+        AutomaticZenRule rule = new AutomaticZenRule("test", owner, owner, mock(Uri.class),
+                zenPolicy, NotificationManager.INTERRUPTION_FILTER_PRIORITY, isEnabled);
+        mBinderService.addAutomaticZenRule(rule, "another.package");
+
+        // verify that zen mode helper gets passed in the package name from the arg, not the owner
+        verify(mockZenModeHelper).addAutomaticZenRule(
+                eq("another.package"), eq(rule), anyString());
+    }
+
+    @Test
     public void testAreNotificationsEnabledForPackage() throws Exception {
         mBinderService.areNotificationsEnabledForPackage(mContext.getPackageName(),
                 mUid);
@@ -8622,7 +8729,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         assertEquals("friend", friendChannel.getConversationId());
         assertEquals(null, original.getConversationId());
         assertEquals(original.canShowBadge(), friendChannel.canShowBadge());
-        assertFalse(friendChannel.canBubble()); // can't be modified by app
+        assertEquals(original.canBubble(), friendChannel.canBubble()); // called by system
         assertFalse(original.getId().equals(friendChannel.getId()));
         assertNotNull(friendChannel.getId());
     }

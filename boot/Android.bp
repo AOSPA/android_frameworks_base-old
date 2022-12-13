@@ -72,10 +72,6 @@ platform_bootclasspath {
             module: "com.android.devicelock-bootclasspath-fragment",
         },
         {
-            apex: "com.android.federatedcompute",
-            module: "com.android.federatedcompute-bootclasspath-fragment",
-        },
-        {
             apex: "com.android.healthconnect",
             module: "com.android.healthconnect-bootclasspath-fragment",
         },
@@ -131,6 +127,10 @@ platform_bootclasspath {
         {
             apex: "com.android.car.framework",
             module: "com.android.car.framework-bootclasspath-fragment",
+        },
+        {
+            apex: "com.android.virt",
+            module: "com.android.virt-bootclasspath-fragment",
         },
     ],
 

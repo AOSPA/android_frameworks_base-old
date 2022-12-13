@@ -17,15 +17,23 @@
 package com.android.server.pm;
 
 import android.annotation.IntDef;
-import android.os.UserManager;
+import android.content.pm.PackageManager;
+import android.content.pm.parsing.ApkLiteParseUtils;
 import android.util.Pair;
 import android.util.SparseArray;
 
 import com.android.internal.util.FrameworkStatsLog;
+import com.android.server.LocalServices;
 
+import java.io.File;
+import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Stream;
 
 /**
  * Metrics class for reporting stats to logging infrastructures like Westworld
@@ -43,7 +51,8 @@ final class PackageMetrics {
             STEP_COMMIT,
     })
     @Retention(RetentionPolicy.SOURCE)
-    public @interface StepInt {}
+    public @interface StepInt {
+    }
 
     private final long mInstallStartTimestampMillis;
     private final SparseArray<InstallStep> mInstallSteps = new SparseArray<>();
@@ -57,32 +66,62 @@ final class PackageMetrics {
     }
 
     public void onInstallSucceed() {
+        // TODO(b/239722919): report to SecurityLog if on work profile or managed device
+        reportInstallationStats(true /* success */);
+    }
+
+    public void onInstallFailed() {
+        reportInstallationStats(false /* success */);
+    }
+
+    private void reportInstallationStats(boolean success) {
+        UserManagerInternal userManagerInternal =
+                LocalServices.getService(UserManagerInternal.class);
         final long installDurationMillis =
                 System.currentTimeMillis() - mInstallStartTimestampMillis;
         // write to stats
         final Pair<int[], long[]> stepDurations = getInstallStepDurations();
         final int[] newUsers = mInstallRequest.getNewUsers();
         final int[] originalUsers = mInstallRequest.getOriginUsers();
+        final String packageName;
+        // only reporting package name for failed non-adb installations
+        if (success || mInstallRequest.isInstallFromAdb()) {
+            packageName = null;
+        } else {
+            packageName = mInstallRequest.getName();
+        }
+
+        final int installerPackageUid = mInstallRequest.getInstallerPackageUid();
+
+        long versionCode = 0, apksSize = 0;
+        if (success) {
+            final PackageSetting ps = mInstallRequest.getScannedPackageSetting();
+            if (ps != null) {
+                versionCode = ps.getVersionCode();
+                apksSize = getApksSize(ps.getPath());
+            }
+        }
+
         FrameworkStatsLog.write(FrameworkStatsLog.PACKAGE_INSTALLATION_SESSION_REPORTED,
-                0 /* session_id */,
-                null /* package_name */,
+                mInstallRequest.getSessionId() /* session_id */,
+                packageName /* package_name */,
                 mInstallRequest.getUid() /* uid */,
                 newUsers /* user_ids */,
-                getUserTypes(newUsers) /* user_types */,
+                userManagerInternal.getUserTypesForStatsd(newUsers) /* user_types */,
                 originalUsers /* original_user_ids */,
-                getUserTypes(originalUsers) /* original_user_types */,
+                userManagerInternal.getUserTypesForStatsd(originalUsers) /* original_user_types */,
                 mInstallRequest.getReturnCode() /* public_return_code */,
                 0 /* internal_error_code */,
-                0 /* apks_size_bytes */,
-                0 /* version_code */,
+                apksSize /* apks_size_bytes */,
+                versionCode /* version_code */,
                 stepDurations.first /* install_steps */,
                 stepDurations.second /* step_duration_millis */,
                 installDurationMillis /* total_duration_millis */,
                 mInstallRequest.getInstallFlags() /* install_flags */,
-                -1 /* installer_package_uid */,
+                installerPackageUid /* installer_package_uid */,
                 -1 /* original_installer_package_uid */,
                 mInstallRequest.getDataLoaderType() /* data_loader_type */,
-                0 /* user_action_required_type */,
+                mInstallRequest.getRequireUserAction() /* user_action_required_type */,
                 mInstallRequest.isInstantInstall() /* is_instant */,
                 mInstallRequest.isInstallReplace() /* is_replace */,
                 mInstallRequest.isInstallSystem() /* is_system */,
@@ -91,6 +130,19 @@ final class PackageMetrics {
                 mInstallRequest.isInstallMove() /* is_move_install */,
                 false /* is_staged */
         );
+    }
+
+    private long getApksSize(File apkDir) {
+        // TODO(b/249294752): also count apk sizes for failed installs
+        final AtomicLong apksSize = new AtomicLong();
+        try (Stream<Path> walkStream = Files.walk(apkDir.toPath())) {
+            walkStream.filter(p -> p.toFile().isFile()
+                    && ApkLiteParseUtils.isApkFile(p.toFile())).forEach(
+                            f -> apksSize.addAndGet(f.toFile().length()));
+        } catch (IOException e) {
+            // ignore
+        }
+        return apksSize.get();
     }
 
     public void onStepStarted(@StepInt int step) {
@@ -125,29 +177,36 @@ final class PackageMetrics {
         return new Pair<>(stepsArray, durationsArray);
     }
 
-    private static int[] getUserTypes(int[] userIds) {
-        if (userIds == null) {
-            return null;
-        }
-        final int[] userTypes = new int[userIds.length];
-        for (int i = 0; i < userTypes.length; i++) {
-            String userType = UserManagerService.getInstance().getUserInfo(userIds[i]).userType;
-            userTypes[i] = UserManager.getUserTypeForStatsd(userType);
-        }
-        return userTypes;
-    }
-
     private static class InstallStep {
         private final long mStartTimestampMillis;
         private long mDurationMillis = -1;
+
         InstallStep() {
             mStartTimestampMillis = System.currentTimeMillis();
         }
+
         void finish() {
             mDurationMillis = System.currentTimeMillis() - mStartTimestampMillis;
         }
+
         long getDurationMillis() {
             return mDurationMillis;
         }
+    }
+
+    public static void onUninstallSucceeded(PackageRemovedInfo info, int deleteFlags,
+            UserManagerInternal userManagerInternal) {
+        if (info.mIsUpdate) {
+            // Not logging uninstalls caused by app updates
+            return;
+        }
+        final int[] removedUsers = info.mRemovedUsers;
+        final int[] removedUserTypes = userManagerInternal.getUserTypesForStatsd(removedUsers);
+        final int[] originalUsers = info.mOrigUsers;
+        final int[] originalUserTypes = userManagerInternal.getUserTypesForStatsd(originalUsers);
+        FrameworkStatsLog.write(FrameworkStatsLog.PACKAGE_UNINSTALLATION_REPORTED,
+                info.mUid, removedUsers, removedUserTypes, originalUsers, originalUserTypes,
+                deleteFlags, PackageManager.DELETE_SUCCEEDED, info.mIsRemovedPackageSystemUpdate,
+                !info.mRemovedForAllUsers);
     }
 }

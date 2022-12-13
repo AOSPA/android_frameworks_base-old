@@ -581,9 +581,10 @@ public class TvInteractiveAppView extends ViewGroup {
     }
 
     /**
-     * Alerts the TV interactive app that a recording has been started with recordingId
+     * Alerts the TV interactive app that a recording has been started.
      *
-     * @param recordingId The ID of the recording started
+     * @param recordingId The ID of the recording started. This ID is created and maintained by the
+     *                    TV app and is used to identify the recording in the future.
      */
     public void notifyRecordingStarted(@NonNull String recordingId) {
         if (DEBUG) {
@@ -591,6 +592,23 @@ public class TvInteractiveAppView extends ViewGroup {
         }
         if (mSession != null) {
             mSession.notifyRecordingStarted(recordingId);
+        }
+    }
+
+    /**
+     * Alerts the TV interactive app that a recording has been stopped.
+     *
+     * @param recordingId The ID of the recording stopped. This ID is created and maintained
+     *                    by the TV app when a recording is started.
+     * @see TvInteractiveAppView#notifyRecordingStarted(String)
+     * @hide
+     */
+    public void notifyRecordingStopped(@NonNull String recordingId) {
+        if (DEBUG) {
+            Log.d(TAG, "notifyRecordingStopped");
+        }
+        if (mSession != null) {
+            mSession.notifyRecordingStopped(recordingId);
         }
     }
 
@@ -864,6 +882,19 @@ public class TvInteractiveAppView extends ViewGroup {
         public void onRequestStartRecording(
                 @NonNull String iAppServiceId,
                 @Nullable Uri programUri) {
+        }
+
+        /**
+         * This is called when {@link TvInteractiveAppService.Session#requestStopRecording()}
+         * is called.
+         *
+         * @param iAppServiceId The ID of the TV interactive app service bound to this view.
+         * @param recordingId The ID of the recording to stop.
+         * @hide
+         */
+        public void onRequestStopRecording(
+                @NonNull String iAppServiceId,
+                @NonNull String recordingId) {
         }
 
         /**
@@ -1200,6 +1231,20 @@ public class TvInteractiveAppView extends ViewGroup {
             }
             if (mCallback != null) {
                 mCallback.onRequestStartRecording(mIAppServiceId, programUri);
+            }
+        }
+
+        @Override
+        public void onRequestStopRecording(Session session, String recordingId) {
+            if (DEBUG) {
+                Log.d(TAG, "onRequestStopRecording");
+            }
+            if (this != mSessionCallback) {
+                Log.w(TAG, "onRequestStopRecording - session not created");
+                return;
+            }
+            if (mCallback != null) {
+                mCallback.onRequestStopRecording(mIAppServiceId, recordingId);
             }
         }
 

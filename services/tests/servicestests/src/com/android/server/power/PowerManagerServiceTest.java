@@ -389,6 +389,18 @@ public class PowerManagerServiceTest {
         mBatteryReceiver.onReceive(mContextSpy, new Intent(Intent.ACTION_BATTERY_CHANGED));
     }
 
+    private void setBatteryLevel(int batteryLevel) {
+        when(mBatteryManagerInternalMock.getBatteryLevel())
+                .thenReturn(batteryLevel);
+        mBatteryReceiver.onReceive(mContextSpy, new Intent(Intent.ACTION_BATTERY_CHANGED));
+    }
+
+    private void setBatteryHealth(int batteryHealth) {
+        when(mBatteryManagerInternalMock.getBatteryHealth())
+                .thenReturn(batteryHealth);
+        mBatteryReceiver.onReceive(mContextSpy, new Intent(Intent.ACTION_BATTERY_CHANGED));
+    }
+
     private void setAttentiveTimeout(int attentiveTimeoutMillis) {
         Settings.Secure.putInt(
                 mContextSpy.getContentResolver(), Settings.Secure.ATTENTIVE_TIMEOUT,
@@ -411,6 +423,12 @@ public class PowerManagerServiceTest {
         when(mResourcesSpy.getBoolean(
                 com.android.internal.R.bool.config_dreamsDisabledByAmbientModeSuppressionConfig))
                 .thenReturn(disable);
+    }
+
+    private void setDreamsBatteryLevelDrainConfig(int threshold) {
+        when(mResourcesSpy.getInteger(
+                com.android.internal.R.integer.config_dreamsBatteryLevelDrainCutoff)).thenReturn(
+                threshold);
     }
 
     private void advanceTime(long timeMs) {
@@ -658,17 +676,52 @@ public class PowerManagerServiceTest {
     }
 
     /**
-     * Tests that dreaming continues when undocking and configured to do so.
+     * Tests that dreaming stops when undocking and not configured to keep dreaming.
      */
     @Test
-    public void testWakefulnessDream_shouldKeepDreamingWhenUndocked() {
+    public void testWakefulnessDream_shouldStopDreamingWhenUndocked_whenNotConfigured() {
+        // Make sure "unplug turns on screen" is configured to true.
+        when(mResourcesSpy.getBoolean(com.android.internal.R.bool.config_unplugTurnsOnScreen))
+                .thenReturn(true);
+
         createService();
         startSystem();
 
-        when(mResourcesSpy.getBoolean(
-                com.android.internal.R.bool.config_keepDreamingWhenUndocking))
+        ArgumentCaptor<DreamManagerInternal.DreamManagerStateListener> dreamManagerStateListener =
+                ArgumentCaptor.forClass(DreamManagerInternal.DreamManagerStateListener.class);
+        verify(mDreamManagerInternalMock).registerDreamManagerStateListener(
+                dreamManagerStateListener.capture());
+        dreamManagerStateListener.getValue().onKeepDreamingWhenUndockedChanged(false);
+
+        when(mBatteryManagerInternalMock.getPlugType())
+                .thenReturn(BatteryManager.BATTERY_PLUGGED_DOCK);
+        setPluggedIn(true);
+
+        forceAwake();  // Needs to be awake first before it can dream.
+        forceDream();
+        when(mBatteryManagerInternalMock.getPlugType()).thenReturn(0);
+        setPluggedIn(false);
+
+        assertThat(mService.getGlobalWakefulnessLocked()).isEqualTo(WAKEFULNESS_AWAKE);
+    }
+
+    /**
+     * Tests that dreaming continues when undocking and configured to do so.
+     */
+    @Test
+    public void testWakefulnessDream_shouldKeepDreamingWhenUndocked_whenConfigured() {
+        // Make sure "unplug turns on screen" is configured to true.
+        when(mResourcesSpy.getBoolean(com.android.internal.R.bool.config_unplugTurnsOnScreen))
                 .thenReturn(true);
-        mService.readConfigurationLocked();
+
+        createService();
+        startSystem();
+
+        ArgumentCaptor<DreamManagerInternal.DreamManagerStateListener> dreamManagerStateListener =
+                ArgumentCaptor.forClass(DreamManagerInternal.DreamManagerStateListener.class);
+        verify(mDreamManagerInternalMock).registerDreamManagerStateListener(
+                dreamManagerStateListener.capture());
+        dreamManagerStateListener.getValue().onKeepDreamingWhenUndockedChanged(true);
 
         when(mBatteryManagerInternalMock.getPlugType())
                 .thenReturn(BatteryManager.BATTERY_PLUGGED_DOCK);
@@ -680,6 +733,37 @@ public class PowerManagerServiceTest {
         setPluggedIn(false);
 
         assertThat(mService.getGlobalWakefulnessLocked()).isEqualTo(WAKEFULNESS_DREAMING);
+    }
+
+    /**
+     * Tests that dreaming stops when undocking while showing a dream that prevents it.
+     */
+    @Test
+    public void testWakefulnessDream_shouldStopDreamingWhenUndocked_whenDreamPrevents() {
+        // Make sure "unplug turns on screen" is configured to true.
+        when(mResourcesSpy.getBoolean(com.android.internal.R.bool.config_unplugTurnsOnScreen))
+                .thenReturn(true);
+
+        createService();
+        startSystem();
+
+        ArgumentCaptor<DreamManagerInternal.DreamManagerStateListener> dreamManagerStateListener =
+                ArgumentCaptor.forClass(DreamManagerInternal.DreamManagerStateListener.class);
+        verify(mDreamManagerInternalMock).registerDreamManagerStateListener(
+                dreamManagerStateListener.capture());
+        dreamManagerStateListener.getValue().onKeepDreamingWhenUndockedChanged(true);
+
+        when(mBatteryManagerInternalMock.getPlugType())
+                .thenReturn(BatteryManager.BATTERY_PLUGGED_DOCK);
+        setPluggedIn(true);
+
+        forceAwake();  // Needs to be awake first before it can dream.
+        forceDream();
+        dreamManagerStateListener.getValue().onKeepDreamingWhenUndockedChanged(false);
+        when(mBatteryManagerInternalMock.getPlugType()).thenReturn(0);
+        setPluggedIn(false);
+
+        assertThat(mService.getGlobalWakefulnessLocked()).isEqualTo(WAKEFULNESS_AWAKE);
     }
 
     @Test
@@ -918,6 +1002,41 @@ public class PowerManagerServiceTest {
         // Verify that forcing dream still works even though ambient display is suppressed
         forceDream();
         assertThat(mService.getGlobalWakefulnessLocked()).isEqualTo(WAKEFULNESS_DREAMING);
+    }
+
+    @Test
+    public void testBatteryDrainDuringDream() {
+        Settings.Secure.putInt(mContextSpy.getContentResolver(),
+                Settings.Secure.SCREENSAVER_ACTIVATE_ON_SLEEP, 1);
+        Settings.Secure.putInt(mContextSpy.getContentResolver(),
+                Settings.Secure.SCREENSAVER_ENABLED, 1);
+
+        setMinimumScreenOffTimeoutConfig(100);
+        setDreamsBatteryLevelDrainConfig(5);
+        createService();
+        startSystem();
+
+        doAnswer(inv -> {
+            when(mDreamManagerInternalMock.isDreaming()).thenReturn(true);
+            return null;
+        }).when(mDreamManagerInternalMock).startDream(anyBoolean(), anyString());
+
+        setBatteryLevel(100);
+        setPluggedIn(true);
+
+        forceAwake();  // Needs to be awake first before it can dream.
+        forceDream();
+        advanceTime(10); // Allow async calls to happen
+        assertThat(mService.getGlobalWakefulnessLocked()).isEqualTo(WAKEFULNESS_DREAMING);
+        setBatteryLevel(90);
+        advanceTime(10); // Allow async calls to happen
+        assertThat(mService.getDreamsBatteryLevelDrain()).isEqualTo(10);
+
+        // If battery overheat protection is enabled, we shouldn't count battery drain
+        setBatteryHealth(BatteryManager.BATTERY_HEALTH_OVERHEAT);
+        setBatteryLevel(70);
+        advanceTime(10); // Allow async calls to happen
+        assertThat(mService.getDreamsBatteryLevelDrain()).isEqualTo(10);
     }
 
     @Test

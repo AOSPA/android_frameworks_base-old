@@ -58,6 +58,7 @@ import android.content.res.TypedArray;
 import android.database.ContentObserver;
 import android.graphics.ColorSpace;
 import android.graphics.Point;
+import android.hardware.OverlayProperties;
 import android.hardware.Sensor;
 import android.hardware.SensorManager;
 import android.hardware.devicestate.DeviceStateManager;
@@ -412,6 +413,7 @@ public final class DisplayManagerService extends SystemService {
     private final Curve mMinimumBrightnessCurve;
     private final Spline mMinimumBrightnessSpline;
     private final ColorSpace mWideColorSpace;
+    private final OverlayProperties mOverlayProperties;
 
     private SensorManager mSensorManager;
     private BrightnessTracker mBrightnessTracker;
@@ -511,6 +513,7 @@ public final class DisplayManagerService extends SystemService {
         mCurrentUserId = UserHandle.USER_SYSTEM;
         ColorSpace[] colorSpaces = SurfaceControl.getCompositionColorSpaces();
         mWideColorSpace = colorSpaces[1];
+        mOverlayProperties = SurfaceControl.getOverlaySupport();
         mAllowNonNativeRefreshRateOverride = mInjector.getAllowNonNativeRefreshRateOverride();
         mSystemReady = false;
         mDumpInProgress = false;
@@ -1796,6 +1799,10 @@ public final class DisplayManagerService extends SystemService {
         return mWideColorSpace.getId();
     }
 
+    OverlayProperties getOverlaySupportInternal() {
+        return mOverlayProperties;
+    }
+
     void setUserPreferredDisplayModeInternal(int displayId, Display.Mode mode) {
         synchronized (mSyncRoot) {
             if (mode != null && !isResolutionAndRefreshRateValid(mode)
@@ -2666,7 +2673,7 @@ public final class DisplayManagerService extends SystemService {
         final DisplayPowerControllerInterface displayPowerController;
 
         if (DeviceConfig.getBoolean("display_manager",
-                "use_newly_structured_display_power_controller", false)) {
+                "use_newly_structured_display_power_controller", true)) {
             displayPowerController = new DisplayPowerController2(
                     mContext, /* injector= */ null, mDisplayPowerCallbacks, mPowerHandler,
                     mSensorManager, mDisplayBlanker, display, mBrightnessTracker, brightnessSetting,
@@ -3617,6 +3624,16 @@ public final class DisplayManagerService extends SystemService {
                     mVirtualDisplayAdapter.setDisplayIdToMirror(token,
                             display == null ? Display.INVALID_DISPLAY : displayId);
                 }
+            }
+        }
+
+        @Override
+        public OverlayProperties getOverlaySupport() {
+            final long token = Binder.clearCallingIdentity();
+            try {
+                return getOverlaySupportInternal();
+            } finally {
+                Binder.restoreCallingIdentity(token);
             }
         }
     }

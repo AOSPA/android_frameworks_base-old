@@ -1637,6 +1637,16 @@ public class UserManager {
     /** @hide */
     public static final String SYSTEM_USER_MODE_EMULATION_HEADLESS = "headless";
 
+    /**
+     * System Property used to override whether users can be created even if their type is disabled
+     * or their limit is reached. Set value to 1 to enable.
+     *
+     * <p>Only used on non-user builds.
+     *
+     * @hide
+     */
+    public static final String DEV_CREATE_OVERRIDE_PROPERTY = "debug.user.creation_override";
+
     private static final String ACTION_CREATE_USER = "android.os.action.CREATE_USER";
 
     /**
@@ -2331,12 +2341,18 @@ public class UserManager {
     }
 
     /**
-     * Used to check if the context user is the primary user. The primary user
-     * is the first human user on a device. This is not supported in headless system user mode.
+     * Used to check if the context user is the primary user. The primary user is the first human
+     * user on a device. This is not supported in headless system user mode.
      *
      * @return whether the context user is the primary user.
+     *
+     * @deprecated This method always returns true for the system user, who may not be a full user
+     * if {@link #isHeadlessSystemUserMode} is true. Use {@link #isSystemUser}, {@link #isAdminUser}
+     * or {@link #isMainUser} instead.
+     *
      * @hide
      */
+    @Deprecated
     @SystemApi
     @RequiresPermission(anyOf = {
             Manifest.permission.MANAGE_USERS,
@@ -2358,6 +2374,29 @@ public class UserManager {
     @UserHandleAware(enabledSinceTargetSdkVersion = Build.VERSION_CODES.TIRAMISU)
     public boolean isSystemUser() {
         return getContextUserIfAppropriate() == UserHandle.USER_SYSTEM;
+    }
+
+    /**
+     * Returns true if the context user is the designated "main user" of the device. This user may
+     * have access to certain features which are limited to at most one user.
+     *
+     * <p>Currently, the first human user on the device will be the main user; in the future, the
+     * concept may be transferable, so a different user (or even no user at all) may be designated
+     * the main user instead.
+     *
+     * <p>Note that this will be the not be the system user on devices for which
+     * {@link #isHeadlessSystemUserMode()} returns true.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(anyOf = {
+            Manifest.permission.MANAGE_USERS,
+            Manifest.permission.CREATE_USERS,
+            Manifest.permission.QUERY_USERS})
+    @UserHandleAware
+    public boolean isMainUser() {
+        final UserInfo user = getUserInfo(mUserId);
+        return user != null && user.isMain();
     }
 
     /**
@@ -4382,6 +4421,7 @@ public class UserManager {
      * @return true if the creation of users of the given user type is enabled on this device.
      * @hide
      */
+    @TestApi
     @RequiresPermission(anyOf = {
             android.Manifest.permission.MANAGE_USERS,
             android.Manifest.permission.CREATE_USERS

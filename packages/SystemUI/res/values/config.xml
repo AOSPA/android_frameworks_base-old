@@ -285,6 +285,9 @@
     <!-- Whether to show the full screen user switcher. -->
     <bool name="config_enableFullscreenUserSwitcher">false</bool>
 
+    <!-- Determines whether the shell features all run on another thread. -->
+    <bool name="config_enableShellMainThread">true</bool>
+
     <!-- SystemUIFactory component -->
     <string name="config_systemUIFactoryComponent" translatable="false">com.android.systemui.SystemUIInitializerImpl</string>
 
@@ -488,6 +491,12 @@
 
     <!-- Whether to show a severe low battery dialog. -->
     <bool name="config_severe_battery_dialog">false</bool>
+
+    <!-- A path representing a shield. Will sometimes be displayed with the battery icon when
+         needed. This path is a 10px wide and 13px tall. -->
+    <string name="config_batterymeterShieldPath" translatable="false">
+        M5 0L0 1.88V6.19C0 9.35 2.13 12.29 5 13.01C7.87 12.29 10 9.35 10 6.19V1.88L5 0Z
+    </string>
 
     <!-- A path similar to frameworks/base/core/res/res/values/config.xml
       config_mainBuiltInDisplayCutout that describes a path larger than the exact path of a display
@@ -741,11 +750,34 @@
     <!-- How long in milliseconds before full burn-in protection is achieved. -->
     <integer name="config_dreamOverlayMillisUntilFullJitter">240000</integer>
 
+    <!-- The duration in milliseconds of the y-translation animation when waking up from
+         the dream -->
+    <integer name="config_dreamOverlayOutTranslationYDurationMs">333</integer>
+    <!-- The delay in milliseconds of the y-translation animation when waking up from
+         the dream for the complications at the bottom of the screen -->
+    <integer name="config_dreamOverlayOutTranslationYDelayBottomMs">33</integer>
+    <!-- The delay in milliseconds of the y-translation animation when waking up from
+         the dream for the complications at the top of the screen -->
+    <integer name="config_dreamOverlayOutTranslationYDelayTopMs">117</integer>
+    <!-- The duration in milliseconds of the alpha animation when waking up from the dream -->
+    <integer name="config_dreamOverlayOutAlphaDurationMs">200</integer>
+    <!-- The delay in milliseconds of the alpha animation when waking up from the dream for the
+         complications at the top of the screen -->
+    <integer name="config_dreamOverlayOutAlphaDelayTopMs">217</integer>
+    <!-- The delay in milliseconds of the alpha animation when waking up from the dream for the
+         complications at the bottom of the screen -->
+    <integer name="config_dreamOverlayOutAlphaDelayBottomMs">133</integer>
+    <!-- The duration in milliseconds of the blur animation when waking up from
+         the dream -->
+    <integer name="config_dreamOverlayOutBlurDurationMs">250</integer>
+
     <integer name="complicationFadeOutMs">500</integer>
 
     <integer name="complicationFadeInMs">500</integer>
 
     <integer name="complicationRestoreMs">1000</integer>
+
+    <integer name="complicationFadeOutDelayMs">200</integer>
 
     <!-- Duration in milliseconds of the dream in un-blur animation. -->
     <integer name="config_dreamOverlayInBlurDurationMs">249</integer>
@@ -778,28 +810,27 @@
         <item>com.android.systemui</item>
     </string-array>
 
-    <!-- The thresholds which determine the color used by the AQI dream overlay.
-         NOTE: This must always be kept sorted from low to high -->
-    <integer-array name="config_dreamAqiThresholds">
-        <item>-1</item>
-        <item>50</item>
-        <item>100</item>
-        <item>150</item>
-        <item>200</item>
-        <item>300</item>
-    </integer-array>
-
-    <!-- The color values which correspond to the thresholds above -->
-    <integer-array name="config_dreamAqiColorValues">
-        <item>@color/dream_overlay_aqi_good</item>
-        <item>@color/dream_overlay_aqi_moderate</item>
-        <item>@color/dream_overlay_aqi_unhealthy_sensitive</item>
-        <item>@color/dream_overlay_aqi_unhealthy</item>
-        <item>@color/dream_overlay_aqi_very_unhealthy</item>
-        <item>@color/dream_overlay_aqi_hazardous</item>
-    </integer-array>
-
     <!-- Whether the device should display hotspot UI. If true, UI will display only when tethering
          is available. If false, UI will never show regardless of tethering availability" -->
     <bool name="config_show_wifi_tethering">true</bool>
+
+    <!-- A collection of "slots" for placing quick affordance actions on the lock screen when the
+    device is locked. Each item is a string consisting of two parts, separated by the ':' character.
+    The first part is the unique ID for the slot, it is not a human-visible name, but should still
+    be unique across all slots specified. The second part is the capacity and must be a positive
+    integer; this is how many quick affordance actions that user is allowed to add to the slot. -->
+    <string-array name="config_keyguardQuickAffordanceSlots" translatable="false">
+        <item>bottom_start:1</item>
+        <item>bottom_end:1</item>
+    </string-array>
+
+    <!-- A collection of defaults for the quick affordances on the lock screen. Each item must be a
+    string with two parts: the ID of the slot and the comma-delimited list of affordance IDs,
+    separated by a colon ':' character. For example: <item>bottom_end:home,wallet</item>. The
+    default is displayed by System UI as long as the user hasn't made a different choice for that
+    slot. If the user did make a choice, even if the choice is the "None" option, the default is
+    ignored. -->
+    <string-array name="config_keyguardQuickAffordanceDefaults" translatable="false">
+    </string-array>
+
 </resources>

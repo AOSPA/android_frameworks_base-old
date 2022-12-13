@@ -91,6 +91,18 @@ package android {
     field public static final String EXPAND_STATUS_BAR = "android.permission.EXPAND_STATUS_BAR";
     field public static final String FACTORY_TEST = "android.permission.FACTORY_TEST";
     field public static final String FOREGROUND_SERVICE = "android.permission.FOREGROUND_SERVICE";
+    field public static final String FOREGROUND_SERVICE_CAMERA = "android.permission.FOREGROUND_SERVICE_CAMERA";
+    field public static final String FOREGROUND_SERVICE_CONNECTED_DEVICE = "android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE";
+    field public static final String FOREGROUND_SERVICE_DATA_SYNC = "android.permission.FOREGROUND_SERVICE_DATA_SYNC";
+    field public static final String FOREGROUND_SERVICE_HEALTH = "android.permission.FOREGROUND_SERVICE_HEALTH";
+    field public static final String FOREGROUND_SERVICE_LOCATION = "android.permission.FOREGROUND_SERVICE_LOCATION";
+    field public static final String FOREGROUND_SERVICE_MEDIA_PLAYBACK = "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK";
+    field public static final String FOREGROUND_SERVICE_MEDIA_PROJECTION = "android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION";
+    field public static final String FOREGROUND_SERVICE_MICROPHONE = "android.permission.FOREGROUND_SERVICE_MICROPHONE";
+    field public static final String FOREGROUND_SERVICE_PHONE_CALL = "android.permission.FOREGROUND_SERVICE_PHONE_CALL";
+    field public static final String FOREGROUND_SERVICE_REMOTE_MESSAGING = "android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING";
+    field public static final String FOREGROUND_SERVICE_SPECIAL_USE = "android.permission.FOREGROUND_SERVICE_SPECIAL_USE";
+    field public static final String FOREGROUND_SERVICE_SYSTEM_EXEMPTED = "android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED";
     field public static final String GET_ACCOUNTS = "android.permission.GET_ACCOUNTS";
     field public static final String GET_ACCOUNTS_PRIVILEGED = "android.permission.GET_ACCOUNTS_PRIVILEGED";
     field public static final String GET_PACKAGE_SIZE = "android.permission.GET_PACKAGE_SIZE";
@@ -3075,6 +3087,7 @@ package android.accessibilityservice {
 
   public abstract class AccessibilityService extends android.app.Service {
     ctor public AccessibilityService();
+    method public void attachAccessibilityOverlayToDisplay(int, @NonNull android.view.SurfaceControl);
     method public boolean clearCache();
     method public boolean clearCachedSubtree(@NonNull android.view.accessibility.AccessibilityNodeInfo);
     method public final void disableSelf();
@@ -3112,10 +3125,13 @@ package android.accessibilityservice {
     method public final void setServiceInfo(android.accessibilityservice.AccessibilityServiceInfo);
     method public void setTouchExplorationPassthroughRegion(int, @NonNull android.graphics.Region);
     method public void takeScreenshot(int, @NonNull java.util.concurrent.Executor, @NonNull android.accessibilityservice.AccessibilityService.TakeScreenshotCallback);
+    method public void takeScreenshotOfWindow(int, @NonNull java.util.concurrent.Executor, @NonNull android.accessibilityservice.AccessibilityService.TakeScreenshotCallback);
     field public static final int ERROR_TAKE_SCREENSHOT_INTERNAL_ERROR = 1; // 0x1
     field public static final int ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT = 3; // 0x3
     field public static final int ERROR_TAKE_SCREENSHOT_INVALID_DISPLAY = 4; // 0x4
+    field public static final int ERROR_TAKE_SCREENSHOT_INVALID_WINDOW = 5; // 0x5
     field public static final int ERROR_TAKE_SCREENSHOT_NO_ACCESSIBILITY_ACCESS = 2; // 0x2
+    field public static final int ERROR_TAKE_SCREENSHOT_SECURE_WINDOW = 6; // 0x6
     field public static final int GESTURE_2_FINGER_DOUBLE_TAP = 20; // 0x14
     field public static final int GESTURE_2_FINGER_DOUBLE_TAP_AND_HOLD = 40; // 0x28
     field public static final int GESTURE_2_FINGER_SINGLE_TAP = 19; // 0x13
@@ -5275,6 +5291,13 @@ package android.app {
     field @NonNull public static final android.os.Parcelable.Creator<android.app.ForegroundServiceStartNotAllowedException> CREATOR;
   }
 
+  public final class ForegroundServiceTypeNotAllowedException extends android.app.ServiceStartNotAllowedException implements android.os.Parcelable {
+    ctor public ForegroundServiceTypeNotAllowedException(@NonNull String);
+    method public int describeContents();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.app.ForegroundServiceTypeNotAllowedException> CREATOR;
+  }
+
   @Deprecated public class Fragment implements android.content.ComponentCallbacks2 android.view.View.OnCreateContextMenuListener {
     ctor @Deprecated public Fragment();
     method @Deprecated public void dump(String, java.io.FileDescriptor, java.io.PrintWriter, String[]);
@@ -5589,6 +5612,7 @@ package android.app {
     method public int getGameMode();
     method public void setGameState(@NonNull android.app.GameState);
     field public static final int GAME_MODE_BATTERY = 3; // 0x3
+    field public static final int GAME_MODE_CUSTOM = 4; // 0x4
     field public static final int GAME_MODE_PERFORMANCE = 2; // 0x2
     field public static final int GAME_MODE_STANDARD = 1; // 0x1
     field public static final int GAME_MODE_UNSUPPORTED = 0; // 0x0
@@ -6936,7 +6960,7 @@ package android.app {
     method public void onTrimMemory(int);
     method public boolean onUnbind(android.content.Intent);
     method public final void startForeground(int, android.app.Notification);
-    method public final void startForeground(int, @NonNull android.app.Notification, int);
+    method public final void startForeground(int, @NonNull android.app.Notification, @RequiresPermission int);
     method @Deprecated public final void stopForeground(boolean);
     method public final void stopForeground(int);
     method public final void stopSelf();
@@ -7249,6 +7273,7 @@ package android.app {
     method @RequiresPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE) public android.os.ParcelFileDescriptor getWallpaperFile(int);
     method public int getWallpaperId(int);
     method public android.app.WallpaperInfo getWallpaperInfo();
+    method @Nullable public android.app.WallpaperInfo getWallpaperInfo(int);
     method public boolean hasResourceWallpaper(@RawRes int);
     method public boolean isSetWallpaperAllowed();
     method public boolean isWallpaperSupported();
@@ -7669,6 +7694,7 @@ package android.app.admin {
     method public boolean updateOverrideApn(@NonNull android.content.ComponentName, int, @NonNull android.telephony.data.ApnSetting);
     method public void wipeData(int);
     method public void wipeData(int, @NonNull CharSequence);
+    method public void wipeDevice(int);
     field public static final String ACTION_ADD_DEVICE_ADMIN = "android.app.action.ADD_DEVICE_ADMIN";
     field public static final String ACTION_ADMIN_POLICY_COMPLIANCE = "android.app.action.ADMIN_POLICY_COMPLIANCE";
     field public static final String ACTION_APPLICATION_DELEGATION_SCOPES_CHANGED = "android.app.action.APPLICATION_DELEGATION_SCOPES_CHANGED";
@@ -8436,6 +8462,7 @@ package android.app.job {
 
   public abstract class JobScheduler {
     ctor public JobScheduler();
+    method public boolean canRunLongJobs();
     method public abstract void cancel(int);
     method public abstract void cancelAll();
     method public abstract int enqueue(@NonNull android.app.job.JobInfo, @NonNull android.app.job.JobWorkItem);
@@ -9061,6 +9088,11 @@ package android.companion {
     method @RequiresPermission(android.Manifest.permission.REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE) public void stopObservingDevicePresence(@NonNull String) throws android.companion.DeviceNotAssociatedException;
     field public static final String EXTRA_ASSOCIATION = "android.companion.extra.ASSOCIATION";
     field @Deprecated public static final String EXTRA_DEVICE = "android.companion.extra.DEVICE";
+    field public static final int RESULT_CANCELED = 0; // 0x0
+    field public static final int RESULT_DISCOVERY_TIMEOUT = 2; // 0x2
+    field public static final int RESULT_INTERNAL_ERROR = 3; // 0x3
+    field public static final int RESULT_OK = -1; // 0xffffffff
+    field public static final int RESULT_USER_REJECTED = 1; // 0x1
   }
 
   public abstract static class CompanionDeviceManager.Callback {
@@ -12122,6 +12154,7 @@ package android.content.pm {
     field public static final String FEATURE_TOUCHSCREEN_MULTITOUCH_JAZZHAND = "android.hardware.touchscreen.multitouch.jazzhand";
     field public static final String FEATURE_USB_ACCESSORY = "android.hardware.usb.accessory";
     field public static final String FEATURE_USB_HOST = "android.hardware.usb.host";
+    field public static final String FEATURE_UWB = "android.hardware.uwb";
     field public static final String FEATURE_VERIFIED_BOOT = "android.software.verified_boot";
     field public static final String FEATURE_VR_HEADTRACKING = "android.hardware.vr.headtracking";
     field @Deprecated public static final String FEATURE_VR_MODE = "android.software.vr.mode";
@@ -12183,6 +12216,7 @@ package android.content.pm {
     field public static final int PERMISSION_DENIED = -1; // 0xffffffff
     field public static final int PERMISSION_GRANTED = 0; // 0x0
     field public static final String PROPERTY_MEDIA_CAPABILITIES = "android.media.PROPERTY_MEDIA_CAPABILITIES";
+    field public static final String PROPERTY_SPECIAL_USE_FGS_SUBTYPE = "android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE";
     field public static final int SIGNATURE_FIRST_NOT_SIGNED = -1; // 0xffffffff
     field public static final int SIGNATURE_MATCH = 0; // 0x0
     field public static final int SIGNATURE_NEITHER_SIGNED = 1; // 0x1
@@ -12396,16 +12430,20 @@ package android.content.pm {
     field public static final int FLAG_SINGLE_USER = 1073741824; // 0x40000000
     field public static final int FLAG_STOP_WITH_TASK = 1; // 0x1
     field public static final int FLAG_USE_APP_ZYGOTE = 8; // 0x8
-    field public static final int FOREGROUND_SERVICE_TYPE_CAMERA = 64; // 0x40
-    field public static final int FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE = 16; // 0x10
-    field public static final int FOREGROUND_SERVICE_TYPE_DATA_SYNC = 1; // 0x1
-    field public static final int FOREGROUND_SERVICE_TYPE_LOCATION = 8; // 0x8
+    field @RequiresPermission(allOf={android.Manifest.permission.FOREGROUND_SERVICE_CAMERA}, anyOf={android.Manifest.permission.CAMERA}, conditional=true) public static final int FOREGROUND_SERVICE_TYPE_CAMERA = 64; // 0x40
+    field @RequiresPermission(allOf={android.Manifest.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE}, anyOf={android.Manifest.permission.BLUETOOTH_CONNECT, android.Manifest.permission.CHANGE_NETWORK_STATE, android.Manifest.permission.CHANGE_WIFI_STATE, android.Manifest.permission.CHANGE_WIFI_MULTICAST_STATE, android.Manifest.permission.NFC, android.Manifest.permission.TRANSMIT_IR}, conditional=true) public static final int FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE = 16; // 0x10
+    field @Deprecated @RequiresPermission(value=android.Manifest.permission.FOREGROUND_SERVICE_DATA_SYNC, conditional=true) public static final int FOREGROUND_SERVICE_TYPE_DATA_SYNC = 1; // 0x1
+    field @RequiresPermission(allOf={android.Manifest.permission.FOREGROUND_SERVICE_HEALTH}, anyOf={android.Manifest.permission.ACTIVITY_RECOGNITION, android.Manifest.permission.BODY_SENSORS, android.Manifest.permission.HIGH_SAMPLING_RATE_SENSORS}, conditional=true) public static final int FOREGROUND_SERVICE_TYPE_HEALTH = 256; // 0x100
+    field @RequiresPermission(allOf={android.Manifest.permission.FOREGROUND_SERVICE_LOCATION}, anyOf={android.Manifest.permission.ACCESS_COARSE_LOCATION, android.Manifest.permission.ACCESS_FINE_LOCATION}, conditional=true) public static final int FOREGROUND_SERVICE_TYPE_LOCATION = 8; // 0x8
     field public static final int FOREGROUND_SERVICE_TYPE_MANIFEST = -1; // 0xffffffff
-    field public static final int FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK = 2; // 0x2
-    field public static final int FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION = 32; // 0x20
-    field public static final int FOREGROUND_SERVICE_TYPE_MICROPHONE = 128; // 0x80
-    field public static final int FOREGROUND_SERVICE_TYPE_NONE = 0; // 0x0
-    field public static final int FOREGROUND_SERVICE_TYPE_PHONE_CALL = 4; // 0x4
+    field @RequiresPermission(value=android.Manifest.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK, conditional=true) public static final int FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK = 2; // 0x2
+    field @RequiresPermission(value=android.Manifest.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION, conditional=true) public static final int FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION = 32; // 0x20
+    field @RequiresPermission(allOf={android.Manifest.permission.FOREGROUND_SERVICE_MICROPHONE}, anyOf={android.Manifest.permission.CAPTURE_AUDIO_OUTPUT, android.Manifest.permission.RECORD_AUDIO}, conditional=true) public static final int FOREGROUND_SERVICE_TYPE_MICROPHONE = 128; // 0x80
+    field @Deprecated public static final int FOREGROUND_SERVICE_TYPE_NONE = 0; // 0x0
+    field @RequiresPermission(allOf={android.Manifest.permission.FOREGROUND_SERVICE_PHONE_CALL}, anyOf={android.Manifest.permission.MANAGE_OWN_CALLS}, conditional=true) public static final int FOREGROUND_SERVICE_TYPE_PHONE_CALL = 4; // 0x4
+    field @RequiresPermission(value=android.Manifest.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING, conditional=true) public static final int FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING = 512; // 0x200
+    field @RequiresPermission(value=android.Manifest.permission.FOREGROUND_SERVICE_SPECIAL_USE, conditional=true) public static final int FOREGROUND_SERVICE_TYPE_SPECIAL_USE = 1073741824; // 0x40000000
+    field @RequiresPermission(value=android.Manifest.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED, conditional=true) public static final int FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED = 1024; // 0x400
     field public int flags;
     field public String permission;
   }
@@ -16597,6 +16635,7 @@ package android.graphics.fonts {
     field public static final int FONT_WEIGHT_NORMAL = 400; // 0x190
     field public static final int FONT_WEIGHT_SEMI_BOLD = 600; // 0x258
     field public static final int FONT_WEIGHT_THIN = 100; // 0x64
+    field public static final int FONT_WEIGHT_UNSPECIFIED = -1; // 0xffffffff
   }
 
   public final class FontVariationAxis {
@@ -17621,6 +17660,7 @@ package android.hardware.camera2 {
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<android.util.Rational> CONTROL_AE_COMPENSATION_STEP;
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<java.lang.Boolean> CONTROL_AE_LOCK_AVAILABLE;
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<int[]> CONTROL_AF_AVAILABLE_MODES;
+    field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<java.lang.Boolean> CONTROL_AUTOFRAMING_AVAILABLE;
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<int[]> CONTROL_AVAILABLE_EFFECTS;
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<android.hardware.camera2.params.Capability[]> CONTROL_AVAILABLE_EXTENDED_SCENE_MODE_CAPABILITIES;
     field @NonNull public static final android.hardware.camera2.CameraCharacteristics.Key<int[]> CONTROL_AVAILABLE_MODES;
@@ -17925,6 +17965,12 @@ package android.hardware.camera2 {
     field public static final int CONTROL_AF_TRIGGER_CANCEL = 2; // 0x2
     field public static final int CONTROL_AF_TRIGGER_IDLE = 0; // 0x0
     field public static final int CONTROL_AF_TRIGGER_START = 1; // 0x1
+    field public static final int CONTROL_AUTOFRAMING_AUTO = 2; // 0x2
+    field public static final int CONTROL_AUTOFRAMING_OFF = 0; // 0x0
+    field public static final int CONTROL_AUTOFRAMING_ON = 1; // 0x1
+    field public static final int CONTROL_AUTOFRAMING_STATE_CONVERGED = 2; // 0x2
+    field public static final int CONTROL_AUTOFRAMING_STATE_FRAMING = 1; // 0x1
+    field public static final int CONTROL_AUTOFRAMING_STATE_INACTIVE = 0; // 0x0
     field public static final int CONTROL_AWB_MODE_AUTO = 1; // 0x1
     field public static final int CONTROL_AWB_MODE_CLOUDY_DAYLIGHT = 6; // 0x6
     field public static final int CONTROL_AWB_MODE_DAYLIGHT = 5; // 0x5
@@ -18172,6 +18218,7 @@ package android.hardware.camera2 {
     field @NonNull public static final android.hardware.camera2.CaptureRequest.Key<java.lang.Integer> CONTROL_AF_MODE;
     field @NonNull public static final android.hardware.camera2.CaptureRequest.Key<android.hardware.camera2.params.MeteringRectangle[]> CONTROL_AF_REGIONS;
     field @NonNull public static final android.hardware.camera2.CaptureRequest.Key<java.lang.Integer> CONTROL_AF_TRIGGER;
+    field @NonNull public static final android.hardware.camera2.CaptureRequest.Key<java.lang.Integer> CONTROL_AUTOFRAMING;
     field @NonNull public static final android.hardware.camera2.CaptureRequest.Key<java.lang.Boolean> CONTROL_AWB_LOCK;
     field @NonNull public static final android.hardware.camera2.CaptureRequest.Key<java.lang.Integer> CONTROL_AWB_MODE;
     field @NonNull public static final android.hardware.camera2.CaptureRequest.Key<android.hardware.camera2.params.MeteringRectangle[]> CONTROL_AWB_REGIONS;
@@ -18262,6 +18309,8 @@ package android.hardware.camera2 {
     field @NonNull public static final android.hardware.camera2.CaptureResult.Key<java.lang.Integer> CONTROL_AF_SCENE_CHANGE;
     field @NonNull public static final android.hardware.camera2.CaptureResult.Key<java.lang.Integer> CONTROL_AF_STATE;
     field @NonNull public static final android.hardware.camera2.CaptureResult.Key<java.lang.Integer> CONTROL_AF_TRIGGER;
+    field @NonNull public static final android.hardware.camera2.CaptureResult.Key<java.lang.Integer> CONTROL_AUTOFRAMING;
+    field @NonNull public static final android.hardware.camera2.CaptureResult.Key<java.lang.Integer> CONTROL_AUTOFRAMING_STATE;
     field @NonNull public static final android.hardware.camera2.CaptureResult.Key<java.lang.Boolean> CONTROL_AWB_LOCK;
     field @NonNull public static final android.hardware.camera2.CaptureResult.Key<java.lang.Integer> CONTROL_AWB_MODE;
     field @NonNull public static final android.hardware.camera2.CaptureResult.Key<android.hardware.camera2.params.MeteringRectangle[]> CONTROL_AWB_REGIONS;
@@ -19690,6 +19739,7 @@ package android.location {
     method public int describeContents();
     method @NonNull public android.location.GnssClock getClock();
     method @NonNull public java.util.Collection<android.location.GnssAutomaticGainControl> getGnssAutomaticGainControls();
+    method public boolean getIsFullTracking();
     method @NonNull public java.util.Collection<android.location.GnssMeasurement> getMeasurements();
     method public void writeToParcel(android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.location.GnssMeasurementsEvent> CREATOR;
@@ -19701,6 +19751,7 @@ package android.location {
     method @NonNull public android.location.GnssMeasurementsEvent build();
     method @NonNull public android.location.GnssMeasurementsEvent.Builder setClock(@NonNull android.location.GnssClock);
     method @NonNull public android.location.GnssMeasurementsEvent.Builder setGnssAutomaticGainControls(@NonNull java.util.Collection<android.location.GnssAutomaticGainControl>);
+    method @NonNull public android.location.GnssMeasurementsEvent.Builder setIsFullTracking(boolean);
     method @NonNull public android.location.GnssMeasurementsEvent.Builder setMeasurements(@NonNull java.util.Collection<android.location.GnssMeasurement>);
   }
 
@@ -27701,6 +27752,15 @@ package android.net.vcn {
 
 package android.nfc {
 
+  public final class AvailableNfcAntenna implements android.os.Parcelable {
+    ctor public AvailableNfcAntenna(int, int);
+    method public int describeContents();
+    method public int getLocationX();
+    method public int getLocationY();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.nfc.AvailableNfcAntenna> CREATOR;
+  }
+
   public class FormatException extends java.lang.Exception {
     ctor public FormatException();
     ctor public FormatException(String);
@@ -27762,6 +27822,7 @@ package android.nfc {
     method @Deprecated public void enableForegroundNdefPush(android.app.Activity, android.nfc.NdefMessage);
     method public void enableReaderMode(android.app.Activity, android.nfc.NfcAdapter.ReaderCallback, int, android.os.Bundle);
     method public static android.nfc.NfcAdapter getDefaultAdapter(android.content.Context);
+    method @Nullable public android.nfc.NfcAntennaInfo getNfcAntennaInfo();
     method public boolean ignore(android.nfc.Tag, int, android.nfc.NfcAdapter.OnTagRemovedListener, android.os.Handler);
     method @Deprecated public boolean invokeBeam(android.app.Activity);
     method public boolean isEnabled();
@@ -27822,6 +27883,17 @@ package android.nfc {
 
   public static interface NfcAdapter.ReaderCallback {
     method public void onTagDiscovered(android.nfc.Tag);
+  }
+
+  public final class NfcAntennaInfo implements android.os.Parcelable {
+    ctor public NfcAntennaInfo(int, int, boolean, @NonNull java.util.List<android.nfc.AvailableNfcAntenna>);
+    method public int describeContents();
+    method @NonNull public java.util.List<android.nfc.AvailableNfcAntenna> getAvailableNfcAntennas();
+    method public int getDeviceHeight();
+    method public int getDeviceWidth();
+    method public boolean isDeviceFoldable();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.nfc.NfcAntennaInfo> CREATOR;
   }
 
   public final class NfcEvent {
@@ -32285,6 +32357,7 @@ package android.os {
     method public static final boolean is64Bit();
     method public static boolean isApplicationUid(int);
     method public static final boolean isIsolated();
+    method public static final boolean isIsolatedUid(int);
     method public static final boolean isSdkSandbox();
     method public static final void killProcess(int);
     method public static final int myPid();
@@ -35813,6 +35886,7 @@ package android.provider {
     field public static final String ACTION_MANAGE_ALL_SIM_PROFILES_SETTINGS = "android.settings.MANAGE_ALL_SIM_PROFILES_SETTINGS";
     field public static final String ACTION_MANAGE_APPLICATIONS_SETTINGS = "android.settings.MANAGE_APPLICATIONS_SETTINGS";
     field public static final String ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION = "android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION";
+    field public static final String ACTION_MANAGE_APP_LONG_JOBS = "android.settings.MANAGE_APP_LONG_JOBS";
     field public static final String ACTION_MANAGE_DEFAULT_APPS_SETTINGS = "android.settings.MANAGE_DEFAULT_APPS_SETTINGS";
     field public static final String ACTION_MANAGE_OVERLAY_PERMISSION = "android.settings.action.MANAGE_OVERLAY_PERMISSION";
     field public static final String ACTION_MANAGE_SUPERVISOR_RESTRICTED_SETTING = "android.settings.MANAGE_SUPERVISOR_RESTRICTED_SETTING";
@@ -39926,7 +40000,7 @@ package android.service.wallpaper {
   public abstract class WallpaperService extends android.app.Service {
     ctor public WallpaperService();
     method public final android.os.IBinder onBind(android.content.Intent);
-    method public abstract android.service.wallpaper.WallpaperService.Engine onCreateEngine();
+    method @MainThread public abstract android.service.wallpaper.WallpaperService.Engine onCreateEngine();
     field public static final String SERVICE_INTERFACE = "android.service.wallpaper.WallpaperService";
     field public static final String SERVICE_META_DATA = "android.service.wallpaper";
   }
@@ -39938,23 +40012,25 @@ package android.service.wallpaper {
     method public int getDesiredMinimumWidth();
     method @Nullable public android.content.Context getDisplayContext();
     method public android.view.SurfaceHolder getSurfaceHolder();
+    method public int getWallpaperFlags();
     method public boolean isPreview();
     method public boolean isVisible();
     method public void notifyColorsChanged();
-    method public void onApplyWindowInsets(android.view.WindowInsets);
-    method public android.os.Bundle onCommand(String, int, int, int, android.os.Bundle, boolean);
-    method @Nullable public android.app.WallpaperColors onComputeColors();
-    method public void onCreate(android.view.SurfaceHolder);
-    method public void onDesiredSizeChanged(int, int);
-    method public void onDestroy();
-    method public void onOffsetsChanged(float, float, float, float, int, int);
-    method public void onSurfaceChanged(android.view.SurfaceHolder, int, int, int);
-    method public void onSurfaceCreated(android.view.SurfaceHolder);
-    method public void onSurfaceDestroyed(android.view.SurfaceHolder);
-    method public void onSurfaceRedrawNeeded(android.view.SurfaceHolder);
-    method public void onTouchEvent(android.view.MotionEvent);
-    method public void onVisibilityChanged(boolean);
-    method public void onZoomChanged(@FloatRange(from=0.0f, to=1.0f) float);
+    method @MainThread public void onApplyWindowInsets(android.view.WindowInsets);
+    method @MainThread public android.os.Bundle onCommand(String, int, int, int, android.os.Bundle, boolean);
+    method @MainThread @Nullable public android.app.WallpaperColors onComputeColors();
+    method @MainThread public void onCreate(android.view.SurfaceHolder);
+    method @MainThread public void onDesiredSizeChanged(int, int);
+    method @MainThread public void onDestroy();
+    method @MainThread public void onOffsetsChanged(float, float, float, float, int, int);
+    method @MainThread public void onSurfaceChanged(android.view.SurfaceHolder, int, int, int);
+    method @MainThread public void onSurfaceCreated(android.view.SurfaceHolder);
+    method @MainThread public void onSurfaceDestroyed(android.view.SurfaceHolder);
+    method @MainThread public void onSurfaceRedrawNeeded(android.view.SurfaceHolder);
+    method @MainThread public void onTouchEvent(android.view.MotionEvent);
+    method @MainThread public void onVisibilityChanged(boolean);
+    method @MainThread public void onWallpaperFlagsChanged(int);
+    method @MainThread public void onZoomChanged(@FloatRange(from=0.0f, to=1.0f) float);
     method public void setOffsetNotificationsEnabled(boolean);
     method public void setTouchEventsEnabled(boolean);
   }
@@ -40389,6 +40465,7 @@ package android.telecom {
     field public static final String EVENT_DISPLAY_DIAGNOSTIC_MESSAGE = "android.telecom.event.DISPLAY_DIAGNOSTIC_MESSAGE";
     field public static final String EXTRA_DIAGNOSTIC_MESSAGE = "android.telecom.extra.DIAGNOSTIC_MESSAGE";
     field public static final String EXTRA_DIAGNOSTIC_MESSAGE_ID = "android.telecom.extra.DIAGNOSTIC_MESSAGE_ID";
+    field public static final String EXTRA_IS_SUPPRESSED_BY_DO_NOT_DISTURB = "android.telecom.extra.IS_SUPPRESSED_BY_DO_NOT_DISTURB";
     field public static final String EXTRA_LAST_EMERGENCY_CALLBACK_TIME_MILLIS = "android.telecom.extra.LAST_EMERGENCY_CALLBACK_TIME_MILLIS";
     field public static final String EXTRA_SILENT_RINGING_REQUESTED = "android.telecom.extra.SILENT_RINGING_REQUESTED";
     field public static final String EXTRA_SUGGESTED_PHONE_ACCOUNTS = "android.telecom.extra.SUGGESTED_PHONE_ACCOUNTS";
@@ -40446,6 +40523,7 @@ package android.telecom {
     method public int getCallerNumberVerificationStatus();
     method public final long getConnectTimeMillis();
     method @Nullable public String getContactDisplayName();
+    method @Nullable public android.net.Uri getContactPhotoUri();
     method public long getCreationTimeMillis();
     method public android.telecom.DisconnectCause getDisconnectCause();
     method public android.os.Bundle getExtras();
@@ -41882,6 +41960,7 @@ package android.telephony {
     field public static final String KEY_VOICE_PRIVACY_DISABLE_UI_BOOL = "voice_privacy_disable_ui_bool";
     field public static final String KEY_VOLTE_REPLACEMENT_RAT_INT = "volte_replacement_rat_int";
     field public static final String KEY_VONR_ENABLED_BOOL = "vonr_enabled_bool";
+    field public static final String KEY_VONR_ON_BY_DEFAULT_BOOL = "vonr_on_by_default_bool";
     field public static final String KEY_VONR_SETTING_VISIBILITY_BOOL = "vonr_setting_visibility_bool";
     field public static final String KEY_VT_UPGRADE_SUPPORTED_FOR_DOWNGRADED_RTT_CALL_BOOL = "vt_upgrade_supported_for_downgraded_rtt_call";
     field public static final String KEY_VVM_CELLULAR_DATA_REQUIRED_BOOL = "vvm_cellular_data_required_bool";
@@ -43997,6 +44076,8 @@ package android.telephony {
     field public static final int APPTYPE_USIM = 2; // 0x2
     field public static final int AUTHTYPE_EAP_AKA = 129; // 0x81
     field public static final int AUTHTYPE_EAP_SIM = 128; // 0x80
+    field public static final int AUTHTYPE_GBA_BOOTSTRAP = 132; // 0x84
+    field public static final int AUTHTYPE_GBA_NAF_KEY_EXTERNAL = 133; // 0x85
     field public static final int CALL_COMPOSER_STATUS_OFF = 0; // 0x0
     field public static final int CALL_COMPOSER_STATUS_ON = 1; // 0x1
     field public static final int CALL_STATE_IDLE = 0; // 0x0
@@ -44117,7 +44198,7 @@ package android.telephony {
     field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_ENTITLEMENT_CHECK_FAILED = 13; // 0xd
     field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_FEATURE_NOT_SUPPORTED = 10; // 0xa
     field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_NETWORK_NOT_AVAILABLE = 12; // 0xc
-    field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_NOT_DEFAULT_DATA_SUB = 14; // 0xe
+    field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_NOT_DEFAULT_DATA_SUBSCRIPTION = 14; // 0xe
     field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_OVERRIDDEN = 5; // 0x5
     field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_PENDING_NETWORK_SETUP = 15; // 0xf
     field public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_REQUEST_FAILED = 11; // 0xb
@@ -49489,6 +49570,7 @@ package android.view {
     method public float getY(int);
     method public float getYPrecision();
     method public boolean isButtonPressed(int);
+    method @Nullable public static android.view.MotionEvent obtain(long, long, int, int, @NonNull android.view.MotionEvent.PointerProperties[], @NonNull android.view.MotionEvent.PointerCoords[], int, int, float, float, int, int, int, int, int, int);
     method public static android.view.MotionEvent obtain(long, long, int, int, android.view.MotionEvent.PointerProperties[], android.view.MotionEvent.PointerCoords[], int, int, float, float, int, int, int, int);
     method @Deprecated public static android.view.MotionEvent obtain(long, long, int, int, int[], android.view.MotionEvent.PointerCoords[], int, float, float, int, int, int, int);
     method public static android.view.MotionEvent obtain(long, long, int, float, float, float, float, int, float, float, int, int);
@@ -49935,6 +50017,7 @@ package android.view {
   public static final class SurfaceControlViewHost.SurfacePackage implements android.os.Parcelable {
     ctor public SurfaceControlViewHost.SurfacePackage(@NonNull android.view.SurfaceControlViewHost.SurfacePackage);
     method public int describeContents();
+    method @NonNull public android.view.SurfaceControl getSurfaceControl();
     method public void notifyConfigurationChanged(@NonNull android.content.res.Configuration);
     method public void notifyDetachedFromWindow();
     method public void release();
@@ -52393,6 +52476,7 @@ package android.view.accessibility {
     method public String getViewIdResourceName();
     method public android.view.accessibility.AccessibilityWindowInfo getWindow();
     method public int getWindowId();
+    method public boolean hasRequestInitialAccessibilityFocus();
     method public boolean isAccessibilityFocused();
     method public boolean isCheckable();
     method public boolean isChecked();
@@ -52472,6 +52556,7 @@ package android.view.accessibility {
     method public void setPassword(boolean);
     method public void setQueryFromAppProcessEnabled(@NonNull android.view.View, boolean);
     method public void setRangeInfo(android.view.accessibility.AccessibilityNodeInfo.RangeInfo);
+    method public void setRequestInitialAccessibilityFocus(boolean);
     method public void setScreenReaderFocusable(boolean);
     method public void setScrollable(boolean);
     method public void setSelected(boolean);
@@ -52542,13 +52627,11 @@ package android.view.accessibility {
     field public static final int FOCUS_ACCESSIBILITY = 2; // 0x2
     field public static final int FOCUS_INPUT = 1; // 0x1
     field public static final int MAX_NUMBER_OF_PREFETCHED_NODES = 50; // 0x32
-    field public static final int MINIMUM_MIN_MILLIS_BETWEEN_CONTENT_CHANGES = 100; // 0x64
     field public static final int MOVEMENT_GRANULARITY_CHARACTER = 1; // 0x1
     field public static final int MOVEMENT_GRANULARITY_LINE = 4; // 0x4
     field public static final int MOVEMENT_GRANULARITY_PAGE = 16; // 0x10
     field public static final int MOVEMENT_GRANULARITY_PARAGRAPH = 8; // 0x8
     field public static final int MOVEMENT_GRANULARITY_WORD = 2; // 0x2
-    field public static final int UNDEFINED_MIN_MILLIS_BETWEEN_CONTENT_CHANGES = -1; // 0xffffffff
   }
 
   public static final class AccessibilityNodeInfo.AccessibilityAction implements android.os.Parcelable {
@@ -53998,23 +54081,22 @@ package android.view.inputmethod {
   }
 
   public final class TextAppearanceInfo implements android.os.Parcelable {
-    ctor public TextAppearanceInfo(@NonNull android.widget.TextView);
     method public int describeContents();
-    method @Nullable public String getFontFamilyName();
     method @Nullable public String getFontFeatureSettings();
     method @Nullable public String getFontVariationSettings();
+    method @ColorInt public int getHighlightTextColor();
+    method @ColorInt public int getHintTextColor();
     method public float getLetterSpacing();
     method public int getLineBreakStyle();
     method public int getLineBreakWordStyle();
-    method public int getMaxLength();
+    method @ColorInt public int getLinkTextColor();
+    method @ColorInt public int getShadowColor();
     method @Px public float getShadowDx();
     method @Px public float getShadowDy();
     method @Px public float getShadowRadius();
+    method @Nullable public String getSystemFontFamilyName();
     method @ColorInt public int getTextColor();
-    method @ColorInt public int getTextColorHighlight();
-    method @ColorInt public int getTextColorHint();
-    method @Nullable public android.content.res.ColorStateList getTextColorLink();
-    method @IntRange(from=0xffffffff, to=android.graphics.fonts.FontStyle.FONT_WEIGHT_MAX) public int getTextFontWeight();
+    method @IntRange(from=android.graphics.fonts.FontStyle.FONT_WEIGHT_UNSPECIFIED, to=android.graphics.fonts.FontStyle.FONT_WEIGHT_MAX) public int getTextFontWeight();
     method @NonNull public android.os.LocaleList getTextLocales();
     method public float getTextScaleX();
     method @Px public float getTextSize();
@@ -54024,6 +54106,33 @@ package android.view.inputmethod {
     method public boolean isFallbackLineSpacing();
     method public void writeToParcel(@NonNull android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.view.inputmethod.TextAppearanceInfo> CREATOR;
+  }
+
+  public static final class TextAppearanceInfo.Builder {
+    ctor public TextAppearanceInfo.Builder();
+    method @NonNull public android.view.inputmethod.TextAppearanceInfo build();
+    method @NonNull public android.view.inputmethod.TextAppearanceInfo.Builder setAllCaps(boolean);
+    method @NonNull public android.view.inputmethod.TextAppearanceInfo.Builder setElegantTextHeight(boolean);
+    method @NonNull public android.view.inputmethod.TextAppearanceInfo.Builder setFallbackLineSpacing(boolean);
+    method @NonNull public android.view.inputmethod.TextAppearanceInfo.Builder setFontFeatureSettings(@Nullable String);
+    method @NonNull public android.view.inputmethod.TextAppearanceInfo.Builder setFontVariationSettings(@Nullable String);
+    method @NonNull public android.view.inputmethod.TextAppearanceInfo.Builder setHighlightTextColor(@ColorInt int);
+    method @NonNull public android.view.inputmethod.TextAppearanceInfo.Builder setHintTextColor(@ColorInt int);
+    method @NonNull public android.view.inputmethod.TextAppearanceInfo.Builder setLetterSpacing(float);
+    method @NonNull public android.view.inputmethod.TextAppearanceInfo.Builder setLineBreakStyle(int);
+    method @NonNull public android.view.inputmethod.TextAppearanceInfo.Builder setLineBreakWordStyle(int);
+    method @NonNull public android.view.inputmethod.TextAppearanceInfo.Builder setLinkTextColor(@ColorInt int);
+    method @NonNull public android.view.inputmethod.TextAppearanceInfo.Builder setShadowColor(@ColorInt int);
+    method @NonNull public android.view.inputmethod.TextAppearanceInfo.Builder setShadowDx(@Px float);
+    method @NonNull public android.view.inputmethod.TextAppearanceInfo.Builder setShadowDy(@Px float);
+    method @NonNull public android.view.inputmethod.TextAppearanceInfo.Builder setShadowRadius(@Px float);
+    method @NonNull public android.view.inputmethod.TextAppearanceInfo.Builder setSystemFontFamilyName(@Nullable String);
+    method @NonNull public android.view.inputmethod.TextAppearanceInfo.Builder setTextColor(@ColorInt int);
+    method @NonNull public android.view.inputmethod.TextAppearanceInfo.Builder setTextFontWeight(@IntRange(from=android.graphics.fonts.FontStyle.FONT_WEIGHT_UNSPECIFIED, to=android.graphics.fonts.FontStyle.FONT_WEIGHT_MAX) int);
+    method @NonNull public android.view.inputmethod.TextAppearanceInfo.Builder setTextLocales(@NonNull android.os.LocaleList);
+    method @NonNull public android.view.inputmethod.TextAppearanceInfo.Builder setTextScaleX(float);
+    method @NonNull public android.view.inputmethod.TextAppearanceInfo.Builder setTextSize(@Px float);
+    method @NonNull public android.view.inputmethod.TextAppearanceInfo.Builder setTextStyle(int);
   }
 
   public final class TextAttribute implements android.os.Parcelable {

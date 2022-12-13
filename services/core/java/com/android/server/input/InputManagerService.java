@@ -23,6 +23,7 @@ import android.Manifest;
 import android.annotation.EnforcePermission;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.UserIdInt;
 import android.app.ActivityManagerInternal;
 import android.app.Notification;
 import android.app.NotificationManager;
@@ -111,11 +112,13 @@ import android.view.Surface;
 import android.view.SurfaceControl;
 import android.view.VerifiedInputEvent;
 import android.view.ViewConfiguration;
+import android.view.inputmethod.InputMethodSubtype;
 import android.widget.Toast;
 
 import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.inputmethod.InputMethodSubtypeHandle;
 import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.os.SomeArgs;
@@ -270,9 +273,9 @@ public class InputManagerService extends IInputManager.Stub
     // to display id (int). Currently only accessed by InputReader.
     private final Map<String, Integer> mStaticAssociations;
     private final Object mAssociationsLock = new Object();
-    @GuardedBy("mAssociationLock")
+    @GuardedBy("mAssociationsLock")
     private final Map<String, Integer> mRuntimeAssociations = new ArrayMap<>();
-    @GuardedBy("mAssociationLock")
+    @GuardedBy("mAssociationsLock")
     private final Map<String, String> mUniqueIdAssociations = new ArrayMap<>();
 
     // Guards per-display input properties and properties relating to the mouse pointer.
@@ -366,7 +369,7 @@ public class InputManagerService extends IInputManager.Stub
     /** Switch code: Camera lens cover. When set the lens is covered. */
     public static final int SW_CAMERA_LENS_COVER = 0x09;
 
-    /** Switch code: Microphone. When set it is off. */
+    /** Switch code: Microphone. When set, the mic is muted. */
     public static final int SW_MUTE_DEVICE = 0x0e;
 
     public static final int SW_LID_BIT = 1 << SW_LID;
@@ -533,14 +536,14 @@ public class InputManagerService extends IInputManager.Stub
         // Set the HW mic toggle switch state
         final int micMuteState = getSwitchState(-1 /* deviceId */, InputDevice.SOURCE_ANY,
                 SW_MUTE_DEVICE);
-        if (micMuteState != InputManager.SWITCH_STATE_UNKNOWN) {
-            setSensorPrivacy(Sensors.MICROPHONE, micMuteState != InputManager.SWITCH_STATE_OFF);
+        if (micMuteState == InputManager.SWITCH_STATE_ON) {
+            setSensorPrivacy(Sensors.MICROPHONE, true);
         }
         // Set the HW camera toggle switch state
         final int cameraMuteState = getSwitchState(-1 /* deviceId */, InputDevice.SOURCE_ANY,
                 SW_CAMERA_LENS_COVER);
-        if (cameraMuteState != InputManager.SWITCH_STATE_UNKNOWN) {
-            setSensorPrivacy(Sensors.CAMERA, cameraMuteState != InputManager.SWITCH_STATE_OFF);
+        if (cameraMuteState == InputManager.SWITCH_STATE_ON) {
+            setSensorPrivacy(Sensors.CAMERA, true);
         }
 
         IntentFilter filter = new IntentFilter(Intent.ACTION_PACKAGE_ADDED);
@@ -1811,8 +1814,8 @@ public class InputManagerService extends IInputManager.Stub
      */
     public boolean transferTouchFocus(@NonNull IBinder fromChannelToken,
             @NonNull IBinder toChannelToken) {
-        Objects.nonNull(fromChannelToken);
-        Objects.nonNull(toChannelToken);
+        Objects.requireNonNull(fromChannelToken);
+        Objects.requireNonNull(toChannelToken);
         return mNative.transferTouchFocus(fromChannelToken, toChannelToken,
                 false /* isDragDrop */);
     }
@@ -2685,6 +2688,8 @@ public class InputManagerService extends IInputManager.Stub
     @EnforcePermission(Manifest.permission.MONITOR_INPUT)
     @Override
     public void pilferPointers(IBinder inputChannelToken) {
+        super.pilferPointers_enforcePermission();
+
         Objects.requireNonNull(inputChannelToken);
         mNative.pilferPointers(inputChannelToken);
     }
@@ -3786,6 +3791,21 @@ public class InputManagerService extends IInputManager.Stub
         @Override
         public InputChannel createInputChannel(String inputChannelName) {
             return InputManagerService.this.createInputChannel(inputChannelName);
+        }
+
+        @Override
+        public void pilferPointers(IBinder token) {
+            mNative.pilferPointers(token);
+        }
+
+        @Override
+        public void onInputMethodSubtypeChangedForKeyboardLayoutMapping(@UserIdInt int userId,
+                @Nullable InputMethodSubtypeHandle subtypeHandle,
+                @Nullable InputMethodSubtype subtype) {
+            if (DEBUG) {
+                Slog.i(TAG, "InputMethodSubtype changed: userId=" + userId
+                        + " subtypeHandle=" + subtypeHandle);
+            }
         }
 
         @Override

@@ -88,6 +88,7 @@ import static android.view.inputmethod.InputMethodEditorTraceProto.InputMethodCl
 import static android.view.inputmethod.InputMethodEditorTraceProto.InputMethodClientsTraceProto.ClientSideProto.INSETS_CONTROLLER;
 
 import android.Manifest;
+import android.accessibilityservice.AccessibilityService;
 import android.animation.AnimationHandler;
 import android.animation.LayoutTransition;
 import android.annotation.AnyThread;
@@ -193,12 +194,14 @@ import android.view.autofill.AutofillManager;
 import android.view.contentcapture.ContentCaptureManager;
 import android.view.contentcapture.ContentCaptureSession;
 import android.view.contentcapture.MainContentCaptureSession;
+import android.view.inputmethod.ImeTracker;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Scroller;
 import android.window.ClientWindowFrames;
 import android.window.CompatOnBackInvokedCallback;
 import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
+import android.window.ScreenCapture;
 import android.window.SurfaceSyncGroup;
 import android.window.WindowOnBackInvokedDispatcher;
 
@@ -229,6 +232,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Queue;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
 
 /**
  * The top of a view hierarchy, implementing the needed protocol between View
@@ -849,7 +853,7 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     private SurfaceSyncGroup mSyncGroup;
-    private SurfaceSyncGroup.SyncBufferCallback mSyncBufferCallback;
+    private SurfaceSyncGroup.TransactionReadyCallback mTransactionReadyCallback;
     private int mNumSyncsInProgress = 0;
 
     private HashSet<ScrollCaptureCallback> mRootScrollCaptureCallbacks;
@@ -1407,7 +1411,11 @@ public final class ViewRootImpl implements ViewParent,
                 mFirstPostImeInputStage = earlyPostImeStage;
                 mPendingInputEventQueueLengthCounterName = "aq:pending:" + counterSuffix;
 
-                AnimationHandler.requestAnimatorsEnabled(mAppVisible, this);
+                if (!mRemoved || !mAppVisible) {
+                    AnimationHandler.requestAnimatorsEnabled(mAppVisible, this);
+                } else if (LOCAL_LOGV) {
+                    Log.v(mTag, "setView() enabling visibility when removed");
+                }
             }
         }
     }
@@ -1758,7 +1766,12 @@ public final class ViewRootImpl implements ViewParent,
                 mAppVisibilityChanged = true;
                 scheduleTraversals();
             }
-            AnimationHandler.requestAnimatorsEnabled(mAppVisible, this);
+            // Only enable if the window is not already removed (via earlier call to doDie())
+            if (!mRemoved || !mAppVisible) {
+                AnimationHandler.requestAnimatorsEnabled(mAppVisible, this);
+            } else if (LOCAL_LOGV) {
+                Log.v(mTag, "handleAppVisibility() enabling visibility when removed");
+            }
         }
     }
 
@@ -2308,6 +2321,7 @@ public final class ViewRootImpl implements ViewParent,
      */
     void notifyRendererOfFramePending() {
         if (mAttachInfo.mThreadedRenderer != null) {
+            mAttachInfo.mThreadedRenderer.notifyCallbackPending();
             mAttachInfo.mThreadedRenderer.notifyFramePending();
         }
     }
@@ -3610,8 +3624,8 @@ public final class ViewRootImpl implements ViewParent,
                 mPendingTransitions.clear();
             }
 
-            if (mSyncBufferCallback != null) {
-                mSyncBufferCallback.onBufferReady(null);
+            if (mTransactionReadyCallback != null) {
+                mTransactionReadyCallback.onTransactionReady(null);
             }
         } else if (cancelAndRedraw) {
             mLastPerformTraversalsSkipDrawReason = cancelDueToPreDrawListener
@@ -3626,8 +3640,8 @@ public final class ViewRootImpl implements ViewParent,
                 }
                 mPendingTransitions.clear();
             }
-            if (!performDraw() && mSyncBufferCallback != null) {
-                mSyncBufferCallback.onBufferReady(null);
+            if (!performDraw() && mTransactionReadyCallback != null) {
+                mTransactionReadyCallback.onTransactionReady(null);
             }
         }
 
@@ -3641,7 +3655,7 @@ public final class ViewRootImpl implements ViewParent,
         if (!cancelAndRedraw) {
             mReportNextDraw = false;
             mLastReportNextDrawReason = null;
-            mSyncBufferCallback = null;
+            mTransactionReadyCallback = null;
             mSyncBuffer = false;
             if (isInLocalSync()) {
                 mSyncGroup.markSyncReady();
@@ -4388,7 +4402,7 @@ public final class ViewRootImpl implements ViewParent,
             return false;
         }
 
-        final boolean fullRedrawNeeded = mFullRedrawNeeded || mSyncBufferCallback != null;
+        final boolean fullRedrawNeeded = mFullRedrawNeeded || mTransactionReadyCallback != null;
         mFullRedrawNeeded = false;
 
         mIsDrawing = true;
@@ -4396,9 +4410,9 @@ public final class ViewRootImpl implements ViewParent,
 
         addFrameCommitCallbackIfNeeded();
 
-        boolean usingAsyncReport = isHardwareEnabled() && mSyncBufferCallback != null;
+        boolean usingAsyncReport = isHardwareEnabled() && mTransactionReadyCallback != null;
         if (usingAsyncReport) {
-            registerCallbacksForSync(mSyncBuffer, mSyncBufferCallback);
+            registerCallbacksForSync(mSyncBuffer, mTransactionReadyCallback);
         } else if (mHasPendingTransactions) {
             // These callbacks are only needed if there's no sync involved and there were calls to
             // applyTransactionOnDraw. These callbacks check if the draw failed for any reason and
@@ -4449,10 +4463,11 @@ public final class ViewRootImpl implements ViewParent,
             }
 
             if (mSurfaceHolder != null && mSurface.isValid()) {
-                final SurfaceSyncGroup.SyncBufferCallback syncBufferCallback = mSyncBufferCallback;
+                final SurfaceSyncGroup.TransactionReadyCallback transactionReadyCallback =
+                        mTransactionReadyCallback;
                 SurfaceCallbackHelper sch = new SurfaceCallbackHelper(() ->
-                        mHandler.post(() -> syncBufferCallback.onBufferReady(null)));
-                mSyncBufferCallback = null;
+                        mHandler.post(() -> transactionReadyCallback.onTransactionReady(null)));
+                mTransactionReadyCallback = null;
 
                 SurfaceHolder.Callback callbacks[] = mSurfaceHolder.getCallbacks();
 
@@ -4463,8 +4478,8 @@ public final class ViewRootImpl implements ViewParent,
                 }
             }
         }
-        if (mSyncBufferCallback != null && !usingAsyncReport) {
-            mSyncBufferCallback.onBufferReady(null);
+        if (mTransactionReadyCallback != null && !usingAsyncReport) {
+            mTransactionReadyCallback.onTransactionReady(null);
         }
         if (mPerformContentCapture) {
             performContentCaptureInitialReport();
@@ -5652,17 +5667,23 @@ public final class ViewRootImpl implements ViewParent,
                     break;
                 }
                 case MSG_SHOW_INSETS: {
+                    final ImeTracker.Token statsToken = (ImeTracker.Token) msg.obj;
+                    ImeTracker.get().onProgress(statsToken,
+                            ImeTracker.PHASE_CLIENT_HANDLE_SHOW_INSETS);
                     if (mView == null) {
                         Log.e(TAG,
                                 String.format("Calling showInsets(%d,%b) on window that no longer"
                                         + " has views.", msg.arg1, msg.arg2 == 1));
                     }
                     clearLowProfileModeIfNeeded(msg.arg1, msg.arg2 == 1);
-                    mInsetsController.show(msg.arg1, msg.arg2 == 1);
+                    mInsetsController.show(msg.arg1, msg.arg2 == 1, statsToken);
                     break;
                 }
                 case MSG_HIDE_INSETS: {
-                    mInsetsController.hide(msg.arg1, msg.arg2 == 1);
+                    final ImeTracker.Token statsToken = (ImeTracker.Token) msg.obj;
+                    ImeTracker.get().onProgress(statsToken,
+                            ImeTracker.PHASE_CLIENT_HANDLE_HIDE_INSETS);
+                    mInsetsController.hide(msg.arg1, msg.arg2 == 1, statsToken);
                     break;
                 }
                 case MSG_WINDOW_MOVED:
@@ -8818,12 +8839,14 @@ public final class ViewRootImpl implements ViewParent,
         mHandler.obtainMessage(MSG_INSETS_CONTROL_CHANGED, args).sendToTarget();
     }
 
-    private void showInsets(@InsetsType int types, boolean fromIme) {
-        mHandler.obtainMessage(MSG_SHOW_INSETS, types, fromIme ? 1 : 0).sendToTarget();
+    private void showInsets(@InsetsType int types, boolean fromIme,
+            @Nullable ImeTracker.Token statsToken) {
+        mHandler.obtainMessage(MSG_SHOW_INSETS, types, fromIme ? 1 : 0, statsToken).sendToTarget();
     }
 
-    private void hideInsets(@InsetsType int types, boolean fromIme) {
-        mHandler.obtainMessage(MSG_HIDE_INSETS, types, fromIme ? 1 : 0).sendToTarget();
+    private void hideInsets(@InsetsType int types, boolean fromIme,
+            @Nullable ImeTracker.Token statsToken) {
+        mHandler.obtainMessage(MSG_HIDE_INSETS, types, fromIme ? 1 : 0, statsToken).sendToTarget();
     }
 
     public void dispatchMoved(int newX, int newY) {
@@ -9122,6 +9145,9 @@ public final class ViewRootImpl implements ViewParent,
             mConsumeBatchedInputScheduled = true;
             mChoreographer.postCallback(Choreographer.CALLBACK_INPUT,
                     mConsumedBatchedInputRunnable, null);
+            if (mAttachInfo.mThreadedRenderer != null) {
+                mAttachInfo.mThreadedRenderer.notifyCallbackPending();
+            }
         }
     }
 
@@ -9315,12 +9341,18 @@ public final class ViewRootImpl implements ViewParent,
                 mViews.add(view);
                 postIfNeededLocked();
             }
+            if (mAttachInfo.mThreadedRenderer != null) {
+                mAttachInfo.mThreadedRenderer.notifyCallbackPending();
+            }
         }
 
         public void addViewRect(AttachInfo.InvalidateInfo info) {
             synchronized (this) {
                 mViewRects.add(info);
                 postIfNeededLocked();
+            }
+            if (mAttachInfo.mThreadedRenderer != null) {
+                mAttachInfo.mThreadedRenderer.notifyCallbackPending();
             }
         }
 
@@ -10188,7 +10220,8 @@ public final class ViewRootImpl implements ViewParent,
         }
 
         @Override
-        public void showInsets(@InsetsType int types, boolean fromIme) {
+        public void showInsets(@InsetsType int types, boolean fromIme,
+                @Nullable ImeTracker.Token statsToken) {
             final ViewRootImpl viewAncestor = mViewAncestor.get();
             if (fromIme) {
                 ImeTracing.getInstance().triggerClientDump("ViewRootImpl.W#showInsets",
@@ -10196,13 +10229,16 @@ public final class ViewRootImpl implements ViewParent,
                         null /* icProto */);
             }
             if (viewAncestor != null) {
-                viewAncestor.showInsets(types, fromIme);
+                ImeTracker.get().onProgress(statsToken, ImeTracker.PHASE_CLIENT_SHOW_INSETS);
+                viewAncestor.showInsets(types, fromIme, statsToken);
+            } else {
+                ImeTracker.get().onFailed(statsToken, ImeTracker.PHASE_CLIENT_SHOW_INSETS);
             }
         }
 
         @Override
-        public void hideInsets(@InsetsType int types, boolean fromIme) {
-
+        public void hideInsets(@InsetsType int types, boolean fromIme,
+                @Nullable ImeTracker.Token statsToken) {
             final ViewRootImpl viewAncestor = mViewAncestor.get();
             if (fromIme) {
                 ImeTracing.getInstance().triggerClientDump("ViewRootImpl.W#hideInsets",
@@ -10210,7 +10246,10 @@ public final class ViewRootImpl implements ViewParent,
                         null /* icProto */);
             }
             if (viewAncestor != null) {
-                viewAncestor.hideInsets(types, fromIme);
+                ImeTracker.get().onProgress(statsToken, ImeTracker.PHASE_CLIENT_HIDE_INSETS);
+                viewAncestor.hideInsets(types, fromIme, statsToken);
+            } else {
+                ImeTracker.get().onFailed(statsToken, ImeTracker.PHASE_CLIENT_HIDE_INSETS);
             }
         }
 
@@ -10699,6 +10738,25 @@ public final class ViewRootImpl implements ViewParent,
                         .notifyOutsideTouchClientThread();
             }
         }
+
+        @Override
+        public void takeScreenshotOfWindow(int interactionId,
+                ScreenCapture.ScreenCaptureListener listener,
+                IAccessibilityInteractionConnectionCallback callback) {
+            ViewRootImpl viewRootImpl = mViewRootImpl.get();
+            if (viewRootImpl != null && viewRootImpl.mView != null) {
+                viewRootImpl.getAccessibilityInteractionController()
+                        .takeScreenshotOfWindowClientThread(interactionId, listener, callback);
+            } else {
+                try {
+                    callback.sendTakeScreenshotOfWindowError(
+                            AccessibilityService.ERROR_TAKE_SCREENSHOT_INTERNAL_ERROR,
+                            interactionId);
+                } catch (RemoteException re) {
+                    /* best effort - ignore */
+                }
+            }
+        }
     }
 
     /**
@@ -11105,7 +11163,7 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     private void registerCallbacksForSync(boolean syncBuffer,
-            final SurfaceSyncGroup.SyncBufferCallback syncBufferCallback) {
+            final SurfaceSyncGroup.TransactionReadyCallback transactionReadyCallback) {
         if (!isHardwareEnabled()) {
             return;
         }
@@ -11132,7 +11190,7 @@ public final class ViewRootImpl implements ViewParent,
                 // pendingDrawFinished.
                 if ((syncResult
                         & (SYNC_LOST_SURFACE_REWARD_IF_FOUND | SYNC_CONTEXT_IS_STOPPED)) != 0) {
-                    syncBufferCallback.onBufferReady(
+                    transactionReadyCallback.onTransactionReady(
                             mBlastBufferQueue.gatherPendingTransactions(frame));
                     return null;
                 }
@@ -11142,7 +11200,8 @@ public final class ViewRootImpl implements ViewParent,
                 }
 
                 if (syncBuffer) {
-                    mBlastBufferQueue.syncNextTransaction(syncBufferCallback::onBufferReady);
+                    mBlastBufferQueue.syncNextTransaction(
+                            transactionReadyCallback::onTransactionReady);
                 }
 
                 return didProduceBuffer -> {
@@ -11162,7 +11221,7 @@ public final class ViewRootImpl implements ViewParent,
                         // since the frame didn't draw on this vsync. It's possible the frame will
                         // draw later, but it's better to not be sync than to block on a frame that
                         // may never come.
-                        syncBufferCallback.onBufferReady(
+                        transactionReadyCallback.onTransactionReady(
                                 mBlastBufferQueue.gatherPendingTransactions(frame));
                         return;
                     }
@@ -11171,22 +11230,49 @@ public final class ViewRootImpl implements ViewParent,
                     // syncNextTransaction callback. Instead, just report back to the Syncer so it
                     // knows that this sync request is complete.
                     if (!syncBuffer) {
-                        syncBufferCallback.onBufferReady(null);
+                        transactionReadyCallback.onTransactionReady(null);
                     }
                 };
             }
         });
     }
 
+    private final Executor mPostAtFrontExecutor = new Executor() {
+        @Override
+        public void execute(Runnable command) {
+            mHandler.postAtFrontOfQueue(command);
+        }
+    };
+
     public final SurfaceSyncGroup.SyncTarget mSyncTarget = new SurfaceSyncGroup.SyncTarget() {
         @Override
-        public void onReadyToSync(SurfaceSyncGroup.SyncBufferCallback syncBufferCallback) {
-            readyToSync(syncBufferCallback);
+        public void onAddedToSyncGroup(SurfaceSyncGroup parentSyncGroup,
+                SurfaceSyncGroup.TransactionReadyCallback transactionReadyCallback) {
+            updateSyncInProgressCount(parentSyncGroup);
+            if (!isInLocalSync()) {
+                // Always sync the buffer if the sync request did not come from VRI.
+                mSyncBuffer = true;
+            }
+            if (mAttachInfo.mThreadedRenderer != null) {
+                HardwareRenderer.setRtAnimationsEnabled(false);
+            }
+
+            if (mTransactionReadyCallback != null) {
+                Log.d(mTag, "Already set sync for the next draw.");
+                mTransactionReadyCallback.onTransactionReady(null);
+            }
+            if (DEBUG_BLAST) {
+                Log.d(mTag, "Setting syncFrameCallback");
+            }
+            mTransactionReadyCallback = transactionReadyCallback;
+            if (!mIsInTraversal && !mTraversalScheduled) {
+                scheduleTraversals();
+            }
         }
 
-        @Override
-        public void onSyncComplete() {
-            mHandler.postAtFrontOfQueue(() -> {
+        private void updateSyncInProgressCount(SurfaceSyncGroup parentSyncGroup) {
+            mNumSyncsInProgress++;
+            parentSyncGroup.addSyncCompleteCallback(mPostAtFrontExecutor, () -> {
                 if (--mNumSyncsInProgress == 0 && mAttachInfo.mThreadedRenderer != null) {
                     HardwareRenderer.setRtAnimationsEnabled(true);
                 }
@@ -11197,29 +11283,6 @@ public final class ViewRootImpl implements ViewParent,
     @Override
     public SurfaceSyncGroup.SyncTarget getSyncTarget() {
         return mSyncTarget;
-    }
-
-    private void readyToSync(SurfaceSyncGroup.SyncBufferCallback syncBufferCallback) {
-        mNumSyncsInProgress++;
-        if (!isInLocalSync()) {
-            // Always sync the buffer if the sync request did not come from VRI.
-            mSyncBuffer = true;
-        }
-        if (mAttachInfo.mThreadedRenderer != null) {
-            HardwareRenderer.setRtAnimationsEnabled(false);
-        }
-
-        if (mSyncBufferCallback != null) {
-            Log.d(mTag, "Already set sync for the next draw.");
-            mSyncBufferCallback.onBufferReady(null);
-        }
-        if (DEBUG_BLAST) {
-            Log.d(mTag, "Setting syncFrameCallback");
-        }
-        mSyncBufferCallback = syncBufferCallback;
-        if (!mIsInTraversal && !mTraversalScheduled) {
-            scheduleTraversals();
-        }
     }
 
     void mergeSync(SurfaceSyncGroup otherSyncGroup) {

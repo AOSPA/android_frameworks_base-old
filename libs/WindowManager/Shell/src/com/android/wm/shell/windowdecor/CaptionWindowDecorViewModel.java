@@ -44,6 +44,8 @@ import android.view.View;
 import android.window.WindowContainerToken;
 import android.window.WindowContainerTransaction;
 
+import androidx.annotation.Nullable;
+
 import com.android.wm.shell.R;
 import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.common.DisplayController;
@@ -71,6 +73,7 @@ public class CaptionWindowDecorViewModel implements WindowDecorViewModel {
     private DesktopModeController mDesktopModeController;
     private EventReceiver mEventReceiver;
     private InputMonitor mInputMonitor;
+    private boolean mTransitionDragActive;
 
     private final SparseArray<CaptionWindowDecoration> mWindowDecorByTaskId = new SparseArray<>();
     private final DragStartListenerImpl mDragStartListener = new DragStartListenerImpl();
@@ -91,6 +94,7 @@ public class CaptionWindowDecorViewModel implements WindowDecorViewModel {
         mDisplayController = displayController;
         mSyncQueue = syncQueue;
         mDesktopModeController = desktopModeController;
+        mTransitionDragActive = false;
     }
 
     @Override
@@ -124,7 +128,8 @@ public class CaptionWindowDecorViewModel implements WindowDecorViewModel {
         TaskPositioner taskPositioner = new TaskPositioner(mTaskOrganizer, windowDecoration,
                 mDragStartListener);
         CaptionTouchEventListener touchEventListener =
-                new CaptionTouchEventListener(taskInfo, taskPositioner);
+                new CaptionTouchEventListener(taskInfo, taskPositioner,
+                        windowDecoration.getDragDetector());
         windowDecoration.setCaptionListeners(touchEventListener, touchEventListener);
         windowDecoration.setDragResizeCallback(taskPositioner);
         setupWindowDecorationForTransition(taskInfo, startT, finishT);
@@ -173,16 +178,18 @@ public class CaptionWindowDecorViewModel implements WindowDecorViewModel {
         private final int mTaskId;
         private final WindowContainerToken mTaskToken;
         private final DragResizeCallback mDragResizeCallback;
+        private final DragDetector mDragDetector;
 
         private int mDragPointerId = -1;
-        private boolean mDragActive = false;
 
         private CaptionTouchEventListener(
                 RunningTaskInfo taskInfo,
-                DragResizeCallback dragResizeCallback) {
+                DragResizeCallback dragResizeCallback,
+                DragDetector dragDetector) {
             mTaskId = taskInfo.taskId;
             mTaskToken = taskInfo.token;
             mDragResizeCallback = dragResizeCallback;
+            mDragDetector = dragDetector;
         }
 
         @Override
@@ -231,19 +238,21 @@ public class CaptionWindowDecorViewModel implements WindowDecorViewModel {
 
         @Override
         public boolean onTouch(View v, MotionEvent e) {
+            boolean isDrag = false;
             int id = v.getId();
             if (id != R.id.caption_handle && id != R.id.caption) {
                 return false;
             }
-            if (id == R.id.caption_handle || mDragActive) {
+            if (id == R.id.caption_handle) {
+                isDrag = mDragDetector.detectDragEvent(e);
                 handleEventForMove(e);
             }
             if (e.getAction() != MotionEvent.ACTION_DOWN) {
-                return false;
+                return isDrag;
             }
             RunningTaskInfo taskInfo = mTaskOrganizer.getRunningTaskInfo(mTaskId);
             if (taskInfo.isFocused) {
-                return false;
+                return isDrag;
             }
             WindowContainerTransaction wct = new WindowContainerTransaction();
             wct.reorder(mTaskToken, true /* onTop */);
@@ -251,6 +260,10 @@ public class CaptionWindowDecorViewModel implements WindowDecorViewModel {
             return true;
         }
 
+        /**
+         * @param e {@link MotionEvent} to process
+         * @return {@code true} if a drag is happening; or {@code false} if it is not
+         */
         private void handleEventForMove(MotionEvent e) {
             RunningTaskInfo taskInfo = mTaskOrganizer.getRunningTaskInfo(mTaskId);
             int windowingMode =  mDesktopModeController
@@ -259,12 +272,12 @@ public class CaptionWindowDecorViewModel implements WindowDecorViewModel {
                 return;
             }
             switch (e.getActionMasked()) {
-                case MotionEvent.ACTION_DOWN:
-                    mDragActive = true;
-                    mDragPointerId  = e.getPointerId(0);
+                case MotionEvent.ACTION_DOWN: {
+                    mDragPointerId = e.getPointerId(0);
                     mDragResizeCallback.onDragResizeStart(
                             0 /* ctrlType */, e.getRawX(0), e.getRawY(0));
                     break;
+                }
                 case MotionEvent.ACTION_MOVE: {
                     int dragPointerIdx = e.findPointerIndex(mDragPointerId);
                     mDragResizeCallback.onDragResizeMove(
@@ -273,14 +286,13 @@ public class CaptionWindowDecorViewModel implements WindowDecorViewModel {
                 }
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL: {
-                    mDragActive = false;
                     int dragPointerIdx = e.findPointerIndex(mDragPointerId);
                     int statusBarHeight = mDisplayController.getDisplayLayout(taskInfo.displayId)
                             .stableInsets().top;
                     mDragResizeCallback.onDragResizeEnd(
                             e.getRawX(dragPointerIdx), e.getRawY(dragPointerIdx));
                     if (e.getRawY(dragPointerIdx) <= statusBarHeight
-                            && windowingMode == WINDOWING_MODE_FREEFORM) {
+                            && DesktopModeStatus.isActive(mContext)) {
                         mDesktopModeController.setDesktopModeActive(false);
                     }
                     break;
@@ -298,24 +310,95 @@ public class CaptionWindowDecorViewModel implements WindowDecorViewModel {
         @Override
         public void onInputEvent(InputEvent event) {
             boolean handled = false;
-            if (event instanceof MotionEvent
-                    && ((MotionEvent) event).getActionMasked() == MotionEvent.ACTION_UP) {
+            if (event instanceof MotionEvent) {
                 handled = true;
-                CaptionWindowDecorViewModel.this.handleMotionEvent((MotionEvent) event);
+                CaptionWindowDecorViewModel.this.handleReceivedMotionEvent((MotionEvent) event);
             }
             finishInputEvent(event, handled);
         }
     }
 
-    // If any input received is outside of caption bounds, turn off handle menu
-    private void handleMotionEvent(MotionEvent ev) {
-        int size = mWindowDecorByTaskId.size();
-        for (int i = 0; i < size; i++) {
-            CaptionWindowDecoration decoration = mWindowDecorByTaskId.valueAt(i);
-            if (decoration != null) {
-                decoration.closeHandleMenuIfNeeded(ev);
+    /**
+     * Handle MotionEvents relevant to focused task's caption that don't directly touch it
+     * @param ev the {@link MotionEvent} received by {@link EventReceiver}
+     */
+    private void handleReceivedMotionEvent(MotionEvent ev) {
+        if (!DesktopModeStatus.isActive(mContext)) {
+            handleCaptionThroughStatusBar(ev);
+        }
+        handleEventOutsideFocusedCaption(ev);
+        // Prevent status bar from reacting to a caption drag.
+        if (mTransitionDragActive && !DesktopModeStatus.isActive(mContext)) {
+            mInputMonitor.pilferPointers();
+        }
+    }
+
+    // If an UP/CANCEL action is received outside of caption bounds, turn off handle menu
+    private void handleEventOutsideFocusedCaption(MotionEvent ev) {
+        int action = ev.getActionMasked();
+        if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+            CaptionWindowDecoration focusedDecor = getFocusedDecor();
+            if (focusedDecor == null) {
+                return;
+            }
+
+            if (!mTransitionDragActive) {
+                focusedDecor.closeHandleMenuIfNeeded(ev);
             }
         }
+    }
+
+    /**
+     * Perform caption actions if not able to through normal means.
+     * Turn on desktop mode if handle is dragged below status bar.
+     */
+    private void handleCaptionThroughStatusBar(MotionEvent ev) {
+        switch (ev.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN: {
+                // Begin drag through status bar if applicable.
+                CaptionWindowDecoration focusedDecor = getFocusedDecor();
+                if (focusedDecor != null && !DesktopModeStatus.isActive(mContext)
+                        && focusedDecor.checkTouchEventInHandle(ev)) {
+                    mTransitionDragActive = true;
+                }
+                break;
+            }
+            case MotionEvent.ACTION_UP: {
+                CaptionWindowDecoration focusedDecor = getFocusedDecor();
+                if (focusedDecor == null) {
+                    mTransitionDragActive = false;
+                    return;
+                }
+                if (mTransitionDragActive) {
+                    mTransitionDragActive = false;
+                    int statusBarHeight = mDisplayController
+                            .getDisplayLayout(focusedDecor.mTaskInfo.displayId).stableInsets().top;
+                    if (ev.getY() > statusBarHeight) {
+                        mDesktopModeController.setDesktopModeActive(true);
+                        return;
+                    }
+                }
+                focusedDecor.checkClickEvent(ev);
+                break;
+            }
+            case MotionEvent.ACTION_CANCEL: {
+                mTransitionDragActive = false;
+            }
+        }
+    }
+
+    @Nullable
+    private CaptionWindowDecoration getFocusedDecor() {
+        int size = mWindowDecorByTaskId.size();
+        CaptionWindowDecoration focusedDecor = null;
+        for (int i = 0; i < size; i++) {
+            CaptionWindowDecoration decor = mWindowDecorByTaskId.valueAt(i);
+            if (decor != null && decor.isFocused()) {
+                focusedDecor = decor;
+                break;
+            }
+        }
+        return focusedDecor;
     }
 
 

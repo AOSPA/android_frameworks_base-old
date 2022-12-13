@@ -297,6 +297,14 @@ package android.net.netstats {
 
 package android.os {
 
+  public class ArtModuleServiceManager {
+    method @NonNull public android.os.ArtModuleServiceManager.ServiceRegisterer getArtdServiceRegisterer();
+  }
+
+  public static final class ArtModuleServiceManager.ServiceRegisterer {
+    method @Nullable public android.os.IBinder waitForService();
+  }
+
   public final class BatteryStatsManager {
     method @RequiresPermission(anyOf={android.net.NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK, android.Manifest.permission.NETWORK_STACK}) public void reportNetworkInterfaceForTransports(@NonNull String, @NonNull int[]) throws java.lang.RuntimeException;
   }
@@ -349,9 +357,9 @@ package android.os {
   }
 
   public final class ServiceManager {
+    method @NonNull public static String[] getDeclaredInstances(@NonNull String);
     method public static boolean isDeclared(@NonNull String);
     method @Nullable public static android.os.IBinder waitForDeclaredService(@NonNull String);
-    method @Nullable public static android.os.IBinder waitForService(@NonNull String);
   }
 
   public class StatsServiceManager {
@@ -384,6 +392,7 @@ package android.os {
     method public static void traceBegin(long, @NonNull String);
     method public static void traceCounter(long, @NonNull String, int);
     method public static void traceEnd(long);
+    field public static final long TRACE_TAG_AIDL = 16777216L; // 0x1000000L
     field public static final long TRACE_TAG_NETWORK = 2097152L; // 0x200000L
   }
 
@@ -411,6 +420,7 @@ package android.provider {
 
   public final class DeviceConfig {
     field public static final String NAMESPACE_ALARM_MANAGER = "alarm_manager";
+    field public static final String NAMESPACE_APP_CLONING = "app_cloning";
     field public static final String NAMESPACE_APP_STANDBY = "app_standby";
     field public static final String NAMESPACE_DEVICE_IDLE = "device_idle";
   }
