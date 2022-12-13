@@ -20,6 +20,9 @@ import static com.android.internal.jank.InteractionJankMonitor.CUJ_LOCKSCREEN_PI
 import static com.android.systemui.statusbar.policy.DevicePostureController.DEVICE_POSTURE_HALF_OPENED;
 import static com.android.systemui.statusbar.policy.DevicePostureController.DEVICE_POSTURE_UNKNOWN;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.res.Configuration;
@@ -29,6 +32,7 @@ import android.view.View;
 import android.view.animation.AnimationUtils;
 import android.view.animation.Interpolator;
 
+import androidx.constraintlayout.widget.ConstraintHelper;
 import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.constraintlayout.widget.ConstraintSet;
 
@@ -43,11 +47,17 @@ import com.android.systemui.statusbar.policy.DevicePostureController.DevicePostu
 public class KeyguardPINView extends KeyguardPinBasedInputView {
 
     ValueAnimator mAppearAnimator = ValueAnimator.ofFloat(0f, 1f);
+    private final ObjectAnimator mDeleteButtonAnimator = ObjectAnimator.ofFloat(null, View.ALPHA, 0f, 1f);
+    private boolean mIsDeleteButtonShown = true;
+    private boolean mIsUnlockButtonShown = true;
     private final DisappearAnimationUtils mDisappearAnimationUtils;
     private final DisappearAnimationUtils mDisappearAnimationUtilsLocked;
     private ConstraintLayout mContainer;
     private int mDisappearYTranslation;
     private View[][] mViews;
+    private View mDeleteButton;
+    private View mOkButton;
+    private ConstraintHelper mFlow;
     private int mYTrans;
     private int mYTransOffset;
     private View mBouncerMessageView;
@@ -73,6 +83,17 @@ public class KeyguardPINView extends KeyguardPinBasedInputView {
                 R.dimen.disappear_y_translation);
         mYTrans = getResources().getDimensionPixelSize(R.dimen.pin_view_trans_y_entry);
         mYTransOffset = getResources().getDimensionPixelSize(R.dimen.pin_view_trans_y_entry_offset);
+        mDeleteButtonAnimator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation, boolean isReverse) {
+                mDeleteButton.setVisibility(isReverse ? View.INVISIBLE : View.VISIBLE);
+            }
+
+            @Override
+            public void onAnimationStart(Animator animation, boolean isReverse) {
+                mDeleteButton.setVisibility(View.VISIBLE);
+            }
+        });
     }
 
     @Override
@@ -109,8 +130,10 @@ public class KeyguardPINView extends KeyguardPinBasedInputView {
             for (int column = 0; column < 3; column++) {
                 View key = mViews[row][column];
 
-                ConstraintLayout.LayoutParams lp =
-                        (ConstraintLayout.LayoutParams) key.getLayoutParams();
+                // FIXME
+                if (key != null) {
+                    ConstraintLayout.LayoutParams lp =
+                         (ConstraintLayout.LayoutParams) key.getLayoutParams();
 
                 lp.dimensionRatio = ratio;
 
@@ -125,6 +148,8 @@ public class KeyguardPINView extends KeyguardPinBasedInputView {
                 }
 
                 key.setLayoutParams(lp);
+                // FIXME
+                }
             }
         }
 
@@ -145,6 +170,10 @@ public class KeyguardPINView extends KeyguardPinBasedInputView {
 
         mContainer = findViewById(R.id.pin_container);
         mBouncerMessageView = findViewById(R.id.bouncer_message_area);
+        mDeleteButton = findViewById(R.id.delete_button);
+        mDeleteButtonAnimator.setTarget(mDeleteButton);
+        mOkButton = findViewById(R.id.key_enter);
+        mFlow = findViewById(R.id.flow1);
         mViews = new View[][]{
                 new View[]{
                         findViewById(R.id.row0), null, null
@@ -162,8 +191,8 @@ public class KeyguardPINView extends KeyguardPinBasedInputView {
                         findViewById(R.id.key9)
                 },
                 new View[]{
-                        findViewById(R.id.delete_button), findViewById(R.id.key0),
-                        findViewById(R.id.key_enter)
+                        null, findViewById(R.id.key0),
+                        mOkButton
                 },
                 new View[]{
                         null, mEcaView, null
@@ -241,6 +270,48 @@ public class KeyguardPINView extends KeyguardPinBasedInputView {
                     ((NumPadAnimationListener) view).setProgress(scaledProgress);
                 }
             }
+        }
+    }
+
+    public void showDeleteButton(boolean show, boolean animate) {
+        if (show == mIsDeleteButtonShown || mDeleteButton == null) {
+            return;
+        }
+
+        mIsDeleteButtonShown = show;
+
+        if (mDeleteButtonAnimator.isStarted()) {
+            mDeleteButtonAnimator.cancel();
+        }
+
+        if (animate) {
+            if (show) {
+                mDeleteButtonAnimator.setDuration(250);
+                mDeleteButtonAnimator.start();
+            } else {
+                mDeleteButtonAnimator.setDuration(450);
+                mDeleteButtonAnimator.reverse();
+            }
+        } else {
+            mDeleteButton.setVisibility(show ? View.VISIBLE : View.INVISIBLE);
+        }
+    }
+
+    public void showUnlockButton(boolean show) {
+        if (show == mIsUnlockButtonShown || mFlow == null || mOkButton == null) {
+            return;
+        }
+
+        mIsUnlockButtonShown = show;
+        mOkButton.setVisibility(show ? View.VISIBLE : View.INVISIBLE);
+
+        // Swap delete & enter keys
+        int[] ids = mFlow.getReferencedIds();
+        if (ids.length >= 11) {
+            int tmp = ids[9];
+            ids[9] = ids[11];
+            ids[11] = tmp;
+            mFlow.setReferencedIds(ids);
         }
     }
 }
