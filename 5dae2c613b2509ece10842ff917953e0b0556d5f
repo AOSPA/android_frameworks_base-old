@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "de971696_fe639099",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2022-12-15T05:19:38Z",
+      "side": 1,
+      "message": "Do we really want HDR for devices that aren\u0027t certified?  Netflix certification verifies that the HDR works as it is supposed to for their content.  Most OEMs should already be doing this.  What devices need this?",
+      "revId": "5dae2c613b2509ece10842ff917953e0b0556d5f",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
