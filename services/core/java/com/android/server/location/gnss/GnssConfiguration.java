@@ -76,6 +76,8 @@ public class GnssConfiguration {
             "ENABLE_PSDS_PERIODIC_DOWNLOAD";
     private static final String CONFIG_ENABLE_ACTIVE_SIM_EMERGENCY_SUPL =
             "ENABLE_ACTIVE_SIM_EMERGENCY_SUPL";
+    private static final String CONFIG_ENABLE_NI_SUPL_MESSAGE_INJECTION =
+            "ENABLE_NI_SUPL_MESSAGE_INJECTION";
     static final String CONFIG_LONGTERM_PSDS_SERVER_1 = "LONGTERM_PSDS_SERVER_1";
     static final String CONFIG_LONGTERM_PSDS_SERVER_2 = "LONGTERM_PSDS_SERVER_2";
     static final String CONFIG_LONGTERM_PSDS_SERVER_3 = "LONGTERM_PSDS_SERVER_3";
@@ -218,6 +220,14 @@ public class GnssConfiguration {
     }
 
     /**
+     * Returns true if NI SUPL message injection is enabled; Returns false otherwise.
+     * Default false if not set.
+     */
+    boolean isNiSuplMessageInjectionEnabled() {
+        return getBooleanConfig(CONFIG_ENABLE_NI_SUPL_MESSAGE_INJECTION, false);
+    }
+
+    /**
      * Returns true if a long-term PSDS server is configured.
      */
     boolean isLongTermPsdsServerConfigured() {
@@ -286,26 +296,24 @@ public class GnssConfiguration {
                 Log.e(TAG, "Unable to set " + CONFIG_ES_EXTENSION_SEC + ": " + mEsExtensionSec);
             }
 
-            Map<String, SetCarrierProperty> map = new HashMap<String, SetCarrierProperty>() {
-                {
-                    put(CONFIG_SUPL_VER, GnssConfiguration::native_set_supl_version);
-                    put(CONFIG_SUPL_MODE, GnssConfiguration::native_set_supl_mode);
+            Map<String, SetCarrierProperty> map = new HashMap<String, SetCarrierProperty>();
 
-                    if (isConfigSuplEsSupported(gnssConfigurationIfaceVersion)) {
-                        put(CONFIG_SUPL_ES, GnssConfiguration::native_set_supl_es);
-                    }
+            map.put(CONFIG_SUPL_VER, GnssConfiguration::native_set_supl_version);
+            map.put(CONFIG_SUPL_MODE, GnssConfiguration::native_set_supl_mode);
 
-                    put(CONFIG_LPP_PROFILE, GnssConfiguration::native_set_lpp_profile);
-                    put(CONFIG_A_GLONASS_POS_PROTOCOL_SELECT,
-                            GnssConfiguration::native_set_gnss_pos_protocol_select);
-                    put(CONFIG_USE_EMERGENCY_PDN_FOR_EMERGENCY_SUPL,
-                            GnssConfiguration::native_set_emergency_supl_pdn);
+            if (isConfigSuplEsSupported(gnssConfigurationIfaceVersion)) {
+                map.put(CONFIG_SUPL_ES, GnssConfiguration::native_set_supl_es);
+            }
 
-                    if (isConfigGpsLockSupported(gnssConfigurationIfaceVersion)) {
-                        put(CONFIG_GPS_LOCK, GnssConfiguration::native_set_gps_lock);
-                    }
-                }
-            };
+            map.put(CONFIG_LPP_PROFILE, GnssConfiguration::native_set_lpp_profile);
+            map.put(CONFIG_A_GLONASS_POS_PROTOCOL_SELECT,
+                    GnssConfiguration::native_set_gnss_pos_protocol_select);
+            map.put(CONFIG_USE_EMERGENCY_PDN_FOR_EMERGENCY_SUPL,
+                    GnssConfiguration::native_set_emergency_supl_pdn);
+
+            if (isConfigGpsLockSupported(gnssConfigurationIfaceVersion)) {
+                map.put(CONFIG_GPS_LOCK, GnssConfiguration::native_set_gps_lock);
+            }
 
             for (Entry<String, SetCarrierProperty> entry : map.entrySet()) {
                 String propertyName = entry.getKey();

@@ -466,7 +466,7 @@
   <java-symbol type="integer" name="config_multiuserMaxRunningUsers" />
   <java-symbol type="bool" name="config_multiuserDelayUserDataLocking" />
   <java-symbol type="bool" name="config_multiuserUsersOnSecondaryDisplays" />
-  <java-symbol type="bool" name="config_enableTimeoutToUserZeroWhenDocked" />
+  <java-symbol type="bool" name="config_enableTimeoutToDockUserWhenDocked" />
   <java-symbol type="integer" name="config_userTypePackageWhitelistMode"/>
   <java-symbol type="xml" name="config_user_types" />
   <java-symbol type="integer" name="config_safe_media_volume_index" />
@@ -838,6 +838,7 @@
   <java-symbol type="string" name="mismatchPin" />
   <java-symbol type="string" name="mmiComplete" />
   <java-symbol type="string" name="mmiError" />
+  <java-symbol type="string" name="mmiErrorNotSupported" />
   <java-symbol type="string" name="mmiFdnError" />
   <java-symbol type="string" name="mmiErrorWhileRoaming" />
   <java-symbol type="string" name="month_day_year" />
@@ -1298,6 +1299,7 @@
   <java-symbol type="array" name="vendor_cross_profile_apps" />
   <java-symbol type="array" name="policy_exempt_apps" />
   <java-symbol type="array" name="vendor_policy_exempt_apps" />
+  <java-symbol type="array" name="cloneable_apps" />
 
   <java-symbol type="drawable" name="default_wallpaper" />
   <java-symbol type="drawable" name="default_lock_wallpaper" />
@@ -1707,15 +1709,6 @@
 
   <!-- From android.policy -->
   <java-symbol type="anim" name="app_starting_exit" />
-  <java-symbol type="anim" name="dock_top_enter" />
-  <java-symbol type="anim" name="dock_top_exit" />
-  <java-symbol type="anim" name="dock_bottom_enter" />
-  <java-symbol type="anim" name="dock_bottom_exit" />
-  <java-symbol type="anim" name="dock_bottom_exit_keyguard" />
-  <java-symbol type="anim" name="dock_left_enter" />
-  <java-symbol type="anim" name="dock_left_exit" />
-  <java-symbol type="anim" name="dock_right_enter" />
-  <java-symbol type="anim" name="dock_right_exit" />
   <java-symbol type="anim" name="fade_in" />
   <java-symbol type="anim" name="fade_out" />
   <java-symbol type="anim" name="voice_activity_close_exit" />
@@ -2253,7 +2246,7 @@
   <java-symbol type="integer" name="config_dreamsBatteryLevelDrainCutoff" />
   <java-symbol type="string" name="config_dreamsDefaultComponent" />
   <java-symbol type="bool" name="config_dreamsDisabledByAmbientModeSuppressionConfig" />
-  <java-symbol type="bool" name="config_dreamsOnlyEnabledForSystemUser" />
+  <java-symbol type="bool" name="config_dreamsOnlyEnabledForDockUser" />
   <java-symbol type="integer" name="config_dreamOpenAnimationDuration" />
   <java-symbol type="integer" name="config_dreamCloseAnimationDuration" />
   <java-symbol type="array" name="config_supportedDreamComplications" />
@@ -3042,6 +3035,8 @@
   <java-symbol type="integer" name="config_cameraLiftTriggerSensorType" />
   <java-symbol type="string" name="config_cameraLiftTriggerSensorStringType" />
   <java-symbol type="bool" name="config_emergencyGestureEnabled" />
+  <java-symbol type="bool" name="config_defaultEmergencyGestureEnabled" />
+  <java-symbol type="bool" name="config_defaultEmergencyGestureSoundEnabled" />
   <java-symbol type="bool" name="config_volumeHushGestureEnabled" />
 
   <java-symbol type="drawable" name="platlogo_m" />
@@ -3497,6 +3492,9 @@
 
   <!-- Captive Portal Login -->
   <java-symbol type="string" name="config_defaultCaptivePortalLoginPackageName" />
+
+  <!-- Dock Manager -->
+  <java-symbol type="string" name="config_defaultDockManagerPackageName" />
 
   <!-- Optional IPsec algorithms -->
   <java-symbol type="array" name="config_optionalIpSecAlgorithms" />
@@ -4885,6 +4883,7 @@
   <!-- For VirtualDeviceManager -->
   <java-symbol type="string" name="vdm_camera_access_denied" />
   <java-symbol type="string" name="vdm_secure_window" />
+  <java-symbol type="string" name="vdm_pip_blocked" />
 
   <java-symbol type="color" name="camera_privacy_light_day"/>
   <java-symbol type="color" name="camera_privacy_light_night"/>

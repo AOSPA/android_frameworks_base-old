@@ -57,6 +57,7 @@ import com.android.systemui.classifier.FalsingCollectorFake;
 import com.android.systemui.dreams.DreamOverlayStateController;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.navigationbar.NavigationModeController;
+import com.android.systemui.settings.UserTracker;
 import com.android.systemui.shade.ShadeController;
 import com.android.systemui.statusbar.NotificationShadeDepthController;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
@@ -64,6 +65,7 @@ import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.phone.CentralSurfaces;
 import com.android.systemui.statusbar.phone.DozeParameters;
 import com.android.systemui.statusbar.phone.ScreenOffAnimationController;
+import com.android.systemui.statusbar.phone.ScrimController;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.statusbar.policy.UserSwitcherController;
@@ -89,6 +91,7 @@ import dagger.Lazy;
 public class KeyguardViewMediatorTest extends SysuiTestCase {
     private KeyguardViewMediator mViewMediator;
 
+    private @Mock UserTracker mUserTracker;
     private @Mock DevicePolicyManager mDevicePolicyManager;
     private @Mock LockPatternUtils mLockPatternUtils;
     private @Mock KeyguardUpdateMonitor mUpdateMonitor;
@@ -113,6 +116,7 @@ public class KeyguardViewMediatorTest extends SysuiTestCase {
     private @Mock Lazy<NotificationShadeWindowController> mNotificationShadeWindowControllerLazy;
     private @Mock DreamOverlayStateController mDreamOverlayStateController;
     private @Mock ActivityLaunchAnimator mActivityLaunchAnimator;
+    private @Mock ScrimController mScrimController;
     private @Mock FoldAodAnimationController mFoldAodAnimationController;
     private @Mock UnfoldLightRevealOverlayAnimation mUnfoldAnimation;
     private DeviceConfigProxy mDeviceConfig = new DeviceConfigProxyFake();
@@ -255,6 +259,7 @@ public class KeyguardViewMediatorTest extends SysuiTestCase {
     private void createAndStartViewMediator() {
         mViewMediator = new KeyguardViewMediator(
                 mContext,
+                mUserTracker,
                 mFalsingCollector,
                 mLockPatternUtils,
                 mBroadcastDispatcher,
@@ -280,7 +285,8 @@ public class KeyguardViewMediatorTest extends SysuiTestCase {
                 mDreamOverlayStateController,
                 () -> mShadeController,
                 mNotificationShadeWindowControllerLazy,
-                () -> mActivityLaunchAnimator);
+                () -> mActivityLaunchAnimator,
+                () -> mScrimController);
         mViewMediator.start();
 
         mViewMediator.registerCentralSurfaces(mCentralSurfaces, null, null, null, null, null);

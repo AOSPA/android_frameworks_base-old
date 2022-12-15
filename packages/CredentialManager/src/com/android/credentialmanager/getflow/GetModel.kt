@@ -16,6 +16,8 @@
 
 package com.android.credentialmanager.getflow
 
+import android.app.PendingIntent
+import android.content.Intent
 import android.graphics.drawable.Drawable
 
 data class ProviderInfo(
@@ -28,8 +30,8 @@ data class ProviderInfo(
   val displayName: String,
   val credentialEntryList: List<CredentialEntryInfo>,
   val authenticationEntry: AuthenticationEntryInfo?,
+  val remoteEntry: RemoteEntryInfo?,
   val actionEntryList: List<ActionEntryInfo>,
-  // TODO: add remote entry
 )
 
 /** Display-centric data structure derived from the [ProviderInfo]. This abstraction is not grouping
@@ -41,6 +43,7 @@ data class ProviderDisplayInfo(
    */
   val sortedUserNameToCredentialEntryList: List<PerUserNameCredentialEntryList>,
   val authenticationEntryList: List<AuthenticationEntryInfo>,
+  val remoteEntry: RemoteEntryInfo?
 )
 
 abstract class EntryInfo (
@@ -48,12 +51,16 @@ abstract class EntryInfo (
   val providerId: String,
   val entryKey: String,
   val entrySubkey: String,
+  val pendingIntent: PendingIntent?,
+  val fillInIntent: Intent?,
 )
 
 class CredentialEntryInfo(
   providerId: String,
   entryKey: String,
   entrySubkey: String,
+  pendingIntent: PendingIntent?,
+  fillInIntent: Intent?,
   /** Type of this credential used for sorting. Not localized so must not be directly displayed. */
   val credentialType: String,
   /** Localized type value of this credential used for display purpose. */
@@ -62,26 +69,36 @@ class CredentialEntryInfo(
   val displayName: String?,
   val icon: Drawable,
   val lastUsedTimeMillis: Long?,
-) : EntryInfo(providerId, entryKey, entrySubkey)
-
-// TODO: handle sub credential type values like password obfuscation.
+) : EntryInfo(providerId, entryKey, entrySubkey, pendingIntent, fillInIntent)
 
 class AuthenticationEntryInfo(
   providerId: String,
   entryKey: String,
   entrySubkey: String,
+  pendingIntent: PendingIntent?,
+  fillInIntent: Intent?,
   val title: String,
   val icon: Drawable,
-) : EntryInfo(providerId, entryKey, entrySubkey)
+) : EntryInfo(providerId, entryKey, entrySubkey, pendingIntent, fillInIntent)
+
+class RemoteEntryInfo(
+  providerId: String,
+  entryKey: String,
+  entrySubkey: String,
+  pendingIntent: PendingIntent?,
+  fillInIntent: Intent?,
+) : EntryInfo(providerId, entryKey, entrySubkey, pendingIntent, fillInIntent)
 
 class ActionEntryInfo(
   providerId: String,
   entryKey: String,
   entrySubkey: String,
+  pendingIntent: PendingIntent?,
+  fillInIntent: Intent?,
   val title: String,
   val icon: Drawable,
   val subTitle: String?,
-) : EntryInfo(providerId, entryKey, entrySubkey)
+) : EntryInfo(providerId, entryKey, entrySubkey, pendingIntent, fillInIntent)
 
 data class RequestDisplayInfo(
   val appDomainName: String,

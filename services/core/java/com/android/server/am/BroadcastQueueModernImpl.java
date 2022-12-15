@@ -42,9 +42,9 @@ import android.annotation.Nullable;
 import android.annotation.UptimeMillisLong;
 import android.app.Activity;
 import android.app.ActivityManager;
+import android.app.ApplicationExitInfo;
 import android.app.BroadcastOptions;
 import android.app.IApplicationThread;
-import android.app.RemoteServiceException.CannotDeliverBroadcastException;
 import android.app.UidObserver;
 import android.app.usage.UsageEvents.Event;
 import android.content.ComponentName;
@@ -138,7 +138,7 @@ class BroadcastQueueModernImpl extends BroadcastQueue {
 
         // We configure runnable size only once at boot; it'd be too complex to
         // try resizing dynamically at runtime
-        mRunning = new BroadcastProcessQueue[mConstants.MAX_RUNNING_PROCESS_QUEUES];
+        mRunning = new BroadcastProcessQueue[mConstants.getMaxRunningQueues()];
     }
 
     /**
@@ -239,7 +239,7 @@ class BroadcastQueueModernImpl extends BroadcastQueue {
             }
             case MSG_DELIVERY_TIMEOUT_SOFT: {
                 synchronized (mService) {
-                    deliveryTimeoutSoftLocked((BroadcastProcessQueue) msg.obj);
+                    deliveryTimeoutSoftLocked((BroadcastProcessQueue) msg.obj, msg.arg1);
                 }
                 return true;
             }
@@ -290,6 +290,19 @@ class BroadcastQueueModernImpl extends BroadcastQueue {
             if (mRunning[i] != null) size++;
         }
         return size;
+    }
+
+    /**
+     * Return the number of active queues that are delivering "urgent" broadcasts
+     */
+    private int getRunningUrgentCount() {
+        int count = 0;
+        for (int i = 0; i < mRunning.length; i++) {
+            if (mRunning[i] != null && mRunning[i].getActive().isUrgent()) {
+                count++;
+            }
+        }
+        return count;
     }
 
     /**
@@ -356,7 +369,15 @@ class BroadcastQueueModernImpl extends BroadcastQueue {
      */
     @GuardedBy("mService")
     private void updateRunningListLocked() {
-        int avail = mRunning.length - getRunningSize();
+        // Allocated size here implicitly includes the extra reservation for urgent
+        // dispatches beyond the MAX_RUNNING_QUEUES soft limit for normal
+        // parallelism.  If we're already dispatching some urgent broadcasts,
+        // count that against the extra first - its role is to permit progress of
+        // urgent broadcast traffic when the normal reservation is fully occupied
+        // with less-urgent dispatches, not to generally expand parallelism.
+        final int usedExtra = Math.min(getRunningUrgentCount(),
+                mConstants.EXTRA_RUNNING_URGENT_PROCESS_QUEUES);
+        int avail = mRunning.length - getRunningSize() - usedExtra;
         if (avail == 0) return;
 
         final int cookie = traceBegin("updateRunningList");
@@ -380,6 +401,15 @@ class BroadcastQueueModernImpl extends BroadcastQueue {
             if (!queue.isRunnable()) {
                 queue = nextQueue;
                 continue;
+            }
+
+            // If we've hit the soft limit for non-urgent dispatch parallelism,
+            // only consider delivering from queues whose ready broadcast is urgent
+            if (getRunningSize() >= mConstants.MAX_RUNNING_PROCESS_QUEUES) {
+                if (!queue.isPendingUrgent()) {
+                    queue = nextQueue;
+                    continue;
+                }
             }
 
             // If queues beyond this point aren't ready to run yet, schedule
@@ -746,9 +776,10 @@ class BroadcastQueueModernImpl extends BroadcastQueue {
         if (mService.mProcessesReady && !r.timeoutExempt && !assumeDelivered) {
             queue.lastCpuDelayTime = queue.app.getCpuDelayTime();
 
-            final long timeout = r.isForeground() ? mFgConstants.TIMEOUT : mBgConstants.TIMEOUT;
-            mLocalHandler.sendMessageDelayed(
-                    Message.obtain(mLocalHandler, MSG_DELIVERY_TIMEOUT_SOFT, queue), timeout);
+            final int softTimeoutMillis = (int) (r.isForeground() ? mFgConstants.TIMEOUT
+                    : mBgConstants.TIMEOUT);
+            mLocalHandler.sendMessageDelayed(Message.obtain(mLocalHandler,
+                    MSG_DELIVERY_TIMEOUT_SOFT, softTimeoutMillis, 0, queue), softTimeoutMillis);
         }
 
         if (r.allowBackgroundActivityStarts) {
@@ -800,8 +831,8 @@ class BroadcastQueueModernImpl extends BroadcastQueue {
                 final String msg = "Failed to schedule " + r + " to " + receiver
                         + " via " + app + ": " + e;
                 logw(msg);
-                app.scheduleCrashLocked(msg, CannotDeliverBroadcastException.TYPE_ID, null);
-                app.setKilled(true);
+                app.killLocked("Can't deliver broadcast", ApplicationExitInfo.REASON_OTHER,
+                        ApplicationExitInfo.SUBREASON_UNDELIVERED_BROADCAST, true);
                 enqueueFinishReceiver(queue, BroadcastRecord.DELIVERY_FAILURE, "remote app");
             }
         } else {
@@ -828,22 +859,25 @@ class BroadcastQueueModernImpl extends BroadcastQueue {
             } catch (RemoteException e) {
                 final String msg = "Failed to schedule result of " + r + " via " + app + ": " + e;
                 logw(msg);
-                app.scheduleCrashLocked(msg, CannotDeliverBroadcastException.TYPE_ID, null);
+                app.killLocked("Can't deliver broadcast", ApplicationExitInfo.REASON_OTHER,
+                        ApplicationExitInfo.SUBREASON_UNDELIVERED_BROADCAST, true);
             }
         }
         // Clear so both local and remote references can be GC'ed
         r.resultTo = null;
     }
 
-    private void deliveryTimeoutSoftLocked(@NonNull BroadcastProcessQueue queue) {
+    private void deliveryTimeoutSoftLocked(@NonNull BroadcastProcessQueue queue,
+            int softTimeoutMillis) {
         if (queue.app != null) {
             // Instead of immediately triggering an ANR, extend the timeout by
             // the amount of time the process was runnable-but-waiting; we're
             // only willing to do this once before triggering an hard ANR
             final long cpuDelayTime = queue.app.getCpuDelayTime() - queue.lastCpuDelayTime;
-            final long timeout = MathUtils.constrain(cpuDelayTime, 0, mConstants.TIMEOUT);
+            final long hardTimeoutMillis = MathUtils.constrain(cpuDelayTime, 0, softTimeoutMillis);
             mLocalHandler.sendMessageDelayed(
-                    Message.obtain(mLocalHandler, MSG_DELIVERY_TIMEOUT_HARD, queue), timeout);
+                    Message.obtain(mLocalHandler, MSG_DELIVERY_TIMEOUT_HARD, queue),
+                    hardTimeoutMillis);
         } else {
             deliveryTimeoutHardLocked(queue);
         }
@@ -904,8 +938,7 @@ class BroadcastQueueModernImpl extends BroadcastQueue {
         if (deliveryState == BroadcastRecord.DELIVERY_TIMEOUT) {
             r.anrCount++;
             if (app != null && !app.isDebugging()) {
-                mService.appNotResponding(queue.app, TimeoutRecord
-                        .forBroadcastReceiver("Broadcast of " + r.toShortString()));
+                mService.appNotResponding(queue.app, TimeoutRecord.forBroadcastReceiver(r.intent));
             }
         } else {
             mLocalHandler.removeMessages(MSG_DELIVERY_TIMEOUT_SOFT, queue);
@@ -1453,7 +1486,7 @@ class BroadcastQueueModernImpl extends BroadcastQueue {
         }
 
         BroadcastProcessQueue created = new BroadcastProcessQueue(mConstants, processName, uid);
-        created.app = mService.getProcessRecordLocked(processName, uid);
+        created.setProcess(mService.getProcessRecordLocked(processName, uid));
 
         if (leaf == null) {
             mProcessQueues.put(uid, created);

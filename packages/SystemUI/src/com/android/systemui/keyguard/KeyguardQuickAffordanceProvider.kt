@@ -57,6 +57,11 @@ class KeyguardQuickAffordanceProvider :
                 Contract.SelectionTable.TABLE_NAME,
                 MATCH_CODE_ALL_SELECTIONS,
             )
+            addURI(
+                Contract.AUTHORITY,
+                Contract.FlagsTable.TABLE_NAME,
+                MATCH_CODE_ALL_FLAGS,
+            )
         }
 
     override fun onCreate(): Boolean {
@@ -77,6 +82,7 @@ class KeyguardQuickAffordanceProvider :
             when (uriMatcher.match(uri)) {
                 MATCH_CODE_ALL_SLOTS,
                 MATCH_CODE_ALL_AFFORDANCES,
+                MATCH_CODE_ALL_FLAGS,
                 MATCH_CODE_ALL_SELECTIONS -> "vnd.android.cursor.dir/vnd."
                 else -> null
             }
@@ -86,6 +92,7 @@ class KeyguardQuickAffordanceProvider :
                 MATCH_CODE_ALL_SLOTS -> Contract.SlotTable.TABLE_NAME
                 MATCH_CODE_ALL_AFFORDANCES -> Contract.AffordanceTable.TABLE_NAME
                 MATCH_CODE_ALL_SELECTIONS -> Contract.SelectionTable.TABLE_NAME
+                MATCH_CODE_ALL_FLAGS -> Contract.FlagsTable.TABLE_NAME
                 else -> null
             }
 
@@ -112,9 +119,10 @@ class KeyguardQuickAffordanceProvider :
         sortOrder: String?,
     ): Cursor? {
         return when (uriMatcher.match(uri)) {
-            MATCH_CODE_ALL_AFFORDANCES -> queryAffordances()
+            MATCH_CODE_ALL_AFFORDANCES -> runBlocking { queryAffordances() }
             MATCH_CODE_ALL_SLOTS -> querySlots()
-            MATCH_CODE_ALL_SELECTIONS -> querySelections()
+            MATCH_CODE_ALL_SELECTIONS -> runBlocking { querySelections() }
+            MATCH_CODE_ALL_FLAGS -> queryFlags()
             else -> null
         }
     }
@@ -171,12 +179,11 @@ class KeyguardQuickAffordanceProvider :
             throw IllegalArgumentException("Cannot insert selection, affordance ID was empty!")
         }
 
-        val success = runBlocking {
+        val success =
             interactor.select(
                 slotId = slotId,
                 affordanceId = affordanceId,
             )
-        }
 
         return if (success) {
             Log.d(TAG, "Successfully selected $affordanceId for slot $slotId")
@@ -188,21 +195,24 @@ class KeyguardQuickAffordanceProvider :
         }
     }
 
-    private fun querySelections(): Cursor {
+    private suspend fun querySelections(): Cursor {
         return MatrixCursor(
                 arrayOf(
                     Contract.SelectionTable.Columns.SLOT_ID,
                     Contract.SelectionTable.Columns.AFFORDANCE_ID,
+                    Contract.SelectionTable.Columns.AFFORDANCE_NAME,
                 )
             )
             .apply {
-                val affordanceIdsBySlotId = runBlocking { interactor.getSelections() }
-                affordanceIdsBySlotId.entries.forEach { (slotId, affordanceIds) ->
-                    affordanceIds.forEach { affordanceId ->
+                val affordanceRepresentationsBySlotId = interactor.getSelections()
+                affordanceRepresentationsBySlotId.entries.forEach {
+                    (slotId, affordanceRepresentations) ->
+                    affordanceRepresentations.forEach { affordanceRepresentation ->
                         addRow(
                             arrayOf(
                                 slotId,
-                                affordanceId,
+                                affordanceRepresentation.id,
+                                affordanceRepresentation.name,
                             )
                         )
                     }
@@ -210,12 +220,16 @@ class KeyguardQuickAffordanceProvider :
             }
     }
 
-    private fun queryAffordances(): Cursor {
+    private suspend fun queryAffordances(): Cursor {
         return MatrixCursor(
                 arrayOf(
                     Contract.AffordanceTable.Columns.ID,
                     Contract.AffordanceTable.Columns.NAME,
                     Contract.AffordanceTable.Columns.ICON,
+                    Contract.AffordanceTable.Columns.IS_ENABLED,
+                    Contract.AffordanceTable.Columns.ENABLEMENT_INSTRUCTIONS,
+                    Contract.AffordanceTable.Columns.ENABLEMENT_ACTION_TEXT,
+                    Contract.AffordanceTable.Columns.ENABLEMENT_COMPONENT_NAME,
                 )
             )
             .apply {
@@ -225,6 +239,12 @@ class KeyguardQuickAffordanceProvider :
                             representation.id,
                             representation.name,
                             representation.iconResourceId,
+                            if (representation.isEnabled) 1 else 0,
+                            representation.instructions?.joinToString(
+                                Contract.AffordanceTable.ENABLEMENT_INSTRUCTIONS_DELIMITER
+                            ),
+                            representation.actionText,
+                            representation.actionComponentName,
                         )
                     )
                 }
@@ -244,6 +264,29 @@ class KeyguardQuickAffordanceProvider :
                         arrayOf(
                             representation.id,
                             representation.maxSelectedAffordances,
+                        )
+                    )
+                }
+            }
+    }
+
+    private fun queryFlags(): Cursor {
+        return MatrixCursor(
+                arrayOf(
+                    Contract.FlagsTable.Columns.NAME,
+                    Contract.FlagsTable.Columns.VALUE,
+                )
+            )
+            .apply {
+                interactor.getPickerFlags().forEach { flag ->
+                    addRow(
+                        arrayOf(
+                            flag.name,
+                            if (flag.value) {
+                                1
+                            } else {
+                                0
+                            },
                         )
                     )
                 }
@@ -271,12 +314,11 @@ class KeyguardQuickAffordanceProvider :
                     )
             }
 
-        val deleted = runBlocking {
+        val deleted =
             interactor.unselect(
                 slotId = slotId,
                 affordanceId = affordanceId,
             )
-        }
 
         return if (deleted) {
             Log.d(TAG, "Successfully unselected $affordanceId for slot $slotId")
@@ -293,5 +335,6 @@ class KeyguardQuickAffordanceProvider :
         private const val MATCH_CODE_ALL_SLOTS = 1
         private const val MATCH_CODE_ALL_AFFORDANCES = 2
         private const val MATCH_CODE_ALL_SELECTIONS = 3
+        private const val MATCH_CODE_ALL_FLAGS = 4
     }
 }

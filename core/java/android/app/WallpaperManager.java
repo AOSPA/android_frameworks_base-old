@@ -67,7 +67,6 @@ import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 import android.os.StrictMode;
 import android.os.SystemProperties;
-import android.service.wallpaper.WallpaperService;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
@@ -521,10 +520,7 @@ public class WallpaperManager {
         }
 
         WallpaperColors getWallpaperColors(int which, int userId, int displayId) {
-            if (which != FLAG_LOCK && which != FLAG_SYSTEM) {
-                throw new IllegalArgumentException(
-                        "Must request colors for exactly one kind of wallpaper");
-            }
+            checkExactlyOneWallpaperFlagSet(which);
 
             try {
                 return mService.getWallpaperColors(which, userId, displayId);
@@ -857,9 +853,7 @@ public class WallpaperManager {
             throw new RuntimeException(new DeadSystemException());
         }
 
-        if (which != FLAG_SYSTEM && which != FLAG_LOCK) {
-            throw new IllegalArgumentException("Must request exactly one kind of wallpaper");
-        }
+        checkExactlyOneWallpaperFlagSet(which);
 
         Resources resources = mContext.getResources();
         horizontalAlignment = Math.max(0, Math.min(1, horizontalAlignment));
@@ -1115,6 +1109,19 @@ public class WallpaperManager {
     }
 
     /**
+     * Like {@link #getDrawable()} but returns a Bitmap.
+     *
+     * @param hardware Asks for a hardware backed bitmap.
+     * @param which Specifies home or lock screen
+     * @see Bitmap.Config#HARDWARE
+     * @hide
+     */
+    @Nullable
+    public Bitmap getBitmap(boolean hardware, @SetWallpaperFlags int which) {
+        return getBitmapAsUser(mContext.getUserId(), hardware, which);
+    }
+
+    /**
      * Like {@link #getDrawable()} but returns a Bitmap for the provided user.
      *
      * @hide
@@ -1122,6 +1129,17 @@ public class WallpaperManager {
     public Bitmap getBitmapAsUser(int userId, boolean hardware) {
         final ColorManagementProxy cmProxy = getColorManagementProxy();
         return sGlobals.peekWallpaperBitmap(mContext, true, FLAG_SYSTEM, userId, hardware, cmProxy);
+    }
+
+    /**
+     * Like {@link #getDrawable()} but returns a Bitmap for the provided user.
+     *
+     * @param which Specifies home or lock screen
+     * @hide
+     */
+    public Bitmap getBitmapAsUser(int userId, boolean hardware, @SetWallpaperFlags int which) {
+        final ColorManagementProxy cmProxy = getColorManagementProxy();
+        return sGlobals.peekWallpaperBitmap(mContext, true, which, userId, hardware, cmProxy);
     }
 
     /**
@@ -1281,9 +1299,7 @@ public class WallpaperManager {
      */
     @UnsupportedAppUsage
     public ParcelFileDescriptor getWallpaperFile(@SetWallpaperFlags int which, int userId) {
-        if (which != FLAG_SYSTEM && which != FLAG_LOCK) {
-            throw new IllegalArgumentException("Must request exactly one kind of wallpaper");
-        }
+        checkExactlyOneWallpaperFlagSet(which);
 
         if (sGlobals.mService == null) {
             Log.w(TAG, "WallpaperService not running");
@@ -1322,7 +1338,7 @@ public class WallpaperManager {
      * wallpaper component. Otherwise, if the wallpaper is a static image, this returns null.
      */
     public WallpaperInfo getWallpaperInfo() {
-        return getWallpaperInfo(mContext.getUserId());
+        return getWallpaperInfoForUser(mContext.getUserId());
     }
 
     /**
@@ -1332,40 +1348,47 @@ public class WallpaperManager {
      * @param userId Owner of the wallpaper.
      * @hide
      */
-    public WallpaperInfo getWallpaperInfo(int userId) {
+    public WallpaperInfo getWallpaperInfoForUser(int userId) {
+        return getWallpaperInfo(FLAG_SYSTEM, userId);
+    }
+
+    /**
+     * Returns the information about the home screen wallpaper if its current wallpaper is a live
+     * wallpaper component. Otherwise, if the wallpaper is a static image or is not set, this
+     * returns null.
+     *
+     * @param which Specifies wallpaper to request (home or lock).
+     * @throws IllegalArgumentException if {@code which} is not exactly one of
+     * {{@link #FLAG_SYSTEM},{@link #FLAG_LOCK}}.
+     */
+    @Nullable
+    public WallpaperInfo getWallpaperInfo(@SetWallpaperFlags int which) {
+        return getWallpaperInfo(which, mContext.getUserId());
+    }
+
+    /**
+     * Returns the information about the designated wallpaper if its current wallpaper is a live
+     * wallpaper component. Otherwise, if the wallpaper is a static image or is not set, this
+     * returns null.
+     *
+     * @param which Specifies wallpaper to request (home or lock).
+     * @param userId Owner of the wallpaper.
+     * @throws IllegalArgumentException if {@code which} is not exactly one of
+     * {{@link #FLAG_SYSTEM},{@link #FLAG_LOCK}}.
+     * @hide
+     */
+    public WallpaperInfo getWallpaperInfo(@SetWallpaperFlags int which, int userId) {
+        checkExactlyOneWallpaperFlagSet(which);
         try {
             if (sGlobals.mService == null) {
                 Log.w(TAG, "WallpaperService not running");
                 throw new RuntimeException(new DeadSystemException());
             } else {
-                return sGlobals.mService.getWallpaperInfo(userId);
+                return sGlobals.mService.getWallpaperInfoWithFlags(which, userId);
             }
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
-    }
-
-    /**
-     * Returns the information about the home screen wallpaper if its current wallpaper is a live
-     * wallpaper component. Otherwise, if the wallpaper is a static image, this returns null.
-     *
-     * @param which Specifies wallpaper destination (home or lock).
-     * @hide
-     */
-    public WallpaperInfo getWallpaperInfoWithFlags(@SetWallpaperFlags int which) {
-        return getWallpaperInfo();
-    }
-
-    /**
-     * Returns the information about the designated wallpaper if its current wallpaper is a live
-     * wallpaper component. Otherwise, if the wallpaper is a static image, this returns null.
-     *
-     * @param which Specifies wallpaper destination (home or lock).
-     * @param userId Owner of the wallpaper.
-     * @hide
-     */
-    public WallpaperInfo getWallpaperInfoWithFlags(@SetWallpaperFlags int which, int userId) {
-        return getWallpaperInfo(userId);
     }
 
     /**
@@ -2006,7 +2029,10 @@ public class WallpaperManager {
     }
 
     /**
-     * Set the live wallpaper.
+     * Set the implementation of {@link android.service.wallpaper.WallpaperService} used to render
+     * wallpaper, usually in order to set a live wallpaper.
+     *
+     * @param name Name of the component to use.
      *
      * @hide
      */
@@ -2074,43 +2100,72 @@ public class WallpaperManager {
     }
 
     /**
-     * Set the live wallpaper.
+     * Set the implementation of {@link android.service.wallpaper.WallpaperService} used to render
+     * wallpaper, usually in order to set a live wallpaper.
      *
      * This can only be called by packages with android.permission.SET_WALLPAPER_COMPONENT
      * permission. The caller must hold the INTERACT_ACROSS_USERS_FULL permission to change
      * another user's wallpaper.
+     *
+     * @param name Name of the component to use.
+     * @param userId User for whom the component should be set.
      *
      * @hide
      */
     @RequiresPermission(android.Manifest.permission.SET_WALLPAPER_COMPONENT)
     @UnsupportedAppUsage
     public boolean setWallpaperComponent(ComponentName name, int userId) {
-        if (sGlobals.mService == null) {
-            Log.w(TAG, "WallpaperService not running");
-            throw new RuntimeException(new DeadSystemException());
-        }
-        try {
-            sGlobals.mService.setWallpaperComponentChecked(name, mContext.getOpPackageName(),
-                    userId);
-            return true;
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
+        return setWallpaperComponentWithFlags(name, FLAG_SYSTEM | FLAG_LOCK, userId);
     }
 
     /**
-     * Set the live wallpaper for the given screen(s).
+     * Set the implementation of {@link android.service.wallpaper.WallpaperService} used to render
+     * wallpaper, usually in order to set a live wallpaper, for a given wallpaper destination.
      *
      * This can only be called by packages with android.permission.SET_WALLPAPER_COMPONENT
      * permission. The caller must hold the INTERACT_ACROSS_USERS_FULL permission to change
      * another user's wallpaper.
      *
+     * @param name Name of the component to use.
+     * @param which Specifies wallpaper destination (home and/or lock).
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.SET_WALLPAPER_COMPONENT)
+    public boolean setWallpaperComponentWithFlags(@NonNull ComponentName name,
+            @SetWallpaperFlags int which) {
+        return setWallpaperComponentWithFlags(name, which, mContext.getUserId());
+    }
+
+    /**
+     * Set the implementation of {@link android.service.wallpaper.WallpaperService} used to render
+     * wallpaper, usually in order to set a live wallpaper, for a given wallpaper destination.
+     *
+     * This can only be called by packages with android.permission.SET_WALLPAPER_COMPONENT
+     * permission. The caller must hold the INTERACT_ACROSS_USERS_FULL permission to change
+     * another user's wallpaper.
+     *
+     * @param name Name of the component to use.
+     * @param which Specifies wallpaper destination (home and/or lock).
+     * @param userId User for whom the component should be set.
+     *
      * @hide
      */
     @RequiresPermission(android.Manifest.permission.SET_WALLPAPER_COMPONENT)
     public boolean setWallpaperComponentWithFlags(@NonNull ComponentName name,
-            @SetWallpaperFlags int which) {
-        return setWallpaperComponent(name);
+            @SetWallpaperFlags int which, int userId) {
+        if (sGlobals.mService == null) {
+            Log.w(TAG, "WallpaperManagerService not running");
+            throw new RuntimeException(new DeadSystemException());
+        }
+        try {
+            sGlobals.mService.setWallpaperComponentChecked(name, mContext.getOpPackageName(),
+                    which, userId);
+            return true;
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     /**
@@ -2434,6 +2489,13 @@ public class WallpaperManager {
         return mCmProxy;
     }
 
+    private static void checkExactlyOneWallpaperFlagSet(@SetWallpaperFlags int which) {
+        if (which == FLAG_SYSTEM || which == FLAG_LOCK) {
+            return;
+        }
+        throw new IllegalArgumentException("Must specify exactly one kind of wallpaper");
+    }
+
     /**
      * A hidden class to help {@link Globals#getCurrentWallpaperLocked} handle color management.
      * @hide
@@ -2513,7 +2575,7 @@ public class WallpaperManager {
          *
          * @param colors Wallpaper color info, {@code null} when not available.
          * @param which A combination of {@link #FLAG_LOCK} and {@link #FLAG_SYSTEM}
-         * @see WallpaperService.Engine#onComputeColors()
+         * @see android.service.wallpaper.WallpaperService.Engine#onComputeColors()
          */
         void onColorsChanged(@Nullable WallpaperColors colors, int which);
 
@@ -2525,7 +2587,7 @@ public class WallpaperManager {
          * @param colors Wallpaper color info, {@code null} when not available.
          * @param which A combination of {@link #FLAG_LOCK} and {@link #FLAG_SYSTEM}
          * @param userId Owner of the wallpaper
-         * @see WallpaperService.Engine#onComputeColors()
+         * @see android.service.wallpaper.WallpaperService.Engine#onComputeColors()
          * @hide
          */
         default void onColorsChanged(@Nullable WallpaperColors colors, int which, int userId) {

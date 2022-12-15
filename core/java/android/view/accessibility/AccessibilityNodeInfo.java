@@ -127,16 +127,6 @@ public class AccessibilityNodeInfo implements Parcelable {
     /** @hide */
     public static final long UNDEFINED_NODE_ID = makeNodeId(UNDEFINED_ITEM_ID, UNDEFINED_ITEM_ID);
 
-    /**
-     * The default value for {@link #getMinMillisBetweenContentChanges};
-     */
-    public static final int UNDEFINED_MIN_MILLIS_BETWEEN_CONTENT_CHANGES = -1;
-
-    /**
-     * The minimum value for {@link #setMinMillisBetweenContentChanges};
-     */
-    public static final int MINIMUM_MIN_MILLIS_BETWEEN_CONTENT_CHANGES = 100;
-
     /** @hide */
     public static final long ROOT_NODE_ID = makeNodeId(ROOT_ITEM_ID,
             AccessibilityNodeProvider.HOST_VIEW_ID);
@@ -820,6 +810,8 @@ public class AccessibilityNodeInfo implements Parcelable {
 
     private static final int BOOLEAN_PROPERTY_IS_TEXT_SELECTABLE = 0x0800000;
 
+    private static final int BOOLEAN_PROPERTY_REQUEST_INITIAL_ACCESSIBILITY_FOCUS = 1 << 24;
+
     /**
      * Bits that provide the id of a virtual descendant of a view.
      */
@@ -889,8 +881,7 @@ public class AccessibilityNodeInfo implements Parcelable {
     private long mTraversalBefore = UNDEFINED_NODE_ID;
     private long mTraversalAfter = UNDEFINED_NODE_ID;
 
-    private int mMinMillisBetweenContentChanges =
-            UNDEFINED_MIN_MILLIS_BETWEEN_CONTENT_CHANGES;
+    private int mMinMillisBetweenContentChanges;
 
     private int mBooleanProperties;
     private final Rect mBoundsInParent = new Rect();
@@ -1799,12 +1790,6 @@ public class AccessibilityNodeInfo implements Parcelable {
      * content change events in accessibility services.
      *
      * <p>
-     * <strong>Note:</strong>
-     * This value should not be smaller than {@link #MINIMUM_MIN_MILLIS_BETWEEN_CONTENT_CHANGES},
-     * otherwise it would be ignored by accessibility services.
-     * </p>
-     *
-     * <p>
      * Example: An app can set MinMillisBetweenContentChanges as 1 min for a view which sends
      * content change events to accessibility services one event per second.
      * Accessibility service will throttle those content change events and only handle one event
@@ -1816,15 +1801,11 @@ public class AccessibilityNodeInfo implements Parcelable {
      */
     public void setMinMillisBetweenContentChanges(int minMillisBetweenContentChanges) {
         enforceNotSealed();
-        mMinMillisBetweenContentChanges = minMillisBetweenContentChanges
-                >= MINIMUM_MIN_MILLIS_BETWEEN_CONTENT_CHANGES
-                ? minMillisBetweenContentChanges
-                : UNDEFINED_MIN_MILLIS_BETWEEN_CONTENT_CHANGES;
+        mMinMillisBetweenContentChanges = minMillisBetweenContentChanges;
     }
 
     /**
-     * Gets the minimum time duration between two content change events. This method may return
-     * {@link #UNDEFINED_MIN_MILLIS_BETWEEN_CONTENT_CHANGES}
+     * Gets the minimum time duration between two content change events.
      */
     public int getMinMillisBetweenContentChanges() {
         return mMinMillisBetweenContentChanges;
@@ -2488,6 +2469,38 @@ public class AccessibilityNodeInfo implements Parcelable {
      */
     public void setTextSelectable(boolean selectableText) {
         setBooleanProperty(BOOLEAN_PROPERTY_IS_TEXT_SELECTABLE, selectableText);
+    }
+
+    /**
+     * Gets whether the node has {@link #setRequestInitialAccessibilityFocus}.
+     *
+     * @return True if the node has requested initial accessibility focus.
+     */
+    public boolean hasRequestInitialAccessibilityFocus() {
+        return getBooleanProperty(BOOLEAN_PROPERTY_REQUEST_INITIAL_ACCESSIBILITY_FOCUS);
+    }
+
+    /**
+     * Sets whether the node has requested initial accessibility focus.
+     *
+     * <p>
+     * If the node {@link #hasRequestInitialAccessibilityFocus}, this node would be one of
+     * candidates to be accessibility focused when the window appears.
+     * </p>
+     *
+     * <p>
+     *   <strong>Note:</strong> Cannot be called from an
+     *   {@link android.accessibilityservice.AccessibilityService}.
+     *   This class is made immutable before being delivered to an AccessibilityService.
+     * </p>
+     *
+     * @param requestInitialAccessibilityFocus True if the node requests to receive initial
+     *                                         accessibility focus.
+     * @throws IllegalStateException If called from an AccessibilityService.
+     */
+    public void setRequestInitialAccessibilityFocus(boolean requestInitialAccessibilityFocus) {
+        setBooleanProperty(BOOLEAN_PROPERTY_REQUEST_INITIAL_ACCESSIBILITY_FOCUS,
+                requestInitialAccessibilityFocus);
     }
 
     /**

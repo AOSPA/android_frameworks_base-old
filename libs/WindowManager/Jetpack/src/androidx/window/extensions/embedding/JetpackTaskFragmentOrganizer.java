@@ -18,6 +18,12 @@ package androidx.window.extensions.embedding;
 
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 
+import static androidx.window.extensions.embedding.SplitContainer.getFinishPrimaryWithSecondaryBehavior;
+import static androidx.window.extensions.embedding.SplitContainer.getFinishSecondaryWithPrimaryBehavior;
+import static androidx.window.extensions.embedding.SplitContainer.shouldFinishAssociatedContainerWhenStacked;
+import static androidx.window.extensions.embedding.SplitContainer.shouldFinishPrimaryWithSecondary;
+import static androidx.window.extensions.embedding.SplitContainer.shouldFinishSecondaryWithPrimary;
+
 import android.app.Activity;
 import android.app.WindowConfiguration.WindowingMode;
 import android.content.Intent;
@@ -31,7 +37,6 @@ import android.window.TaskFragmentOrganizer;
 import android.window.TaskFragmentTransaction;
 import android.window.WindowContainerTransaction;
 
-import androidx.annotation.GuardedBy;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -79,26 +84,20 @@ class JetpackTaskFragmentOrganizer extends TaskFragmentOrganizer {
     @Override
     public void unregisterOrganizer() {
         if (mAnimationController != null) {
-            mAnimationController.unregisterAllRemoteAnimations();
+            mAnimationController.unregisterRemoteAnimations();
             mAnimationController = null;
         }
         super.unregisterOrganizer();
     }
 
-    /** Overrides the animation if the transition is on the given Task. */
-    void startOverrideSplitAnimation(int taskId) {
+    /**
+     * Overrides the animation for transitions of embedded activities organized by this organizer.
+     */
+    void overrideSplitAnimation() {
         if (mAnimationController == null) {
             mAnimationController = new TaskFragmentAnimationController(this);
         }
-        mAnimationController.registerRemoteAnimations(taskId);
-    }
-
-    /** No longer overrides the animation if the transition is on the given Task. */
-    @GuardedBy("mLock")
-    void stopOverrideSplitAnimation(int taskId) {
-        if (mAnimationController != null) {
-            mAnimationController.unregisterRemoteAnimations(taskId);
-        }
+        mAnimationController.registerRemoteAnimations();
     }
 
     /**
@@ -140,6 +139,8 @@ class JetpackTaskFragmentOrganizer extends TaskFragmentOrganizer {
 
         // Set adjacent to each other so that the containers below will be invisible.
         setAdjacentTaskFragments(wct, launchingFragmentToken, secondaryFragmentToken, rule);
+        setCompanionTaskFragment(wct, launchingFragmentToken, secondaryFragmentToken, rule,
+                false /* isStacked */);
     }
 
     /**
@@ -213,6 +214,28 @@ class JetpackTaskFragmentOrganizer extends TaskFragmentOrganizer {
             adjacentParams.setShouldDelaySecondaryLastActivityRemoval(finishPrimaryWithSecondary);
         }
         wct.setAdjacentTaskFragments(primary, secondary, adjacentParams);
+    }
+
+    void setCompanionTaskFragment(@NonNull WindowContainerTransaction wct,
+            @NonNull IBinder primary, @NonNull IBinder secondary, @NonNull SplitRule splitRule,
+            boolean isStacked) {
+        final boolean finishPrimaryWithSecondary;
+        if (isStacked) {
+            finishPrimaryWithSecondary = shouldFinishAssociatedContainerWhenStacked(
+                    getFinishPrimaryWithSecondaryBehavior(splitRule));
+        } else {
+            finishPrimaryWithSecondary = shouldFinishPrimaryWithSecondary(splitRule);
+        }
+        wct.setCompanionTaskFragment(primary, finishPrimaryWithSecondary ? secondary : null);
+
+        final boolean finishSecondaryWithPrimary;
+        if (isStacked) {
+            finishSecondaryWithPrimary = shouldFinishAssociatedContainerWhenStacked(
+                    getFinishSecondaryWithPrimaryBehavior(splitRule));
+        } else {
+            finishSecondaryWithPrimary = shouldFinishSecondaryWithPrimary(splitRule);
+        }
+        wct.setCompanionTaskFragment(secondary, finishSecondaryWithPrimary ? primary : null);
     }
 
     TaskFragmentCreationParams createFragmentOptions(@NonNull IBinder fragmentToken,

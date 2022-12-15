@@ -6,6 +6,8 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.ImeAwareEditText
 import android.widget.TextView
+import android.window.OnBackInvokedCallback
+import android.window.OnBackInvokedDispatcher
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.android.systemui.R
@@ -13,7 +15,7 @@ import com.android.systemui.biometrics.ui.CredentialPasswordView
 import com.android.systemui.biometrics.ui.CredentialView
 import com.android.systemui.biometrics.ui.viewmodel.CredentialViewModel
 import com.android.systemui.lifecycle.repeatWhenAttached
-import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 
 /** Sub-binder for the [CredentialPasswordView]. */
@@ -24,14 +26,19 @@ object CredentialPasswordViewBinder {
         view: CredentialPasswordView,
         host: CredentialView.Host,
         viewModel: CredentialViewModel,
+        requestFocusForInput: Boolean,
     ) {
         val imeManager = view.context.getSystemService(InputMethodManager::class.java)!!
 
         val passwordField: ImeAwareEditText = view.requireViewById(R.id.lockPassword)
 
+        val onBackInvokedCallback = OnBackInvokedCallback { host.onCredentialAborted() }
+
         view.repeatWhenAttached {
-            passwordField.requestFocus()
-            passwordField.scheduleShowSoftInput()
+            if (requestFocusForInput) {
+                passwordField.requestFocus()
+                passwordField.scheduleShowSoftInput()
+            }
 
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 // observe credential validation attempts and submit/cancel buttons
@@ -43,9 +50,7 @@ object CredentialPasswordViewBinder {
                                 launch { viewModel.checkCredential(text, header) }
                             }
                         )
-                        passwordField.setOnKeyListener(
-                            OnBackButtonListener { host.onCredentialAborted() }
-                        )
+                        passwordField.setOnKeyListener(OnBackButtonListener(onBackInvokedCallback))
                     }
                 }
 
@@ -66,18 +71,35 @@ object CredentialPasswordViewBinder {
                         }
                     }
                 }
+
+                val onBackInvokedDispatcher = view.findOnBackInvokedDispatcher()
+                if (onBackInvokedDispatcher != null) {
+                    launch {
+                            onBackInvokedDispatcher.registerOnBackInvokedCallback(
+                                OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                                onBackInvokedCallback
+                            )
+                            awaitCancellation()
+                        }
+                        .invokeOnCompletion {
+                            onBackInvokedDispatcher.unregisterOnBackInvokedCallback(
+                                onBackInvokedCallback
+                            )
+                        }
+                }
             }
         }
     }
 }
 
-private class OnBackButtonListener(private val onBack: () -> Unit) : View.OnKeyListener {
+private class OnBackButtonListener(private val onBackInvokedCallback: OnBackInvokedCallback) :
+    View.OnKeyListener {
     override fun onKey(v: View, keyCode: Int, event: KeyEvent): Boolean {
         if (keyCode != KeyEvent.KEYCODE_BACK) {
             return false
         }
         if (event.action == KeyEvent.ACTION_UP) {
-            onBack()
+            onBackInvokedCallback.onBackInvoked()
         }
         return true
     }

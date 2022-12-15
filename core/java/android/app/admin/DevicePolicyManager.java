@@ -103,6 +103,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.infra.AndroidFuture;
 import com.android.internal.net.NetworkUtilsInternal;
 import com.android.internal.os.BackgroundThread;
+import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.Preconditions;
 import com.android.org.conscrypt.TrustedCertificateStore;
 
@@ -170,6 +171,7 @@ public class DevicePolicyManager {
     private final IDevicePolicyManager mService;
     private final boolean mParentInstance;
     private final DevicePolicyResourcesManager mResourcesManager;
+
 
     /** @hide */
     public DevicePolicyManager(Context context, IDevicePolicyManager service) {
@@ -3822,6 +3824,27 @@ public class DevicePolicyManager {
     public static final int OPERATION_SAFETY_REASON_DRIVING_DISTRACTION = 1;
 
     /**
+     * Prevent an app from being placed into app standby buckets, such that it will not be subject
+     * to device resources restrictions as a result of app standby buckets.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int EXEMPT_FROM_APP_STANDBY =  0;
+
+    /**
+     * Exemptions to platform restrictions, given to an application through
+     * {@link #setApplicationExemptions(String, Set)}.
+     *
+     * @hide
+     */
+    @IntDef(prefix = { "EXEMPT_FROM_"}, value = {
+            EXEMPT_FROM_APP_STANDBY
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface ApplicationExemptionConstants {}
+
+    /**
      * Broadcast action: notify system apps (e.g. settings, SysUI, etc) that the device management
      * resources with IDs {@link #EXTRA_RESOURCE_IDS} has been updated, the updated resources can be
      * retrieved using {@link DevicePolicyResourcesManager#getDrawable} and
@@ -3913,6 +3936,34 @@ public class DevicePolicyManager {
         // This is not used.
         throw new SecurityException("not implemented");
     }
+
+    // TODO: Expose this as SystemAPI once we add the query API
+    /**
+     * @hide
+     */
+    public static final String AUTO_TIMEZONE_POLICY = "autoTimezone";
+
+    /**
+     * @hide
+     */
+    public static final String PERMISSION_GRANT_POLICY_KEY = "permissionGrant";
+
+    // TODO: Expose this as SystemAPI once we add the query API
+    /**
+     * @hide
+     */
+    public static String PERMISSION_GRANT_POLICY(
+            @NonNull String packageName, @NonNull String permission) {
+        Objects.requireNonNull(packageName);
+        Objects.requireNonNull(permission);
+        return PERMISSION_GRANT_POLICY_KEY + "_" + packageName + "_" + permission;
+    }
+
+    // TODO: Expose this as SystemAPI once we add the query API
+    /**
+     * @hide
+     */
+    public static final String LOCK_TASK_POLICY = "lockTask";
 
     /**
      * This object is a single place to tack on invalidation and disable calls.  All
@@ -6207,46 +6258,46 @@ public class DevicePolicyManager {
     public static final int WIPE_SILENTLY = 0x0008;
 
     /**
-     * Ask that all user data be wiped. If called as a secondary user, the user will be removed and
-     * other users will remain unaffected. Calling from the primary user will cause the device to
-     * reboot, erasing all device data - including all the secondary users and their data - while
-     * booting up.
-     * <p>
-     * The calling device admin must have requested {@link DeviceAdminInfo#USES_POLICY_WIPE_DATA} to
-     * be able to call this method; if it has not, a security exception will be thrown.
-     *
-     * If the caller is a profile owner of an organization-owned managed profile, it may
-     * additionally call this method on the parent instance.
-     * Calling this method on the parent {@link DevicePolicyManager} instance would wipe the
-     * entire device, while calling it on the current profile instance would relinquish the device
-     * for personal use, removing the managed profile and all policies set by the profile owner.
+     * See {@link #wipeData(int, CharSequence)}
      *
      * @param flags Bit mask of additional options: currently supported flags are
-     *            {@link #WIPE_EXTERNAL_STORAGE}, {@link #WIPE_RESET_PROTECTION_DATA},
-     *            {@link #WIPE_EUICC} and {@link #WIPE_SILENTLY}.
-     * @throws SecurityException if the calling application does not own an active administrator
-     *            that uses {@link DeviceAdminInfo#USES_POLICY_WIPE_DATA} or is not granted the
-     *            {@link android.Manifest.permission#MASTER_CLEAR} permission.
+     *              {@link #WIPE_EXTERNAL_STORAGE}, {@link #WIPE_RESET_PROTECTION_DATA},
+     *              {@link #WIPE_EUICC} and {@link #WIPE_SILENTLY}.
+     * @throws SecurityException     if the calling application does not own an active
+     *                               administrator
+     *                               that uses {@link DeviceAdminInfo#USES_POLICY_WIPE_DATA} and is
+     *                               not granted the
+     *                               {@link android.Manifest.permission#MASTER_CLEAR} permission.
+     * @throws IllegalStateException if called on last full-user or system-user
+     * @see #wipeDevice(int)
+     * @see #wipeData(int, CharSequence)
      */
     public void wipeData(int flags) {
-        wipeDataInternal(flags, "");
+        wipeDataInternal(flags,
+                /* wipeReasonForUser= */ "",
+                /* factoryReset= */ false);
     }
 
     /**
-     * Ask that all user data be wiped. If called as a secondary user, the user will be removed and
-     * other users will remain unaffected, the provided reason for wiping data can be shown to
-     * user. Calling from the primary user will cause the device to reboot, erasing all device data
-     * - including all the secondary users and their data - while booting up. In this case, we don't
-     * show the reason to the user since the device would be factory reset.
-     * <p>
-     * The calling device admin must have requested {@link DeviceAdminInfo#USES_POLICY_WIPE_DATA} to
-     * be able to call this method; if it has not, a security exception will be thrown.
+     * Ask that all user data be wiped.
      *
-     * If the caller is a profile owner of an organization-owned managed profile, it may
-     * additionally call this method on the parent instance.
-     * Calling this method on the parent {@link DevicePolicyManager} instance would wipe the
-     * entire device, while calling it on the current profile instance would relinquish the device
-     * for personal use, removing the managed profile and all policies set by the profile owner.
+     * <p>
+     * If called as a secondary user or managed profile, the user itself and its associated user
+     * data will be wiped. In particular, If the caller is a profile owner of an
+     * organization-owned managed profile, calling this method will relinquish the device for
+     * personal use, removing the managed profile and all policies set by the profile owner.
+     * </p>
+     *
+     * <p>
+     * Calling this method from the primary user will only work if the calling app is targeting
+     * Android 13 or below, in which case it will cause the device to reboot, erasing all device
+     * data - including all the secondary users and their data - while booting up. If an app
+     * targeting Android 13+ is calling this method from the primary user or last full user,
+     * {@link IllegalStateException} will be thrown.
+     * </p>
+     *
+     * If an app wants to wipe the entire device irrespective of which user they are from, they
+     * should use {@link #wipeDevice} instead.
      *
      * @param flags Bit mask of additional options: currently supported flags are
      *            {@link #WIPE_EXTERNAL_STORAGE}, {@link #WIPE_RESET_PROTECTION_DATA} and
@@ -6254,30 +6305,61 @@ public class DevicePolicyManager {
      * @param reason a string that contains the reason for wiping data, which can be
      *            presented to the user.
      * @throws SecurityException if the calling application does not own an active administrator
-     *            that uses {@link DeviceAdminInfo#USES_POLICY_WIPE_DATA} or is not granted the
+     *            that uses {@link DeviceAdminInfo#USES_POLICY_WIPE_DATA} and is not granted the
      *            {@link android.Manifest.permission#MASTER_CLEAR} permission.
      * @throws IllegalArgumentException if the input reason string is null or empty, or if
      *            {@link #WIPE_SILENTLY} is set.
+     * @throws IllegalStateException if called on last full-user or system-user
+     * @see #wipeDevice(int)
+     * @see #wipeData(int)
      */
     public void wipeData(int flags, @NonNull CharSequence reason) {
         Objects.requireNonNull(reason, "reason string is null");
         Preconditions.checkStringNotEmpty(reason, "reason string is empty");
         Preconditions.checkArgument((flags & WIPE_SILENTLY) == 0, "WIPE_SILENTLY cannot be set");
-        wipeDataInternal(flags, reason.toString());
+        wipeDataInternal(flags, reason.toString(), /* factoryReset= */ false);
     }
 
     /**
-     * Internal function for both {@link #wipeData(int)} and
-     * {@link #wipeData(int, CharSequence)} to call.
+     * Ask that the device be wiped and factory reset.
      *
+     * <p>
+     * The calling Device Owner or Organization Owned Profile Owner must have requested
+     * {@link DeviceAdminInfo#USES_POLICY_WIPE_DATA} to be able to call this method; if it has
+     * not, a security exception will be thrown.
+     *
+     * @param flags Bit mask of additional options: currently supported flags are
+     *              {@link #WIPE_EXTERNAL_STORAGE}, {@link #WIPE_RESET_PROTECTION_DATA},
+     *              {@link #WIPE_EUICC} and {@link #WIPE_SILENTLY}.
+     * @throws SecurityException if the calling application does not own an active administrator
+     *                           that uses {@link DeviceAdminInfo#USES_POLICY_WIPE_DATA} and is not
+     *                           granted the {@link android.Manifest.permission#MASTER_CLEAR}
+     *                           permission.
      * @see #wipeData(int)
      * @see #wipeData(int, CharSequence)
-     * @hide
      */
-    private void wipeDataInternal(int flags, @NonNull String wipeReasonForUser) {
+    // TODO(b/255323293) Add host-side tests
+    public void wipeDevice(int flags) {
+        wipeDataInternal(flags,
+                /* wipeReasonForUser= */ "",
+                /* factoryReset= */ true);
+    }
+
+    /**
+     * Internal function for {@link #wipeData(int)}, {@link #wipeData(int, CharSequence)}
+     * and {@link #wipeDevice(int)} to call.
+     *
+     * @hide
+     * @see #wipeData(int)
+     * @see #wipeData(int, CharSequence)
+     * @see #wipeDevice(int)
+     */
+    private void wipeDataInternal(int flags, @NonNull String wipeReasonForUser,
+            boolean factoryReset) {
         if (mService != null) {
             try {
-                mService.wipeDataWithReason(flags, wipeReasonForUser, mParentInstance);
+                mService.wipeDataWithReason(flags, wipeReasonForUser, mParentInstance,
+                        factoryReset);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -8642,7 +8724,7 @@ public class DevicePolicyManager {
     public void reportFailedPasswordAttempt(int userHandle) {
         if (mService != null) {
             try {
-                mService.reportFailedPasswordAttempt(userHandle);
+                mService.reportFailedPasswordAttempt(userHandle, mParentInstance);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -14692,6 +14774,95 @@ public class DevicePolicyManager {
             }
         }
         return false;
+    }
+
+    /**
+     * Service-specific error code used in {@link #setApplicationExemptions(String, Set)} and
+     * {@link #getApplicationExemptions(String)}.
+     * @hide
+     */
+    public static final int ERROR_PACKAGE_NAME_NOT_FOUND = 1;
+
+    /**
+     * Called by an application with the
+     * {@link  android.Manifest.permission#MANAGE_DEVICE_POLICY_APP_EXEMPTIONS} permission, to
+     * grant platform restriction exemptions to a given application.
+     *
+     * @param  packageName The package name of the application to be exempt.
+     * @param  exemptions The set of exemptions to be applied.
+     * @throws SecurityException If the caller does not have
+     *             {@link  android.Manifest.permission#MANAGE_DEVICE_POLICY_APP_EXEMPTIONS}
+     * @throws NameNotFoundException If either the package is not installed or the package is not
+     *              visible to the caller.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MANAGE_DEVICE_POLICY_APP_EXEMPTIONS)
+    public void setApplicationExemptions(@NonNull String packageName,
+            @NonNull @ApplicationExemptionConstants Set<Integer> exemptions)
+            throws NameNotFoundException {
+        throwIfParentInstance("setApplicationExemptions");
+        if (mService != null) {
+            try {
+                mService.setApplicationExemptions(packageName,
+                        ArrayUtils.convertToIntArray(new ArraySet<>(exemptions)));
+            } catch (ServiceSpecificException e) {
+                switch (e.errorCode) {
+                    case ERROR_PACKAGE_NAME_NOT_FOUND:
+                        throw new NameNotFoundException(e.getMessage());
+                    default:
+                        throw new RuntimeException(
+                                "Unknown error setting application exemptions: " + e.errorCode, e);
+                }
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+    }
+
+    /**
+     * Returns all the platform restriction exemptions currently applied to an application. Called
+     * by an application with the
+     * {@link  android.Manifest.permission#MANAGE_DEVICE_POLICY_APP_EXEMPTIONS} permission.
+     *
+     * @param  packageName The package name to check.
+     * @return A set of platform restrictions an application is exempt from.
+     * @throws SecurityException If the caller does not have
+     *             {@link  android.Manifest.permission#MANAGE_DEVICE_POLICY_APP_EXEMPTIONS}
+     * @throws NameNotFoundException If either the package is not installed or the package is not
+     *              visible to the caller.
+     * @hide
+     */
+    @NonNull
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MANAGE_DEVICE_POLICY_APP_EXEMPTIONS)
+    public Set<Integer> getApplicationExemptions(@NonNull String packageName)
+            throws NameNotFoundException {
+        throwIfParentInstance("getApplicationExemptions");
+        if (mService == null) {
+            return Collections.emptySet();
+        }
+        try {
+            return intArrayToSet(mService.getApplicationExemptions(packageName));
+        } catch (ServiceSpecificException e) {
+            switch (e.errorCode) {
+                case ERROR_PACKAGE_NAME_NOT_FOUND:
+                    throw new NameNotFoundException(e.getMessage());
+                default:
+                    throw new RuntimeException(
+                            "Unknown error getting application exemptions: " + e.errorCode, e);
+            }
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    private Set<Integer> intArrayToSet(int[] array) {
+        Set<Integer> set = new ArraySet<>();
+        for (int item : array) {
+            set.add(item);
+        }
+        return set;
     }
 
     /**

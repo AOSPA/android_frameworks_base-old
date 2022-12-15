@@ -42,16 +42,15 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.Activity;
 import android.app.ActivityManager;
+import android.app.ApplicationExitInfo;
 import android.app.BroadcastOptions;
 import android.app.IApplicationThread;
-import android.app.RemoteServiceException.CannotDeliverBroadcastException;
 import android.app.usage.UsageEvents.Event;
 import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.IIntentReceiver;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
-import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.pm.UserInfo;
@@ -729,19 +728,14 @@ public class BroadcastQueueImpl extends BroadcastQueue {
                     thread.scheduleRegisteredReceiver(receiver, intent, resultCode,
                             data, extras, ordered, sticky, sendingUser,
                             app.mState.getReportedProcState());
-                // TODO: Uncomment this when (b/28322359) is fixed and we aren't getting
-                // DeadObjectException when the process isn't actually dead.
-                //} catch (DeadObjectException ex) {
-                // Failed to call into the process.  It's dying so just let it die and move on.
-                //    throw ex;
                 } catch (RemoteException ex) {
                     // Failed to call into the process. It's either dying or wedged. Kill it gently.
                     synchronized (mService) {
                         final String msg = "Failed to schedule " + intent + " to " + receiver
                                 + " via " + app + ": " + ex;
                         Slog.w(TAG, msg);
-                        app.scheduleCrashLocked(msg,
-                                CannotDeliverBroadcastException.TYPE_ID, /* extras=*/ null);
+                        app.killLocked("Can't deliver broadcast", ApplicationExitInfo.REASON_OTHER,
+                                ApplicationExitInfo.SUBREASON_UNDELIVERED_BROADCAST, true);
                     }
                     throw ex;
                 }
@@ -1394,8 +1388,8 @@ public class BroadcastQueueImpl extends BroadcastQueue {
                 final String msg = "Failed to schedule " + r.intent + " to " + info
                         + " via " + app + ": " + e;
                 Slog.w(TAG, msg);
-                app.scheduleCrashLocked(msg,
-                        CannotDeliverBroadcastException.TYPE_ID, /* extras=*/ null);
+                app.killLocked("Can't deliver broadcast", ApplicationExitInfo.REASON_OTHER,
+                        ApplicationExitInfo.SUBREASON_UNDELIVERED_BROADCAST, true);
             } catch (RuntimeException e) {
                 Slog.wtf(TAG, "Failed sending broadcast to "
                         + r.curComponent + " with " + r.intent, e);
@@ -1639,9 +1633,8 @@ public class BroadcastQueueImpl extends BroadcastQueue {
             }
             Slog.w(TAG, "Receiver during timeout of " + r + " : " + curReceiver);
             logBroadcastReceiverDiscardLocked(r);
-            String anrMessage =
-                    "Broadcast of " + r.intent.toString() + ", waited " + timeoutDurationMs + "ms";
-            TimeoutRecord timeoutRecord = TimeoutRecord.forBroadcastReceiver(anrMessage);
+            TimeoutRecord timeoutRecord = TimeoutRecord.forBroadcastReceiver(r.intent,
+                    timeoutDurationMs);
             if (curReceiver != null && curReceiver instanceof BroadcastFilter) {
                 BroadcastFilter bf = (BroadcastFilter) curReceiver;
                 if (bf.receiverList.pid != 0

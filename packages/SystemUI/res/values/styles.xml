@@ -23,6 +23,12 @@
         <item name="android:textColor">@color/status_bar_clock_color</item>
     </style>
 
+    <style name="TextAppearance.StatusBar.UserChip" parent="@*android:style/TextAppearance.StatusBar.Icon">
+        <item name="android:textSize">@dimen/status_bar_user_chip_text_size</item>
+        <item name="android:fontFamily">@*android:string/config_headlineFontFamilyMedium</item>
+        <item name="android:textColor">@color/status_bar_clock_color</item>
+    </style>
+
     <style name="TextAppearance.StatusBar.Expanded" parent="@*android:style/TextAppearance.StatusBar">
         <item name="android:textColor">?android:attr/textColorTertiary</item>
     </style>
@@ -1091,7 +1097,7 @@
         <item name="android:orientation">horizontal</item>
         <item name="android:focusable">true</item>
         <item name="android:clickable">true</item>
-        <item name="android:background">?android:attr/selectableItemBackground</item>
+        <item name="android:background">@drawable/internet_dialog_selected_effect</item>
     </style>
 
     <style name="InternetDialog.NetworkTitle">

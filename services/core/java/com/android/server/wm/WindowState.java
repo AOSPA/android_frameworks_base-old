@@ -24,8 +24,6 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_DREAM;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.graphics.GraphicsProtos.dumpPointProto;
-import static android.hardware.display.DisplayManager.SWITCHING_TYPE_NONE;
-import static android.hardware.display.DisplayManager.SWITCHING_TYPE_RENDER_FRAME_RATE_ONLY;
 import static android.os.InputConstants.DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
 import static android.os.PowerManager.DRAW_WAKE_LOCK;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
@@ -203,7 +201,6 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Region;
 import android.gui.TouchOcclusionMode;
-import android.hardware.display.DisplayManager;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Debug;
@@ -249,6 +246,7 @@ import android.view.WindowManager;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
 import android.view.animation.Interpolator;
+import android.view.inputmethod.ImeTracker;
 import android.window.ClientWindowFrames;
 import android.window.OnBackInvokedCallbackInfo;
 
@@ -260,6 +258,7 @@ import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.ToBooleanFunction;
 import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.wm.LocalAnimationAdapter.AnimationSpec;
+import com.android.server.wm.RefreshRatePolicy.FrameRateVote;
 import com.android.server.wm.SurfaceAnimator.AnimationType;
 
 import dalvik.annotation.optimization.NeverCompile;
@@ -791,7 +790,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      * preferredDisplayModeId or is part of the high refresh rate deny list.
      * The variable is cached, so we do not send too many updates to SF.
      */
-    float mAppPreferredFrameRate = 0f;
+    FrameRateVote mFrameRateVote = new FrameRateVote();
 
     static final int BLAST_TIMEOUT_DURATION = 5000; /* milliseconds */
 
@@ -1539,10 +1538,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             mWmService.makeWindowFreezingScreenIfNeededLocked(this);
 
             // If the orientation is changing, or we're starting or ending a drag resizing action,
-            // then we need to hold off on unfreezing the display until this window has been
-            // redrawn; to do that, we need to go through the process of getting informed by the
-            // application when it has finished drawing.
-            if (getOrientationChanging() || dragResizingChanged) {
+            // or we're resizing an embedded Activity, then we need to hold off on unfreezing the
+            // display until this window has been redrawn; to do that, we need to go through the
+            // process of getting informed by the application when it has finished drawing.
+            if (getOrientationChanging() || dragResizingChanged
+                    || isEmbeddedActivityResizeChanged()) {
                 if (dragResizingChanged) {
                     ProtoLog.v(WM_DEBUG_RESIZE,
                             "Resize start waiting for draw, "
@@ -4018,7 +4018,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             mClient.insetsControlChanged(getCompatInsetsState(),
                     stateController.getControlsForDispatch(this));
         } catch (RemoteException e) {
-            Slog.w(TAG, "Failed to deliver inset state change to w=" + this, e);
+            Slog.w(TAG, "Failed to deliver inset control state change to w=" + this, e);
         }
     }
 
@@ -4028,20 +4028,30 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     @Override
-    public void showInsets(@InsetsType int types, boolean fromIme) {
+    public void showInsets(@InsetsType int types, boolean fromIme,
+            @Nullable ImeTracker.Token statsToken) {
         try {
-            mClient.showInsets(types, fromIme);
+            ImeTracker.get().onProgress(statsToken,
+                    ImeTracker.PHASE_WM_WINDOW_INSETS_CONTROL_TARGET_SHOW_INSETS);
+            mClient.showInsets(types, fromIme, statsToken);
         } catch (RemoteException e) {
             Slog.w(TAG, "Failed to deliver showInsets", e);
+            ImeTracker.get().onFailed(statsToken,
+                    ImeTracker.PHASE_WM_WINDOW_INSETS_CONTROL_TARGET_SHOW_INSETS);
         }
     }
 
     @Override
-    public void hideInsets(@InsetsType int types, boolean fromIme) {
+    public void hideInsets(@InsetsType int types, boolean fromIme,
+            @Nullable ImeTracker.Token statsToken) {
         try {
-            mClient.hideInsets(types, fromIme);
+            ImeTracker.get().onProgress(statsToken,
+                    ImeTracker.PHASE_WM_WINDOW_INSETS_CONTROL_TARGET_HIDE_INSETS);
+            mClient.hideInsets(types, fromIme, statsToken);
         } catch (RemoteException e) {
-            Slog.w(TAG, "Failed to deliver showInsets", e);
+            Slog.w(TAG, "Failed to deliver hideInsets", e);
+            ImeTracker.get().onFailed(statsToken,
+                    ImeTracker.PHASE_WM_WINDOW_INSETS_CONTROL_TARGET_HIDE_INSETS);
         }
     }
 
@@ -4147,6 +4157,20 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      */
     boolean isFullyTransparentBarAllowed(Rect frame) {
         return mActivityRecord == null || mActivityRecord.isFullyTransparentBarAllowed(frame);
+    }
+
+    /**
+     * Whether this window belongs to a resizing embedded activity.
+     */
+    private boolean isEmbeddedActivityResizeChanged() {
+        if (mActivityRecord == null || !isVisibleRequested()) {
+            // No need to update if the window is in the background.
+            return false;
+        }
+
+        final TaskFragment embeddedTaskFragment = mActivityRecord.getOrganizedTaskFragment();
+        return embeddedTaskFragment != null
+                && mDisplayContent.mChangingContainers.contains(embeddedTaskFragment);
     }
 
     boolean isDragResizeChanged() {
@@ -5481,20 +5505,12 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                     mFrameRateSelectionPriority);
         }
 
-        // If refresh rate switching is disabled there is no point to set the frame rate on the
-        // surface as the refresh rate will be limited by display manager to a single value
-        // and SurfaceFlinger wouldn't be able to change it anyways.
-        @DisplayManager.SwitchingType int refreshRateSwitchingType =
-                mWmService.mDisplayManagerInternal.getRefreshRateSwitchingType();
-        if (refreshRateSwitchingType != SWITCHING_TYPE_NONE
-                && refreshRateSwitchingType != SWITCHING_TYPE_RENDER_FRAME_RATE_ONLY) {
-            final float refreshRate = refreshRatePolicy.getPreferredRefreshRate(this);
-            if (mAppPreferredFrameRate != refreshRate) {
-                mAppPreferredFrameRate = refreshRate;
-                getPendingTransaction().setFrameRate(
-                        mSurfaceControl, mAppPreferredFrameRate,
-                        Surface.FRAME_RATE_COMPATIBILITY_EXACT, Surface.CHANGE_FRAME_RATE_ALWAYS);
-            }
+        boolean voteChanged = refreshRatePolicy.updateFrameRateVote(this);
+        if (voteChanged) {
+            getPendingTransaction().setFrameRate(
+                    mSurfaceControl, mFrameRateVote.mRefreshRate,
+                    mFrameRateVote.mCompatibility, Surface.CHANGE_FRAME_RATE_ALWAYS);
+
         }
     }
 
@@ -6110,9 +6126,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         if (mRedrawForSyncReported) {
             return false;
         }
-        if (mInRelayout && mPrepareSyncSeqId > 0) {
-            // The last sync seq id will return to the client, so there is no need to request the
-            // client to redraw.
+        if (mInRelayout && (mPrepareSyncSeqId > 0 || (mViewVisibility == View.VISIBLE
+                && mWinAnimator.mDrawState == DRAW_PENDING))) {
+            // The client will report draw if it gets the sync seq id from relayout or it is
+            // drawing for being visible, then no need to request redraw.
             return false;
         }
         return useBLASTSync();

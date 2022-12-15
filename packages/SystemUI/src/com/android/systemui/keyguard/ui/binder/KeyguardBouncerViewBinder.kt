@@ -32,7 +32,6 @@ import com.android.systemui.lifecycle.repeatWhenAttached
 import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.statusbar.phone.KeyguardBouncer.EXPANSION_VISIBLE
 import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 
@@ -89,7 +88,7 @@ object KeyguardBouncerViewBinder {
                 }
             }
         view.repeatWhenAttached {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
+            repeatOnLifecycle(Lifecycle.State.CREATED) {
                 try {
                     viewModel.setBouncerViewDelegate(delegate)
                     launch {
@@ -153,7 +152,6 @@ object KeyguardBouncerViewBinder {
                             val visibility = if (isVisible) View.VISIBLE else View.INVISIBLE
                             view.visibility = visibility
                             hostViewController.onBouncerVisibilityChanged(visibility)
-                            viewModel.notifyBouncerVisibilityHasChanged(visibility)
                         }
                     }
 
@@ -182,6 +180,7 @@ object KeyguardBouncerViewBinder {
                     launch {
                         viewModel.bouncerShowMessage.collect {
                             hostViewController.showMessage(it.message, it.colorStateList)
+                            viewModel.onMessageShown()
                         }
                     }
 
