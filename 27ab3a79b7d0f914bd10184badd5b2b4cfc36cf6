@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "92e48f01_e5554a04",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000316
+      },
+      "writtenOn": "2022-12-15T16:33:17Z",
+      "side": 1,
+      "message": "I\u0027ve sent the latest AVD",
+      "revId": "27ab3a79b7d0f914bd10184badd5b2b4cfc36cf6",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
