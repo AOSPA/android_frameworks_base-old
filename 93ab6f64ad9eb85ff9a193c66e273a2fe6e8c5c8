@@ -16,6 +16,23 @@
       "message": "Nope, we don\u0027t need to give people free Google Photos.  If they want a service, they should pay for that service.",
       "revId": "93ab6f64ad9eb85ff9a193c66e273a2fe6e8c5c8",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "ff6124b6_315b3ee8",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000833
+      },
+      "writtenOn": "2022-12-15T08:56:08Z",
+      "side": 1,
+      "message": "we dont follow google codes",
+      "revId": "93ab6f64ad9eb85ff9a193c66e273a2fe6e8c5c8",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
