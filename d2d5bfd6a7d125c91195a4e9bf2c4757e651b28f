@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "c302c4da_0de1b263",
+        "filename": "core/java/com/android/internal/util/PropImitationHooks.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 22,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2022-12-15T05:20:59Z",
+      "side": 1,
+      "message": "Nothing seems to be calling this?",
+      "revId": "d2d5bfd6a7d125c91195a4e9bf2c4757e651b28f",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
