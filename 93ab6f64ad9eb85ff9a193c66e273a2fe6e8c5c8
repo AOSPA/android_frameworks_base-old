@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "7e0bc7ff_ea619035",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000012
+      },
+      "writtenOn": "2022-12-15T05:20:26Z",
+      "side": 1,
+      "message": "Nope, we don\u0027t need to give people free Google Photos.  If they want a service, they should pay for that service.",
+      "revId": "93ab6f64ad9eb85ff9a193c66e273a2fe6e8c5c8",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
