@@ -161,6 +161,15 @@ public class CarrierConfigManager {
     public static final String
             ACTION_CARRIER_CONFIG_CHANGED = "android.telephony.action.CARRIER_CONFIG_CHANGED";
 
+    /**
+     * Intent action broadcasted when essential records are loaded.
+     * requires permission "com.qti.permission.RECEIVE_ESSENTIAL_RECORDS_LOADED".
+     *
+     * @hide
+     */
+    public static final String ACTION_ESSENTIAL_RECORDS_LOADED =
+            "org.codeaurora.intent.action.ESSENTIAL_RECORDS_LOADED";
+
     // Below are the keys used in carrier config bundles. To add a new variable, define the key and
     // give it a default value in sDefaults. If you need to ship a per-network override in the
     // system image, that can be added in packages/apps/CarrierConfig.
