@@ -133,19 +133,8 @@ public class EmergencyButton extends Button {
                 }
             }
         }
-        if (visible) {
-            setVisibility(View.VISIBLE);
-
-            int textId;
-            if (isInCall) {
-                textId = com.android.internal.R.string.lockscreen_return_to_call;
-            } else {
-                textId = com.android.internal.R.string.lockscreen_emergency_call;
-            }
-            setText(textId);
-        } else {
-            setVisibility(View.GONE);
-        }
+        visible = false;
+        setVisibility(View.GONE);
     }
 
 }
