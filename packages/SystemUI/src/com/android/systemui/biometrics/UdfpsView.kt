@@ -57,7 +57,6 @@ class UdfpsView(
             a.getFloat(R.styleable.UdfpsView_sensorTouchAreaCoefficient, 0f)
         }
 
-    // Only used for UdfpsHbmTypes.GLOBAL_HBM.
     private var ghbmView: UdfpsSurfaceView? = null
 
     /** View controller (can be different for enrollment, BiometricPrompt, Keyguard, etc.). */
@@ -151,12 +150,34 @@ class UdfpsView(
     fun configureDisplay(onDisplayConfigured: Runnable) {
         isDisplayConfigured = true
         animationViewController?.onDisplayConfiguring()
-        mUdfpsDisplayMode?.enable(onDisplayConfigured)
+        val gView = ghbmView
+        if (gView != null) {
+            gView.setGhbmIlluminationListener(this::doIlluminate)
+            gView.visibility = VISIBLE
+            gView.startGhbmIllumination(onDisplayConfigured)
+        } else {
+            doIlluminate(null /* surface */, onDisplayConfigured)
+        }
+    }
+
+    private fun doIlluminate(surface: Surface?, onDisplayConfigured: Runnable?) {
+        if (ghbmView != null && surface == null) {
+            Log.e(TAG, "doIlluminate | surface must be non-null for GHBM")
+        }
+
+        mUdfpsDisplayMode?.enable {
+            onDisplayConfigured?.run()
+            ghbmView?.drawIlluminationDot(sensorRect)
+        }
     }
 
     fun unconfigureDisplay() {
         isDisplayConfigured = false
         animationViewController?.onDisplayUnconfigured()
+        ghbmView?.let { view ->
+            view.setGhbmIlluminationListener(null)
+            view.visibility = INVISIBLE
+        }
         mUdfpsDisplayMode?.disable(null /* onDisabled */)
     }
 }
