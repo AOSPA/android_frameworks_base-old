@@ -1,3 +1,9 @@
+/**
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+
 package com.android.systemui.qs.tiles.dialog;
 
 import static android.provider.Settings.Global.AIRPLANE_MODE_ON;
@@ -69,6 +75,7 @@ import com.android.systemui.statusbar.policy.LocationController;
 import com.android.systemui.toast.SystemUIToast;
 import com.android.systemui.toast.ToastFactory;
 import com.android.systemui.util.CarrierConfigTracker;
+import com.android.systemui.util.CarrierNameCustomization;
 import com.android.systemui.util.concurrency.FakeExecutor;
 import com.android.systemui.util.settings.GlobalSettings;
 import com.android.systemui.util.time.FakeSystemClock;
@@ -169,6 +176,8 @@ public class InternetDialogControllerTest extends SysuiTestCase {
     private WifiStateWorker mWifiStateWorker;
     @Mock
     private SignalStrength mSignalStrength;
+    @Mock
+    private CarrierNameCustomization mCarrierNameCustomization;
 
     private FakeFeatureFlags mFlags = new FakeFeatureFlags();
 
@@ -214,7 +223,8 @@ public class InternetDialogControllerTest extends SysuiTestCase {
                 mConnectivityManager, mHandler, mExecutor, mBroadcastDispatcher,
                 mock(KeyguardUpdateMonitor.class), mGlobalSettings, mKeyguardStateController,
                 mWindowManager, mToastFactory, mWorkerHandler, mCarrierConfigTracker,
-                mLocationController, mDialogLaunchAnimator, mWifiStateWorker, mFlags);
+                mLocationController, mDialogLaunchAnimator, mWifiStateWorker, mFlags,
+                mCarrierNameCustomization);
         mSubscriptionManager.addOnSubscriptionsChangedListener(mExecutor,
                 mInternetDialogController.mOnSubscriptionsChangedListener);
         mInternetDialogController.onStart(mInternetDialogCallback, true);
