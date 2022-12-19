@@ -210,6 +210,7 @@ public abstract class JobService extends Service {
      * 30 seconds for a data transfer job if a payload size estimate
      * was not provided at the time of scheduling.
      *
+     * @hide
      * @see JobInfo.Builder#setEstimatedNetworkBytes(long, long)
      */
     public final void updateEstimatedNetworkBytes(@NonNull JobParameters params,
@@ -227,6 +228,7 @@ public abstract class JobService extends Service {
      * 30 seconds for a data transfer job if a payload size estimate
      * was not provided at the time of scheduling.
      *
+     * @hide
      * @see JobInfo.Builder#setEstimatedNetworkBytes(long, long)
      */
     public final void updateEstimatedNetworkBytes(@NonNull JobParameters params,
@@ -237,6 +239,7 @@ public abstract class JobService extends Service {
 
     /**
      * Tell JobScheduler how much data has successfully been transferred for the data transfer job.
+     * @hide
      */
     public final void updateTransferredNetworkBytes(@NonNull JobParameters params,
             @BytesLong long transferredDownloadBytes, @BytesLong long transferredUploadBytes) {
@@ -247,6 +250,7 @@ public abstract class JobService extends Service {
     /**
      * Tell JobScheduler how much data has been transferred for the data transfer
      * {@link JobWorkItem}.
+     * @hide
      */
     public final void updateTransferredNetworkBytes(@NonNull JobParameters params,
             @NonNull JobWorkItem item,
@@ -264,6 +268,7 @@ public abstract class JobService extends Service {
      * <p>
      * This must be implemented for all data transfer jobs.
      *
+     * @hide
      * @see JobInfo.Builder#setEstimatedNetworkBytes(long, long)
      * @see JobInfo#NETWORK_BYTES_UNKNOWN
      */
@@ -287,6 +292,7 @@ public abstract class JobService extends Service {
      * <p>
      * This must be implemented for all data transfer jobs.
      *
+     * @hide
      * @see JobInfo.Builder#setEstimatedNetworkBytes(long, long)
      * @see JobInfo#NETWORK_BYTES_UNKNOWN
      */
@@ -313,6 +319,7 @@ public abstract class JobService extends Service {
      * <p>
      * This must be implemented for all data transfer jobs.
      *
+     * @hide
      * @see JobInfo#NETWORK_BYTES_UNKNOWN
      */
     // TODO(255371817): specify the actual time JS will wait for progress before requesting
@@ -341,6 +348,7 @@ public abstract class JobService extends Service {
      * <p>
      * This must be implemented for all data transfer jobs.
      *
+     * @hide
      * @see JobInfo#NETWORK_BYTES_UNKNOWN
      */
     // TODO(255371817): specify the actual time JS will wait for progress before requesting

@@ -17,6 +17,7 @@
 package com.android.server.media;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.app.ActivityManager;
 import android.app.UserSwitchObserver;
@@ -43,6 +44,7 @@ import android.media.MediaRouterClientState;
 import android.media.RemoteDisplayState;
 import android.media.RemoteDisplayState.RemoteDisplayInfo;
 import android.media.RouteDiscoveryPreference;
+import android.media.RouteListingPreference;
 import android.media.RoutingSessionInfo;
 import android.os.Binder;
 import android.os.Bundle;
@@ -420,6 +422,14 @@ public final class MediaRouterService extends IMediaRouterService.Stub
 
     // Binder call
     @Override
+    public void setRouteListingPreference(
+            @NonNull IMediaRouter2 router,
+            @Nullable RouteListingPreference routeListingPreference) {
+        mService2.setRouteListingPreference(router, routeListingPreference);
+    }
+
+    // Binder call
+    @Override
     public void setRouteVolumeWithRouter2(IMediaRouter2 router,
             MediaRoute2Info route, int volume) {
         mService2.setRouteVolumeWithRouter2(router, route, volume);
@@ -628,9 +638,11 @@ public final class MediaRouterService extends IMediaRouterService.Stub
         synchronized (mLock) {
             if (mCurrentActiveUserId != newActiveUserId) {
                 mCurrentActiveUserId = newActiveUserId;
-                for (int i = 0; i < mUserRecords.size(); i++) {
-                    int userId = mUserRecords.keyAt(i);
-                    UserRecord userRecord = mUserRecords.valueAt(i);
+                // disposeUserIfNeededLocked might modify the collection, hence clone
+                final var userRecords = mUserRecords.clone();
+                for (int i = 0; i < userRecords.size(); i++) {
+                    int userId = userRecords.keyAt(i);
+                    UserRecord userRecord = userRecords.valueAt(i);
                     if (isUserActiveLocked(userId)) {
                         // userId corresponds to the active user, or one of its profiles. We
                         // ensure the associated structures are initialized.
