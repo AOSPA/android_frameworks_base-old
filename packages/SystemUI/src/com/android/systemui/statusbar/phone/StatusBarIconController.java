@@ -552,13 +552,13 @@ public interface StatusBarIconController {
         public void onSetWifiIcon(int viewIndex, WifiIconState state) {
             View view = mGroup.getChildAt(viewIndex);
             if (view instanceof StatusBarWifiView) {
-                ((StatusBarWifiView) view).applyWifiState(state);
+                view.applyWifiState(state);
             } else if (view instanceof ModernStatusBarWifiView) {
                 // ModernStatusBarWifiView will automatically apply state based on its callbacks, so
                 // we don't need to call applyWifiState.
             } else {
-                throw new IllegalStateException("View at " + viewIndex + " must be of type "
-                        + "StatusBarWifiView or ModernStatusBarWifiView");
+                Log.e("StatusBarIconController", "View at " + viewIndex + " must be of type "
+                        + "StatusBarWifiView or ModernStatusBarWifiView, is of type " + view.getClass());
             }
 
             if (mIsInDemoMode) {
