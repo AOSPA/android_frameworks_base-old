@@ -550,9 +550,14 @@ public interface StatusBarIconController {
         }
 
         public void onSetWifiIcon(int viewIndex, WifiIconState state) {
+            StatusBarWifiView sbView;
             View view = mGroup.getChildAt(viewIndex);
+            sbView = null;
             if (view instanceof StatusBarWifiView) {
-                ((StatusBarWifiView) view).applyWifiState(state);
+                sbView = (StatusBarWifiView) view;
+            }
+            if (sbView != null) {
+                sbView.applyWifiState(state);
             } else if (view instanceof ModernStatusBarWifiView) {
                 // ModernStatusBarWifiView will automatically apply state based on its callbacks, so
                 // we don't need to call applyWifiState.
