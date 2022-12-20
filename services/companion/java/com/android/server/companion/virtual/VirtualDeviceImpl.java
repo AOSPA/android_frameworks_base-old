@@ -74,6 +74,7 @@ import com.android.server.companion.virtual.audio.VirtualAudioController;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -411,6 +412,7 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
         }
     }
 
+    @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)
     @Override // Binder call
     public void createVirtualKeyboard(
             int displayId,
@@ -437,6 +439,7 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
         }
     }
 
+    @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)
     @Override // Binder call
     public void createVirtualMouse(
             int displayId,
@@ -462,6 +465,7 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
         }
     }
 
+    @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)
     @Override // Binder call
     public void createVirtualTouchscreen(
             int displayId,
@@ -480,6 +484,13 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
                                 + "this virtual device");
             }
         }
+
+        if (screenSize.x <= 0 || screenSize.y <= 0) {
+            throw new IllegalArgumentException(
+                    "Cannot create a virtual touchscreen, screen dimensions must be positive. Got: "
+                            + screenSize);
+        }
+
         final long token = Binder.clearCallingIdentity();
         try {
             mInputController.createTouchscreen(deviceName, vendorId, productId,
@@ -618,7 +629,8 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
         mInputController.dump(fout);
     }
 
-    GenericWindowPolicyController createWindowPolicyController() {
+    GenericWindowPolicyController createWindowPolicyController(
+            @NonNull List<String> displayCategories) {
         synchronized (mVirtualDeviceLock) {
             final GenericWindowPolicyController gwpc =
                     new GenericWindowPolicyController(FLAG_SECURE,
@@ -633,7 +645,8 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
                             this::onEnteringPipBlocked,
                             this::onActivityBlocked,
                             this::onSecureWindowShown,
-                            mAssociationInfo.getDeviceProfile());
+                            mAssociationInfo.getDeviceProfile(),
+                            displayCategories);
             gwpc.registerRunningAppsChangedListener(/* listener= */ this);
             return gwpc;
         }

@@ -56,7 +56,6 @@ class CreateOptionInfo(
   pendingIntent: PendingIntent?,
   fillInIntent: Intent?,
   val userProviderDisplayName: String?,
-  val credentialTypeIcon: Drawable,
   val profileIcon: Drawable,
   val passwordCount: Int?,
   val passkeyCount: Int?,
@@ -74,9 +73,10 @@ class RemoteInfo(
 
 data class RequestDisplayInfo(
   val title: String,
-  val subtitle: String,
+  val subtitle: String?,
   val type: String,
   val appDomainName: String,
+  val typeIcon: Drawable,
 )
 
 /**

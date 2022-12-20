@@ -42,7 +42,7 @@
             android:exported="false">
         </provider>
 
-        <provider android:name="com.android.settingslib.spa.framework.SpaSliceProvider"
+        <provider android:name="com.android.settingslib.spa.slice.SpaSliceProvider"
             android:authorities="com.android.spa.gallery.slice.provider"
             android:exported="true" >
             <intent-filter>
@@ -52,20 +52,20 @@
         </provider>
 
         <receiver
-            android:name="com.android.settingslib.spa.framework.SpaSliceBroadcastReceiver"
+            android:name="com.android.settingslib.spa.slice.SpaSliceBroadcastReceiver"
             android:exported="false">
         </receiver>
 
         <activity
-            android:name="com.android.settingslib.spa.framework.debug.BlankActivity"
+            android:name="com.android.settingslib.spa.debug.BlankActivity"
             android:exported="true">
         </activity>
         <activity
-            android:name="com.android.settingslib.spa.framework.debug.DebugActivity"
+            android:name="com.android.settingslib.spa.debug.DebugActivity"
             android:exported="true">
         </activity>
         <provider
-            android:name="com.android.settingslib.spa.framework.debug.DebugProvider"
+            android:name="com.android.settingslib.spa.debug.DebugProvider"
             android:authorities="com.android.spa.gallery.debug.provider"
             android:enabled="true"
             android:exported="false">

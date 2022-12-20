@@ -205,10 +205,6 @@ object Flags {
     @JvmField val QS_SECONDARY_DATA_SUB_INFO = releasedFlag(508, "qs_secondary_data_sub_info")
 
     // 600- status bar
-    // TODO(b/254513246): Tracking Bug
-    val STATUS_BAR_USER_SWITCHER =
-        resourceBooleanFlag(602, R.bool.flag_user_switcher_chip, "status_bar_user_switcher")
-
     // TODO(b/254512623): Tracking Bug
     @Deprecated("Replaced by mobile and wifi specific flags.")
     val NEW_STATUS_BAR_PIPELINE_BACKEND =
@@ -370,6 +366,11 @@ object Flags {
     @JvmField
     val NEW_BACK_AFFORDANCE = unreleasedFlag(1203, "new_back_affordance", teamfood = false)
 
+    // TODO(b/255854141): Tracking Bug
+    @JvmField
+    val WM_ENABLE_PREDICTIVE_BACK_SYSUI =
+        unreleasedFlag(1204, "persist.wm.debug.predictive_back_sysui_enable", teamfood = false)
+
     // 1300 - screenshots
     // TODO(b/254512719): Tracking Bug
     @JvmField val SCREENSHOT_REQUEST_PROCESSOR = releasedFlag(1300, "screenshot_request_processor")
@@ -390,7 +391,7 @@ object Flags {
     // 1600 - accessibility
     @JvmField
     val A11Y_FLOATING_MENU_FLING_SPRING_ANIMATIONS =
-        unreleasedFlag(1600, "a11y_floating_menu_fling_spring_animations")
+        unreleasedFlag(1600, "a11y_floating_menu_fling_spring_animations", teamfood = true)
 
     // 1700 - clipboard
     @JvmField val CLIPBOARD_OVERLAY_REFACTOR = releasedFlag(1700, "clipboard_overlay_refactor")
@@ -417,6 +418,9 @@ object Flags {
     @JvmField val UDFPS_NEW_TOUCH_DETECTION = unreleasedFlag(2200, "udfps_new_touch_detection")
     @JvmField val UDFPS_ELLIPSE_DEBUG_UI = unreleasedFlag(2201, "udfps_ellipse_debug")
     @JvmField val UDFPS_ELLIPSE_DETECTION = unreleasedFlag(2202, "udfps_ellipse_detection")
+
+    // 2300 - stylus
+    @JvmField val TRACK_STYLUS_EVER_USED = unreleasedFlag(2300, "track_stylus_ever_used")
 
     // TODO(b259590361): Tracking bug
     val EXPERIMENTAL_FLAG = unreleasedFlag(2, "exp_flag_release")
