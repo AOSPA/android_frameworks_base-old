@@ -4155,6 +4155,12 @@
    -->
     <string name="config_defaultAmbientContextDetectionService" translatable="false"></string>
 
+    <!-- The component name for the default system wearable sensing service.
+        This service must be trusted, as it can be activated without explicit consent of the user.
+        See android.service.wearable.WearableSensingService.
+   -->
+    <string name="config_defaultWearableSensingService" translatable="false"></string>
+
     <!-- Component name that accepts ACTION_SEND intents for requesting ambient context consent. -->
     <string translatable="false" name="config_defaultAmbientContextConsentComponent"></string>
 
@@ -5367,6 +5373,12 @@
     <bool name="config_cecRoutingControlDisabled_allowed">true</bool>
     <bool name="config_cecRoutingControlDisabled_default">true</bool>
 
+    <bool name="config_cecSoundbarMode_userConfigurable">true</bool>
+    <bool name="config_cecSoundbarModeEnabled_allowed">true</bool>
+    <bool name="config_cecSoundbarModeEnabled_default">false</bool>
+    <bool name="config_cecSoundbarModeDisabled_allowed">true</bool>
+    <bool name="config_cecSoundbarModeDisabled_default">true</bool>
+
     <bool name="config_cecPowerControlMode_userConfigurable">true</bool>
     <bool name="config_cecPowerControlModeTv_allowed">true</bool>
     <bool name="config_cecPowerControlModeTv_default">false</bool>
@@ -5551,6 +5563,13 @@
     <bool name="config_cecQuerySadMaxEnabled_default">true</bool>
     <bool name="config_cecQuerySadMaxDisabled_allowed">true</bool>
     <bool name="config_cecQuerySadMaxDisabled_default">false</bool>
+
+    <!-- eARC Configuration -->
+    <bool name="config_earcEnabled_userConfigurable">true</bool>
+    <bool name="config_earcFeatureEnabled_allowed">true</bool>
+    <bool name="config_earcFeatureEnabled_default">true</bool>
+    <bool name="config_earcFeatureDisabled_allowed">true</bool>
+    <bool name="config_earcFeatureDisabled_default">false</bool>
 
     <!-- Whether app hibernation deletes OAT artifact files as part of global hibernation. -->
     <bool name="config_hibernationDeletesOatArtifactsEnabled">true</bool>

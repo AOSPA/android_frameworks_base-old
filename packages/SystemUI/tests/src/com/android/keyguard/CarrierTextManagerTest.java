@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/**
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+
 package com.android.keyguard;
 
 
@@ -53,6 +59,7 @@ import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
 import com.android.systemui.telephony.TelephonyListenerManager;
+import com.android.systemui.util.CarrierNameCustomization;
 import com.android.systemui.util.concurrency.FakeExecutor;
 import com.android.systemui.util.time.FakeSystemClock;
 
@@ -109,6 +116,8 @@ public class CarrierTextManagerTest extends SysuiTestCase {
     private SubscriptionManager mSubscriptionManager;
     private CarrierTextManager.CarrierTextCallbackInfo mCarrierTextCallbackInfo;
 
+    @Mock
+    private CarrierNameCustomization mCarrierNameCustomization;
     private CarrierTextManager mCarrierTextManager;
 
     private Void checkMainThread(InvocationOnMock inv) {
@@ -146,7 +155,7 @@ public class CarrierTextManagerTest extends SysuiTestCase {
         mCarrierTextManager = new CarrierTextManager.Builder(
                 mContext, mContext.getResources(), mWifiManager,
                 mTelephonyManager, mTelephonyListenerManager, mWakefulnessLifecycle, mMainExecutor,
-                mBgExecutor, mKeyguardUpdateMonitor)
+                mBgExecutor, mKeyguardUpdateMonitor, mCarrierNameCustomization)
                 .setShowAirplaneMode(true)
                 .setShowMissingSim(true)
                 .build();

@@ -367,6 +367,7 @@ public abstract class JobServiceEngine {
     /**
      * Engine's request to get how much data has been downloaded.
      *
+     * @hide
      * @see JobService#getTransferredDownloadBytes()
      */
     @BytesLong
@@ -381,6 +382,7 @@ public abstract class JobServiceEngine {
     /**
      * Engine's request to get how much data has been uploaded.
      *
+     * @hide
      * @see JobService#getTransferredUploadBytes()
      */
     @BytesLong
@@ -395,6 +397,7 @@ public abstract class JobServiceEngine {
     /**
      * Call in to engine to report data transfer progress.
      *
+     * @hide
      * @see JobService#updateTransferredNetworkBytes(JobParameters, long, long)
      */
     public void updateTransferredNetworkBytes(@NonNull JobParameters params,
@@ -413,6 +416,7 @@ public abstract class JobServiceEngine {
     /**
      * Call in to engine to report data transfer progress.
      *
+     * @hide
      * @see JobService#updateEstimatedNetworkBytes(JobParameters, JobWorkItem, long, long)
      */
     public void updateEstimatedNetworkBytes(@NonNull JobParameters params,

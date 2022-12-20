@@ -47,6 +47,7 @@ import com.android.credentialmanager.common.ui.CancelButton
 import com.android.credentialmanager.common.ui.ConfirmButton
 import com.android.credentialmanager.common.ui.Entry
 import com.android.credentialmanager.ui.theme.EntryShape
+import com.android.credentialmanager.ui.theme.LocalAndroidColorScheme
 import com.android.credentialmanager.jetpack.developer.PublicKeyCredential.Companion.TYPE_PUBLIC_KEY_CREDENTIAL
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -75,15 +76,20 @@ fun CreateCredentialScreen(
           onCancel = viewModel::onCancel,
         )
         CreateScreenState.PROVIDER_SELECTION -> ProviderSelectionCard(
+          requestDisplayInfo = uiState.requestDisplayInfo,
           enabledProviderList = uiState.enabledProviders,
+          disabledProviderList = uiState.disabledProviders,
           onCancel = viewModel::onCancel,
-          onProviderSelected = viewModel::onProviderSelected
+          onOptionSelected = viewModel::onEntrySelectedFromFirstUseScreen,
+          onDisabledPasswordManagerSelected = viewModel::onDisabledPasswordManagerSelected,
+          onRemoteEntrySelected = selectEntryCallback,
         )
         CreateScreenState.CREATION_OPTION_SELECTION -> CreationSelectionCard(
           requestDisplayInfo = uiState.requestDisplayInfo,
           enabledProviderList = uiState.enabledProviders,
           providerInfo = uiState.activeEntry?.activeProvider!!,
           createOptionInfo = uiState.activeEntry.activeEntryInfo as CreateOptionInfo,
+          showActiveEntryOnly = uiState.showActiveEntryOnly,
           onOptionSelected = selectEntryCallback,
           onConfirm = confirmEntryCallback,
           onCancel = viewModel::onCancel,
@@ -94,7 +100,7 @@ fun CreateCredentialScreen(
           enabledProviderList = uiState.enabledProviders,
           disabledProviderList = uiState.disabledProviders,
           onBackButtonSelected = viewModel::onBackButtonSelected,
-          onOptionSelected = viewModel::onMoreOptionsRowSelected,
+          onOptionSelected = viewModel::onEntrySelectedFromMoreOptionScreen,
           onDisabledPasswordManagerSelected = viewModel::onDisabledPasswordManagerSelected,
           onRemoteEntrySelected = selectEntryCallback,
         )
@@ -125,18 +131,20 @@ fun ConfirmationCard(
       Icon(
         painter = painterResource(R.drawable.ic_passkey),
         contentDescription = null,
-        tint = Color.Unspecified,
-        modifier = Modifier.align(alignment = Alignment.CenterHorizontally).padding(top = 24.dp)
+        tint = LocalAndroidColorScheme.current.colorAccentPrimaryVariant,
+        modifier = Modifier.align(alignment = Alignment.CenterHorizontally)
+          .padding(top = 24.dp, bottom = 12.dp)
       )
       Text(
         text = stringResource(R.string.passkey_creation_intro_title),
         style = MaterialTheme.typography.titleMedium,
         modifier = Modifier
           .padding(horizontal = 24.dp)
-          .align(alignment = Alignment.CenterHorizontally)
+          .align(alignment = Alignment.CenterHorizontally),
+        textAlign = TextAlign.Center
       )
       Divider(
-        thickness = 24.dp,
+        thickness = 16.dp,
         color = Color.Transparent
       )
       Text(
@@ -145,7 +153,7 @@ fun ConfirmationCard(
         modifier = Modifier.padding(horizontal = 28.dp)
       )
       Divider(
-        thickness = 48.dp,
+        thickness = 32.dp,
         color = Color.Transparent
       )
       Row(
@@ -164,7 +172,7 @@ fun ConfirmationCard(
       Divider(
         thickness = 18.dp,
         color = Color.Transparent,
-        modifier = Modifier.padding(bottom = 16.dp)
+        modifier = Modifier.padding(bottom = 18.dp)
       )
     }
   }
@@ -173,16 +181,40 @@ fun ConfirmationCard(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProviderSelectionCard(
+  requestDisplayInfo: RequestDisplayInfo,
   enabledProviderList: List<EnabledProviderInfo>,
-  onProviderSelected: (String) -> Unit,
-  onCancel: () -> Unit
+  disabledProviderList: List<DisabledProviderInfo>?,
+  onOptionSelected: (ActiveEntry) -> Unit,
+  onDisabledPasswordManagerSelected: () -> Unit,
+  onCancel: () -> Unit,
+  onRemoteEntrySelected: (EntryInfo) -> Unit,
 ) {
   Card() {
     Column() {
+      Icon(
+        bitmap = requestDisplayInfo.typeIcon.toBitmap().asImageBitmap(),
+        contentDescription = null,
+        tint = LocalAndroidColorScheme.current.colorAccentPrimaryVariant,
+        modifier = Modifier.align(alignment = Alignment.CenterHorizontally)
+          .padding(top = 24.dp, bottom = 16.dp).size(32.dp)
+      )
       Text(
-        text = stringResource(R.string.choose_provider_title),
+        text = stringResource(
+          R.string.choose_provider_title,
+          when (requestDisplayInfo.type) {
+            TYPE_PUBLIC_KEY_CREDENTIAL -> stringResource(R.string.create_your_passkey)
+            TYPE_PASSWORD_CREDENTIAL -> stringResource(R.string.save_your_password)
+            else -> stringResource(R.string.save_your_sign_in_info)
+          },
+        ),
         style = MaterialTheme.typography.titleMedium,
-        modifier = Modifier.padding(all = 24.dp).align(alignment = Alignment.CenterHorizontally)
+        modifier = Modifier.padding(horizontal = 24.dp)
+          .align(alignment = Alignment.CenterHorizontally),
+        textAlign = TextAlign.Center
+      )
+      Divider(
+        thickness = 16.dp,
+        color = Color.Transparent
       )
       Text(
         text = stringResource(R.string.choose_provider_body),
@@ -190,7 +222,7 @@ fun ProviderSelectionCard(
         modifier = Modifier.padding(horizontal = 28.dp)
       )
       Divider(
-        thickness = 24.dp,
+        thickness = 18.dp,
         color = Color.Transparent
       )
       Card(
@@ -202,17 +234,45 @@ fun ProviderSelectionCard(
         LazyColumn(
           verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-          enabledProviderList.forEach {
+          enabledProviderList.forEach { enabledProviderInfo ->
+            enabledProviderInfo.createOptions.forEach { createOptionInfo ->
+              item {
+                MoreOptionsInfoRow(
+                  providerInfo = enabledProviderInfo,
+                  createOptionInfo = createOptionInfo,
+                  onOptionSelected = {
+                    onOptionSelected(ActiveEntry(enabledProviderInfo, createOptionInfo))
+                  })
+              }
+            }
+          }
+          if (disabledProviderList != null) {
             item {
-              ProviderRow(providerInfo = it, onProviderSelected = onProviderSelected)
+              MoreOptionsDisabledProvidersRow(
+                disabledProviders = disabledProviderList,
+                onDisabledPasswordManagerSelected = onDisabledPasswordManagerSelected,
+              )
             }
           }
         }
       }
-      Divider(
-        thickness = 24.dp,
-        color = Color.Transparent
-      )
+      // TODO: handle the error situation that if multiple remoteInfos exists
+      enabledProviderList.forEach { enabledProvider ->
+        if (enabledProvider.remoteEntry != null) {
+          TextButton(
+            onClick = {
+              onRemoteEntrySelected(enabledProvider.remoteEntry!!) },
+            modifier = Modifier
+              .padding(horizontal = 24.dp)
+              .align(alignment = Alignment.CenterHorizontally)
+          ) {
+            Text(
+              text = stringResource(R.string.string_save_to_another_device),
+              textAlign = TextAlign.Center,
+            )
+          }
+        }
+      }
       Row(
         horizontalArrangement = Arrangement.Start,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
@@ -364,27 +424,6 @@ fun MoreOptionsRowIntroCard(
   }
 }
 
-@Composable
-fun ProviderRow(providerInfo: ProviderInfo, onProviderSelected: (String) -> Unit) {
-  Entry(
-    onClick = {onProviderSelected(providerInfo.name)},
-    icon = {
-      Image(modifier = Modifier.size(32.dp).padding(start = 10.dp),
-            bitmap = providerInfo.icon.toBitmap().asImageBitmap(),
-            // painter = painterResource(R.drawable.ic_passkey),
-            // TODO: add description.
-            contentDescription = "")
-    },
-    label = {
-      Text(
-        text = providerInfo.displayName,
-        style = MaterialTheme.typography.labelLarge,
-        modifier = Modifier.padding(vertical = 18.dp)
-      )
-    }
-  )
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreationSelectionCard(
@@ -392,6 +431,7 @@ fun CreationSelectionCard(
   enabledProviderList: List<EnabledProviderInfo>,
   providerInfo: EnabledProviderInfo,
   createOptionInfo: CreateOptionInfo,
+  showActiveEntryOnly: Boolean,
   onOptionSelected: (EntryInfo) -> Unit,
   onConfirm: () -> Unit,
   onCancel: () -> Unit,
@@ -449,41 +489,43 @@ fun CreationSelectionCard(
           onOptionSelected = onOptionSelected
         )
       }
-      var createOptionsSize = 0
-      enabledProviderList.forEach{
-        enabledProvider -> createOptionsSize += enabledProvider.createOptions.size}
-      if (createOptionsSize > 1) {
-        TextButton(
-          onClick = onMoreOptionsSelected,
-          modifier = Modifier
-          .padding(horizontal = 24.dp)
-          .align(alignment = Alignment.CenterHorizontally)){
-          Text(
-              text =
-                when (requestDisplayInfo.type) {
-                  TYPE_PUBLIC_KEY_CREDENTIAL ->
-                    stringResource(R.string.string_create_in_another_place)
-                  else -> stringResource(R.string.string_save_to_another_place)},
-            textAlign = TextAlign.Center,
-          )
-        }
-      } else if (
-        requestDisplayInfo.type == TYPE_PUBLIC_KEY_CREDENTIAL
-      ) {
-        // TODO: handle the error situation that if multiple remoteInfos exists
-        enabledProviderList.forEach { enabledProvider ->
-          if (enabledProvider.remoteEntry != null) {
-            TextButton(
-              onClick = {
-                onOptionSelected(enabledProvider.remoteEntry!!) },
-              modifier = Modifier
-                .padding(horizontal = 24.dp)
-                .align(alignment = Alignment.CenterHorizontally)
-            ) {
-              Text(
-                text = stringResource(R.string.string_use_another_device),
-                textAlign = TextAlign.Center,
-              )
+      if (!showActiveEntryOnly) {
+        var createOptionsSize = 0
+        enabledProviderList.forEach{
+          enabledProvider -> createOptionsSize += enabledProvider.createOptions.size}
+        if (createOptionsSize > 1) {
+          TextButton(
+            onClick = onMoreOptionsSelected,
+            modifier = Modifier
+            .padding(horizontal = 24.dp)
+            .align(alignment = Alignment.CenterHorizontally)){
+            Text(
+                text =
+                  when (requestDisplayInfo.type) {
+                    TYPE_PUBLIC_KEY_CREDENTIAL ->
+                      stringResource(R.string.string_create_in_another_place)
+                    else -> stringResource(R.string.string_save_to_another_place)},
+              textAlign = TextAlign.Center,
+            )
+          }
+        } else if (
+          requestDisplayInfo.type == TYPE_PUBLIC_KEY_CREDENTIAL
+        ) {
+          // TODO: handle the error situation that if multiple remoteInfos exists
+          enabledProviderList.forEach { enabledProvider ->
+            if (enabledProvider.remoteEntry != null) {
+              TextButton(
+                onClick = {
+                  onOptionSelected(enabledProvider.remoteEntry!!) },
+                modifier = Modifier
+                  .padding(horizontal = 24.dp)
+                  .align(alignment = Alignment.CenterHorizontally)
+              ) {
+                Text(
+                  text = stringResource(R.string.string_use_another_device),
+                  textAlign = TextAlign.Center,
+                )
+              }
             }
           }
         }
@@ -524,31 +566,52 @@ fun PrimaryCreateOptionRow(
   Entry(
     onClick = {onOptionSelected(createOptionInfo)},
     icon = {
-      Image(modifier = Modifier.size(32.dp).padding(start = 10.dp),
-        bitmap = createOptionInfo.credentialTypeIcon.toBitmap().asImageBitmap(),
-        contentDescription = null)
+      Icon(
+        bitmap = createOptionInfo.profileIcon.toBitmap().asImageBitmap(),
+        contentDescription = null,
+        tint = LocalAndroidColorScheme.current.colorAccentPrimaryVariant,
+        modifier = Modifier.padding(start = 18.dp).size(32.dp)
+      )
     },
     label = {
       Column() {
         // TODO: Add the function to hide/view password when the type is create password
-        if (requestDisplayInfo.type == TYPE_PUBLIC_KEY_CREDENTIAL ||
-          requestDisplayInfo.type == TYPE_PASSWORD_CREDENTIAL) {
-          Text(
-            text = requestDisplayInfo.title,
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(top = 16.dp)
-          )
-          Text(
-            text = requestDisplayInfo.subtitle,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.padding(bottom = 16.dp)
-          )
-        } else {
-          Text(
-            text = requestDisplayInfo.title,
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(top = 16.dp, bottom = 16.dp)
-          )
+        when (requestDisplayInfo.type) {
+            TYPE_PUBLIC_KEY_CREDENTIAL -> {
+              Text(
+                text = requestDisplayInfo.title,
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(top = 16.dp)
+              )
+              Text(
+                text = if (requestDisplayInfo.subtitle != null) {
+                  stringResource(
+                    R.string.passkey_before_subtitle) + " - " + requestDisplayInfo.subtitle
+                } else {stringResource(R.string.passkey_before_subtitle)},
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(bottom = 16.dp)
+              )
+            }
+            TYPE_PASSWORD_CREDENTIAL -> {
+              Text(
+                text = requestDisplayInfo.title,
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(top = 16.dp)
+              )
+              Text(
+                // This subtitle would never be null for create password
+                text = requestDisplayInfo.subtitle ?: "",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(bottom = 16.dp)
+              )
+            }
+            else -> {
+              Text(
+                text = requestDisplayInfo.title,
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(top = 16.dp, bottom = 16.dp)
+              )
+            }
         }
       }
     }
@@ -645,6 +708,7 @@ fun MoreOptionsDisabledProvidersRow(
           style = MaterialTheme.typography.titleLarge,
           modifier = Modifier.padding(top = 16.dp, start = 16.dp)
         )
+        // TODO: Update the subtitle once design is confirmed
         Text(
           text = disabledProviders.joinToString(separator = ", "){ it.displayName },
           style = MaterialTheme.typography.bodyMedium,

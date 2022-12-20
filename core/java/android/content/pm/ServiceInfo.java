@@ -106,7 +106,7 @@ public class ServiceInfo extends ComponentInfo
      * <p>Apps targeting API level {@link android.os.Build.VERSION_CODES#UPSIDE_DOWN_CAKE} and
      * later should NOT use this type,
      * calling {@link android.app.Service#startForeground(int, android.app.Notification, int)} with
-     * this type will get a {@link android.app.ForegroundServiceTypeNotAllowedException}.</p>
+     * this type will get a {@link android.app.InvalidForegroundServiceTypeException}.</p>
      *
      * @deprecated Do not use.
      */
@@ -124,7 +124,7 @@ public class ServiceInfo extends ComponentInfo
      * calling {@link android.app.Service#startForeground(int, android.app.Notification, int)} with
      * this type on devices running {@link android.os.Build.VERSION_CODES#UPSIDE_DOWN_CAKE} is still
      * allowed, but calling it with this type on devices running future platform releases may get a
-     * {@link android.app.ForegroundServiceTypeNotAllowedException}.</p>
+     * {@link android.app.InvalidForegroundServiceTypeException}.</p>
      *
      * @deprecated Use {@link android.app.job.JobInfo.Builder} data transfer APIs instead.
      */
@@ -308,7 +308,9 @@ public class ServiceInfo extends ComponentInfo
      * permissions:
      * {@link android.Manifest.permission#ACTIVITY_RECOGNITION},
      * {@link android.Manifest.permission#BODY_SENSORS},
-     * {@link android.Manifest.permission#HIGH_SAMPLING_RATE_SENSORS}.
+     * {@link android.Manifest.permission#HIGH_SAMPLING_RATE_SENSORS},
+     * or one of the {@code "android.permission.health.*"} permissions defined in the
+     * {@link android.healthconnect.HealthPermissions}.
      */
     @RequiresPermission(
             allOf = {
@@ -424,7 +426,7 @@ public class ServiceInfo extends ComponentInfo
      *      android:name=".MySpecialForegroundService"
      *      android:foregroundServiceType="specialUse|foo"&gt;
      *      &lt;property
-     *          android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE""
+     *          android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
      *          android:value="foo"
      *      /&gt;
      * &lt;/service&gt;

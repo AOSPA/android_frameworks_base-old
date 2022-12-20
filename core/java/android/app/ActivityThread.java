@@ -47,6 +47,8 @@ import android.app.RemoteServiceException.MissingRequestPasswordComplexityPermis
 import android.app.assist.AssistContent;
 import android.app.assist.AssistStructure;
 import android.app.backup.BackupAgent;
+import android.app.backup.BackupAnnotations.BackupDestination;
+import android.app.backup.BackupAnnotations.OperationType;
 import android.app.servertransaction.ActivityLifecycleItem;
 import android.app.servertransaction.ActivityLifecycleItem.LifecycleState;
 import android.app.servertransaction.ActivityRelaunchItem;
@@ -800,7 +802,7 @@ public final class ActivityThread extends ClientTransactionHandler
         ApplicationInfo appInfo;
         int backupMode;
         int userId;
-        int operationType;
+        @BackupDestination int backupDestination;
         public String toString() {
             return "CreateBackupAgentData{appInfo=" + appInfo
                     + " backupAgent=" + appInfo.backupAgentName
@@ -1035,12 +1037,12 @@ public final class ActivityThread extends ClientTransactionHandler
         }
 
         public final void scheduleCreateBackupAgent(ApplicationInfo app,
-                int backupMode, int userId, int operationType) {
+                int backupMode, int userId, @BackupDestination int backupDestination) {
             CreateBackupAgentData d = new CreateBackupAgentData();
             d.appInfo = app;
             d.backupMode = backupMode;
             d.userId = userId;
-            d.operationType = operationType;
+            d.backupDestination = backupDestination;
 
             sendMessage(H.CREATE_BACKUP_AGENT, d);
         }
@@ -4403,7 +4405,8 @@ public final class ActivityThread extends ClientTransactionHandler
                     context.setOuterContext(agent);
                     agent.attach(context);
 
-                    agent.onCreate(UserHandle.of(data.userId), data.operationType);
+                    agent.onCreate(UserHandle.of(data.userId), data.backupDestination,
+                            getOperationTypeFromBackupMode(data.backupMode));
                     binder = agent.onBind();
                     backupAgents.put(packageName, agent);
                 } catch (Exception e) {
@@ -4428,6 +4431,22 @@ public final class ActivityThread extends ClientTransactionHandler
         } catch (Exception e) {
             throw new RuntimeException("Unable to create BackupAgent "
                     + classname + ": " + e.toString(), e);
+        }
+    }
+
+    @OperationType
+    private static int getOperationTypeFromBackupMode(int backupMode) {
+        switch (backupMode) {
+            case ApplicationThreadConstants.BACKUP_MODE_RESTORE:
+            case ApplicationThreadConstants.BACKUP_MODE_RESTORE_FULL:
+                return OperationType.RESTORE;
+            case ApplicationThreadConstants.BACKUP_MODE_FULL:
+            case ApplicationThreadConstants.BACKUP_MODE_INCREMENTAL:
+                return OperationType.BACKUP;
+            default:
+                Slog.w(TAG, "Invalid backup mode when initialising BackupAgent: "
+                        + backupMode);
+                return OperationType.UNKNOWN;
         }
     }
 
@@ -6408,23 +6427,28 @@ public final class ActivityThread extends ClientTransactionHandler
     }
 
     private void handleTrimMemory(int level) {
-        Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "trimMemory");
+        if (Trace.isTagEnabled(Trace.TRACE_TAG_ACTIVITY_MANAGER)) {
+            Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "trimMemory: " + level);
+        }
         if (DEBUG_MEMORY_TRIM) Slog.v(TAG, "Trimming memory to level: " + level);
 
-        if (level >= ComponentCallbacks2.TRIM_MEMORY_COMPLETE) {
-            PropertyInvalidatedCache.onTrimMemory();
-        }
+        try {
+            if (level >= ComponentCallbacks2.TRIM_MEMORY_COMPLETE) {
+                PropertyInvalidatedCache.onTrimMemory();
+            }
 
-        final ArrayList<ComponentCallbacks2> callbacks =
-                collectComponentCallbacks(true /* includeUiContexts */);
+            final ArrayList<ComponentCallbacks2> callbacks =
+                    collectComponentCallbacks(true /* includeUiContexts */);
 
-        final int N = callbacks.size();
-        for (int i = 0; i < N; i++) {
-            callbacks.get(i).onTrimMemory(level);
+            final int N = callbacks.size();
+            for (int i = 0; i < N; i++) {
+                callbacks.get(i).onTrimMemory(level);
+            }
+        } finally {
+            Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
         }
 
         WindowManagerGlobal.getInstance().trimMemory(level);
-        Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
 
         if (SystemProperties.getInt("debug.am.run_gc_trim_level", Integer.MAX_VALUE) <= level) {
             unscheduleGcIdler();

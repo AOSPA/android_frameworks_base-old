@@ -140,6 +140,7 @@ import static com.android.server.wm.WindowManagerDebugConfig.SHOW_STACK_CRAWLS;
 import static com.android.server.wm.WindowManagerDebugConfig.SHOW_VERBOSE_TRANSACTIONS;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
+import static com.android.server.wm.WindowManagerServiceDumpProto.BACK_NAVIGATION;
 import static com.android.server.wm.WindowManagerServiceDumpProto.DISPLAY_FROZEN;
 import static com.android.server.wm.WindowManagerServiceDumpProto.FOCUSED_APP;
 import static com.android.server.wm.WindowManagerServiceDumpProto.FOCUSED_DISPLAY_ID;
@@ -2557,6 +2558,12 @@ public class WindowManagerService extends IWindowManager.Stub
                         && win.mSyncSeqId > lastSyncSeqId) {
                     maybeSyncSeqId = win.shouldSyncWithBuffers() ? win.mSyncSeqId : -1;
                     win.markRedrawForSyncReported();
+                    if (win.mSyncState == WindowContainer.SYNC_STATE_WAITING_FOR_DRAW
+                            && winAnimator.mDrawState == WindowStateAnimator.HAS_DRAWN
+                            && maybeSyncSeqId < 0) {
+                        // Do not wait for a drawn window which won't report draw.
+                        win.onSyncFinishedDrawing();
+                    }
                 } else {
                     maybeSyncSeqId = -1;
                 }
@@ -6584,6 +6591,9 @@ public class WindowManagerService extends IWindowManager.Stub
         // Once we move the window layout to the client side, this can be false when we are waiting
         // for the frames.
         proto.write(WINDOW_FRAMES_VALID, true);
+
+        // Write the BackNavigationController's state into the protocol buffer
+        mAtmService.mBackNavigationController.dumpDebug(proto, BACK_NAVIGATION);
     }
 
     private void dumpWindowsLocked(PrintWriter pw, boolean dumpAll,
