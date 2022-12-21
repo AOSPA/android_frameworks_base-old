@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "f2ca6357_a9736d6d",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2022-12-21T11:18:20Z",
+      "side": 1,
+      "message": "it works, but this MUST be skipped when we rebase on qpr1 qssi tags as they probably wont miss their own code to hide it",
+      "revId": "8f1e676b959d2e40516d783ec01d7e58e8c33d42",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
