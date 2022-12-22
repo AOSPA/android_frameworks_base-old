@@ -2126,8 +2126,8 @@
     <!-- Message body of the dialog to turn off data usage [CHAR LIMIT=NONE] -->
     <string name="mobile_data_disable_message">You won\’t have access to data or the internet through <xliff:g id="carrier" example="T-Mobile">%s</xliff:g>. Internet will only be available via Wi-Fi.</string>
 
-    <!-- Message body of the dialog to turn off mobile data when IMS is registered on C_IWLAN and device is in a call [CHAR LIMIT=NONE] -->
-    <string name="mobile_data_disable_ciwlan_call_message">Disabling mobile data may cause ongoing call disconnect.</string>
+    <!-- Message body of the dialog to turn off mobile data when IMS is registered on C_IWLAN,UE is in C_IWLAN-only mode, and device is in a call [CHAR LIMIT=NONE] -->
+    <string name="mobile_data_disable_ciwlan_call_message">Disabling mobile data will cause ongoing call disconnect.</string>
 
     <!-- Internet dialog, summary of mobile network when there is an ongoing call on the non default data subscription. [CHAR LIMIT=NONE] -->
     <string name="mobile_data_summary_not_allowed_to_disable_data">Unavailable during a call on the other SIM</string>
