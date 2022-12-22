@@ -44,6 +44,8 @@ public class A2dpProfile implements LocalBluetoothProfile {
     private static final String TAG = "A2dpProfile";
     private static boolean V = true;
 
+    private static final int SOURCE_CODEC_TYPE_OPUS = 6; // TODO remove in U
+
     private Context mContext;
 
     private BluetoothA2dp mService;
@@ -375,6 +377,9 @@ public class A2dpProfile implements LocalBluetoothProfile {
            case BluetoothCodecConfig.SOURCE_CODEC_TYPE_LC3:
                index = 8;
                break;
+            case SOURCE_CODEC_TYPE_OPUS: // TODO update in U
+                index = 9;
+                break;
            }
 
         if (index < 0) {
