@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "9934b396_bcc637dc",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2022-12-23T10:53:55Z",
+      "side": 1,
+      "message": "breaks clickablility of privacy chip, keep on hold for now",
+      "revId": "730f6e354554d1021d0a388f08b8df55f522836c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
