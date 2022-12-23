@@ -20,9 +20,11 @@ package android.hardware.display;
 import static android.hardware.display.DisplayManager.EventsMask;
 import static android.view.Display.HdrCapabilities.HdrType;
 
+import android.Manifest;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.RequiresPermission;
 import android.app.PropertyInvalidatedCache;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
@@ -30,6 +32,7 @@ import android.content.pm.ParceledListSlice;
 import android.content.res.Resources;
 import android.graphics.ColorSpace;
 import android.graphics.Point;
+import android.hardware.OverlayProperties;
 import android.hardware.display.DisplayManager.DisplayListener;
 import android.hardware.graphics.common.DisplayDecorationSupport;
 import android.media.projection.IMediaProjection;
@@ -110,6 +113,7 @@ public final class DisplayManagerGlobal {
 
     private final SparseArray<DisplayInfo> mDisplayInfoCache = new SparseArray<>();
     private final ColorSpace mWideColorSpace;
+    private final OverlayProperties mOverlayProperties = new OverlayProperties();
     private int[] mDisplayIdCache;
 
     private int mWifiDisplayScanNestCount;
@@ -577,6 +581,20 @@ public final class DisplayManagerGlobal {
         }
     }
 
+    /**
+     * Overrides HDR modes for a display device.
+     *
+     */
+    @RequiresPermission(Manifest.permission.ACCESS_SURFACE_FLINGER)
+    public void overrideHdrTypes(int displayId, int[] modes) {
+        try {
+            mDm.overrideHdrTypes(displayId, modes);
+        } catch (RemoteException ex) {
+            throw ex.rethrowFromSystemServer();
+        }
+    }
+
+
     public void requestColorMode(int displayId, int colorMode) {
         try {
             mDm.requestColorMode(displayId, colorMode);
@@ -708,6 +726,11 @@ public final class DisplayManagerGlobal {
      */
     public ColorSpace getPreferredWideGamutColorSpace() {
         return mWideColorSpace;
+    }
+
+    /** @hide */
+    public OverlayProperties getOverlaySupport() {
+        return mOverlayProperties;
     }
 
     /**

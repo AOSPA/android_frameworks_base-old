@@ -1606,15 +1606,6 @@ public class StorageManager {
     }
 
     /** {@hide} */
-    public void unlockUserKey(int userId, int serialNumber, byte[] secret) {
-        try {
-            mStorageManager.unlockUserKey(userId, serialNumber, secret);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /** {@hide} */
     public void lockUserKey(int userId) {
         try {
             mStorageManager.lockUserKey(userId);
@@ -2549,7 +2540,7 @@ public class StorageManager {
      * called on first creation of a new file on external storage, and whenever the
      * media type of the file is updated later.
      *
-     * This API doesn't require any special permissions, though typical implementations
+     * This API requires MANAGE_EXTERNAL_STORAGE permission and typical implementations
      * will require being called from an SELinux domain that allows setting file attributes
      * related to quota (eg the GID or project ID).
      *
@@ -2568,11 +2559,16 @@ public class StorageManager {
      * @hide
      */
     @SystemApi
+    @RequiresPermission(android.Manifest.permission.MANAGE_EXTERNAL_STORAGE)
     public void updateExternalStorageFileQuotaType(@NonNull File path,
             @QuotaType int quotaType) throws IOException {
         long projectId;
         final String filePath = path.getCanonicalPath();
-        final StorageVolume volume = getStorageVolume(path);
+        // MANAGE_EXTERNAL_STORAGE permission is required as FLAG_INCLUDE_SHARED_PROFILE is being
+        // set while querying getVolumeList.
+        final StorageVolume[] availableVolumes = getVolumeList(mContext.getUserId(),
+                FLAG_REAL_STATE | FLAG_INCLUDE_INVISIBLE | FLAG_INCLUDE_SHARED_PROFILE);
+        final StorageVolume volume = getStorageVolume(availableVolumes, path);
         if (volume == null) {
             Log.w(TAG, "Failed to update quota type for " + filePath);
             return;

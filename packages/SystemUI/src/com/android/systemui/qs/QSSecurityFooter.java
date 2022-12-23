@@ -39,6 +39,7 @@ import androidx.annotation.Nullable;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.systemui.FontSizeUtils;
 import com.android.systemui.R;
+import com.android.systemui.animation.Expandable;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.common.shared.model.Icon;
 import com.android.systemui.dagger.qualifiers.Background;
@@ -97,7 +98,8 @@ public class QSSecurityFooter extends ViewController<View>
         super(rootView);
         mFooterText = mView.findViewById(R.id.footer_text);
         mPrimaryFooterIcon = mView.findViewById(R.id.primary_footer_icon);
-        mFooterIcon = new Icon.Resource(R.drawable.ic_info_outline);
+        mFooterIcon = new Icon.Resource(
+                R.drawable.ic_info_outline, /* contentDescription= */ null);
         mContext = rootView.getContext();
         mSecurityController = securityController;
         mMainHandler = mainHandler;
@@ -168,7 +170,7 @@ public class QSSecurityFooter extends ViewController<View>
 
     // TODO(b/242040009): Remove this.
     public void showDeviceMonitoringDialog() {
-        mQSSecurityFooterUtils.showDeviceMonitoringDialog(mContext, mView);
+        mQSSecurityFooterUtils.showDeviceMonitoringDialog(mContext, Expandable.fromView(mView));
     }
 
     public void refreshState() {

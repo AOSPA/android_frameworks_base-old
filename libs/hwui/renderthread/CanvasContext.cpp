@@ -42,9 +42,6 @@
 #include "utils/GLUtils.h"
 #include "utils/TimeUtils.h"
 
-#define TRIM_MEMORY_COMPLETE 80
-#define TRIM_MEMORY_UI_HIDDEN 20
-
 #define LOG_FRAMETIME_MMA 0
 
 #if LOG_FRAMETIME_MMA
@@ -122,6 +119,7 @@ CanvasContext::CanvasContext(RenderThread& thread, bool translucent, RenderNode*
         , mProfiler(mJankTracker.frames(), thread.timeLord().frameIntervalNanos())
         , mContentDrawBounds(0, 0, 0, 0)
         , mRenderPipeline(std::move(renderPipeline)) {
+    mRenderThread.cacheManager().registerCanvasContext(this);
     rootRenderNode->makeRoot();
     mRenderNodes.emplace_back(rootRenderNode);
     mProfiler.setDensity(DeviceInfo::getDensity());
@@ -133,6 +131,7 @@ CanvasContext::~CanvasContext() {
         node->clearRoot();
     }
     mRenderNodes.clear();
+    mRenderThread.cacheManager().unregisterCanvasContext(this);
 }
 
 void CanvasContext::addRenderNode(RenderNode* node, bool placeFront) {
@@ -154,6 +153,7 @@ void CanvasContext::destroy() {
     freePrefetchedLayers();
     destroyHardwareResources();
     mAnimationContext->destroy();
+    mRenderThread.cacheManager().onContextStopped(this);
 }
 
 static void setBufferCount(ANativeWindow* window) {
@@ -251,6 +251,7 @@ void CanvasContext::setStopped(bool stopped) {
             mGenerationID++;
             mRenderThread.removeFrameCallback(this);
             mRenderPipeline->onStop();
+            mRenderThread.cacheManager().onContextStopped(this);
         } else if (mIsDirty && hasSurface()) {
             mRenderThread.postFrameCallback(this);
         }
@@ -461,7 +462,6 @@ void CanvasContext::prepareTree(TreeInfo& info, int64_t* uiFrameInfo, int64_t sy
 }
 
 void CanvasContext::stopDrawing() {
-    cleanupResources();
     mRenderThread.removeFrameCallback(this);
     mAnimationContext->pauseAnimators();
     mGenerationID++;
@@ -472,11 +472,11 @@ void CanvasContext::notifyFramePending() {
     mRenderThread.pushBackFrameCallback(this);
 }
 
-nsecs_t CanvasContext::draw() {
+std::optional<nsecs_t> CanvasContext::draw() {
     if (auto grContext = getGrContext()) {
         if (grContext->abandoned()) {
             LOG_ALWAYS_FATAL("GrContext is abandoned/device lost at start of CanvasContext::draw");
-            return 0;
+            return std::nullopt;
         }
     }
     SkRect dirty;
@@ -498,7 +498,7 @@ nsecs_t CanvasContext::draw() {
             std::invoke(func, false /* didProduceBuffer */);
         }
         mFrameCommitCallbacks.clear();
-        return 0;
+        return std::nullopt;
     }
 
     ScopedActiveContext activeContext(this);
@@ -543,6 +543,8 @@ nsecs_t CanvasContext::draw() {
     }
 
     bool requireSwap = false;
+    bool didDraw = false;
+
     int error = OK;
     bool didSwap = mRenderPipeline->swapBuffers(frame, drawResult.success, windowDirty,
                                                 mCurrentFrameInfo, &requireSwap);
@@ -553,7 +555,7 @@ nsecs_t CanvasContext::draw() {
     mIsDirty = false;
 
     if (requireSwap) {
-        bool didDraw = true;
+        didDraw = true;
         // Handle any swapchain errors
         error = mNativeSurface->getAndClearError();
         if (error == TIMED_OUT) {
@@ -648,23 +650,10 @@ nsecs_t CanvasContext::draw() {
         }
     }
 
-    cleanupResources();
     mRenderThread.cacheManager().onFrameCompleted();
-    return mCurrentFrameInfo->get(FrameInfoIndex::DequeueBufferDuration);
-}
-
-void CanvasContext::cleanupResources() {
-    auto& tracker = mJankTracker.frames();
-    auto size = tracker.size();
-    auto capacity = tracker.capacity();
-    if (size == capacity) {
-        nsecs_t nowNanos = systemTime(SYSTEM_TIME_MONOTONIC);
-        nsecs_t frameCompleteNanos =
-            tracker[0].get(FrameInfoIndex::FrameCompleted);
-        nsecs_t frameDiffNanos = nowNanos - frameCompleteNanos;
-        nsecs_t cleanupMillis = ns2ms(std::max(frameDiffNanos, 10_s));
-        mRenderThread.cacheManager().performDeferredCleanup(cleanupMillis);
-    }
+    return didDraw ? std::make_optional(
+                             mCurrentFrameInfo->get(FrameInfoIndex::DequeueBufferDuration))
+                   : std::nullopt;
 }
 
 void CanvasContext::reportMetricsWithPresentTime() {
@@ -790,6 +779,7 @@ SkISize CanvasContext::getNextFrameSize() const {
     SkISize size;
     size.fWidth = ANativeWindow_getWidth(anw);
     size.fHeight = ANativeWindow_getHeight(anw);
+    mRenderThread.cacheManager().notifyNextFrameSize(size.fWidth, size.fHeight);
     return size;
 }
 
@@ -865,18 +855,6 @@ void CanvasContext::destroyHardwareResources() {
             node->destroyHardwareResources();
         }
         mRenderPipeline->onDestroyHardwareResources();
-    }
-}
-
-void CanvasContext::trimMemory(RenderThread& thread, int level) {
-    ATRACE_CALL();
-    if (!thread.getGrContext()) return;
-    ATRACE_CALL();
-    if (level >= TRIM_MEMORY_COMPLETE) {
-        thread.cacheManager().trimMemory(CacheManager::TrimMemoryMode::Complete);
-        thread.destroyRenderingContext();
-    } else if (level >= TRIM_MEMORY_UI_HIDDEN) {
-        thread.cacheManager().trimMemory(CacheManager::TrimMemoryMode::UiHidden);
     }
 }
 

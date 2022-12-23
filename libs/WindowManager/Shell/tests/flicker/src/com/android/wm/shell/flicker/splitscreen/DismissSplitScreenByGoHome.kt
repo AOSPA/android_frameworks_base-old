@@ -16,22 +16,19 @@
 
 package com.android.wm.shell.flicker.splitscreen
 
-import android.platform.test.annotations.Postsubmit
+import android.platform.test.annotations.FlakyTest
+import android.platform.test.annotations.IwTest
 import android.platform.test.annotations.Presubmit
-import android.view.WindowManagerPolicyConstants
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
-import com.android.server.wm.flicker.annotation.Group1
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.wm.shell.flicker.appWindowBecomesInvisible
-import com.android.wm.shell.flicker.helpers.SplitScreenHelper
 import com.android.wm.shell.flicker.layerBecomesInvisible
 import com.android.wm.shell.flicker.splitAppLayerBoundsBecomesInvisible
+import com.android.wm.shell.flicker.splitScreenDismissed
 import com.android.wm.shell.flicker.splitScreenDividerBecomesInvisible
-import org.junit.Assume
-import org.junit.Before
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -47,61 +44,57 @@ import org.junit.runners.Parameterized
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-@Group1
 class DismissSplitScreenByGoHome(
     testSpec: FlickerTestParameter
 ) : SplitScreenBase(testSpec) {
-
-    // TODO(b/231399940): Remove this once we can use recent shortcut to enter split.
-    @Before
-    open fun before() {
-        Assume.assumeTrue(tapl.isTablet)
-    }
 
     override val transition: FlickerBuilder.() -> Unit
         get() = {
             super.transition(this)
             setup {
-                eachRun {
-                    primaryApp.launchViaIntent(wmHelper)
-                    // TODO(b/231399940): Use recent shortcut to enter split.
-                    tapl.launchedAppState.taskbar
-                        .openAllApps()
-                        .getAppIcon(secondaryApp.appName)
-                        .dragToSplitscreen(secondaryApp.`package`, primaryApp.`package`)
-                    SplitScreenHelper.waitForSplitComplete(wmHelper, primaryApp, secondaryApp)
-                }
+                SplitScreenUtils.enterSplit(wmHelper, tapl, device, primaryApp, secondaryApp)
             }
             transitions {
                 tapl.goHome()
                 wmHelper.StateSyncBuilder()
-                    .withAppTransitionIdle()
                     .withHomeActivityVisible()
                     .waitForAndVerify()
             }
         }
+    @IwTest(focusArea = "sysui")
+    @Presubmit
+    @Test
+    fun cujCompleted() = testSpec.splitScreenDismissed(primaryApp, secondaryApp, toHome = true)
 
     @Presubmit
     @Test
     fun splitScreenDividerBecomesInvisible() = testSpec.splitScreenDividerBecomesInvisible()
 
-    @Presubmit
+    @FlakyTest(bugId = 241525302)
     @Test
     fun primaryAppLayerBecomesInvisible() = testSpec.layerBecomesInvisible(primaryApp)
 
-    @Presubmit
+    // TODO(b/245472831): Move back to presubmit after shell transitions landing.
+    @FlakyTest(bugId = 245472831)
     @Test
     fun secondaryAppLayerBecomesInvisible() = testSpec.layerBecomesInvisible(primaryApp)
 
-    @Presubmit
+    // TODO(b/245472831): Move back to presubmit after shell transitions landing.
+    @FlakyTest(bugId = 245472831)
     @Test
     fun primaryAppBoundsBecomesInvisible() = testSpec.splitAppLayerBoundsBecomesInvisible(
-        primaryApp, landscapePosLeft = false, portraitPosTop = false)
+        primaryApp,
+        landscapePosLeft = tapl.isTablet,
+        portraitPosTop = false
+    )
 
-    @Presubmit
+    @FlakyTest(bugId = 250530241)
     @Test
     fun secondaryAppBoundsBecomesInvisible() = testSpec.splitAppLayerBoundsBecomesInvisible(
-        secondaryApp, landscapePosLeft = true, portraitPosTop = true)
+        secondaryApp,
+        landscapePosLeft = !tapl.isTablet,
+        portraitPosTop = true
+    )
 
     @Presubmit
     @Test
@@ -112,67 +105,67 @@ class DismissSplitScreenByGoHome(
     fun secondaryAppWindowBecomesInvisible() = testSpec.appWindowBecomesInvisible(secondaryApp)
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @FlakyTest(bugId = 251268711)
     @Test
     override fun entireScreenCovered() =
         super.entireScreenCovered()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @Presubmit
     @Test
     override fun navBarLayerIsVisibleAtStartAndEnd() =
         super.navBarLayerIsVisibleAtStartAndEnd()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @FlakyTest(bugId = 206753786)
     @Test
     override fun navBarLayerPositionAtStartAndEnd() =
         super.navBarLayerPositionAtStartAndEnd()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @Presubmit
     @Test
     override fun navBarWindowIsAlwaysVisible() =
         super.navBarWindowIsAlwaysVisible()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @Presubmit
     @Test
     override fun statusBarLayerIsVisibleAtStartAndEnd() =
         super.statusBarLayerIsVisibleAtStartAndEnd()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @Presubmit
     @Test
     override fun statusBarLayerPositionAtStartAndEnd() =
         super.statusBarLayerPositionAtStartAndEnd()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @Presubmit
     @Test
     override fun statusBarWindowIsAlwaysVisible() =
         super.statusBarWindowIsAlwaysVisible()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @Presubmit
     @Test
     override fun taskBarLayerIsVisibleAtStartAndEnd() =
         super.taskBarLayerIsVisibleAtStartAndEnd()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @Presubmit
     @Test
     override fun taskBarWindowIsAlwaysVisible() =
         super.taskBarWindowIsAlwaysVisible()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @FlakyTest
     @Test
     override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
         super.visibleLayersShownMoreThanOneConsecutiveEntry()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @Presubmit
     @Test
     override fun visibleWindowsShownMoreThanOneConsecutiveEntry() =
         super.visibleWindowsShownMoreThanOneConsecutiveEntry()
@@ -181,11 +174,7 @@ class DismissSplitScreenByGoHome(
         @Parameterized.Parameters(name = "{0}")
         @JvmStatic
         fun getParams(): List<FlickerTestParameter> {
-            return FlickerTestParameterFactory.getInstance().getConfigNonRotationTests(
-                repetitions = SplitScreenHelper.TEST_REPETITIONS,
-                // TODO(b/176061063):The 3 buttons of nav bar do not exist in the hierarchy.
-                supportedNavigationModes =
-                    listOf(WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL_OVERLAY))
+            return FlickerTestParameterFactory.getInstance().getConfigNonRotationTests()
         }
     }
 }

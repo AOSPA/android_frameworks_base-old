@@ -63,8 +63,6 @@ import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseBooleanArray;
 import android.util.StatsEvent;
-import android.util.TypedXmlPullParser;
-import android.util.TypedXmlSerializer;
 import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.R;
@@ -73,6 +71,8 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.util.Preconditions;
 import com.android.internal.util.XmlUtils;
+import com.android.modules.utils.TypedXmlPullParser;
+import com.android.modules.utils.TypedXmlSerializer;
 import com.android.server.notification.PermissionHelper.PackagePermission;
 
 import org.json.JSONArray;
@@ -106,7 +106,7 @@ public class PreferencesHelper implements RankingConfig {
     private static final String NON_BLOCKABLE_CHANNEL_DELIM = ":";
 
     @VisibleForTesting
-    static final int NOTIFICATION_CHANNEL_COUNT_LIMIT = 50000;
+    static final int NOTIFICATION_CHANNEL_COUNT_LIMIT = 5000;
     @VisibleForTesting
     static final int NOTIFICATION_CHANNEL_GROUP_COUNT_LIMIT = 50000;
 

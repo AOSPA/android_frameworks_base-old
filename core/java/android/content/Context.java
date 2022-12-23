@@ -46,16 +46,20 @@ import android.app.VrManager;
 import android.app.ambientcontext.AmbientContextManager;
 import android.app.people.PeopleManager;
 import android.app.time.TimeManager;
+import android.companion.virtual.VirtualDeviceManager;
 import android.compat.annotation.ChangeId;
 import android.compat.annotation.EnabledSince;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.PermissionMethod;
+import android.content.pm.PermissionName;
 import android.content.res.AssetManager;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
+import android.credentials.CredentialManager;
 import android.database.DatabaseErrorHandler;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteDatabase.CursorFactory;
@@ -3814,6 +3818,7 @@ public abstract class Context {
             CAPTIONING_SERVICE,
             KEYGUARD_SERVICE,
             LOCATION_SERVICE,
+            HEALTHCONNECT_SERVICE,
             //@hide: COUNTRY_DETECTOR,
             SEARCH_SERVICE,
             SENSOR_SERVICE,
@@ -3916,7 +3921,7 @@ public abstract class Context {
             //@hide: INCIDENT_COMPANION_SERVICE,
             //@hide: STATS_COMPANION_SERVICE,
             COMPANION_DEVICE_SERVICE,
-            //@hide: VIRTUAL_DEVICE_SERVICE,
+            VIRTUAL_DEVICE_SERVICE,
             CROSS_PROFILE_APPS_SERVICE,
             //@hide: SYSTEM_UPDATE_SERVICE,
             //@hide: TIME_DETECTOR_SERVICE,
@@ -3932,6 +3937,8 @@ public abstract class Context {
             //@hide: ATTESTATION_VERIFICATION_SERVICE,
             //@hide: SAFETY_CENTER_SERVICE,
             DISPLAY_HASH_SERVICE,
+            CREDENTIAL_SERVICE,
+            DEVICE_LOCK_SERVICE,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ServiceName {}
@@ -5135,6 +5142,14 @@ public abstract class Context {
     public static final String PERMISSION_CHECKER_SERVICE = "permission_checker";
 
     /**
+     * Official published name of the (internal) permission enforcer service.
+     *
+     * @see #getSystemService(String)
+     * @hide
+     */
+    public static final String PERMISSION_ENFORCER_SERVICE = "permission_enforcer";
+
+    /**
      * Use with {@link #getSystemService(String) to retrieve an
      * {@link android.apphibernation.AppHibernationManager}} for
      * communicating with the hibernation service.
@@ -5185,6 +5200,15 @@ public abstract class Context {
      * @see #getSystemService(String)
      */
     public static final String DROPBOX_SERVICE = "dropbox";
+
+    /**
+     * System service name for BackgroundInstallControlService. This service supervises the MBAs
+     * on device and provides the related metadata of the MBAs.
+     *
+     * @hide
+     */
+    @SuppressLint("ServiceName")
+    public static final String BACKGROUND_INSTALL_CONTROL_SERVICE = "background_install_control";
 
     /**
      * System service name for BinaryTransparencyService. This is used to retrieve measurements
@@ -5437,8 +5461,8 @@ public abstract class Context {
      *
      * @see #getSystemService(String)
      * @see android.companion.virtual.VirtualDeviceManager
-     * @hide
      */
+    @SuppressLint("ServiceName")
     public static final String VIRTUAL_DEVICE_SERVICE = "virtualdevice";
 
     /**
@@ -6049,6 +6073,32 @@ public abstract class Context {
     public static final String AMBIENT_CONTEXT_SERVICE = "ambient_context";
 
     /**
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.healthconnect.HealthConnectManager}.
+     *
+     * @see #getSystemService(String)
+     * @see android.healthconnect.HealthConnectManager
+     */
+    public static final String HEALTHCONNECT_SERVICE = "healthconnect";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.credentials.CredentialManager} to authenticate a user to your app.
+     *
+     * @see #getSystemService(String)
+     * @see CredentialManager
+     */
+    public static final String CREDENTIAL_SERVICE = "credential";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.devicelock.DeviceLockManager}.
+     *
+     * @see #getSystemService(String)
+     */
+    public static final String DEVICE_LOCK_SERVICE = "device_lock";
+
+    /**
      * Determine whether the given permission is allowed for a particular
      * process and user ID running in the system.
      *
@@ -6066,7 +6116,9 @@ public abstract class Context {
      */
     @CheckResult(suggest="#enforcePermission(String,int,int,String)")
     @PackageManager.PermissionResult
-    public abstract int checkPermission(@NonNull String permission, int pid, int uid);
+    @PermissionMethod
+    public abstract int checkPermission(
+            @NonNull @PermissionName String permission, int pid, int uid);
 
     /** @hide */
     @SuppressWarnings("HiddenAbstractMethod")
@@ -6098,7 +6150,8 @@ public abstract class Context {
      */
     @CheckResult(suggest="#enforceCallingPermission(String,String)")
     @PackageManager.PermissionResult
-    public abstract int checkCallingPermission(@NonNull String permission);
+    @PermissionMethod
+    public abstract int checkCallingPermission(@NonNull @PermissionName String permission);
 
     /**
      * Determine whether the calling process of an IPC <em>or you</em> have been
@@ -6118,7 +6171,8 @@ public abstract class Context {
      */
     @CheckResult(suggest="#enforceCallingOrSelfPermission(String,String)")
     @PackageManager.PermissionResult
-    public abstract int checkCallingOrSelfPermission(@NonNull String permission);
+    @PermissionMethod
+    public abstract int checkCallingOrSelfPermission(@NonNull @PermissionName String permission);
 
     /**
      * Determine whether <em>you</em> have been granted a particular permission.
@@ -6146,8 +6200,9 @@ public abstract class Context {
      *
      * @see #checkPermission(String, int, int)
      */
+    @PermissionMethod
     public abstract void enforcePermission(
-            @NonNull String permission, int pid, int uid, @Nullable String message);
+            @NonNull @PermissionName String permission, int pid, int uid, @Nullable String message);
 
     /**
      * If the calling process of an IPC you are handling has not been
@@ -6167,8 +6222,9 @@ public abstract class Context {
      *
      * @see #checkCallingPermission(String)
      */
+    @PermissionMethod
     public abstract void enforceCallingPermission(
-            @NonNull String permission, @Nullable String message);
+            @NonNull @PermissionName String permission, @Nullable String message);
 
     /**
      * If neither you nor the calling process of an IPC you are
@@ -6183,8 +6239,9 @@ public abstract class Context {
      *
      * @see #checkCallingOrSelfPermission(String)
      */
+    @PermissionMethod
     public abstract void enforceCallingOrSelfPermission(
-            @NonNull String permission, @Nullable String message);
+            @NonNull @PermissionName String permission, @Nullable String message);
 
     /**
      * Grant permission to access a specific Uri to another package, regardless
@@ -6800,6 +6857,30 @@ public abstract class Context {
     public abstract Context createDisplayContext(@NonNull Display display);
 
     /**
+     * Returns a new {@code Context} object from the current context but with device association
+     * given by the {@code deviceId}. Each call to this method returns a new instance of a context
+     * object. Context objects are not shared; however, common state (such as the
+     * {@link ClassLoader} and other resources for the same configuration) can be shared, so the
+     * {@code Context} itself is lightweight.
+     * <p>
+     * Applications that run on virtual devices may use this method to access the default device
+     * capabilities and functionality (by passing
+     * {@link android.companion.virtual.VirtualDeviceManager#DEFAULT_DEVICE_ID}. Similarly,
+     * applications running on the default device may access the functionality of virtual devices.
+     * </p>
+     * @param deviceId The ID of the device to associate with this context.
+     * @return A context associated with the given device ID.
+     *
+     * @see #getDeviceId()
+     * @see VirtualDeviceManager#getVirtualDevices()
+     * @throws IllegalArgumentException if the given device ID is not a valid ID of the default
+     * device or a virtual device.
+     */
+    public @NonNull Context createDeviceContext(int deviceId) {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
+
+    /**
      * Creates a Context for a non-activity window.
      *
      * <p>
@@ -7120,6 +7201,20 @@ public abstract class Context {
      */
     @SuppressWarnings("HiddenAbstractMethod")
     public abstract void updateDisplay(int displayId);
+
+    /**
+     * Get the device ID this context is associated with. Applications can use this method to
+     * determine whether they are running on a virtual device and identify that device.
+     *
+     * The device ID of the host device is
+     * {@link android.companion.virtual.VirtualDeviceManager#DEFAULT_DEVICE_ID}
+     *
+     * @return the ID of the device this context is associated with.
+     * @see #createDeviceContext(int)
+     */
+    public int getDeviceId() {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
 
     /**
      * Indicates whether this Context is restricted.

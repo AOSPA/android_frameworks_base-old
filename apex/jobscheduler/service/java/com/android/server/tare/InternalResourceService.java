@@ -30,6 +30,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.AlarmManager;
 import android.app.AppOpsManager;
+import android.app.tare.EconomyManager;
 import android.app.tare.IEconomyManager;
 import android.app.usage.UsageEvents;
 import android.app.usage.UsageStatsManagerInternal;
@@ -43,6 +44,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.PackageManagerInternal;
 import android.database.ContentObserver;
 import android.net.Uri;
+import android.os.BatteryManager;
 import android.os.BatteryManagerInternal;
 import android.os.Binder;
 import android.os.Handler;
@@ -80,7 +82,7 @@ import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.Objects;
 
 /**
  * Responsible for handling app's ARC count based on events, ensuring ARCs are credited when
@@ -110,6 +112,19 @@ public class InternalResourceService extends SystemService {
      * limit).
      */
     private static final int QUANTITATIVE_EASING_BATTERY_THRESHOLD = 50;
+    /**
+     * The battery level above which we may consider adjusting the desired stock level.
+     */
+    private static final int STOCK_RECALCULATION_BATTERY_THRESHOLD = 80;
+    /**
+     * The amount of time to wait before considering recalculating the desired stock level.
+     */
+    private static final long STOCK_RECALCULATION_DELAY_MS = 16 * HOUR_IN_MILLIS;
+    /**
+     * The minimum amount of time we must have background drain for before considering
+     * recalculating the desired stock level.
+     */
+    private static final long STOCK_RECALCULATION_MIN_DATA_DURATION_MS = 8 * HOUR_IN_MILLIS;
     private static final int PACKAGE_QUERY_FLAGS =
             PackageManager.MATCH_DIRECT_BOOT_AWARE | PackageManager.MATCH_DIRECT_BOOT_UNAWARE
                     | PackageManager.MATCH_APEX;
@@ -146,8 +161,9 @@ public class InternalResourceService extends SystemService {
     @GuardedBy("mPackageToUidCache")
     private final SparseArrayMap<String, Integer> mPackageToUidCache = new SparseArrayMap<>();
 
-    private final CopyOnWriteArraySet<TareStateChangeListener> mStateChangeListeners =
-            new CopyOnWriteArraySet<>();
+    @GuardedBy("mStateChangeListeners")
+    private final SparseSetArray<TareStateChangeListener> mStateChangeListeners =
+            new SparseSetArray<>();
 
     /**
      * List of packages that are fully restricted and shouldn't be allowed to run in the background.
@@ -163,12 +179,20 @@ public class InternalResourceService extends SystemService {
     @GuardedBy("mLock")
     private final SparseArrayMap<String, Boolean> mVipOverrides = new SparseArrayMap<>();
 
+    /** Set of apps each installer is responsible for installing. */
+    @GuardedBy("mLock")
+    private final SparseArrayMap<String, ArraySet<String>> mInstallers = new SparseArrayMap<>();
+
+    private volatile boolean mHasBattery = true;
     private volatile boolean mIsEnabled;
     private volatile int mBootPhase;
     private volatile boolean mExemptListLoaded;
     // In the range [0,100] to represent 0% to 100% battery.
     @GuardedBy("mLock")
     private int mCurrentBatteryLevel;
+
+    // TODO(250007395): make configurable per device
+    private final int mTargetBackgroundBatteryLifeHours;
 
     private final IAppOpsCallback mApbListener = new IAppOpsCallback.Stub() {
         @Override
@@ -204,6 +228,15 @@ public class InternalResourceService extends SystemService {
         @Override
         public void onReceive(Context context, Intent intent) {
             switch (intent.getAction()) {
+                case Intent.ACTION_BATTERY_CHANGED: {
+                    final boolean hasBattery =
+                            intent.getBooleanExtra(BatteryManager.EXTRA_PRESENT, mHasBattery);
+                    if (mHasBattery != hasBattery) {
+                        mHasBattery = hasBattery;
+                        mConfigObserver.updateEnabledStatus();
+                    }
+                }
+                break;
                 case Intent.ACTION_BATTERY_LEVEL_CHANGED:
                     onBatteryLevelChanged();
                     break;
@@ -274,6 +307,7 @@ public class InternalResourceService extends SystemService {
     private static final int MSG_SCHEDULE_UNUSED_WEALTH_RECLAMATION_EVENT = 1;
     private static final int MSG_PROCESS_USAGE_EVENT = 2;
     private static final int MSG_NOTIFY_STATE_CHANGE_LISTENERS = 3;
+    private static final int MSG_NOTIFY_STATE_CHANGE_LISTENER = 4;
     private static final String ALARM_TAG_WEALTH_RECLAMATION = "*tare.reclamation*";
 
     /**
@@ -299,6 +333,11 @@ public class InternalResourceService extends SystemService {
         mAgent = new Agent(this, mScribe, mAnalyst);
 
         mConfigObserver = new ConfigObserver(mHandler, context);
+
+        mTargetBackgroundBatteryLifeHours =
+                mPackageManager.hasSystemFeature(PackageManager.FEATURE_WATCH)
+                        ? 200 // ~ 0.5%/hr
+                        : 100; // ~ 1%/hr
 
         publishLocalService(EconomyManagerInternal.class, new LocalService());
     }
@@ -340,6 +379,14 @@ public class InternalResourceService extends SystemService {
     @GuardedBy("mLock")
     CompleteEconomicPolicy getCompleteEconomicPolicyLocked() {
         return mCompleteEconomicPolicy;
+    }
+
+    /** Returns the number of apps that this app is expected to update at some point. */
+    int getAppUpdateResponsibilityCount(final int userId, @NonNull final String pkgName) {
+        synchronized (mLock) {
+            // TODO(248274798): return 0 if the app has lost the install permission
+            return ArrayUtils.size(mInstallers.get(userId, pkgName));
+        }
     }
 
     @NonNull
@@ -397,6 +444,12 @@ public class InternalResourceService extends SystemService {
         return mIsEnabled;
     }
 
+    boolean isEnabled(int policyId) {
+        synchronized (mLock) {
+            return isEnabled() && mCompleteEconomicPolicy.isPolicyEnabled(policyId);
+        }
+    }
+
     boolean isPackageExempted(final int userId, @NonNull String pkgName) {
         synchronized (mLock) {
             return mExemptedApps.contains(pkgName);
@@ -437,6 +490,9 @@ public class InternalResourceService extends SystemService {
             mAnalyst.noteBatteryLevelChange(newBatteryLevel);
             final boolean increased = newBatteryLevel > mCurrentBatteryLevel;
             if (increased) {
+                if (newBatteryLevel >= STOCK_RECALCULATION_BATTERY_THRESHOLD) {
+                    maybeAdjustDesiredStockLevelLocked();
+                }
                 mAgent.distributeBasicIncomeLocked(newBatteryLevel);
             } else if (newBatteryLevel == mCurrentBatteryLevel) {
                 // The broadcast is also sent when the plug type changes...
@@ -513,16 +569,24 @@ public class InternalResourceService extends SystemService {
             mPackageToUidCache.add(userId, pkgName, uid);
         }
         synchronized (mLock) {
-            mPkgCache.add(userId, pkgName, new InstalledPackageInfo(packageInfo));
+            final InstalledPackageInfo ipo = new InstalledPackageInfo(packageInfo);
+            final InstalledPackageInfo oldIpo = mPkgCache.add(userId, pkgName, ipo);
+            maybeUpdateInstallerStatusLocked(oldIpo, ipo);
             mUidToPackageCache.add(uid, pkgName);
             // TODO: only do this when the user first launches the app (app leaves stopped state)
             mAgent.grantBirthrightLocked(userId, pkgName);
+            if (ipo.installerPackageName != null) {
+                mAgent.noteInstantaneousEventLocked(userId, ipo.installerPackageName,
+                        JobSchedulerEconomicPolicy.REWARD_APP_INSTALL, null);
+            }
         }
     }
 
     void onPackageForceStopped(final int userId, @NonNull final String pkgName) {
         synchronized (mLock) {
-            // TODO: reduce ARC count by some amount
+            // Remove all credits if the user force stops the app. It will slowly regain them
+            // in response to different events.
+            mAgent.reclaimAllAssetsLocked(userId, pkgName, EconomicPolicy.REGULATION_FORCE_STOP);
         }
     }
 
@@ -534,7 +598,14 @@ public class InternalResourceService extends SystemService {
         synchronized (mLock) {
             mUidToPackageCache.remove(uid, pkgName);
             mVipOverrides.delete(userId, pkgName);
-            mPkgCache.delete(userId, pkgName);
+            final InstalledPackageInfo ipo = mPkgCache.delete(userId, pkgName);
+            mInstallers.delete(userId, pkgName);
+            if (ipo != null && ipo.installerPackageName != null) {
+                final ArraySet<String> list = mInstallers.get(userId, ipo.installerPackageName);
+                if (list != null) {
+                    list.remove(pkgName);
+                }
+            }
             mAgent.onPackageRemovedLocked(userId, pkgName);
         }
     }
@@ -556,7 +627,8 @@ public class InternalResourceService extends SystemService {
                     mPackageManager.getInstalledPackagesAsUser(PACKAGE_QUERY_FLAGS, userId);
             for (int i = pkgs.size() - 1; i >= 0; --i) {
                 final InstalledPackageInfo ipo = new InstalledPackageInfo(pkgs.get(i));
-                mPkgCache.add(userId, ipo.packageName, ipo);
+                final InstalledPackageInfo oldIpo = mPkgCache.add(userId, ipo.packageName, ipo);
+                maybeUpdateInstallerStatusLocked(oldIpo, ipo);
             }
             mAgent.grantBirthrightsLocked(userId);
         }
@@ -565,17 +637,16 @@ public class InternalResourceService extends SystemService {
     void onUserRemoved(final int userId) {
         synchronized (mLock) {
             mVipOverrides.delete(userId);
-            ArrayList<String> removedPkgs = new ArrayList<>();
             final int uIdx = mPkgCache.indexOfKey(userId);
             if (uIdx >= 0) {
                 for (int p = mPkgCache.numElementsForKeyAt(uIdx) - 1; p >= 0; --p) {
                     final InstalledPackageInfo pkgInfo = mPkgCache.valueAt(uIdx, p);
-                    removedPkgs.add(pkgInfo.packageName);
                     mUidToPackageCache.remove(pkgInfo.uid);
                 }
             }
+            mInstallers.delete(userId);
             mPkgCache.delete(userId);
-            mAgent.onUserRemovedLocked(userId, removedPkgs);
+            mAgent.onUserRemovedLocked(userId);
         }
     }
 
@@ -584,6 +655,10 @@ public class InternalResourceService extends SystemService {
      */
     @GuardedBy("mLock")
     void maybePerformQuantitativeEasingLocked() {
+        if (mConfigObserver.ENABLE_TIP3) {
+            maybeAdjustDesiredStockLevelLocked();
+            return;
+        }
         // We don't need to increase the limit if the device runs out of consumable credits
         // when the battery is low.
         final long remainingConsumableCakes = mScribe.getRemainingConsumableCakesLocked();
@@ -595,12 +670,78 @@ public class InternalResourceService extends SystemService {
         final long shortfall = (mCurrentBatteryLevel - QUANTITATIVE_EASING_BATTERY_THRESHOLD)
                 * currentConsumptionLimit / 100;
         final long newConsumptionLimit = Math.min(currentConsumptionLimit + shortfall,
-                mCompleteEconomicPolicy.getHardSatiatedConsumptionLimit());
+                mCompleteEconomicPolicy.getMaxSatiatedConsumptionLimit());
         if (newConsumptionLimit != currentConsumptionLimit) {
             Slog.i(TAG, "Increasing consumption limit from " + cakeToString(currentConsumptionLimit)
                     + " to " + cakeToString(newConsumptionLimit));
             mScribe.setConsumptionLimitLocked(newConsumptionLimit);
             adjustCreditSupplyLocked(/* allowIncrease */ true);
+        }
+    }
+
+    /**
+     * Adjust the consumption limit based on historical data and the target battery drain.
+     */
+    @GuardedBy("mLock")
+    void maybeAdjustDesiredStockLevelLocked() {
+        if (!mConfigObserver.ENABLE_TIP3) {
+            return;
+        }
+        // Don't adjust the limit too often or while the battery is low.
+        final long now = getCurrentTimeMillis();
+        if ((now - mScribe.getLastStockRecalculationTimeLocked()) < STOCK_RECALCULATION_DELAY_MS
+                || mCurrentBatteryLevel <= STOCK_RECALCULATION_BATTERY_THRESHOLD) {
+            return;
+        }
+
+        // For now, use screen off battery drain as a proxy for background battery drain.
+        // TODO: get more accurate background battery drain numbers
+        final long totalScreenOffDurationMs = mAnalyst.getBatteryScreenOffDurationMs();
+        if (totalScreenOffDurationMs < STOCK_RECALCULATION_MIN_DATA_DURATION_MS) {
+            return;
+        }
+        final long totalDischargeMah = mAnalyst.getBatteryScreenOffDischargeMah();
+        if (totalDischargeMah == 0) {
+            Slog.i(TAG, "Total discharge was 0");
+            return;
+        }
+        final long batteryCapacityMah = mBatteryManagerInternal.getBatteryFullCharge() / 1000;
+        final long estimatedLifeHours = batteryCapacityMah * totalScreenOffDurationMs
+                / totalDischargeMah / HOUR_IN_MILLIS;
+        final long percentageOfTarget =
+                100 * estimatedLifeHours / mTargetBackgroundBatteryLifeHours;
+        if (DEBUG) {
+            Slog.d(TAG, "maybeAdjustDesiredStockLevelLocked:"
+                    + " screenOffMs=" + totalScreenOffDurationMs
+                    + " dischargeMah=" + totalDischargeMah
+                    + " capacityMah=" + batteryCapacityMah
+                    + " estimatedLifeHours=" + estimatedLifeHours
+                    + " %ofTarget=" + percentageOfTarget);
+        }
+        final long currentConsumptionLimit = mScribe.getSatiatedConsumptionLimitLocked();
+        final long newConsumptionLimit;
+        if (percentageOfTarget > 105) {
+            // The stock is too low. We're doing pretty well. We can increase the stock slightly
+            // to let apps do more work in the background.
+            newConsumptionLimit = Math.min((long) (currentConsumptionLimit * 1.01),
+                    mCompleteEconomicPolicy.getMaxSatiatedConsumptionLimit());
+        } else if (percentageOfTarget < 100) {
+            // The stock is too high IMO. We're below the target. Decrease the stock to reduce
+            // background work.
+            newConsumptionLimit = Math.max((long) (currentConsumptionLimit * .98),
+                    mCompleteEconomicPolicy.getMinSatiatedConsumptionLimit());
+        } else {
+            // The stock is just right.
+            return;
+        }
+        // TODO(250007191): calculate and log implied service level
+        if (newConsumptionLimit != currentConsumptionLimit) {
+            Slog.i(TAG, "Adjusting consumption limit from " + cakeToString(currentConsumptionLimit)
+                    + " to " + cakeToString(newConsumptionLimit)
+                    + " because drain was " + percentageOfTarget + "% of target");
+            mScribe.setConsumptionLimitLocked(newConsumptionLimit);
+            adjustCreditSupplyLocked(/* allowIncrease */ true);
+            mScribe.setLastStockRecalculationTimeLocked(now);
         }
     }
 
@@ -713,6 +854,12 @@ public class InternalResourceService extends SystemService {
         return packages;
     }
 
+    private boolean isTareSupported() {
+        // TARE is presently designed for devices with batteries. Don't enable it on
+        // battery-less devices for now.
+        return mHasBattery;
+    }
+
     @GuardedBy("mLock")
     private void loadInstalledPackageListLocked() {
         mPkgCache.clear();
@@ -724,13 +871,52 @@ public class InternalResourceService extends SystemService {
                     mPackageManager.getInstalledPackagesAsUser(PACKAGE_QUERY_FLAGS, userId);
             for (int i = pkgs.size() - 1; i >= 0; --i) {
                 final InstalledPackageInfo ipo = new InstalledPackageInfo(pkgs.get(i));
-                mPkgCache.add(userId, ipo.packageName, ipo);
+                final InstalledPackageInfo oldIpo = mPkgCache.add(userId, ipo.packageName, ipo);
+                maybeUpdateInstallerStatusLocked(oldIpo, ipo);
             }
+        }
+    }
+
+    /**
+     * Used to update the set of installed apps for each installer. This only has an effect if the
+     * installer package name is different between {@code oldIpo} and {@code newIpo}.
+     */
+    @GuardedBy("mLock")
+    private void maybeUpdateInstallerStatusLocked(@Nullable InstalledPackageInfo oldIpo,
+            @NonNull InstalledPackageInfo newIpo) {
+        final boolean changed;
+        if (oldIpo == null) {
+            changed = newIpo.installerPackageName != null;
+        } else {
+            changed = !Objects.equals(oldIpo.installerPackageName, newIpo.installerPackageName);
+        }
+        if (!changed) {
+            return;
+        }
+        // InstallSourceInfo doesn't track userId, so for now, assume the installer on the package's
+        // user profile did the installation.
+        // TODO(246640162): use the actual installer's user ID
+        final int userId = UserHandle.getUserId(newIpo.uid);
+        final String pkgName = newIpo.packageName;
+        if (oldIpo != null) {
+            final ArraySet<String> oldList = mInstallers.get(userId, oldIpo.installerPackageName);
+            if (oldList != null) {
+                oldList.remove(pkgName);
+            }
+        }
+        if (newIpo.installerPackageName != null) {
+            ArraySet<String> newList = mInstallers.get(userId, newIpo.installerPackageName);
+            if (newList == null) {
+                newList = new ArraySet<>();
+                mInstallers.add(userId, newIpo.installerPackageName, newList);
+            }
+            newList.add(pkgName);
         }
     }
 
     private void registerListeners() {
         final IntentFilter filter = new IntentFilter();
+        filter.addAction(Intent.ACTION_BATTERY_CHANGED);
         filter.addAction(Intent.ACTION_BATTERY_LEVEL_CHANGED);
         filter.addAction(PowerManager.ACTION_POWER_SAVE_WHITELIST_CHANGED);
         getContext().registerReceiverAsUser(mBroadcastReceiver, UserHandle.ALL, filter, null, null);
@@ -765,6 +951,7 @@ public class InternalResourceService extends SystemService {
             return;
         }
         synchronized (mLock) {
+            mCompleteEconomicPolicy.setup(mConfigObserver.getAllDeviceConfigProperties());
             loadInstalledPackageListLocked();
             final boolean isFirstSetup = !mScribe.recordExists();
             if (isFirstSetup) {
@@ -774,9 +961,9 @@ public class InternalResourceService extends SystemService {
             } else {
                 mScribe.loadFromDiskLocked();
                 if (mScribe.getSatiatedConsumptionLimitLocked()
-                        < mCompleteEconomicPolicy.getInitialSatiatedConsumptionLimit()
+                        < mCompleteEconomicPolicy.getMinSatiatedConsumptionLimit()
                         || mScribe.getSatiatedConsumptionLimitLocked()
-                        > mCompleteEconomicPolicy.getHardSatiatedConsumptionLimit()) {
+                        > mCompleteEconomicPolicy.getMaxSatiatedConsumptionLimit()) {
                     // Reset the consumption limit since several factors may have changed.
                     mScribe.setConsumptionLimitLocked(
                             mCompleteEconomicPolicy.getInitialSatiatedConsumptionLimit());
@@ -796,6 +983,18 @@ public class InternalResourceService extends SystemService {
         synchronized (mLock) {
             registerListeners();
             mCurrentBatteryLevel = getCurrentBatteryLevel();
+            // Get the current battery presence, if available. This would succeed if TARE is
+            // toggled long after boot.
+            final Intent batteryStatus = getContext().registerReceiver(null,
+                    new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+            if (batteryStatus != null) {
+                final boolean hasBattery =
+                        batteryStatus.getBooleanExtra(BatteryManager.EXTRA_PRESENT, true);
+                if (mHasBattery != hasBattery) {
+                    mHasBattery = hasBattery;
+                    mConfigObserver.updateEnabledStatus();
+                }
+            }
         }
     }
 
@@ -803,10 +1002,7 @@ public class InternalResourceService extends SystemService {
         if (mBootPhase < PHASE_THIRD_PARTY_APPS_CAN_START || !mIsEnabled) {
             return;
         }
-        synchronized (mLock) {
-            mHandler.post(this::setupHeavyWork);
-            mCompleteEconomicPolicy.setup(mConfigObserver.getAllDeviceConfigProperties());
-        }
+        mHandler.post(this::setupHeavyWork);
     }
 
     private void onBootPhaseBootCompleted() {
@@ -900,9 +1096,30 @@ public class InternalResourceService extends SystemService {
                 }
                 break;
 
+                case MSG_NOTIFY_STATE_CHANGE_LISTENER: {
+                    final int policy = msg.arg1;
+                    final TareStateChangeListener listener = (TareStateChangeListener) msg.obj;
+                    listener.onTareEnabledStateChanged(isEnabled(policy));
+                }
+                break;
+
                 case MSG_NOTIFY_STATE_CHANGE_LISTENERS: {
-                    for (TareStateChangeListener listener : mStateChangeListeners) {
-                        listener.onTareEnabledStateChanged(mIsEnabled);
+                    final int changedPolicies = msg.arg1;
+                    synchronized (mStateChangeListeners) {
+                        final int size = mStateChangeListeners.size();
+                        for (int l = 0; l < size; ++l) {
+                            final int policy = mStateChangeListeners.keyAt(l);
+                            if ((policy & changedPolicies) == 0) {
+                                continue;
+                            }
+                            final ArraySet<TareStateChangeListener> listeners =
+                                    mStateChangeListeners.get(policy);
+                            final boolean isEnabled = isEnabled(policy);
+                            for (int p = listeners.size() - 1; p >= 0; --p) {
+                                final TareStateChangeListener listener = listeners.valueAt(p);
+                                listener.onTareEnabledStateChanged(isEnabled);
+                            }
+                        }
                     }
                 }
                 break;
@@ -985,7 +1202,7 @@ public class InternalResourceService extends SystemService {
         @Override
         public void registerAffordabilityChangeListener(int userId, @NonNull String pkgName,
                 @NonNull AffordabilityChangeListener listener, @NonNull ActionBill bill) {
-            if (isSystem(userId, pkgName)) {
+            if (!isTareSupported() || isSystem(userId, pkgName)) {
                 // The system's affordability never changes.
                 return;
             }
@@ -1007,13 +1224,28 @@ public class InternalResourceService extends SystemService {
         }
 
         @Override
-        public void registerTareStateChangeListener(@NonNull TareStateChangeListener listener) {
-            mStateChangeListeners.add(listener);
+        public void registerTareStateChangeListener(@NonNull TareStateChangeListener listener,
+                int policyId) {
+            if (!isTareSupported()) {
+                return;
+            }
+            synchronized (mStateChangeListeners) {
+                if (mStateChangeListeners.add(policyId, listener)) {
+                    mHandler.obtainMessage(MSG_NOTIFY_STATE_CHANGE_LISTENER, policyId, 0, listener)
+                            .sendToTarget();
+                }
+            }
         }
 
         @Override
         public void unregisterTareStateChangeListener(@NonNull TareStateChangeListener listener) {
-            mStateChangeListeners.remove(listener);
+            synchronized (mStateChangeListeners) {
+                for (int i = mStateChangeListeners.size() - 1; i >= 0; --i) {
+                    final ArraySet<TareStateChangeListener> listeners =
+                            mStateChangeListeners.get(mStateChangeListeners.keyAt(i));
+                    listeners.remove(listener);
+                }
+            }
         }
 
         @Override
@@ -1078,6 +1310,11 @@ public class InternalResourceService extends SystemService {
         }
 
         @Override
+        public boolean isEnabled(int policyId) {
+            return InternalResourceService.this.isEnabled(policyId);
+        }
+
+        @Override
         public void noteInstantaneousEvent(int userId, @NonNull String pkgName, int eventId,
                 @Nullable String tag) {
             if (!mIsEnabled) {
@@ -1116,7 +1353,12 @@ public class InternalResourceService extends SystemService {
 
     private class ConfigObserver extends ContentObserver
             implements DeviceConfig.OnPropertiesChangedListener {
-        private static final String KEY_DC_ENABLE_TARE = "enable_tare";
+        private static final String KEY_ENABLE_TIP3 = "enable_tip3";
+
+        private static final boolean DEFAULT_ENABLE_TIP3 = true;
+
+        /** Use a target background battery drain rate to determine consumption limits. */
+        public boolean ENABLE_TIP3 = DEFAULT_ENABLE_TIP3;
 
         private final ContentResolver mContentResolver;
 
@@ -1164,12 +1406,16 @@ public class InternalResourceService extends SystemService {
                         continue;
                     }
                     switch (name) {
-                        case KEY_DC_ENABLE_TARE:
+                        case EconomyManager.KEY_ENABLE_TARE:
                             updateEnabledStatus();
+                            break;
+                        case KEY_ENABLE_TIP3:
+                            ENABLE_TIP3 = properties.getBoolean(name, DEFAULT_ENABLE_TIP3);
                             break;
                         default:
                             if (!economicPolicyUpdated
-                                    && (name.startsWith("am") || name.startsWith("js"))) {
+                                    && (name.startsWith("am") || name.startsWith("js")
+                                    || name.startsWith("enable_policy"))) {
                                 updateEconomicPolicy();
                                 economicPolicyUpdated = true;
                             }
@@ -1180,11 +1426,10 @@ public class InternalResourceService extends SystemService {
 
         private void updateEnabledStatus() {
             // User setting should override DeviceConfig setting.
-            // NOTE: There's currently no way for a user to reset the value (via UI), so if a user
-            // manually toggles TARE via UI, we'll always defer to the user's current setting
             final boolean isTareEnabledDC = DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_TARE,
-                    KEY_DC_ENABLE_TARE, Settings.Global.DEFAULT_ENABLE_TARE == 1);
-            final boolean isTareEnabled = Settings.Global.getInt(mContentResolver,
+                    EconomyManager.KEY_ENABLE_TARE, EconomyManager.DEFAULT_ENABLE_TARE);
+            final boolean isTareEnabled = isTareSupported()
+                    && Settings.Global.getInt(mContentResolver,
                     Settings.Global.ENABLE_TARE, isTareEnabledDC ? 1 : 0) == 1;
             if (mIsEnabled != isTareEnabled) {
                 mIsEnabled = isTareEnabled;
@@ -1193,27 +1438,36 @@ public class InternalResourceService extends SystemService {
                 } else {
                     tearDownEverything();
                 }
-                mHandler.sendEmptyMessage(MSG_NOTIFY_STATE_CHANGE_LISTENERS);
+                mHandler.obtainMessage(
+                                MSG_NOTIFY_STATE_CHANGE_LISTENERS, EconomicPolicy.ALL_POLICIES, 0)
+                        .sendToTarget();
             }
         }
 
         private void updateEconomicPolicy() {
             synchronized (mLock) {
-                final long initialLimit =
-                        mCompleteEconomicPolicy.getInitialSatiatedConsumptionLimit();
-                final long hardLimit = mCompleteEconomicPolicy.getHardSatiatedConsumptionLimit();
+                final long minLimit = mCompleteEconomicPolicy.getMinSatiatedConsumptionLimit();
+                final long maxLimit = mCompleteEconomicPolicy.getMaxSatiatedConsumptionLimit();
+                final int oldEnabledPolicies = mCompleteEconomicPolicy.getEnabledPolicyIds();
                 mCompleteEconomicPolicy.tearDown();
                 mCompleteEconomicPolicy = new CompleteEconomicPolicy(InternalResourceService.this);
-                if (mIsEnabled && mBootPhase >= PHASE_SYSTEM_SERVICES_READY) {
+                if (mIsEnabled && mBootPhase >= PHASE_THIRD_PARTY_APPS_CAN_START) {
                     mCompleteEconomicPolicy.setup(getAllDeviceConfigProperties());
-                    if (initialLimit != mCompleteEconomicPolicy.getInitialSatiatedConsumptionLimit()
-                            || hardLimit
-                            != mCompleteEconomicPolicy.getHardSatiatedConsumptionLimit()) {
+                    if (minLimit != mCompleteEconomicPolicy.getMinSatiatedConsumptionLimit()
+                            || maxLimit
+                            != mCompleteEconomicPolicy.getMaxSatiatedConsumptionLimit()) {
                         // Reset the consumption limit since several factors may have changed.
                         mScribe.setConsumptionLimitLocked(
                                 mCompleteEconomicPolicy.getInitialSatiatedConsumptionLimit());
                     }
                     mAgent.onPricingChangedLocked();
+                    final int newEnabledPolicies = mCompleteEconomicPolicy.getEnabledPolicyIds();
+                    if (oldEnabledPolicies != newEnabledPolicies) {
+                        final int changedPolicies = oldEnabledPolicies ^ newEnabledPolicies;
+                        mHandler.obtainMessage(
+                                        MSG_NOTIFY_STATE_CHANGE_LISTENERS, changedPolicies, 0)
+                                .sendToTarget();
+                    }
                 }
             }
         }
@@ -1268,6 +1522,10 @@ public class InternalResourceService extends SystemService {
     }
 
     private void dumpInternal(final IndentingPrintWriter pw, final boolean dumpAll) {
+        if (!isTareSupported()) {
+            pw.print("Unsupported by device");
+            return;
+        }
         synchronized (mLock) {
             pw.print("Is enabled: ");
             pw.println(mIsEnabled);
@@ -1319,6 +1577,23 @@ public class InternalResourceService extends SystemService {
                 pw.print(" None");
             }
             pw.println();
+
+            pw.println();
+            pw.println("Installers:");
+            pw.increaseIndent();
+            for (int u = 0; u < mInstallers.numMaps(); ++u) {
+                final int userId = mInstallers.keyAt(u);
+
+                for (int p = 0; p < mInstallers.numElementsForKeyAt(u); ++p) {
+                    final String pkgName = mInstallers.keyAt(u, p);
+
+                    pw.print(appToString(userId, pkgName));
+                    pw.print(": ");
+                    pw.print(mInstallers.valueAt(u, p).size());
+                    pw.println(" apps");
+                }
+            }
+            pw.decreaseIndent();
 
             pw.println();
             mCompleteEconomicPolicy.dump(pw);

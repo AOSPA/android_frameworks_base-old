@@ -67,7 +67,7 @@ class TransitionController {
 
     /** Which sync method to use for transition syncs. */
     static final int SYNC_METHOD =
-            android.os.SystemProperties.getBoolean("persist.wm.debug.shell_transit_blast", true)
+            android.os.SystemProperties.getBoolean("persist.wm.debug.shell_transit_blast", false)
                     ? BLASTSyncEngine.METHOD_BLAST : BLASTSyncEngine.METHOD_NONE;
 
     /** The same as legacy APP_TRANSITION_TIMEOUT_MS. */
@@ -126,17 +126,25 @@ class TransitionController {
         mTransitionTracer = transitionTracer;
         mTransitionPlayerDeath = () -> {
             synchronized (mAtm.mGlobalLock) {
-                // Clean-up/finish any playing transitions.
-                for (int i = 0; i < mPlayingTransitions.size(); ++i) {
-                    mPlayingTransitions.get(i).cleanUpOnFailure();
-                }
-                mPlayingTransitions.clear();
-                mTransitionPlayer = null;
-                mTransitionPlayerProc = null;
-                mRemotePlayer.clear();
-                mRunningLock.doNotifyLocked();
+                detachPlayer();
             }
         };
+    }
+
+    private void detachPlayer() {
+        if (mTransitionPlayer == null) return;
+        // Clean-up/finish any playing transitions.
+        for (int i = 0; i < mPlayingTransitions.size(); ++i) {
+            mPlayingTransitions.get(i).cleanUpOnFailure();
+        }
+        mPlayingTransitions.clear();
+        if (mCollectingTransition != null) {
+            mCollectingTransition.abort();
+        }
+        mTransitionPlayer = null;
+        mTransitionPlayerProc = null;
+        mRemotePlayer.clear();
+        mRunningLock.doNotifyLocked();
     }
 
     /** @see #createTransition(int, int) */
@@ -193,7 +201,7 @@ class TransitionController {
                 if (mTransitionPlayer.asBinder() != null) {
                     mTransitionPlayer.asBinder().unlinkToDeath(mTransitionPlayerDeath, 0);
                 }
-                mTransitionPlayer = null;
+                detachPlayer();
             }
             if (player.asBinder() != null) {
                 player.asBinder().linkToDeath(mTransitionPlayerDeath, 0);
@@ -224,6 +232,14 @@ class TransitionController {
      */
     boolean isCollecting() {
         return mCollectingTransition != null;
+    }
+
+    /**
+     * @return the collecting transition. {@code null} if there is no collecting transition.
+     */
+    @Nullable
+    Transition getCollectingTransition() {
+        return mCollectingTransition;
     }
 
     /**
@@ -515,6 +531,17 @@ class TransitionController {
     void collectVisibleChange(WindowContainer wc) {
         if (!isCollecting()) return;
         mCollectingTransition.collectVisibleChange(wc);
+    }
+
+    /**
+     * Records that a particular container has been reparented. This only effects windows that have
+     * already been collected in the transition. This should be called before reparenting because
+     * the old parent may be removed during reparenting, for example:
+     * {@link Task#shouldRemoveSelfOnLastChildRemoval}
+     */
+    void collectReparentChange(@NonNull WindowContainer wc, @NonNull WindowContainer newParent) {
+        if (!isCollecting()) return;
+        mCollectingTransition.collectReparentChange(wc, newParent);
     }
 
     /** @see Transition#mStatusBarTransitionDelay */

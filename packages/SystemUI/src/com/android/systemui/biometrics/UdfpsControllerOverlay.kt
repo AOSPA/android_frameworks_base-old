@@ -21,13 +21,18 @@ import android.annotation.UiThread
 import android.content.Context
 import android.graphics.PixelFormat
 import android.graphics.Rect
-import android.hardware.biometrics.BiometricOverlayConstants
+import android.hardware.biometrics.BiometricOverlayConstants.REASON_AUTH_BP
+import android.hardware.biometrics.BiometricOverlayConstants.REASON_AUTH_KEYGUARD
+import android.hardware.biometrics.BiometricOverlayConstants.REASON_AUTH_OTHER
+import android.hardware.biometrics.BiometricOverlayConstants.REASON_AUTH_SETTINGS
 import android.hardware.biometrics.BiometricOverlayConstants.REASON_ENROLL_ENROLLING
 import android.hardware.biometrics.BiometricOverlayConstants.REASON_ENROLL_FIND_SENSOR
 import android.hardware.biometrics.BiometricOverlayConstants.ShowReason
 import android.hardware.fingerprint.FingerprintManager
 import android.hardware.fingerprint.IUdfpsOverlayControllerCallback
+import android.os.Build
 import android.os.RemoteException
+import android.provider.Settings
 import android.util.Log
 import android.util.RotationUtils
 import android.view.LayoutInflater
@@ -38,21 +43,27 @@ import android.view.WindowManager
 import android.view.accessibility.AccessibilityManager
 import android.view.accessibility.AccessibilityManager.TouchExplorationStateChangeListener
 import androidx.annotation.LayoutRes
+import androidx.annotation.VisibleForTesting
 import com.android.keyguard.KeyguardUpdateMonitor
 import com.android.systemui.R
 import com.android.systemui.animation.ActivityLaunchAnimator
 import com.android.systemui.dump.DumpManager
+import com.android.systemui.flags.FeatureFlags
+import com.android.systemui.keyguard.domain.interactor.PrimaryBouncerInteractor
 import com.android.systemui.plugins.statusbar.StatusBarStateController
+import com.android.systemui.shade.ShadeExpansionStateManager
 import com.android.systemui.statusbar.LockscreenShadeTransitionController
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager
 import com.android.systemui.statusbar.phone.SystemUIDialogManager
 import com.android.systemui.statusbar.phone.UnlockedScreenOffAnimationController
-import com.android.systemui.statusbar.phone.panelstate.PanelExpansionStateManager
 import com.android.systemui.statusbar.policy.ConfigurationController
 import com.android.systemui.statusbar.policy.KeyguardStateController
 import com.android.systemui.util.time.SystemClock
 
 private const val TAG = "UdfpsControllerOverlay"
+
+@VisibleForTesting
+const val SETTING_REMOVE_ENROLLMENT_UI = "udfps_overlay_remove_enrollment_ui"
 
 /**
  * Keeps track of the overlay state and UI resources associated with a single FingerprintService
@@ -60,30 +71,32 @@ private const val TAG = "UdfpsControllerOverlay"
  * methods.
  */
 @UiThread
-class UdfpsControllerOverlay(
-    private val context: Context,
-    fingerprintManager: FingerprintManager,
-    private val inflater: LayoutInflater,
-    private val windowManager: WindowManager,
-    private val accessibilityManager: AccessibilityManager,
-    private val statusBarStateController: StatusBarStateController,
-    private val panelExpansionStateManager: PanelExpansionStateManager,
-    private val statusBarKeyguardViewManager: StatusBarKeyguardViewManager,
-    private val keyguardUpdateMonitor: KeyguardUpdateMonitor,
-    private val dialogManager: SystemUIDialogManager,
-    private val dumpManager: DumpManager,
-    private val transitionController: LockscreenShadeTransitionController,
-    private val configurationController: ConfigurationController,
-    private val systemClock: SystemClock,
-    private val keyguardStateController: KeyguardStateController,
-    private val unlockedScreenOffAnimationController: UnlockedScreenOffAnimationController,
-    private val halControlsIllumination: Boolean,
-    private var hbmProvider: UdfpsHbmProvider,
-    val requestId: Long,
-    @ShowReason val requestReason: Int,
-    private val controllerCallback: IUdfpsOverlayControllerCallback,
-    private val onTouch: (View, MotionEvent, Boolean) -> Boolean,
-    private val activityLaunchAnimator: ActivityLaunchAnimator
+class UdfpsControllerOverlay @JvmOverloads constructor(
+        private val context: Context,
+        fingerprintManager: FingerprintManager,
+        private val inflater: LayoutInflater,
+        private val windowManager: WindowManager,
+        private val accessibilityManager: AccessibilityManager,
+        private val statusBarStateController: StatusBarStateController,
+        private val shadeExpansionStateManager: ShadeExpansionStateManager,
+        private val statusBarKeyguardViewManager: StatusBarKeyguardViewManager,
+        private val keyguardUpdateMonitor: KeyguardUpdateMonitor,
+        private val dialogManager: SystemUIDialogManager,
+        private val dumpManager: DumpManager,
+        private val transitionController: LockscreenShadeTransitionController,
+        private val configurationController: ConfigurationController,
+        private val systemClock: SystemClock,
+        private val keyguardStateController: KeyguardStateController,
+        private val unlockedScreenOffAnimationController: UnlockedScreenOffAnimationController,
+        private var udfpsDisplayModeProvider: UdfpsDisplayModeProvider,
+        val requestId: Long,
+        @ShowReason val requestReason: Int,
+        private val controllerCallback: IUdfpsOverlayControllerCallback,
+        private val onTouch: (View, MotionEvent, Boolean) -> Boolean,
+        private val activityLaunchAnimator: ActivityLaunchAnimator,
+        private val featureFlags: FeatureFlags,
+        private val primaryBouncerInteractor: PrimaryBouncerInteractor,
+        private val isDebuggable: Boolean = Build.IS_DEBUGGABLE
 ) {
     /** The view, when [isShowing], or null. */
     var overlayView: UdfpsView? = null
@@ -102,19 +115,20 @@ class UdfpsControllerOverlay(
         fitInsetsTypes = 0
         gravity = android.view.Gravity.TOP or android.view.Gravity.LEFT
         layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
-        flags =
-            (Utils.FINGERPRINT_OVERLAY_LAYOUT_PARAM_FLAGS or WindowManager.LayoutParams.FLAG_SPLIT_TOUCH)
+        flags = (Utils.FINGERPRINT_OVERLAY_LAYOUT_PARAM_FLAGS or
+                WindowManager.LayoutParams.FLAG_SPLIT_TOUCH)
         privateFlags = WindowManager.LayoutParams.PRIVATE_FLAG_TRUSTED_OVERLAY
         // Avoid announcing window title.
         accessibilityTitle = " "
     }
 
     /** A helper if the [requestReason] was due to enrollment. */
-    val enrollHelper: UdfpsEnrollHelper? = if (requestReason.isEnrollmentReason()) {
-        UdfpsEnrollHelper(context, fingerprintManager, requestReason)
-    } else {
-        null
-    }
+    val enrollHelper: UdfpsEnrollHelper? =
+        if (requestReason.isEnrollmentReason() && !shouldRemoveEnrollmentUi()) {
+            UdfpsEnrollHelper(context, fingerprintManager, requestReason)
+        } else {
+            null
+        }
 
     /** If the overlay is currently showing. */
     val isShowing: Boolean
@@ -130,6 +144,17 @@ class UdfpsControllerOverlay(
 
     private var touchExplorationEnabled = false
 
+    private fun shouldRemoveEnrollmentUi(): Boolean {
+        if (isDebuggable) {
+            return Settings.Global.getInt(
+                context.contentResolver,
+                SETTING_REMOVE_ENROLLMENT_UI,
+                0 /* def */
+            ) != 0
+        }
+        return false
+    }
+
     /** Show the overlay or return false and do nothing if it is already showing. */
     @SuppressLint("ClickableViewAccessibility")
     fun show(controller: UdfpsController, params: UdfpsOverlayParams): Boolean {
@@ -140,8 +165,7 @@ class UdfpsControllerOverlay(
                     R.layout.udfps_view, null, false
                 ) as UdfpsView).apply {
                     overlayParams = params
-                    halControlsIllumination = this@UdfpsControllerOverlay.halControlsIllumination
-                    setHbmProvider(hbmProvider)
+                    setUdfpsDisplayModeProvider(udfpsDisplayModeProvider)
                     val animation = inflateUdfpsAnimation(this, controller)
                     if (animation != null) {
                         animation.init()
@@ -185,7 +209,18 @@ class UdfpsControllerOverlay(
         view: UdfpsView,
         controller: UdfpsController
     ): UdfpsAnimationViewController<*>? {
-        return when (requestReason) {
+        val isEnrollment = when (requestReason) {
+            REASON_ENROLL_FIND_SENSOR, REASON_ENROLL_ENROLLING -> true
+            else -> false
+        }
+
+        val filteredRequestReason = if (isEnrollment && shouldRemoveEnrollmentUi()) {
+            REASON_AUTH_OTHER
+        } else {
+            requestReason
+        }
+
+        return when (filteredRequestReason) {
             REASON_ENROLL_FIND_SENSOR,
             REASON_ENROLL_ENROLLING -> {
                 UdfpsEnrollViewController(
@@ -194,17 +229,17 @@ class UdfpsControllerOverlay(
                     },
                     enrollHelper ?: throw IllegalStateException("no enrollment helper"),
                     statusBarStateController,
-                    panelExpansionStateManager,
+                    shadeExpansionStateManager,
                     dialogManager,
                     dumpManager,
                     overlayParams.scaleFactor
                 )
             }
-            BiometricOverlayConstants.REASON_AUTH_KEYGUARD -> {
+            REASON_AUTH_KEYGUARD -> {
                 UdfpsKeyguardViewController(
                     view.addUdfpsView(R.layout.udfps_keyguard_view),
                     statusBarStateController,
-                    panelExpansionStateManager,
+                    shadeExpansionStateManager,
                     statusBarKeyguardViewManager,
                     keyguardUpdateMonitor,
                     dumpManager,
@@ -215,25 +250,27 @@ class UdfpsControllerOverlay(
                     unlockedScreenOffAnimationController,
                     dialogManager,
                     controller,
-                    activityLaunchAnimator
+                    activityLaunchAnimator,
+                    featureFlags,
+                    primaryBouncerInteractor
                 )
             }
-            BiometricOverlayConstants.REASON_AUTH_BP -> {
+            REASON_AUTH_BP -> {
                 // note: empty controller, currently shows no visual affordance
                 UdfpsBpViewController(
                     view.addUdfpsView(R.layout.udfps_bp_view),
                     statusBarStateController,
-                    panelExpansionStateManager,
+                    shadeExpansionStateManager,
                     dialogManager,
                     dumpManager
                 )
             }
-            BiometricOverlayConstants.REASON_AUTH_OTHER,
-            BiometricOverlayConstants.REASON_AUTH_SETTINGS -> {
+            REASON_AUTH_OTHER,
+            REASON_AUTH_SETTINGS -> {
                 UdfpsFpmOtherViewController(
                     view.addUdfpsView(R.layout.udfps_fpm_other_view),
                     statusBarStateController,
-                    panelExpansionStateManager,
+                    shadeExpansionStateManager,
                     dialogManager,
                     dumpManager
                 )
@@ -250,8 +287,8 @@ class UdfpsControllerOverlay(
         val wasShowing = isShowing
 
         overlayView?.apply {
-            if (isIlluminationRequested) {
-                stopIllumination()
+            if (isDisplayConfigured) {
+                unconfigureDisplay()
             }
             windowManager.removeView(this)
             setOnTouchListener(null)
@@ -442,4 +479,4 @@ private fun Int.isEnrollmentReason() =
 private fun Int.isImportantForAccessibility() =
     this == REASON_ENROLL_FIND_SENSOR ||
             this == REASON_ENROLL_ENROLLING ||
-            this == BiometricOverlayConstants.REASON_AUTH_BP
+            this == REASON_AUTH_BP

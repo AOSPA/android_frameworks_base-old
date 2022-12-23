@@ -16,6 +16,7 @@
 
 package com.android.wm.shell;
 
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
@@ -43,6 +44,7 @@ import android.util.Log;
 import android.util.SparseArray;
 import android.view.SurfaceControl;
 import android.window.ITaskOrganizerController;
+import android.window.ScreenCapture;
 import android.window.StartingWindowInfo;
 import android.window.StartingWindowRemovalInfo;
 import android.window.TaskAppearedInfo;
@@ -473,7 +475,7 @@ public class ShellTaskOrganizer extends TaskOrganizer implements
      * Take a screenshot of a task.
      */
     public void screenshotTask(RunningTaskInfo taskInfo, Rect crop,
-            Consumer<SurfaceControl.ScreenshotHardwareBuffer> consumer) {
+            Consumer<ScreenCapture.ScreenshotHardwareBuffer> consumer) {
         final TaskAppearedInfo info = mTasks.get(taskInfo.taskId);
         if (info == null) {
             return;
@@ -695,15 +697,19 @@ public class ShellTaskOrganizer extends TaskOrganizer implements
     /**
      * Create a {@link WindowContainerTransaction} to clear task bounds.
      *
+     * Only affects tasks that have {@link RunningTaskInfo#getActivityType()} set to
+     * {@link WindowConfiguration#ACTIVITY_TYPE_STANDARD}.
+     *
      * @param displayId display id for tasks that will have bounds cleared
      * @return {@link WindowContainerTransaction} with pending operations to clear bounds
      */
-    public WindowContainerTransaction prepareClearBoundsForTasks(int displayId) {
+    public WindowContainerTransaction prepareClearBoundsForStandardTasks(int displayId) {
         ProtoLog.d(WM_SHELL_DESKTOP_MODE, "prepareClearBoundsForTasks: displayId=%d", displayId);
         WindowContainerTransaction wct = new WindowContainerTransaction();
         for (int i = 0; i < mTasks.size(); i++) {
             RunningTaskInfo taskInfo = mTasks.valueAt(i).getTaskInfo();
-            if (taskInfo.displayId == displayId) {
+            if ((taskInfo.displayId == displayId) && (taskInfo.getActivityType()
+                    == WindowConfiguration.ACTIVITY_TYPE_STANDARD)) {
                 ProtoLog.d(WM_SHELL_DESKTOP_MODE, "clearing bounds for token=%s taskInfo=%s",
                         taskInfo.token, taskInfo);
                 wct.setBounds(taskInfo.token, null);
@@ -715,17 +721,21 @@ public class ShellTaskOrganizer extends TaskOrganizer implements
     /**
      * Create a {@link WindowContainerTransaction} to clear task level freeform setting.
      *
+     * Only affects tasks that have {@link RunningTaskInfo#getActivityType()} set to
+     * {@link WindowConfiguration#ACTIVITY_TYPE_STANDARD}.
+     *
      * @param displayId display id for tasks that will have windowing mode reset to {@link
      *                  WindowConfiguration#WINDOWING_MODE_UNDEFINED}
      * @return {@link WindowContainerTransaction} with pending operations to clear windowing mode
      */
-    public WindowContainerTransaction prepareClearFreeformForTasks(int displayId) {
+    public WindowContainerTransaction prepareClearFreeformForStandardTasks(int displayId) {
         ProtoLog.d(WM_SHELL_DESKTOP_MODE, "prepareClearFreeformForTasks: displayId=%d", displayId);
         WindowContainerTransaction wct = new WindowContainerTransaction();
         for (int i = 0; i < mTasks.size(); i++) {
             RunningTaskInfo taskInfo = mTasks.valueAt(i).getTaskInfo();
             if (taskInfo.displayId == displayId
-                    && taskInfo.getWindowingMode() == WINDOWING_MODE_FREEFORM) {
+                    && taskInfo.getWindowingMode() == WINDOWING_MODE_FREEFORM
+                    && taskInfo.getActivityType() == ACTIVITY_TYPE_STANDARD) {
                 ProtoLog.d(WM_SHELL_DESKTOP_MODE,
                         "clearing windowing mode for token=%s taskInfo=%s", taskInfo.token,
                         taskInfo);
@@ -867,8 +877,12 @@ public class ShellTaskOrganizer extends TaskOrganizer implements
                     pkg = info.getTaskInfo().baseActivity.getPackageName();
                 }
                 Rect bounds = info.getTaskInfo().getConfiguration().windowConfiguration.getBounds();
+                boolean running = info.getTaskInfo().isRunning;
+                boolean visible = info.getTaskInfo().isVisible;
+                boolean focused = info.getTaskInfo().isFocused;
                 pw.println(innerPrefix + "#" + i + " task=" + key + " listener=" + listener
-                        + " wmMode=" + windowingMode + " pkg=" + pkg + " bounds=" + bounds);
+                        + " wmMode=" + windowingMode + " pkg=" + pkg + " bounds=" + bounds
+                        + " running=" + running + " visible=" + visible + " focused=" + focused);
             }
 
             pw.println();

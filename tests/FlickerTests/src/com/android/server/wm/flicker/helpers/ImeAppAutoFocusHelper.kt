@@ -24,17 +24,21 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Until
 import com.android.server.wm.flicker.testapp.ActivityOptions
 import com.android.server.wm.traces.common.ComponentNameMatcher
+import com.android.server.wm.traces.common.Condition
+import com.android.server.wm.traces.common.DeviceStateDump
 import com.android.server.wm.traces.parser.toFlickerComponent
 import com.android.server.wm.traces.parser.windowmanager.WindowManagerStateHelper
 import java.util.regex.Pattern
 
-class ImeAppAutoFocusHelper @JvmOverloads constructor(
+class ImeAppAutoFocusHelper
+@JvmOverloads
+constructor(
     instr: Instrumentation,
     private val rotation: Int,
     private val imePackageName: String = IME_PACKAGE,
-    launcherName: String = ActivityOptions.IME_ACTIVITY_AUTO_FOCUS_LAUNCHER_NAME,
+    launcherName: String = ActivityOptions.Ime.AutoFocusActivity.LABEL,
     component: ComponentNameMatcher =
-        ActivityOptions.IME_ACTIVITY_AUTO_FOCUS_COMPONENT_NAME.toFlickerComponent()
+        ActivityOptions.Ime.AutoFocusActivity.COMPONENT.toFlickerComponent()
 ) : ImeAppHelper(instr, launcherName, component) {
     override fun openIME(wmHelper: WindowManagerStateHelper) {
         // do nothing (the app is focused automatically)
@@ -45,64 +49,69 @@ class ImeAppAutoFocusHelper @JvmOverloads constructor(
         wmHelper: WindowManagerStateHelper,
         expectedWindowName: String,
         action: String?,
-        stringExtras: Map<String, String>
+        stringExtras: Map<String, String>,
+        waitConditions: Array<Condition<DeviceStateDump>>
     ) {
-        super.launchViaIntent(wmHelper, expectedWindowName, action, stringExtras)
+        super.launchViaIntent(wmHelper, expectedWindowName, action, stringExtras, waitConditions)
         waitIMEShown(wmHelper)
     }
 
     override fun open() {
-        val expectedPackage = if (rotation.isRotated()) {
-            imePackageName
-        } else {
-            getPackage()
-        }
+        val expectedPackage =
+            if (rotation.isRotated()) {
+                imePackageName
+            } else {
+                getPackage()
+            }
         launcherStrategy.launch(appName, expectedPackage)
     }
 
     fun startDialogThemedActivity(wmHelper: WindowManagerStateHelper) {
-        val button = uiDevice.wait(Until.findObject(By.res(getPackage(),
-                "start_dialog_themed_activity_btn")), FIND_TIMEOUT)
+        val button =
+            uiDevice.wait(
+                Until.findObject(By.res(getPackage(), "start_dialog_themed_activity_btn")),
+                FIND_TIMEOUT
+            )
 
         requireNotNull(button) {
             "Button not found, this usually happens when the device " +
-                    "was left in an unknown state (e.g. Screen turned off)"
+                "was left in an unknown state (e.g. Screen turned off)"
         }
         button.click()
-        wmHelper.StateSyncBuilder()
-            .withFullScreenApp(
-                ActivityOptions.DIALOG_THEMED_ACTIVITY_COMPONENT_NAME.toFlickerComponent())
+        wmHelper
+            .StateSyncBuilder()
+            .withFullScreenApp(ActivityOptions.DialogThemedActivity.COMPONENT.toFlickerComponent())
             .waitForAndVerify()
     }
+
     fun dismissDialog(wmHelper: WindowManagerStateHelper) {
-        val dialog = uiDevice.wait(
-                Until.findObject(By.text("Dialog for test")), FIND_TIMEOUT)
+        val dialog = uiDevice.wait(Until.findObject(By.text("Dialog for test")), FIND_TIMEOUT)
 
         // Pressing back key to dismiss the dialog
         if (dialog != null) {
             uiDevice.pressBack()
-            wmHelper.StateSyncBuilder()
-                .withAppTransitionIdle()
-                .waitForAndVerify()
+            wmHelper.StateSyncBuilder().withAppTransitionIdle().waitForAndVerify()
         }
     }
+
     fun getInsetsVisibleFromDialog(type: Int): Boolean {
-        val insetsVisibilityTextView = uiDevice.wait(
-                Until.findObject(By.res("android:id/text1")), FIND_TIMEOUT)
+        val insetsVisibilityTextView =
+            uiDevice.wait(Until.findObject(By.res("android:id/text1")), FIND_TIMEOUT)
         if (insetsVisibilityTextView != null) {
             val visibility = insetsVisibilityTextView.text.toString()
-            val matcher = when (type) {
-                ime() -> {
-                    Pattern.compile("IME\\: (VISIBLE|INVISIBLE)").matcher(visibility)
+            val matcher =
+                when (type) {
+                    ime() -> {
+                        Pattern.compile("IME\\: (VISIBLE|INVISIBLE)").matcher(visibility)
+                    }
+                    statusBars() -> {
+                        Pattern.compile("StatusBar\\: (VISIBLE|INVISIBLE)").matcher(visibility)
+                    }
+                    navigationBars() -> {
+                        Pattern.compile("NavBar\\: (VISIBLE|INVISIBLE)").matcher(visibility)
+                    }
+                    else -> null
                 }
-                statusBars() -> {
-                    Pattern.compile("StatusBar\\: (VISIBLE|INVISIBLE)").matcher(visibility)
-                }
-                navigationBars() -> {
-                    Pattern.compile("NavBar\\: (VISIBLE|INVISIBLE)").matcher(visibility)
-                }
-                else -> null
-            }
             if (matcher != null && matcher.find()) {
                 return matcher.group(1).equals("VISIBLE")
             }

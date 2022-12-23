@@ -61,7 +61,7 @@ public class SmartSpaceComplication implements Complication {
      * {@link CoreStartable} responsbile for registering {@link SmartSpaceComplication} with
      * SystemUI.
      */
-    public static class Registrant extends CoreStartable {
+    public static class Registrant implements CoreStartable {
         private final DreamSmartspaceController mSmartSpaceController;
         private final DreamOverlayStateController mDreamOverlayStateController;
         private final SmartSpaceComplication mComplication;
@@ -70,11 +70,7 @@ public class SmartSpaceComplication implements Complication {
                 new BcSmartspaceDataPlugin.SmartspaceTargetListener() {
             @Override
             public void onSmartspaceTargetsUpdated(List<? extends Parcelable> targets) {
-                if (!targets.isEmpty()) {
-                    mDreamOverlayStateController.addComplication(mComplication);
-                } else {
-                    mDreamOverlayStateController.removeComplication(mComplication);
-                }
+                mDreamOverlayStateController.addComplication(mComplication);
             }
         };
 
@@ -82,11 +78,10 @@ public class SmartSpaceComplication implements Complication {
          * Default constructor for {@link SmartSpaceComplication}.
          */
         @Inject
-        public Registrant(Context context,
+        public Registrant(
                 DreamOverlayStateController dreamOverlayStateController,
                 SmartSpaceComplication smartSpaceComplication,
                 DreamSmartspaceController smartSpaceController) {
-            super(context);
             mDreamOverlayStateController = dreamOverlayStateController;
             mComplication = smartSpaceComplication;
             mSmartSpaceController = smartSpaceController;

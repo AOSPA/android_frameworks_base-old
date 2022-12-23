@@ -52,6 +52,7 @@ public final class AssociationInfo implements Parcelable {
     private final @Nullable MacAddress mDeviceMacAddress;
     private final @Nullable CharSequence mDisplayName;
     private final @Nullable String mDeviceProfile;
+    private final @Nullable AssociatedDevice mAssociatedDevice;
 
     private final boolean mSelfManaged;
     private final boolean mNotifyOnDeviceNearby;
@@ -78,8 +79,9 @@ public final class AssociationInfo implements Parcelable {
      */
     public AssociationInfo(int id, @UserIdInt int userId, @NonNull String packageName,
             @Nullable MacAddress macAddress, @Nullable CharSequence displayName,
-            @Nullable String deviceProfile, boolean selfManaged, boolean notifyOnDeviceNearby,
-            boolean revoked, long timeApprovedMs, long lastTimeConnectedMs) {
+            @Nullable String deviceProfile, @Nullable AssociatedDevice associatedDevice,
+            boolean selfManaged, boolean notifyOnDeviceNearby, boolean revoked,
+            long timeApprovedMs, long lastTimeConnectedMs) {
         if (id <= 0) {
             throw new IllegalArgumentException("Association ID should be greater than 0");
         }
@@ -96,6 +98,7 @@ public final class AssociationInfo implements Parcelable {
         mDeviceMacAddress = macAddress;
         mDisplayName = displayName;
         mDeviceProfile = deviceProfile;
+        mAssociatedDevice = associatedDevice;
 
         mSelfManaged = selfManaged;
         mNotifyOnDeviceNearby = notifyOnDeviceNearby;
@@ -157,6 +160,23 @@ public final class AssociationInfo implements Parcelable {
      */
     public @Nullable String getDeviceProfile() {
         return mDeviceProfile;
+    }
+
+    /**
+     * Companion device that was associated. Note that this field is not persisted across sessions.
+     * Device can be one of the following types:
+     *
+     * <ul>
+     *     <li>for classic Bluetooth - {@link AssociatedDevice#getBluetoothDevice()}</li>
+     *     <li>for Bluetooth LE - {@link AssociatedDevice#getBleDevice()}</li>
+     *     <li>for WiFi - {@link AssociatedDevice#getWifiDevice()}</li>
+     * </ul>
+     *
+     * @return the companion device that was associated, or {@code null} if the device is
+     *         self-managed or this association info was retrieved from persistent storage.
+     */
+    public @Nullable AssociatedDevice getAssociatedDevice() {
+        return mAssociatedDevice;
     }
 
     /**
@@ -260,6 +280,7 @@ public final class AssociationInfo implements Parcelable {
                 + ", mDisplayName='" + mDisplayName + '\''
                 + ", mDeviceProfile='" + mDeviceProfile + '\''
                 + ", mSelfManaged=" + mSelfManaged
+                + ", mAssociatedDevice=" + mAssociatedDevice
                 + ", mNotifyOnDeviceNearby=" + mNotifyOnDeviceNearby
                 + ", mRevoked=" + mRevoked
                 + ", mTimeApprovedMs=" + new Date(mTimeApprovedMs)
@@ -284,14 +305,15 @@ public final class AssociationInfo implements Parcelable {
                 && Objects.equals(mPackageName, that.mPackageName)
                 && Objects.equals(mDeviceMacAddress, that.mDeviceMacAddress)
                 && Objects.equals(mDisplayName, that.mDisplayName)
-                && Objects.equals(mDeviceProfile, that.mDeviceProfile);
+                && Objects.equals(mDeviceProfile, that.mDeviceProfile)
+                && Objects.equals(mAssociatedDevice, that.mAssociatedDevice);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(mId, mUserId, mPackageName, mDeviceMacAddress, mDisplayName,
-                mDeviceProfile, mSelfManaged, mNotifyOnDeviceNearby, mRevoked, mTimeApprovedMs,
-                mLastTimeConnectedMs);
+                mDeviceProfile, mAssociatedDevice, mSelfManaged, mNotifyOnDeviceNearby, mRevoked,
+                mTimeApprovedMs, mLastTimeConnectedMs);
     }
 
     @Override
@@ -309,6 +331,7 @@ public final class AssociationInfo implements Parcelable {
         dest.writeTypedObject(mDeviceMacAddress, 0);
         dest.writeCharSequence(mDisplayName);
         dest.writeString(mDeviceProfile);
+        dest.writeTypedObject(mAssociatedDevice, 0);
 
         dest.writeBoolean(mSelfManaged);
         dest.writeBoolean(mNotifyOnDeviceNearby);
@@ -326,6 +349,7 @@ public final class AssociationInfo implements Parcelable {
         mDeviceMacAddress = in.readTypedObject(MacAddress.CREATOR);
         mDisplayName = in.readCharSequence();
         mDeviceProfile = in.readString();
+        mAssociatedDevice = in.readTypedObject(AssociatedDevice.CREATOR);
 
         mSelfManaged = in.readBoolean();
         mNotifyOnDeviceNearby = in.readBoolean();
@@ -433,6 +457,7 @@ public final class AssociationInfo implements Parcelable {
                     mOriginalInfo.mDeviceMacAddress,
                     mOriginalInfo.mDisplayName,
                     mOriginalInfo.mDeviceProfile,
+                    mOriginalInfo.mAssociatedDevice,
                     mOriginalInfo.mSelfManaged,
                     mNotifyOnDeviceNearby,
                     mRevoked,

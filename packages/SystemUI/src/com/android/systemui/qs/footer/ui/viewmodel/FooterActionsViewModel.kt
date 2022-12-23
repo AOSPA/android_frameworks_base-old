@@ -18,12 +18,10 @@ package com.android.systemui.qs.footer.ui.viewmodel
 
 import android.content.Context
 import android.util.Log
-import android.view.View
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import com.android.settingslib.Utils
-import com.android.settingslib.drawable.UserIconDrawable
 import com.android.systemui.R
 import com.android.systemui.animation.Expandable
 import com.android.systemui.common.shared.model.ContentDescription
@@ -138,10 +136,13 @@ class FooterActionsViewModel(
     /** The model for the settings button. */
     val settings: FooterActionsButtonViewModel =
         FooterActionsButtonViewModel(
-            Icon.Resource(R.drawable.ic_settings),
+            id = R.id.settings_button_container,
+            Icon.Resource(
+                R.drawable.ic_settings,
+                ContentDescription.Resource(R.string.accessibility_quick_settings_settings)
+            ),
             iconTint = null,
             R.drawable.qs_footer_action_circle,
-            ContentDescription.Resource(R.string.accessibility_quick_settings_settings),
             this::onSettingsButtonClicked,
         )
 
@@ -149,14 +150,17 @@ class FooterActionsViewModel(
     val power: FooterActionsButtonViewModel? =
         if (showPowerButton) {
             FooterActionsButtonViewModel(
-                Icon.Resource(android.R.drawable.ic_lock_power_off),
+                id = R.id.pm_lite,
+                Icon.Resource(
+                    android.R.drawable.ic_lock_power_off,
+                    ContentDescription.Resource(R.string.accessibility_quick_settings_power_menu)
+                ),
                 iconTint =
                     Utils.getColorAttrDefaultColor(
                         context,
                         com.android.internal.R.attr.textColorOnAccent,
                     ),
                 R.drawable.qs_footer_action_circle_color,
-                ContentDescription.Resource(R.string.accessibility_quick_settings_power_menu),
                 this::onPowerButtonClicked,
             )
         } else {
@@ -194,69 +198,70 @@ class FooterActionsViewModel(
      */
     suspend fun observeDeviceMonitoringDialogRequests(quickSettingsContext: Context) {
         footerActionsInteractor.deviceMonitoringDialogRequests.collect {
-            footerActionsInteractor.showDeviceMonitoringDialog(quickSettingsContext)
+            footerActionsInteractor.showDeviceMonitoringDialog(
+                quickSettingsContext,
+                expandable = null,
+            )
         }
     }
 
-    private fun onSecurityButtonClicked(view: View) {
+    private fun onSecurityButtonClicked(quickSettingsContext: Context, expandable: Expandable) {
         if (falsingManager.isFalseTap(FalsingManager.LOW_PENALTY)) {
             return
         }
 
-        footerActionsInteractor.showDeviceMonitoringDialog(view)
+        footerActionsInteractor.showDeviceMonitoringDialog(quickSettingsContext, expandable)
     }
 
-    private fun onForegroundServiceButtonClicked(view: View) {
+    private fun onForegroundServiceButtonClicked(expandable: Expandable) {
         if (falsingManager.isFalseTap(FalsingManager.LOW_PENALTY)) {
             return
         }
 
-        footerActionsInteractor.showForegroundServicesDialog(view)
+        footerActionsInteractor.showForegroundServicesDialog(expandable)
     }
 
-    private fun onUserSwitcherClicked(view: View) {
+    private fun onUserSwitcherClicked(expandable: Expandable) {
         if (falsingManager.isFalseTap(FalsingManager.LOW_PENALTY)) {
             return
         }
 
-        footerActionsInteractor.showUserSwitcher(view)
+        footerActionsInteractor.showUserSwitcher(context, expandable)
     }
 
-    // TODO(b/230830644): Replace View by an Expandable interface that can expand in either dialog
-    // or activity.
-    private fun onSettingsButtonClicked(view: View) {
+    private fun onSettingsButtonClicked(expandable: Expandable) {
         if (falsingManager.isFalseTap(FalsingManager.LOW_PENALTY)) {
             return
         }
 
-        footerActionsInteractor.showSettings(Expandable.fromView(view))
+        footerActionsInteractor.showSettings(expandable)
     }
 
-    private fun onPowerButtonClicked(view: View) {
+    private fun onPowerButtonClicked(expandable: Expandable) {
         if (falsingManager.isFalseTap(FalsingManager.LOW_PENALTY)) {
             return
         }
 
-        footerActionsInteractor.showPowerMenuDialog(globalActionsDialogLite, view)
+        footerActionsInteractor.showPowerMenuDialog(globalActionsDialogLite, expandable)
     }
 
     private fun userSwitcherButton(
         status: UserSwitcherStatusModel.Enabled
     ): FooterActionsButtonViewModel {
         val icon = status.currentUserImage!!
-        val iconTint =
-            if (status.isGuestUser && icon !is UserIconDrawable) {
-                Utils.getColorAttrDefaultColor(context, android.R.attr.colorForeground)
-            } else {
-                null
-            }
 
         return FooterActionsButtonViewModel(
-            Icon.Loaded(icon),
-            iconTint,
-            R.drawable.qs_footer_action_circle,
-            ContentDescription.Loaded(userSwitcherContentDescription(status.currentUserName)),
-            this::onUserSwitcherClicked,
+            id = R.id.multi_user_switch,
+            icon =
+                Icon.Loaded(
+                    icon,
+                    ContentDescription.Loaded(
+                        userSwitcherContentDescription(status.currentUserName)
+                    ),
+                ),
+            iconTint = null,
+            background = R.drawable.qs_footer_action_circle,
+            onClick = this::onUserSwitcherClicked,
         )
     }
 

@@ -50,6 +50,7 @@ import android.database.ContentObserver;
 import android.hardware.display.ColorDisplayManager;
 import android.hardware.display.ColorDisplayManager.AutoMode;
 import android.hardware.display.ColorDisplayManager.ColorMode;
+import android.hardware.display.DisplayManagerInternal;
 import android.hardware.display.IColorDisplayManager;
 import android.hardware.display.Time;
 import android.net.Uri;
@@ -154,7 +155,8 @@ public final class ColorDisplayService extends SystemService {
 
     @VisibleForTesting
     final DisplayWhiteBalanceTintController mDisplayWhiteBalanceTintController =
-            new DisplayWhiteBalanceTintController();
+            new DisplayWhiteBalanceTintController(
+                    LocalServices.getService(DisplayManagerInternal.class));
     private final NightDisplayTintController mNightDisplayTintController =
             new NightDisplayTintController();
     private final TintController mGlobalSaturationTintController =
@@ -740,7 +742,8 @@ public final class ColorDisplayService extends SystemService {
         mDisplayWhiteBalanceTintController.setActivated(isDisplayWhiteBalanceSettingEnabled()
                 && !mNightDisplayTintController.isActivated()
                 && !isAccessibilityEnabled()
-                && dtm.needsLinearColorMatrix());
+                && dtm.needsLinearColorMatrix()
+                && mDisplayWhiteBalanceTintController.isAllowed());
         boolean activated = mDisplayWhiteBalanceTintController.isActivated();
 
         if (mDisplayWhiteBalanceListener != null && oldActivated != activated) {
@@ -1453,6 +1456,12 @@ public final class ColorDisplayService extends SystemService {
      */
     public class ColorDisplayServiceInternal {
 
+        /** Sets whether DWB should be allowed in the current state. */
+        public void setDisplayWhiteBalanceAllowed(boolean allowed)  {
+            mDisplayWhiteBalanceTintController.setAllowed(allowed);
+            updateDisplayWhiteBalanceStatus();
+        }
+
         /**
          * Set the current CCT value for the display white balance transform, and if the transform
          * is enabled, apply it.
@@ -1673,6 +1682,8 @@ public final class ColorDisplayService extends SystemService {
         @android.annotation.EnforcePermission(android.Manifest.permission.CONTROL_DISPLAY_COLOR_TRANSFORMS)
         @Override
         public boolean isSaturationActivated() {
+            super.isSaturationActivated_enforcePermission();
+
             final long token = Binder.clearCallingIdentity();
             try {
                 return !mGlobalSaturationTintController.isActivatedStateNotSet()
@@ -1685,6 +1696,8 @@ public final class ColorDisplayService extends SystemService {
         @android.annotation.EnforcePermission(android.Manifest.permission.CONTROL_DISPLAY_COLOR_TRANSFORMS)
         @Override
         public boolean setAppSaturationLevel(String packageName, int level) {
+            super.setAppSaturationLevel_enforcePermission();
+
             final String callingPackageName = LocalServices.getService(PackageManagerInternal.class)
                     .getNameForUid(Binder.getCallingUid());
             final long token = Binder.clearCallingIdentity();
@@ -1697,6 +1710,8 @@ public final class ColorDisplayService extends SystemService {
 
         @android.annotation.EnforcePermission(android.Manifest.permission.CONTROL_DISPLAY_COLOR_TRANSFORMS)
         public int getTransformCapabilities() {
+            super.getTransformCapabilities_enforcePermission();
+
             final long token = Binder.clearCallingIdentity();
             try {
                 return getTransformCapabilitiesInternal();

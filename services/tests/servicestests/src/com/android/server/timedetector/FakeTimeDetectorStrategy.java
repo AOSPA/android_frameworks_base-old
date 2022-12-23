@@ -16,11 +16,10 @@
 
 package com.android.server.timedetector;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-
 import android.annotation.UserIdInt;
 import android.app.time.ExternalTimeSuggestion;
+import android.app.time.TimeState;
+import android.app.time.UnixEpochTime;
 import android.app.timedetector.ManualTimeSuggestion;
 import android.app.timedetector.TelephonyTimeSuggestion;
 import android.util.IndentingPrintWriter;
@@ -29,82 +28,48 @@ import android.util.IndentingPrintWriter;
  * A fake implementation of {@link com.android.server.timedetector.TimeDetectorStrategy} for use
  * in tests.
  */
-class FakeTimeDetectorStrategy implements TimeDetectorStrategy {
-
-    // Call tracking.
-    private TelephonyTimeSuggestion mLastTelephonySuggestion;
-    private @UserIdInt Integer mLastManualSuggestionUserId;
-    private ManualTimeSuggestion mLastManualSuggestion;
-    private NetworkTimeSuggestion mLastNetworkSuggestion;
-    private GnssTimeSuggestion mLastGnssSuggestion;
-    private ExternalTimeSuggestion mLastExternalSuggestion;
-    private boolean mDumpCalled;
+public class FakeTimeDetectorStrategy implements TimeDetectorStrategy {
+    // State
+    private TimeState mTimeState;
 
     @Override
-    public void suggestTelephonyTime(TelephonyTimeSuggestion timeSuggestion) {
-        mLastTelephonySuggestion = timeSuggestion;
+    public TimeState getTimeState() {
+        return mTimeState;
     }
 
     @Override
-    public boolean suggestManualTime(@UserIdInt int userId, ManualTimeSuggestion timeSuggestion) {
-        mLastManualSuggestionUserId = userId;
-        mLastManualSuggestion = timeSuggestion;
+    public void setTimeState(TimeState timeState) {
+        mTimeState = timeState;
+    }
+
+    @Override
+    public boolean confirmTime(UnixEpochTime confirmationTime) {
+        return false;
+    }
+
+    @Override
+    public void suggestTelephonyTime(TelephonyTimeSuggestion timeSuggestion) {
+    }
+
+    @Override
+    public boolean suggestManualTime(@UserIdInt int userId, ManualTimeSuggestion timeSuggestion,
+            boolean bypassUserPolicyChecks) {
         return true;
     }
 
     @Override
     public void suggestNetworkTime(NetworkTimeSuggestion timeSuggestion) {
-        mLastNetworkSuggestion = timeSuggestion;
     }
 
     @Override
     public void suggestGnssTime(GnssTimeSuggestion timeSuggestion) {
-        mLastGnssSuggestion = timeSuggestion;
     }
 
     @Override
     public void suggestExternalTime(ExternalTimeSuggestion timeSuggestion) {
-        mLastExternalSuggestion = timeSuggestion;
     }
 
     @Override
     public void dump(IndentingPrintWriter pw, String[] args) {
-        mDumpCalled = true;
-    }
-
-    void resetCallTracking() {
-        mLastTelephonySuggestion = null;
-        mLastManualSuggestionUserId = null;
-        mLastManualSuggestion = null;
-        mLastNetworkSuggestion = null;
-        mLastGnssSuggestion = null;
-        mLastExternalSuggestion = null;
-        mDumpCalled = false;
-    }
-
-    void verifySuggestTelephonyTimeCalled(TelephonyTimeSuggestion expectedSuggestion) {
-        assertEquals(expectedSuggestion, mLastTelephonySuggestion);
-    }
-
-    void verifySuggestManualTimeCalled(
-            @UserIdInt int expectedUserId, ManualTimeSuggestion expectedSuggestion) {
-        assertEquals((Integer) expectedUserId, mLastManualSuggestionUserId);
-        assertEquals(expectedSuggestion, mLastManualSuggestion);
-    }
-
-    void verifySuggestNetworkTimeCalled(NetworkTimeSuggestion expectedSuggestion) {
-        assertEquals(expectedSuggestion, mLastNetworkSuggestion);
-    }
-
-    void verifySuggestGnssTimeCalled(GnssTimeSuggestion expectedSuggestion) {
-        assertEquals(expectedSuggestion, mLastGnssSuggestion);
-    }
-
-    void verifySuggestExternalTimeCalled(ExternalTimeSuggestion expectedSuggestion) {
-        assertEquals(expectedSuggestion, mLastExternalSuggestion);
-    }
-
-    void verifyDumpCalled() {
-        assertTrue(mDumpCalled);
     }
 }

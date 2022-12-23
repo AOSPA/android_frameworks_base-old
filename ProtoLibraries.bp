@@ -35,14 +35,12 @@ gensrcs {
         "&& $(location soong_zip) -jar -o $(out) -C $(genDir)/$(in) -D $(genDir)/$(in)",
 
     srcs: [
-        ":framework-connectivity-protos",
         ":ipconnectivity-proto-src",
         ":libstats_atom_enum_protos",
         ":libstats_atom_message_protos",
         ":libtombstone_proto-src",
         "core/proto/**/*.proto",
         "libs/incident/**/*.proto",
-        ":service-permission-streaming-proto-sources",
     ],
     output_extension: "srcjar",
 }
@@ -68,13 +66,11 @@ gensrcs {
         "  $(in)",
 
     srcs: [
-        ":framework-connectivity-protos",
         ":ipconnectivity-proto-src",
         ":libstats_atom_enum_protos",
         ":libstats_atom_message_protos",
         "core/proto/**/*.proto",
         "libs/incident/**/*.proto",
-        ":service-permission-streaming-proto-sources",
     ],
 
     output_extension: "proto.h",
@@ -84,7 +80,6 @@ gensrcs {
 java_library_host {
     name: "platformprotos",
     srcs: [
-        ":framework-connectivity-protos",
         ":ipconnectivity-proto-src",
         ":libstats_atom_enum_protos",
         ":libstats_atom_message_protos",
@@ -94,7 +89,6 @@ java_library_host {
         "cmds/statsd/src/**/*.proto",
         "core/proto/**/*.proto",
         "libs/incident/proto/**/*.proto",
-        ":service-permission-streaming-proto-sources",
     ],
     proto: {
         include_dirs: [
@@ -124,13 +118,11 @@ java_library {
     ],
     sdk_version: "9",
     srcs: [
-        ":framework-connectivity-protos",
         ":ipconnectivity-proto-src",
         ":libstats_atom_enum_protos",
         ":libstats_atom_message_protos",
         "core/proto/**/*.proto",
         "libs/incident/proto/android/os/**/*.proto",
-        ":service-permission-streaming-proto-sources",
     ],
     // Protos have lots of MissingOverride and similar.
     errorprone: {
@@ -147,13 +139,11 @@ java_library {
     },
 
     srcs: [
-        ":framework-connectivity-protos",
         ":ipconnectivity-proto-src",
         ":libstats_atom_enum_protos",
         ":libstats_atom_message_protos",
         "core/proto/**/*.proto",
         "libs/incident/proto/android/os/**/*.proto",
-        ":service-permission-streaming-proto-sources",
     ],
     exclude_srcs: [
         "core/proto/android/privacy.proto",
@@ -185,12 +175,10 @@ cc_defaults {
     ],
 
     srcs: [
-        ":framework-connectivity-protos",
         ":ipconnectivity-proto-src",
         ":libstats_atom_enum_protos",
         ":libstats_atom_message_protos",
         "core/proto/**/*.proto",
-        ":service-permission-streaming-proto-sources",
     ],
 }
 

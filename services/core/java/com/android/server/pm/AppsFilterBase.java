@@ -28,7 +28,6 @@ import android.content.pm.SigningDetails;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.Process;
-import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.text.TextUtils;
@@ -40,7 +39,7 @@ import android.util.SparseArray;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.function.QuadFunction;
 import com.android.server.om.OverlayReferenceMapper;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
+import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.PackageStateInternal;
 import com.android.server.pm.snapshot.PackageDataSnapshot;
 import com.android.server.utils.SnapshotCache;
@@ -199,6 +198,7 @@ public abstract class AppsFilterBase implements AppsFilterSnapshot {
     protected SnapshotCache<WatchedSparseBooleanMatrix> mShouldFilterCacheSnapshot;
 
     protected volatile boolean mCacheReady = false;
+    protected volatile boolean mCacheEnabled = true;
 
     protected static final boolean CACHE_VALID = true;
     protected static final boolean CACHE_INVALID = false;
@@ -216,12 +216,12 @@ public abstract class AppsFilterBase implements AppsFilterSnapshot {
         return mQueriesViaComponent.contains(callingAppId, targetAppId);
     }
 
-    protected boolean isImplicitlyQueryable(int callingAppId, int targetAppId) {
-        return mImplicitlyQueryable.contains(callingAppId, targetAppId);
+    protected boolean isImplicitlyQueryable(int callingUid, int targetUid) {
+        return mImplicitlyQueryable.contains(callingUid, targetUid);
     }
 
-    protected boolean isRetainedImplicitlyQueryable(int callingAppId, int targetAppId) {
-        return mRetainedImplicitlyQueryable.contains(callingAppId, targetAppId);
+    protected boolean isRetainedImplicitlyQueryable(int callingUid, int targetUid) {
+        return mRetainedImplicitlyQueryable.contains(callingUid, targetUid);
     }
 
     protected boolean isQueryableViaUsesLibrary(int callingAppId, int targetAppId) {
@@ -337,13 +337,14 @@ public abstract class AppsFilterBase implements AppsFilterSnapshot {
                     || callingAppId == targetPkgSetting.getAppId()) {
                 return false;
             } else if (Process.isSdkSandboxUid(callingAppId)) {
+                final int targetAppId = targetPkgSetting.getAppId();
+                final int targetUid = UserHandle.getUid(userId, targetAppId);
                 // we only allow sdk sandbox processes access to forcequeryable packages
                 return !isForceQueryable(targetPkgSetting.getAppId())
-                      && !isImplicitlyQueryable(callingAppId, targetPkgSetting.getAppId());
+                      && !isImplicitlyQueryable(callingUid, targetUid);
             }
             // use cache
-            if (mCacheReady && SystemProperties.getBoolean("debug.pm.use_app_filter_cache",
-                    true)) {
+            if (mCacheReady && mCacheEnabled) {
                 if (!shouldFilterApplicationUsingCache(callingUid,
                         targetPkgSetting.getAppId(),
                         userId)) {

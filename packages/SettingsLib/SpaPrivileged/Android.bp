@@ -30,6 +30,21 @@ android_library {
     ],
     kotlincflags: [
         "-Xjvm-default=all",
-        "-Xopt-in=kotlin.RequiresOptIn",
+        "-opt-in=kotlin.RequiresOptIn",
     ],
+}
+
+java_defaults {
+    name: "SpaPrivilegedLib-defaults",
+    static_libs: [
+        "androidx.compose.runtime_runtime",
+        "SpaPrivilegedLib",
+    ],
+    kotlincflags: ["-Xjvm-default=all"],
+}
+
+// Expose the srcs to tests, so the tests can access the internal classes.
+filegroup {
+    name: "SpaPrivilegedLib_srcs",
+    srcs: ["src/**/*.kt"],
 }

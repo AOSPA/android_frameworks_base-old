@@ -16,12 +16,10 @@
 
 package com.android.server.wm.flicker.ime
 
-import android.platform.test.annotations.FlakyTest
 import android.platform.test.annotations.Presubmit
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
-import com.android.server.wm.flicker.annotation.Group4
 import com.android.server.wm.flicker.helpers.isShellTransitionsEnabled
 import com.android.server.wm.flicker.navBarWindowIsVisibleAtStartAndEnd
 import org.junit.Assume
@@ -34,37 +32,35 @@ import org.junit.runners.MethodSorters
 import org.junit.runners.Parameterized
 
 /**
- * Test IME windows switching with 2-Buttons or gestural navigation.
- * To run this test: `atest FlickerTests:SwitchImeWindowsFromGestureNavTest`
+ * Test IME windows switching with 2-Buttons or gestural navigation. To run this test: `atest
+ * FlickerTests:SwitchImeWindowsFromGestureNavTest`
  */
 @RequiresDevice
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-@Group4
-class SwitchImeWindowsFromGestureNavTest_ShellTransit(
-    testSpec: FlickerTestParameter
-) : SwitchImeWindowsFromGestureNavTest(testSpec) {
+class SwitchImeWindowsFromGestureNavTest_ShellTransit(testSpec: FlickerTestParameter) :
+    SwitchImeWindowsFromGestureNavTest(testSpec) {
     @Before
     override fun before() {
         Assume.assumeTrue(isShellTransitionsEnabled)
     }
 
-    @FlakyTest(bugId = 228012334)
+    @Presubmit
     @Test
     override fun entireScreenCovered() = super.entireScreenCovered()
 
-    @FlakyTest(bugId = 228012334)
+    @Presubmit
     @Test
     override fun imeLayerIsVisibleWhenSwitchingToImeApp() =
         super.imeLayerIsVisibleWhenSwitchingToImeApp()
 
-    @FlakyTest(bugId = 228012334)
+    @Presubmit
     @Test
     override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
         super.visibleLayersShownMoreThanOneConsecutiveEntry()
 
-    @FlakyTest(bugId = 228012334)
+    @Presubmit
     @Test
     override fun visibleWindowsShownMoreThanOneConsecutiveEntry() =
         super.visibleWindowsShownMoreThanOneConsecutiveEntry()
@@ -75,8 +71,8 @@ class SwitchImeWindowsFromGestureNavTest_ShellTransit(
     override fun navBarWindowIsAlwaysVisible() = super.navBarWindowIsAlwaysVisible()
 
     /**
-     * Checks that [ComponentMatcher.NAV_BAR] window is visible and above the app windows at the start
-     * and end of the WM trace
+     * Checks that [ComponentMatcher.NAV_BAR] window is visible and above the app windows at the
+     * start and end of the WM trace
      */
     @Presubmit
     @Test

@@ -16,9 +16,6 @@
 
 package com.android.server.appop;
 
-import static android.app.ActivityManager.PROCESS_CAPABILITY_FOREGROUND_CAMERA;
-import static android.app.ActivityManager.PROCESS_CAPABILITY_FOREGROUND_LOCATION;
-import static android.app.ActivityManager.PROCESS_CAPABILITY_FOREGROUND_MICROPHONE;
 import static android.app.AppOpsManager.ATTRIBUTION_CHAIN_ID_NONE;
 import static android.app.AppOpsManager.ATTRIBUTION_FLAG_TRUSTED;
 import static android.app.AppOpsManager.CALL_BACK_ON_SWITCHED_OP;
@@ -36,7 +33,6 @@ import static android.app.AppOpsManager.MODE_DEFAULT;
 import static android.app.AppOpsManager.MODE_ERRORED;
 import static android.app.AppOpsManager.MODE_FOREGROUND;
 import static android.app.AppOpsManager.MODE_IGNORED;
-import static android.app.AppOpsManager.NoteOpEvent;
 import static android.app.AppOpsManager.OP_CAMERA;
 import static android.app.AppOpsManager.OP_FLAGS_ALL;
 import static android.app.AppOpsManager.OP_FLAG_SELF;
@@ -46,8 +42,8 @@ import static android.app.AppOpsManager.OP_PLAY_AUDIO;
 import static android.app.AppOpsManager.OP_RECEIVE_AMBIENT_TRIGGER_AUDIO;
 import static android.app.AppOpsManager.OP_RECORD_AUDIO;
 import static android.app.AppOpsManager.OP_RECORD_AUDIO_HOTWORD;
+import static android.app.AppOpsManager.OP_VIBRATE;
 import static android.app.AppOpsManager.OnOpStartedListener.START_TYPE_FAILED;
-import static android.app.AppOpsManager.OnOpStartedListener.START_TYPE_RESUMED;
 import static android.app.AppOpsManager.OnOpStartedListener.START_TYPE_STARTED;
 import static android.app.AppOpsManager.OpEventProxyInfo;
 import static android.app.AppOpsManager.RestrictionBypass;
@@ -56,23 +52,14 @@ import static android.app.AppOpsManager.SAMPLING_STRATEGY_RARELY_USED;
 import static android.app.AppOpsManager.SAMPLING_STRATEGY_UNIFORM;
 import static android.app.AppOpsManager.SAMPLING_STRATEGY_UNIFORM_OPS;
 import static android.app.AppOpsManager.SECURITY_EXCEPTION_ON_INVALID_ATTRIBUTION_TAG_CHANGE;
-import static android.app.AppOpsManager.UID_STATE_BACKGROUND;
-import static android.app.AppOpsManager.UID_STATE_CACHED;
-import static android.app.AppOpsManager.UID_STATE_FOREGROUND;
-import static android.app.AppOpsManager.UID_STATE_FOREGROUND_SERVICE;
-import static android.app.AppOpsManager.UID_STATE_MAX_LAST_NON_RESTRICTED;
-import static android.app.AppOpsManager.UID_STATE_PERSISTENT;
-import static android.app.AppOpsManager.UID_STATE_TOP;
 import static android.app.AppOpsManager._NUM_OP;
 import static android.app.AppOpsManager.extractFlagsFromKey;
 import static android.app.AppOpsManager.extractUidStateFromKey;
-import static android.app.AppOpsManager.makeKey;
 import static android.app.AppOpsManager.modeToName;
 import static android.app.AppOpsManager.opAllowSystemBypassRestriction;
 import static android.app.AppOpsManager.opRestrictsRead;
 import static android.app.AppOpsManager.opToName;
 import static android.app.AppOpsManager.opToPublicName;
-import static android.app.AppOpsManager.resolveFirstUnrestrictedUidState;
 import static android.content.Intent.ACTION_PACKAGE_REMOVED;
 import static android.content.Intent.EXTRA_REPLACING;
 import static android.content.pm.PermissionInfo.PROTECTION_DANGEROUS;
@@ -80,10 +67,7 @@ import static android.content.pm.PermissionInfo.PROTECTION_FLAG_APPOP;
 
 import static com.android.server.appop.AppOpsService.ModeCallback.ALL_OPS;
 
-import static java.lang.Long.max;
-
 import android.Manifest;
-import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
@@ -113,7 +97,6 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManagerInternal;
 import android.content.pm.PermissionInfo;
-import android.content.pm.UserInfo;
 import android.database.ContentObserver;
 import android.hardware.camera2.CameraDevice.CAMERA_AUDIO_RESTRICTION;
 import android.net.Uri;
@@ -122,6 +105,7 @@ import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.HandlerExecutor;
 import android.os.IBinder;
 import android.os.PackageTagsList;
 import android.os.Process;
@@ -134,26 +118,19 @@ import android.os.ShellCallback;
 import android.os.ShellCommand;
 import android.os.SystemClock;
 import android.os.UserHandle;
-import android.os.UserManager;
 import android.os.storage.StorageManagerInternal;
 import android.permission.PermissionManager;
 import android.provider.Settings;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.AtomicFile;
-import android.util.IndentingPrintWriter;
 import android.util.KeyValueListParser;
-import android.util.LongSparseArray;
 import android.util.Pair;
-import android.util.Pools;
-import android.util.Pools.SimplePool;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
 import android.util.SparseIntArray;
 import android.util.TimeUtils;
-import android.util.TypedXmlPullParser;
-import android.util.TypedXmlSerializer;
 import android.util.Xml;
 
 import com.android.internal.annotations.GuardedBy;
@@ -167,17 +144,20 @@ import com.android.internal.app.IAppOpsService;
 import com.android.internal.app.IAppOpsStartedCallback;
 import com.android.internal.app.MessageSamplingConfig;
 import com.android.internal.compat.IPlatformCompat;
+import com.android.internal.os.Clock;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.Preconditions;
 import com.android.internal.util.XmlUtils;
 import com.android.internal.util.function.pooled.PooledLambda;
+import com.android.modules.utils.TypedXmlPullParser;
+import com.android.modules.utils.TypedXmlSerializer;
 import com.android.server.LocalServices;
 import com.android.server.LockGuard;
 import com.android.server.SystemServerInitThreadPool;
 import com.android.server.SystemServiceManager;
 import com.android.server.pm.PackageList;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
+import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.component.ParsedAttribution;
 import com.android.server.policy.AppOpsPolicy;
 
@@ -209,7 +189,6 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Scanner;
 import java.util.Set;
@@ -236,35 +215,11 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
     // Constant meaning that any UID should be matched when dispatching callbacks
     private static final int UID_ANY = -2;
 
-    // Map from process states to the uid states we track.
-    private static final int[] PROCESS_STATE_TO_UID_STATE = new int[] {
-        UID_STATE_PERSISTENT,           // ActivityManager.PROCESS_STATE_PERSISTENT
-        UID_STATE_PERSISTENT,           // ActivityManager.PROCESS_STATE_PERSISTENT_UI
-        UID_STATE_TOP,                  // ActivityManager.PROCESS_STATE_TOP
-        UID_STATE_FOREGROUND,           // ActivityManager.PROCESS_STATE_BOUND_TOP
-        UID_STATE_FOREGROUND_SERVICE,   // ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE
-        UID_STATE_FOREGROUND,           // ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE
-        UID_STATE_BACKGROUND,           // ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND
-        UID_STATE_BACKGROUND,           // ActivityManager.PROCESS_STATE_IMPORTANT_BACKGROUND
-        UID_STATE_BACKGROUND,           // ActivityManager.PROCESS_STATE_TRANSIENT_BACKGROUND
-        UID_STATE_BACKGROUND,           // ActivityManager.PROCESS_STATE_BACKUP
-        UID_STATE_BACKGROUND,           // ActivityManager.PROCESS_STATE_SERVICE
-        UID_STATE_BACKGROUND,           // ActivityManager.PROCESS_STATE_RECEIVER
-        UID_STATE_CACHED,               // ActivityManager.PROCESS_STATE_TOP_SLEEPING
-        UID_STATE_CACHED,               // ActivityManager.PROCESS_STATE_HEAVY_WEIGHT
-        UID_STATE_CACHED,               // ActivityManager.PROCESS_STATE_HOME
-        UID_STATE_CACHED,               // ActivityManager.PROCESS_STATE_LAST_ACTIVITY
-        UID_STATE_CACHED,               // ActivityManager.PROCESS_STATE_CACHED_ACTIVITY
-        UID_STATE_CACHED,               // ActivityManager.PROCESS_STATE_CACHED_ACTIVITY_CLIENT
-        UID_STATE_CACHED,               // ActivityManager.PROCESS_STATE_CACHED_RECENT
-        UID_STATE_CACHED,               // ActivityManager.PROCESS_STATE_CACHED_EMPTY
-        UID_STATE_CACHED,               // ActivityManager.PROCESS_STATE_NONEXISTENT
-    };
-
     private static final int[] OPS_RESTRICTED_ON_SUSPEND = {
             OP_PLAY_AUDIO,
             OP_RECORD_AUDIO,
             OP_CAMERA,
+            OP_VIBRATE,
     };
 
     private static final int MAX_UNFORWARDED_OPS = 10;
@@ -276,14 +231,22 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
     private final @Nullable File mNoteOpCallerStacktracesFile;
     final Handler mHandler;
 
-    /** Pool for {@link OpEventProxyInfoPool} to avoid to constantly reallocate new objects */
+    /**
+     * Pool for {@link AttributedOp.OpEventProxyInfoPool} to avoid to constantly reallocate new
+     * objects
+     */
     @GuardedBy("this")
-    private final OpEventProxyInfoPool mOpEventProxyInfoPool = new OpEventProxyInfoPool();
+    final AttributedOp.OpEventProxyInfoPool mOpEventProxyInfoPool =
+            new AttributedOp.OpEventProxyInfoPool(MAX_UNUSED_POOLED_OBJECTS);
 
-    /** Pool for {@link InProgressStartOpEventPool} to avoid to constantly reallocate new objects */
+    /**
+     * Pool for {@link AttributedOp.InProgressStartOpEventPool} to avoid to constantly reallocate
+     * new objects
+     */
     @GuardedBy("this")
-    private final InProgressStartOpEventPool mInProgressStartOpEventPool =
-            new InProgressStartOpEventPool();
+    final AttributedOp.InProgressStartOpEventPool mInProgressStartOpEventPool =
+            new AttributedOp.InProgressStartOpEventPool(mOpEventProxyInfoPool,
+                    MAX_UNUSED_POOLED_OBJECTS);
 
     private final AppOpsManagerInternalImpl mAppOpsManagerInternal
             = new AppOpsManagerInternalImpl();
@@ -341,8 +304,6 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
     final SparseArray<UidState> mUidStates = new SparseArray<>();
 
     volatile @NonNull HistoricalRegistry mHistoricalRegistry = new HistoricalRegistry(this);
-
-    long mLastRealtime;
 
     /*
      * These are app op restrictions imposed per user from various parties.
@@ -404,58 +365,29 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
     /** Interface for app-op modes.*/
     @VisibleForTesting AppOpsServiceInterface mAppOpsServiceInterface;
 
-    /**
-     * An unsynchronized pool of {@link OpEventProxyInfo} objects.
-     */
-    private class OpEventProxyInfoPool extends SimplePool<OpEventProxyInfo> {
-        OpEventProxyInfoPool() {
-            super(MAX_UNUSED_POOLED_OBJECTS);
+    /** Interface for app-op restrictions.*/
+    @VisibleForTesting AppOpsRestrictions mAppOpsRestrictions;
+
+    private AppOpsUidStateTracker mUidStateTracker;
+
+    /** Hands the definition of foreground and uid states */
+    @GuardedBy("this")
+    public AppOpsUidStateTracker getUidStateTracker() {
+        if (mUidStateTracker == null) {
+            mUidStateTracker = new AppOpsUidStateTrackerImpl(
+                    LocalServices.getService(ActivityManagerInternal.class),
+                    mHandler,
+                    r -> {
+                        synchronized (AppOpsService.this) {
+                            r.run();
+                        }
+                    },
+                    Clock.SYSTEM_CLOCK, mConstants);
+
+            mUidStateTracker.addUidStateChangedCallback(new HandlerExecutor(mHandler),
+                    this::onUidStateChanged);
         }
-
-        OpEventProxyInfo acquire(@IntRange(from = 0) int uid, @Nullable String packageName,
-                @Nullable String attributionTag) {
-            OpEventProxyInfo recycled = acquire();
-            if (recycled != null) {
-                recycled.reinit(uid, packageName, attributionTag);
-                return recycled;
-            }
-
-            return new OpEventProxyInfo(uid, packageName, attributionTag);
-        }
-    }
-
-    /**
-     * An unsynchronized pool of {@link InProgressStartOpEvent} objects.
-     */
-    private class InProgressStartOpEventPool extends SimplePool<InProgressStartOpEvent> {
-        InProgressStartOpEventPool() {
-            super(MAX_UNUSED_POOLED_OBJECTS);
-        }
-
-        InProgressStartOpEvent acquire(long startTime, long elapsedTime, @NonNull IBinder clientId,
-                @Nullable String attributionTag, @NonNull Runnable onDeath, int proxyUid,
-                @Nullable String proxyPackageName, @Nullable String proxyAttributionTag,
-                @AppOpsManager.UidState int uidState, @OpFlags int flags, @AttributionFlags
-                int attributionFlags, int attributionChainId) throws RemoteException {
-
-            InProgressStartOpEvent recycled = acquire();
-
-            OpEventProxyInfo proxyInfo = null;
-            if (proxyUid != Process.INVALID_UID) {
-                proxyInfo = mOpEventProxyInfoPool.acquire(proxyUid, proxyPackageName,
-                        proxyAttributionTag);
-            }
-
-            if (recycled != null) {
-                recycled.reinit(startTime, elapsedTime, clientId, attributionTag, onDeath,
-                        uidState, flags, proxyInfo,  attributionFlags, attributionChainId,
-                        mOpEventProxyInfoPool);
-                return recycled;
-            }
-
-            return new InProgressStartOpEvent(startTime, elapsedTime, clientId, attributionTag,
-                    onDeath, uidState, proxyInfo, flags, attributionFlags, attributionChainId);
-        }
+        return mUidStateTracker;
     }
 
     /**
@@ -463,7 +395,6 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
      * global Settings. Any access to this class or its fields should be done while
      * holding the AppOpsService lock.
      */
-    @VisibleForTesting
     final class Constants extends ContentObserver {
 
         /**
@@ -551,14 +482,6 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
     final class UidState {
         public final int uid;
 
-        public int state = UID_STATE_CACHED;
-        public int pendingState = UID_STATE_CACHED;
-        public long pendingStateCommitTime;
-        public int capability;
-        public int pendingCapability;
-        public boolean appWidgetVisible;
-        public boolean pendingAppWidgetVisible;
-
         public ArrayMap<String, Ops> pkgOps;
 
         // true indicates there is an interested observer, false there isn't but it has such an op
@@ -574,7 +497,7 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
             mAppOpsServiceInterface.removeUid(uid);
             if (pkgOps != null) {
                 for (String packageName : pkgOps.keySet()) {
-                    mAppOpsServiceInterface.removePackage(packageName);
+                    mAppOpsServiceInterface.removePackage(packageName, UserHandle.getUserId(uid));
                 }
             }
             pkgOps = null;
@@ -584,17 +507,16 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
             boolean areAllPackageModesDefault = true;
             if (pkgOps != null) {
                 for (String packageName : pkgOps.keySet()) {
-                    if (!mAppOpsServiceInterface.arePackageModesDefault(packageName)) {
+                    if (!mAppOpsServiceInterface.arePackageModesDefault(packageName,
+                            UserHandle.getUserId(uid))) {
                         areAllPackageModesDefault = false;
                         break;
                     }
                 }
             }
             return (pkgOps == null || pkgOps.isEmpty())
-                    && (state == UID_STATE_CACHED
-                    && (pendingState == UID_STATE_CACHED))
-                    && (mAppOpsServiceInterface.areUidModesDefault(uid)
-                    && areAllPackageModesDefault);
+                    && mAppOpsServiceInterface.areUidModesDefault(uid)
+                    && areAllPackageModesDefault;
         }
 
         // Functions for uid mode access and manipulation.
@@ -610,52 +532,9 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
             return mAppOpsServiceInterface.setUidMode(uid, op, mode);
         }
 
+        @SuppressWarnings("GuardedBy")
         int evalMode(int op, int mode) {
-            if (mode == MODE_FOREGROUND) {
-                if (appWidgetVisible) {
-                    return MODE_ALLOWED;
-                } else if (mActivityManagerInternal != null
-                        && mActivityManagerInternal.isPendingTopUid(uid)) {
-                    return MODE_ALLOWED;
-                } else if (mActivityManagerInternal != null
-                        && mActivityManagerInternal.isTempAllowlistedForFgsWhileInUse(uid)) {
-                    return MODE_ALLOWED;
-                } else if (state <= UID_STATE_TOP) {
-                    // process is in TOP.
-                    return MODE_ALLOWED;
-                } else if (state <= AppOpsManager.resolveFirstUnrestrictedUidState(op)) {
-                    // process is in foreground, check its capability.
-                    switch (op) {
-                        case AppOpsManager.OP_FINE_LOCATION:
-                        case AppOpsManager.OP_COARSE_LOCATION:
-                        case AppOpsManager.OP_MONITOR_LOCATION:
-                        case AppOpsManager.OP_MONITOR_HIGH_POWER_LOCATION:
-                            if ((capability & PROCESS_CAPABILITY_FOREGROUND_LOCATION) != 0) {
-                                return MODE_ALLOWED;
-                            } else {
-                                return MODE_IGNORED;
-                            }
-                        case OP_CAMERA:
-                            if ((capability & PROCESS_CAPABILITY_FOREGROUND_CAMERA) != 0) {
-                                return MODE_ALLOWED;
-                            } else {
-                                return MODE_IGNORED;
-                            }
-                        case OP_RECORD_AUDIO:
-                            if ((capability & PROCESS_CAPABILITY_FOREGROUND_MICROPHONE) != 0) {
-                                return MODE_ALLOWED;
-                            } else {
-                                return MODE_IGNORED;
-                            }
-                        default:
-                            return MODE_ALLOWED;
-                    }
-                } else {
-                    // process is not in foreground.
-                    return MODE_IGNORED;
-                }
-            }
-            return mode;
+            return getUidStateTracker().evalMode(uid, op, mode);
         }
 
         public void evalForegroundOps() {
@@ -664,7 +543,8 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
             if (pkgOps != null) {
                 for (int i = pkgOps.size() - 1; i >= 0; i--) {
                     foregroundOps = mAppOpsServiceInterface
-                            .evalForegroundPackageOps(pkgOps.valueAt(i).packageName, foregroundOps);
+                            .evalForegroundPackageOps(pkgOps.valueAt(i).packageName, foregroundOps,
+                                    UserHandle.getUserId(uid));
                 }
             }
             hasForegroundWatchers = false;
@@ -676,6 +556,16 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
                     }
                 }
             }
+        }
+
+        @SuppressWarnings("GuardedBy")
+        public int getState() {
+            return getUidStateTracker().getUidState(uid);
+        }
+
+        @SuppressWarnings("GuardedBy")
+        public void dump(PrintWriter pw, long nowElapsed) {
+            getUidStateTracker().dumpUidState(pw, uid, nowElapsed);
         }
     }
 
@@ -704,7 +594,7 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
         }
     }
 
-    /** Returned from {@link #verifyAndGetBypass(int, String, String, String, boolean)}. */
+    /** Returned from {@link #verifyAndGetBypass(int, String, String, String)}. */
     private static final class PackageVerificationResult {
 
         final RestrictionBypass bypass;
@@ -713,740 +603,6 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
         PackageVerificationResult(RestrictionBypass bypass, boolean isAttributionTagValid) {
             this.bypass = bypass;
             this.isAttributionTagValid = isAttributionTagValid;
-        }
-    }
-
-    /** A in progress startOp->finishOp event */
-    private static final class InProgressStartOpEvent implements IBinder.DeathRecipient {
-        /** Wall clock time of startOp event (not monotonic) */
-        private long mStartTime;
-
-        /** Elapsed time since boot of startOp event */
-        private long mStartElapsedTime;
-
-        /** Id of the client that started the event */
-        private @NonNull IBinder mClientId;
-
-        /** The attribution tag for this operation */
-        private @Nullable String mAttributionTag;
-
-        /** To call when client dies */
-        private @NonNull Runnable mOnDeath;
-
-        /** uidstate used when calling startOp */
-        private @AppOpsManager.UidState int mUidState;
-
-        /** Proxy information of the startOp event */
-        private @Nullable OpEventProxyInfo mProxy;
-
-        /** Proxy flag information */
-        private @OpFlags int mFlags;
-
-        /** How many times the op was started but not finished yet */
-        int numUnfinishedStarts;
-
-        /** The attribution flags related to this event */
-        private @AttributionFlags int mAttributionFlags;
-
-        /** The id of the attribution chain this even is a part of */
-        private int mAttributionChainId;
-
-        /**
-         * Create a new {@link InProgressStartOpEvent}.
-         *
-         * @param startTime The time {@link #startOperation} was called
-         * @param startElapsedTime The elapsed time when {@link #startOperation} was called
-         * @param clientId The client id of the caller of {@link #startOperation}
-         * @param attributionTag The attribution tag for the operation.
-         * @param onDeath The code to execute on client death
-         * @param uidState The uidstate of the app {@link #startOperation} was called for
-         * @param attributionFlags the attribution flags for this operation.
-         * @param attributionChainId the unique id of the attribution chain this op is a part of.
-         * @param proxy The proxy information, if {@link #startProxyOperation} was called
-         * @param flags The trusted/nontrusted/self flags.
-         *
-         * @throws RemoteException If the client is dying
-         */
-        private InProgressStartOpEvent(long startTime, long startElapsedTime,
-                @NonNull IBinder clientId, @Nullable String attributionTag,
-                @NonNull Runnable onDeath, @AppOpsManager.UidState int uidState,
-                @Nullable OpEventProxyInfo proxy, @OpFlags int flags,
-                @AttributionFlags int attributionFlags, int attributionChainId)
-                throws RemoteException {
-            mStartTime = startTime;
-            mStartElapsedTime = startElapsedTime;
-            mClientId = clientId;
-            mAttributionTag = attributionTag;
-            mOnDeath = onDeath;
-            mUidState = uidState;
-            mProxy = proxy;
-            mFlags = flags;
-            mAttributionFlags = attributionFlags;
-            mAttributionChainId = attributionChainId;
-
-            clientId.linkToDeath(this, 0);
-        }
-
-        /** Clean up event */
-        public void finish() {
-            try {
-                mClientId.unlinkToDeath(this, 0);
-            } catch (NoSuchElementException e) {
-                // Either not linked, or already unlinked. Either way, nothing to do.
-            }
-        }
-
-        @Override
-        public void binderDied() {
-            mOnDeath.run();
-        }
-
-        /**
-         * Reinit existing object with new state.
-         *
-         * @param startTime The time {@link #startOperation} was called
-         * @param startElapsedTime The elapsed time when {@link #startOperation} was called
-         * @param clientId The client id of the caller of {@link #startOperation}
-         * @param attributionTag The attribution tag for this operation.
-         * @param onDeath The code to execute on client death
-         * @param uidState The uidstate of the app {@link #startOperation} was called for
-         * @param flags The flags relating to the proxy
-         * @param proxy The proxy information, if {@link #startProxyOperation} was called
-         * @param attributionFlags the attribution flags for this operation.
-         * @param attributionChainId the unique id of the attribution chain this op is a part of.
-         * @param proxyPool The pool to release previous {@link OpEventProxyInfo} to
-         *
-         * @throws RemoteException If the client is dying
-         */
-        public void reinit(long startTime, long startElapsedTime, @NonNull IBinder clientId,
-                @Nullable String attributionTag, @NonNull Runnable onDeath,
-                @AppOpsManager.UidState int uidState, @OpFlags int flags,
-                @Nullable OpEventProxyInfo proxy, @AttributionFlags int attributionFlags,
-                int attributionChainId, @NonNull Pools.Pool<OpEventProxyInfo> proxyPool
-        ) throws RemoteException {
-            mStartTime = startTime;
-            mStartElapsedTime = startElapsedTime;
-            mClientId = clientId;
-            mAttributionTag = attributionTag;
-            mOnDeath = onDeath;
-            mUidState = uidState;
-            mFlags = flags;
-
-            if (mProxy != null) {
-                proxyPool.release(mProxy);
-            }
-            mProxy = proxy;
-            mAttributionFlags = attributionFlags;
-            mAttributionChainId = attributionChainId;
-
-            clientId.linkToDeath(this, 0);
-        }
-
-        /** @return Wall clock time of startOp event */
-        public long getStartTime() {
-            return mStartTime;
-        }
-
-        /** @return Elapsed time since boot of startOp event */
-        public long getStartElapsedTime() {
-            return mStartElapsedTime;
-        }
-
-        /** @return Id of the client that started the event */
-        public @NonNull IBinder getClientId() {
-            return mClientId;
-        }
-
-        /** @return uidstate used when calling startOp */
-        public @AppOpsManager.UidState int getUidState() {
-            return mUidState;
-        }
-
-        /** @return proxy tag for the access */
-        public @Nullable OpEventProxyInfo getProxy() {
-            return mProxy;
-        }
-
-        /** @return flags used for the access */
-        public @OpFlags int getFlags() {
-            return mFlags;
-        }
-
-        /** @return attributoin flags used for the access */
-        public @AttributionFlags int getAttributionFlags() {
-            return mAttributionFlags;
-        }
-
-        /** @return attribution chain id for the access */
-        public int getAttributionChainId() {
-            return mAttributionChainId;
-        }
-    }
-
-    private final class AttributedOp {
-        public final @Nullable String tag;
-        public final @NonNull Op parent;
-
-        /**
-         * Last successful accesses (noteOp + finished startOp) for each uidState/opFlag combination
-         *
-         * <p>Key is {@link AppOpsManager#makeKey}
-         */
-        @GuardedBy("AppOpsService.this")
-        private @Nullable LongSparseArray<NoteOpEvent> mAccessEvents;
-
-        /**
-         * Last rejected accesses for each uidState/opFlag combination
-         *
-         * <p>Key is {@link AppOpsManager#makeKey}
-         */
-        @GuardedBy("AppOpsService.this")
-        private @Nullable LongSparseArray<NoteOpEvent> mRejectEvents;
-
-        /**
-         * Currently in progress startOp events
-         *
-         * <p>Key is clientId
-         */
-        @GuardedBy("AppOpsService.this")
-        private @Nullable ArrayMap<IBinder, InProgressStartOpEvent> mInProgressEvents;
-
-        /**
-         * Currently paused startOp events
-         *
-         * <p>Key is clientId
-         */
-        @GuardedBy("AppOpsService.this")
-        private @Nullable ArrayMap<IBinder, InProgressStartOpEvent> mPausedInProgressEvents;
-
-        AttributedOp(@Nullable String tag, @NonNull Op parent) {
-            this.tag = tag;
-            this.parent = parent;
-        }
-
-        /**
-         * Update state when noteOp was rejected or startOp->finishOp event finished
-         *
-         * @param proxyUid The uid of the proxy
-         * @param proxyPackageName The package name of the proxy
-         * @param proxyAttributionTag the attributionTag in the proxies package
-         * @param uidState UID state of the app noteOp/startOp was called for
-         * @param flags OpFlags of the call
-         */
-        public void accessed(int proxyUid, @Nullable String proxyPackageName,
-                @Nullable String proxyAttributionTag, @AppOpsManager.UidState int uidState,
-                @OpFlags int flags) {
-            long accessTime = System.currentTimeMillis();
-            accessed(accessTime, -1, proxyUid, proxyPackageName,
-                    proxyAttributionTag, uidState, flags);
-
-            mHistoricalRegistry.incrementOpAccessedCount(parent.op, parent.uid, parent.packageName,
-                    tag, uidState, flags, accessTime, AppOpsManager.ATTRIBUTION_FLAGS_NONE,
-                    AppOpsManager.ATTRIBUTION_CHAIN_ID_NONE);
-        }
-
-        /**
-         * Add an access that was previously collected.
-         *
-         * @param noteTime The time of the event
-         * @param duration The duration of the event
-         * @param proxyUid The uid of the proxy
-         * @param proxyPackageName The package name of the proxy
-         * @param proxyAttributionTag the attributionTag in the proxies package
-         * @param uidState UID state of the app noteOp/startOp was called for
-         * @param flags OpFlags of the call
-         */
-        public void accessed(long noteTime, long duration, int proxyUid,
-                @Nullable String proxyPackageName, @Nullable String proxyAttributionTag,
-                @AppOpsManager.UidState int uidState, @OpFlags int flags) {
-            long key = makeKey(uidState, flags);
-
-            if (mAccessEvents == null) {
-                mAccessEvents = new LongSparseArray<>(1);
-            }
-
-            OpEventProxyInfo proxyInfo = null;
-            if (proxyUid != Process.INVALID_UID) {
-                proxyInfo = mOpEventProxyInfoPool.acquire(proxyUid, proxyPackageName,
-                        proxyAttributionTag);
-            }
-
-            NoteOpEvent existingEvent = mAccessEvents.get(key);
-            if (existingEvent != null) {
-                existingEvent.reinit(noteTime, duration, proxyInfo, mOpEventProxyInfoPool);
-            } else {
-                mAccessEvents.put(key, new NoteOpEvent(noteTime, duration, proxyInfo));
-            }
-        }
-
-        /**
-         * Update state when noteOp/startOp was rejected.
-         *
-         * @param uidState UID state of the app noteOp is called for
-         * @param flags OpFlags of the call
-         */
-        public void rejected(@AppOpsManager.UidState int uidState, @OpFlags int flags) {
-            rejected(System.currentTimeMillis(), uidState, flags);
-
-            mHistoricalRegistry.incrementOpRejected(parent.op, parent.uid, parent.packageName,
-                    tag, uidState, flags);
-        }
-
-        /**
-         * Add an rejection that was previously collected
-         *
-         * @param noteTime The time of the event
-         * @param uidState UID state of the app noteOp/startOp was called for
-         * @param flags OpFlags of the call
-         */
-        public void rejected(long noteTime, @AppOpsManager.UidState int uidState,
-                @OpFlags int flags) {
-            long key = makeKey(uidState, flags);
-
-            if (mRejectEvents == null) {
-                mRejectEvents = new LongSparseArray<>(1);
-            }
-
-            // We do not collect proxy information for rejections yet
-            NoteOpEvent existingEvent = mRejectEvents.get(key);
-            if (existingEvent != null) {
-                existingEvent.reinit(noteTime, -1, null, mOpEventProxyInfoPool);
-            } else {
-                mRejectEvents.put(key, new NoteOpEvent(noteTime, -1, null));
-            }
-        }
-
-        /**
-         * Update state when start was called
-         *
-         * @param clientId Id of the startOp caller
-         * @param proxyUid The UID of the proxy app
-         * @param proxyPackageName The package name of the proxy app
-         * @param proxyAttributionTag The attribution tag of the proxy app
-         * @param uidState UID state of the app startOp is called for
-         * @param flags The proxy flags
-         * @param attributionFlags The attribution flags associated with this operation.
-         * @param attributionChainId The if of the attribution chain this operations is a part of.
-         */
-        public void started(@NonNull IBinder clientId, int proxyUid,
-                @Nullable String proxyPackageName, @Nullable String proxyAttributionTag,
-                @AppOpsManager.UidState int uidState, @OpFlags int flags, @AttributionFlags
-                int attributionFlags, int attributionChainId) throws RemoteException {
-            started(clientId, proxyUid, proxyPackageName, proxyAttributionTag,
-                    uidState, flags,/*triggerCallbackIfNeeded*/ true, attributionFlags,
-                    attributionChainId);
-        }
-
-        private void started(@NonNull IBinder clientId, int proxyUid,
-                @Nullable String proxyPackageName, @Nullable String proxyAttributionTag,
-                @AppOpsManager.UidState int uidState, @OpFlags int flags,
-                boolean triggerCallbackIfNeeded, @AttributionFlags int attributionFlags,
-                int attributionChainId) throws RemoteException {
-            startedOrPaused(clientId, proxyUid, proxyPackageName,
-                    proxyAttributionTag, uidState, flags, triggerCallbackIfNeeded,
-                    /*triggerCallbackIfNeeded*/ true, attributionFlags, attributionChainId);
-        }
-
-        private void startedOrPaused(@NonNull IBinder clientId, int proxyUid,
-                @Nullable String proxyPackageName, @Nullable String proxyAttributionTag,
-                @AppOpsManager.UidState int uidState, @OpFlags int flags,
-                boolean triggerCallbackIfNeeded, boolean isStarted, @AttributionFlags
-                int attributionFlags, int attributionChainId) throws RemoteException {
-            if (triggerCallbackIfNeeded && !parent.isRunning() && isStarted) {
-                scheduleOpActiveChangedIfNeededLocked(parent.op, parent.uid, parent.packageName,
-                        tag, true, attributionFlags, attributionChainId);
-            }
-
-            if (isStarted && mInProgressEvents == null) {
-                mInProgressEvents = new ArrayMap<>(1);
-            } else if (!isStarted && mPausedInProgressEvents == null) {
-                mPausedInProgressEvents = new ArrayMap<>(1);
-            }
-            ArrayMap<IBinder, InProgressStartOpEvent> events = isStarted
-                    ? mInProgressEvents : mPausedInProgressEvents;
-
-            long startTime = System.currentTimeMillis();
-            InProgressStartOpEvent event = events.get(clientId);
-            if (event == null) {
-                event = mInProgressStartOpEventPool.acquire(startTime,
-                        SystemClock.elapsedRealtime(), clientId, tag,
-                        PooledLambda.obtainRunnable(AppOpsService::onClientDeath, this, clientId),
-                        proxyUid, proxyPackageName, proxyAttributionTag, uidState, flags,
-                        attributionFlags, attributionChainId);
-                events.put(clientId, event);
-            } else {
-                if (uidState != event.mUidState) {
-                    onUidStateChanged(uidState);
-                }
-            }
-
-            event.numUnfinishedStarts++;
-
-            if (isStarted) {
-                mHistoricalRegistry.incrementOpAccessedCount(parent.op, parent.uid,
-                        parent.packageName, tag, uidState, flags, startTime, attributionFlags,
-                        attributionChainId);
-            }
-        }
-
-        /**
-         * Update state when finishOp was called. Will finish started ops, and delete paused ops.
-         *
-         * @param clientId Id of the finishOp caller
-         */
-        public void finished(@NonNull IBinder clientId) {
-            finished(clientId, true);
-        }
-
-        private void finished(@NonNull IBinder clientId, boolean triggerCallbackIfNeeded) {
-            finishOrPause(clientId, triggerCallbackIfNeeded, false);
-        }
-
-        /**
-         * Update state when paused or finished is called. If pausing, it records the op as
-         * stopping in the HistoricalRegistry, but does not delete it.
-         */
-        private void finishOrPause(@NonNull IBinder clientId, boolean triggerCallbackIfNeeded,
-                boolean isPausing) {
-            int indexOfToken = isRunning() ? mInProgressEvents.indexOfKey(clientId) : -1;
-            if (indexOfToken < 0) {
-                finishPossiblyPaused(clientId, isPausing);
-                return;
-            }
-
-            InProgressStartOpEvent event = mInProgressEvents.valueAt(indexOfToken);
-            if (!isPausing) {
-                event.numUnfinishedStarts--;
-            }
-            // If we are pausing, create a NoteOpEvent, but don't change the InProgress event
-            if (event.numUnfinishedStarts == 0 || isPausing) {
-                if (!isPausing) {
-                    event.finish();
-                    mInProgressEvents.removeAt(indexOfToken);
-                }
-
-                if (mAccessEvents == null) {
-                    mAccessEvents = new LongSparseArray<>(1);
-                }
-
-                OpEventProxyInfo proxyCopy = event.getProxy() != null
-                        ? new OpEventProxyInfo(event.getProxy()) : null;
-
-                long accessDurationMillis =
-                        SystemClock.elapsedRealtime() - event.getStartElapsedTime();
-                NoteOpEvent finishedEvent = new NoteOpEvent(event.getStartTime(),
-                        accessDurationMillis, proxyCopy);
-                mAccessEvents.put(makeKey(event.getUidState(), event.getFlags()),
-                        finishedEvent);
-
-                mHistoricalRegistry.increaseOpAccessDuration(parent.op, parent.uid,
-                        parent.packageName, tag, event.getUidState(),
-                        event.getFlags(), finishedEvent.getNoteTime(), finishedEvent.getDuration(),
-                        event.getAttributionFlags(), event.getAttributionChainId());
-
-                if (!isPausing) {
-                    mInProgressStartOpEventPool.release(event);
-                    if (mInProgressEvents.isEmpty()) {
-                        mInProgressEvents = null;
-
-                        // TODO ntmyren: Also callback for single attribution tag activity changes
-                        if (triggerCallbackIfNeeded && !parent.isRunning()) {
-                            scheduleOpActiveChangedIfNeededLocked(parent.op, parent.uid,
-                                    parent.packageName, tag, false, event.getAttributionFlags(),
-                                    event.getAttributionChainId());
-                        }
-                    }
-                }
-            }
-        }
-
-        // Finish or pause (no-op) an already paused op
-        private void finishPossiblyPaused(@NonNull IBinder clientId, boolean isPausing) {
-            if (!isPaused()) {
-                Slog.wtf(TAG, "No ops running or paused");
-                return;
-            }
-
-            int indexOfToken = mPausedInProgressEvents.indexOfKey(clientId);
-            if (indexOfToken < 0) {
-                Slog.wtf(TAG, "No op running or paused for the client");
-                return;
-            } else if (isPausing) {
-                // already paused
-                return;
-            }
-
-            // no need to record a paused event finishing.
-            InProgressStartOpEvent event = mPausedInProgressEvents.valueAt(indexOfToken);
-            event.numUnfinishedStarts--;
-            if (event.numUnfinishedStarts == 0) {
-                mPausedInProgressEvents.removeAt(indexOfToken);
-                mInProgressStartOpEventPool.release(event);
-                if (mPausedInProgressEvents.isEmpty()) {
-                    mPausedInProgressEvents = null;
-                }
-            }
-        }
-
-        /**
-         * Create an event that will be started, if the op is unpaused.
-         */
-        public void createPaused(@NonNull IBinder clientId, int proxyUid,
-                @Nullable String proxyPackageName, @Nullable String proxyAttributionTag,
-                @AppOpsManager.UidState int uidState, @OpFlags int flags, @AttributionFlags
-                int attributionFlags, int attributionChainId) throws RemoteException {
-            startedOrPaused(clientId, proxyUid, proxyPackageName, proxyAttributionTag,
-                    uidState, flags, true, false, attributionFlags, attributionChainId);
-        }
-
-        /**
-         * Pause all currently started ops. This will create a HistoricalRegistry
-         */
-        public void pause() {
-            if (!isRunning()) {
-                return;
-            }
-
-            if (mPausedInProgressEvents == null) {
-                mPausedInProgressEvents = new ArrayMap<>(1);
-            }
-
-            for (int i = 0; i < mInProgressEvents.size(); i++) {
-                InProgressStartOpEvent event = mInProgressEvents.valueAt(i);
-                mPausedInProgressEvents.put(event.mClientId, event);
-                finishOrPause(event.mClientId, true, true);
-
-                scheduleOpActiveChangedIfNeededLocked(parent.op, parent.uid,
-                        parent.packageName, tag, false,
-                        event.getAttributionFlags(), event.getAttributionChainId());
-            }
-            mInProgressEvents = null;
-        }
-
-        /**
-         * Unpause all currently paused ops. This will reinitialize their start and duration
-         * times, but keep all other values the same
-         */
-        public void resume() {
-            if (!isPaused()) {
-                return;
-            }
-
-            if (mInProgressEvents == null) {
-                mInProgressEvents = new ArrayMap<>(mPausedInProgressEvents.size());
-            }
-            boolean shouldSendActive = !mPausedInProgressEvents.isEmpty()
-                    && mInProgressEvents.isEmpty();
-
-            long startTime = System.currentTimeMillis();
-            for (int i = 0; i < mPausedInProgressEvents.size(); i++) {
-                InProgressStartOpEvent event = mPausedInProgressEvents.valueAt(i);
-                mInProgressEvents.put(event.mClientId, event);
-                event.mStartElapsedTime = SystemClock.elapsedRealtime();
-                event.mStartTime = startTime;
-                mHistoricalRegistry.incrementOpAccessedCount(parent.op, parent.uid,
-                        parent.packageName, tag, event.mUidState, event.mFlags, startTime,
-                        event.getAttributionFlags(), event.getAttributionChainId());
-                if (shouldSendActive) {
-                    scheduleOpActiveChangedIfNeededLocked(parent.op, parent.uid, parent.packageName,
-                            tag, true, event.getAttributionFlags(), event.getAttributionChainId());
-                }
-                // Note: this always sends MODE_ALLOWED, even if the mode is FOREGROUND
-                // TODO ntmyren: figure out how to get the real mode.
-                scheduleOpStartedIfNeededLocked(parent.op, parent.uid, parent.packageName,
-                        tag, event.getFlags(), MODE_ALLOWED, START_TYPE_RESUMED,
-                        event.getAttributionFlags(), event.getAttributionChainId());
-            }
-            mPausedInProgressEvents = null;
-        }
-
-        /**
-         * Called in the case the client dies without calling finish first
-         *
-         * @param clientId The client that died
-         */
-        void onClientDeath(@NonNull IBinder clientId) {
-            synchronized (AppOpsService.this) {
-                if (!isPaused() && !isRunning()) {
-                    return;
-                }
-
-                ArrayMap<IBinder, InProgressStartOpEvent> events = isPaused()
-                        ? mPausedInProgressEvents : mInProgressEvents;
-                InProgressStartOpEvent deadEvent = events.get(clientId);
-                if (deadEvent != null) {
-                    deadEvent.numUnfinishedStarts = 1;
-                }
-
-                finished(clientId);
-            }
-        }
-
-        /**
-         * Notify that the state of the uid changed
-         *
-         * @param newState The new state
-         */
-        public void onUidStateChanged(@AppOpsManager.UidState int newState) {
-            if (!isPaused() && !isRunning()) {
-                return;
-            }
-
-            boolean isRunning = isRunning();
-            ArrayMap<IBinder, AppOpsService.InProgressStartOpEvent> events =
-                    isRunning ? mInProgressEvents : mPausedInProgressEvents;
-
-            int numInProgressEvents = events.size();
-            List<IBinder> binders = new ArrayList<>(events.keySet());
-            for (int i = 0; i < numInProgressEvents; i++) {
-                InProgressStartOpEvent event = events.get(binders.get(i));
-
-                if (event != null && event.getUidState() != newState) {
-                    try {
-                        // Remove all but one unfinished start count and then call finished() to
-                        // remove start event object
-                        int numPreviousUnfinishedStarts = event.numUnfinishedStarts;
-                        event.numUnfinishedStarts = 1;
-                        OpEventProxyInfo proxy = event.getProxy();
-
-                        finished(event.getClientId(), false);
-
-                        // Call started() to add a new start event object and then add the
-                        // previously removed unfinished start counts back
-                        if (proxy != null) {
-                            startedOrPaused(event.getClientId(), proxy.getUid(),
-                                    proxy.getPackageName(), proxy.getAttributionTag(), newState,
-                                    event.getFlags(), false, isRunning,
-                                    event.getAttributionFlags(), event.getAttributionChainId());
-                        } else {
-                            startedOrPaused(event.getClientId(), Process.INVALID_UID, null, null,
-                                    newState, event.getFlags(), false, isRunning,
-                                    event.getAttributionFlags(), event.getAttributionChainId());
-                        }
-
-                        events = isRunning ? mInProgressEvents : mPausedInProgressEvents;
-                        InProgressStartOpEvent newEvent = events.get(binders.get(i));
-                        if (newEvent != null) {
-                            newEvent.numUnfinishedStarts += numPreviousUnfinishedStarts - 1;
-                        }
-                    } catch (RemoteException e) {
-                        if (DEBUG) Slog.e(TAG, "Cannot switch to new uidState " + newState);
-                    }
-                }
-            }
-        }
-
-        /**
-         * Combine {@code a} and {@code b} and return the result. The result might be {@code a}
-         * or {@code b}. If there is an event for the same key in both the later event is retained.
-         */
-        private @Nullable LongSparseArray<NoteOpEvent> add(@Nullable LongSparseArray<NoteOpEvent> a,
-                @Nullable LongSparseArray<NoteOpEvent> b) {
-            if (a == null) {
-                return b;
-            }
-
-            if (b == null) {
-                return a;
-            }
-
-            int numEventsToAdd = b.size();
-            for (int i = 0; i < numEventsToAdd; i++) {
-                long keyOfEventToAdd = b.keyAt(i);
-                NoteOpEvent bEvent = b.valueAt(i);
-                NoteOpEvent aEvent = a.get(keyOfEventToAdd);
-
-                if (aEvent == null || bEvent.getNoteTime() > aEvent.getNoteTime()) {
-                    a.put(keyOfEventToAdd, bEvent);
-                }
-            }
-
-            return a;
-        }
-
-        /**
-         * Add all data from the {@code opToAdd} to this op.
-         *
-         * <p>If there is an event for the same key in both the later event is retained.
-         * <p>{@code opToAdd} should not be used after this method is called.
-         *
-         * @param opToAdd The op to add
-         */
-        public void add(@NonNull AttributedOp opToAdd) {
-            if (opToAdd.isRunning() || opToAdd.isPaused()) {
-                ArrayMap<IBinder, InProgressStartOpEvent> ignoredEvents = opToAdd.isRunning()
-                        ? opToAdd.mInProgressEvents : opToAdd.mPausedInProgressEvents;
-                Slog.w(TAG, "Ignoring " + ignoredEvents.size() + " app-ops, running: "
-                        + opToAdd.isRunning());
-
-                int numInProgressEvents = ignoredEvents.size();
-                for (int i = 0; i < numInProgressEvents; i++) {
-                    InProgressStartOpEvent event = ignoredEvents.valueAt(i);
-
-                    event.finish();
-                    mInProgressStartOpEventPool.release(event);
-                }
-            }
-
-            mAccessEvents = add(mAccessEvents, opToAdd.mAccessEvents);
-            mRejectEvents = add(mRejectEvents, opToAdd.mRejectEvents);
-        }
-
-        public boolean isRunning() {
-            return mInProgressEvents != null && !mInProgressEvents.isEmpty();
-        }
-
-        public boolean isPaused() {
-            return mPausedInProgressEvents != null && !mPausedInProgressEvents.isEmpty();
-        }
-
-        boolean hasAnyTime() {
-            return (mAccessEvents != null && mAccessEvents.size() > 0)
-                    || (mRejectEvents != null && mRejectEvents.size() > 0);
-        }
-
-        /**
-         * Clone a {@link LongSparseArray} and clone all values.
-         */
-        private @Nullable LongSparseArray<NoteOpEvent> deepClone(
-                @Nullable LongSparseArray<NoteOpEvent> original) {
-            if (original == null) {
-                return original;
-            }
-
-            int size = original.size();
-            LongSparseArray<NoteOpEvent> clone = new LongSparseArray<>(size);
-            for (int i = 0; i < size; i++) {
-                clone.put(original.keyAt(i), new NoteOpEvent(original.valueAt(i)));
-            }
-
-            return clone;
-        }
-
-        @NonNull AttributedOpEntry createAttributedOpEntryLocked() {
-            LongSparseArray<NoteOpEvent> accessEvents = deepClone(mAccessEvents);
-
-            // Add in progress events as access events
-            if (isRunning()) {
-                long now = SystemClock.elapsedRealtime();
-                int numInProgressEvents = mInProgressEvents.size();
-
-                if (accessEvents == null) {
-                    accessEvents = new LongSparseArray<>(numInProgressEvents);
-                }
-
-                for (int i = 0; i < numInProgressEvents; i++) {
-                    InProgressStartOpEvent event = mInProgressEvents.valueAt(i);
-
-                    accessEvents.append(makeKey(event.getUidState(), event.getFlags()),
-                            new NoteOpEvent(event.getStartTime(), now - event.getStartElapsedTime(),
-                                    event.getProxy()));
-                }
-            }
-
-            LongSparseArray<NoteOpEvent> rejectEvents = deepClone(mRejectEvents);
-
-            return new AttributedOpEntry(parent.op, isRunning(), accessEvents, rejectEvents);
         }
     }
 
@@ -1467,14 +623,12 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
         }
 
         @Mode int getMode() {
-            return mAppOpsServiceInterface.getPackageMode(packageName, this.op);
+            return mAppOpsServiceInterface.getPackageMode(packageName, this.op,
+                    UserHandle.getUserId(this.uid));
         }
         void setMode(@Mode int mode) {
-            mAppOpsServiceInterface.setPackageMode(packageName, this.op, mode);
-        }
-
-        int evalMode() {
-            return uidState.evalMode(op, getMode());
+            mAppOpsServiceInterface.setPackageMode(packageName, this.op, mode,
+                    UserHandle.getUserId(this.uid));
         }
 
         void removeAttributionsWithNoTime() {
@@ -1491,7 +645,7 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
 
             attributedOp = mAttributions.get(attributionTag);
             if (attributedOp == null) {
-                attributedOp = new AttributedOp(attributionTag, parent);
+                attributedOp = new AttributedOp(AppOpsService.this, attributionTag, parent);
                 mAttributions.put(attributionTag, attributedOp);
             }
 
@@ -1741,7 +895,7 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
     /**
      * Call {@link AttributedOp#onClientDeath attributedOp.onClientDeath(clientId)}.
      */
-    private static void onClientDeath(@NonNull AttributedOp attributedOp,
+    static void onClientDeath(@NonNull AttributedOp attributedOp,
             @NonNull IBinder clientId) {
         attributedOp.onClientDeath(clientId);
     }
@@ -1780,6 +934,8 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
         }
         mAppOpsServiceInterface =
                 new LegacyAppOpsServiceInterfaceImpl(this, this, handler, context, mSwitchedOps);
+        mAppOpsRestrictions = new AppOpsRestrictionsImpl(context, handler,
+                mAppOpsServiceInterface);
 
         LockGuard.installLock(this, LockGuard.INDEX_APP_OPS);
         mFile = new AtomicFile(storagePath, "appops");
@@ -1814,7 +970,7 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
                     if (uidState == null || uidState.pkgOps == null) {
                         return;
                     }
-                    mAppOpsServiceInterface.removePackage(pkgName);
+                    mAppOpsServiceInterface.removePackage(pkgName, UserHandle.getUserId(uid));
                     Ops removedOps = uidState.pkgOps.remove(pkgName);
                     if (removedOps != null) {
                         scheduleFastWriteLocked();
@@ -1982,7 +1138,7 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
                 PackageInfo pi = getPackageManagerInternal().getPackageInfo(packageName,
                         PackageManager.GET_PERMISSIONS, Process.myUid(), mContext.getUserId());
                 if (isSamplingTarget(pi)) {
-                    synchronized (this) {
+                    synchronized (AppOpsService.this) {
                         mRarelyUsedPackages.add(packageName);
                     }
                 }
@@ -2041,7 +1197,7 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
             // Remove any package state if such.
             if (uidState.pkgOps != null) {
                 removedOps = uidState.pkgOps.remove(packageName);
-                mAppOpsServiceInterface.removePackage(packageName);
+                mAppOpsServiceInterface.removePackage(packageName, UserHandle.getUserId(uid));
             }
 
             // If we just nuked the last package state check if the UID is valid.
@@ -2088,78 +1244,87 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
         }
     }
 
-    /**
-     * Update the pending state for the uid
-     *
-     * @param currentTime The current elapsed real time
-     * @param uid The uid that has a pending state
-     */
-    private void updatePendingState(long currentTime, int uid) {
+    // The callback method from ForegroundPolicyInterface
+    private void onUidStateChanged(int uid, int state, boolean foregroundModeMayChange) {
         synchronized (this) {
-            mLastRealtime = max(currentTime, mLastRealtime);
-            updatePendingStateIfNeededLocked(mUidStates.get(uid));
-        }
-    }
+            UidState uidState = getUidStateLocked(uid, true);
 
-    public void updateUidProcState(int uid, int procState,
-            @ActivityManager.ProcessCapability int capability) {
-        synchronized (this) {
-            final UidState uidState = getUidStateLocked(uid, true);
-            final int newState = PROCESS_STATE_TO_UID_STATE[procState];
-            if (uidState != null && (uidState.pendingState != newState
-                    || uidState.pendingCapability != capability)) {
-                final int oldPendingState = uidState.pendingState;
-                uidState.pendingState = newState;
-                uidState.pendingCapability = capability;
-                if (newState < uidState.state
-                        || (newState <= UID_STATE_MAX_LAST_NON_RESTRICTED
-                                && uidState.state > UID_STATE_MAX_LAST_NON_RESTRICTED)) {
-                    // We are moving to a more important state, or the new state may be in the
-                    // foreground and the old state is in the background, then always do it
-                    // immediately.
-                    commitUidPendingStateLocked(uidState);
-                } else if (newState == uidState.state && capability != uidState.capability) {
-                    // No change on process state, but process capability has changed.
-                    commitUidPendingStateLocked(uidState);
-                } else if (uidState.pendingStateCommitTime == 0) {
-                    // We are moving to a less important state for the first time,
-                    // delay the application for a bit.
-                    final long settleTime;
-                    if (uidState.state <= UID_STATE_TOP) {
-                        settleTime = mConstants.TOP_STATE_SETTLE_TIME;
-                    } else if (uidState.state <= UID_STATE_FOREGROUND_SERVICE) {
-                        settleTime = mConstants.FG_SERVICE_STATE_SETTLE_TIME;
-                    } else {
-                        settleTime = mConstants.BG_STATE_SETTLE_TIME;
+            if (uidState != null && foregroundModeMayChange && uidState.hasForegroundWatchers) {
+                for (int fgi = uidState.foregroundOps.size() - 1; fgi >= 0; fgi--) {
+                    if (!uidState.foregroundOps.valueAt(fgi)) {
+                        continue;
                     }
-                    final long commitTime = SystemClock.elapsedRealtime() + settleTime;
-                    uidState.pendingStateCommitTime = commitTime;
+                    final int code = uidState.foregroundOps.keyAt(fgi);
 
-                    mHandler.sendMessageDelayed(
-                            PooledLambda.obtainMessage(AppOpsService::updatePendingState, this,
-                                    commitTime + 1, uid), settleTime + 1);
-                }
-
-                if (uidState.pkgOps != null) {
-                    int numPkgs = uidState.pkgOps.size();
-                    for (int pkgNum = 0; pkgNum < numPkgs; pkgNum++) {
-                        Ops ops = uidState.pkgOps.valueAt(pkgNum);
-
-                        int numOps = ops.size();
-                        for (int opNum = 0; opNum < numOps; opNum++) {
-                            Op op = ops.valueAt(opNum);
-
-                            int numAttributions = op.mAttributions.size();
-                            for (int attributionNum = 0; attributionNum < numAttributions;
-                                    attributionNum++) {
-                                AttributedOp attributedOp = op.mAttributions.valueAt(
-                                        attributionNum);
-
-                                attributedOp.onUidStateChanged(newState);
+                    if (uidState.getUidMode(code) != AppOpsManager.opToDefaultMode(code)
+                            && uidState.getUidMode(code) == AppOpsManager.MODE_FOREGROUND) {
+                        mHandler.sendMessage(PooledLambda.obtainMessage(
+                                AppOpsService::notifyOpChangedForAllPkgsInUid,
+                                this, code, uidState.uid, true, null));
+                    } else if (uidState.pkgOps != null) {
+                        final ArraySet<OnOpModeChangedListener> listenerSet =
+                                mAppOpsServiceInterface.getOpModeChangedListeners(code);
+                        if (listenerSet != null) {
+                            for (int cbi = listenerSet.size() - 1; cbi >= 0; cbi--) {
+                                final OnOpModeChangedListener listener = listenerSet.valueAt(cbi);
+                                if ((listener.getFlags()
+                                        & AppOpsManager.WATCH_FOREGROUND_CHANGES) == 0
+                                        || !listener.isWatchingUid(uidState.uid)) {
+                                    continue;
+                                }
+                                for (int pkgi = uidState.pkgOps.size() - 1; pkgi >= 0; pkgi--) {
+                                    final Op op = uidState.pkgOps.valueAt(pkgi).get(code);
+                                    if (op == null) {
+                                        continue;
+                                    }
+                                    if (op.getMode() == AppOpsManager.MODE_FOREGROUND) {
+                                        mHandler.sendMessage(PooledLambda.obtainMessage(
+                                                AppOpsService::notifyOpChanged,
+                                                this, listenerSet.valueAt(cbi), code, uidState.uid,
+                                                uidState.pkgOps.keyAt(pkgi)));
+                                    }
+                                }
                             }
                         }
                     }
                 }
+            }
+
+            if (uidState != null && uidState.pkgOps != null) {
+                int numPkgs = uidState.pkgOps.size();
+                for (int pkgNum = 0; pkgNum < numPkgs; pkgNum++) {
+                    Ops ops = uidState.pkgOps.valueAt(pkgNum);
+
+                    int numOps = ops.size();
+                    for (int opNum = 0; opNum < numOps; opNum++) {
+                        Op op = ops.valueAt(opNum);
+
+                        int numAttributions = op.mAttributions.size();
+                        for (int attributionNum = 0; attributionNum < numAttributions;
+                                attributionNum++) {
+                            AttributedOp attributedOp = op.mAttributions.valueAt(
+                                    attributionNum);
+
+                            attributedOp.onUidStateChanged(state);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Notify the proc state or capability has changed for a certain UID.
+     */
+    public void updateUidProcState(int uid, int procState,
+            @ActivityManager.ProcessCapability int capability) {
+        synchronized (this) {
+            getUidStateTracker().updateUidProcState(uid, procState, capability);
+            if (!mUidStates.contains(uid)) {
+                UidState uidState = new UidState(uid);
+                mUidStates.put(uid, uidState);
+                onUidStateChanged(uid,
+                        AppOpsUidStateTracker.processStateToUidState(procState), false);
             }
         }
     }
@@ -2491,7 +1656,8 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
                     ArrayMap<String, Ops> pkgOps = uidState.pkgOps;
                     if (pkgOps != null) {
                         pkgOps.remove(ops.packageName);
-                        mAppOpsServiceInterface.removePackage(ops.packageName);
+                        mAppOpsServiceInterface.removePackage(ops.packageName,
+                                UserHandle.getUserId(uidState.uid));
                         if (pkgOps.isEmpty()) {
                             uidState.pkgOps = null;
                         }
@@ -2944,7 +2110,8 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
                     }
                     if (pkgOps.size() == 0) {
                         it.remove();
-                        mAppOpsServiceInterface.removePackage(packageName);
+                        mAppOpsServiceInterface.removePackage(packageName,
+                                UserHandle.getUserId(uidState.uid));
                     }
                 }
                 if (uidState.isDefault()) {
@@ -3152,7 +2319,7 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
             if (op == null) {
                 return AppOpsManager.opToDefaultMode(code);
             }
-            return raw ? op.getMode() : op.evalMode();
+            return raw ? op.getMode() : op.uidState.evalMode(op.op, op.getMode());
         }
     }
 
@@ -3370,7 +2537,7 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
             final int switchCode = AppOpsManager.opToSwitch(code);
             final UidState uidState = ops.uidState;
             if (isOpRestrictedLocked(uid, code, packageName, attributionTag, pvr.bypass, false)) {
-                attributedOp.rejected(uidState.state, flags);
+                attributedOp.rejected(uidState.getState(), flags);
                 scheduleOpNotedIfNeededLocked(code, uid, packageName, attributionTag, flags,
                         AppOpsManager.MODE_IGNORED);
                 return new SyncNotedAppOp(AppOpsManager.MODE_IGNORED, code, attributionTag,
@@ -3384,7 +2551,7 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
                     if (DEBUG) Slog.d(TAG, "noteOperation: uid reject #" + uidMode + " for code "
                             + switchCode + " (" + code + ") uid " + uid + " package "
                             + packageName + " flags: " + AppOpsManager.flagsToString(flags));
-                    attributedOp.rejected(uidState.state, flags);
+                    attributedOp.rejected(uidState.getState(), flags);
                     scheduleOpNotedIfNeededLocked(code, uid, packageName, attributionTag, flags,
                             uidMode);
                     return new SyncNotedAppOp(uidMode, code, attributionTag, packageName);
@@ -3392,12 +2559,12 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
             } else {
                 final Op switchOp = switchCode != code ? getOpLocked(ops, switchCode, uid, true)
                         : op;
-                final int mode = switchOp.evalMode();
+                final int mode = switchOp.uidState.evalMode(switchOp.op, switchOp.getMode());
                 if (mode != AppOpsManager.MODE_ALLOWED) {
                     if (DEBUG) Slog.d(TAG, "noteOperation: reject #" + mode + " for code "
                             + switchCode + " (" + code + ") uid " + uid + " package "
                             + packageName + " flags: " + AppOpsManager.flagsToString(flags));
-                    attributedOp.rejected(uidState.state, flags);
+                    attributedOp.rejected(uidState.getState(), flags);
                     scheduleOpNotedIfNeededLocked(code, uid, packageName, attributionTag, flags,
                             mode);
                     return new SyncNotedAppOp(mode, code, attributionTag, packageName);
@@ -3412,7 +2579,8 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
             }
             scheduleOpNotedIfNeededLocked(code, uid, packageName, attributionTag, flags,
                     AppOpsManager.MODE_ALLOWED);
-            attributedOp.accessed(proxyUid, proxyPackageName, proxyAttributionTag, uidState.state,
+            attributedOp.accessed(proxyUid, proxyPackageName, proxyAttributionTag,
+                    uidState.getState(),
                     flags);
 
             if (shouldCollectAsyncNotedOp) {
@@ -3903,7 +3071,7 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
                                 + packageName + " flags: " + AppOpsManager.flagsToString(flags));
                     }
                     if (!dryRun) {
-                        attributedOp.rejected(uidState.state, flags);
+                        attributedOp.rejected(uidState.getState(), flags);
                         scheduleOpStartedIfNeededLocked(code, uid, packageName, attributionTag,
                                 flags, uidMode, startType, attributionFlags, attributionChainId);
                     }
@@ -3912,14 +3080,14 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
             } else {
                 final Op switchOp = switchCode != code ? getOpLocked(ops, switchCode, uid, true)
                         : op;
-                final int mode = switchOp.evalMode();
+                final int mode = switchOp.uidState.evalMode(switchOp.op, switchOp.getMode());
                 if (mode != AppOpsManager.MODE_ALLOWED
                         && (!startIfModeDefault || mode != MODE_DEFAULT)) {
                     if (DEBUG) Slog.d(TAG, "startOperation: reject #" + mode + " for code "
                             + switchCode + " (" + code + ") uid " + uid + " package "
                             + packageName + " flags: " + AppOpsManager.flagsToString(flags));
                     if (!dryRun) {
-                        attributedOp.rejected(uidState.state, flags);
+                        attributedOp.rejected(uidState.getState(), flags);
                         scheduleOpStartedIfNeededLocked(code, uid, packageName, attributionTag,
                                 flags, mode, startType, attributionFlags, attributionChainId);
                     }
@@ -3933,12 +3101,12 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
                 try {
                     if (isRestricted) {
                         attributedOp.createPaused(clientId, proxyUid, proxyPackageName,
-                                proxyAttributionTag, uidState.state, flags, attributionFlags,
-                                attributionChainId);
+                                proxyAttributionTag, uidState.getState(), flags,
+                                attributionFlags, attributionChainId);
                     } else {
                         attributedOp.started(clientId, proxyUid, proxyPackageName,
-                                proxyAttributionTag, uidState.state, flags, attributionFlags,
-                                attributionChainId);
+                                proxyAttributionTag, uidState.getState(), flags,
+                                attributionFlags, attributionChainId);
                         startType = START_TYPE_STARTED;
                     }
                 } catch (RemoteException e) {
@@ -4070,7 +3238,7 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
         }
     }
 
-    private void scheduleOpActiveChangedIfNeededLocked(int code, int uid, @NonNull
+    void scheduleOpActiveChangedIfNeededLocked(int code, int uid, @NonNull
             String packageName, @Nullable String attributionTag, boolean active, @AttributionFlags
             int attributionFlags, int attributionChainId) {
         ArraySet<ActiveCallback> dispatchedCallbacks = null;
@@ -4123,7 +3291,7 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
         }
     }
 
-    private void scheduleOpStartedIfNeededLocked(int code, int uid, String pkgName,
+    void scheduleOpStartedIfNeededLocked(int code, int uid, String pkgName,
             String attributionTag, @OpFlags int flags, @Mode int result,
             @AppOpsManager.OnOpStartedListener.StartedType int startedType,
             @AttributionFlags int attributionFlags, int attributionChainId) {
@@ -4242,6 +3410,10 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
     public boolean shouldCollectNotes(int opCode) {
         Preconditions.checkArgumentInRange(opCode, 0, _NUM_OP - 1, "opCode");
 
+        if (AppOpsManager.shouldForceCollectNoteForOp(opCode)) {
+            return true;
+        }
+
         String perm = AppOpsManager.opToPermission(opCode);
         if (perm == null) {
             return false;
@@ -4348,101 +3520,14 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
             }
             uidState = new UidState(uid);
             mUidStates.put(uid, uidState);
-        } else {
-            updatePendingStateIfNeededLocked(uidState);
         }
+
         return uidState;
-    }
-
-    /**
-     * Check if the pending state should be updated and do so if needed
-     *
-     * @param uidState The uidState that might have a pending state
-     */
-    private void updatePendingStateIfNeededLocked(@NonNull UidState uidState) {
-        if (uidState != null) {
-            if (uidState.pendingStateCommitTime != 0) {
-                if (uidState.pendingStateCommitTime < mLastRealtime) {
-                    commitUidPendingStateLocked(uidState);
-                } else {
-                    mLastRealtime = SystemClock.elapsedRealtime();
-                    if (uidState.pendingStateCommitTime < mLastRealtime) {
-                        commitUidPendingStateLocked(uidState);
-                    }
-                }
-            }
-        }
-    }
-
-    private void commitUidPendingStateLocked(UidState uidState) {
-        if (uidState.hasForegroundWatchers) {
-            for (int fgi = uidState.foregroundOps.size() - 1; fgi >= 0; fgi--) {
-                if (!uidState.foregroundOps.valueAt(fgi)) {
-                    continue;
-                }
-                final int code = uidState.foregroundOps.keyAt(fgi);
-                // For location ops we consider fg state only if the fg service
-                // is of location type, for all other ops any fg service will do.
-                final long firstUnrestrictedUidState = resolveFirstUnrestrictedUidState(code);
-                final boolean resolvedLastFg = uidState.state <= firstUnrestrictedUidState;
-                final boolean resolvedNowFg = uidState.pendingState <= firstUnrestrictedUidState;
-                if (resolvedLastFg == resolvedNowFg
-                        && uidState.capability == uidState.pendingCapability
-                        && uidState.appWidgetVisible == uidState.pendingAppWidgetVisible) {
-                    continue;
-                }
-
-                if (uidState.getUidMode(code) != AppOpsManager.opToDefaultMode(code)
-                        && uidState.getUidMode(code) == AppOpsManager.MODE_FOREGROUND) {
-                    mHandler.sendMessage(PooledLambda.obtainMessage(
-                            AppOpsService::notifyOpChangedForAllPkgsInUid,
-                            this, code, uidState.uid, true, null));
-                } else if (uidState.pkgOps != null) {
-                    final ArraySet<OnOpModeChangedListener> listenerSet =
-                            mAppOpsServiceInterface.getOpModeChangedListeners(code);
-                    if (listenerSet != null) {
-                        for (int cbi = listenerSet.size() - 1; cbi >= 0; cbi--) {
-                            final OnOpModeChangedListener listener = listenerSet.valueAt(cbi);
-                            if ((listener.getFlags()
-                                    & AppOpsManager.WATCH_FOREGROUND_CHANGES) == 0
-                                    || !listener.isWatchingUid(uidState.uid)) {
-                                continue;
-                            }
-                            for (int pkgi = uidState.pkgOps.size() - 1; pkgi >= 0; pkgi--) {
-                                final Op op = uidState.pkgOps.valueAt(pkgi).get(code);
-                                if (op == null) {
-                                    continue;
-                                }
-                                if (op.getMode() == AppOpsManager.MODE_FOREGROUND) {
-                                    mHandler.sendMessage(PooledLambda.obtainMessage(
-                                            AppOpsService::notifyOpChanged,
-                                            this, listenerSet.valueAt(cbi), code, uidState.uid,
-                                            uidState.pkgOps.keyAt(pkgi)));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        uidState.state = uidState.pendingState;
-        uidState.capability = uidState.pendingCapability;
-        uidState.appWidgetVisible = uidState.pendingAppWidgetVisible;
-        uidState.pendingStateCommitTime = 0;
     }
 
     private void updateAppWidgetVisibility(SparseArray<String> uidPackageNames, boolean visible) {
         synchronized (this) {
-            for (int i = uidPackageNames.size() - 1; i >= 0; i--) {
-                final int uid = uidPackageNames.keyAt(i);
-                final UidState uidState = getUidStateLocked(uid, true);
-                if (uidState != null && (uidState.pendingAppWidgetVisible != visible)) {
-                    uidState.pendingAppWidgetVisible = visible;
-                    if (uidState.pendingAppWidgetVisible != uidState.appWidgetVisible) {
-                        commitUidPendingStateLocked(uidState);
-                    }
-                }
-            }
+            getUidStateTracker().updateAppWidgetVisibility(uidPackageNames, visible);
         }
     }
 
@@ -4510,9 +3595,8 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
                 final PackageManager pm = mContext.getPackageManager();
                 final String supplementalPackageName = pm.getSdkSandboxPackageName();
                 if (Objects.equals(packageName, supplementalPackageName)) {
-                    int supplementalAppId = pm.getPackageUid(supplementalPackageName,
-                            PackageManager.PackageInfoFlags.of(0));
-                    uid = UserHandle.getUid(UserHandle.getUserId(uid), supplementalAppId);
+                    uid = pm.getPackageUidAsUser(supplementalPackageName,
+                            PackageManager.PackageInfoFlags.of(0), UserHandle.getUserId(uid));
                 }
             } catch (PackageManager.NameNotFoundException e) {
                 // Shouldn't happen for the supplemental package
@@ -5733,6 +4817,8 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
         pw.println("    Only output the watcher sections.");
         pw.println("  --history");
         pw.println("    Only output history.");
+        pw.println("  --uid-state-changes");
+        pw.println("    Include logs about uid state changes.");
     }
 
     private void dumpStatesLocked(@NonNull PrintWriter pw, @Nullable String filterAttributionTag,
@@ -5838,10 +4924,11 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
             long maxNumStarts = 0;
             int numInProgressEvents = attributedOp.mInProgressEvents.size();
             for (int i = 0; i < numInProgressEvents; i++) {
-                InProgressStartOpEvent event = attributedOp.mInProgressEvents.valueAt(i);
+                AttributedOp.InProgressStartOpEvent event =
+                        attributedOp.mInProgressEvents.valueAt(i);
 
                 earliestElapsedTime = Math.min(earliestElapsedTime, event.getStartElapsedTime());
-                maxNumStarts = Math.max(maxNumStarts, event.numUnfinishedStarts);
+                maxNumStarts = Math.max(maxNumStarts, event.mNumUnfinishedStarts);
             }
 
             pw.print(prefix + "Running start at: ");
@@ -5869,8 +4956,10 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
         // TODO ntmyren: Remove the dumpHistory and dumpFilter
         boolean dumpHistory = false;
         boolean includeDiscreteOps = false;
+        boolean dumpUidStateChangeLogs = false;
         int nDiscreteOps = 10;
         @HistoricalOpsRequestFilter int dumpFilter = 0;
+        boolean dumpAll = false;
 
         if (args != null) {
             for (int i = 0; i < args.length; i++) {
@@ -5880,6 +4969,7 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
                     return;
                 } else if ("-a".equals(arg)) {
                     // dump all data
+                    dumpAll = true;
                 } else if ("--op".equals(arg)) {
                     i++;
                     if (i >= args.length) {
@@ -5949,6 +5039,8 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
                 } else if (arg.length() > 0 && arg.charAt(0) == '-') {
                     pw.println("Unknown option: " + arg);
                     return;
+                } else if ("--uid-state-changes".equals(arg)) {
+                    dumpUidStateChangeLogs = true;
                 } else {
                     pw.println("Unknown command: " + arg);
                     return;
@@ -6193,31 +5285,7 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
                 }
 
                 pw.print("  Uid "); UserHandle.formatUid(pw, uidState.uid); pw.println(":");
-                pw.print("    state=");
-                pw.println(AppOpsManager.getUidStateName(uidState.state));
-                if (uidState.state != uidState.pendingState) {
-                    pw.print("    pendingState=");
-                    pw.println(AppOpsManager.getUidStateName(uidState.pendingState));
-                }
-                pw.print("    capability=");
-                ActivityManager.printCapabilitiesFull(pw, uidState.capability);
-                pw.println();
-                if (uidState.capability != uidState.pendingCapability) {
-                    pw.print("    pendingCapability=");
-                    ActivityManager.printCapabilitiesFull(pw, uidState.pendingCapability);
-                    pw.println();
-                }
-                pw.print("    appWidgetVisible=");
-                pw.println(uidState.appWidgetVisible);
-                if (uidState.appWidgetVisible != uidState.pendingAppWidgetVisible) {
-                    pw.print("    pendingAppWidgetVisible=");
-                    pw.println(uidState.pendingAppWidgetVisible);
-                }
-                if (uidState.pendingStateCommitTime != 0) {
-                    pw.print("    pendingStateCommitTime=");
-                    TimeUtils.formatDuration(uidState.pendingStateCommitTime, nowElapsed, pw);
-                    pw.println();
-                }
+                uidState.dump(pw, nowElapsed);
                 if (uidState.foregroundOps != null && (dumpMode < 0
                         || dumpMode == AppOpsManager.MODE_FOREGROUND)) {
                     pw.println("    foregroundOps:");
@@ -6295,124 +5363,8 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
                 pw.println();
             }
 
-            final int globalRestrictionCount = mOpGlobalRestrictions.size();
-            for (int i = 0; i < globalRestrictionCount; i++) {
-                IBinder token = mOpGlobalRestrictions.keyAt(i);
-                ClientGlobalRestrictionState restrictionState = mOpGlobalRestrictions.valueAt(i);
-                ArraySet<Integer> restrictedOps = restrictionState.mRestrictedOps;
-
-                pw.println("  Global restrictions for token " + token + ":");
-                StringBuilder restrictedOpsValue = new StringBuilder();
-                restrictedOpsValue.append("[");
-                final int restrictedOpCount = restrictedOps.size();
-                for (int j = 0; j < restrictedOpCount; j++) {
-                    if (restrictedOpsValue.length() > 1) {
-                        restrictedOpsValue.append(", ");
-                    }
-                    restrictedOpsValue.append(AppOpsManager.opToName(restrictedOps.valueAt(j)));
-                }
-                restrictedOpsValue.append("]");
-                pw.println("      Restricted ops: " + restrictedOpsValue);
-
-            }
-
-            final int userRestrictionCount = mOpUserRestrictions.size();
-            for (int i = 0; i < userRestrictionCount; i++) {
-                IBinder token = mOpUserRestrictions.keyAt(i);
-                ClientUserRestrictionState restrictionState = mOpUserRestrictions.valueAt(i);
-                boolean printedTokenHeader = false;
-
-                if (dumpMode >= 0 || dumpWatchers || dumpHistory) {
-                    continue;
-                }
-
-                final int restrictionCount = restrictionState.perUserRestrictions != null
-                        ? restrictionState.perUserRestrictions.size() : 0;
-                if (restrictionCount > 0 && dumpPackage == null) {
-                    boolean printedOpsHeader = false;
-                    for (int j = 0; j < restrictionCount; j++) {
-                        int userId = restrictionState.perUserRestrictions.keyAt(j);
-                        boolean[] restrictedOps = restrictionState.perUserRestrictions.valueAt(j);
-                        if (restrictedOps == null) {
-                            continue;
-                        }
-                        if (dumpOp >= 0 && (dumpOp >= restrictedOps.length
-                                || !restrictedOps[dumpOp])) {
-                            continue;
-                        }
-                        if (!printedTokenHeader) {
-                            pw.println("  User restrictions for token " + token + ":");
-                            printedTokenHeader = true;
-                        }
-                        if (!printedOpsHeader) {
-                            pw.println("      Restricted ops:");
-                            printedOpsHeader = true;
-                        }
-                        StringBuilder restrictedOpsValue = new StringBuilder();
-                        restrictedOpsValue.append("[");
-                        final int restrictedOpCount = restrictedOps.length;
-                        for (int k = 0; k < restrictedOpCount; k++) {
-                            if (restrictedOps[k]) {
-                                if (restrictedOpsValue.length() > 1) {
-                                    restrictedOpsValue.append(", ");
-                                }
-                                restrictedOpsValue.append(AppOpsManager.opToName(k));
-                            }
-                        }
-                        restrictedOpsValue.append("]");
-                        pw.print("        "); pw.print("user: "); pw.print(userId);
-                                pw.print(" restricted ops: "); pw.println(restrictedOpsValue);
-                    }
-                }
-
-                final int excludedPackageCount = restrictionState.perUserExcludedPackageTags != null
-                        ? restrictionState.perUserExcludedPackageTags.size() : 0;
-                if (excludedPackageCount > 0 && dumpOp < 0) {
-                    IndentingPrintWriter ipw = new IndentingPrintWriter(pw);
-                    ipw.increaseIndent();
-                    boolean printedPackagesHeader = false;
-                    for (int j = 0; j < excludedPackageCount; j++) {
-                        int userId = restrictionState.perUserExcludedPackageTags.keyAt(j);
-                        PackageTagsList packageNames =
-                                restrictionState.perUserExcludedPackageTags.valueAt(j);
-                        if (packageNames == null) {
-                            continue;
-                        }
-                        boolean hasPackage;
-                        if (dumpPackage != null) {
-                            hasPackage = packageNames.includes(dumpPackage);
-                        } else {
-                            hasPackage = true;
-                        }
-                        if (!hasPackage) {
-                            continue;
-                        }
-                        if (!printedTokenHeader) {
-                            ipw.println("User restrictions for token " + token + ":");
-                            printedTokenHeader = true;
-                        }
-
-                        ipw.increaseIndent();
-                        if (!printedPackagesHeader) {
-                            ipw.println("Excluded packages:");
-                            printedPackagesHeader = true;
-                        }
-
-                        ipw.increaseIndent();
-                        ipw.print("user: ");
-                        ipw.print(userId);
-                        ipw.println(" packages: ");
-
-                        ipw.increaseIndent();
-                        packageNames.dump(ipw);
-
-                        ipw.decreaseIndent();
-                        ipw.decreaseIndent();
-                        ipw.decreaseIndent();
-                    }
-                    ipw.decreaseIndent();
-                }
-            }
+            boolean showUserRestrictions = !(dumpMode < 0 && !dumpWatchers && !dumpHistory);
+            mAppOpsRestrictions.dumpRestrictions(pw, dumpOp, dumpPackage, showUserRestrictions);
 
             if (!dumpHistory && !dumpWatchers) {
                 pw.println();
@@ -6423,6 +5375,12 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
                 } else {
                     pw.println("  AppOps policy not set.");
                 }
+            }
+
+            if (dumpAll || dumpUidStateChangeLogs) {
+                pw.println();
+                pw.println("Uid State Changes Event Log:");
+                getUidStateTracker().dumpEvents(pw);
             }
         }
 
@@ -6646,7 +5604,7 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
                 return;
             }
             Ops removedOps = uidState.pkgOps.remove(packageName);
-            mAppOpsServiceInterface.removePackage(packageName);
+            mAppOpsServiceInterface.removePackage(packageName, UserHandle.getUserId(uid));
             if (removedOps != null) {
                 scheduleFastWriteLocked();
             }
@@ -7024,8 +5982,6 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
 
     private final class ClientUserRestrictionState implements DeathRecipient {
         private final IBinder token;
-        SparseArray<boolean[]> perUserRestrictions;
-        SparseArray<PackageTagsList> perUserExcludedPackageTags;
 
         ClientUserRestrictionState(IBinder token)
                 throws RemoteException {
@@ -7035,134 +5991,29 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
 
         public boolean setRestriction(int code, boolean restricted,
                 PackageTagsList excludedPackageTags, int userId) {
-            boolean changed = false;
-
-            if (perUserRestrictions == null && restricted) {
-                perUserRestrictions = new SparseArray<>();
-            }
-
-            int[] users;
-            if (userId == UserHandle.USER_ALL) {
-                // TODO(b/162888972): this call is returning all users, not just live ones - we
-                // need to either fix the method called, or rename the variable
-                List<UserInfo> liveUsers = UserManager.get(mContext).getUsers();
-
-                users = new int[liveUsers.size()];
-                for (int i = 0; i < liveUsers.size(); i++) {
-                    users[i] = liveUsers.get(i).id;
-                }
-            } else {
-                users = new int[]{userId};
-            }
-
-            if (perUserRestrictions != null) {
-                int numUsers = users.length;
-
-                for (int i = 0; i < numUsers; i++) {
-                    int thisUserId = users[i];
-
-                    boolean[] userRestrictions = perUserRestrictions.get(thisUserId);
-                    if (userRestrictions == null && restricted) {
-                        userRestrictions = new boolean[AppOpsManager._NUM_OP];
-                        perUserRestrictions.put(thisUserId, userRestrictions);
-                    }
-                    if (userRestrictions != null && userRestrictions[code] != restricted) {
-                        userRestrictions[code] = restricted;
-                        if (!restricted && isDefault(userRestrictions)) {
-                            perUserRestrictions.remove(thisUserId);
-                            userRestrictions = null;
-                        }
-                        changed = true;
-                    }
-
-                    if (userRestrictions != null) {
-                        final boolean noExcludedPackages =
-                                excludedPackageTags == null || excludedPackageTags.isEmpty();
-                        if (perUserExcludedPackageTags == null && !noExcludedPackages) {
-                            perUserExcludedPackageTags = new SparseArray<>();
-                        }
-                        if (perUserExcludedPackageTags != null) {
-                            if (noExcludedPackages) {
-                                perUserExcludedPackageTags.remove(thisUserId);
-                                if (perUserExcludedPackageTags.size() <= 0) {
-                                    perUserExcludedPackageTags = null;
-                                }
-                            } else {
-                                perUserExcludedPackageTags.put(thisUserId, excludedPackageTags);
-                            }
-                            changed = true;
-                        }
-                    }
-                }
-            }
-
-            return changed;
+            return mAppOpsRestrictions.setUserRestriction(token, userId, code,
+                    restricted, excludedPackageTags);
         }
 
-        public boolean hasRestriction(int restriction, String packageName, String attributionTag,
+        public boolean hasRestriction(int code, String packageName, String attributionTag,
                 int userId, boolean isCheckOp) {
-            if (perUserRestrictions == null) {
-                return false;
-            }
-            boolean[] restrictions = perUserRestrictions.get(userId);
-            if (restrictions == null) {
-                return false;
-            }
-            if (!restrictions[restriction]) {
-                return false;
-            }
-            if (perUserExcludedPackageTags == null) {
-                return true;
-            }
-            PackageTagsList perUserExclusions = perUserExcludedPackageTags.get(userId);
-            if (perUserExclusions == null) {
-                return true;
-            }
-
-            // TODO (b/240617242) add overload for checkOp to support attribution tags
-            if (isCheckOp) {
-                return !perUserExclusions.includes(packageName);
-            }
-            return !perUserExclusions.contains(packageName, attributionTag);
+            return mAppOpsRestrictions.getUserRestriction(token, userId, code, packageName,
+                    attributionTag, isCheckOp);
         }
 
         public void removeUser(int userId) {
-            if (perUserExcludedPackageTags != null) {
-                perUserExcludedPackageTags.remove(userId);
-                if (perUserExcludedPackageTags.size() <= 0) {
-                    perUserExcludedPackageTags = null;
-                }
-            }
-            if (perUserRestrictions != null) {
-                perUserRestrictions.remove(userId);
-                if (perUserRestrictions.size() <= 0) {
-                    perUserRestrictions = null;
-                }
-            }
+            mAppOpsRestrictions.clearUserRestrictions(token, userId);
         }
 
         public boolean isDefault() {
-            return perUserRestrictions == null || perUserRestrictions.size() <= 0;
+            return !mAppOpsRestrictions.hasUserRestrictions(token);
         }
 
         @Override
         public void binderDied() {
             synchronized (AppOpsService.this) {
+                mAppOpsRestrictions.clearUserRestrictions(token);
                 mOpUserRestrictions.remove(token);
-                if (perUserRestrictions == null) {
-                    return;
-                }
-                final int userCount = perUserRestrictions.size();
-                for (int i = 0; i < userCount; i++) {
-                    final boolean[] restrictions = perUserRestrictions.valueAt(i);
-                    final int restrictionCount = restrictions.length;
-                    for (int j = 0; j < restrictionCount; j++) {
-                        if (restrictions[j]) {
-                            final int changedCode = j;
-                            mHandler.post(() -> notifyWatchersOfChange(changedCode, UID_ANY));
-                        }
-                    }
-                }
                 destroy();
             }
         }
@@ -7170,23 +6021,10 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
         public void destroy() {
             token.unlinkToDeath(this, 0);
         }
-
-        private boolean isDefault(boolean[] array) {
-            if (ArrayUtils.isEmpty(array)) {
-                return true;
-            }
-            for (boolean value : array) {
-                if (value) {
-                    return false;
-                }
-            }
-            return true;
-        }
     }
 
     private final class ClientGlobalRestrictionState implements DeathRecipient {
         final IBinder mToken;
-        final ArraySet<Integer> mRestrictedOps = new ArraySet<>();
 
         ClientGlobalRestrictionState(IBinder token)
                 throws RemoteException {
@@ -7195,23 +6033,21 @@ public class AppOpsService extends IAppOpsService.Stub implements PersistenceSch
         }
 
         boolean setRestriction(int code, boolean restricted) {
-            if (restricted) {
-                return mRestrictedOps.add(code);
-            } else {
-                return mRestrictedOps.remove(code);
-            }
+            return mAppOpsRestrictions.setGlobalRestriction(mToken, code, restricted);
         }
 
         boolean hasRestriction(int code) {
-            return mRestrictedOps.contains(code);
+            return mAppOpsRestrictions.getGlobalRestriction(mToken, code);
         }
 
         boolean isDefault() {
-            return mRestrictedOps.isEmpty();
+            return !mAppOpsRestrictions.hasGlobalRestrictions(mToken);
         }
 
         @Override
         public void binderDied() {
+            mAppOpsRestrictions.clearGlobalRestrictions(mToken);
+            mOpGlobalRestrictions.remove(mToken);
             destroy();
         }
 

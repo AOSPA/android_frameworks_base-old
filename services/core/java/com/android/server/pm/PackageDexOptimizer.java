@@ -74,12 +74,11 @@ import com.android.server.pm.Installer.InstallerException;
 import com.android.server.pm.dex.ArtManagerService;
 import com.android.server.pm.dex.ArtStatsLogUtils;
 import com.android.server.pm.dex.ArtStatsLogUtils.ArtStatsLogger;
-import com.android.server.pm.dex.DexManager;
 import com.android.server.pm.dex.DexoptOptions;
 import com.android.server.pm.dex.DexoptUtils;
 import com.android.server.pm.dex.PackageDexUsage;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.parsing.pkg.AndroidPackageUtils;
+import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.PackageStateInternal;
 
 import dalvik.system.DexFile;
@@ -190,6 +189,11 @@ public class PackageDexOptimizer {
             return false;
         }
 
+        // We do not dexopt APEX packages.
+        if (pkg.isApex()) {
+            return false;
+        }
+
         // We do not dexopt unused packages.
         // It's possible for this to be called before app hibernation service is ready due to
         // an OTA dexopt. In this case, we ignore the hibernation check here. This is fine since
@@ -261,8 +265,8 @@ public class PackageDexOptimizer {
                 .getNonNativeUsesLibraryInfos();
         final String[] instructionSets = targetInstructionSets != null ?
                 targetInstructionSets : getAppDexInstructionSets(
-                AndroidPackageUtils.getPrimaryCpuAbi(pkg, pkgSetting),
-                AndroidPackageUtils.getSecondaryCpuAbi(pkg, pkgSetting));
+                pkgSetting.getPrimaryCpuAbi(),
+                pkgSetting.getSecondaryCpuAbi());
         final String[] dexCodeInstructionSets = getDexCodeInstructionSets(instructionSets);
         final List<String> paths = AndroidPackageUtils.getAllCodePaths(pkg);
 
@@ -648,12 +652,6 @@ public class PackageDexOptimizer {
     @DexOptResult
     private int dexOptSecondaryDexPathLI(ApplicationInfo info, String path,
             PackageDexUsage.DexUseInfo dexUseInfo, DexoptOptions options) {
-        if (options.isDexoptOnlySharedDex() && !dexUseInfo.isUsedByOtherApps()) {
-            // We are asked to optimize only the dex files used by other apps and this is not
-            // on of them: skip it.
-            return DEX_OPT_SKIPPED;
-        }
-
         String compilerFilter = getRealCompilerFilter(info, options.getCompilerFilter(),
                 dexUseInfo.isUsedByOtherApps());
         // Get the dexopt flags after getRealCompilerFilter to make sure we get the correct flags.
@@ -732,9 +730,8 @@ public class PackageDexOptimizer {
      */
     void dumpDexoptState(IndentingPrintWriter pw, AndroidPackage pkg,
             PackageStateInternal pkgSetting, PackageDexUsage.PackageUseInfo useInfo) {
-        final String[] instructionSets = getAppDexInstructionSets(
-                AndroidPackageUtils.getPrimaryCpuAbi(pkg, pkgSetting),
-                AndroidPackageUtils.getSecondaryCpuAbi(pkg, pkgSetting));
+        final String[] instructionSets = getAppDexInstructionSets(pkgSetting.getPrimaryCpuAbi(),
+                pkgSetting.getSecondaryCpuAbi());
         final String[] dexCodeInstructionSets = getDexCodeInstructionSets(instructionSets);
 
         final List<String> paths = AndroidPackageUtils.getAllCodePathsExcludingResourceOnly(pkg);
@@ -787,10 +784,7 @@ public class PackageDexOptimizer {
      */
     private String getRealCompilerFilter(ApplicationInfo info, String targetCompilerFilter,
             boolean isUsedByOtherApps) {
-        // When an app or priv app is configured to run out of box, only verify it.
-        if (info.isEmbeddedDexUsed()
-                || (info.isPrivilegedApp()
-                && DexManager.isPackageSelectedToRunOob(info.packageName))) {
+        if (info.isEmbeddedDexUsed()) {
             return "verify";
         }
 
@@ -827,10 +821,7 @@ public class PackageDexOptimizer {
      * handling the case where the package code is used by other apps.
      */
     private String getRealCompilerFilter(AndroidPackage pkg, String targetCompilerFilter) {
-        // When an app or priv app is configured to run out of box, only verify it.
-        if (pkg.isUseEmbeddedDex()
-                || (pkg.isPrivileged()
-                    && DexManager.isPackageSelectedToRunOob(pkg.getPackageName()))) {
+        if (pkg.isUseEmbeddedDex()) {
             return "verify";
         }
 

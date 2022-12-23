@@ -125,6 +125,7 @@ import android.view.inputmethod.ExtractedText;
 import android.view.inputmethod.ExtractedTextRequest;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodManager;
+import android.view.inputmethod.TextAppearanceInfo;
 import android.view.textclassifier.TextClassification;
 import android.view.textclassifier.TextClassificationManager;
 import android.widget.AdapterView.OnItemClickListener;
@@ -225,8 +226,6 @@ public class Editor {
     private UndoOwner mUndoOwner = mUndoManager.getOwner(UNDO_OWNER_TAG, this);
     final UndoInputFilter mUndoInputFilter = new UndoInputFilter(this);
     boolean mAllowUndo = true;
-
-    private int mLastInputSource = InputDevice.SOURCE_UNKNOWN;
 
     private final MetricsLogger mMetricsLogger = new MetricsLogger();
 
@@ -574,8 +573,8 @@ public class Editor {
 
         final Layout layout = mTextView.getLayout();
         final int line = layout.getLineForOffset(mTextView.getSelectionStart());
-        final int sourceHeight =
-            layout.getLineBottomWithoutSpacing(line) - layout.getLineTop(line);
+        final int sourceHeight = layout.getLineBottom(line, /* includeLineSpacing= */ false)
+                - layout.getLineTop(line);
         final int height = (int)(sourceHeight * zoom);
         final int width = (int)(aspectRatio * Math.max(sourceHeight, mMinLineHeightForMagnifier));
 
@@ -1735,8 +1734,6 @@ public class Editor {
     public void onTouchEvent(MotionEvent event) {
         final boolean filterOutEvent = shouldFilterOutTouchEvent(event);
 
-        mLastInputSource = event.getSource();
-
         mLastButtonState = event.getButtonState();
         if (filterOutEvent) {
             if (event.getActionMasked() == MotionEvent.ACTION_UP) {
@@ -1789,7 +1786,7 @@ public class Editor {
     }
 
     private void showFloatingToolbar() {
-        if (mTextActionMode != null && showUIForTouchScreen()) {
+        if (mTextActionMode != null && mTextView.showUIForTouchScreen()) {
             // Delay "show" so it doesn't interfere with click confirmations
             // or double-clicks that could "dismiss" the floating toolbar.
             int delay = ViewConfiguration.getDoubleTapTimeout();
@@ -1870,7 +1867,7 @@ public class Editor {
                     ? getSelectionController() : getInsertionController();
             if (cursorController != null && !cursorController.isActive()
                     && !cursorController.isCursorBeingModified()
-                    && showUIForTouchScreen()) {
+                    && mTextView.showUIForTouchScreen()) {
                 cursorController.show();
             }
         }
@@ -2344,7 +2341,7 @@ public class Editor {
         final int offset = mTextView.getSelectionStart();
         final int line = layout.getLineForOffset(offset);
         final int top = layout.getLineTop(line);
-        final int bottom = layout.getLineBottomWithoutSpacing(line);
+        final int bottom = layout.getLineBottom(line, /* includeLineSpacing= */ false);
 
         final boolean clamped = layout.shouldClampCursor(line);
         updateCursorPosition(top, bottom, layout.getPrimaryHorizontal(offset, clamped));
@@ -2521,7 +2518,7 @@ public class Editor {
             return false;
         }
 
-        if (!showUIForTouchScreen()) {
+        if (!mTextView.showUIForTouchScreen()) {
             return false;
         }
 
@@ -2677,7 +2674,7 @@ public class Editor {
                     mTextView.postDelayed(mShowSuggestionRunnable,
                             ViewConfiguration.getDoubleTapTimeout());
                 } else if (hasInsertionController()) {
-                    if (shouldInsertCursor && showUIForTouchScreen()) {
+                    if (shouldInsertCursor && mTextView.showUIForTouchScreen()) {
                         getInsertionController().show();
                     } else {
                         getInsertionController().hide();
@@ -2877,6 +2874,17 @@ public class Editor {
         } else {
             if (mBlink != null) mTextView.removeCallbacks(mBlink);
         }
+    }
+
+    /**
+     *
+     * @return whether the Blink runnable is blinking or not, if null return false.
+     * @hide
+     */
+    @VisibleForTesting
+    public boolean isBlinking() {
+        if (mBlink == null) return false;
+        return !mBlink.mCancelled;
     }
 
     private class Blink implements Runnable {
@@ -3436,7 +3444,7 @@ public class Editor {
         @Override
         protected int getVerticalLocalPosition(int line) {
             final Layout layout = mTextView.getLayout();
-            return layout.getLineBottomWithoutSpacing(line);
+            return layout.getLineBottom(line, /* includeLineSpacing= */ false);
         }
 
         @Override
@@ -4102,7 +4110,8 @@ public class Editor {
         @Override
         protected int getVerticalLocalPosition(int line) {
             final Layout layout = mTextView.getLayout();
-            return layout.getLineBottomWithoutSpacing(line) - mContainerMarginTop;
+            return layout.getLineBottom(line, /* includeLineSpacing= */ false)
+                    - mContainerMarginTop;
         }
 
         @Override
@@ -4587,7 +4596,6 @@ public class Editor {
      */
     private final class CursorAnchorInfoNotifier implements TextViewPositionListener {
         final CursorAnchorInfo.Builder mSelectionInfoBuilder = new CursorAnchorInfo.Builder();
-        final int[] mTmpIntOffset = new int[2];
         final Matrix mViewToScreenMatrix = new Matrix();
 
         @Override
@@ -4621,12 +4629,19 @@ public class Editor {
                     (filter & InputConnection.CURSOR_UPDATE_FILTER_CHARACTER_BOUNDS) != 0;
             boolean includeInsertionMarker =
                     (filter & InputConnection.CURSOR_UPDATE_FILTER_INSERTION_MARKER) != 0;
+            boolean includeVisibleLineBounds =
+                    (filter & InputConnection.CURSOR_UPDATE_FILTER_VISIBLE_LINE_BOUNDS) != 0;
+            boolean includeTextAppearance =
+                    (filter & InputConnection.CURSOR_UPDATE_FILTER_TEXT_APPEARANCE) != 0;
             boolean includeAll =
-                    (!includeEditorBounds && !includeCharacterBounds && !includeInsertionMarker);
+                    (!includeEditorBounds && !includeCharacterBounds && !includeInsertionMarker
+                    && !includeVisibleLineBounds && !includeTextAppearance);
 
             includeEditorBounds |= includeAll;
             includeCharacterBounds |= includeAll;
             includeInsertionMarker |= includeAll;
+            includeVisibleLineBounds |= includeAll;
+            includeTextAppearance |= includeAll;
 
             final CursorAnchorInfo.Builder builder = mSelectionInfoBuilder;
             builder.reset();
@@ -4635,9 +4650,8 @@ public class Editor {
             builder.setSelectionRange(selectionStart, mTextView.getSelectionEnd());
 
             // Construct transformation matrix from view local coordinates to screen coordinates.
-            mViewToScreenMatrix.set(mTextView.getMatrix());
-            mTextView.getLocationOnScreen(mTmpIntOffset);
-            mViewToScreenMatrix.postTranslate(mTmpIntOffset[0], mTmpIntOffset[1]);
+            mViewToScreenMatrix.reset();
+            mTextView.transformMatrixToGlobal(mViewToScreenMatrix);
             builder.setMatrix(mViewToScreenMatrix);
 
             if (includeEditorBounds) {
@@ -4655,7 +4669,7 @@ public class Editor {
                 builder.setEditorBoundsInfo(editorBoundsInfo);
             }
 
-            if (includeCharacterBounds || includeInsertionMarker) {
+            if (includeCharacterBounds || includeInsertionMarker || includeVisibleLineBounds) {
                 final float viewportToContentHorizontalOffset =
                         mTextView.viewportToContentHorizontalOffset();
                 final float viewportToContentVerticalOffset =
@@ -4697,8 +4711,9 @@ public class Editor {
                                 + viewportToContentVerticalOffset;
                         final float insertionMarkerBaseline = layout.getLineBaseline(line)
                                 + viewportToContentVerticalOffset;
-                        final float insertionMarkerBottom = layout.getLineBottomWithoutSpacing(line)
-                                + viewportToContentVerticalOffset;
+                        final float insertionMarkerBottom =
+                                layout.getLineBottom(line, /* includeLineSpacing= */ false)
+                                        + viewportToContentVerticalOffset;
                         final boolean isTopVisible = mTextView
                                 .isPositionVisible(insertionMarkerX, insertionMarkerTop);
                         final boolean isBottomVisible = mTextView
@@ -4718,8 +4733,38 @@ public class Editor {
                                 insertionMarkerFlags);
                     }
                 }
+
+                if (includeVisibleLineBounds) {
+                    Rect visibleRect = new Rect();
+                    if (mTextView.getLocalVisibleRect(visibleRect)) {
+                        final float visibleTop =
+                                visibleRect.top + viewportToContentVerticalOffset;
+                        final float visibleBottom =
+                                visibleRect.bottom + viewportToContentVerticalOffset;
+                        final int firstLine =
+                                layout.getLineForVertical((int) Math.floor(visibleTop));
+                        final int lastLine =
+                                layout.getLineForVertical((int) Math.ceil(visibleBottom));
+
+                        for (int line = firstLine; line <= lastLine; ++line) {
+                            final float left = layout.getLineLeft(line)
+                                    + viewportToContentHorizontalOffset;
+                            final float top = layout.getLineTop(line)
+                                    + viewportToContentVerticalOffset;
+                            final float right = layout.getLineRight(line)
+                                    + viewportToContentHorizontalOffset;
+                            final float bottom = layout.getLineBottom(line)
+                                    + viewportToContentVerticalOffset;
+                            builder.addVisibleLineBounds(left, top, right, bottom);
+                        }
+                    }
+                }
             }
 
+            if (includeTextAppearance) {
+                TextAppearanceInfo textAppearanceInfo = new TextAppearanceInfo(mTextView);
+                builder.setTextAppearanceInfo(textAppearanceInfo);
+            }
             imm.updateCursorAnchorInfo(mTextView, builder.build());
 
             // Drop the immediate flag if any.
@@ -5102,7 +5147,7 @@ public class Editor {
 
                 mPositionX = getCursorHorizontalPosition(layout, offset) - mHotspotX
                         - getHorizontalOffset() + getCursorOffset();
-                mPositionY = layout.getLineBottomWithoutSpacing(line);
+                mPositionY = layout.getLineBottom(line, /* includeLineSpacing= */ false);
 
                 // Take TextView's padding and scroll into account.
                 mPositionX += mTextView.viewportToContentHorizontalOffset();
@@ -5198,8 +5243,8 @@ public class Editor {
             if (mNewMagnifierEnabled) {
                 Layout layout = mTextView.getLayout();
                 final int line = layout.getLineForOffset(getCurrentCursorOffset());
-                return layout.getLineBottomWithoutSpacing(line) - layout.getLineTop(line)
-                        >= mMaxLineHeightForMagnifier;
+                return layout.getLineBottom(line, /* includeLineSpacing= */ false)
+                        - layout.getLineTop(line) >= mMaxLineHeightForMagnifier;
             }
             final float magnifierContentHeight = Math.round(
                     mMagnifierAnimator.mMagnifier.getHeight()
@@ -5354,7 +5399,8 @@ public class Editor {
 
             // Vertically snap to middle of current line.
             showPosInView.y = ((mTextView.getLayout().getLineTop(lineNumber)
-                    + mTextView.getLayout().getLineBottomWithoutSpacing(lineNumber)) / 2.0f
+                    + mTextView.getLayout()
+                            .getLineBottom(lineNumber, /* includeLineSpacing= */ false)) / 2.0f
                     + mTextView.getTotalPaddingTop() - mTextView.getScrollY()) * mTextViewScaleY;
             return true;
         }
@@ -5408,7 +5454,7 @@ public class Editor {
             final boolean shouldShow = checkForTransforms() /*check not rotated and compute scale*/
                     && !tooLargeTextForMagnifier()
                     && obtainMagnifierShowCoordinates(event, showPosInView)
-                    && showUIForTouchScreen();
+                    && mTextView.showUIForTouchScreen();
             if (shouldShow) {
                 // Make the cursor visible and stop blinking.
                 mRenderCursorRegardlessTiming = true;
@@ -5438,7 +5484,8 @@ public class Editor {
                         updateCursorPosition();
                     }
                     final int lineHeight =
-                            layout.getLineBottomWithoutSpacing(line) - layout.getLineTop(line);
+                            layout.getLineBottom(line, /* includeLineSpacing= */ false)
+                                    - layout.getLineTop(line);
                     float zoom = mInitialZoom;
                     if (lineHeight < mMinLineHeightForMagnifier) {
                         zoom = zoom * mMinLineHeightForMagnifier / lineHeight;
@@ -5788,8 +5835,8 @@ public class Editor {
         private MotionEvent transformEventForTouchThrough(MotionEvent ev) {
             final Layout layout = mTextView.getLayout();
             final int line = layout.getLineForOffset(getCurrentCursorOffset());
-            final int textHeight =
-                    layout.getLineBottomWithoutSpacing(line) - layout.getLineTop(line);
+            final int textHeight = layout.getLineBottom(line, /* includeLineSpacing= */ false)
+                    - layout.getLineTop(line);
             // Transforms the touch events to screen coordinates.
             // And also shift up to make the hit point is on the text.
             // Note:
@@ -6352,16 +6399,6 @@ public class Editor {
         if (mDrawableForCursor == null) {
             mDrawableForCursor = mTextView.getTextCursorDrawable();
         }
-    }
-
-    /**
-     * Returns true when need to show UIs, e.g. floating toolbar, etc, for finger based interaction.
-     *
-     * @return true if UIs need to show for finger interaciton. false if UIs are not necessary.
-     */
-    public boolean showUIForTouchScreen() {
-        return (mLastInputSource & InputDevice.SOURCE_TOUCHSCREEN)
-                == InputDevice.SOURCE_TOUCHSCREEN;
     }
 
     /** Controller for the insertion cursor. */

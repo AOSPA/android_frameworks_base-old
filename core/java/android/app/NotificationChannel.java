@@ -33,12 +33,12 @@ import android.provider.Settings;
 import android.service.notification.NotificationListenerService;
 import android.text.TextUtils;
 import android.util.Slog;
-import android.util.TypedXmlPullParser;
-import android.util.TypedXmlSerializer;
 import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.util.Preconditions;
 import com.android.internal.util.XmlUtils;
+import com.android.modules.utils.TypedXmlPullParser;
+import com.android.modules.utils.TypedXmlSerializer;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -753,7 +753,7 @@ public final class NotificationChannel implements Parcelable {
 
     /**
      * Returns the vibration pattern for notifications posted to this channel. Will be ignored if
-     * vibration is not enabled ({@link #shouldVibrate()}.
+     * vibration is not enabled ({@link #shouldVibrate()}).
      */
     public long[] getVibrationPattern() {
         return mVibration;

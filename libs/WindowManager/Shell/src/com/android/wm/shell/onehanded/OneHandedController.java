@@ -24,6 +24,7 @@ import static com.android.wm.shell.onehanded.OneHandedState.STATE_ACTIVE;
 import static com.android.wm.shell.onehanded.OneHandedState.STATE_ENTERING;
 import static com.android.wm.shell.onehanded.OneHandedState.STATE_EXITING;
 import static com.android.wm.shell.onehanded.OneHandedState.STATE_NONE;
+import static com.android.wm.shell.sysui.ShellSharedConstants.KEY_EXTRA_SHELL_ONE_HANDED;
 
 import android.annotation.BinderThread;
 import android.content.ComponentName;
@@ -46,9 +47,11 @@ import androidx.annotation.VisibleForTesting;
 import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.logging.UiEventLogger;
 import com.android.wm.shell.R;
+import com.android.wm.shell.RootDisplayAreaOrganizer;
 import com.android.wm.shell.common.DisplayChangeController;
 import com.android.wm.shell.common.DisplayController;
 import com.android.wm.shell.common.DisplayLayout;
+import com.android.wm.shell.common.ExternalInterfaceBinder;
 import com.android.wm.shell.common.RemoteCallable;
 import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.common.TaskStackListenerCallback;
@@ -202,12 +205,14 @@ public class OneHandedController implements RemoteCallable<OneHandedController>,
             DisplayController displayController, DisplayLayout displayLayout,
             TaskStackListenerImpl taskStackListener,
             InteractionJankMonitor jankMonitor, UiEventLogger uiEventLogger,
+            RootDisplayAreaOrganizer rootDisplayAreaOrganizer,
             ShellExecutor mainExecutor, Handler mainHandler) {
         OneHandedSettingsUtil settingsUtil = new OneHandedSettingsUtil();
         OneHandedAccessibilityUtil accessibilityUtil = new OneHandedAccessibilityUtil(context);
         OneHandedTimeoutHandler timeoutHandler = new OneHandedTimeoutHandler(mainExecutor);
         OneHandedState oneHandedState = new OneHandedState();
-        BackgroundWindowManager backgroundWindowManager = new BackgroundWindowManager(context);
+        BackgroundWindowManager backgroundWindowManager =
+                new BackgroundWindowManager(context, rootDisplayAreaOrganizer);
         OneHandedTutorialHandler tutorialHandler = new OneHandedTutorialHandler(context,
                 settingsUtil, windowManager, backgroundWindowManager);
         OneHandedAnimationController animationController =
@@ -296,10 +301,16 @@ public class OneHandedController implements RemoteCallable<OneHandedController>,
         mShellController.addConfigurationChangeListener(this);
         mShellController.addKeyguardChangeListener(this);
         mShellController.addUserChangeListener(this);
+        mShellController.addExternalInterface(KEY_EXTRA_SHELL_ONE_HANDED,
+                this::createExternalInterface, this);
     }
 
     public OneHanded asOneHanded() {
         return mImpl;
+    }
+
+    private ExternalInterfaceBinder createExternalInterface() {
+        return new IOneHandedImpl(this);
     }
 
     @Override
@@ -709,17 +720,6 @@ public class OneHandedController implements RemoteCallable<OneHandedController>,
      */
     @ExternalThread
     private class OneHandedImpl implements OneHanded {
-        private IOneHandedImpl mIOneHanded;
-
-        @Override
-        public IOneHanded createExternalInterface() {
-            if (mIOneHanded != null) {
-                mIOneHanded.invalidate();
-            }
-            mIOneHanded = new IOneHandedImpl(OneHandedController.this);
-            return mIOneHanded;
-        }
-
         @Override
         public void startOneHanded() {
             mMainExecutor.execute(() -> {
@@ -767,7 +767,7 @@ public class OneHandedController implements RemoteCallable<OneHandedController>,
      * The interface for calls from outside the host process.
      */
     @BinderThread
-    private static class IOneHandedImpl extends IOneHanded.Stub {
+    private static class IOneHandedImpl extends IOneHanded.Stub implements ExternalInterfaceBinder {
         private OneHandedController mController;
 
         IOneHandedImpl(OneHandedController controller) {
@@ -777,7 +777,8 @@ public class OneHandedController implements RemoteCallable<OneHandedController>,
         /**
          * Invalidates this instance, preventing future calls from updating the controller.
          */
-        void invalidate() {
+        @Override
+        public void invalidate() {
             mController = null;
         }
 

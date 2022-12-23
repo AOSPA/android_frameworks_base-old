@@ -16,42 +16,62 @@
 
 package com.android.settingslib.spa.framework.compose
 
+import androidx.activity.OnBackPressedDispatcher
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ProvidedValue
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.navigation.NavHostController
 
 interface NavControllerWrapper {
     fun navigate(route: String)
-    fun navigateUp()
+    fun navigateBack()
+
+    val highlightEntryId: String?
+      get() = null
 }
 
 @Composable
-fun NavHostController.localNavController() =
-    LocalNavController provides remember { NavControllerWrapperImpl(this) }
+fun NavHostController.localNavController(): ProvidedValue<NavControllerWrapper> {
+    val onBackPressedDispatcherOwner = LocalOnBackPressedDispatcherOwner.current
+    return LocalNavController provides remember {
+        NavControllerWrapperImpl(
+            navController = this,
+            onBackPressedDispatcher = onBackPressedDispatcherOwner?.onBackPressedDispatcher,
+        )
+    }
+}
 
 val LocalNavController = compositionLocalOf<NavControllerWrapper> {
     object : NavControllerWrapper {
         override fun navigate(route: String) {}
 
-        override fun navigateUp() {}
+        override fun navigateBack() {}
     }
 }
 
 @Composable
-fun navigator(route: String): () -> Unit {
+fun navigator(route: String?): () -> Unit {
+    if (route == null) return {}
     val navController = LocalNavController.current
     return { navController.navigate(route) }
 }
 
 internal class NavControllerWrapperImpl(
-    private val navController: NavHostController,
+    val navController: NavHostController,
+    private val onBackPressedDispatcher: OnBackPressedDispatcher?,
 ) : NavControllerWrapper {
+    var highlightId: String? = null
+
     override fun navigate(route: String) {
         navController.navigate(route)
     }
 
-    override fun navigateUp() {
-        navController.navigateUp()
+    override fun navigateBack() {
+        onBackPressedDispatcher?.onBackPressed()
     }
+
+    override val highlightEntryId: String?
+      get() = highlightId
 }

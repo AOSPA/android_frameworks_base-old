@@ -40,7 +40,10 @@ class AndroidFrameworkIssueRegistry : IssueRegistry() {
         EnforcePermissionDetector.ISSUE_MISMATCHING_ENFORCE_PERMISSION,
         ManualPermissionCheckDetector.ISSUE_USE_ENFORCE_PERMISSION_ANNOTATION,
         SaferParcelChecker.ISSUE_UNSAFE_API_USAGE,
-        PackageVisibilityDetector.ISSUE_PACKAGE_NAME_NO_PACKAGE_VISIBILITY_FILTERS
+        PackageVisibilityDetector.ISSUE_PACKAGE_NAME_NO_PACKAGE_VISIBILITY_FILTERS,
+        RegisterReceiverFlagDetector.ISSUE_RECEIVER_EXPORTED_FLAG,
+        PermissionMethodDetector.ISSUE_PERMISSION_METHOD_USAGE,
+        PermissionMethodDetector.ISSUE_CAN_BE_PERMISSION_METHOD,
     )
 
     override val api: Int

@@ -24,6 +24,7 @@ import android.annotation.IntDef;
 import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.compat.annotation.ChangeId;
 import android.compat.annotation.EnabledAfter;
@@ -784,7 +785,8 @@ public class AccessibilityServiceInfo implements Parcelable {
         mNonInteractiveUiTimeout = other.mNonInteractiveUiTimeout;
         mInteractiveUiTimeout = other.mInteractiveUiTimeout;
         flags = other.flags;
-        mIsAccessibilityTool = other.mIsAccessibilityTool;
+        // NOTE: Ensure that only properties that are safe to be modified by the service itself
+        // are included here (regardless of hidden setters, etc.).
     }
 
     private boolean isRequestAccessibilityButtonChangeEnabled(IPlatformCompat platformCompat) {
@@ -806,6 +808,13 @@ public class AccessibilityServiceInfo implements Parcelable {
      */
     public void setComponentName(@NonNull ComponentName component) {
         mComponentName = component;
+    }
+
+    /**
+     * @hide
+     */
+    public void setResolveInfo(@NonNull ResolveInfo resolveInfo) {
+        mResolveInfo = resolveInfo;
     }
 
     /**
@@ -1127,7 +1136,7 @@ public class AccessibilityServiceInfo implements Parcelable {
      *
      * @hide
      */
-    @TestApi
+    @SystemApi
     public void setAccessibilityTool(boolean isAccessibilityTool) {
         mIsAccessibilityTool = isAccessibilityTool;
     }

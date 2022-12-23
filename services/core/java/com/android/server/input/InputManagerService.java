@@ -19,6 +19,8 @@ package com.android.server.input;
 import static android.provider.DeviceConfig.NAMESPACE_INPUT_NATIVE_BOOT;
 import static android.view.KeyEvent.KEYCODE_UNKNOWN;
 
+import android.Manifest;
+import android.annotation.EnforcePermission;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManagerInternal;
@@ -48,14 +50,14 @@ import android.hardware.SensorPrivacyManager.Sensors;
 import android.hardware.SensorPrivacyManagerInternal;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.DisplayViewport;
+import android.hardware.input.IInputDeviceBatteryListener;
+import android.hardware.input.IInputDeviceBatteryState;
 import android.hardware.input.IInputDevicesChangedListener;
 import android.hardware.input.IInputManager;
 import android.hardware.input.IInputSensorEventListener;
 import android.hardware.input.ITabletModeChangedListener;
 import android.hardware.input.InputDeviceIdentifier;
 import android.hardware.input.InputManager;
-import android.hardware.input.InputManagerInternal;
-import android.hardware.input.InputManagerInternal.LidSwitchCallback;
 import android.hardware.input.InputSensorInfo;
 import android.hardware.input.KeyboardLayout;
 import android.hardware.input.TouchCalibration;
@@ -89,6 +91,7 @@ import android.provider.Settings;
 import android.provider.Settings.SettingNotFoundException;
 import android.text.TextUtils;
 import android.util.ArrayMap;
+import android.util.IndentingPrintWriter;
 import android.util.Log;
 import android.util.Slog;
 import android.util.SparseArray;
@@ -122,6 +125,7 @@ import com.android.internal.util.XmlUtils;
 import com.android.server.DisplayThread;
 import com.android.server.LocalServices;
 import com.android.server.Watchdog;
+import com.android.server.input.InputManagerInternal.LidSwitchCallback;
 import com.android.server.policy.WindowManagerPolicy;
 
 import libcore.io.IoUtils;
@@ -299,14 +303,20 @@ public class InputManagerService extends IInputManager.Stub
     private final AdditionalDisplayInputProperties mCurrentDisplayProperties =
             new AdditionalDisplayInputProperties();
     @GuardedBy("mAdditionalDisplayInputPropertiesLock")
-    private int mIconType = PointerIcon.TYPE_NOT_SPECIFIED;
+    private int mPointerIconType = PointerIcon.TYPE_NOT_SPECIFIED;
     @GuardedBy("mAdditionalDisplayInputPropertiesLock")
-    private PointerIcon mIcon;
+    private PointerIcon mPointerIcon;
 
     // Holds all the registered gesture monitors that are implemented as spy windows. The spy
     // windows are mapped by their InputChannel tokens.
     @GuardedBy("mInputMonitors")
     final Map<IBinder, GestureMonitorSpyWindow> mInputMonitors = new HashMap<>();
+
+    // Manages battery state for input devices.
+    private final BatteryController mBatteryController;
+
+    // Manages Keyboard backlight
+    private final KeyboardBacklightController mKeyboardBacklightController;
 
     // Maximum number of milliseconds to wait for input event injection.
     private static final int INJECTION_TIMEOUT_MILLIS = 30 * 1000;
@@ -417,6 +427,9 @@ public class InputManagerService extends IInputManager.Stub
         mContext = injector.getContext();
         mHandler = new InputManagerHandler(injector.getLooper());
         mNative = injector.getNativeService(this);
+        mBatteryController = new BatteryController(mContext, mNative, injector.getLooper());
+        mKeyboardBacklightController = new KeyboardBacklightController(mContext, mNative,
+                mDataStore, injector.getLooper());
 
         mUseDevInputEventForAudioJack =
                 mContext.getResources().getBoolean(R.bool.config_useDevInputEventForAudioJack);
@@ -556,6 +569,9 @@ public class InputManagerService extends IInputManager.Stub
         if (mWiredAccessoryCallbacks != null) {
             mWiredAccessoryCallbacks.systemReady();
         }
+
+        mBatteryController.systemRunning();
+        mKeyboardBacklightController.systemRunning();
     }
 
     private void reloadKeyboardLayouts() {
@@ -2299,14 +2315,8 @@ public class InputManagerService extends IInputManager.Stub
 
     // Binder call
     @Override
-    public int getBatteryStatus(int deviceId) {
-        return mNative.getBatteryStatus(deviceId);
-    }
-
-    // Binder call
-    @Override
-    public int getBatteryCapacity(int deviceId) {
-        return mNative.getBatteryCapacity(deviceId);
+    public IInputDeviceBatteryState getBatteryState(int deviceId) {
+        return mBatteryController.getBatteryState(deviceId);
     }
 
     // Binder call
@@ -2316,12 +2326,12 @@ public class InputManagerService extends IInputManager.Stub
             throw new IllegalArgumentException("Use setCustomPointerIcon to set custom pointers");
         }
         synchronized (mAdditionalDisplayInputPropertiesLock) {
-            mIcon = null;
-            mIconType = iconType;
+            mPointerIcon = null;
+            mPointerIconType = iconType;
 
             if (!mCurrentDisplayProperties.pointerIconVisible) return;
 
-            mNative.setPointerIconType(mIconType);
+            mNative.setPointerIconType(mPointerIconType);
         }
     }
 
@@ -2330,12 +2340,12 @@ public class InputManagerService extends IInputManager.Stub
     public void setCustomPointerIcon(PointerIcon icon) {
         Objects.requireNonNull(icon);
         synchronized (mAdditionalDisplayInputPropertiesLock) {
-            mIconType = PointerIcon.TYPE_CUSTOM;
-            mIcon = icon;
+            mPointerIconType = PointerIcon.TYPE_CUSTOM;
+            mPointerIcon = icon;
 
             if (!mCurrentDisplayProperties.pointerIconVisible) return;
 
-            mNative.setCustomPointerIcon(mIcon);
+            mNative.setCustomPointerIcon(mPointerIcon);
         }
     }
 
@@ -2653,74 +2663,107 @@ public class InputManagerService extends IInputManager.Stub
     }
 
     @Override
+    public void registerBatteryListener(int deviceId, IInputDeviceBatteryListener listener) {
+        Objects.requireNonNull(listener);
+        mBatteryController.registerBatteryListener(deviceId, listener, Binder.getCallingPid());
+    }
+
+    @Override
+    public void unregisterBatteryListener(int deviceId, IInputDeviceBatteryListener listener) {
+        Objects.requireNonNull(listener);
+        mBatteryController.unregisterBatteryListener(deviceId, listener, Binder.getCallingPid());
+    }
+
+    @EnforcePermission(Manifest.permission.BLUETOOTH)
+    @Override
+    public String getInputDeviceBluetoothAddress(int deviceId) {
+        super.getInputDeviceBluetoothAddress_enforcePermission();
+
+        return mNative.getBluetoothAddress(deviceId);
+    }
+
+    @EnforcePermission(Manifest.permission.MONITOR_INPUT)
+    @Override
+    public void pilferPointers(IBinder inputChannelToken) {
+        Objects.requireNonNull(inputChannelToken);
+        mNative.pilferPointers(inputChannelToken);
+    }
+
+    @Override
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         if (!DumpUtils.checkDumpPermission(mContext, TAG, pw)) return;
+        IndentingPrintWriter ipw = new IndentingPrintWriter(pw, "  ");
 
-        pw.println("INPUT MANAGER (dumpsys input)\n");
+        ipw.println("INPUT MANAGER (dumpsys input)\n");
         String dumpStr = mNative.dump();
         if (dumpStr != null) {
             pw.println(dumpStr);
         }
 
-        pw.println("Input Manager Service (Java) State:");
-        dumpAssociations(pw, "  " /*prefix*/);
-        dumpSpyWindowGestureMonitors(pw, "  " /*prefix*/);
-        dumpDisplayInputPropertiesValues(pw, "  " /* prefix */);
+        ipw.println("Input Manager Service (Java) State:");
+        ipw.increaseIndent();
+        dumpAssociations(ipw);
+        dumpSpyWindowGestureMonitors(ipw);
+        dumpDisplayInputPropertiesValues(ipw);
+        mBatteryController.dump(ipw);
+        mKeyboardBacklightController.dump(ipw);
     }
 
-    private void dumpAssociations(PrintWriter pw, String prefix) {
+    private void dumpAssociations(IndentingPrintWriter pw) {
         if (!mStaticAssociations.isEmpty()) {
-            pw.println(prefix + "Static Associations:");
+            pw.println("Static Associations:");
             mStaticAssociations.forEach((k, v) -> {
-                pw.print(prefix + "  port: " + k);
+                pw.print("  port: " + k);
                 pw.println("  display: " + v);
             });
         }
 
         synchronized (mAssociationsLock) {
             if (!mRuntimeAssociations.isEmpty()) {
-                pw.println(prefix + "Runtime Associations:");
+                pw.println("Runtime Associations:");
                 mRuntimeAssociations.forEach((k, v) -> {
-                    pw.print(prefix + "  port: " + k);
+                    pw.print("  port: " + k);
                     pw.println("  display: " + v);
                 });
             }
             if (!mUniqueIdAssociations.isEmpty()) {
-                pw.println(prefix + "Unique Id Associations:");
+                pw.println("Unique Id Associations:");
                 mUniqueIdAssociations.forEach((k, v) -> {
-                    pw.print(prefix + "  port: " + k);
+                    pw.print("  port: " + k);
                     pw.println("  uniqueId: " + v);
                 });
             }
         }
     }
 
-    private void dumpSpyWindowGestureMonitors(PrintWriter pw, String prefix) {
+    private void dumpSpyWindowGestureMonitors(IndentingPrintWriter pw) {
         synchronized (mInputMonitors) {
             if (mInputMonitors.isEmpty()) return;
-            pw.println(prefix + "Gesture Monitors (implemented as spy windows):");
+            pw.println("Gesture Monitors (implemented as spy windows):");
             int i = 0;
             for (final GestureMonitorSpyWindow monitor : mInputMonitors.values()) {
-                pw.append(prefix + "  " + i++ + ": ").println(monitor.dump());
+                pw.append("  " + i++ + ": ").println(monitor.dump());
             }
         }
     }
 
-    private void dumpDisplayInputPropertiesValues(PrintWriter pw, String prefix) {
+    private void dumpDisplayInputPropertiesValues(IndentingPrintWriter pw) {
         synchronized (mAdditionalDisplayInputPropertiesLock) {
             if (mAdditionalDisplayInputProperties.size() != 0) {
-                pw.println(prefix + "mAdditionalDisplayInputProperties:");
+                pw.println("mAdditionalDisplayInputProperties:");
+                pw.increaseIndent();
                 for (int i = 0; i < mAdditionalDisplayInputProperties.size(); i++) {
-                    pw.println(prefix + "  displayId: "
+                    pw.println("displayId: "
                             + mAdditionalDisplayInputProperties.keyAt(i));
                     final AdditionalDisplayInputProperties properties =
                             mAdditionalDisplayInputProperties.valueAt(i);
-                    pw.println(prefix + "  pointerAcceleration: " + properties.pointerAcceleration);
-                    pw.println(prefix + "  pointerIconVisible: " + properties.pointerIconVisible);
+                    pw.println("pointerAcceleration: " + properties.pointerAcceleration);
+                    pw.println("pointerIconVisible: " + properties.pointerIconVisible);
                 }
+                pw.decreaseIndent();
             }
             if (mOverriddenPointerDisplayId != Display.INVALID_DISPLAY) {
-                pw.println(prefix + "mOverriddenPointerDisplayId: " + mOverriddenPointerDisplayId);
+                pw.println("mOverriddenPointerDisplayId: " + mOverriddenPointerDisplayId);
             }
         }
     }
@@ -2776,6 +2819,7 @@ public class InputManagerService extends IInputManager.Stub
         synchronized (mLidSwitchLock) { /* Test if blocked by lid switch lock. */ }
         synchronized (mInputMonitors) { /* Test if blocked by input monitor lock. */ }
         synchronized (mAdditionalDisplayInputPropertiesLock) { /* Test if blocked by props lock */ }
+        mBatteryController.monitor();
         mNative.monitor();
     }
 
@@ -3028,6 +3072,12 @@ public class InputManagerService extends IInputManager.Stub
     private boolean isPerDisplayTouchModeEnabled() {
         return mContext.getResources().getBoolean(
                 com.android.internal.R.bool.config_perDisplayFocusEnabled);
+    }
+
+    // Native callback.
+    @SuppressWarnings("unused")
+    private void notifyStylusGestureStarted(int deviceId, long eventTime) {
+        mBatteryController.notifyStylusGestureStarted(deviceId, eventTime);
     }
 
     /**
@@ -3663,6 +3713,7 @@ public class InputManagerService extends IInputManager.Stub
         @Override
         public void setInteractive(boolean interactive) {
             mNative.setInteractive(interactive);
+            mBatteryController.onInteractiveChanged(interactive);
         }
 
         @Override
@@ -3738,8 +3789,13 @@ public class InputManagerService extends IInputManager.Stub
         }
 
         @Override
-        public void pilferPointers(IBinder token) {
-            mNative.pilferPointers(token);
+        public void incrementKeyboardBacklight(int deviceId) {
+            mKeyboardBacklightController.incrementKeyboardBacklight(deviceId);
+        }
+
+        @Override
+        public void decrementKeyboardBacklight(int deviceId) {
+            mKeyboardBacklightController.decrementKeyboardBacklight(deviceId);
         }
     }
 
@@ -3792,11 +3848,11 @@ public class InputManagerService extends IInputManager.Stub
         if (properties.pointerIconVisible != mCurrentDisplayProperties.pointerIconVisible) {
             mCurrentDisplayProperties.pointerIconVisible = properties.pointerIconVisible;
             if (properties.pointerIconVisible) {
-                if (mIconType == PointerIcon.TYPE_CUSTOM) {
-                    Objects.requireNonNull(mIcon);
-                    mNative.setCustomPointerIcon(mIcon);
+                if (mPointerIconType == PointerIcon.TYPE_CUSTOM) {
+                    Objects.requireNonNull(mPointerIcon);
+                    mNative.setCustomPointerIcon(mPointerIcon);
                 } else {
-                    mNative.setPointerIconType(mIconType);
+                    mNative.setPointerIconType(mPointerIconType);
                 }
             } else {
                 mNative.setPointerIconType(PointerIcon.TYPE_NULL);

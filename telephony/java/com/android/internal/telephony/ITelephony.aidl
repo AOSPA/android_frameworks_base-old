@@ -621,7 +621,7 @@ interface ITelephony {
     /**
      * Sets minimum time in milli-seconds between onCellInfoChanged
      */
-    void setCellInfoListRate(int rateInMillis);
+    void setCellInfoListRate(int rateInMillis, int subId);
 
     /**
      * Opens a logical channel to the ICC card.
@@ -2529,6 +2529,16 @@ interface ITelephony {
     void getSlicingConfig(in ResultReceiver callback);
 
     /**
+     * Check whether the given premium capability is available for purchase from the carrier.
+     */
+    boolean isPremiumCapabilityAvailableForPurchase(int capability, int subId);
+
+    /**
+     * Purchase the given premium capability from the carrier.
+     */
+    void purchasePremiumCapability(int capability, IIntegerConsumer callback, int subId);
+
+    /**
      * Register an IMS connection state callback
      */
     void registerImsStateCallback(int subId, int feature, in IImsStateCallback cb,
@@ -2547,9 +2557,6 @@ interface ITelephony {
      */
     CellIdentity getLastKnownCellIdentity(int subId, String callingPackage,
             String callingFeatureId);
-
-    /** Check if telephony new data stack is enabled. */
-    boolean isUsingNewDataStack();
 
     /**
      *  @return true if the modem service is set successfully, false otherwise.

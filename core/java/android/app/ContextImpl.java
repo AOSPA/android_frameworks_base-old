@@ -25,6 +25,8 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UiContext;
+import android.companion.virtual.VirtualDevice;
+import android.companion.virtual.VirtualDeviceManager;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.AttributionSource;
 import android.content.AutofillOptions;
@@ -241,6 +243,7 @@ class ContextImpl extends Context {
     @UnsupportedAppUsage
     private @NonNull Resources mResources;
     private @Nullable Display mDisplay; // may be null if invalid display or not initialized yet.
+    private int mDeviceId = VirtualDeviceManager.DEFAULT_DEVICE_ID;
 
     /**
      * If set to {@code true} the resources for this context will be configured for mDisplay which
@@ -1094,7 +1097,7 @@ class ContextImpl extends Context {
                 && (options == null
                         || ActivityOptions.fromBundle(options).getLaunchTaskId() == -1)) {
             throw new AndroidRuntimeException(
-                    "Calling startActivity() from outside of an Activity "
+                    "Calling startActivity() from outside of an Activity"
                             + " context requires the FLAG_ACTIVITY_NEW_TASK flag."
                             + " Is this really what you want?");
         }
@@ -1128,7 +1131,7 @@ class ContextImpl extends Context {
     public int startActivitiesAsUser(Intent[] intents, Bundle options, UserHandle userHandle) {
         if ((intents[0].getFlags()&Intent.FLAG_ACTIVITY_NEW_TASK) == 0) {
             throw new AndroidRuntimeException(
-                    "Calling startActivities() from outside of an Activity "
+                    "Calling startActivities() from outside of an Activity"
                     + " context requires the FLAG_ACTIVITY_NEW_TASK flag on first Intent."
                     + " Is this really what you want?");
         }
@@ -1142,7 +1145,7 @@ class ContextImpl extends Context {
         warnIfCallingFromSystemProcess();
         if ((intents[0].getFlags()&Intent.FLAG_ACTIVITY_NEW_TASK) == 0) {
             throw new AndroidRuntimeException(
-                    "Calling startActivities() from outside of an Activity "
+                    "Calling startActivities() from outside of an Activity"
                     + " context requires the FLAG_ACTIVITY_NEW_TASK flag on first Intent."
                     + " Is this really what you want?");
         }
@@ -1390,8 +1393,9 @@ class ContextImpl extends Context {
                 if (scheduler == null) {
                     scheduler = mMainThread.getHandler();
                 }
-                rd = new LoadedApk.ReceiverDispatcher(
-                        resultReceiver, getOuterContext(), scheduler, null, false).getIIntentReceiver();
+                rd = new LoadedApk.ReceiverDispatcher(mMainThread.getApplicationThread(),
+                        resultReceiver, getOuterContext(), scheduler, null, false)
+                                .getIIntentReceiver();
             }
         }
         String resolvedType = intent.resolveTypeIfNeeded(getContentResolver());
@@ -1497,8 +1501,9 @@ class ContextImpl extends Context {
                 if (scheduler == null) {
                     scheduler = mMainThread.getHandler();
                 }
-                rd = new LoadedApk.ReceiverDispatcher(resultReceiver, getOuterContext(),
-                        scheduler, null, false).getIIntentReceiver();
+                rd = new LoadedApk.ReceiverDispatcher(mMainThread.getApplicationThread(),
+                        resultReceiver, getOuterContext(), scheduler, null, false)
+                                .getIIntentReceiver();
             }
         }
         String resolvedType = intent.resolveTypeIfNeeded(getContentResolver());
@@ -1616,8 +1621,9 @@ class ContextImpl extends Context {
                 if (scheduler == null) {
                     scheduler = mMainThread.getHandler();
                 }
-                rd = new LoadedApk.ReceiverDispatcher(
-                        resultReceiver, getOuterContext(), scheduler, null, false).getIIntentReceiver();
+                rd = new LoadedApk.ReceiverDispatcher(mMainThread.getApplicationThread(),
+                        resultReceiver, getOuterContext(), scheduler, null, false)
+                                .getIIntentReceiver();
             }
         }
         String resolvedType = intent.resolveTypeIfNeeded(getContentResolver());
@@ -1699,8 +1705,9 @@ class ContextImpl extends Context {
                 if (scheduler == null) {
                     scheduler = mMainThread.getHandler();
                 }
-                rd = new LoadedApk.ReceiverDispatcher(
-                        resultReceiver, getOuterContext(), scheduler, null, false).getIIntentReceiver();
+                rd = new LoadedApk.ReceiverDispatcher(mMainThread.getApplicationThread(),
+                        resultReceiver, getOuterContext(), scheduler, null, false)
+                                .getIIntentReceiver();
             }
         }
         String resolvedType = intent.resolveTypeIfNeeded(getContentResolver());
@@ -1802,7 +1809,7 @@ class ContextImpl extends Context {
                 if (scheduler == null) {
                     scheduler = mMainThread.getHandler();
                 }
-                rd = new LoadedApk.ReceiverDispatcher(
+                rd = new LoadedApk.ReceiverDispatcher(mMainThread.getApplicationThread(),
                         receiver, context, scheduler, null, true).getIIntentReceiver();
             }
         }
@@ -2696,6 +2703,30 @@ class ContextImpl extends Context {
         return context;
     }
 
+    @Override
+    public @NonNull Context createDeviceContext(int deviceId) {
+        boolean validDeviceId = deviceId == VirtualDeviceManager.DEFAULT_DEVICE_ID;
+        if (deviceId > VirtualDeviceManager.DEFAULT_DEVICE_ID) {
+            VirtualDeviceManager vdm = getSystemService(VirtualDeviceManager.class);
+            if (vdm != null) {
+                List<VirtualDevice> virtualDevices = vdm.getVirtualDevices();
+                validDeviceId = virtualDevices.stream().anyMatch(d -> d.getDeviceId() == deviceId);
+            }
+        }
+        if (!validDeviceId) {
+            throw new IllegalArgumentException(
+                    "Not a valid ID of the default device or any virtual device: " + deviceId);
+        }
+
+        ContextImpl context = new ContextImpl(this, mMainThread, mPackageInfo, mParams,
+                mAttributionSource.getAttributionTag(),
+                mAttributionSource.getNext(),
+                mSplitName, mToken, mUser, mFlags, mClassLoader, null);
+
+        context.mDeviceId = deviceId;
+        return context;
+    }
+
     @NonNull
     @Override
     public WindowContext createWindowContext(@WindowType int type,
@@ -2940,6 +2971,11 @@ class ContextImpl extends Context {
         if (mContextType == CONTEXT_TYPE_NON_UI) {
             mContextType = CONTEXT_TYPE_DISPLAY_CONTEXT;
         }
+    }
+
+    @Override
+    public int getDeviceId() {
+        return mDeviceId;
     }
 
     @Override

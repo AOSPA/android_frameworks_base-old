@@ -504,6 +504,19 @@ public class LocationManager {
     }
 
     /**
+     * Returns ADAS packages and their associated attribution tags.
+     *
+     * @hide
+     */
+    public @NonNull PackageTagsList getAdasAllowlist() {
+        try {
+            return mService.getAdasAllowlist();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Returns the extra location controller package on the device.
      *
      * @hide
@@ -2106,7 +2119,7 @@ public class LocationManager {
 
         try {
             mService.addTestProvider(provider, properties, new ArrayList<>(extraAttributionTags),
-                    mContext.getOpPackageName(), mContext.getFeatureId());
+                    mContext.getOpPackageName(), mContext.getAttributionTag());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2128,7 +2141,7 @@ public class LocationManager {
 
         try {
             mService.removeTestProvider(provider, mContext.getOpPackageName(),
-                    mContext.getFeatureId());
+                    mContext.getAttributionTag());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2163,7 +2176,7 @@ public class LocationManager {
 
         try {
             mService.setTestProviderLocation(provider, location, mContext.getOpPackageName(),
-                    mContext.getFeatureId());
+                    mContext.getAttributionTag());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2193,7 +2206,7 @@ public class LocationManager {
 
         try {
             mService.setTestProviderEnabled(provider, enabled, mContext.getOpPackageName(),
-                    mContext.getFeatureId());
+                    mContext.getAttributionTag());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

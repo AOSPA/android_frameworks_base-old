@@ -8,7 +8,6 @@ import android.content.Context;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.RelativeLayout;
 
@@ -18,7 +17,7 @@ import androidx.annotation.VisibleForTesting;
 import com.android.keyguard.dagger.KeyguardStatusViewScope;
 import com.android.systemui.R;
 import com.android.systemui.animation.Interpolators;
-import com.android.systemui.plugins.Clock;
+import com.android.systemui.plugins.ClockController;
 
 import java.io.PrintWriter;
 import java.lang.annotation.Retention;
@@ -68,6 +67,7 @@ public class KeyguardClockSwitch extends RelativeLayout {
 
     private int mClockSwitchYAmount;
     @VisibleForTesting boolean mChildrenAreLaidOut = false;
+    @VisibleForTesting boolean mAnimateOnLayout = true;
 
     public KeyguardClockSwitch(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -94,7 +94,7 @@ public class KeyguardClockSwitch extends RelativeLayout {
         onDensityOrFontScaleChanged();
     }
 
-    void setClock(Clock clock, int statusBarState) {
+    void setClock(ClockController clock, int statusBarState) {
         // Disconnect from existing plugin.
         mSmallClockFrame.removeAllViews();
         mLargeClockFrame.removeAllViews();
@@ -105,13 +105,14 @@ public class KeyguardClockSwitch extends RelativeLayout {
         }
 
         // Attach small and big clock views to hierarchy.
-        mSmallClockFrame.addView(clock.getSmallClock(), -1,
-                new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT));
-        mLargeClockFrame.addView(clock.getLargeClock());
+        Log.i(TAG, "Attached new clock views to switch");
+        mSmallClockFrame.addView(clock.getSmallClock().getView());
+        mLargeClockFrame.addView(clock.getLargeClock().getView());
     }
 
     private void updateClockViews(boolean useLargeClock, boolean animate) {
+        Log.i(TAG, "updateClockViews; useLargeClock=" + useLargeClock + "; animate=" + animate
+                + "; mChildrenAreLaidOut=" + mChildrenAreLaidOut);
         if (mClockInAnim != null) mClockInAnim.cancel();
         if (mClockOutAnim != null) mClockOutAnim.cancel();
         if (mStatusAreaAnim != null) mStatusAreaAnim.cancel();
@@ -126,7 +127,7 @@ public class KeyguardClockSwitch extends RelativeLayout {
         if (useLargeClock) {
             out = mSmallClockFrame;
             in = mLargeClockFrame;
-            if (indexOfChild(in) == -1) addView(in);
+            if (indexOfChild(in) == -1) addView(in, 0);
             direction = -1;
             statusAreaYTranslation = mSmallClockFrame.getTop() - mStatusArea.getTop()
                     + mSmartspaceTopOffset;
@@ -214,7 +215,7 @@ public class KeyguardClockSwitch extends RelativeLayout {
         super.onLayout(changed, l, t, r, b);
 
         if (mDisplayedClockSize != null && !mChildrenAreLaidOut) {
-            post(() -> updateClockViews(mDisplayedClockSize == LARGE, /* animate */ true));
+            post(() -> updateClockViews(mDisplayedClockSize == LARGE, mAnimateOnLayout));
         }
 
         mChildrenAreLaidOut = true;
@@ -222,7 +223,7 @@ public class KeyguardClockSwitch extends RelativeLayout {
 
     public void dump(PrintWriter pw, String[] args) {
         pw.println("KeyguardClockSwitch:");
-        pw.println("  mClockFrame: " + mSmallClockFrame);
+        pw.println("  mSmallClockFrame: " + mSmallClockFrame);
         pw.println("  mLargeClockFrame: " + mLargeClockFrame);
         pw.println("  mStatusArea: " + mStatusArea);
         pw.println("  mDisplayedClockSize: " + mDisplayedClockSize);

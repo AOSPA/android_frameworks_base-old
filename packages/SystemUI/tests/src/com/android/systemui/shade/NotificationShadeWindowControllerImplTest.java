@@ -88,6 +88,7 @@ public class NotificationShadeWindowControllerImplTest extends SysuiTestCase {
     @Mock private KeyguardStateController mKeyguardStateController;
     @Mock private ScreenOffAnimationController mScreenOffAnimationController;
     @Mock private AuthController mAuthController;
+    @Mock private ShadeExpansionStateManager mShadeExpansionStateManager;
     @Captor private ArgumentCaptor<WindowManager.LayoutParams> mLayoutParameters;
 
     private NotificationShadeWindowControllerImpl mNotificationShadeWindowController;
@@ -103,7 +104,7 @@ public class NotificationShadeWindowControllerImplTest extends SysuiTestCase {
                 mWindowManager, mActivityManager, mDozeParameters, mStatusBarStateController,
                 mConfigurationController, mKeyguardViewMediator, mKeyguardBypassController,
                 mColorExtractor, mDumpManager, mKeyguardStateController,
-                mScreenOffAnimationController, mAuthController) {
+                mScreenOffAnimationController, mAuthController, mShadeExpansionStateManager) {
                     @Override
                     protected boolean isDebuggable() {
                         return false;
@@ -238,9 +239,9 @@ public class NotificationShadeWindowControllerImplTest extends SysuiTestCase {
 
     @Test
     public void setPanelExpanded_notFocusable_altFocusable_whenPanelIsOpen() {
-        mNotificationShadeWindowController.setPanelExpanded(true);
+        mNotificationShadeWindowController.onShadeExpansionFullyChanged(true);
         clearInvocations(mWindowManager);
-        mNotificationShadeWindowController.setPanelExpanded(true);
+        mNotificationShadeWindowController.onShadeExpansionFullyChanged(true);
         verifyNoMoreInteractions(mWindowManager);
         mNotificationShadeWindowController.setNotificationShadeFocusable(true);
 
@@ -312,7 +313,7 @@ public class NotificationShadeWindowControllerImplTest extends SysuiTestCase {
         verifyNoMoreInteractions(mWindowManager);
 
         clearInvocations(mWindowManager);
-        mNotificationShadeWindowController.batchApplyWindowLayoutParams(()-> {
+        mNotificationShadeWindowController.batchApplyWindowLayoutParams(() -> {
             mNotificationShadeWindowController.setForceDozeBrightness(false);
             verify(mWindowManager, never()).updateViewLayout(any(), any());
         });

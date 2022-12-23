@@ -22,7 +22,7 @@ per-file android_view_PointerIcon.* = file:/services/core/java/com/android/serve
 # WindowManager
 per-file android_graphics_BLASTBufferQueue.cpp = file:/services/core/java/com/android/server/wm/OWNERS
 per-file android_view_Surface* = file:/services/core/java/com/android/server/wm/OWNERS
-per-file android_window_WindowInfosListener.cpp = file:/services/core/java/com/android/server/wm/OWNERS
+per-file android_window_* = file:/services/core/java/com/android/server/wm/OWNERS
 
 # Resources
 per-file android_content_res_* = file:/core/java/android/content/res/OWNERS
@@ -95,3 +95,7 @@ per-file android_os_VintfRuntimeInfo* = file:platform/system/libvintf:/OWNERS
 # Battery
 per-file com_android_internal_os_Kernel* = file:/BATTERY_STATS_OWNERS
 per-file com_android_internal_os_*MultiStateCounter* = file:/BATTERY_STATS_OWNERS
+
+# PM
+per-file com_android_internal_content_* = file:/PACKAGE_MANAGER_OWNERS
+

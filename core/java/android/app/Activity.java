@@ -87,10 +87,13 @@ import android.os.Parcelable;
 import android.os.PersistableBundle;
 import android.os.Process;
 import android.os.RemoteException;
+import android.os.ServiceManager;
 import android.os.ServiceManager.ServiceNotFoundException;
 import android.os.StrictMode;
+import android.os.SystemClock;
 import android.os.Trace;
 import android.os.UserHandle;
+import android.service.voice.VoiceInteractionSession;
 import android.text.Selection;
 import android.text.SpannableStringBuilder;
 import android.text.TextUtils;
@@ -154,6 +157,7 @@ import android.window.WindowOnBackInvokedDispatcher;
 import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.app.IVoiceInteractionManagerService;
 import com.android.internal.app.IVoiceInteractor;
 import com.android.internal.app.ToolbarActionBar;
 import com.android.internal.app.WindowDecorActionBar;
@@ -1601,6 +1605,25 @@ public class Activity extends ContextThemeWrapper
         return callbacks;
     }
 
+    private void notifyVoiceInteractionManagerServiceActivityEvent(
+            @VoiceInteractionSession.VoiceInteractionActivityEventType int type) {
+
+        final IVoiceInteractionManagerService service =
+                IVoiceInteractionManagerService.Stub.asInterface(
+                        ServiceManager.getService(Context.VOICE_INTERACTION_MANAGER_SERVICE));
+        if (service == null) {
+            Log.w(TAG, "notifyVoiceInteractionManagerServiceActivityEvent: Can not get "
+                    + "VoiceInteractionManagerService");
+            return;
+        }
+
+        try {
+            service.notifyActivityEventChanged(mToken, type);
+        } catch (RemoteException e) {
+            // Empty
+        }
+    }
+
     /**
      * Called when the activity is starting.  This is where most initialization
      * should go: calling {@link #setContentView(int)} to inflate the
@@ -1876,6 +1899,9 @@ public class Activity extends ContextThemeWrapper
         mCalled = true;
 
         notifyContentCaptureManagerIfNeeded(CONTENT_CAPTURE_START);
+
+        notifyVoiceInteractionManagerServiceActivityEvent(
+                VoiceInteractionSession.VOICE_INTERACTION_ACTIVITY_EVENT_START);
     }
 
     /**
@@ -2019,6 +2045,12 @@ public class Activity extends ContextThemeWrapper
         final Window win = getWindow();
         if (win != null) win.makeActive();
         if (mActionBar != null) mActionBar.setShowHideAnimationEnabled(true);
+
+        // Because the test case "com.android.launcher3.jank.BinderTests#testPressHome" doesn't
+        // allow any binder call in onResume, we call this method in onPostResume.
+        notifyVoiceInteractionManagerServiceActivityEvent(
+                VoiceInteractionSession.VOICE_INTERACTION_ACTIVITY_EVENT_RESUME);
+
         mCalled = true;
     }
 
@@ -2394,6 +2426,10 @@ public class Activity extends ContextThemeWrapper
         getAutofillClientController().onActivityPaused();
 
         notifyContentCaptureManagerIfNeeded(CONTENT_CAPTURE_PAUSE);
+
+        notifyVoiceInteractionManagerServiceActivityEvent(
+                VoiceInteractionSession.VOICE_INTERACTION_ACTIVITY_EVENT_PAUSE);
+
         mCalled = true;
     }
 
@@ -2623,6 +2659,9 @@ public class Activity extends ContextThemeWrapper
 
         getAutofillClientController().onActivityStopped(mIntent, mChangingConfigurations);
         mEnterAnimationComplete = false;
+
+        notifyVoiceInteractionManagerServiceActivityEvent(
+                VoiceInteractionSession.VOICE_INTERACTION_ACTIVITY_EVENT_STOP);
     }
 
     /**
@@ -8050,8 +8089,9 @@ public class Activity extends ContextThemeWrapper
                 resultData.prepareToLeaveProcess(this);
             }
             upIntent.prepareToLeaveProcess(this);
-            return ActivityClient.getInstance().navigateUpTo(mToken, upIntent, resultCode,
-                    resultData);
+            String resolvedType = upIntent.resolveTypeIfNeeded(getContentResolver());
+            return ActivityClient.getInstance().navigateUpTo(mToken, upIntent, resolvedType,
+                    resultCode, resultData);
         } else {
             return mParent.navigateUpToFromChild(this, upIntent);
         }
@@ -8304,13 +8344,15 @@ public class Activity extends ContextThemeWrapper
         mIsInPictureInPictureMode = windowingMode == WINDOWING_MODE_PINNED;
         mShouldDockBigOverlays = getResources().getBoolean(R.bool.config_dockBigOverlayWindows);
         restoreHasCurrentPermissionRequest(icicle);
+        final long startTime = SystemClock.uptimeMillis();
         if (persistentState != null) {
             onCreate(icicle, persistentState);
         } else {
             onCreate(icicle);
         }
+        final long duration = SystemClock.uptimeMillis() - startTime;
         EventLogTags.writeWmOnCreateCalled(mIdent, getComponentName().getClassName(),
-                "performCreate");
+                "performCreate", duration);
         mActivityTransitionState.readState(icicle);
 
         mVisibleFromClient = !mWindow.getWindowStyle().getBoolean(
@@ -8322,18 +8364,27 @@ public class Activity extends ContextThemeWrapper
     }
 
     final void performNewIntent(@NonNull Intent intent) {
+        Trace.traceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "performNewIntent");
         mCanEnterPictureInPicture = true;
         onNewIntent(intent);
+        Trace.traceEnd(Trace.TRACE_TAG_WINDOW_MANAGER);
     }
 
     final void performStart(String reason) {
+        if (Trace.isTagEnabled(Trace.TRACE_TAG_WINDOW_MANAGER)) {
+            Trace.traceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "performStart:"
+                    + mComponent.getClassName());
+        }
         dispatchActivityPreStarted();
         mActivityTransitionState.setEnterActivityOptions(this, getActivityOptions());
         mFragments.noteStateNotSaved();
         mCalled = false;
         mFragments.execPendingActions();
+        final long startTime = SystemClock.uptimeMillis();
         mInstrumentation.callActivityOnStart(this);
-        EventLogTags.writeWmOnStartCalled(mIdent, getComponentName().getClassName(), reason);
+        final long duration = SystemClock.uptimeMillis() - startTime;
+        EventLogTags.writeWmOnStartCalled(mIdent, getComponentName().getClassName(), reason,
+                duration);
 
         if (!mCalled) {
             throw new SuperNotCalledException(
@@ -8370,6 +8421,7 @@ public class Activity extends ContextThemeWrapper
 
         mActivityTransitionState.enterReady(this);
         dispatchActivityPostStarted();
+        Trace.traceEnd(Trace.TRACE_TAG_WINDOW_MANAGER);
     }
 
     /**
@@ -8378,7 +8430,8 @@ public class Activity extends ContextThemeWrapper
      *              The option to not start immediately is needed in case a transaction with
      *              multiple lifecycle transitions is in progress.
      */
-    final void performRestart(boolean start, String reason) {
+    final void performRestart(boolean start) {
+        Trace.traceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "performRestart");
         mCanEnterPictureInPicture = true;
         mFragments.noteStateNotSaved();
 
@@ -8410,17 +8463,21 @@ public class Activity extends ContextThemeWrapper
             }
 
             mCalled = false;
+            final long startTime = SystemClock.uptimeMillis();
             mInstrumentation.callActivityOnRestart(this);
-            EventLogTags.writeWmOnRestartCalled(mIdent, getComponentName().getClassName(), reason);
+            final long duration = SystemClock.uptimeMillis() - startTime;
+            EventLogTags.writeWmOnRestartCalled(mIdent, getComponentName().getClassName(),
+                    "performRestart", duration);
             if (!mCalled) {
                 throw new SuperNotCalledException(
                     "Activity " + mComponent.toShortString() +
                     " did not call through to super.onRestart()");
             }
             if (start) {
-                performStart(reason);
+                performStart("performRestart");
             }
         }
+        Trace.traceEnd(Trace.TRACE_TAG_WINDOW_MANAGER);
     }
 
     final void performResume(boolean followedByPause, String reason) {
@@ -8429,7 +8486,6 @@ public class Activity extends ContextThemeWrapper
                     + mComponent.getClassName());
         }
         dispatchActivityPreResumed();
-        performRestart(true /* start */, reason);
 
         mFragments.execPendingActions();
 
@@ -8438,9 +8494,12 @@ public class Activity extends ContextThemeWrapper
         getAutofillClientController().onActivityPerformResume(followedByPause);
 
         mCalled = false;
+        final long startTime = SystemClock.uptimeMillis();
         // mResumed is set by the instrumentation
         mInstrumentation.callActivityOnResume(this);
-        EventLogTags.writeWmOnResumeCalled(mIdent, getComponentName().getClassName(), reason);
+        final long duration = SystemClock.uptimeMillis() - startTime;
+        EventLogTags.writeWmOnResumeCalled(mIdent, getComponentName().getClassName(), reason,
+                duration);
         if (!mCalled) {
             throw new SuperNotCalledException(
                 "Activity " + mComponent.toShortString() +
@@ -8483,9 +8542,11 @@ public class Activity extends ContextThemeWrapper
         mDoReportFullyDrawn = false;
         mFragments.dispatchPause();
         mCalled = false;
+        final long startTime = SystemClock.uptimeMillis();
         onPause();
+        final long duration = SystemClock.uptimeMillis() - startTime;
         EventLogTags.writeWmOnPausedCalled(mIdent, getComponentName().getClassName(),
-                "performPause");
+                "performPause", duration);
         mResumed = false;
         if (!mCalled && getApplicationInfo().targetSdkVersion
                 >= android.os.Build.VERSION_CODES.GINGERBREAD) {
@@ -8529,8 +8590,11 @@ public class Activity extends ContextThemeWrapper
             mFragments.dispatchStop();
 
             mCalled = false;
+            final long startTime = SystemClock.uptimeMillis();
             mInstrumentation.callActivityOnStop(this);
-            EventLogTags.writeWmOnStopCalled(mIdent, getComponentName().getClassName(), reason);
+            final long duration = SystemClock.uptimeMillis() - startTime;
+            EventLogTags.writeWmOnStopCalled(mIdent, getComponentName().getClassName(), reason,
+                    duration);
             if (!mCalled) {
                 throw new SuperNotCalledException(
                     "Activity " + mComponent.toShortString() +
@@ -8564,9 +8628,11 @@ public class Activity extends ContextThemeWrapper
         mDestroyed = true;
         mWindow.destroy();
         mFragments.dispatchDestroy();
+        final long startTime = SystemClock.uptimeMillis();
         onDestroy();
+        final long duration = SystemClock.uptimeMillis() - startTime;
         EventLogTags.writeWmOnDestroyCalled(mIdent, getComponentName().getClassName(),
-                "performDestroy");
+                "performDestroy", duration);
         mFragments.doLoaderDestroy();
         if (mVoiceInteractor != null) {
             mVoiceInteractor.detachActivity();

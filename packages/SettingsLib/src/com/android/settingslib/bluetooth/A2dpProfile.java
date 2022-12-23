@@ -44,8 +44,6 @@ public class A2dpProfile implements LocalBluetoothProfile {
     private static final String TAG = "A2dpProfile";
     private static boolean V = true;
 
-    private static final int SOURCE_CODEC_TYPE_OPUS = 6; // TODO remove in U
-
     private Context mContext;
 
     private BluetoothA2dp mService;
@@ -84,12 +82,13 @@ public class A2dpProfile implements LocalBluetoothProfile {
                 device.onProfileStateChanged(A2dpProfile.this, BluetoothProfile.STATE_CONNECTED);
                 device.refresh();
             }
-            mIsProfileReady=true;
+            mIsProfileReady = true;
             mProfileManager.callServiceConnectedListeners();
         }
 
         public void onServiceDisconnected(int profile) {
-            mIsProfileReady=false;
+            mIsProfileReady = false;
+            mProfileManager.callServiceDisconnectedListeners();
         }
     }
 
@@ -242,7 +241,7 @@ public class A2dpProfile implements LocalBluetoothProfile {
     /**
      * @return whether high quality audio is enabled or not
      */
-    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     public boolean isHighQualityAudioEnabled(BluetoothDevice device) {
         if (V) Log.d(TAG, " execute isHighQualityAudioEnabled()");
         if (mService == null) {
@@ -325,7 +324,7 @@ public class A2dpProfile implements LocalBluetoothProfile {
      * @param device to get codec label from
      * @return the label associated with the device codec
      */
-    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     public String getHighQualityAudioOptionLabel(BluetoothDevice device) {
         if (V) Log.d(TAG, " execute getHighQualityAudioOptionLabel()");
         BluetoothDevice bluetoothDevice = (device != null) ? device : getActiveDevice();
@@ -371,7 +370,7 @@ public class A2dpProfile implements LocalBluetoothProfile {
            case BluetoothCodecConfig.SOURCE_CODEC_TYPE_LC3:
                index = 6;
                break;
-           case SOURCE_CODEC_TYPE_OPUS: // TODO update in U
+           case BluetoothCodecConfig.SOURCE_CODEC_TYPE_OPUS:
                index = 7;
                break;
            case BluetoothCodecConfig.SOURCE_CODEC_TYPE_APTX_ADAPTIVE:

@@ -326,18 +326,18 @@ static std::unique_ptr<ResourceTable> BuildTableWithSparseEntries(
   return table;
 }
 
-TEST_F(TableFlattenerTest, FlattenSparseEntryWithMinSdkO) {
+TEST_F(TableFlattenerTest, FlattenSparseEntryWithMinSdkSV2) {
   std::unique_ptr<IAaptContext> context = test::ContextBuilder()
                                               .SetCompilationPackage("android")
                                               .SetPackageId(0x01)
-                                              .SetMinSdkVersion(SDK_O)
+                                              .SetMinSdkVersion(SDK_S_V2)
                                               .Build();
 
   const ConfigDescription sparse_config = test::ParseConfigOrDie("en-rGB");
   auto table_in = BuildTableWithSparseEntries(context.get(), sparse_config, 0.25f);
 
   TableFlattenerOptions options;
-  options.use_sparse_entries = true;
+  options.sparse_entries = SparseEntriesMode::Enabled;
 
   std::string no_sparse_contents;
   ASSERT_TRUE(Flatten(context.get(), {}, table_in.get(), &no_sparse_contents));
@@ -369,18 +369,40 @@ TEST_F(TableFlattenerTest, FlattenSparseEntryWithMinSdkO) {
   EXPECT_EQ(4u, value->value.data);
 }
 
-TEST_F(TableFlattenerTest, FlattenSparseEntryWithConfigSdkVersionO) {
+TEST_F(TableFlattenerTest, FlattenSparseEntryWithConfigSdkVersionSV2) {
   std::unique_ptr<IAaptContext> context = test::ContextBuilder()
                                               .SetCompilationPackage("android")
                                               .SetPackageId(0x01)
                                               .SetMinSdkVersion(SDK_LOLLIPOP)
                                               .Build();
 
-  const ConfigDescription sparse_config = test::ParseConfigOrDie("en-rGB-v26");
+  const ConfigDescription sparse_config = test::ParseConfigOrDie("en-rGB-v32");
   auto table_in = BuildTableWithSparseEntries(context.get(), sparse_config, 0.25f);
 
   TableFlattenerOptions options;
-  options.use_sparse_entries = true;
+  options.sparse_entries = SparseEntriesMode::Enabled;
+
+  std::string no_sparse_contents;
+  ASSERT_TRUE(Flatten(context.get(), {}, table_in.get(), &no_sparse_contents));
+
+  std::string sparse_contents;
+  ASSERT_TRUE(Flatten(context.get(), options, table_in.get(), &sparse_contents));
+
+  EXPECT_EQ(no_sparse_contents.size(), sparse_contents.size());
+}
+
+TEST_F(TableFlattenerTest, FlattenSparseEntryRegardlessOfMinSdkWhenForced) {
+  std::unique_ptr<IAaptContext> context = test::ContextBuilder()
+                                              .SetCompilationPackage("android")
+                                              .SetPackageId(0x01)
+                                              .SetMinSdkVersion(SDK_LOLLIPOP)
+                                              .Build();
+
+  const ConfigDescription sparse_config = test::ParseConfigOrDie("en-rGB");
+  auto table_in = BuildTableWithSparseEntries(context.get(), sparse_config, 0.25f);
+
+  TableFlattenerOptions options;
+  options.sparse_entries = SparseEntriesMode::Forced;
 
   std::string no_sparse_contents;
   ASSERT_TRUE(Flatten(context.get(), {}, table_in.get(), &no_sparse_contents));
@@ -389,6 +411,46 @@ TEST_F(TableFlattenerTest, FlattenSparseEntryWithConfigSdkVersionO) {
   ASSERT_TRUE(Flatten(context.get(), options, table_in.get(), &sparse_contents));
 
   EXPECT_GT(no_sparse_contents.size(), sparse_contents.size());
+}
+
+TEST_F(TableFlattenerTest, FlattenSparseEntryWithSdkVersionNotSet) {
+  std::unique_ptr<IAaptContext> context =
+      test::ContextBuilder().SetCompilationPackage("android").SetPackageId(0x01).Build();
+
+  const ConfigDescription sparse_config = test::ParseConfigOrDie("en-rGB");
+  auto table_in = BuildTableWithSparseEntries(context.get(), sparse_config, 0.25f);
+
+  TableFlattenerOptions options;
+  options.sparse_entries = SparseEntriesMode::Enabled;
+
+  std::string no_sparse_contents;
+  ASSERT_TRUE(Flatten(context.get(), {}, table_in.get(), &no_sparse_contents));
+
+  std::string sparse_contents;
+  ASSERT_TRUE(Flatten(context.get(), options, table_in.get(), &sparse_contents));
+
+  EXPECT_GT(no_sparse_contents.size(), sparse_contents.size());
+
+  // Attempt to parse the sparse contents.
+
+  ResourceTable sparse_table;
+  BinaryResourceParser parser(context->GetDiagnostics(), &sparse_table, Source("test.arsc"),
+                              sparse_contents.data(), sparse_contents.size());
+  ASSERT_TRUE(parser.Parse());
+
+  auto value = test::GetValueForConfig<BinaryPrimitive>(&sparse_table, "android:string/foo_0",
+                                                        sparse_config);
+  ASSERT_THAT(value, NotNull());
+  EXPECT_EQ(0u, value->value.data);
+
+  ASSERT_THAT(test::GetValueForConfig<BinaryPrimitive>(&sparse_table, "android:string/foo_1",
+                                                       sparse_config),
+              IsNull());
+
+  value = test::GetValueForConfig<BinaryPrimitive>(&sparse_table, "android:string/foo_4",
+                                                   sparse_config);
+  ASSERT_THAT(value, NotNull());
+  EXPECT_EQ(4u, value->value.data);
 }
 
 TEST_F(TableFlattenerTest, DoNotUseSparseEntryForDenseConfig) {
@@ -402,7 +464,7 @@ TEST_F(TableFlattenerTest, DoNotUseSparseEntryForDenseConfig) {
   auto table_in = BuildTableWithSparseEntries(context.get(), sparse_config, 0.80f);
 
   TableFlattenerOptions options;
-  options.use_sparse_entries = true;
+  options.sparse_entries = SparseEntriesMode::Enabled;
 
   std::string no_sparse_contents;
   ASSERT_TRUE(Flatten(context.get(), {}, table_in.get(), &no_sparse_contents));
@@ -605,6 +667,87 @@ TEST_F(TableFlattenerTest, ObfuscatingResourceNamesNoNameCollapseExemptionsSucce
   ASSERT_TRUE(idx.has_value());
   EXPECT_TRUE(Exists(&res_table, "com.app.test:layout/0_resource_name_obfuscated",
                      ResourceId(0x7f050000), {}, Res_value::TYPE_STRING, (uint32_t)*idx, 0u));
+}
+
+TEST_F(TableFlattenerTest, ObfuscatingResourceNamesWithDeduplicationSucceeds) {
+  std::unique_ptr<ResourceTable> table =
+      test::ResourceTableBuilder()
+          .AddSimple("com.app.test:id/one", ResourceId(0x7f020000))
+          .AddSimple("com.app.test:id/two", ResourceId(0x7f020001))
+          .AddValue("com.app.test:id/three", ResourceId(0x7f020002),
+                    test::BuildReference("com.app.test:id/one", ResourceId(0x7f020000)))
+          .AddValue("com.app.test:integer/one", ResourceId(0x7f030000),
+                    util::make_unique<BinaryPrimitive>(uint8_t(Res_value::TYPE_INT_DEC), 1u))
+          .AddValue("com.app.test:integer/one", test::ParseConfigOrDie("v1"),
+                    ResourceId(0x7f030000),
+                    util::make_unique<BinaryPrimitive>(uint8_t(Res_value::TYPE_INT_DEC), 2u))
+          .AddString("com.app.test:string/test1", ResourceId(0x7f040000), "foo")
+          .AddString("com.app.test:string/test2", ResourceId(0x7f040001), "foo")
+          .AddString("com.app.test:string/test3", ResourceId(0x7f040002), "bar")
+          .AddString("com.app.test:string/test4", ResourceId(0x7f040003), "foo")
+          .AddString("com.app.test:layout/bar1", ResourceId(0x7f050000), "res/layout/bar.xml")
+          .AddString("com.app.test:layout/bar2", ResourceId(0x7f050001), "res/layout/bar.xml")
+          .Build();
+
+  TableFlattenerOptions options;
+  options.collapse_key_stringpool = true;
+  options.deduplicate_entry_values = true;
+
+  ResTable res_table;
+
+  ASSERT_TRUE(Flatten(context_.get(), options, table.get(), &res_table));
+
+  EXPECT_TRUE(Exists(&res_table, "com.app.test:id/0_resource_name_obfuscated",
+                     ResourceId(0x7f020000), {}, Res_value::TYPE_INT_BOOLEAN, 0u, 0u));
+
+  EXPECT_TRUE(Exists(&res_table, "com.app.test:id/0_resource_name_obfuscated",
+                     ResourceId(0x7f020001), {}, Res_value::TYPE_INT_BOOLEAN, 0u, 0u));
+
+  EXPECT_TRUE(Exists(&res_table, "com.app.test:id/0_resource_name_obfuscated",
+                     ResourceId(0x7f020002), {}, Res_value::TYPE_REFERENCE, 0x7f020000u, 0u));
+
+  EXPECT_TRUE(Exists(&res_table, "com.app.test:integer/0_resource_name_obfuscated",
+                     ResourceId(0x7f030000), {}, Res_value::TYPE_INT_DEC, 1u,
+                     ResTable_config::CONFIG_VERSION));
+
+  EXPECT_TRUE(Exists(&res_table, "com.app.test:integer/0_resource_name_obfuscated",
+                     ResourceId(0x7f030000), test::ParseConfigOrDie("v1"), Res_value::TYPE_INT_DEC,
+                     2u, ResTable_config::CONFIG_VERSION));
+
+  std::u16string foo_str = u"foo";
+  std::u16string bar_str = u"bar";
+  auto foo_idx = res_table.getTableStringBlock(0)->indexOfString(foo_str.data(), foo_str.size());
+  auto bar_idx = res_table.getTableStringBlock(0)->indexOfString(bar_str.data(), bar_str.size());
+  ASSERT_TRUE(foo_idx.has_value());
+  EXPECT_TRUE(Exists(&res_table, "com.app.test:string/0_resource_name_obfuscated",
+                     ResourceId(0x7f040000), {}, Res_value::TYPE_STRING, (uint32_t)*foo_idx, 0u));
+  EXPECT_TRUE(Exists(&res_table, "com.app.test:string/0_resource_name_obfuscated",
+                     ResourceId(0x7f040001), {}, Res_value::TYPE_STRING, (uint32_t)*foo_idx, 0u));
+  EXPECT_TRUE(Exists(&res_table, "com.app.test:string/0_resource_name_obfuscated",
+                     ResourceId(0x7f040002), {}, Res_value::TYPE_STRING, (uint32_t)*bar_idx, 0u));
+  EXPECT_TRUE(Exists(&res_table, "com.app.test:string/0_resource_name_obfuscated",
+                     ResourceId(0x7f040003), {}, Res_value::TYPE_STRING, (uint32_t)*foo_idx, 0u));
+
+  std::u16string bar_path = u"res/layout/bar.xml";
+  auto bar_path_idx =
+      res_table.getTableStringBlock(0)->indexOfString(bar_path.data(), bar_path.size());
+  ASSERT_TRUE(bar_path_idx.has_value());
+  EXPECT_TRUE(Exists(&res_table, "com.app.test:layout/0_resource_name_obfuscated",
+                     ResourceId(0x7f050000), {}, Res_value::TYPE_STRING, (uint32_t)*bar_path_idx,
+                     0u));
+  EXPECT_TRUE(Exists(&res_table, "com.app.test:layout/0_resource_name_obfuscated",
+                     ResourceId(0x7f050001), {}, Res_value::TYPE_STRING, (uint32_t)*bar_path_idx,
+                     0u));
+
+  std::string deduplicated_output;
+  std::string sequential_output;
+  Flatten(context_.get(), options, table.get(), &deduplicated_output);
+  options.deduplicate_entry_values = false;
+  Flatten(context_.get(), options, table.get(), &sequential_output);
+
+  // We have 4 duplicates: 0x7f020001 id, 0x7f040001 string, 0x7f040003 string, 0x7f050001 layout.
+  EXPECT_EQ(sequential_output.size(),
+            deduplicated_output.size() + 4 * (sizeof(ResTable_entry) + sizeof(Res_value)));
 }
 
 TEST_F(TableFlattenerTest, ObfuscatingResourceNamesWithNameCollapseExemptionsSucceeds) {

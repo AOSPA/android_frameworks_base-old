@@ -55,12 +55,14 @@ public abstract class EconomicPolicy {
     static final int TYPE_ACTION = 1 << SHIFT_TYPE;
     static final int TYPE_REWARD = 2 << SHIFT_TYPE;
 
-    private static final int SHIFT_POLICY = 29;
-    static final int MASK_POLICY = 0b1 << SHIFT_POLICY;
-    static final int POLICY_AM = 0 << SHIFT_POLICY;
-    static final int POLICY_JS = 1 << SHIFT_POLICY;
+    private static final int SHIFT_POLICY = 28;
+    static final int MASK_POLICY = 0b11 << SHIFT_POLICY;
+    static final int ALL_POLICIES = MASK_POLICY;
+    // Reserve 0 for the base/common policy.
+    public static final int POLICY_ALARM = 1 << SHIFT_POLICY;
+    public static final int POLICY_JOB = 2 << SHIFT_POLICY;
 
-    static final int MASK_EVENT = ~0 - (0b111 << SHIFT_POLICY);
+    static final int MASK_EVENT = -1 ^ (MASK_TYPE | MASK_POLICY);
 
     static final int REGULATION_BASIC_INCOME = TYPE_REGULATION | 0;
     static final int REGULATION_BIRTHRIGHT = TYPE_REGULATION | 1;
@@ -70,6 +72,7 @@ public abstract class EconomicPolicy {
     /** App is fully restricted from running in the background. */
     static final int REGULATION_BG_RESTRICTED = TYPE_REGULATION | 5;
     static final int REGULATION_BG_UNRESTRICTED = TYPE_REGULATION | 6;
+    static final int REGULATION_FORCE_STOP = TYPE_REGULATION | 8;
 
     static final int REWARD_NOTIFICATION_SEEN = TYPE_REWARD | 0;
     static final int REWARD_NOTIFICATION_INTERACTION = TYPE_REWARD | 1;
@@ -113,11 +116,21 @@ public abstract class EconomicPolicy {
     }
 
     @IntDef({
+            ALL_POLICIES,
+            POLICY_ALARM,
+            POLICY_JOB,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface Policy {
+    }
+
+    @IntDef({
             REWARD_TOP_ACTIVITY,
             REWARD_NOTIFICATION_SEEN,
             REWARD_NOTIFICATION_INTERACTION,
             REWARD_WIDGET_INTERACTION,
             REWARD_OTHER_USER_INTERACTION,
+            JobSchedulerEconomicPolicy.REWARD_APP_INSTALL,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface UtilityReward {
@@ -219,15 +232,21 @@ public abstract class EconomicPolicy {
      * Returns the maximum number of cakes that should be consumed during a full 100% discharge
      * cycle. This is the initial limit. The system may choose to increase the limit over time,
      * but the increased limit should never exceed the value returned from
-     * {@link #getHardSatiatedConsumptionLimit()}.
+     * {@link #getMaxSatiatedConsumptionLimit()}.
      */
     abstract long getInitialSatiatedConsumptionLimit();
 
     /**
-     * Returns the maximum number of cakes that should be consumed during a full 100% discharge
-     * cycle. This is the hard limit that should never be exceeded.
+     * Returns the minimum number of cakes that should be available for consumption during a full
+     * 100% discharge cycle.
      */
-    abstract long getHardSatiatedConsumptionLimit();
+    abstract long getMinSatiatedConsumptionLimit();
+
+    /**
+     * Returns the maximum number of cakes that should be available for consumption during a full
+     * 100% discharge cycle.
+     */
+    abstract long getMaxSatiatedConsumptionLimit();
 
     /** Return the set of modifiers that should apply to this policy's costs. */
     @NonNull
@@ -339,7 +358,7 @@ public abstract class EconomicPolicy {
     @NonNull
     static String actionToString(int eventId) {
         switch (eventId & MASK_POLICY) {
-            case POLICY_AM:
+            case POLICY_ALARM:
                 switch (eventId) {
                     case AlarmManagerEconomicPolicy.ACTION_ALARM_WAKEUP_EXACT_ALLOW_WHILE_IDLE:
                         return "ALARM_WAKEUP_EXACT_ALLOW_WHILE_IDLE";
@@ -362,7 +381,7 @@ public abstract class EconomicPolicy {
                 }
                 break;
 
-            case POLICY_JS:
+            case POLICY_JOB:
                 switch (eventId) {
                     case JobSchedulerEconomicPolicy.ACTION_JOB_MAX_START:
                         return "JOB_MAX_START";
@@ -409,6 +428,8 @@ public abstract class EconomicPolicy {
                 return "BG_RESTRICTED";
             case REGULATION_BG_UNRESTRICTED:
                 return "BG_UNRESTRICTED";
+            case REGULATION_FORCE_STOP:
+                return "FORCE_STOP";
         }
         return "UNKNOWN_REGULATION:" + Integer.toHexString(eventId);
     }
@@ -426,6 +447,8 @@ public abstract class EconomicPolicy {
                 return "REWARD_WIDGET_INTERACTION";
             case REWARD_OTHER_USER_INTERACTION:
                 return "REWARD_OTHER_USER_INTERACTION";
+            case JobSchedulerEconomicPolicy.REWARD_APP_INSTALL:
+                return "REWARD_JOB_APP_INSTALL";
         }
         return "UNKNOWN_REWARD:" + Integer.toHexString(eventId);
     }

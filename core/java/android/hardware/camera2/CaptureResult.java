@@ -990,18 +990,18 @@ public class CaptureResult extends CameraMetadata<CaptureResult.Key<?>> {
      * <table>
      * <thead>
      * <tr>
-     * <th align="center">State</th>
-     * <th align="center">Transition Cause</th>
-     * <th align="center">New State</th>
-     * <th align="center">Notes</th>
+     * <th style="text-align: center;">State</th>
+     * <th style="text-align: center;">Transition Cause</th>
+     * <th style="text-align: center;">New State</th>
+     * <th style="text-align: center;">Notes</th>
      * </tr>
      * </thead>
      * <tbody>
      * <tr>
-     * <td align="center">INACTIVE</td>
-     * <td align="center"></td>
-     * <td align="center">INACTIVE</td>
-     * <td align="center">Camera device auto exposure algorithm is disabled</td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;"></td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;">Camera device auto exposure algorithm is disabled</td>
      * </tr>
      * </tbody>
      * </table>
@@ -1009,120 +1009,120 @@ public class CaptureResult extends CameraMetadata<CaptureResult.Key<?>> {
      * <table>
      * <thead>
      * <tr>
-     * <th align="center">State</th>
-     * <th align="center">Transition Cause</th>
-     * <th align="center">New State</th>
-     * <th align="center">Notes</th>
+     * <th style="text-align: center;">State</th>
+     * <th style="text-align: center;">Transition Cause</th>
+     * <th style="text-align: center;">New State</th>
+     * <th style="text-align: center;">Notes</th>
      * </tr>
      * </thead>
      * <tbody>
      * <tr>
-     * <td align="center">INACTIVE</td>
-     * <td align="center">Camera device initiates AE scan</td>
-     * <td align="center">SEARCHING</td>
-     * <td align="center">Values changing</td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;">Camera device initiates AE scan</td>
+     * <td style="text-align: center;">SEARCHING</td>
+     * <td style="text-align: center;">Values changing</td>
      * </tr>
      * <tr>
-     * <td align="center">INACTIVE</td>
-     * <td align="center">{@link CaptureRequest#CONTROL_AE_LOCK android.control.aeLock} is ON</td>
-     * <td align="center">LOCKED</td>
-     * <td align="center">Values locked</td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;">{@link CaptureRequest#CONTROL_AE_LOCK android.control.aeLock} is ON</td>
+     * <td style="text-align: center;">LOCKED</td>
+     * <td style="text-align: center;">Values locked</td>
      * </tr>
      * <tr>
-     * <td align="center">SEARCHING</td>
-     * <td align="center">Camera device finishes AE scan</td>
-     * <td align="center">CONVERGED</td>
-     * <td align="center">Good values, not changing</td>
+     * <td style="text-align: center;">SEARCHING</td>
+     * <td style="text-align: center;">Camera device finishes AE scan</td>
+     * <td style="text-align: center;">CONVERGED</td>
+     * <td style="text-align: center;">Good values, not changing</td>
      * </tr>
      * <tr>
-     * <td align="center">SEARCHING</td>
-     * <td align="center">Camera device finishes AE scan</td>
-     * <td align="center">FLASH_REQUIRED</td>
-     * <td align="center">Converged but too dark w/o flash</td>
+     * <td style="text-align: center;">SEARCHING</td>
+     * <td style="text-align: center;">Camera device finishes AE scan</td>
+     * <td style="text-align: center;">FLASH_REQUIRED</td>
+     * <td style="text-align: center;">Converged but too dark w/o flash</td>
      * </tr>
      * <tr>
-     * <td align="center">SEARCHING</td>
-     * <td align="center">{@link CaptureRequest#CONTROL_AE_LOCK android.control.aeLock} is ON</td>
-     * <td align="center">LOCKED</td>
-     * <td align="center">Values locked</td>
+     * <td style="text-align: center;">SEARCHING</td>
+     * <td style="text-align: center;">{@link CaptureRequest#CONTROL_AE_LOCK android.control.aeLock} is ON</td>
+     * <td style="text-align: center;">LOCKED</td>
+     * <td style="text-align: center;">Values locked</td>
      * </tr>
      * <tr>
-     * <td align="center">CONVERGED</td>
-     * <td align="center">Camera device initiates AE scan</td>
-     * <td align="center">SEARCHING</td>
-     * <td align="center">Values changing</td>
+     * <td style="text-align: center;">CONVERGED</td>
+     * <td style="text-align: center;">Camera device initiates AE scan</td>
+     * <td style="text-align: center;">SEARCHING</td>
+     * <td style="text-align: center;">Values changing</td>
      * </tr>
      * <tr>
-     * <td align="center">CONVERGED</td>
-     * <td align="center">{@link CaptureRequest#CONTROL_AE_LOCK android.control.aeLock} is ON</td>
-     * <td align="center">LOCKED</td>
-     * <td align="center">Values locked</td>
+     * <td style="text-align: center;">CONVERGED</td>
+     * <td style="text-align: center;">{@link CaptureRequest#CONTROL_AE_LOCK android.control.aeLock} is ON</td>
+     * <td style="text-align: center;">LOCKED</td>
+     * <td style="text-align: center;">Values locked</td>
      * </tr>
      * <tr>
-     * <td align="center">FLASH_REQUIRED</td>
-     * <td align="center">Camera device initiates AE scan</td>
-     * <td align="center">SEARCHING</td>
-     * <td align="center">Values changing</td>
+     * <td style="text-align: center;">FLASH_REQUIRED</td>
+     * <td style="text-align: center;">Camera device initiates AE scan</td>
+     * <td style="text-align: center;">SEARCHING</td>
+     * <td style="text-align: center;">Values changing</td>
      * </tr>
      * <tr>
-     * <td align="center">FLASH_REQUIRED</td>
-     * <td align="center">{@link CaptureRequest#CONTROL_AE_LOCK android.control.aeLock} is ON</td>
-     * <td align="center">LOCKED</td>
-     * <td align="center">Values locked</td>
+     * <td style="text-align: center;">FLASH_REQUIRED</td>
+     * <td style="text-align: center;">{@link CaptureRequest#CONTROL_AE_LOCK android.control.aeLock} is ON</td>
+     * <td style="text-align: center;">LOCKED</td>
+     * <td style="text-align: center;">Values locked</td>
      * </tr>
      * <tr>
-     * <td align="center">LOCKED</td>
-     * <td align="center">{@link CaptureRequest#CONTROL_AE_LOCK android.control.aeLock} is OFF</td>
-     * <td align="center">SEARCHING</td>
-     * <td align="center">Values not good after unlock</td>
+     * <td style="text-align: center;">LOCKED</td>
+     * <td style="text-align: center;">{@link CaptureRequest#CONTROL_AE_LOCK android.control.aeLock} is OFF</td>
+     * <td style="text-align: center;">SEARCHING</td>
+     * <td style="text-align: center;">Values not good after unlock</td>
      * </tr>
      * <tr>
-     * <td align="center">LOCKED</td>
-     * <td align="center">{@link CaptureRequest#CONTROL_AE_LOCK android.control.aeLock} is OFF</td>
-     * <td align="center">CONVERGED</td>
-     * <td align="center">Values good after unlock</td>
+     * <td style="text-align: center;">LOCKED</td>
+     * <td style="text-align: center;">{@link CaptureRequest#CONTROL_AE_LOCK android.control.aeLock} is OFF</td>
+     * <td style="text-align: center;">CONVERGED</td>
+     * <td style="text-align: center;">Values good after unlock</td>
      * </tr>
      * <tr>
-     * <td align="center">LOCKED</td>
-     * <td align="center">{@link CaptureRequest#CONTROL_AE_LOCK android.control.aeLock} is OFF</td>
-     * <td align="center">FLASH_REQUIRED</td>
-     * <td align="center">Exposure good, but too dark</td>
+     * <td style="text-align: center;">LOCKED</td>
+     * <td style="text-align: center;">{@link CaptureRequest#CONTROL_AE_LOCK android.control.aeLock} is OFF</td>
+     * <td style="text-align: center;">FLASH_REQUIRED</td>
+     * <td style="text-align: center;">Exposure good, but too dark</td>
      * </tr>
      * <tr>
-     * <td align="center">PRECAPTURE</td>
-     * <td align="center">Sequence done. {@link CaptureRequest#CONTROL_AE_LOCK android.control.aeLock} is OFF</td>
-     * <td align="center">CONVERGED</td>
-     * <td align="center">Ready for high-quality capture</td>
+     * <td style="text-align: center;">PRECAPTURE</td>
+     * <td style="text-align: center;">Sequence done. {@link CaptureRequest#CONTROL_AE_LOCK android.control.aeLock} is OFF</td>
+     * <td style="text-align: center;">CONVERGED</td>
+     * <td style="text-align: center;">Ready for high-quality capture</td>
      * </tr>
      * <tr>
-     * <td align="center">PRECAPTURE</td>
-     * <td align="center">Sequence done. {@link CaptureRequest#CONTROL_AE_LOCK android.control.aeLock} is ON</td>
-     * <td align="center">LOCKED</td>
-     * <td align="center">Ready for high-quality capture</td>
+     * <td style="text-align: center;">PRECAPTURE</td>
+     * <td style="text-align: center;">Sequence done. {@link CaptureRequest#CONTROL_AE_LOCK android.control.aeLock} is ON</td>
+     * <td style="text-align: center;">LOCKED</td>
+     * <td style="text-align: center;">Ready for high-quality capture</td>
      * </tr>
      * <tr>
-     * <td align="center">LOCKED</td>
-     * <td align="center">aeLock is ON and aePrecaptureTrigger is START</td>
-     * <td align="center">LOCKED</td>
-     * <td align="center">Precapture trigger is ignored when AE is already locked</td>
+     * <td style="text-align: center;">LOCKED</td>
+     * <td style="text-align: center;">aeLock is ON and aePrecaptureTrigger is START</td>
+     * <td style="text-align: center;">LOCKED</td>
+     * <td style="text-align: center;">Precapture trigger is ignored when AE is already locked</td>
      * </tr>
      * <tr>
-     * <td align="center">LOCKED</td>
-     * <td align="center">aeLock is ON and aePrecaptureTrigger is CANCEL</td>
-     * <td align="center">LOCKED</td>
-     * <td align="center">Precapture trigger is ignored when AE is already locked</td>
+     * <td style="text-align: center;">LOCKED</td>
+     * <td style="text-align: center;">aeLock is ON and aePrecaptureTrigger is CANCEL</td>
+     * <td style="text-align: center;">LOCKED</td>
+     * <td style="text-align: center;">Precapture trigger is ignored when AE is already locked</td>
      * </tr>
      * <tr>
-     * <td align="center">Any state (excluding LOCKED)</td>
-     * <td align="center">{@link CaptureRequest#CONTROL_AE_PRECAPTURE_TRIGGER android.control.aePrecaptureTrigger} is START</td>
-     * <td align="center">PRECAPTURE</td>
-     * <td align="center">Start AE precapture metering sequence</td>
+     * <td style="text-align: center;">Any state (excluding LOCKED)</td>
+     * <td style="text-align: center;">{@link CaptureRequest#CONTROL_AE_PRECAPTURE_TRIGGER android.control.aePrecaptureTrigger} is START</td>
+     * <td style="text-align: center;">PRECAPTURE</td>
+     * <td style="text-align: center;">Start AE precapture metering sequence</td>
      * </tr>
      * <tr>
-     * <td align="center">Any state (excluding LOCKED)</td>
-     * <td align="center">{@link CaptureRequest#CONTROL_AE_PRECAPTURE_TRIGGER android.control.aePrecaptureTrigger} is CANCEL</td>
-     * <td align="center">INACTIVE</td>
-     * <td align="center">Currently active precapture metering sequence is canceled</td>
+     * <td style="text-align: center;">Any state (excluding LOCKED)</td>
+     * <td style="text-align: center;">{@link CaptureRequest#CONTROL_AE_PRECAPTURE_TRIGGER android.control.aePrecaptureTrigger} is CANCEL</td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;">Currently active precapture metering sequence is canceled</td>
      * </tr>
      * </tbody>
      * </table>
@@ -1138,54 +1138,54 @@ public class CaptureResult extends CameraMetadata<CaptureResult.Key<?>> {
      * <table>
      * <thead>
      * <tr>
-     * <th align="center">State</th>
-     * <th align="center">Transition Cause</th>
-     * <th align="center">New State</th>
-     * <th align="center">Notes</th>
+     * <th style="text-align: center;">State</th>
+     * <th style="text-align: center;">Transition Cause</th>
+     * <th style="text-align: center;">New State</th>
+     * <th style="text-align: center;">Notes</th>
      * </tr>
      * </thead>
      * <tbody>
      * <tr>
-     * <td align="center">INACTIVE</td>
-     * <td align="center">Camera device finished AE scan</td>
-     * <td align="center">CONVERGED</td>
-     * <td align="center">Values are already good, transient states are skipped by camera device.</td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;">Camera device finished AE scan</td>
+     * <td style="text-align: center;">CONVERGED</td>
+     * <td style="text-align: center;">Values are already good, transient states are skipped by camera device.</td>
      * </tr>
      * <tr>
-     * <td align="center">Any state (excluding LOCKED)</td>
-     * <td align="center">{@link CaptureRequest#CONTROL_AE_PRECAPTURE_TRIGGER android.control.aePrecaptureTrigger} is START, sequence done</td>
-     * <td align="center">FLASH_REQUIRED</td>
-     * <td align="center">Converged but too dark w/o flash after a precapture sequence, transient states are skipped by camera device.</td>
+     * <td style="text-align: center;">Any state (excluding LOCKED)</td>
+     * <td style="text-align: center;">{@link CaptureRequest#CONTROL_AE_PRECAPTURE_TRIGGER android.control.aePrecaptureTrigger} is START, sequence done</td>
+     * <td style="text-align: center;">FLASH_REQUIRED</td>
+     * <td style="text-align: center;">Converged but too dark w/o flash after a precapture sequence, transient states are skipped by camera device.</td>
      * </tr>
      * <tr>
-     * <td align="center">Any state (excluding LOCKED)</td>
-     * <td align="center">{@link CaptureRequest#CONTROL_AE_PRECAPTURE_TRIGGER android.control.aePrecaptureTrigger} is START, sequence done</td>
-     * <td align="center">CONVERGED</td>
-     * <td align="center">Converged after a precapture sequence, transient states are skipped by camera device.</td>
+     * <td style="text-align: center;">Any state (excluding LOCKED)</td>
+     * <td style="text-align: center;">{@link CaptureRequest#CONTROL_AE_PRECAPTURE_TRIGGER android.control.aePrecaptureTrigger} is START, sequence done</td>
+     * <td style="text-align: center;">CONVERGED</td>
+     * <td style="text-align: center;">Converged after a precapture sequence, transient states are skipped by camera device.</td>
      * </tr>
      * <tr>
-     * <td align="center">Any state (excluding LOCKED)</td>
-     * <td align="center">{@link CaptureRequest#CONTROL_AE_PRECAPTURE_TRIGGER android.control.aePrecaptureTrigger} is CANCEL, converged</td>
-     * <td align="center">FLASH_REQUIRED</td>
-     * <td align="center">Converged but too dark w/o flash after a precapture sequence is canceled, transient states are skipped by camera device.</td>
+     * <td style="text-align: center;">Any state (excluding LOCKED)</td>
+     * <td style="text-align: center;">{@link CaptureRequest#CONTROL_AE_PRECAPTURE_TRIGGER android.control.aePrecaptureTrigger} is CANCEL, converged</td>
+     * <td style="text-align: center;">FLASH_REQUIRED</td>
+     * <td style="text-align: center;">Converged but too dark w/o flash after a precapture sequence is canceled, transient states are skipped by camera device.</td>
      * </tr>
      * <tr>
-     * <td align="center">Any state (excluding LOCKED)</td>
-     * <td align="center">{@link CaptureRequest#CONTROL_AE_PRECAPTURE_TRIGGER android.control.aePrecaptureTrigger} is CANCEL, converged</td>
-     * <td align="center">CONVERGED</td>
-     * <td align="center">Converged after a precapture sequences canceled, transient states are skipped by camera device.</td>
+     * <td style="text-align: center;">Any state (excluding LOCKED)</td>
+     * <td style="text-align: center;">{@link CaptureRequest#CONTROL_AE_PRECAPTURE_TRIGGER android.control.aePrecaptureTrigger} is CANCEL, converged</td>
+     * <td style="text-align: center;">CONVERGED</td>
+     * <td style="text-align: center;">Converged after a precapture sequences canceled, transient states are skipped by camera device.</td>
      * </tr>
      * <tr>
-     * <td align="center">CONVERGED</td>
-     * <td align="center">Camera device finished AE scan</td>
-     * <td align="center">FLASH_REQUIRED</td>
-     * <td align="center">Converged but too dark w/o flash after a new scan, transient states are skipped by camera device.</td>
+     * <td style="text-align: center;">CONVERGED</td>
+     * <td style="text-align: center;">Camera device finished AE scan</td>
+     * <td style="text-align: center;">FLASH_REQUIRED</td>
+     * <td style="text-align: center;">Converged but too dark w/o flash after a new scan, transient states are skipped by camera device.</td>
      * </tr>
      * <tr>
-     * <td align="center">FLASH_REQUIRED</td>
-     * <td align="center">Camera device finished AE scan</td>
-     * <td align="center">CONVERGED</td>
-     * <td align="center">Converged after a new scan, transient states are skipped by camera device.</td>
+     * <td style="text-align: center;">FLASH_REQUIRED</td>
+     * <td style="text-align: center;">Camera device finished AE scan</td>
+     * <td style="text-align: center;">CONVERGED</td>
+     * <td style="text-align: center;">Converged after a new scan, transient states are skipped by camera device.</td>
      * </tr>
      * </tbody>
      * </table>
@@ -1413,18 +1413,18 @@ public class CaptureResult extends CameraMetadata<CaptureResult.Key<?>> {
      * <table>
      * <thead>
      * <tr>
-     * <th align="center">State</th>
-     * <th align="center">Transition Cause</th>
-     * <th align="center">New State</th>
-     * <th align="center">Notes</th>
+     * <th style="text-align: center;">State</th>
+     * <th style="text-align: center;">Transition Cause</th>
+     * <th style="text-align: center;">New State</th>
+     * <th style="text-align: center;">Notes</th>
      * </tr>
      * </thead>
      * <tbody>
      * <tr>
-     * <td align="center">INACTIVE</td>
-     * <td align="center"></td>
-     * <td align="center">INACTIVE</td>
-     * <td align="center">Never changes</td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;"></td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;">Never changes</td>
      * </tr>
      * </tbody>
      * </table>
@@ -1432,66 +1432,66 @@ public class CaptureResult extends CameraMetadata<CaptureResult.Key<?>> {
      * <table>
      * <thead>
      * <tr>
-     * <th align="center">State</th>
-     * <th align="center">Transition Cause</th>
-     * <th align="center">New State</th>
-     * <th align="center">Notes</th>
+     * <th style="text-align: center;">State</th>
+     * <th style="text-align: center;">Transition Cause</th>
+     * <th style="text-align: center;">New State</th>
+     * <th style="text-align: center;">Notes</th>
      * </tr>
      * </thead>
      * <tbody>
      * <tr>
-     * <td align="center">INACTIVE</td>
-     * <td align="center">AF_TRIGGER</td>
-     * <td align="center">ACTIVE_SCAN</td>
-     * <td align="center">Start AF sweep, Lens now moving</td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;">AF_TRIGGER</td>
+     * <td style="text-align: center;">ACTIVE_SCAN</td>
+     * <td style="text-align: center;">Start AF sweep, Lens now moving</td>
      * </tr>
      * <tr>
-     * <td align="center">ACTIVE_SCAN</td>
-     * <td align="center">AF sweep done</td>
-     * <td align="center">FOCUSED_LOCKED</td>
-     * <td align="center">Focused, Lens now locked</td>
+     * <td style="text-align: center;">ACTIVE_SCAN</td>
+     * <td style="text-align: center;">AF sweep done</td>
+     * <td style="text-align: center;">FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">Focused, Lens now locked</td>
      * </tr>
      * <tr>
-     * <td align="center">ACTIVE_SCAN</td>
-     * <td align="center">AF sweep done</td>
-     * <td align="center">NOT_FOCUSED_LOCKED</td>
-     * <td align="center">Not focused, Lens now locked</td>
+     * <td style="text-align: center;">ACTIVE_SCAN</td>
+     * <td style="text-align: center;">AF sweep done</td>
+     * <td style="text-align: center;">NOT_FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">Not focused, Lens now locked</td>
      * </tr>
      * <tr>
-     * <td align="center">ACTIVE_SCAN</td>
-     * <td align="center">AF_CANCEL</td>
-     * <td align="center">INACTIVE</td>
-     * <td align="center">Cancel/reset AF, Lens now locked</td>
+     * <td style="text-align: center;">ACTIVE_SCAN</td>
+     * <td style="text-align: center;">AF_CANCEL</td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;">Cancel/reset AF, Lens now locked</td>
      * </tr>
      * <tr>
-     * <td align="center">FOCUSED_LOCKED</td>
-     * <td align="center">AF_CANCEL</td>
-     * <td align="center">INACTIVE</td>
-     * <td align="center">Cancel/reset AF</td>
+     * <td style="text-align: center;">FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">AF_CANCEL</td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;">Cancel/reset AF</td>
      * </tr>
      * <tr>
-     * <td align="center">FOCUSED_LOCKED</td>
-     * <td align="center">AF_TRIGGER</td>
-     * <td align="center">ACTIVE_SCAN</td>
-     * <td align="center">Start new sweep, Lens now moving</td>
+     * <td style="text-align: center;">FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">AF_TRIGGER</td>
+     * <td style="text-align: center;">ACTIVE_SCAN</td>
+     * <td style="text-align: center;">Start new sweep, Lens now moving</td>
      * </tr>
      * <tr>
-     * <td align="center">NOT_FOCUSED_LOCKED</td>
-     * <td align="center">AF_CANCEL</td>
-     * <td align="center">INACTIVE</td>
-     * <td align="center">Cancel/reset AF</td>
+     * <td style="text-align: center;">NOT_FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">AF_CANCEL</td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;">Cancel/reset AF</td>
      * </tr>
      * <tr>
-     * <td align="center">NOT_FOCUSED_LOCKED</td>
-     * <td align="center">AF_TRIGGER</td>
-     * <td align="center">ACTIVE_SCAN</td>
-     * <td align="center">Start new sweep, Lens now moving</td>
+     * <td style="text-align: center;">NOT_FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">AF_TRIGGER</td>
+     * <td style="text-align: center;">ACTIVE_SCAN</td>
+     * <td style="text-align: center;">Start new sweep, Lens now moving</td>
      * </tr>
      * <tr>
-     * <td align="center">Any state</td>
-     * <td align="center">Mode change</td>
-     * <td align="center">INACTIVE</td>
-     * <td align="center"></td>
+     * <td style="text-align: center;">Any state</td>
+     * <td style="text-align: center;">Mode change</td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;"></td>
      * </tr>
      * </tbody>
      * </table>
@@ -1504,36 +1504,36 @@ public class CaptureResult extends CameraMetadata<CaptureResult.Key<?>> {
      * <table>
      * <thead>
      * <tr>
-     * <th align="center">State</th>
-     * <th align="center">Transition Cause</th>
-     * <th align="center">New State</th>
-     * <th align="center">Notes</th>
+     * <th style="text-align: center;">State</th>
+     * <th style="text-align: center;">Transition Cause</th>
+     * <th style="text-align: center;">New State</th>
+     * <th style="text-align: center;">Notes</th>
      * </tr>
      * </thead>
      * <tbody>
      * <tr>
-     * <td align="center">INACTIVE</td>
-     * <td align="center">AF_TRIGGER</td>
-     * <td align="center">FOCUSED_LOCKED</td>
-     * <td align="center">Focus is already good or good after a scan, lens is now locked.</td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;">AF_TRIGGER</td>
+     * <td style="text-align: center;">FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">Focus is already good or good after a scan, lens is now locked.</td>
      * </tr>
      * <tr>
-     * <td align="center">INACTIVE</td>
-     * <td align="center">AF_TRIGGER</td>
-     * <td align="center">NOT_FOCUSED_LOCKED</td>
-     * <td align="center">Focus failed after a scan, lens is now locked.</td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;">AF_TRIGGER</td>
+     * <td style="text-align: center;">NOT_FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">Focus failed after a scan, lens is now locked.</td>
      * </tr>
      * <tr>
-     * <td align="center">FOCUSED_LOCKED</td>
-     * <td align="center">AF_TRIGGER</td>
-     * <td align="center">FOCUSED_LOCKED</td>
-     * <td align="center">Focus is already good or good after a scan, lens is now locked.</td>
+     * <td style="text-align: center;">FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">AF_TRIGGER</td>
+     * <td style="text-align: center;">FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">Focus is already good or good after a scan, lens is now locked.</td>
      * </tr>
      * <tr>
-     * <td align="center">NOT_FOCUSED_LOCKED</td>
-     * <td align="center">AF_TRIGGER</td>
-     * <td align="center">FOCUSED_LOCKED</td>
-     * <td align="center">Focus is good after a scan, lens is not locked.</td>
+     * <td style="text-align: center;">NOT_FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">AF_TRIGGER</td>
+     * <td style="text-align: center;">FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">Focus is good after a scan, lens is not locked.</td>
      * </tr>
      * </tbody>
      * </table>
@@ -1541,102 +1541,102 @@ public class CaptureResult extends CameraMetadata<CaptureResult.Key<?>> {
      * <table>
      * <thead>
      * <tr>
-     * <th align="center">State</th>
-     * <th align="center">Transition Cause</th>
-     * <th align="center">New State</th>
-     * <th align="center">Notes</th>
+     * <th style="text-align: center;">State</th>
+     * <th style="text-align: center;">Transition Cause</th>
+     * <th style="text-align: center;">New State</th>
+     * <th style="text-align: center;">Notes</th>
      * </tr>
      * </thead>
      * <tbody>
      * <tr>
-     * <td align="center">INACTIVE</td>
-     * <td align="center">Camera device initiates new scan</td>
-     * <td align="center">PASSIVE_SCAN</td>
-     * <td align="center">Start AF scan, Lens now moving</td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;">Camera device initiates new scan</td>
+     * <td style="text-align: center;">PASSIVE_SCAN</td>
+     * <td style="text-align: center;">Start AF scan, Lens now moving</td>
      * </tr>
      * <tr>
-     * <td align="center">INACTIVE</td>
-     * <td align="center">AF_TRIGGER</td>
-     * <td align="center">NOT_FOCUSED_LOCKED</td>
-     * <td align="center">AF state query, Lens now locked</td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;">AF_TRIGGER</td>
+     * <td style="text-align: center;">NOT_FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">AF state query, Lens now locked</td>
      * </tr>
      * <tr>
-     * <td align="center">PASSIVE_SCAN</td>
-     * <td align="center">Camera device completes current scan</td>
-     * <td align="center">PASSIVE_FOCUSED</td>
-     * <td align="center">End AF scan, Lens now locked</td>
+     * <td style="text-align: center;">PASSIVE_SCAN</td>
+     * <td style="text-align: center;">Camera device completes current scan</td>
+     * <td style="text-align: center;">PASSIVE_FOCUSED</td>
+     * <td style="text-align: center;">End AF scan, Lens now locked</td>
      * </tr>
      * <tr>
-     * <td align="center">PASSIVE_SCAN</td>
-     * <td align="center">Camera device fails current scan</td>
-     * <td align="center">PASSIVE_UNFOCUSED</td>
-     * <td align="center">End AF scan, Lens now locked</td>
+     * <td style="text-align: center;">PASSIVE_SCAN</td>
+     * <td style="text-align: center;">Camera device fails current scan</td>
+     * <td style="text-align: center;">PASSIVE_UNFOCUSED</td>
+     * <td style="text-align: center;">End AF scan, Lens now locked</td>
      * </tr>
      * <tr>
-     * <td align="center">PASSIVE_SCAN</td>
-     * <td align="center">AF_TRIGGER</td>
-     * <td align="center">FOCUSED_LOCKED</td>
-     * <td align="center">Immediate transition, if focus is good. Lens now locked</td>
+     * <td style="text-align: center;">PASSIVE_SCAN</td>
+     * <td style="text-align: center;">AF_TRIGGER</td>
+     * <td style="text-align: center;">FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">Immediate transition, if focus is good. Lens now locked</td>
      * </tr>
      * <tr>
-     * <td align="center">PASSIVE_SCAN</td>
-     * <td align="center">AF_TRIGGER</td>
-     * <td align="center">NOT_FOCUSED_LOCKED</td>
-     * <td align="center">Immediate transition, if focus is bad. Lens now locked</td>
+     * <td style="text-align: center;">PASSIVE_SCAN</td>
+     * <td style="text-align: center;">AF_TRIGGER</td>
+     * <td style="text-align: center;">NOT_FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">Immediate transition, if focus is bad. Lens now locked</td>
      * </tr>
      * <tr>
-     * <td align="center">PASSIVE_SCAN</td>
-     * <td align="center">AF_CANCEL</td>
-     * <td align="center">INACTIVE</td>
-     * <td align="center">Reset lens position, Lens now locked</td>
+     * <td style="text-align: center;">PASSIVE_SCAN</td>
+     * <td style="text-align: center;">AF_CANCEL</td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;">Reset lens position, Lens now locked</td>
      * </tr>
      * <tr>
-     * <td align="center">PASSIVE_FOCUSED</td>
-     * <td align="center">Camera device initiates new scan</td>
-     * <td align="center">PASSIVE_SCAN</td>
-     * <td align="center">Start AF scan, Lens now moving</td>
+     * <td style="text-align: center;">PASSIVE_FOCUSED</td>
+     * <td style="text-align: center;">Camera device initiates new scan</td>
+     * <td style="text-align: center;">PASSIVE_SCAN</td>
+     * <td style="text-align: center;">Start AF scan, Lens now moving</td>
      * </tr>
      * <tr>
-     * <td align="center">PASSIVE_UNFOCUSED</td>
-     * <td align="center">Camera device initiates new scan</td>
-     * <td align="center">PASSIVE_SCAN</td>
-     * <td align="center">Start AF scan, Lens now moving</td>
+     * <td style="text-align: center;">PASSIVE_UNFOCUSED</td>
+     * <td style="text-align: center;">Camera device initiates new scan</td>
+     * <td style="text-align: center;">PASSIVE_SCAN</td>
+     * <td style="text-align: center;">Start AF scan, Lens now moving</td>
      * </tr>
      * <tr>
-     * <td align="center">PASSIVE_FOCUSED</td>
-     * <td align="center">AF_TRIGGER</td>
-     * <td align="center">FOCUSED_LOCKED</td>
-     * <td align="center">Immediate transition, lens now locked</td>
+     * <td style="text-align: center;">PASSIVE_FOCUSED</td>
+     * <td style="text-align: center;">AF_TRIGGER</td>
+     * <td style="text-align: center;">FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">Immediate transition, lens now locked</td>
      * </tr>
      * <tr>
-     * <td align="center">PASSIVE_UNFOCUSED</td>
-     * <td align="center">AF_TRIGGER</td>
-     * <td align="center">NOT_FOCUSED_LOCKED</td>
-     * <td align="center">Immediate transition, lens now locked</td>
+     * <td style="text-align: center;">PASSIVE_UNFOCUSED</td>
+     * <td style="text-align: center;">AF_TRIGGER</td>
+     * <td style="text-align: center;">NOT_FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">Immediate transition, lens now locked</td>
      * </tr>
      * <tr>
-     * <td align="center">FOCUSED_LOCKED</td>
-     * <td align="center">AF_TRIGGER</td>
-     * <td align="center">FOCUSED_LOCKED</td>
-     * <td align="center">No effect</td>
+     * <td style="text-align: center;">FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">AF_TRIGGER</td>
+     * <td style="text-align: center;">FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">No effect</td>
      * </tr>
      * <tr>
-     * <td align="center">FOCUSED_LOCKED</td>
-     * <td align="center">AF_CANCEL</td>
-     * <td align="center">INACTIVE</td>
-     * <td align="center">Restart AF scan</td>
+     * <td style="text-align: center;">FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">AF_CANCEL</td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;">Restart AF scan</td>
      * </tr>
      * <tr>
-     * <td align="center">NOT_FOCUSED_LOCKED</td>
-     * <td align="center">AF_TRIGGER</td>
-     * <td align="center">NOT_FOCUSED_LOCKED</td>
-     * <td align="center">No effect</td>
+     * <td style="text-align: center;">NOT_FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">AF_TRIGGER</td>
+     * <td style="text-align: center;">NOT_FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">No effect</td>
      * </tr>
      * <tr>
-     * <td align="center">NOT_FOCUSED_LOCKED</td>
-     * <td align="center">AF_CANCEL</td>
-     * <td align="center">INACTIVE</td>
-     * <td align="center">Restart AF scan</td>
+     * <td style="text-align: center;">NOT_FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">AF_CANCEL</td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;">Restart AF scan</td>
      * </tr>
      * </tbody>
      * </table>
@@ -1644,102 +1644,102 @@ public class CaptureResult extends CameraMetadata<CaptureResult.Key<?>> {
      * <table>
      * <thead>
      * <tr>
-     * <th align="center">State</th>
-     * <th align="center">Transition Cause</th>
-     * <th align="center">New State</th>
-     * <th align="center">Notes</th>
+     * <th style="text-align: center;">State</th>
+     * <th style="text-align: center;">Transition Cause</th>
+     * <th style="text-align: center;">New State</th>
+     * <th style="text-align: center;">Notes</th>
      * </tr>
      * </thead>
      * <tbody>
      * <tr>
-     * <td align="center">INACTIVE</td>
-     * <td align="center">Camera device initiates new scan</td>
-     * <td align="center">PASSIVE_SCAN</td>
-     * <td align="center">Start AF scan, Lens now moving</td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;">Camera device initiates new scan</td>
+     * <td style="text-align: center;">PASSIVE_SCAN</td>
+     * <td style="text-align: center;">Start AF scan, Lens now moving</td>
      * </tr>
      * <tr>
-     * <td align="center">INACTIVE</td>
-     * <td align="center">AF_TRIGGER</td>
-     * <td align="center">NOT_FOCUSED_LOCKED</td>
-     * <td align="center">AF state query, Lens now locked</td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;">AF_TRIGGER</td>
+     * <td style="text-align: center;">NOT_FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">AF state query, Lens now locked</td>
      * </tr>
      * <tr>
-     * <td align="center">PASSIVE_SCAN</td>
-     * <td align="center">Camera device completes current scan</td>
-     * <td align="center">PASSIVE_FOCUSED</td>
-     * <td align="center">End AF scan, Lens now locked</td>
+     * <td style="text-align: center;">PASSIVE_SCAN</td>
+     * <td style="text-align: center;">Camera device completes current scan</td>
+     * <td style="text-align: center;">PASSIVE_FOCUSED</td>
+     * <td style="text-align: center;">End AF scan, Lens now locked</td>
      * </tr>
      * <tr>
-     * <td align="center">PASSIVE_SCAN</td>
-     * <td align="center">Camera device fails current scan</td>
-     * <td align="center">PASSIVE_UNFOCUSED</td>
-     * <td align="center">End AF scan, Lens now locked</td>
+     * <td style="text-align: center;">PASSIVE_SCAN</td>
+     * <td style="text-align: center;">Camera device fails current scan</td>
+     * <td style="text-align: center;">PASSIVE_UNFOCUSED</td>
+     * <td style="text-align: center;">End AF scan, Lens now locked</td>
      * </tr>
      * <tr>
-     * <td align="center">PASSIVE_SCAN</td>
-     * <td align="center">AF_TRIGGER</td>
-     * <td align="center">FOCUSED_LOCKED</td>
-     * <td align="center">Eventual transition once the focus is good. Lens now locked</td>
+     * <td style="text-align: center;">PASSIVE_SCAN</td>
+     * <td style="text-align: center;">AF_TRIGGER</td>
+     * <td style="text-align: center;">FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">Eventual transition once the focus is good. Lens now locked</td>
      * </tr>
      * <tr>
-     * <td align="center">PASSIVE_SCAN</td>
-     * <td align="center">AF_TRIGGER</td>
-     * <td align="center">NOT_FOCUSED_LOCKED</td>
-     * <td align="center">Eventual transition if cannot find focus. Lens now locked</td>
+     * <td style="text-align: center;">PASSIVE_SCAN</td>
+     * <td style="text-align: center;">AF_TRIGGER</td>
+     * <td style="text-align: center;">NOT_FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">Eventual transition if cannot find focus. Lens now locked</td>
      * </tr>
      * <tr>
-     * <td align="center">PASSIVE_SCAN</td>
-     * <td align="center">AF_CANCEL</td>
-     * <td align="center">INACTIVE</td>
-     * <td align="center">Reset lens position, Lens now locked</td>
+     * <td style="text-align: center;">PASSIVE_SCAN</td>
+     * <td style="text-align: center;">AF_CANCEL</td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;">Reset lens position, Lens now locked</td>
      * </tr>
      * <tr>
-     * <td align="center">PASSIVE_FOCUSED</td>
-     * <td align="center">Camera device initiates new scan</td>
-     * <td align="center">PASSIVE_SCAN</td>
-     * <td align="center">Start AF scan, Lens now moving</td>
+     * <td style="text-align: center;">PASSIVE_FOCUSED</td>
+     * <td style="text-align: center;">Camera device initiates new scan</td>
+     * <td style="text-align: center;">PASSIVE_SCAN</td>
+     * <td style="text-align: center;">Start AF scan, Lens now moving</td>
      * </tr>
      * <tr>
-     * <td align="center">PASSIVE_UNFOCUSED</td>
-     * <td align="center">Camera device initiates new scan</td>
-     * <td align="center">PASSIVE_SCAN</td>
-     * <td align="center">Start AF scan, Lens now moving</td>
+     * <td style="text-align: center;">PASSIVE_UNFOCUSED</td>
+     * <td style="text-align: center;">Camera device initiates new scan</td>
+     * <td style="text-align: center;">PASSIVE_SCAN</td>
+     * <td style="text-align: center;">Start AF scan, Lens now moving</td>
      * </tr>
      * <tr>
-     * <td align="center">PASSIVE_FOCUSED</td>
-     * <td align="center">AF_TRIGGER</td>
-     * <td align="center">FOCUSED_LOCKED</td>
-     * <td align="center">Immediate trans. Lens now locked</td>
+     * <td style="text-align: center;">PASSIVE_FOCUSED</td>
+     * <td style="text-align: center;">AF_TRIGGER</td>
+     * <td style="text-align: center;">FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">Immediate trans. Lens now locked</td>
      * </tr>
      * <tr>
-     * <td align="center">PASSIVE_UNFOCUSED</td>
-     * <td align="center">AF_TRIGGER</td>
-     * <td align="center">NOT_FOCUSED_LOCKED</td>
-     * <td align="center">Immediate trans. Lens now locked</td>
+     * <td style="text-align: center;">PASSIVE_UNFOCUSED</td>
+     * <td style="text-align: center;">AF_TRIGGER</td>
+     * <td style="text-align: center;">NOT_FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">Immediate trans. Lens now locked</td>
      * </tr>
      * <tr>
-     * <td align="center">FOCUSED_LOCKED</td>
-     * <td align="center">AF_TRIGGER</td>
-     * <td align="center">FOCUSED_LOCKED</td>
-     * <td align="center">No effect</td>
+     * <td style="text-align: center;">FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">AF_TRIGGER</td>
+     * <td style="text-align: center;">FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">No effect</td>
      * </tr>
      * <tr>
-     * <td align="center">FOCUSED_LOCKED</td>
-     * <td align="center">AF_CANCEL</td>
-     * <td align="center">INACTIVE</td>
-     * <td align="center">Restart AF scan</td>
+     * <td style="text-align: center;">FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">AF_CANCEL</td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;">Restart AF scan</td>
      * </tr>
      * <tr>
-     * <td align="center">NOT_FOCUSED_LOCKED</td>
-     * <td align="center">AF_TRIGGER</td>
-     * <td align="center">NOT_FOCUSED_LOCKED</td>
-     * <td align="center">No effect</td>
+     * <td style="text-align: center;">NOT_FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">AF_TRIGGER</td>
+     * <td style="text-align: center;">NOT_FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">No effect</td>
      * </tr>
      * <tr>
-     * <td align="center">NOT_FOCUSED_LOCKED</td>
-     * <td align="center">AF_CANCEL</td>
-     * <td align="center">INACTIVE</td>
-     * <td align="center">Restart AF scan</td>
+     * <td style="text-align: center;">NOT_FOCUSED_LOCKED</td>
+     * <td style="text-align: center;">AF_CANCEL</td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;">Restart AF scan</td>
      * </tr>
      * </tbody>
      * </table>
@@ -1751,30 +1751,30 @@ public class CaptureResult extends CameraMetadata<CaptureResult.Key<?>> {
      * <table>
      * <thead>
      * <tr>
-     * <th align="center">State</th>
-     * <th align="center">Transition Cause</th>
-     * <th align="center">New State</th>
-     * <th align="center">Notes</th>
+     * <th style="text-align: center;">State</th>
+     * <th style="text-align: center;">Transition Cause</th>
+     * <th style="text-align: center;">New State</th>
+     * <th style="text-align: center;">Notes</th>
      * </tr>
      * </thead>
      * <tbody>
      * <tr>
-     * <td align="center">any state</td>
-     * <td align="center">CAF--&gt;AUTO mode switch</td>
-     * <td align="center">INACTIVE</td>
-     * <td align="center">Mode switch without trigger, initial state must be INACTIVE</td>
+     * <td style="text-align: center;">any state</td>
+     * <td style="text-align: center;">CAF--&gt;AUTO mode switch</td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;">Mode switch without trigger, initial state must be INACTIVE</td>
      * </tr>
      * <tr>
-     * <td align="center">any state</td>
-     * <td align="center">CAF--&gt;AUTO mode switch with AF_TRIGGER</td>
-     * <td align="center">trigger-reachable states from INACTIVE</td>
-     * <td align="center">Mode switch with trigger, INACTIVE is skipped</td>
+     * <td style="text-align: center;">any state</td>
+     * <td style="text-align: center;">CAF--&gt;AUTO mode switch with AF_TRIGGER</td>
+     * <td style="text-align: center;">trigger-reachable states from INACTIVE</td>
+     * <td style="text-align: center;">Mode switch with trigger, INACTIVE is skipped</td>
      * </tr>
      * <tr>
-     * <td align="center">any state</td>
-     * <td align="center">AUTO--&gt;CAF mode switch</td>
-     * <td align="center">passively reachable states from INACTIVE</td>
-     * <td align="center">Mode switch without trigger, passive transient state is skipped</td>
+     * <td style="text-align: center;">any state</td>
+     * <td style="text-align: center;">AUTO--&gt;CAF mode switch</td>
+     * <td style="text-align: center;">passively reachable states from INACTIVE</td>
+     * <td style="text-align: center;">Mode switch without trigger, passive transient state is skipped</td>
      * </tr>
      * </tbody>
      * </table>
@@ -2053,18 +2053,18 @@ public class CaptureResult extends CameraMetadata<CaptureResult.Key<?>> {
      * <table>
      * <thead>
      * <tr>
-     * <th align="center">State</th>
-     * <th align="center">Transition Cause</th>
-     * <th align="center">New State</th>
-     * <th align="center">Notes</th>
+     * <th style="text-align: center;">State</th>
+     * <th style="text-align: center;">Transition Cause</th>
+     * <th style="text-align: center;">New State</th>
+     * <th style="text-align: center;">Notes</th>
      * </tr>
      * </thead>
      * <tbody>
      * <tr>
-     * <td align="center">INACTIVE</td>
-     * <td align="center"></td>
-     * <td align="center">INACTIVE</td>
-     * <td align="center">Camera device auto white balance algorithm is disabled</td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;"></td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;">Camera device auto white balance algorithm is disabled</td>
      * </tr>
      * </tbody>
      * </table>
@@ -2072,54 +2072,54 @@ public class CaptureResult extends CameraMetadata<CaptureResult.Key<?>> {
      * <table>
      * <thead>
      * <tr>
-     * <th align="center">State</th>
-     * <th align="center">Transition Cause</th>
-     * <th align="center">New State</th>
-     * <th align="center">Notes</th>
+     * <th style="text-align: center;">State</th>
+     * <th style="text-align: center;">Transition Cause</th>
+     * <th style="text-align: center;">New State</th>
+     * <th style="text-align: center;">Notes</th>
      * </tr>
      * </thead>
      * <tbody>
      * <tr>
-     * <td align="center">INACTIVE</td>
-     * <td align="center">Camera device initiates AWB scan</td>
-     * <td align="center">SEARCHING</td>
-     * <td align="center">Values changing</td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;">Camera device initiates AWB scan</td>
+     * <td style="text-align: center;">SEARCHING</td>
+     * <td style="text-align: center;">Values changing</td>
      * </tr>
      * <tr>
-     * <td align="center">INACTIVE</td>
-     * <td align="center">{@link CaptureRequest#CONTROL_AWB_LOCK android.control.awbLock} is ON</td>
-     * <td align="center">LOCKED</td>
-     * <td align="center">Values locked</td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;">{@link CaptureRequest#CONTROL_AWB_LOCK android.control.awbLock} is ON</td>
+     * <td style="text-align: center;">LOCKED</td>
+     * <td style="text-align: center;">Values locked</td>
      * </tr>
      * <tr>
-     * <td align="center">SEARCHING</td>
-     * <td align="center">Camera device finishes AWB scan</td>
-     * <td align="center">CONVERGED</td>
-     * <td align="center">Good values, not changing</td>
+     * <td style="text-align: center;">SEARCHING</td>
+     * <td style="text-align: center;">Camera device finishes AWB scan</td>
+     * <td style="text-align: center;">CONVERGED</td>
+     * <td style="text-align: center;">Good values, not changing</td>
      * </tr>
      * <tr>
-     * <td align="center">SEARCHING</td>
-     * <td align="center">{@link CaptureRequest#CONTROL_AWB_LOCK android.control.awbLock} is ON</td>
-     * <td align="center">LOCKED</td>
-     * <td align="center">Values locked</td>
+     * <td style="text-align: center;">SEARCHING</td>
+     * <td style="text-align: center;">{@link CaptureRequest#CONTROL_AWB_LOCK android.control.awbLock} is ON</td>
+     * <td style="text-align: center;">LOCKED</td>
+     * <td style="text-align: center;">Values locked</td>
      * </tr>
      * <tr>
-     * <td align="center">CONVERGED</td>
-     * <td align="center">Camera device initiates AWB scan</td>
-     * <td align="center">SEARCHING</td>
-     * <td align="center">Values changing</td>
+     * <td style="text-align: center;">CONVERGED</td>
+     * <td style="text-align: center;">Camera device initiates AWB scan</td>
+     * <td style="text-align: center;">SEARCHING</td>
+     * <td style="text-align: center;">Values changing</td>
      * </tr>
      * <tr>
-     * <td align="center">CONVERGED</td>
-     * <td align="center">{@link CaptureRequest#CONTROL_AWB_LOCK android.control.awbLock} is ON</td>
-     * <td align="center">LOCKED</td>
-     * <td align="center">Values locked</td>
+     * <td style="text-align: center;">CONVERGED</td>
+     * <td style="text-align: center;">{@link CaptureRequest#CONTROL_AWB_LOCK android.control.awbLock} is ON</td>
+     * <td style="text-align: center;">LOCKED</td>
+     * <td style="text-align: center;">Values locked</td>
      * </tr>
      * <tr>
-     * <td align="center">LOCKED</td>
-     * <td align="center">{@link CaptureRequest#CONTROL_AWB_LOCK android.control.awbLock} is OFF</td>
-     * <td align="center">SEARCHING</td>
-     * <td align="center">Values not good after unlock</td>
+     * <td style="text-align: center;">LOCKED</td>
+     * <td style="text-align: center;">{@link CaptureRequest#CONTROL_AWB_LOCK android.control.awbLock} is OFF</td>
+     * <td style="text-align: center;">SEARCHING</td>
+     * <td style="text-align: center;">Values not good after unlock</td>
      * </tr>
      * </tbody>
      * </table>
@@ -2132,24 +2132,24 @@ public class CaptureResult extends CameraMetadata<CaptureResult.Key<?>> {
      * <table>
      * <thead>
      * <tr>
-     * <th align="center">State</th>
-     * <th align="center">Transition Cause</th>
-     * <th align="center">New State</th>
-     * <th align="center">Notes</th>
+     * <th style="text-align: center;">State</th>
+     * <th style="text-align: center;">Transition Cause</th>
+     * <th style="text-align: center;">New State</th>
+     * <th style="text-align: center;">Notes</th>
      * </tr>
      * </thead>
      * <tbody>
      * <tr>
-     * <td align="center">INACTIVE</td>
-     * <td align="center">Camera device finished AWB scan</td>
-     * <td align="center">CONVERGED</td>
-     * <td align="center">Values are already good, transient states are skipped by camera device.</td>
+     * <td style="text-align: center;">INACTIVE</td>
+     * <td style="text-align: center;">Camera device finished AWB scan</td>
+     * <td style="text-align: center;">CONVERGED</td>
+     * <td style="text-align: center;">Values are already good, transient states are skipped by camera device.</td>
      * </tr>
      * <tr>
-     * <td align="center">LOCKED</td>
-     * <td align="center">{@link CaptureRequest#CONTROL_AWB_LOCK android.control.awbLock} is OFF</td>
-     * <td align="center">CONVERGED</td>
-     * <td align="center">Values good after unlock, transient states are skipped by camera device.</td>
+     * <td style="text-align: center;">LOCKED</td>
+     * <td style="text-align: center;">{@link CaptureRequest#CONTROL_AWB_LOCK android.control.awbLock} is OFF</td>
+     * <td style="text-align: center;">CONVERGED</td>
+     * <td style="text-align: center;">Values good after unlock, transient states are skipped by camera device.</td>
      * </tr>
      * </tbody>
      * </table>
@@ -2631,6 +2631,90 @@ public class CaptureResult extends CameraMetadata<CaptureResult.Key<?>> {
     @NonNull
     public static final Key<Float> CONTROL_ZOOM_RATIO =
             new Key<Float>("android.control.zoomRatio", float.class);
+
+    /**
+     * <p>The desired CaptureRequest settings override with which certain keys are
+     * applied earlier so that they can take effect sooner.</p>
+     * <p>There are some CaptureRequest keys which can be applied earlier than others
+     * when controls within a CaptureRequest aren't required to take effect at the same time.
+     * One such example is zoom. Zoom can be applied at a later stage of the camera pipeline.
+     * As soon as the camera device receives the CaptureRequest, it can apply the requested
+     * zoom value onto an earlier request that's already in the pipeline, thus improves zoom
+     * latency.</p>
+     * <p>This key's value in the capture result reflects whether the controls for this capture
+     * are overridden "by" a newer request. This means that if a capture request turns on
+     * settings override, the capture result of an earlier request will contain the key value
+     * of ZOOM. On the other hand, if a capture request has settings override turned on,
+     * but all newer requests have it turned off, the key's value in the capture result will
+     * be OFF because this capture isn't overridden by a newer capture. In the two examples
+     * below, the capture results columns illustrate the settingsOverride values in different
+     * scenarios.</p>
+     * <p>Assuming the zoom settings override can speed up by 1 frame, below example illustrates
+     * the speed-up at the start of capture session:</p>
+     * <pre><code>Camera session created
+     * Request 1 (zoom=1.0x, override=ZOOM) -&gt;
+     * Request 2 (zoom=1.2x, override=ZOOM) -&gt;
+     * Request 3 (zoom=1.4x, override=ZOOM) -&gt;  Result 1 (zoom=1.2x, override=ZOOM)
+     * Request 4 (zoom=1.6x, override=ZOOM) -&gt;  Result 2 (zoom=1.4x, override=ZOOM)
+     * Request 5 (zoom=1.8x, override=ZOOM) -&gt;  Result 3 (zoom=1.6x, override=ZOOM)
+     *                                      -&gt;  Result 4 (zoom=1.8x, override=ZOOM)
+     *                                      -&gt;  Result 5 (zoom=1.8x, override=OFF)
+     * </code></pre>
+     * <p>The application can turn on settings override and use zoom as normal. The example
+     * shows that the later zoom values (1.2x, 1.4x, 1.6x, and 1.8x) overwrite the zoom
+     * values (1.0x, 1.2x, 1.4x, and 1.8x) of earlier requests (#1, #2, #3, and #4).</p>
+     * <p>The application must make sure the settings override doesn't interfere with user
+     * journeys requiring simultaneous application of all controls in CaptureRequest on the
+     * requested output targets. For example, if the application takes a still capture using
+     * CameraCaptureSession#capture, and the repeating request immediately sets a different
+     * zoom value using override, the inflight still capture could have its zoom value
+     * overwritten unexpectedly.</p>
+     * <p>So the application is strongly recommended to turn off settingsOverride when taking
+     * still/burst captures, and turn it back on when there is only repeating viewfinder
+     * request and no inflight still/burst captures.</p>
+     * <p>Below is the example demonstrating the transitions in and out of the
+     * settings override:</p>
+     * <pre><code>Request 1 (zoom=1.0x, override=OFF)
+     * Request 2 (zoom=1.2x, override=OFF)
+     * Request 3 (zoom=1.4x, override=ZOOM)  -&gt; Result 1 (zoom=1.0x, override=OFF)
+     * Request 4 (zoom=1.6x, override=ZOOM)  -&gt; Result 2 (zoom=1.4x, override=ZOOM)
+     * Request 5 (zoom=1.8x, override=OFF)   -&gt; Result 3 (zoom=1.6x, override=ZOOM)
+     *                                       -&gt; Result 4 (zoom=1.6x, override=OFF)
+     *                                       -&gt; Result 5 (zoom=1.8x, override=OFF)
+     * </code></pre>
+     * <p>This example shows that:</p>
+     * <ul>
+     * <li>The application "ramps in" settings override by setting the control to ZOOM.
+     * In the example, request #3 enables zoom settings override. Because the camera device
+     * can speed up applying zoom by 1 frame, the outputs of request #2 has 1.4x zoom, the
+     * value specified in request #3.</li>
+     * <li>The application "ramps out" of settings override by setting the control to OFF. In
+     * the example, request #5 changes the override to OFF. Because request #4's zoom
+     * takes effect in result #3, result #4's zoom remains the same until new value takes
+     * effect in result #5.</li>
+     * </ul>
+     * <p><b>Possible values:</b></p>
+     * <ul>
+     *   <li>{@link #CONTROL_SETTINGS_OVERRIDE_OFF OFF}</li>
+     *   <li>{@link #CONTROL_SETTINGS_OVERRIDE_ZOOM ZOOM}</li>
+     * </ul>
+     *
+     * <p><b>Available values for this device:</b><br>
+     * {@link CameraCharacteristics#CONTROL_AVAILABLE_SETTINGS_OVERRIDES android.control.availableSettingsOverrides}</p>
+     * <p><b>Optional</b> - The value for this key may be {@code null} on some devices.</p>
+     * <p><b>Limited capability</b> -
+     * Present on all camera devices that report being at least {@link CameraCharacteristics#INFO_SUPPORTED_HARDWARE_LEVEL_LIMITED HARDWARE_LEVEL_LIMITED} devices in the
+     * {@link CameraCharacteristics#INFO_SUPPORTED_HARDWARE_LEVEL android.info.supportedHardwareLevel} key</p>
+     *
+     * @see CameraCharacteristics#CONTROL_AVAILABLE_SETTINGS_OVERRIDES
+     * @see CameraCharacteristics#INFO_SUPPORTED_HARDWARE_LEVEL
+     * @see #CONTROL_SETTINGS_OVERRIDE_OFF
+     * @see #CONTROL_SETTINGS_OVERRIDE_ZOOM
+     */
+    @PublicKey
+    @NonNull
+    public static final Key<Integer> CONTROL_SETTINGS_OVERRIDE =
+            new Key<Integer>("android.control.settingsOverride", int.class);
 
     /**
      * <p>Operation mode for edge

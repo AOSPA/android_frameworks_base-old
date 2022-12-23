@@ -16,16 +16,24 @@
 
 package com.android.internal.os;
 
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.os.BatteryManager;
+import android.os.BatteryStats;
+import android.os.BatteryStats.BitDescription;
+import android.os.BatteryStats.CpuUsageDetails;
 import android.os.BatteryStats.HistoryItem;
 import android.os.BatteryStats.HistoryStepDetails;
 import android.os.BatteryStats.HistoryTag;
+import android.os.BatteryStats.MeasuredEnergyDetails;
+import android.os.Build;
 import android.os.Parcel;
 import android.os.ParcelFormatException;
 import android.os.Process;
 import android.os.StatFs;
 import android.os.SystemClock;
+import android.os.SystemProperties;
+import android.os.Trace;
 import android.util.ArraySet;
 import android.util.AtomicFile;
 import android.util.Slog;
@@ -71,7 +79,7 @@ public class BatteryStatsHistory {
     private static final String TAG = "BatteryStatsHistory";
 
     // Current on-disk Parcel version. Must be updated when the format of the parcelable changes
-    private static final int VERSION = 208;
+    private static final int VERSION = 209;
 
     private static final String HISTORY_DIR = "battery-history";
     private static final String FILE_SUFFIX = ".bin";
@@ -112,6 +120,11 @@ public class BatteryStatsHistory {
     // Flag in history tag index: indicates that this is the first occurrence of this tag,
     // therefore the tag value is written in the parcel
     static final int TAG_FIRST_OCCURRENCE_FLAG = 0x8000;
+
+    static final int EXTENSION_MEASURED_ENERGY_HEADER_FLAG = 0x00000001;
+    static final int EXTENSION_MEASURED_ENERGY_FLAG = 0x00000002;
+    static final int EXTENSION_CPU_USAGE_HEADER_FLAG = 0x00000004;
+    static final int EXTENSION_CPU_USAGE_FLAG = 0x00000008;
 
     private final Parcel mHistoryBuffer;
     private final File mSystemDir;
@@ -183,6 +196,9 @@ public class BatteryStatsHistory {
     private long mTrackRunningHistoryElapsedRealtimeMs = 0;
     private long mTrackRunningHistoryUptimeMs = 0;
     private long mHistoryBaseTimeMs;
+    private boolean mMeasuredEnergyHeaderWritten = false;
+    private boolean mCpuUsageHeaderWritten = false;
+    private final VarintParceler mVarintParceler = new VarintParceler();
 
     private byte mLastHistoryStepLevel = 0;
 
@@ -205,6 +221,49 @@ public class BatteryStatsHistory {
     }
 
     /**
+     * A delegate for android.os.Trace to allow testing static calls. Due to
+     * limitations in Android Tracing (b/153319140), the delegate also records
+     * counter values in system properties which allows reading the value at the
+     * start of a tracing session. This overhead is limited to userdebug builds.
+     * On user builds, tracing still occurs but the counter value will be missing
+     * until the first change occurs.
+     */
+    @VisibleForTesting
+    public static class TraceDelegate {
+        // Note: certain tests currently run as platform_app which is not allowed
+        // to set debug system properties. To ensure that system properties are set
+        // only when allowed, we check the current UID.
+        private final boolean mShouldSetProperty =
+                Build.IS_USERDEBUG && (Process.myUid() == Process.SYSTEM_UID);
+
+        /**
+         * Returns true if trace counters should be recorded.
+         */
+        public boolean tracingEnabled() {
+            return Trace.isTagEnabled(Trace.TRACE_TAG_POWER) || mShouldSetProperty;
+        }
+
+        /**
+         * Records the counter value with the given name.
+         */
+        public void traceCounter(@NonNull String name, int value) {
+            Trace.traceCounter(Trace.TRACE_TAG_POWER, name, value);
+            if (mShouldSetProperty) {
+                SystemProperties.set("debug.tracing." + name, Integer.toString(value));
+            }
+        }
+
+        /**
+         * Records an instant event (one with no duration).
+         */
+        public void traceInstantEvent(@NonNull String track, @NonNull String name) {
+            Trace.instantForTrack(Trace.TRACE_TAG_POWER, track, name);
+        }
+    }
+
+    private TraceDelegate mTracer;
+
+    /**
      * Constructor
      *
      * @param systemDir            typically /data/system
@@ -214,19 +273,20 @@ public class BatteryStatsHistory {
     public BatteryStatsHistory(File systemDir, int maxHistoryFiles, int maxHistoryBufferSize,
             HistoryStepDetailsCalculator stepDetailsCalculator, Clock clock) {
         this(Parcel.obtain(), systemDir, maxHistoryFiles, maxHistoryBufferSize,
-                stepDetailsCalculator, clock);
+                stepDetailsCalculator, clock, new TraceDelegate());
         initHistoryBuffer();
     }
 
     @VisibleForTesting
     public BatteryStatsHistory(Parcel historyBuffer, File systemDir,
             int maxHistoryFiles, int maxHistoryBufferSize,
-            HistoryStepDetailsCalculator stepDetailsCalculator, Clock clock) {
+            HistoryStepDetailsCalculator stepDetailsCalculator, Clock clock, TraceDelegate tracer) {
         mHistoryBuffer = historyBuffer;
         mSystemDir = systemDir;
         mMaxHistoryFiles = maxHistoryFiles;
         mMaxHistoryBufferSize = maxHistoryBufferSize;
         mStepDetailsCalculator = stepDetailsCalculator;
+        mTracer = tracer;
         mClock = clock;
 
         mHistoryDir = new File(systemDir, HISTORY_DIR);
@@ -267,6 +327,7 @@ public class BatteryStatsHistory {
 
     public BatteryStatsHistory(HistoryStepDetailsCalculator stepDetailsCalculator, Clock clock) {
         mStepDetailsCalculator = stepDetailsCalculator;
+        mTracer = new TraceDelegate();
         mClock = clock;
 
         mHistoryBuffer = Parcel.obtain();
@@ -282,6 +343,7 @@ public class BatteryStatsHistory {
     private BatteryStatsHistory(Parcel historyBuffer,
             HistoryStepDetailsCalculator stepDetailsCalculator, Clock clock) {
         mHistoryBuffer = historyBuffer;
+        mTracer = new TraceDelegate();
         mClock = clock;
         mSystemDir = null;
         mHistoryDir = null;
@@ -293,6 +355,8 @@ public class BatteryStatsHistory {
         mLastHistoryElapsedRealtimeMs = 0;
         mTrackRunningHistoryElapsedRealtimeMs = 0;
         mTrackRunningHistoryUptimeMs = 0;
+        mMeasuredEnergyHeaderWritten = false;
+        mCpuUsageHeaderWritten = false;
 
         mHistoryBuffer.setDataSize(0);
         mHistoryBuffer.setDataPosition(0);
@@ -332,7 +396,7 @@ public class BatteryStatsHistory {
         // Make a copy of battery history to avoid concurrent modification.
         Parcel historyBuffer = Parcel.obtain();
         historyBuffer.appendFrom(mHistoryBuffer, 0, mHistoryBuffer.dataSize());
-        return new BatteryStatsHistory(historyBuffer, mSystemDir, 0, 0, null, null);
+        return new BatteryStatsHistory(historyBuffer, mSystemDir, 0, 0, null, null, mTracer);
     }
 
     /**
@@ -933,6 +997,16 @@ public class BatteryStatsHistory {
     }
 
     /**
+     * Records measured energy data.
+     */
+    public void recordMeasuredEnergyDetails(long elapsedRealtimeMs, long uptimeMs,
+            MeasuredEnergyDetails measuredEnergyDetails) {
+        mHistoryCur.measuredEnergyDetails = measuredEnergyDetails;
+        mHistoryCur.states2 |= HistoryItem.STATE2_EXTENSIONS_FLAG;
+        writeHistoryItem(elapsedRealtimeMs, uptimeMs);
+    }
+
+    /**
      * Records a history item with the amount of charge consumed by WiFi.  Used on certain devices
      * equipped with on-device power metering.
      */
@@ -1104,6 +1178,60 @@ public class BatteryStatsHistory {
     }
 
     /**
+     * Writes event details into Atrace.
+     */
+    private void recordTraceEvents(int code, HistoryTag tag) {
+        if (code == HistoryItem.EVENT_NONE) return;
+        if (!mTracer.tracingEnabled()) return;
+
+        final int idx = code & HistoryItem.EVENT_TYPE_MASK;
+        final String prefix = (code & HistoryItem.EVENT_FLAG_START) != 0 ? "+" :
+                (code & HistoryItem.EVENT_FLAG_FINISH) != 0 ? "-" : "";
+
+        final String[] names = BatteryStats.HISTORY_EVENT_NAMES;
+        if (idx < 0 || idx >= names.length) return;
+
+        final String track = "battery_stats." + names[idx];
+        final String name = prefix + names[idx] + "=" + tag.uid + ":\"" + tag.string + "\"";
+        mTracer.traceInstantEvent(track, name);
+    }
+
+    /**
+     * Records CPU usage by a specific UID.  The recorded data is the delta from
+     * the previous record for the same UID.
+     */
+    public void recordCpuUsage(long elapsedRealtimeMs, long uptimeMs,
+            CpuUsageDetails cpuUsageDetails) {
+        mHistoryCur.cpuUsageDetails = cpuUsageDetails;
+        mHistoryCur.states2 |= HistoryItem.STATE2_EXTENSIONS_FLAG;
+        writeHistoryItem(elapsedRealtimeMs, uptimeMs);
+    }
+
+    /**
+     * Writes changes to a HistoryItem state bitmap to Atrace.
+     */
+    private void recordTraceCounters(int oldval, int newval, BitDescription[] descriptions) {
+        if (!mTracer.tracingEnabled()) return;
+
+        int diff = oldval ^ newval;
+        if (diff == 0) return;
+
+        for (int i = 0; i < descriptions.length; i++) {
+            BitDescription bd = descriptions[i];
+            if ((diff & bd.mask) == 0) continue;
+
+            int value;
+            if (bd.shift < 0) {
+                value = (newval & bd.mask) != 0 ? 1 : 0;
+            } else {
+                value = (newval & bd.mask) >> bd.shift;
+            }
+
+            mTracer.traceCounter("battery_stats." + bd.name, value);
+        }
+    }
+
+    /**
      * Writes the current history item to history.
      */
     public void writeHistoryItem(long elapsedRealtimeMs, long uptimeMs) {
@@ -1143,6 +1271,13 @@ public class BatteryStatsHistory {
                     + Integer.toHexString(diffStates2) + " lastDiff2="
                     + Integer.toHexString(lastDiffStates2));
         }
+
+        recordTraceEvents(cur.eventCode, cur.eventTag);
+        recordTraceCounters(mHistoryLastWritten.states,
+                cur.states & mActiveHistoryStates, BatteryStats.HISTORY_STATE_DESCRIPTIONS);
+        recordTraceCounters(mHistoryLastWritten.states2,
+                cur.states2 & mActiveHistoryStates2, BatteryStats.HISTORY_STATE2_DESCRIPTIONS);
+
         if (mHistoryBufferLastPos >= 0 && mHistoryLastWritten.cmd == HistoryItem.CMD_UPDATE
                 && timeDiffMs < 1000 && (diffStates & lastDiffStates) == 0
                 && (diffStates2 & lastDiffStates2) == 0
@@ -1219,6 +1354,9 @@ public class BatteryStatsHistory {
             for (Map.Entry<HistoryTag, Integer> entry : mHistoryTagPool.entrySet()) {
                 entry.setValue(entry.getValue() | BatteryStatsHistory.TAG_FIRST_OCCURRENCE_FLAG);
             }
+            mMeasuredEnergyHeaderWritten = false;
+            mCpuUsageHeaderWritten = false;
+
             // Make a copy of mHistoryCur.
             HistoryItem copy = new HistoryItem();
             copy.setTo(cur);
@@ -1256,6 +1394,8 @@ public class BatteryStatsHistory {
         cur.eventCode = HistoryItem.EVENT_NONE;
         cur.eventTag = null;
         cur.tagsFirstOccurrence = false;
+        cur.measuredEnergyDetails = null;
+        cur.cpuUsageDetails = null;
         if (DEBUG) {
             Slog.i(TAG, "Writing history buffer: was " + mHistoryBufferLastPos
                     + " now " + mHistoryBuffer.dataPosition()
@@ -1348,6 +1488,7 @@ public class BatteryStatsHistory {
             return;
         }
 
+        int extensionFlags = 0;
         final long deltaTime = cur.time - last.time;
         final int lastBatteryLevelInt = buildBatteryLevelInt(last);
         final int lastStateInt = buildStateInt(last);
@@ -1374,7 +1515,24 @@ public class BatteryStatsHistory {
         if (stateIntChanged) {
             firstToken |= BatteryStatsHistory.DELTA_STATE_FLAG;
         }
-        final boolean state2IntChanged = cur.states2 != last.states2;
+        if (cur.measuredEnergyDetails != null) {
+            extensionFlags |= BatteryStatsHistory.EXTENSION_MEASURED_ENERGY_FLAG;
+            if (!mMeasuredEnergyHeaderWritten) {
+                extensionFlags |= BatteryStatsHistory.EXTENSION_MEASURED_ENERGY_HEADER_FLAG;
+            }
+        }
+        if (cur.cpuUsageDetails != null) {
+            extensionFlags |= EXTENSION_CPU_USAGE_FLAG;
+            if (!mCpuUsageHeaderWritten) {
+                extensionFlags |= BatteryStatsHistory.EXTENSION_CPU_USAGE_HEADER_FLAG;
+            }
+        }
+        if (extensionFlags != 0) {
+            cur.states2 |= HistoryItem.STATE2_EXTENSIONS_FLAG;
+        } else {
+            cur.states2 &= ~HistoryItem.STATE2_EXTENSIONS_FLAG;
+        }
+        final boolean state2IntChanged = cur.states2 != last.states2 || extensionFlags != 0;
         if (state2IntChanged) {
             firstToken |= BatteryStatsHistory.DELTA_STATE2_FLAG;
         }
@@ -1491,6 +1649,38 @@ public class BatteryStatsHistory {
         }
         dest.writeDouble(cur.modemRailChargeMah);
         dest.writeDouble(cur.wifiRailChargeMah);
+        if (extensionFlags != 0) {
+            dest.writeInt(extensionFlags);
+            if (cur.measuredEnergyDetails != null) {
+                if (DEBUG) {
+                    Slog.i(TAG, "WRITE DELTA: measuredEnergyDetails=" + cur.measuredEnergyDetails);
+                }
+                if (!mMeasuredEnergyHeaderWritten) {
+                    MeasuredEnergyDetails.EnergyConsumer[] consumers =
+                            cur.measuredEnergyDetails.consumers;
+                    dest.writeInt(consumers.length);
+                    for (MeasuredEnergyDetails.EnergyConsumer consumer : consumers) {
+                        dest.writeInt(consumer.type);
+                        dest.writeInt(consumer.ordinal);
+                        dest.writeString(consumer.name);
+                    }
+                    mMeasuredEnergyHeaderWritten = true;
+                }
+                mVarintParceler.writeLongArray(dest, cur.measuredEnergyDetails.chargeUC);
+            }
+
+            if (cur.cpuUsageDetails != null) {
+                if (DEBUG) {
+                    Slog.i(TAG, "WRITE DELTA: cpuUsageDetails=" + cur.cpuUsageDetails);
+                }
+                if (!mCpuUsageHeaderWritten) {
+                    dest.writeStringArray(cur.cpuUsageDetails.cpuBracketDescriptions);
+                    mCpuUsageHeaderWritten = true;
+                }
+                dest.writeInt(cur.cpuUsageDetails.uid);
+                mVarintParceler.writeLongArray(dest, cur.cpuUsageDetails.cpuUsageMs);
+            }
+        }
     }
 
     private int buildBatteryLevelInt(HistoryItem h) {
@@ -1735,6 +1925,76 @@ public class BatteryStatsHistory {
         for (Map.Entry<HistoryTag, Integer> entry : mHistoryTagPool.entrySet()) {
             mHistoryTags.put(entry.getValue() & ~BatteryStatsHistory.TAG_FIRST_OCCURRENCE_FLAG,
                     entry.getKey());
+        }
+    }
+
+    /**
+     * Writes/reads an array of longs into Parcel using a compact format, where small integers use
+     * fewer bytes.  It is a bit more expensive than just writing the long into the parcel,
+     * but at scale saves a lot of storage and allows recording of longer battery history.
+     */
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    public static final class VarintParceler {
+        /**
+         * Writes an array of longs into Parcel using the varint format, see
+         * https://developers.google.com/protocol-buffers/docs/encoding#varints
+         */
+        public void writeLongArray(Parcel parcel, long[] values) {
+            int out = 0;
+            int shift = 0;
+            for (long value : values) {
+                boolean done = false;
+                while (!done) {
+                    final byte b;
+                    if ((value & ~0x7FL) == 0) {
+                        b = (byte) value;
+                        done = true;
+                    } else {
+                        b = (byte) (((int) value & 0x7F) | 0x80);
+                        value >>>= 7;
+                    }
+                    if (shift == 32) {
+                        parcel.writeInt(out);
+                        shift = 0;
+                        out = 0;
+                    }
+                    out |= (b & 0xFF) << shift;
+                    shift += 8;
+                }
+            }
+            if (shift != 0) {
+                parcel.writeInt(out);
+            }
+        }
+
+        /**
+         * Reads a long written with {@link #writeLongArray}
+         */
+        public void readLongArray(Parcel parcel, long[] values) {
+            int in = parcel.readInt();
+            int available = 4;
+            for (int i = 0; i < values.length; i++) {
+                long result = 0;
+                int shift;
+                for (shift = 0; shift < 64; shift += 7) {
+                    if (available == 0) {
+                        in = parcel.readInt();
+                        available = 4;
+                    }
+                    final byte b = (byte) in;
+                    in >>= 8;
+                    available--;
+
+                    result |= (long) (b & 0x7F) << shift;
+                    if ((b & 0x80) == 0) {
+                        values[i] = result;
+                        break;
+                    }
+                }
+                if (shift >= 64) {
+                    throw new ParcelFormatException("Invalid varint format");
+                }
+            }
         }
     }
 }

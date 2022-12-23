@@ -21,6 +21,7 @@ import static android.app.job.JobInfo.getPriorityString;
 import static com.android.server.job.JobConcurrencyManager.WORK_TYPE_NONE;
 import static com.android.server.job.JobSchedulerService.sElapsedRealtimeClock;
 
+import android.annotation.BytesLong;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.job.IJobCallback;
@@ -187,6 +188,18 @@ public final class JobServiceContext implements ServiceConnection {
         public long mStoppedTime;
 
         @Override
+        public void acknowledgeGetTransferredDownloadBytesMessage(int jobId, int workId,
+                @BytesLong long transferredBytes) {
+            doAcknowledgeGetTransferredDownloadBytesMessage(this, jobId, workId, transferredBytes);
+        }
+
+        @Override
+        public void acknowledgeGetTransferredUploadBytesMessage(int jobId, int workId,
+                @BytesLong long transferredBytes) {
+            doAcknowledgeGetTransferredUploadBytesMessage(this, jobId, workId, transferredBytes);
+        }
+
+        @Override
         public void acknowledgeStartMessage(int jobId, boolean ongoing) {
             doAcknowledgeStartMessage(this, jobId, ongoing);
         }
@@ -209,6 +222,18 @@ public final class JobServiceContext implements ServiceConnection {
         @Override
         public void jobFinished(int jobId, boolean reschedule) {
             doJobFinished(this, jobId, reschedule);
+        }
+
+        @Override
+        public void updateEstimatedNetworkBytes(int jobId, JobWorkItem item,
+                long downloadBytes, long uploadBytes) {
+            doUpdateEstimatedNetworkBytes(this, jobId, item, downloadBytes, uploadBytes);
+        }
+
+        @Override
+        public void updateTransferredNetworkBytes(int jobId, JobWorkItem item,
+                long downloadBytes, long uploadBytes) {
+            doUpdateTransferredNetworkBytes(this, jobId, item, downloadBytes, uploadBytes);
         }
     }
 
@@ -363,10 +388,22 @@ public final class JobServiceContext implements ServiceConnection {
                     job.getJob().isPrefetch(),
                     job.getJob().getPriority(),
                     job.getEffectivePriority(),
-                    job.getNumFailures());
-            // Use the context's ID to distinguish traces since there'll only be one job running
-            // per context.
-            Trace.asyncTraceBegin(Trace.TRACE_TAG_SYSTEM_SERVER, job.getBatteryName(), getId());
+                    job.getNumPreviousAttempts(),
+                    job.getJob().getMaxExecutionDelayMillis(),
+                    isDeadlineExpired,
+                    job.isConstraintSatisfied(JobInfo.CONSTRAINT_FLAG_CHARGING),
+                    job.isConstraintSatisfied(JobInfo.CONSTRAINT_FLAG_BATTERY_NOT_LOW),
+                    job.isConstraintSatisfied(JobInfo.CONSTRAINT_FLAG_STORAGE_NOT_LOW),
+                    job.isConstraintSatisfied(JobStatus.CONSTRAINT_TIMING_DELAY),
+                    job.isConstraintSatisfied(JobInfo.CONSTRAINT_FLAG_DEVICE_IDLE),
+                    job.isConstraintSatisfied(JobStatus.CONSTRAINT_CONNECTIVITY),
+                    job.isConstraintSatisfied(JobStatus.CONSTRAINT_CONTENT_TRIGGER));
+            if (Trace.isTagEnabled(Trace.TRACE_TAG_SYSTEM_SERVER)) {
+                // Use the context's ID to distinguish traces since there'll only be one job
+                // running per context.
+                Trace.asyncTraceForTrackBegin(Trace.TRACE_TAG_SYSTEM_SERVER, "JobScheduler",
+                        job.getTag(), getId());
+            }
             try {
                 mBatteryStats.noteJobStart(job.getBatteryName(), job.getSourceUid());
             } catch (RemoteException e) {
@@ -451,6 +488,10 @@ public final class JobServiceContext implements ServiceConnection {
         return mTimeoutElapsed;
     }
 
+    long getRemainingGuaranteedTimeMs(long nowElapsed) {
+        return Math.max(0, mExecutionStartTimeElapsed + mMinExecutionGuaranteeMillis - nowElapsed);
+    }
+
     boolean isWithinExecutionGuaranteeTime() {
         return sElapsedRealtimeClock.millis()
                 < mExecutionStartTimeElapsed + mMinExecutionGuaranteeMillis;
@@ -488,6 +529,16 @@ public final class JobServiceContext implements ServiceConnection {
         } finally {
             Binder.restoreCallingIdentity(ident);
         }
+    }
+
+    private void doAcknowledgeGetTransferredDownloadBytesMessage(JobCallback jobCallback, int jobId,
+            int workId, @BytesLong long transferredBytes) {
+        // TODO(255393346): Make sure apps call this appropriately and monitor for abuse
+    }
+
+    private void doAcknowledgeGetTransferredUploadBytesMessage(JobCallback jobCallback, int jobId,
+            int workId, @BytesLong long transferredBytes) {
+        // TODO(255393346): Make sure apps call this appropriately and monitor for abuse
     }
 
     void doAcknowledgeStopMessage(JobCallback cb, int jobId, boolean reschedule) {
@@ -540,6 +591,16 @@ public final class JobServiceContext implements ServiceConnection {
         } finally {
             Binder.restoreCallingIdentity(ident);
         }
+    }
+
+    private void doUpdateTransferredNetworkBytes(JobCallback jobCallback, int jobId,
+            @Nullable JobWorkItem item, long downloadBytes, long uploadBytes) {
+        // TODO(255393346): Make sure apps call this appropriately and monitor for abuse
+    }
+
+    private void doUpdateEstimatedNetworkBytes(JobCallback jobCallback, int jobId,
+            @Nullable JobWorkItem item, long downloadBytes, long uploadBytes) {
+        // TODO(255393346): Make sure apps call this appropriately and monitor for abuse
     }
 
     /**
@@ -1029,8 +1090,20 @@ public final class JobServiceContext implements ServiceConnection {
                 completedJob.getJob().isPrefetch(),
                 completedJob.getJob().getPriority(),
                 completedJob.getEffectivePriority(),
-                completedJob.getNumFailures());
-        Trace.asyncTraceEnd(Trace.TRACE_TAG_SYSTEM_SERVER, completedJob.getBatteryName(), getId());
+                completedJob.getNumPreviousAttempts(),
+                completedJob.getJob().getMaxExecutionDelayMillis(),
+                mParams.isOverrideDeadlineExpired(),
+                completedJob.isConstraintSatisfied(JobInfo.CONSTRAINT_FLAG_CHARGING),
+                completedJob.isConstraintSatisfied(JobInfo.CONSTRAINT_FLAG_BATTERY_NOT_LOW),
+                completedJob.isConstraintSatisfied(JobInfo.CONSTRAINT_FLAG_STORAGE_NOT_LOW),
+                completedJob.isConstraintSatisfied(JobStatus.CONSTRAINT_TIMING_DELAY),
+                completedJob.isConstraintSatisfied(JobInfo.CONSTRAINT_FLAG_DEVICE_IDLE),
+                completedJob.isConstraintSatisfied(JobStatus.CONSTRAINT_CONNECTIVITY),
+                completedJob.isConstraintSatisfied(JobStatus.CONSTRAINT_CONTENT_TRIGGER));
+        if (Trace.isTagEnabled(Trace.TRACE_TAG_SYSTEM_SERVER)) {
+            Trace.asyncTraceForTrackEnd(Trace.TRACE_TAG_SYSTEM_SERVER, "JobScheduler",
+                    completedJob.getTag(), getId());
+        }
         try {
             mBatteryStats.noteJobFinish(mRunningJob.getBatteryName(), mRunningJob.getSourceUid(),
                     internalStopReason);

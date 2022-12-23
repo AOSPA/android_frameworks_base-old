@@ -16,6 +16,7 @@
 
 package android.view.inputmethod;
 
+import android.annotation.AnyThread;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.Context;
@@ -23,6 +24,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.res.Configuration;
 import android.icu.text.DisplayContext;
 import android.icu.text.LocaleDisplayNames;
+import android.icu.util.ULocale;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.text.TextUtils;
@@ -74,12 +76,17 @@ public final class InputMethodSubtype implements Parcelable {
     /** {@hide} */
     public static final int SUBTYPE_ID_NONE = 0;
 
+    private static final String SUBTYPE_MODE_KEYBOARD = "keyboard";
+
+    private static final String UNDEFINED_LANGUAGE_TAG = "und";
+
     private final boolean mIsAuxiliary;
     private final boolean mOverridesImplicitlyEnabledSubtype;
     private final boolean mIsAsciiCapable;
     private final int mSubtypeHashCode;
     private final int mSubtypeIconResId;
     private final int mSubtypeNameResId;
+    private final CharSequence mSubtypeNameOverride;
     private final int mSubtypeId;
     private final String mSubtypeLocale;
     private final String mSubtypeLanguageTag;
@@ -88,6 +95,14 @@ public final class InputMethodSubtype implements Parcelable {
     private final Object mLock = new Object();
     private volatile Locale mCachedLocaleObj;
     private volatile HashMap<String, String> mExtraValueHashMapCache;
+
+    /**
+     * A volatile cache to optimize {@link #getCanonicalizedLanguageTag()}.
+     *
+     * <p>{@code null} means that the initial evaluation is not yet done.</p>
+     */
+    @Nullable
+    private volatile String mCachedCanonicalizedLanguageTag;
 
     /**
      * InputMethodSubtypeBuilder is a builder class of InputMethodSubtype.
@@ -160,6 +175,21 @@ public final class InputMethodSubtype implements Parcelable {
         private int mSubtypeNameResId = 0;
 
         /**
+         * Sets the untranslatable name of the subtype.
+         *
+         * This string is used as the subtype's display name if subtype's name res Id is 0.
+         *
+         * @param nameOverride is the name to set.
+         */
+        @NonNull
+        public InputMethodSubtypeBuilder setSubtypeNameOverride(
+                @NonNull CharSequence nameOverride) {
+            mSubtypeNameOverride = nameOverride;
+            return this;
+        }
+        private CharSequence mSubtypeNameOverride = "";
+
+        /**
          * @param subtypeId is the unique ID for this subtype. The input method framework keeps
          * track of enabled subtypes by ID. When the IME package gets upgraded, enabled IDs will
          * stay enabled even if other attributes are different. If the ID is unspecified or 0,
@@ -215,23 +245,23 @@ public final class InputMethodSubtype implements Parcelable {
         public InputMethodSubtype build() {
             return new InputMethodSubtype(this);
         }
-     }
+    }
 
-     private static InputMethodSubtypeBuilder getBuilder(int nameId, int iconId, String locale,
-             String mode, String extraValue, boolean isAuxiliary,
-             boolean overridesImplicitlyEnabledSubtype, int id, boolean isAsciiCapable) {
-         final InputMethodSubtypeBuilder builder = new InputMethodSubtypeBuilder();
-         builder.mSubtypeNameResId = nameId;
-         builder.mSubtypeIconResId = iconId;
-         builder.mSubtypeLocale = locale;
-         builder.mSubtypeMode = mode;
-         builder.mSubtypeExtraValue = extraValue;
-         builder.mIsAuxiliary = isAuxiliary;
-         builder.mOverridesImplicitlyEnabledSubtype = overridesImplicitlyEnabledSubtype;
-         builder.mSubtypeId = id;
-         builder.mIsAsciiCapable = isAsciiCapable;
-         return builder;
-     }
+    private static InputMethodSubtypeBuilder getBuilder(int nameId, int iconId,
+            String locale, String mode, String extraValue, boolean isAuxiliary,
+            boolean overridesImplicitlyEnabledSubtype, int id, boolean isAsciiCapable) {
+        final InputMethodSubtypeBuilder builder = new InputMethodSubtypeBuilder();
+        builder.mSubtypeNameResId = nameId;
+        builder.mSubtypeIconResId = iconId;
+        builder.mSubtypeLocale = locale;
+        builder.mSubtypeMode = mode;
+        builder.mSubtypeExtraValue = extraValue;
+        builder.mIsAuxiliary = isAuxiliary;
+        builder.mOverridesImplicitlyEnabledSubtype = overridesImplicitlyEnabledSubtype;
+        builder.mSubtypeId = id;
+        builder.mIsAsciiCapable = isAsciiCapable;
+        return builder;
+    }
 
     /**
      * Constructor with no subtype ID specified.
@@ -291,6 +321,7 @@ public final class InputMethodSubtype implements Parcelable {
      */
     private InputMethodSubtype(InputMethodSubtypeBuilder builder) {
         mSubtypeNameResId = builder.mSubtypeNameResId;
+        mSubtypeNameOverride = builder.mSubtypeNameOverride;
         mSubtypeIconResId = builder.mSubtypeIconResId;
         mSubtypeLocale = builder.mSubtypeLocale;
         mSubtypeLanguageTag = builder.mSubtypeLanguageTag;
@@ -313,6 +344,8 @@ public final class InputMethodSubtype implements Parcelable {
     InputMethodSubtype(Parcel source) {
         String s;
         mSubtypeNameResId = source.readInt();
+        CharSequence cs = TextUtils.CHAR_SEQUENCE_CREATOR.createFromParcel(source);
+        mSubtypeNameOverride = cs != null ? cs : "";
         mSubtypeIconResId = source.readInt();
         s = source.readString();
         mSubtypeLocale = s != null ? s : "";
@@ -334,6 +367,14 @@ public final class InputMethodSubtype implements Parcelable {
      */
     public int getNameResId() {
         return mSubtypeNameResId;
+    }
+
+    /**
+     * @return The subtype's untranslatable name string.
+     */
+    @NonNull
+    public CharSequence getNameOverride() {
+        return mSubtypeNameOverride;
     }
 
     /**
@@ -389,6 +430,65 @@ public final class InputMethodSubtype implements Parcelable {
             }
             return mCachedLocaleObj;
         }
+    }
+
+    /**
+     * Returns a canonicalized BCP 47 Language Tag initialized with {@link #getLocaleObject()}.
+     *
+     * <p>This has an internal cache mechanism.  Subsequent calls are in general cheap and fast.</p>
+     *
+     * @return a canonicalized BCP 47 Language Tag initialized with {@link #getLocaleObject()}. An
+     *         empty string if {@link #getLocaleObject()} returns {@code null} or an empty
+     *         {@link Locale} object.
+     * @hide
+     */
+    @AnyThread
+    @NonNull
+    public String getCanonicalizedLanguageTag() {
+        final String cachedValue = mCachedCanonicalizedLanguageTag;
+        if (cachedValue != null) {
+            return cachedValue;
+        }
+
+        String result = null;
+        final Locale locale = getLocaleObject();
+        if (locale != null) {
+            final String langTag = locale.toLanguageTag();
+            if (!TextUtils.isEmpty(langTag)) {
+                result = ULocale.createCanonical(ULocale.forLanguageTag(langTag)).toLanguageTag();
+            }
+        }
+        result = TextUtils.emptyIfNull(result);
+        mCachedCanonicalizedLanguageTag = result;
+        return result;
+    }
+
+    /**
+     * Determines whether this {@link InputMethodSubtype} can be used as the key of mapping rules
+     * between {@link InputMethodSubtype} and hardware keyboard layout.
+     *
+     * <p>Note that in a future build may require different rules.  Design the system so that the
+     * system can automatically take care of any rule changes upon OTAs.</p>
+     *
+     * @return {@code true} if this {@link InputMethodSubtype} can be used as the key of mapping
+     *         rules between {@link InputMethodSubtype} and hardware keyboard layout.
+     * @hide
+     */
+    public boolean isSuitableForPhysicalKeyboardLayoutMapping() {
+        if (hashCode() == SUBTYPE_ID_NONE) {
+            return false;
+        }
+        if (!TextUtils.equals(getMode(), SUBTYPE_MODE_KEYBOARD)) {
+            return false;
+        }
+        if (isAuxiliary()) {
+            return false;
+        }
+        final String langTag = getCanonicalizedLanguageTag();
+        if (langTag.isEmpty() || TextUtils.equals(langTag, UNDEFINED_LANGUAGE_TAG)) {
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -459,8 +559,11 @@ public final class InputMethodSubtype implements Parcelable {
     public CharSequence getDisplayName(
             Context context, String packageName, ApplicationInfo appInfo) {
         if (mSubtypeNameResId == 0) {
-            return getLocaleDisplayName(getLocaleFromContext(context), getLocaleObject(),
-                    DisplayContext.CAPITALIZATION_FOR_UI_LIST_OR_MENU);
+            return TextUtils.isEmpty(mSubtypeNameOverride)
+                    ? getLocaleDisplayName(
+                            getLocaleFromContext(context), getLocaleObject(),
+                            DisplayContext.CAPITALIZATION_FOR_UI_LIST_OR_MENU)
+                    : mSubtypeNameOverride;
         }
 
         final CharSequence subtypeName = context.getPackageManager().getText(
@@ -625,6 +728,7 @@ public final class InputMethodSubtype implements Parcelable {
     @Override
     public void writeToParcel(Parcel dest, int parcelableFlags) {
         dest.writeInt(mSubtypeNameResId);
+        TextUtils.writeToParcel(mSubtypeNameOverride, dest, parcelableFlags);
         dest.writeInt(mSubtypeIconResId);
         dest.writeString(mSubtypeLocale);
         dest.writeString(mSubtypeLanguageTag);

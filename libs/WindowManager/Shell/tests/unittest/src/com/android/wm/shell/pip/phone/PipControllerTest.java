@@ -20,6 +20,7 @@ import static android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE;
 
 import static org.junit.Assert.assertNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -43,10 +44,12 @@ import android.util.Size;
 import com.android.wm.shell.ShellTestCase;
 import com.android.wm.shell.WindowManagerShellWrapper;
 import com.android.wm.shell.common.DisplayController;
+import com.android.wm.shell.common.DisplayInsetsController;
 import com.android.wm.shell.common.DisplayLayout;
 import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.common.TaskStackListenerImpl;
 import com.android.wm.shell.onehanded.OneHandedController;
+import com.android.wm.shell.pip.PipAnimationController;
 import com.android.wm.shell.pip.PipAppOpsListener;
 import com.android.wm.shell.pip.PipBoundsAlgorithm;
 import com.android.wm.shell.pip.PipBoundsState;
@@ -59,11 +62,13 @@ import com.android.wm.shell.pip.PipTransitionState;
 import com.android.wm.shell.sysui.ShellCommandHandler;
 import com.android.wm.shell.sysui.ShellController;
 import com.android.wm.shell.sysui.ShellInit;
+import com.android.wm.shell.sysui.ShellSharedConstants;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 import java.util.Optional;
@@ -83,9 +88,10 @@ public class PipControllerTest extends ShellTestCase {
     @Mock private ShellCommandHandler mMockShellCommandHandler;
     @Mock private DisplayController mMockDisplayController;
     @Mock private PhonePipMenuController mMockPhonePipMenuController;
+    @Mock private PipAnimationController mMockPipAnimationController;
     @Mock private PipAppOpsListener mMockPipAppOpsListener;
     @Mock private PipBoundsAlgorithm mMockPipBoundsAlgorithm;
-    @Mock private PipKeepClearAlgorithm mMockPipKeepClearAlgorithm;
+    @Mock private PhonePipKeepClearAlgorithm mMockPipKeepClearAlgorithm;
     @Mock private PipSnapAlgorithm mMockPipSnapAlgorithm;
     @Mock private PipMediaController mMockPipMediaController;
     @Mock private PipTaskOrganizer mMockPipTaskOrganizer;
@@ -98,7 +104,8 @@ public class PipControllerTest extends ShellTestCase {
     @Mock private TaskStackListenerImpl mMockTaskStackListener;
     @Mock private ShellExecutor mMockExecutor;
     @Mock private Optional<OneHandedController> mMockOneHandedController;
-    @Mock private PipParamsChangedForwarder mPipParamsChangedForwarder;
+    @Mock private PipParamsChangedForwarder mMockPipParamsChangedForwarder;
+    @Mock private DisplayInsetsController mMockDisplayInsetsController;
 
     @Mock private DisplayLayout mMockDisplayLayout1;
     @Mock private DisplayLayout mMockDisplayLayout2;
@@ -114,13 +121,13 @@ public class PipControllerTest extends ShellTestCase {
         mShellController = spy(new ShellController(mShellInit, mMockShellCommandHandler,
                 mMockExecutor));
         mPipController = new PipController(mContext, mShellInit, mMockShellCommandHandler,
-                mShellController, mMockDisplayController, mMockPipAppOpsListener,
-                mMockPipBoundsAlgorithm, mMockPipKeepClearAlgorithm,
+                mShellController, mMockDisplayController, mMockPipAnimationController,
+                mMockPipAppOpsListener, mMockPipBoundsAlgorithm, mMockPipKeepClearAlgorithm,
                 mMockPipBoundsState, mMockPipMotionHelper, mMockPipMediaController,
                 mMockPhonePipMenuController, mMockPipTaskOrganizer, mMockPipTransitionState,
                 mMockPipTouchHandler, mMockPipTransitionController, mMockWindowManagerShellWrapper,
-                mMockTaskStackListener, mPipParamsChangedForwarder,
-                mMockOneHandedController, mMockExecutor);
+                mMockTaskStackListener, mMockPipParamsChangedForwarder,
+                mMockDisplayInsetsController, mMockOneHandedController, mMockExecutor);
         mShellInit.init();
         when(mMockPipBoundsAlgorithm.getSnapAlgorithm()).thenReturn(mMockPipSnapAlgorithm);
         when(mMockPipTouchHandler.getMotionHelper()).thenReturn(mMockPipMotionHelper);
@@ -144,6 +151,12 @@ public class PipControllerTest extends ShellTestCase {
     @Test
     public void instantiatePipController_registerKeyguardChangeListener() {
         verify(mShellController, times(1)).addKeyguardChangeListener(any());
+    }
+
+    @Test
+    public void instantiatePipController_registerExternalInterface() {
+        verify(mShellController, times(1)).addExternalInterface(
+                eq(ShellSharedConstants.KEY_EXTRA_SHELL_PIP), any(), any());
     }
 
     @Test
@@ -180,13 +193,13 @@ public class PipControllerTest extends ShellTestCase {
 
         ShellInit shellInit = new ShellInit(mMockExecutor);
         assertNull(PipController.create(spyContext, shellInit, mMockShellCommandHandler,
-                mShellController, mMockDisplayController, mMockPipAppOpsListener,
-                mMockPipBoundsAlgorithm, mMockPipKeepClearAlgorithm,
+                mShellController, mMockDisplayController, mMockPipAnimationController,
+                mMockPipAppOpsListener, mMockPipBoundsAlgorithm, mMockPipKeepClearAlgorithm,
                 mMockPipBoundsState, mMockPipMotionHelper, mMockPipMediaController,
                 mMockPhonePipMenuController, mMockPipTaskOrganizer, mMockPipTransitionState,
                 mMockPipTouchHandler, mMockPipTransitionController, mMockWindowManagerShellWrapper,
-                mMockTaskStackListener, mPipParamsChangedForwarder,
-                mMockOneHandedController, mMockExecutor));
+                mMockTaskStackListener, mMockPipParamsChangedForwarder,
+                mMockDisplayInsetsController, mMockOneHandedController, mMockExecutor));
     }
 
     @Test
@@ -267,7 +280,20 @@ public class PipControllerTest extends ShellTestCase {
     }
 
     @Test
-    public void onKeepClearAreasChanged_updatesPipBoundsState() {
+    public void onKeepClearAreasChanged_featureDisabled_pipBoundsStateDoesntChange() {
+        final int displayId = 1;
+        final Rect keepClearArea = new Rect(0, 0, 10, 10);
+        when(mMockPipBoundsState.getDisplayId()).thenReturn(displayId);
+
+        mPipController.mDisplaysChangedListener.onKeepClearAreasChanged(
+                displayId, Set.of(keepClearArea), Set.of());
+
+        verify(mMockPipBoundsState, never()).setKeepClearAreas(Mockito.anySet(), Mockito.anySet());
+    }
+
+    @Test
+    public void onKeepClearAreasChanged_featureEnabled_updatesPipBoundsState() {
+        mPipController.setEnablePipKeepClearAlgorithm(true);
         final int displayId = 1;
         final Rect keepClearArea = new Rect(0, 0, 10, 10);
         when(mMockPipBoundsState.getDisplayId()).thenReturn(displayId);

@@ -35,6 +35,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.InstanceId;
 import com.android.internal.statusbar.ISessionListener;
 import com.android.internal.statusbar.IStatusBarService;
+import com.android.server.biometrics.sensors.AuthSessionCoordinator;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -43,7 +44,7 @@ import java.util.function.Consumer;
 /**
  * A default provider for {@link BiometricContext}.
  */
-class BiometricContextProvider implements BiometricContext {
+public final class BiometricContextProvider implements BiometricContext {
 
     private static final String TAG = "BiometricContextProvider";
 
@@ -59,7 +60,8 @@ class BiometricContextProvider implements BiometricContext {
                     sInstance = new BiometricContextProvider(
                             new AmbientDisplayConfiguration(context),
                             IStatusBarService.Stub.asInterface(ServiceManager.getServiceOrThrow(
-                                    Context.STATUS_BAR_SERVICE)), null /* handler */);
+                                    Context.STATUS_BAR_SERVICE)), null /* handler */,
+                            new AuthSessionCoordinator());
                 } catch (ServiceNotFoundException e) {
                     throw new IllegalStateException("Failed to find required service", e);
                 }
@@ -76,18 +78,28 @@ class BiometricContextProvider implements BiometricContext {
     private final Map<Integer, InstanceId> mSession = new ConcurrentHashMap<>();
 
     private final AmbientDisplayConfiguration mAmbientDisplayConfiguration;
-    private boolean mIsDozing = false;
+    private final AuthSessionCoordinator mAuthSessionCoordinator;
+    private boolean mIsAod = false;
+    private boolean mIsAwake = false;
 
     @VisibleForTesting
-    BiometricContextProvider(@NonNull AmbientDisplayConfiguration ambientDisplayConfiguration,
-            @NonNull IStatusBarService service, @Nullable Handler handler) {
+    public BiometricContextProvider(
+            @NonNull AmbientDisplayConfiguration ambientDisplayConfiguration,
+            @NonNull IStatusBarService service, @Nullable Handler handler,
+            AuthSessionCoordinator authSessionCoordinator) {
         mAmbientDisplayConfiguration = ambientDisplayConfiguration;
+        mAuthSessionCoordinator = authSessionCoordinator;
         try {
             service.setBiometicContextListener(new IBiometricContextListener.Stub() {
                 @Override
-                public void onDozeChanged(boolean isDozing) {
-                    mIsDozing = isDozing;
-                    notifyChanged();
+                public void onDozeChanged(boolean isDozing, boolean isAwake) {
+                    isDozing = isDozing && isAodEnabled();
+                    final boolean changed = (mIsAod != isDozing) || (mIsAwake != isAwake);
+                    if (changed) {
+                        mIsAod = isDozing;
+                        mIsAwake = isAwake;
+                        notifyChanged();
+                    }
                 }
 
                 private void notifyChanged() {
@@ -96,6 +108,10 @@ class BiometricContextProvider implements BiometricContext {
                     } else {
                         notifySubscribers();
                     }
+                }
+
+                private boolean isAodEnabled() {
+                    return mAmbientDisplayConfiguration.alwaysOnEnabled(UserHandle.USER_CURRENT);
                 }
             });
             service.registerSessionListener(SESSION_TYPES, new ISessionListener.Stub() {
@@ -161,7 +177,12 @@ class BiometricContextProvider implements BiometricContext {
 
     @Override
     public boolean isAod() {
-        return mIsDozing && mAmbientDisplayConfiguration.alwaysOnEnabled(UserHandle.USER_CURRENT);
+        return mIsAod;
+    }
+
+    @Override
+    public boolean isAwake() {
+        return mIsAwake;
     }
 
     @Override
@@ -173,6 +194,11 @@ class BiometricContextProvider implements BiometricContext {
     @Override
     public void unsubscribe(@NonNull OperationContext context) {
         mSubscribers.remove(context);
+    }
+
+    @Override
+    public AuthSessionCoordinator getAuthSessionCoordinator() {
+        return mAuthSessionCoordinator;
     }
 
     private void notifySubscribers() {

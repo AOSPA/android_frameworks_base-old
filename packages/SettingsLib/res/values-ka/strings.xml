@@ -53,8 +53,6 @@
     <string name="wifi_disconnected" msgid="7054450256284661757">"კავშირი გაწყვეტილია"</string>
     <string name="wifi_disabled_generic" msgid="2651916945380294607">"გამორთულია"</string>
     <string name="wifi_disabled_network_failure" msgid="2660396183242399585">"IP კონფიგურაციის შეფერხება"</string>
-    <string name="wifi_disabled_by_recommendation_provider" msgid="1302938248432705534">"არ არის დაკავშირებული დაბალი ხარისხის ქსელის გამო"</string>
-    <string name="wifi_disabled_wifi_failure" msgid="8819554899148331100">"WiFi კავშირის შეფერხება"</string>
     <string name="wifi_disabled_password_failure" msgid="6892387079613226738">"ავთენტიკაციის პრობლემა"</string>
     <string name="wifi_cant_connect" msgid="5718417542623056783">"დაკავშირება ვერ ხერხდება"</string>
     <string name="wifi_cant_connect_to_ap" msgid="3099667989279700135">"<xliff:g id="AP_NAME">%1$s</xliff:g>-თან დაკავშირება ვერ ხერხდება"</string>
@@ -63,12 +61,9 @@
     <string name="wifi_no_internet_no_reconnect" msgid="821591791066497347">"ავტომატურად დაკავშირება ვერ მოხერხდება"</string>
     <string name="wifi_no_internet" msgid="1774198889176926299">"ინტერნეტ-კავშირი არ არის"</string>
     <string name="saved_network" msgid="7143698034077223645">"შენახული <xliff:g id="NAME">%1$s</xliff:g>-ის მიერ"</string>
-    <string name="connected_to_metered_access_point" msgid="9179693207918156341">"დაკავშირებულია ფასიან ქსელთან"</string>
     <string name="connected_via_network_scorer" msgid="7665725527352893558">"ავტომატურად დაკავშირდა %1$s-ის მეშვეობით"</string>
     <string name="connected_via_network_scorer_default" msgid="7973529709744526285">"ავტომატურად დაკავშირდა ქსელის ხარისხის შეფასების პროვაიდერის მეშვეობით"</string>
-    <string name="connected_via_passpoint" msgid="7735442932429075684">"%1$s-ით დაკავშირებული"</string>
     <string name="connected_via_app" msgid="3532267661404276584">"დაკავშირებულია <xliff:g id="NAME">%1$s</xliff:g>-ით"</string>
-    <string name="available_via_passpoint" msgid="1716000261192603682">"ხელმისაწვდომია %1$s-ით"</string>
     <string name="tap_to_sign_up" msgid="5356397741063740395">"შეეხეთ რეგისტრაციისთვის"</string>
     <string name="wifi_connected_no_internet" msgid="5087420713443350646">"ინტერნეტ-კავშირი არ არის"</string>
     <string name="private_dns_broken" msgid="1984159464346556931">"პირად DNS სერვერზე წვდომა შეუძლებელია"</string>
@@ -76,17 +71,13 @@
     <string name="wifi_status_no_internet" msgid="3799933875988829048">"ინტერნეტ-კავშირი არ არის"</string>
     <string name="wifi_status_sign_in_required" msgid="2236267500459526855">"აუცილებელია სისტემაში შესვლა"</string>
     <string name="wifi_ap_unable_to_handle_new_sta" msgid="5885145407184194503">"წვდომის წერტილი დროებით გადატვირთულია"</string>
-    <string name="connected_via_carrier" msgid="1968057009076191514">"%1$s-ით დაკავშირებული"</string>
-    <string name="available_via_carrier" msgid="465598683092718294">"ხელმისაწვდომია %1$s-ით"</string>
     <string name="osu_opening_provider" msgid="4318105381295178285">"მიმდინარეობს <xliff:g id="PASSPOINTPROVIDER">%1$s</xliff:g>-ის გახსნა"</string>
     <string name="osu_connect_failed" msgid="9107873364807159193">"დაკავშირება ვერ მოხერხდა"</string>
     <string name="osu_completing_sign_up" msgid="8412636665040390901">"მიმდინარეობს რეგისტრაციის დასრულება…"</string>
     <string name="osu_sign_up_failed" msgid="5605453599586001793">"რეგისტრაციის დასრულება ვერ მოხერხდა. შეეხეთ ხელახლა საცდელად."</string>
     <string name="osu_sign_up_complete" msgid="7640183358878916847">"რეგისტრაცია დასრულდა. მიმდინარეობს დაკავშირება…"</string>
-    <string name="speed_label_very_slow" msgid="8526005255731597666">"ძალიან ნელი"</string>
     <string name="speed_label_slow" msgid="6069917670665664161">"ნელი"</string>
     <string name="speed_label_okay" msgid="1253594383880810424">"კარგი"</string>
-    <string name="speed_label_medium" msgid="9078405312828606976">"საშუალო"</string>
     <string name="speed_label_fast" msgid="2677719134596044051">"სწრაფი"</string>
     <string name="speed_label_very_fast" msgid="8215718029533182439">"ძალიან სწრაფი"</string>
     <string name="wifi_passpoint_expired" msgid="6540867261754427561">"ვადაგასულია"</string>
@@ -98,7 +89,6 @@
     <string name="bluetooth_pairing" msgid="4269046942588193600">"დაწყვილება…"</string>
     <string name="bluetooth_connected_no_headset" msgid="2224101138659967604">"დაკავშირებულია (ტელეფონი არ არის)<xliff:g id="ACTIVE_DEVICE">%1$s</xliff:g>"</string>
     <string name="bluetooth_connected_no_a2dp" msgid="8566874395813947092">"დაკავშირებულია (მედია არ არის)<xliff:g id="ACTIVE_DEVICE">%1$s</xliff:g>"</string>
-    <string name="bluetooth_connected_no_map" msgid="3381860077002724689">"დაკავშირებულია (შეტყობინებებზე წვდომა არ არის)<xliff:g id="ACTIVE_DEVICE">%1$s</xliff:g>"</string>
     <string name="bluetooth_connected_no_headset_no_a2dp" msgid="2893204819854215433">"დაკავშირებულია (ტელეფონი ამ მედია არ არის)<xliff:g id="ACTIVE_DEVICE">%1$s</xliff:g>"</string>
     <string name="bluetooth_connected_battery_level" msgid="5410325759372259950">"დაკავშირებულია. ბატარეის დონე: <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g><xliff:g id="ACTIVE_DEVICE">%2$s</xliff:g>"</string>
     <string name="bluetooth_connected_no_headset_battery_level" msgid="2661863370509206428">"დაკავშირებულია (ტელეფონი არ არის). ბატარეის დონე: <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g><xliff:g id="ACTIVE_DEVICE">%2$s</xliff:g>"</string>
@@ -212,15 +202,15 @@
     <string name="tts_reset_speech_pitch_title" msgid="7149398585468413246">"მეტყველების ტონის გადაყენება"</string>
     <string name="tts_reset_speech_pitch_summary" msgid="6822904157021406449">"ტექსტის გახმოვანების ტონის ნაგულისხმევზე დაბრუნება."</string>
   <string-array name="tts_rate_entries">
-    <item msgid="9004239613505400644">"ძალიან ნელი"</item>
-    <item msgid="1815382991399815061">"ნელი"</item>
-    <item msgid="3075292553049300105">"ჩვეულებრივი"</item>
-    <item msgid="1158955023692670059">"სწრაფი"</item>
-    <item msgid="5664310435707146591">"უფრო სწრაფი"</item>
-    <item msgid="5491266922147715962">"ძალიან სწრაფი"</item>
-    <item msgid="7659240015901486196">"ჩქარი"</item>
-    <item msgid="7147051179282410945">"ძალიან ჩქარი"</item>
-    <item msgid="581904787661470707">"უსწრაფესი"</item>
+    <item msgid="4563475121751694801">"60%"</item>
+    <item msgid="6323184326270638754">"80%"</item>
+    <item msgid="2569200872125313769">"100%"</item>
+    <item msgid="9010794089704942570">"150%"</item>
+    <item msgid="4634010129655810634">"200%"</item>
+    <item msgid="8929490998534497543">"250%"</item>
+    <item msgid="8442352376763286772">"300%"</item>
+    <item msgid="4446831566506165093">"350%"</item>
+    <item msgid="6946761421234586000">"400%"</item>
   </string-array>
     <string name="choose_profile" msgid="343803890897657450">"აირჩიეთ პროფილი"</string>
     <string name="category_personal" msgid="6236798763159385225">"პირადი"</string>
@@ -408,6 +398,7 @@
     <string name="force_resizable_activities_summary" msgid="2490382056981583062">"მანიფესტის მნიშვნელობების მიუხედავად, მრავალი ფანჯრის რეჟიმისთვის ყველა აქტივობის ზომაცვლადად გადაქცევა."</string>
     <string name="enable_freeform_support" msgid="7599125687603914253">"თავისუფალი ფორმის მქონე ფანჯრების ჩართვა"</string>
     <string name="enable_freeform_support_summary" msgid="1822862728719276331">"თავისუფალი ფორმის მქონე ფანჯრების მხარდაჭერის ექსპერიმენტული ფუნქციის ჩართვა."</string>
+    <string name="desktop_mode" msgid="2389067840550544462">"დესკტოპის რეჟიმი"</string>
     <string name="local_backup_password_title" msgid="4631017948933578709">"დესკტოპის სარეზერვო ასლის პაროლი"</string>
     <string name="local_backup_password_summary_none" msgid="7646898032616361714">"დესკტოპის სრული სარეზერვო ასლები ამჟამად დაცული არ არის"</string>
     <string name="local_backup_password_summary_change" msgid="1707357670383995567">"შეეხეთ დესკტოპის სრული სარეზერვო ასლების პაროლის შესაცვლელად ან წასაშლელად"</string>
@@ -476,13 +467,13 @@
     <string name="power_charging" msgid="6727132649743436802">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="STATE">%2$s</xliff:g>"</string>
     <string name="power_remaining_charging_duration_only" msgid="8085099012811384899">"სრულ დატენვამდე დარჩენილია <xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_charging_duration" msgid="6127154952524919719">"<xliff:g id="LEVEL">%1$s</xliff:g> — სრულ დატენვამდე დარჩენილია <xliff:g id="TIME">%2$s</xliff:g>"</string>
-    <string name="power_charging_limited" msgid="7956120998372505295">"<xliff:g id="LEVEL">%1$s</xliff:g> — დატენვა დროებით შეზღუდულია"</string>
+    <string name="power_charging_limited" msgid="6971664137170239141">"<xliff:g id="LEVEL">%1$s</xliff:g> - დატენვა ᲨეᲩერებულია"</string>
     <string name="battery_info_status_unknown" msgid="268625384868401114">"უცნობი"</string>
     <string name="battery_info_status_charging" msgid="4279958015430387405">"იტენება"</string>
     <string name="battery_info_status_charging_fast" msgid="8027559755902954885">"სწრაფად იტენება"</string>
     <string name="battery_info_status_charging_slow" msgid="3190803837168962319">"ნელა იტენება"</string>
     <string name="battery_info_status_charging_wireless" msgid="8924722966861282197">"უსადენოდ დატენა"</string>
-    <string name="battery_info_status_charging_dock" msgid="3554147903321236585">"დამტენი სამაგრი"</string>
+    <string name="battery_info_status_charging_dock" msgid="8573274094093364791">"იტენება"</string>
     <string name="battery_info_status_discharging" msgid="6962689305413556485">"არ იტენება"</string>
     <string name="battery_info_status_not_charging" msgid="3371084153747234837">"დაკავშირებულია, არ იტენება"</string>
     <string name="battery_info_status_full" msgid="1339002294876531312">"დატენილია"</string>
@@ -655,13 +646,6 @@
     <string name="accessibility_ethernet_disconnected" msgid="2832501530856497489">"Ethernet კავშირი შეწყვეტილია."</string>
     <string name="accessibility_ethernet_connected" msgid="6175942685957461563">"Ethernet."</string>
     <string name="accessibility_no_calling" msgid="3540827068323895748">"ზარების გარეშე."</string>
-    <string name="dream_complication_title_time" msgid="701747800712893499">"დრო"</string>
-    <string name="dream_complication_title_date" msgid="8661176085446135789">"თარიღი"</string>
-    <string name="dream_complication_title_weather" msgid="598609151677172783">"ამინდი"</string>
-    <string name="dream_complication_title_aqi" msgid="4587552608957834110">"ჰაერის ხარისხი"</string>
-    <string name="dream_complication_title_cast_info" msgid="4038776652841885084">"ტრანსლირების ინფო"</string>
-    <string name="dream_complication_title_home_controls" msgid="9153381632476738811">"სახლის მართვა"</string>
-    <string name="dream_complication_title_smartspace" msgid="4197829945636051120">"ჭკვიანი სივრცე"</string>
     <string name="avatar_picker_title" msgid="8492884172713170652">"აირჩიეთ პროფილის სურათი"</string>
     <string name="default_user_icon_description" msgid="6554047177298972638">"მომხმარებლის ნაგულისხმევი ხატულა"</string>
     <string name="physical_keyboard_title" msgid="4811935435315835220">"ფიზიკური კლავიატურა"</string>

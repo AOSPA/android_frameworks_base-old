@@ -19,10 +19,10 @@
 #define LOG_NDEBUG 1
 
 #include <android-base/macros.h>
+#include <android-base/parsebool.h>
 #include <android-base/properties.h>
 #include <android/graphics/jni_runtime.h>
 #include <android_runtime/AndroidRuntime.h>
-#include <android_runtime/vm.h>
 #include <assert.h>
 #include <binder/IBinder.h>
 #include <binder/IPCThreadState.h>
@@ -53,6 +53,8 @@
 using namespace android;
 using android::base::GetBoolProperty;
 using android::base::GetProperty;
+using android::base::ParseBool;
+using android::base::ParseBoolResult;
 
 extern int register_android_os_Binder(JNIEnv* env);
 extern int register_android_os_Process(JNIEnv* env);
@@ -118,6 +120,7 @@ extern int register_android_util_MemoryIntArray(JNIEnv* env);
 extern int register_android_content_StringBlock(JNIEnv* env);
 extern int register_android_content_XmlBlock(JNIEnv* env);
 extern int register_android_content_res_ApkAssets(JNIEnv* env);
+extern int register_android_content_res_ResourceTimer(JNIEnv* env);
 extern int register_android_graphics_BLASTBufferQueue(JNIEnv* env);
 extern int register_android_graphics_SurfaceTexture(JNIEnv* env);
 extern int register_android_view_DisplayEventReceiver(JNIEnv* env);
@@ -195,6 +198,7 @@ extern int register_android_security_Scrypt(JNIEnv *env);
 extern int register_com_android_internal_content_F2fsUtils(JNIEnv* env);
 extern int register_com_android_internal_content_NativeLibraryHelper(JNIEnv *env);
 extern int register_com_android_internal_content_om_OverlayConfig(JNIEnv *env);
+extern int register_com_android_internal_expresslog_Counter(JNIEnv* env);
 extern int register_com_android_internal_net_NetworkUtilsInternal(JNIEnv* env);
 extern int register_com_android_internal_os_ClassLoaderFactory(JNIEnv* env);
 extern int register_com_android_internal_os_FuseAppLoop(JNIEnv* env);
@@ -212,6 +216,8 @@ extern int register_com_android_internal_os_ZygoteInit(JNIEnv *env);
 extern int register_com_android_internal_security_VerityUtils(JNIEnv* env);
 extern int register_com_android_internal_util_VirtualRefBasePtr(JNIEnv *env);
 extern int register_android_window_WindowInfosListener(JNIEnv* env);
+extern int register_android_window_ScreenCapture(JNIEnv* env);
+extern int register_jni_common(JNIEnv* env);
 extern int register_com_android_internal_app_ActivityTrigger(JNIEnv *env);
 
 // Namespace for Android Runtime flags applied during boot time.
@@ -702,17 +708,24 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote, bool p
 
     // Read if we are using the profile configuration, do this at the start since the last ART args
     // take precedence.
-    property_get("dalvik.vm.profilebootclasspath", propBuf, "");
-    std::string profile_boot_class_path_flag = propBuf;
-    // Empty means the property is unset and we should default to the phenotype property.
-    // The possible values are {"true", "false", ""}
-    if (profile_boot_class_path_flag.empty()) {
-        profile_boot_class_path_flag = server_configurable_flags::GetServerConfigurableFlag(
-                RUNTIME_NATIVE_BOOT_NAMESPACE,
-                PROFILE_BOOT_CLASS_PATH,
-                /*default_value=*/ "");
+    std::string profile_boot_class_path_flag =
+            server_configurable_flags::GetServerConfigurableFlag(RUNTIME_NATIVE_BOOT_NAMESPACE,
+                                                                 PROFILE_BOOT_CLASS_PATH,
+                                                                 /*default_value=*/"");
+    bool profile_boot_class_path;
+    switch (ParseBool(profile_boot_class_path_flag)) {
+        case ParseBoolResult::kError:
+            // Default to the system property.
+            profile_boot_class_path =
+                    GetBoolProperty("dalvik.vm.profilebootclasspath", /*default_value=*/false);
+            break;
+        case ParseBoolResult::kTrue:
+            profile_boot_class_path = true;
+            break;
+        case ParseBoolResult::kFalse:
+            profile_boot_class_path = false;
+            break;
     }
-    const bool profile_boot_class_path = (profile_boot_class_path_flag == "true");
     if (profile_boot_class_path) {
         addOption("-Xcompiler-option");
         addOption("--count-hotness-in-compiled-code");
@@ -1507,6 +1520,7 @@ static const RegJNIRec gRegJNI[] = {
         REG_JNI(register_android_content_StringBlock),
         REG_JNI(register_android_content_XmlBlock),
         REG_JNI(register_android_content_res_ApkAssets),
+        REG_JNI(register_android_content_res_ResourceTimer),
         REG_JNI(register_android_text_AndroidCharacter),
         REG_JNI(register_android_text_Hyphenator),
         REG_JNI(register_android_view_InputDevice),
@@ -1529,12 +1543,14 @@ static const RegJNIRec gRegJNI[] = {
         REG_JNI(register_android_os_VintfRuntimeInfo),
         REG_JNI(register_android_service_DataLoaderService),
         REG_JNI(register_android_view_DisplayEventReceiver),
-        REG_JNI(register_android_view_InputApplicationHandle),
-        REG_JNI(register_android_view_InputWindowHandle),
         REG_JNI(register_android_view_Surface),
         REG_JNI(register_android_view_SurfaceControl),
         REG_JNI(register_android_view_SurfaceControlHdrLayerInfoListener),
         REG_JNI(register_android_view_SurfaceSession),
+        REG_JNI(register_android_view_InputApplicationHandle),
+        // This must be called after register_android_view_SurfaceControl since it has a dependency
+        // on the Java SurfaceControl object that references a native resource via static request.
+        REG_JNI(register_android_view_InputWindowHandle),
         REG_JNI(register_android_view_CompositionSamplingListener),
         REG_JNI(register_android_view_TextureView),
         REG_JNI(register_android_view_TunnelModeEnabledListener),
@@ -1573,6 +1589,7 @@ static const RegJNIRec gRegJNI[] = {
         REG_JNI(register_android_os_SharedMemory),
         REG_JNI(register_android_os_incremental_IncrementalManager),
         REG_JNI(register_com_android_internal_content_om_OverlayConfig),
+        REG_JNI(register_com_android_internal_expresslog_Counter),
         REG_JNI(register_com_android_internal_net_NetworkUtilsInternal),
         REG_JNI(register_com_android_internal_os_ClassLoaderFactory),
         REG_JNI(register_com_android_internal_os_LongArrayMultiStateCounter),
@@ -1649,6 +1666,8 @@ static const RegJNIRec gRegJNI[] = {
         REG_JNI(register_com_android_internal_os_KernelSingleUidTimeReader),
 
         REG_JNI(register_android_window_WindowInfosListener),
+        REG_JNI(register_android_window_ScreenCapture),
+        REG_JNI(register_jni_common),
         REG_JNI(register_com_android_internal_app_ActivityTrigger),
         REG_JNI(register_com_android_internal_os_KernelSingleProcessCpuThreadReader),
 };

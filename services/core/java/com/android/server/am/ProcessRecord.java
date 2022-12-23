@@ -55,7 +55,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.procstats.ProcessState;
 import com.android.internal.app.procstats.ProcessStats;
 import com.android.internal.os.Zygote;
-import com.android.internal.util.FrameworkStatsLog;
+import com.android.server.FgThread;
 import com.android.server.wm.WindowProcessController;
 import com.android.server.wm.WindowProcessListener;
 
@@ -143,6 +143,13 @@ class ProcessRecord implements WindowProcessListener {
      */
     @CompositeRWLock({"mService", "mProcLock"})
     private IApplicationThread mThread;
+
+    /**
+     * Instance of {@link #mThread} that will always meet the {@code oneway}
+     * contract, possibly by using {@link SameProcessApplicationThread}.
+     */
+    @CompositeRWLock({"mService", "mProcLock"})
+    private IApplicationThread mOnewayThread;
 
     /**
      * Always keep this application running?
@@ -605,6 +612,11 @@ class ProcessRecord implements WindowProcessListener {
         return mThread;
     }
 
+    @GuardedBy(anyOf = {"mService", "mProcLock"})
+    IApplicationThread getOnewayThread() {
+        return mOnewayThread;
+    }
+
     @GuardedBy({"mService", "mProcLock"})
     public void makeActive(IApplicationThread thread, ProcessStatsService tracker) {
         // TODO(b/180501180): Add back this logging message.
@@ -624,6 +636,11 @@ class ProcessRecord implements WindowProcessListener {
         */
         mProfile.onProcessActive(thread, tracker);
         mThread = thread;
+        if (mPid == Process.myPid()) {
+            mOnewayThread = new SameProcessApplicationThread(thread, FgThread.getHandler());
+        } else {
+            mOnewayThread = thread;
+        }
         mWindowProcessController.setThread(thread);
     }
 
@@ -645,6 +662,7 @@ class ProcessRecord implements WindowProcessListener {
         android.util.SeempLog.record_str(387, seempStr);
         */
         mThread = null;
+        mOnewayThread = null;
         mWindowProcessController.setThread(null);
         mProfile.onProcessInactive(tracker);
     }
@@ -1088,18 +1106,30 @@ class ProcessRecord implements WindowProcessListener {
 
     @GuardedBy("mService")
     void killLocked(String reason, @Reason int reasonCode, boolean noisy) {
-        killLocked(reason, reasonCode, ApplicationExitInfo.SUBREASON_UNKNOWN, noisy);
+        killLocked(reason, reasonCode, ApplicationExitInfo.SUBREASON_UNKNOWN, noisy, true);
     }
 
     @GuardedBy("mService")
     void killLocked(String reason, @Reason int reasonCode, @SubReason int subReason,
             boolean noisy) {
-        killLocked(reason, reason, reasonCode, subReason, noisy);
+        killLocked(reason, reason, reasonCode, subReason, noisy, true);
     }
 
     @GuardedBy("mService")
     void killLocked(String reason, String description, @Reason int reasonCode,
             @SubReason int subReason, boolean noisy) {
+        killLocked(reason, description, reasonCode, subReason, noisy, true);
+    }
+
+    @GuardedBy("mService")
+    void killLocked(String reason, @Reason int reasonCode, @SubReason int subReason,
+            boolean noisy, boolean asyncKPG) {
+        killLocked(reason, reason, reasonCode, subReason, noisy, asyncKPG);
+    }
+
+    @GuardedBy("mService")
+    void killLocked(String reason, String description, @Reason int reasonCode,
+            @SubReason int subReason, boolean noisy, boolean asyncKPG) {
         if (!mKilledByAm) {
             Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "kill");
             if (reasonCode == ApplicationExitInfo.REASON_ANR
@@ -1117,7 +1147,8 @@ class ProcessRecord implements WindowProcessListener {
                 EventLog.writeEvent(EventLogTags.AM_KILL,
                         userId, mPid, processName, mState.getSetAdj(), reason);
                 Process.killProcessQuiet(mPid);
-                ProcessList.killProcessGroup(uid, mPid);
+                if (asyncKPG) ProcessList.killProcessGroup(uid, mPid);
+                else Process.killProcessGroup(uid, mPid);
             } else {
                 mPendingStart = false;
             }
@@ -1130,7 +1161,10 @@ class ProcessRecord implements WindowProcessListener {
             }
             if (ux_perf != null && !mService.mForceStopKill && !mErrorState.isNotResponding()
                 && !mErrorState.isCrashing()) {
-                ux_perf.perfUXEngine_events(BoostFramework.UXE_EVENT_KILL, 0, this.processName, 0);
+                if (ux_perf.board_first_api_lvl < BoostFramework.VENDOR_T_API_LEVEL &&
+                    ux_perf.board_api_lvl < BoostFramework.VENDOR_T_API_LEVEL) {
+                    ux_perf.perfUXEngine_events(BoostFramework.UXE_EVENT_KILL, 0, this.processName, 0);
+                }
                 ux_perf.perfEvent(BoostFramework.VENDOR_HINT_KILL,this.processName, 2, 0,getPid());
             } else {
                 mService.mForceStopKill = false;
@@ -1251,12 +1285,6 @@ class ProcessRecord implements WindowProcessListener {
                     long now = SystemClock.uptimeMillis();
                     baseProcessTracker.setState(ProcessStats.STATE_NOTHING,
                             tracker.getMemFactorLocked(), now, mPkgList.getPackageListLocked());
-                    mPkgList.forEachPackage((pkgName, holder) ->
-                            FrameworkStatsLog.write(FrameworkStatsLog.PROCESS_STATE_CHANGED,
-                                uid, processName, pkgName,
-                                ActivityManager.processStateAmToProto(ProcessStats.STATE_NOTHING),
-                                holder.appVersion)
-                    );
                     if (numOfPkgs != 1) {
                         mPkgList.forEachPackageProcessStats(holder -> {
                             if (holder.state != null && holder.state != baseProcessTracker) {
@@ -1367,6 +1395,10 @@ class ProcessRecord implements WindowProcessListener {
     @Override
     public long getCpuTime() {
         return mService.mAppProfiler.getCpuTimeForPid(mPid);
+    }
+
+    public long getCpuDelayTime() {
+        return mService.mAppProfiler.getCpuDelayTimeForPid(mPid);
     }
 
     @Override

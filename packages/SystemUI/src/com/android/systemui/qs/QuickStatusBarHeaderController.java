@@ -30,6 +30,7 @@ import com.android.systemui.qs.carrier.QSCarrierGroupController;
 import com.android.systemui.qs.dagger.QSScope;
 import com.android.systemui.statusbar.phone.StatusBarContentInsetsProvider;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
+import com.android.systemui.statusbar.phone.StatusBarLocation;
 import com.android.systemui.statusbar.phone.StatusIconContainer;
 import com.android.systemui.statusbar.policy.Clock;
 import com.android.systemui.statusbar.policy.VariableDateViewController;
@@ -104,7 +105,7 @@ class QuickStatusBarHeaderController extends ViewController<QuickStatusBarHeader
                 mView.requireViewById(R.id.date_clock)
         );
 
-        mIconManager = tintedIconManagerFactory.create(mIconContainer);
+        mIconManager = tintedIconManagerFactory.create(mIconContainer, StatusBarLocation.QS);
         mDemoModeReceiver = new ClockDemoModeReceiver(mClockView);
         mColorExtractor = colorExtractor;
         mOnColorsChangedListener = (extractor, which) -> {
@@ -126,6 +127,8 @@ class QuickStatusBarHeaderController extends ViewController<QuickStatusBarHeader
     protected void onViewAttached() {
         mPrivacyIconsController.onParentVisible();
         mPrivacyIconsController.setChipVisibilityListener(this);
+        mIconContainer.addIgnoredSlot(
+                getResources().getString(com.android.internal.R.string.status_bar_alarm_clock));
         mIconContainer.setShouldRestrictIcons(false);
         mStatusBarIconController.addIconGroup(mIconManager);
 

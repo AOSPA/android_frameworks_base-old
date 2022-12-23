@@ -23,12 +23,13 @@ import static org.testng.Assert.assertThrows;
 import android.content.pm.UserProperties;
 import android.os.Parcel;
 import android.platform.test.annotations.Presubmit;
-import android.util.TypedXmlPullParser;
-import android.util.TypedXmlSerializer;
 import android.util.Xml;
 
 import androidx.test.filters.MediumTest;
 import androidx.test.runner.AndroidJUnit4;
+
+import com.android.modules.utils.TypedXmlPullParser;
+import com.android.modules.utils.TypedXmlSerializer;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -58,9 +59,13 @@ public class UserManagerServiceUserPropertiesTest {
         final UserProperties defaultProps = new UserProperties.Builder()
                 .setShowInLauncher(21)
                 .setStartWithParent(false)
+                .setShowInSettings(45)
+                .setInheritDevicePolicy(67)
                 .build();
         final UserProperties actualProps = new UserProperties(defaultProps);
         actualProps.setShowInLauncher(14);
+        actualProps.setShowInSettings(32);
+        actualProps.setInheritDevicePolicy(51);
 
         // Write the properties to xml.
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -98,10 +103,14 @@ public class UserManagerServiceUserPropertiesTest {
         final UserProperties defaultProps = new UserProperties.Builder()
                 .setShowInLauncher(2145)
                 .setStartWithParent(true)
+                .setShowInSettings(3452)
+                .setInheritDevicePolicy(1732)
                 .build();
         final UserProperties orig = new UserProperties(defaultProps);
         orig.setShowInLauncher(2841);
         orig.setStartWithParent(false);
+        orig.setShowInSettings(1437);
+        orig.setInheritDevicePolicy(9456);
 
         // Test every permission level. (Currently, it's linear so it's easy.)
         for (int permLevel = 0; permLevel < 4; permLevel++) {
@@ -137,8 +146,13 @@ public class UserManagerServiceUserPropertiesTest {
 
         // Items requiring exposeAll.
         assertEqualGetterOrThrows(orig::getStartWithParent, copy::getStartWithParent, exposeAll);
+        assertEqualGetterOrThrows(orig::getInheritDevicePolicy,
+                copy::getInheritDevicePolicy, exposeAll);
 
         // Items requiring hasManagePermission - put them here using hasManagePermission.
+        assertEqualGetterOrThrows(orig::getShowInSettings, copy::getShowInSettings,
+                hasManagePermission);
+
         // Items requiring hasQueryPermission - put them here using hasQueryPermission.
 
         // Items with no permission requirements.
@@ -181,5 +195,8 @@ public class UserManagerServiceUserPropertiesTest {
         assertThat(expected.getPropertiesPresent()).isEqualTo(actual.getPropertiesPresent());
         assertThat(expected.getShowInLauncher()).isEqualTo(actual.getShowInLauncher());
         assertThat(expected.getStartWithParent()).isEqualTo(actual.getStartWithParent());
+        assertThat(expected.getShowInSettings()).isEqualTo(actual.getShowInSettings());
+        assertThat(expected.getInheritDevicePolicy()).isEqualTo(
+                actual.getInheritDevicePolicy());
     }
 }

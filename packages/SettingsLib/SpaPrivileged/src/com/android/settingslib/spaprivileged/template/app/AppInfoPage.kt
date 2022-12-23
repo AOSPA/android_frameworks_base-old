@@ -17,8 +17,10 @@
 package com.android.settingslib.spaprivileged.template.app
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import com.android.settingslib.spa.widget.scaffold.RegularScaffold
 import com.android.settingslib.spa.widget.ui.Footer
+import com.android.settingslib.spaprivileged.model.app.PackageManagers
 
 @Composable
 fun AppInfoPage(
@@ -29,7 +31,13 @@ fun AppInfoPage(
     content: @Composable () -> Unit,
 ) {
     RegularScaffold(title = title) {
-        AppInfo(packageName, userId)
+        val appInfoProvider = remember {
+            PackageManagers.getPackageInfoAsUser(packageName, userId)?.let { packageInfo ->
+                AppInfoProvider(packageInfo)
+            }
+        } ?: return@RegularScaffold
+
+        appInfoProvider.AppInfo(displayVersion = true)
 
         content()
 

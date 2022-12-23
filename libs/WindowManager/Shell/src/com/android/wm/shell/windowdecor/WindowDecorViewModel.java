@@ -19,8 +19,6 @@ package com.android.wm.shell.windowdecor;
 import android.app.ActivityManager;
 import android.view.SurfaceControl;
 
-import androidx.annotation.Nullable;
-
 import com.android.wm.shell.freeform.FreeformTaskTransitionStarter;
 
 /**
@@ -28,10 +26,8 @@ import com.android.wm.shell.freeform.FreeformTaskTransitionStarter;
  * customize {@link WindowDecoration}. Its implementations are responsible to interpret user's
  * interactions with UI widgets in window decorations and send corresponding requests to system
  * servers.
- *
- * @param <T> The actual decoration type
  */
-public interface WindowDecorViewModel<T extends AutoCloseable> {
+public interface WindowDecorViewModel {
 
     /**
      * Sets the transition starter that starts freeform task transitions.
@@ -42,35 +38,27 @@ public interface WindowDecorViewModel<T extends AutoCloseable> {
 
     /**
      * Creates a window decoration for the given task.
+     * Can be {@code null} for Fullscreen tasks but not Freeform ones.
      *
      * @param taskInfo the initial task info of the task
      * @param taskSurface the surface of the task
      * @param startT the start transaction to be applied before the transition
      * @param finishT the finish transaction to restore states after the transition
-     * @return the window decoration object
+     * @return {@code true} if window decoration was created, {@code false} otherwise
      */
-    T createWindowDecoration(
+    boolean createWindowDecoration(
             ActivityManager.RunningTaskInfo taskInfo,
             SurfaceControl taskSurface,
             SurfaceControl.Transaction startT,
             SurfaceControl.Transaction finishT);
 
     /**
-     * Adopts the window decoration if possible.
-     *
-     * @param windowDecor the potential window decoration to adopt
-     * @return the window decoration if it can be adopted, or {@code null} otherwise.
-     */
-    T adoptWindowDecoration(@Nullable AutoCloseable windowDecor);
-
-    /**
      * Notifies a task info update on the given task, with the window decoration created previously
      * for this task by {@link #createWindowDecoration}.
      *
      * @param taskInfo the new task info of the task
-     * @param windowDecoration the window decoration created for the task
      */
-    void onTaskInfoChanged(ActivityManager.RunningTaskInfo taskInfo, T windowDecoration);
+    void onTaskInfoChanged(ActivityManager.RunningTaskInfo taskInfo);
 
     /**
      * Notifies a transition is about to start about the given task to give the window decoration a
@@ -78,11 +66,18 @@ public interface WindowDecorViewModel<T extends AutoCloseable> {
      *
      * @param startT the start transaction to be applied before the transition
      * @param finishT the finish transaction to restore states after the transition
-     * @param windowDecoration the window decoration created for the task
+     * @return {@code true} if window decoration exists, {@code false} otherwise
      */
-    void setupWindowDecorationForTransition(
+    boolean setupWindowDecorationForTransition(
             ActivityManager.RunningTaskInfo taskInfo,
             SurfaceControl.Transaction startT,
-            SurfaceControl.Transaction finishT,
-            T windowDecoration);
+            SurfaceControl.Transaction finishT);
+
+    /**
+     * Destroys the window decoration of the give task.
+     *
+     * @param taskInfo the info of the task
+     * @return {@code true} if window decoration was destroyed, {@code false} otherwise
+     */
+    boolean destroyWindowDecoration(ActivityManager.RunningTaskInfo taskInfo);
 }

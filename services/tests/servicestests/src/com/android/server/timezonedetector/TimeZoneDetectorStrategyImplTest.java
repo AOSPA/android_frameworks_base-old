@@ -24,6 +24,8 @@ import static android.app.timezonedetector.TelephonyTimeZoneSuggestion.QUALITY_M
 import static android.app.timezonedetector.TelephonyTimeZoneSuggestion.QUALITY_MULTIPLE_ZONES_WITH_SAME_OFFSET;
 import static android.app.timezonedetector.TelephonyTimeZoneSuggestion.QUALITY_SINGLE_ZONE;
 
+import static com.android.server.SystemTimeZone.TIME_ZONE_CONFIDENCE_HIGH;
+import static com.android.server.SystemTimeZone.TIME_ZONE_CONFIDENCE_LOW;
 import static com.android.server.timezonedetector.TimeZoneDetectorStrategyImpl.TELEPHONY_SCORE_HIGH;
 import static com.android.server.timezonedetector.TimeZoneDetectorStrategyImpl.TELEPHONY_SCORE_HIGHEST;
 import static com.android.server.timezonedetector.TimeZoneDetectorStrategyImpl.TELEPHONY_SCORE_LOW;
@@ -32,31 +34,49 @@ import static com.android.server.timezonedetector.TimeZoneDetectorStrategyImpl.T
 import static com.android.server.timezonedetector.TimeZoneDetectorStrategyImpl.TELEPHONY_SCORE_USAGE_THRESHOLD;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 import android.annotation.ElapsedRealtimeLong;
 import android.annotation.NonNull;
 import android.annotation.UserIdInt;
+import android.app.time.TimeZoneCapabilitiesAndConfig;
+import android.app.time.TimeZoneConfiguration;
+import android.app.time.TimeZoneState;
 import android.app.timezonedetector.ManualTimeZoneSuggestion;
 import android.app.timezonedetector.TelephonyTimeZoneSuggestion;
 import android.app.timezonedetector.TelephonyTimeZoneSuggestion.MatchType;
 import android.app.timezonedetector.TelephonyTimeZoneSuggestion.Quality;
+import android.os.HandlerThread;
 
+import com.android.server.SystemTimeZone.TimeZoneConfidence;
 import com.android.server.timezonedetector.TimeZoneDetectorStrategyImpl.QualifiedTelephonyTimeZoneSuggestion;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 
+import java.io.PrintWriter;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Function;
 
+import junitparams.JUnitParamsRunner;
+import junitparams.Parameters;
+
 /**
  * White-box unit tests for {@link TimeZoneDetectorStrategyImpl}.
  */
+@RunWith(JUnitParamsRunner.class)
 public class TimeZoneDetectorStrategyImplTest {
 
     private static final @UserIdInt int USER_ID = 9876;
@@ -86,7 +106,8 @@ public class TimeZoneDetectorStrategyImplTest {
     };
 
     private static final ConfigurationInternal CONFIG_USER_RESTRICTED_AUTO_DISABLED =
-            new ConfigurationInternal.Builder(USER_ID)
+            new ConfigurationInternal.Builder()
+                    .setUserId(USER_ID)
                     .setTelephonyDetectionFeatureSupported(true)
                     .setGeoDetectionFeatureSupported(true)
                     .setTelephonyFallbackSupported(false)
@@ -99,7 +120,8 @@ public class TimeZoneDetectorStrategyImplTest {
                     .build();
 
     private static final ConfigurationInternal CONFIG_USER_RESTRICTED_AUTO_ENABLED =
-            new ConfigurationInternal.Builder(USER_ID)
+            new ConfigurationInternal.Builder()
+                    .setUserId(USER_ID)
                     .setTelephonyDetectionFeatureSupported(true)
                     .setGeoDetectionFeatureSupported(true)
                     .setTelephonyFallbackSupported(false)
@@ -112,7 +134,8 @@ public class TimeZoneDetectorStrategyImplTest {
                     .build();
 
     private static final ConfigurationInternal CONFIG_AUTO_DETECT_NOT_SUPPORTED =
-            new ConfigurationInternal.Builder(USER_ID)
+            new ConfigurationInternal.Builder()
+                    .setUserId(USER_ID)
                     .setTelephonyDetectionFeatureSupported(false)
                     .setGeoDetectionFeatureSupported(false)
                     .setTelephonyFallbackSupported(false)
@@ -125,7 +148,8 @@ public class TimeZoneDetectorStrategyImplTest {
                     .build();
 
     private static final ConfigurationInternal CONFIG_AUTO_DISABLED_GEO_DISABLED =
-            new ConfigurationInternal.Builder(USER_ID)
+            new ConfigurationInternal.Builder()
+                    .setUserId(USER_ID)
                     .setTelephonyDetectionFeatureSupported(true)
                     .setGeoDetectionFeatureSupported(true)
                     .setTelephonyFallbackSupported(false)
@@ -138,7 +162,8 @@ public class TimeZoneDetectorStrategyImplTest {
                     .build();
 
     private static final ConfigurationInternal CONFIG_AUTO_ENABLED_GEO_DISABLED =
-            new ConfigurationInternal.Builder(USER_ID)
+            new ConfigurationInternal.Builder()
+                    .setUserId(USER_ID)
                     .setTelephonyDetectionFeatureSupported(true)
                     .setGeoDetectionFeatureSupported(true)
                     .setTelephonyFallbackSupported(false)
@@ -151,7 +176,8 @@ public class TimeZoneDetectorStrategyImplTest {
                     .build();
 
     private static final ConfigurationInternal CONFIG_AUTO_ENABLED_GEO_ENABLED =
-            new ConfigurationInternal.Builder(USER_ID)
+            new ConfigurationInternal.Builder()
+                    .setUserId(USER_ID)
                     .setTelephonyDetectionFeatureSupported(true)
                     .setGeoDetectionFeatureSupported(true)
                     .setTelephonyFallbackSupported(false)
@@ -163,14 +189,223 @@ public class TimeZoneDetectorStrategyImplTest {
                     .setGeoDetectionEnabledSetting(true)
                     .build();
 
-    private TimeZoneDetectorStrategyImpl mTimeZoneDetectorStrategy;
+    private FakeServiceConfigAccessor mFakeServiceConfigAccessorSpy;
     private FakeEnvironment mFakeEnvironment;
+    private HandlerThread mHandlerThread;
+    private TestHandler mTestHandler;
+
+    private TimeZoneDetectorStrategyImpl mTimeZoneDetectorStrategy;
 
     @Before
     public void setUp() {
         mFakeEnvironment = new FakeEnvironment();
-        mFakeEnvironment.initializeConfig(CONFIG_AUTO_DISABLED_GEO_DISABLED);
-        mTimeZoneDetectorStrategy = new TimeZoneDetectorStrategyImpl(mFakeEnvironment);
+        mFakeServiceConfigAccessorSpy = spy(new FakeServiceConfigAccessor());
+        mFakeServiceConfigAccessorSpy.initializeCurrentUserConfiguration(
+                CONFIG_AUTO_DISABLED_GEO_DISABLED);
+
+        // Create a thread + handler for processing the work that the strategy posts.
+        mHandlerThread = new HandlerThread("TimeZoneDetectorStrategyImplTest");
+        mHandlerThread.start();
+        mTestHandler = new TestHandler(mHandlerThread.getLooper());
+        mTimeZoneDetectorStrategy = new TimeZoneDetectorStrategyImpl(
+                mFakeServiceConfigAccessorSpy, mTestHandler, mFakeEnvironment);
+    }
+
+    @After
+    public void tearDown() throws Exception {
+        mHandlerThread.quit();
+        mHandlerThread.join();
+    }
+
+    @Test
+    public void testChangeListenerBehavior_currentUser() throws Exception {
+        ConfigurationInternal currentUserConfig = CONFIG_AUTO_DISABLED_GEO_DISABLED;
+        // The strategy initializes itself with the current user's config during construction.
+        assertEquals(currentUserConfig,
+                mTimeZoneDetectorStrategy.getCachedCapabilitiesAndConfigForTests());
+
+        TestStateChangeListener stateChangeListener = new TestStateChangeListener();
+        mTimeZoneDetectorStrategy.addChangeListener(stateChangeListener);
+
+        boolean bypassUserPolicyChecks = false;
+
+        // Report a config change, but not one that actually changes anything.
+        {
+            mFakeServiceConfigAccessorSpy.simulateCurrentUserConfigurationInternalChange(
+                    CONFIG_AUTO_DISABLED_GEO_DISABLED);
+            mTestHandler.waitForMessagesToBeProcessed();
+
+            stateChangeListener.assertNotificationsReceived(0);
+            assertEquals(CONFIG_AUTO_DISABLED_GEO_DISABLED,
+                    mTimeZoneDetectorStrategy.getCachedCapabilitiesAndConfigForTests());
+        }
+
+        // Report a config change that actually changes something.
+        {
+            mFakeServiceConfigAccessorSpy.simulateCurrentUserConfigurationInternalChange(
+                    CONFIG_AUTO_ENABLED_GEO_ENABLED);
+            mTestHandler.waitForMessagesToBeProcessed();
+
+            stateChangeListener.assertNotificationsReceived(1);
+            stateChangeListener.resetNotificationsReceivedCount();
+            assertEquals(CONFIG_AUTO_ENABLED_GEO_ENABLED,
+                    mTimeZoneDetectorStrategy.getCachedCapabilitiesAndConfigForTests());
+        }
+
+        // Perform a (current user) update via the strategy.
+        {
+            TimeZoneConfiguration requestedChanges =
+                    new TimeZoneConfiguration.Builder().setGeoDetectionEnabled(false).build();
+            mTimeZoneDetectorStrategy.updateConfiguration(
+                    USER_ID, requestedChanges, bypassUserPolicyChecks);
+            mTestHandler.waitForMessagesToBeProcessed();
+
+            stateChangeListener.assertNotificationsReceived(1);
+            stateChangeListener.resetNotificationsReceivedCount();
+        }
+    }
+
+    // Perform a (not current user) update via the strategy. There's no listener behavior for
+    // updates to "other" users.
+    @Test
+    public void testChangeListenerBehavior_otherUser() throws Exception {
+        ConfigurationInternal currentUserConfig = CONFIG_AUTO_DISABLED_GEO_DISABLED;
+        // The strategy initializes itself with the current user's config during construction.
+        assertEquals(currentUserConfig,
+                mTimeZoneDetectorStrategy.getCachedCapabilitiesAndConfigForTests());
+
+        TestStateChangeListener stateChangeListener = new TestStateChangeListener();
+        mTimeZoneDetectorStrategy.addChangeListener(stateChangeListener);
+
+        boolean bypassUserPolicyChecks = false;
+
+        int otherUserId = currentUserConfig.getUserId() + 1;
+        ConfigurationInternal otherUserConfig = new ConfigurationInternal.Builder(currentUserConfig)
+                .setUserId(otherUserId)
+                .setGeoDetectionEnabledSetting(true)
+                .build();
+        mFakeServiceConfigAccessorSpy.initializeOtherUserConfiguration(otherUserConfig);
+
+        TimeZoneConfiguration requestedChanges =
+                new TimeZoneConfiguration.Builder().setGeoDetectionEnabled(false).build();
+        mTimeZoneDetectorStrategy.updateConfiguration(
+                otherUserId, requestedChanges, bypassUserPolicyChecks);
+        mTestHandler.waitForMessagesToBeProcessed();
+
+        // Only changes to the current user's config are notified.
+        stateChangeListener.assertNotificationsReceived(0);
+        stateChangeListener.resetNotificationsReceivedCount();
+    }
+
+    // Current user behavior: the strategy caches and returns the latest configuration.
+    @Test
+    public void testReadAndWriteConfiguration_currentUser() throws Exception {
+        ConfigurationInternal currentUserConfig = CONFIG_AUTO_ENABLED_GEO_DISABLED;
+        mFakeServiceConfigAccessorSpy.simulateCurrentUserConfigurationInternalChange(
+                currentUserConfig);
+
+        int otherUserId = currentUserConfig.getUserId() + 1;
+        ConfigurationInternal otherUserConfig = new ConfigurationInternal.Builder(currentUserConfig)
+                .setUserId(otherUserId)
+                .setGeoDetectionEnabledSetting(true)
+                .build();
+        mFakeServiceConfigAccessorSpy.simulateOtherUserConfigurationInternalChange(otherUserConfig);
+        reset(mFakeServiceConfigAccessorSpy);
+
+        final boolean bypassUserPolicyChecks = false;
+
+        ConfigurationInternal cachedConfigurationInternal =
+                mTimeZoneDetectorStrategy.getCachedCapabilitiesAndConfigForTests();
+        assertEquals(currentUserConfig, cachedConfigurationInternal);
+
+        // Confirm getCapabilitiesAndConfig() does not call through to the ServiceConfigAccessor.
+        {
+            reset(mFakeServiceConfigAccessorSpy);
+            TimeZoneCapabilitiesAndConfig actualCapabilitiesAndConfig =
+                    mTimeZoneDetectorStrategy.getCapabilitiesAndConfig(
+                            currentUserConfig.getUserId(), bypassUserPolicyChecks);
+            verify(mFakeServiceConfigAccessorSpy, never()).getConfigurationInternal(
+                    currentUserConfig.getUserId());
+
+            assertEquals(currentUserConfig.asCapabilities(bypassUserPolicyChecks),
+                    actualCapabilitiesAndConfig.getCapabilities());
+            assertEquals(currentUserConfig.asConfiguration(),
+                    actualCapabilitiesAndConfig.getConfiguration());
+        }
+
+        // Confirm updateConfiguration() calls through to the ServiceConfigAccessor and updates
+        // the cached copy.
+        {
+            boolean newGeoDetectionEnabled =
+                    !cachedConfigurationInternal.asConfiguration().isGeoDetectionEnabled();
+            TimeZoneConfiguration requestedChanges = new TimeZoneConfiguration.Builder()
+                    .setGeoDetectionEnabled(newGeoDetectionEnabled)
+                    .build();
+            ConfigurationInternal expectedConfigAfterChange =
+                    new ConfigurationInternal.Builder(cachedConfigurationInternal)
+                            .setGeoDetectionEnabledSetting(newGeoDetectionEnabled)
+                            .build();
+
+            reset(mFakeServiceConfigAccessorSpy);
+            mTimeZoneDetectorStrategy.updateConfiguration(
+                    currentUserConfig.getUserId(), requestedChanges, bypassUserPolicyChecks);
+            verify(mFakeServiceConfigAccessorSpy, times(1)).updateConfiguration(
+                    currentUserConfig.getUserId(), requestedChanges, bypassUserPolicyChecks);
+            assertEquals(expectedConfigAfterChange,
+                    mTimeZoneDetectorStrategy.getCachedCapabilitiesAndConfigForTests());
+        }
+    }
+
+    // Not current user behavior: the strategy reads from the ServiceConfigAccessor.
+    @Test
+    public void testReadAndWriteConfiguration_otherUser() throws Exception {
+        ConfigurationInternal currentUserConfig = CONFIG_AUTO_ENABLED_GEO_DISABLED;
+        mFakeServiceConfigAccessorSpy.simulateCurrentUserConfigurationInternalChange(
+                currentUserConfig);
+
+        int otherUserId = currentUserConfig.getUserId() + 1;
+        ConfigurationInternal otherUserConfig = new ConfigurationInternal.Builder(currentUserConfig)
+                .setUserId(otherUserId)
+                .setGeoDetectionEnabledSetting(true)
+                .build();
+        mFakeServiceConfigAccessorSpy.simulateOtherUserConfigurationInternalChange(otherUserConfig);
+        reset(mFakeServiceConfigAccessorSpy);
+
+        final boolean bypassUserPolicyChecks = false;
+
+        // Confirm getCapabilitiesAndConfig() does not call through to the ServiceConfigAccessor.
+        {
+            reset(mFakeServiceConfigAccessorSpy);
+            TimeZoneCapabilitiesAndConfig actualCapabilitiesAndConfig =
+                    mTimeZoneDetectorStrategy.getCapabilitiesAndConfig(
+                            otherUserId, bypassUserPolicyChecks);
+            verify(mFakeServiceConfigAccessorSpy, times(1)).getConfigurationInternal(otherUserId);
+
+            assertEquals(otherUserConfig.asCapabilities(bypassUserPolicyChecks),
+                    actualCapabilitiesAndConfig.getCapabilities());
+            assertEquals(otherUserConfig.asConfiguration(),
+                    actualCapabilitiesAndConfig.getConfiguration());
+        }
+
+        // Confirm updateConfiguration() calls through to the ServiceConfigAccessor and doesn't
+        // touch the cached copy.
+        {
+            ConfigurationInternal cachedConfigBeforeChange =
+                    mTimeZoneDetectorStrategy.getCachedCapabilitiesAndConfigForTests();
+            boolean newGeoDetectionEnabled =
+                    !otherUserConfig.asConfiguration().isGeoDetectionEnabled();
+            TimeZoneConfiguration requestedChanges = new TimeZoneConfiguration.Builder()
+                    .setGeoDetectionEnabled(newGeoDetectionEnabled)
+                    .build();
+
+            reset(mFakeServiceConfigAccessorSpy);
+            mTimeZoneDetectorStrategy.updateConfiguration(
+                    currentUserConfig.getUserId(), requestedChanges, bypassUserPolicyChecks);
+            verify(mFakeServiceConfigAccessorSpy, times(1)).updateConfiguration(
+                    currentUserConfig.getUserId(), requestedChanges, bypassUserPolicyChecks);
+            assertEquals(cachedConfigBeforeChange,
+                    mTimeZoneDetectorStrategy.getCachedCapabilitiesAndConfigForTests());
+        }
     }
 
     @Test
@@ -180,7 +415,7 @@ public class TimeZoneDetectorStrategyImplTest {
         TelephonyTimeZoneSuggestion slotIndex2TimeZoneSuggestion =
                 createEmptySlotIndex2Suggestion();
         Script script = new Script()
-                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID)
+                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID, TIME_ZONE_CONFIDENCE_LOW)
                 .simulateConfigurationInternalChange(CONFIG_AUTO_ENABLED_GEO_DISABLED)
                 .resetConfigurationTracking();
 
@@ -293,7 +528,7 @@ public class TimeZoneDetectorStrategyImplTest {
 
         for (TelephonyTestCase testCase : TELEPHONY_TEST_CASES) {
             // Start with the device in a known state.
-            script.initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID)
+            script.initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID, TIME_ZONE_CONFIDENCE_LOW)
                     .simulateConfigurationInternalChange(CONFIG_AUTO_DISABLED_GEO_DISABLED)
                     .resetConfigurationTracking();
 
@@ -345,7 +580,7 @@ public class TimeZoneDetectorStrategyImplTest {
     @Test
     public void testTelephonySuggestionsSingleSlotId() {
         Script script = new Script()
-                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID)
+                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID, TIME_ZONE_CONFIDENCE_LOW)
                 .simulateConfigurationInternalChange(CONFIG_AUTO_ENABLED_GEO_DISABLED)
                 .resetConfigurationTracking();
 
@@ -411,7 +646,7 @@ public class TimeZoneDetectorStrategyImplTest {
                         TELEPHONY_SCORE_NONE);
 
         Script script = new Script()
-                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID)
+                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID, TIME_ZONE_CONFIDENCE_LOW)
                 .simulateConfigurationInternalChange(CONFIG_AUTO_ENABLED_GEO_DISABLED)
                 .resetConfigurationTracking()
 
@@ -550,60 +785,15 @@ public class TimeZoneDetectorStrategyImplTest {
                         .setGeoDetectionEnabledSetting(geoDetectionEnabled)
                         .build();
         Script script = new Script()
-                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID)
+                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID, TIME_ZONE_CONFIDENCE_LOW)
                 .simulateConfigurationInternalChange(geoTzEnabledConfig)
                 .resetConfigurationTracking();
 
         // Auto time zone detection is enabled so the manual suggestion should be ignored.
-        script.simulateManualTimeZoneSuggestion(
-                USER_ID, createManualSuggestion("Europe/Paris"), false /* expectedResult */)
-                .verifyTimeZoneNotChanged();
-
-        assertNull(mTimeZoneDetectorStrategy.getLatestManualSuggestion());
-    }
-
-    @Test
-    public void testManualSuggestion_restricted_simulateAutoTimeZoneEnabled() {
-        Script script = new Script()
-                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID)
-                .simulateConfigurationInternalChange(CONFIG_USER_RESTRICTED_AUTO_ENABLED)
-                .resetConfigurationTracking();
-
-        // User is restricted so the manual suggestion should be ignored.
-        script.simulateManualTimeZoneSuggestion(
-                USER_ID, createManualSuggestion("Europe/Paris"), false /* expectedResult */)
-                .verifyTimeZoneNotChanged();
-
-        assertNull(mTimeZoneDetectorStrategy.getLatestManualSuggestion());
-    }
-
-    @Test
-    public void testManualSuggestion_unrestricted_autoTimeZoneDetectionDisabled() {
-        Script script = new Script()
-                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID)
-                .simulateConfigurationInternalChange(CONFIG_AUTO_DISABLED_GEO_DISABLED)
-                .resetConfigurationTracking();
-
-        // Auto time zone detection is disabled so the manual suggestion should be used.
-        ManualTimeZoneSuggestion manualSuggestion = createManualSuggestion("Europe/Paris");
-        script.simulateManualTimeZoneSuggestion(
-                USER_ID, manualSuggestion, true /* expectedResult */)
-            .verifyTimeZoneChangedAndReset(manualSuggestion);
-
-        assertEquals(manualSuggestion, mTimeZoneDetectorStrategy.getLatestManualSuggestion());
-    }
-
-    @Test
-    public void testManualSuggestion_restricted_autoTimeZoneDetectionDisabled() {
-        Script script = new Script()
-                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID)
-                .simulateConfigurationInternalChange(CONFIG_USER_RESTRICTED_AUTO_DISABLED)
-                .resetConfigurationTracking();
-
-        // Restricted users do not have the capability.
-        ManualTimeZoneSuggestion manualSuggestion = createManualSuggestion("Europe/Paris");
-        script.simulateManualTimeZoneSuggestion(
-                USER_ID, manualSuggestion, false /* expectedResult */)
+        boolean bypassUserPolicyChecks = false;
+        boolean expectedResult = false;
+        script.simulateManualTimeZoneSuggestion(USER_ID, createManualSuggestion("Europe/Paris"),
+                        bypassUserPolicyChecks, expectedResult)
                 .verifyTimeZoneNotChanged();
 
         assertNull(mTimeZoneDetectorStrategy.getLatestManualSuggestion());
@@ -612,23 +802,73 @@ public class TimeZoneDetectorStrategyImplTest {
     @Test
     public void testManualSuggestion_autoDetectNotSupported() {
         Script script = new Script()
-                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID)
+                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID, TIME_ZONE_CONFIDENCE_LOW)
                 .simulateConfigurationInternalChange(CONFIG_AUTO_DETECT_NOT_SUPPORTED)
                 .resetConfigurationTracking();
 
         // Unrestricted users have the capability.
         ManualTimeZoneSuggestion manualSuggestion = createManualSuggestion("Europe/Paris");
+        boolean bypassUserPolicyChecks = false;
+        boolean expectedResult = true;
         script.simulateManualTimeZoneSuggestion(
-                USER_ID, manualSuggestion, true /* expectedResult */)
+                USER_ID, manualSuggestion, bypassUserPolicyChecks, expectedResult)
                 .verifyTimeZoneChangedAndReset(manualSuggestion);
 
         assertEquals(manualSuggestion, mTimeZoneDetectorStrategy.getLatestManualSuggestion());
     }
 
     @Test
+    @Parameters({ "true,true", "true,false", "false,true", "false,false" })
+    public void testManualSuggestion_autoTimeEnabled_userRestrictions(
+            boolean userConfigAllowed, boolean bypassUserPolicyChecks) {
+        ConfigurationInternal config =
+                new ConfigurationInternal.Builder(CONFIG_USER_RESTRICTED_AUTO_ENABLED)
+                        .setUserConfigAllowed(userConfigAllowed)
+                        .build();
+        Script script = new Script()
+                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID, TIME_ZONE_CONFIDENCE_LOW)
+                .simulateConfigurationInternalChange(config)
+                .resetConfigurationTracking();
+
+        // User is restricted so the manual suggestion should be ignored.
+        boolean expectedResult = false;
+        script.simulateManualTimeZoneSuggestion(USER_ID, createManualSuggestion("Europe/Paris"),
+                        bypassUserPolicyChecks, expectedResult)
+                .verifyTimeZoneNotChanged();
+
+        assertNull(mTimeZoneDetectorStrategy.getLatestManualSuggestion());
+    }
+
+    @Test
+    @Parameters({ "true,true", "true,false", "false,true", "false,false" })
+    public void testManualSuggestion_autoTimeDisabled_userRestrictions(
+            boolean userConfigAllowed, boolean bypassUserPolicyChecks) {
+        ConfigurationInternal config =
+                new ConfigurationInternal.Builder(CONFIG_AUTO_DISABLED_GEO_DISABLED)
+                        .setUserConfigAllowed(userConfigAllowed)
+                        .build();
+        Script script = new Script()
+                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID, TIME_ZONE_CONFIDENCE_LOW)
+                .simulateConfigurationInternalChange(config)
+                .resetConfigurationTracking();
+
+        ManualTimeZoneSuggestion manualSuggestion = createManualSuggestion("Europe/Paris");
+        boolean expectedResult = userConfigAllowed || bypassUserPolicyChecks;
+        script.simulateManualTimeZoneSuggestion(
+                        USER_ID, manualSuggestion, bypassUserPolicyChecks, expectedResult);
+        if (expectedResult) {
+            script.verifyTimeZoneChangedAndReset(manualSuggestion);
+            assertEquals(manualSuggestion, mTimeZoneDetectorStrategy.getLatestManualSuggestion());
+        } else {
+            script.verifyTimeZoneNotChanged();
+            assertNull(mTimeZoneDetectorStrategy.getLatestManualSuggestion());
+        }
+    }
+
+    @Test
     public void testGeoSuggestion_uncertain() {
         Script script = new Script()
-                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID)
+                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID, TIME_ZONE_CONFIDENCE_LOW)
                 .simulateConfigurationInternalChange(CONFIG_AUTO_ENABLED_GEO_ENABLED)
                 .resetConfigurationTracking();
 
@@ -645,7 +885,7 @@ public class TimeZoneDetectorStrategyImplTest {
     @Test
     public void testGeoSuggestion_noZones() {
         Script script = new Script()
-                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID)
+                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID, TIME_ZONE_CONFIDENCE_LOW)
                 .simulateConfigurationInternalChange(CONFIG_AUTO_ENABLED_GEO_ENABLED)
                 .resetConfigurationTracking();
 
@@ -664,7 +904,7 @@ public class TimeZoneDetectorStrategyImplTest {
                 createCertainGeolocationSuggestion("Europe/London");
 
         Script script = new Script()
-                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID)
+                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID, TIME_ZONE_CONFIDENCE_LOW)
                 .simulateConfigurationInternalChange(CONFIG_AUTO_ENABLED_GEO_ENABLED)
                 .resetConfigurationTracking();
 
@@ -690,7 +930,7 @@ public class TimeZoneDetectorStrategyImplTest {
                 createCertainGeolocationSuggestion("Europe/Paris");
 
         Script script = new Script()
-                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID)
+                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID, TIME_ZONE_CONFIDENCE_LOW)
                 .simulateConfigurationInternalChange(CONFIG_AUTO_ENABLED_GEO_ENABLED)
                 .resetConfigurationTracking();
 
@@ -731,7 +971,7 @@ public class TimeZoneDetectorStrategyImplTest {
                 "Europe/Paris");
 
         Script script = new Script()
-                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID)
+                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID, TIME_ZONE_CONFIDENCE_LOW)
                 .simulateConfigurationInternalChange(CONFIG_AUTO_DISABLED_GEO_DISABLED)
                 .resetConfigurationTracking();
 
@@ -777,7 +1017,7 @@ public class TimeZoneDetectorStrategyImplTest {
 
         Script script = new Script()
                 .initializeClock(ARBITRARY_ELAPSED_REALTIME_MILLIS)
-                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID)
+                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID, TIME_ZONE_CONFIDENCE_LOW)
                 .simulateConfigurationInternalChange(config)
                 .resetConfigurationTracking();
 
@@ -911,7 +1151,7 @@ public class TimeZoneDetectorStrategyImplTest {
 
         Script script = new Script()
                 .initializeClock(ARBITRARY_ELAPSED_REALTIME_MILLIS)
-                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID)
+                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID, TIME_ZONE_CONFIDENCE_LOW)
                 .simulateConfigurationInternalChange(config)
                 .resetConfigurationTracking();
 
@@ -967,6 +1207,78 @@ public class TimeZoneDetectorStrategyImplTest {
     }
 
     @Test
+    public void testGetTimeZoneState() {
+        Script script = new Script()
+                .initializeClock(ARBITRARY_ELAPSED_REALTIME_MILLIS)
+                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID, TIME_ZONE_CONFIDENCE_LOW)
+                .simulateConfigurationInternalChange(CONFIG_AUTO_DISABLED_GEO_DISABLED)
+                .resetConfigurationTracking();
+
+        String timeZoneId = "Europe/London";
+
+        // When confidence is low, the user should confirm.
+        script.initializeTimeZoneSetting(timeZoneId, TIME_ZONE_CONFIDENCE_LOW);
+        assertEquals(new TimeZoneState(timeZoneId, true),
+                mTimeZoneDetectorStrategy.getTimeZoneState());
+
+        // When confidence is high, no need for the user to confirm.
+        script.initializeTimeZoneSetting(timeZoneId, TIME_ZONE_CONFIDENCE_HIGH);
+
+        assertEquals(new TimeZoneState(timeZoneId, false),
+                mTimeZoneDetectorStrategy.getTimeZoneState());
+    }
+
+    @Test
+    public void testSetTimeZoneState() {
+        Script script = new Script()
+                .initializeClock(ARBITRARY_ELAPSED_REALTIME_MILLIS)
+                .initializeTimeZoneSetting(ARBITRARY_TIME_ZONE_ID, TIME_ZONE_CONFIDENCE_LOW)
+                .simulateConfigurationInternalChange(CONFIG_AUTO_DISABLED_GEO_DISABLED)
+                .resetConfigurationTracking();
+
+        String timeZoneId = "Europe/London";
+        boolean userShouldConfirmId = false;
+        TimeZoneState state = new TimeZoneState(timeZoneId, userShouldConfirmId);
+        mTimeZoneDetectorStrategy.setTimeZoneState(state);
+
+        script.verifyTimeZoneChangedAndReset(timeZoneId, TIME_ZONE_CONFIDENCE_HIGH);
+        assertEquals(state, mTimeZoneDetectorStrategy.getTimeZoneState());
+    }
+
+    @Test
+    public void testConfirmTimeZone_autoDisabled() {
+        testConfirmTimeZone(CONFIG_AUTO_DISABLED_GEO_DISABLED);
+    }
+
+    @Test
+    public void testConfirmTimeZone_autoEnabled() {
+        testConfirmTimeZone(CONFIG_AUTO_ENABLED_GEO_DISABLED);
+    }
+
+    private void testConfirmTimeZone(ConfigurationInternal config) {
+        String timeZoneId = "Europe/London";
+        Script script = new Script()
+                .initializeClock(ARBITRARY_ELAPSED_REALTIME_MILLIS)
+                .initializeTimeZoneSetting(timeZoneId, TIME_ZONE_CONFIDENCE_LOW)
+                .simulateConfigurationInternalChange(config)
+                .resetConfigurationTracking();
+
+        String incorrectTimeZoneId = "Europe/Paris";
+        assertFalse(mTimeZoneDetectorStrategy.confirmTimeZone(incorrectTimeZoneId));
+        script.verifyTimeZoneNotChanged();
+
+        assertTrue(mTimeZoneDetectorStrategy.confirmTimeZone(timeZoneId));
+        script.verifyTimeZoneChangedAndReset(timeZoneId, TIME_ZONE_CONFIDENCE_HIGH);
+
+        assertTrue(mTimeZoneDetectorStrategy.confirmTimeZone(timeZoneId));
+        // The strategy checks the current confidence and if it is already high it takes no action.
+        script.verifyTimeZoneNotChanged();
+
+        assertFalse(mTimeZoneDetectorStrategy.confirmTimeZone(incorrectTimeZoneId));
+        script.verifyTimeZoneNotChanged();
+    }
+
+    @Test
     public void testGenerateMetricsState_enhancedMetricsCollection() {
         testGenerateMetricsState(true);
     }
@@ -984,7 +1296,7 @@ public class TimeZoneDetectorStrategyImplTest {
         String expectedDeviceTimeZoneId = "InitialZoneId";
 
         Script script = new Script()
-                .initializeTimeZoneSetting(expectedDeviceTimeZoneId)
+                .initializeTimeZoneSetting(expectedDeviceTimeZoneId, TIME_ZONE_CONFIDENCE_LOW)
                 .simulateConfigurationInternalChange(expectedInternalConfig)
                 .resetConfigurationTracking();
 
@@ -993,8 +1305,10 @@ public class TimeZoneDetectorStrategyImplTest {
 
         // Make sure the manual suggestion is recorded.
         ManualTimeZoneSuggestion manualSuggestion = createManualSuggestion("Zone1");
-        script.simulateManualTimeZoneSuggestion(USER_ID, manualSuggestion,
-                true /* expectedResult */)
+        boolean bypassUserPolicyChecks = false;
+        boolean expectedResult = true;
+        script.simulateManualTimeZoneSuggestion(
+                USER_ID, manualSuggestion, bypassUserPolicyChecks, expectedResult)
                 .verifyTimeZoneChangedAndReset(manualSuggestion);
         expectedDeviceTimeZoneId = manualSuggestion.getZoneId();
         assertMetricsState(expectedInternalConfig, expectedDeviceTimeZoneId,
@@ -1024,7 +1338,7 @@ public class TimeZoneDetectorStrategyImplTest {
 
         expectedDeviceTimeZoneId = geolocationTimeZoneSuggestion.getZoneIds().get(0);
         script.simulateConfigurationInternalChange(expectedInternalConfig)
-                .verifyTimeZoneChangedAndReset(expectedDeviceTimeZoneId);
+                .verifyTimeZoneChangedAndReset(expectedDeviceTimeZoneId, TIME_ZONE_CONFIDENCE_HIGH);
         assertMetricsState(expectedInternalConfig, expectedDeviceTimeZoneId,
                 manualSuggestion, telephonySuggestion, geolocationTimeZoneSuggestion,
                 MetricsTimeZoneDetectorState.DETECTION_MODE_GEO);
@@ -1110,39 +1424,25 @@ public class TimeZoneDetectorStrategyImplTest {
     static class FakeEnvironment implements TimeZoneDetectorStrategyImpl.Environment {
 
         private final TestState<String> mTimeZoneId = new TestState<>();
-        private ConfigurationInternal mConfigurationInternal;
+        private final TestState<Integer> mTimeZoneConfidence = new TestState<>();
         private @ElapsedRealtimeLong long mElapsedRealtimeMillis;
-        private ConfigurationChangeListener mConfigurationInternalChangeListener;
 
-        void initializeConfig(ConfigurationInternal configurationInternal) {
-            mConfigurationInternal = configurationInternal;
+        FakeEnvironment() {
+            // Ensure the fake environment starts with the defaults a fresh device would.
+            initializeTimeZoneSetting("", TIME_ZONE_CONFIDENCE_LOW);
         }
 
         void initializeClock(@ElapsedRealtimeLong long elapsedRealtimeMillis) {
             mElapsedRealtimeMillis = elapsedRealtimeMillis;
         }
 
-        void initializeTimeZoneSetting(String zoneId) {
+        void initializeTimeZoneSetting(String zoneId, @TimeZoneConfidence int timeZoneConfidence) {
             mTimeZoneId.init(zoneId);
+            mTimeZoneConfidence.init(timeZoneConfidence);
         }
 
         void incrementClock() {
             mElapsedRealtimeMillis++;
-        }
-
-        @Override
-        public void setConfigurationInternalChangeListener(ConfigurationChangeListener listener) {
-            mConfigurationInternalChangeListener = listener;
-        }
-
-        @Override
-        public ConfigurationInternal getCurrentUserConfigurationInternal() {
-            return mConfigurationInternal;
-        }
-
-        @Override
-        public boolean isDeviceTimeZoneInitialized() {
-            return mTimeZoneId.getLatest() != null;
         }
 
         @Override
@@ -1151,33 +1451,51 @@ public class TimeZoneDetectorStrategyImplTest {
         }
 
         @Override
-        public void setDeviceTimeZone(String zoneId) {
-            mTimeZoneId.set(zoneId);
+        public int getDeviceTimeZoneConfidence() {
+            return mTimeZoneConfidence.getLatest();
         }
 
-        void simulateConfigurationInternalChange(ConfigurationInternal configurationInternal) {
-            mConfigurationInternal = configurationInternal;
-            mConfigurationInternalChangeListener.onChange();
+        @Override
+        public void setDeviceTimeZoneAndConfidence(
+                String zoneId, @TimeZoneConfidence int confidence, String logInfo) {
+            mTimeZoneId.set(zoneId);
+            mTimeZoneConfidence.set(confidence);
         }
 
         void assertTimeZoneNotChanged() {
             mTimeZoneId.assertHasNotBeenSet();
+            mTimeZoneConfidence.assertHasNotBeenSet();
         }
 
-        void assertTimeZoneChangedTo(String timeZoneId) {
+        void assertTimeZoneChangedTo(String timeZoneId, @TimeZoneConfidence int confidence) {
             mTimeZoneId.assertHasBeenSet();
             mTimeZoneId.assertChangeCount(1);
             mTimeZoneId.assertLatestEquals(timeZoneId);
+
+            mTimeZoneConfidence.assertHasBeenSet();
+            mTimeZoneConfidence.assertChangeCount(1);
+            mTimeZoneConfidence.assertLatestEquals(confidence);
         }
 
         void commitAllChanges() {
             mTimeZoneId.commitLatest();
+            mTimeZoneConfidence.commitLatest();
         }
 
         @Override
         @ElapsedRealtimeLong
         public long elapsedRealtimeMillis() {
             return mElapsedRealtimeMillis;
+        }
+
+        @Override
+        public void addDebugLogEntry(String logMsg) {
+            // No-op for tests
+        }
+
+        @Override
+        public void dumpDebugLog(PrintWriter printWriter) {
+            // No-op for tests
         }
     }
 
@@ -1187,8 +1505,9 @@ public class TimeZoneDetectorStrategyImplTest {
      */
     private class Script {
 
-        Script initializeTimeZoneSetting(String zoneId) {
-            mFakeEnvironment.initializeTimeZoneSetting(zoneId);
+        Script initializeTimeZoneSetting(
+                String zoneId, @TimeZoneConfidence int timeZoneConfidence) {
+            mFakeEnvironment.initializeTimeZoneSetting(zoneId, timeZoneConfidence);
             return this;
         }
 
@@ -1206,7 +1525,8 @@ public class TimeZoneDetectorStrategyImplTest {
          * Simulates the user / user's configuration changing.
          */
         Script simulateConfigurationInternalChange(ConfigurationInternal configurationInternal) {
-            mFakeEnvironment.simulateConfigurationInternalChange(configurationInternal);
+            mFakeServiceConfigAccessorSpy.simulateCurrentUserConfigurationInternalChange(
+                    configurationInternal);
             return this;
         }
 
@@ -1215,7 +1535,7 @@ public class TimeZoneDetectorStrategyImplTest {
          */
         Script simulateSetAutoMode(boolean autoDetectionEnabled) {
             ConfigurationInternal newConfig = new ConfigurationInternal.Builder(
-                    mFakeEnvironment.getCurrentUserConfigurationInternal())
+                    mFakeServiceConfigAccessorSpy.getCurrentUserConfigurationInternal())
                     .setAutoDetectionEnabledSetting(autoDetectionEnabled)
                     .build();
             simulateConfigurationInternalChange(newConfig);
@@ -1227,7 +1547,7 @@ public class TimeZoneDetectorStrategyImplTest {
          */
         Script simulateSetGeoDetectionEnabled(boolean geoDetectionEnabled) {
             ConfigurationInternal newConfig = new ConfigurationInternal.Builder(
-                    mFakeEnvironment.getCurrentUserConfigurationInternal())
+                    mFakeServiceConfigAccessorSpy.getCurrentUserConfigurationInternal())
                     .setGeoDetectionEnabledSetting(geoDetectionEnabled)
                     .build();
             simulateConfigurationInternalChange(newConfig);
@@ -1246,9 +1566,9 @@ public class TimeZoneDetectorStrategyImplTest {
         /** Simulates the time zone detection strategy receiving a user-originated suggestion. */
         Script simulateManualTimeZoneSuggestion(
                 @UserIdInt int userId, ManualTimeZoneSuggestion manualTimeZoneSuggestion,
-                boolean expectedResult) {
+                boolean bypassUserPolicyChecks, boolean expectedResult) {
             boolean actualResult = mTimeZoneDetectorStrategy.suggestManualTimeZone(
-                    userId, manualTimeZoneSuggestion);
+                    userId, manualTimeZoneSuggestion, bypassUserPolicyChecks);
             assertEquals(expectedResult, actualResult);
             return this;
         }
@@ -1280,29 +1600,27 @@ public class TimeZoneDetectorStrategyImplTest {
         }
 
         /** Verifies the device's time zone has been set and clears change tracking history. */
-        Script verifyTimeZoneChangedAndReset(String zoneId) {
-            mFakeEnvironment.assertTimeZoneChangedTo(zoneId);
+        Script verifyTimeZoneChangedAndReset(String zoneId, @TimeZoneConfidence int confidence) {
+            mFakeEnvironment.assertTimeZoneChangedTo(zoneId, confidence);
             mFakeEnvironment.commitAllChanges();
             return this;
         }
 
         Script verifyTimeZoneChangedAndReset(ManualTimeZoneSuggestion suggestion) {
-            mFakeEnvironment.assertTimeZoneChangedTo(suggestion.getZoneId());
-            mFakeEnvironment.commitAllChanges();
+            verifyTimeZoneChangedAndReset(suggestion.getZoneId(), TIME_ZONE_CONFIDENCE_HIGH);
             return this;
         }
 
         Script verifyTimeZoneChangedAndReset(TelephonyTimeZoneSuggestion suggestion) {
-            mFakeEnvironment.assertTimeZoneChangedTo(suggestion.getZoneId());
-            mFakeEnvironment.commitAllChanges();
+            verifyTimeZoneChangedAndReset(suggestion.getZoneId(), TIME_ZONE_CONFIDENCE_HIGH);
             return this;
         }
 
         Script verifyTimeZoneChangedAndReset(GeolocationTimeZoneSuggestion suggestion) {
             assertEquals("Only use this method with unambiguous geo suggestions",
                     1, suggestion.getZoneIds().size());
-            mFakeEnvironment.assertTimeZoneChangedTo(suggestion.getZoneIds().get(0));
-            mFakeEnvironment.commitAllChanges();
+            verifyTimeZoneChangedAndReset(
+                    suggestion.getZoneIds().get(0), TIME_ZONE_CONFIDENCE_HIGH);
             return this;
         }
 
@@ -1342,5 +1660,23 @@ public class TimeZoneDetectorStrategyImplTest {
     private static TelephonyTestCase newTelephonyTestCase(
             @MatchType int matchType, @Quality int quality, int expectedScore) {
         return new TelephonyTestCase(matchType, quality, expectedScore);
+    }
+
+    private static class TestStateChangeListener implements StateChangeListener {
+
+        private int mNotificationsReceived;
+
+        @Override
+        public void onChange() {
+            mNotificationsReceived++;
+        }
+
+        public void resetNotificationsReceivedCount() {
+            mNotificationsReceived = 0;
+        }
+
+        public void assertNotificationsReceived(int expectedCount) {
+            assertEquals(expectedCount, mNotificationsReceived);
+        }
     }
 }

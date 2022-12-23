@@ -19,6 +19,7 @@ package com.android.systemui.keyguard;
 import static android.view.WindowManagerPolicyConstants.OFF_BECAUSE_OF_USER;
 
 import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STRONG_AUTH_REQUIRED_AFTER_DPM_LOCK_NOW;
+import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STRONG_AUTH_REQUIRED_AFTER_NON_STRONG_BIOMETRICS_TIMEOUT;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -48,7 +49,6 @@ import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.KeyguardDisplayManager;
 import com.android.keyguard.KeyguardSecurityView;
 import com.android.keyguard.KeyguardUpdateMonitor;
-import com.android.keyguard.logging.KeyguardViewMediatorLogger;
 import com.android.keyguard.mediator.ScreenOnCoordinator;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.animation.ActivityLaunchAnimator;
@@ -57,9 +57,11 @@ import com.android.systemui.classifier.FalsingCollectorFake;
 import com.android.systemui.dreams.DreamOverlayStateController;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.navigationbar.NavigationModeController;
+import com.android.systemui.shade.ShadeController;
 import com.android.systemui.statusbar.NotificationShadeDepthController;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
+import com.android.systemui.statusbar.phone.CentralSurfaces;
 import com.android.systemui.statusbar.phone.DozeParameters;
 import com.android.systemui.statusbar.phone.ScreenOffAnimationController;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
@@ -107,16 +109,18 @@ public class KeyguardViewMediatorTest extends SysuiTestCase {
     private @Mock ScreenOffAnimationController mScreenOffAnimationController;
     private @Mock InteractionJankMonitor mInteractionJankMonitor;
     private @Mock ScreenOnCoordinator mScreenOnCoordinator;
+    private @Mock ShadeController mShadeController;
     private @Mock Lazy<NotificationShadeWindowController> mNotificationShadeWindowControllerLazy;
     private @Mock DreamOverlayStateController mDreamOverlayStateController;
     private @Mock ActivityLaunchAnimator mActivityLaunchAnimator;
-    private @Mock KeyguardViewMediatorLogger mLogger;
     private @Mock FoldAodAnimationController mFoldAodAnimationController;
     private @Mock UnfoldLightRevealOverlayAnimation mUnfoldAnimation;
     private DeviceConfigProxy mDeviceConfig = new DeviceConfigProxyFake();
     private FakeExecutor mUiBgExecutor = new FakeExecutor(new FakeSystemClock());
 
     private FalsingCollectorFake mFalsingCollector;
+
+    private @Mock CentralSurfaces mCentralSurfaces;
 
     @Before
     public void setUp() throws Exception {
@@ -200,10 +204,52 @@ public class KeyguardViewMediatorTest extends SysuiTestCase {
     }
 
     @Test
+    public void testBouncerPrompt_nonStrongIdleTimeout() {
+        // GIVEN trust agents enabled and biometrics are enrolled
+        when(mUpdateMonitor.isTrustUsuallyManaged(anyInt())).thenReturn(true);
+        when(mUpdateMonitor.isUnlockingWithBiometricsPossible(anyInt())).thenReturn(true);
+
+        // WHEN the strong auth reason is STRONG_AUTH_REQUIRED_AFTER_NON_STRONG_BIOMETRICS_TIMEOUT
+        KeyguardUpdateMonitor.StrongAuthTracker strongAuthTracker =
+                mock(KeyguardUpdateMonitor.StrongAuthTracker.class);
+        when(mUpdateMonitor.getStrongAuthTracker()).thenReturn(strongAuthTracker);
+        when(strongAuthTracker.hasUserAuthenticatedSinceBoot()).thenReturn(true);
+        when(strongAuthTracker.isNonStrongBiometricAllowedAfterIdleTimeout(
+                anyInt())).thenReturn(false);
+        when(strongAuthTracker.getStrongAuthForUser(anyInt())).thenReturn(
+                STRONG_AUTH_REQUIRED_AFTER_NON_STRONG_BIOMETRICS_TIMEOUT);
+
+        // THEN the bouncer prompt reason should return
+        // STRONG_AUTH_REQUIRED_AFTER_NON_STRONG_BIOMETRICS_TIMEOUT
+        assertEquals(KeyguardSecurityView.PROMPT_REASON_NON_STRONG_BIOMETRIC_TIMEOUT,
+                mViewMediator.mViewMediatorCallback.getBouncerPromptReason());
+    }
+
+    @Test
     public void testHideSurfaceBehindKeyguardMarksKeyguardNotGoingAway() {
         mViewMediator.hideSurfaceBehindKeyguard();
 
         verify(mKeyguardStateController).notifyKeyguardGoingAway(false);
+    }
+
+    @Test
+    public void testUpdateIsKeyguardAfterOccludeAnimationEnds() {
+        mViewMediator.mOccludeAnimationController.onLaunchAnimationEnd(
+                false /* isExpandingFullyAbove */);
+
+        // Since the updateIsKeyguard call is delayed during the animation, ensure it's called once
+        // it ends.
+        verify(mCentralSurfaces).updateIsKeyguard();
+    }
+
+    @Test
+    public void testUpdateIsKeyguardAfterOccludeAnimationIsCancelled() {
+        mViewMediator.mOccludeAnimationController.onLaunchAnimationCancelled(
+                null /* newKeyguardOccludedState */);
+
+        // Since the updateIsKeyguard call is delayed during the animation, ensure it's called if
+        // it's cancelled.
+        verify(mCentralSurfaces).updateIsKeyguard();
     }
 
     private void createAndStartViewMediator() {
@@ -232,9 +278,11 @@ public class KeyguardViewMediatorTest extends SysuiTestCase {
                 mScreenOnCoordinator,
                 mInteractionJankMonitor,
                 mDreamOverlayStateController,
+                () -> mShadeController,
                 mNotificationShadeWindowControllerLazy,
-                () -> mActivityLaunchAnimator,
-                mLogger);
+                () -> mActivityLaunchAnimator);
         mViewMediator.start();
+
+        mViewMediator.registerCentralSurfaces(mCentralSurfaces, null, null, null, null, null);
     }
 }

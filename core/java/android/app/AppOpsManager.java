@@ -25,6 +25,7 @@ import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
+import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
@@ -554,7 +555,7 @@ public class AppOpsManager {
      * @hide
      */
     public static int resolveFirstUnrestrictedUidState(int op) {
-        return UID_STATE_FOREGROUND;
+        return UID_STATE_MAX_LAST_NON_RESTRICTED;
     }
 
     /**
@@ -866,7 +867,7 @@ public class AppOpsManager {
 
     // when adding one of these:
     //  - increment _NUM_OP
-    //  - define an OPSTR_* constant (marked as @SystemApi)
+    //  - define an OPSTR_* constant (and mark as @SystemApi if needed)
     //  - add row to sAppOpInfos
     //  - add descriptive strings to Settings/res/values/arrays.xml
     //  - add the op to the appropriate template in AppOpsState.OpsTemplate (settings app)
@@ -1342,9 +1343,56 @@ public class AppOpsManager {
     public static final int OP_RECEIVE_AMBIENT_TRIGGER_AUDIO =
             AppProtoEnums.APP_OP_RECEIVE_AMBIENT_TRIGGER_AUDIO;
 
+     /**
+      * Receive audio from near-field mic (ie. TV remote)
+      * Allows audio recording regardless of sensor privacy state,
+      *  as it is an intentional user interaction: hold-to-talk
+      *
+      * @hide
+      */
+    public static final int OP_RECEIVE_EXPLICIT_USER_INTERACTION_AUDIO =
+            AppProtoEnums.APP_OP_RECEIVE_EXPLICIT_USER_INTERACTION_AUDIO;
+
+    /**
+     * App can schedule long running jobs.
+     *
+     * @hide
+     */
+    public static final int OP_RUN_LONG_JOBS = AppProtoEnums.APP_OP_RUN_LONG_JOBS;
+
+    /**
+     * Notify apps that they have been granted URI permission photos
+     *
+     * @hide
+     */
+    public static final int OP_READ_MEDIA_VISUAL_USER_SELECTED =
+            AppProtoEnums.APP_OP_READ_MEDIA_VISUAL_USER_SELECTED;
+
+    /**
+     * Prevent an app from being placed into app standby buckets.
+     *
+     * Only to be used by the system.
+     *
+     * @hide
+     */
+    public static final int OP_SYSTEM_EXEMPT_FROM_APP_STANDBY =
+            AppProtoEnums.APP_OP_SYSTEM_EXEMPT_FROM_APP_STANDBY;
+
+    /**
+     * Prevent an app from being placed into forced app standby.
+     * {@link ActivityManager#isBackgroundRestricted()}
+     * {@link #OP_RUN_ANY_IN_BACKGROUND}
+     *
+     * Only to be used by the system.
+     *
+     * @hide
+     */
+    public static final int OP_SYSTEM_EXEMPT_FROM_FORCED_APP_STANDBY =
+            AppProtoEnums.APP_OP_SYSTEM_EXEMPT_FROM_FORCED_APP_STANDBY;
+
     /** @hide */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-    public static final int _NUM_OP = 121;
+    public static final int _NUM_OP = 126;
 
     /** Access to coarse location information. */
     public static final String OPSTR_COARSE_LOCATION = "android:coarse_location";
@@ -1812,8 +1860,58 @@ public class AppOpsManager {
      *
      * @hide
      */
+    @SystemApi
     public static final String OPSTR_RECEIVE_AMBIENT_TRIGGER_AUDIO =
             "android:receive_ambient_trigger_audio";
+    /**
+     * Notify apps that they have been granted URI permission photos
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String OPSTR_READ_MEDIA_VISUAL_USER_SELECTED =
+            "android:read_media_visual_user_selected";
+
+    /**
+     * Record audio from near-field microphone (ie. TV remote)
+     * Allows audio recording regardless of sensor privacy state,
+     *  as it is an intentional user interaction: hold-to-talk
+     *
+     * @hide
+     */
+    @SystemApi
+    @SuppressLint("IntentName")
+    public static final String OPSTR_RECEIVE_EXPLICIT_USER_INTERACTION_AUDIO =
+            "android:receive_explicit_user_interaction_audio";
+
+    /**
+     * App can schedule long running jobs.
+     *
+     * @hide
+     */
+    public static final String OPSTR_RUN_LONG_JOBS = "android:run_long_jobs";
+
+    /**
+     * Prevent an app from being placed into app standby buckets.
+     *
+     * Only to be used by the system.
+     *
+     * @hide
+     */
+    public static final String OPSTR_SYSTEM_EXEMPT_FROM_APP_STANDBY =
+            "android:system_exempt_from_app_standby";
+
+    /**
+     * Prevent an app from being placed into forced app standby.
+     * {@link ActivityManager#isBackgroundRestricted()}
+     * {@link #OP_RUN_ANY_IN_BACKGROUND}
+     *
+     * Only to be used by the system.
+     *
+     * @hide
+     */
+    public static final String OPSTR_SYSTEM_EXEMPT_FROM_FORCED_APP_STANDBY =
+            "android:system_exempt_from_forced_app_standby";
 
     /** {@link #sAppOpsToNote} not initialized yet for this op */
     private static final byte SHOULD_COLLECT_NOTE_OP_NOT_INITIALIZED = 0;
@@ -1829,6 +1927,9 @@ public class AppOpsManager {
             SHOULD_COLLECT_NOTE_OP
     })
     private @interface ShouldCollectNoteOp {}
+
+    /** Whether noting for an appop should be collected */
+    private static final @ShouldCollectNoteOp byte[] sAppOpsToNote = new byte[_NUM_OP];
 
     private static final int[] RUNTIME_AND_APPOP_PERMISSIONS_OPS = {
             // RUNTIME PERMISSIONS
@@ -1906,6 +2007,8 @@ public class AppOpsManager {
             OP_SCHEDULE_EXACT_ALARM,
             OP_MANAGE_MEDIA,
             OP_TURN_SCREEN_ON,
+            OP_RUN_LONG_JOBS,
+            OP_READ_MEDIA_VISUAL_USER_SELECTED,
     };
 
     static final AppOpInfo[] sAppOpInfos = new AppOpInfo[]{
@@ -2280,8 +2383,33 @@ public class AppOpsManager {
                 "ACCESS_RESTRICTED_SETTINGS").setDefaultMode(AppOpsManager.MODE_ALLOWED)
             .setDisableReset(true).setRestrictRead(true).build(),
         new AppOpInfo.Builder(OP_RECEIVE_AMBIENT_TRIGGER_AUDIO, OPSTR_RECEIVE_AMBIENT_TRIGGER_AUDIO,
-                "RECEIVE_SOUNDTRIGGER_AUDIO").setDefaultMode(AppOpsManager.MODE_ALLOWED).build()
+                "RECEIVE_SOUNDTRIGGER_AUDIO").setDefaultMode(AppOpsManager.MODE_ALLOWED)
+                .setForceCollectNotes(true).build(),
+        new AppOpInfo.Builder(OP_RECEIVE_EXPLICIT_USER_INTERACTION_AUDIO,
+                OPSTR_RECEIVE_EXPLICIT_USER_INTERACTION_AUDIO,
+                "RECEIVE_EXPLICIT_USER_INTERACTION_AUDIO").setDefaultMode(
+                AppOpsManager.MODE_ALLOWED).build(),
+        new AppOpInfo.Builder(OP_RUN_LONG_JOBS, OPSTR_RUN_LONG_JOBS, "RUN_LONG_JOBS")
+                .setPermission(Manifest.permission.RUN_LONG_JOBS).build(),
+            new AppOpInfo.Builder(OP_READ_MEDIA_VISUAL_USER_SELECTED,
+                    OPSTR_READ_MEDIA_VISUAL_USER_SELECTED, "READ_MEDIA_VISUAL_USER_SELECTED")
+                    .setPermission(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
+                    .setDefaultMode(AppOpsManager.MODE_ALLOWED).build(),
+        new AppOpInfo.Builder(OP_SYSTEM_EXEMPT_FROM_APP_STANDBY,
+                OPSTR_SYSTEM_EXEMPT_FROM_APP_STANDBY,
+                "SYSTEM_EXEMPT_FROM_APP_STANDBY").build(),
+        new AppOpInfo.Builder(OP_SYSTEM_EXEMPT_FROM_FORCED_APP_STANDBY,
+                OPSTR_SYSTEM_EXEMPT_FROM_FORCED_APP_STANDBY,
+                "SYSTEM_EXEMPT_FROM_FORCED_APP_STANDBY").build()
     };
+
+    /**
+     * @hide
+     */
+    public static boolean shouldForceCollectNoteForOp(int op) {
+        Preconditions.checkArgumentInRange(op, 0, _NUM_OP - 1, "opCode");
+        return sAppOpInfos[op].forceCollectNotes;
+    }
 
     /**
      * Mapping from an app op name to the app op code.
@@ -2311,9 +2439,6 @@ public class AppOpsManager {
      */
     private static final ThreadLocal<ArrayMap<String, long[]>> sAppOpsNotedInThisBinderTransaction =
             new ThreadLocal<>();
-
-    /** Whether noting for an appop should be collected */
-    private static final @ShouldCollectNoteOp byte[] sAppOpsToNote = new byte[_NUM_OP];
 
     static {
         if (sAppOpInfos.length != _NUM_OP) {
@@ -8179,7 +8304,7 @@ public class AppOpsManager {
      * @see #startOp(String, int, String, String, String)
      */
     public int startOpNoThrow(@NonNull String op, int uid, @NonNull String packageName,
-            @NonNull String attributionTag, @Nullable String message) {
+            @Nullable String attributionTag, @Nullable String message) {
         return startOpNoThrow(strOpToOp(op), uid, packageName, false, attributionTag, message);
     }
 

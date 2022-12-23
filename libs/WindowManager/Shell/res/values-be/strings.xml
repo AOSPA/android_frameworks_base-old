@@ -22,8 +22,7 @@
     <string name="pip_phone_settings" msgid="5468987116750491918">"Налады"</string>
     <string name="pip_phone_enter_split" msgid="7042877263880641911">"Падзяліць экран"</string>
     <string name="pip_menu_title" msgid="5393619322111827096">"Меню"</string>
-    <!-- no translation found for pip_menu_accessibility_title (8129016817688656249) -->
-    <skip />
+    <string name="pip_menu_accessibility_title" msgid="8129016817688656249">"Меню рэжыму \"Відарыс у відарысе\""</string>
     <string name="pip_notification_title" msgid="1347104727641353453">"<xliff:g id="NAME">%s</xliff:g> з’яўляецца відарысам у відарысе"</string>
     <string name="pip_notification_message" msgid="8854051911700302620">"Калі вы не хочаце, каб праграма <xliff:g id="NAME">%s</xliff:g> выкарыстоўвала гэту функцыю, дакраніцеся, каб адкрыць налады і адключыць яе."</string>
     <string name="pip_play" msgid="3496151081459417097">"Прайграць"</string>
@@ -38,8 +37,7 @@
     <string name="forced_resizable_secondary_display" msgid="1768046938673582671">"Праграма можа не працаваць на дадатковых экранах."</string>
     <string name="activity_launch_on_secondary_display_failed_text" msgid="4226485344988071769">"Праграма не падтрымлівае запуск на дадатковых экранах."</string>
     <string name="accessibility_divider" msgid="703810061635792791">"Раздзяляльнік падзеленага экрана"</string>
-    <!-- no translation found for divider_title (5482989479865361192) -->
-    <skip />
+    <string name="divider_title" msgid="5482989479865361192">"Раздзяляльнік падзеленага экрана"</string>
     <string name="accessibility_action_divider_left_full" msgid="1792313656305328536">"Левы экран – поўнаэкранны рэжым"</string>
     <string name="accessibility_action_divider_left_70" msgid="8859845045360659250">"Левы экран – 70%"</string>
     <string name="accessibility_action_divider_left_50" msgid="3488317024557521561">"Левы экран – 50%"</string>
@@ -80,12 +78,24 @@
     <string name="camera_compat_treatment_suggested_button_description" msgid="8103916969024076767">"Праблемы з камерай?\nНацісніце, каб пераабсталяваць"</string>
     <string name="camera_compat_treatment_applied_button_description" msgid="2944157113330703897">"Не ўдалося выправіць?\nНацісніце, каб аднавіць"</string>
     <string name="camera_compat_dismiss_button_description" msgid="2795364433503817511">"Ніякіх праблем з камерай? Націсніце, каб адхіліць."</string>
-    <string name="letterbox_education_dialog_title" msgid="6688664582871779215">"Некаторыя праграмы лепш за ўсё працуюць у кніжнай арыентацыі"</string>
-    <string name="letterbox_education_dialog_subtext" msgid="4853542518367719562">"Каб эфектыўна выкарыстоўваць прастору, паспрабуйце адзін з гэтых варыянтаў"</string>
-    <string name="letterbox_education_screen_rotation_text" msgid="5085786687366339027">"Каб перайсці ў поўнаэкранны рэжым, павярніце прыладу"</string>
-    <string name="letterbox_education_reposition_text" msgid="1068293354123934727">"Двойчы націсніце побач з праграмай, каб перамясціць яе"</string>
+    <string name="letterbox_education_dialog_title" msgid="7739895354143295358">"Адначасова выконвайце розныя задачы"</string>
+    <string name="letterbox_education_split_screen_text" msgid="6206339484068670830">"Перацягніце іншую праграму, каб выкарыстоўваць падзелены экран"</string>
+    <string name="letterbox_education_reposition_text" msgid="4589957299813220661">"Двойчы націсніце экран па-за праграмай, каб перамясціць яе"</string>
     <string name="letterbox_education_got_it" msgid="4057634570866051177">"Зразумела"</string>
     <string name="letterbox_education_expand_button_description" msgid="1729796567101129834">"Разгарнуць для дадатковай інфармацыі"</string>
     <string name="maximize_button_text" msgid="1650859196290301963">"Разгарнуць"</string>
+    <string name="minimize_button_text" msgid="271592547935841753">"Згарнуць"</string>
     <string name="close_button_text" msgid="2913281996024033299">"Закрыць"</string>
+    <string name="back_button_text" msgid="1469718707134137085">"Назад"</string>
+    <string name="handle_text" msgid="1766582106752184456">"Маркер"</string>
+    <!-- no translation found for fullscreen_text (1162316685217676079) -->
+    <skip />
+    <!-- no translation found for desktop_text (1077633567027630454) -->
+    <skip />
+    <!-- no translation found for split_screen_text (1396336058129570886) -->
+    <skip />
+    <!-- no translation found for more_button_text (3655388105592893530) -->
+    <skip />
+    <!-- no translation found for float_button_text (9221657008391364581) -->
+    <skip />
 </resources>

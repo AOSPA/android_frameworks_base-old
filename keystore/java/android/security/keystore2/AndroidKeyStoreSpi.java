@@ -16,6 +16,8 @@
 
 package android.security.keystore2;
 
+import static android.security.keystore2.AndroidKeyStoreCipherSpiBase.DEFAULT_MGF1_DIGEST;
+
 import android.annotation.NonNull;
 import android.hardware.biometrics.BiometricManager;
 import android.hardware.security.keymint.HardwareAuthenticatorType;
@@ -64,6 +66,7 @@ import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.security.interfaces.ECKey;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -511,6 +514,28 @@ public class AndroidKeyStoreSpi extends KeyStoreSpi {
                         KeymasterDefs.KM_TAG_PADDING,
                         padding
                 ));
+                if (padding == KeymasterDefs.KM_PAD_RSA_OAEP) {
+                    if (spec.isDigestsSpecified()) {
+                        boolean hasDefaultMgf1DigestBeenAdded = false;
+                        for (String digest : spec.getDigests()) {
+                            importArgs.add(KeyStore2ParameterUtils.makeEnum(
+                                    KeymasterDefs.KM_TAG_RSA_OAEP_MGF_DIGEST,
+                                    KeyProperties.Digest.toKeymaster(digest)
+                            ));
+                            hasDefaultMgf1DigestBeenAdded |= digest.equals(DEFAULT_MGF1_DIGEST);
+                        }
+                        /* Because of default MGF1 digest is SHA-1. It has to be added in Key
+                         * characteristics. Otherwise, crypto operations will fail with Incompatible
+                         * MGF1 digest.
+                         */
+                        if (!hasDefaultMgf1DigestBeenAdded) {
+                            importArgs.add(KeyStore2ParameterUtils.makeEnum(
+                                    KeymasterDefs.KM_TAG_RSA_OAEP_MGF_DIGEST,
+                                    KeyProperties.Digest.toKeymaster(DEFAULT_MGF1_DIGEST)
+                            ));
+                        }
+                    }
+                }
             }
             for (String padding : spec.getSignaturePaddings()) {
                 importArgs.add(KeyStore2ParameterUtils.makeEnum(
@@ -542,6 +567,22 @@ public class AndroidKeyStoreSpi extends KeyStoreSpi {
                         spec.getMaxUsageCount()
                 ));
             }
+            if (KeyProperties.KEY_ALGORITHM_EC.equalsIgnoreCase(key.getAlgorithm())) {
+                if (key instanceof ECKey) {
+                    ECKey ecKey = (ECKey) key;
+                    importArgs.add(KeyStore2ParameterUtils.makeEnum(
+                            KeymasterDefs.KM_TAG_EC_CURVE,
+                            KeyProperties.EcCurve.toKeymasterCurve(ecKey.getParams())
+                    ));
+                }
+            }
+            /* TODO: check for Ed25519(EdDSA) or X25519(XDH) key algorithm and
+             *  add import args for KM_TAG_EC_CURVE as EcCurve.CURVE_25519.
+             *  Currently conscrypt does not support EdDSA key import and XDH keys are not an
+             *  instance of XECKey, hence these conditions are not added, once it is fully
+             *  implemented by conscrypt, we can add CURVE_25519 argument for EdDSA and XDH
+             *  algorithms.
+             */
         } catch (IllegalArgumentException | IllegalStateException e) {
             throw new KeyStoreException(e);
         }

@@ -20,6 +20,8 @@ import android.graphics.Rect;
 import android.hardware.input.InputDeviceIdentifier;
 import android.hardware.input.KeyboardLayout;
 import android.hardware.input.IInputDevicesChangedListener;
+import android.hardware.input.IInputDeviceBatteryListener;
+import android.hardware.input.IInputDeviceBatteryState;
 import android.hardware.input.ITabletModeChangedListener;
 import android.hardware.input.TouchCalibration;
 import android.os.CombinedVibration;
@@ -109,9 +111,7 @@ interface IInputManager {
     boolean registerVibratorStateListener(int deviceId, in IVibratorStateListener listener);
     boolean unregisterVibratorStateListener(int deviceId, in IVibratorStateListener listener);
 
-    // Input device battery query.
-    int getBatteryStatus(int deviceId);
-    int getBatteryCapacity(int deviceId);
+    IInputDeviceBatteryState getBatteryState(int deviceId);
 
     void setPointerIconType(int typeId);
     void setCustomPointerIcon(in PointerIcon icon);
@@ -157,4 +157,20 @@ interface IInputManager {
     void closeLightSession(int deviceId, in IBinder token);
 
     void cancelCurrentTouch();
+
+    void registerBatteryListener(int deviceId, IInputDeviceBatteryListener listener);
+
+    void unregisterBatteryListener(int deviceId, IInputDeviceBatteryListener listener);
+
+    // Get the bluetooth address of an input device if known, returning null if it either is not
+    // connected via bluetooth or if the address cannot be determined.
+    @EnforcePermission("BLUETOOTH")
+    @JavaPassthrough(annotation="@android.annotation.RequiresPermission(value = "
+            + "android.Manifest.permission.BLUETOOTH)")
+    String getInputDeviceBluetoothAddress(int deviceId);
+
+    @EnforcePermission("MONITOR_INPUT")
+    @JavaPassthrough(annotation="@android.annotation.RequiresPermission(value = "
+            + "android.Manifest.permission.MONITOR_INPUT)")
+    void pilferPointers(IBinder inputChannelToken);
 }

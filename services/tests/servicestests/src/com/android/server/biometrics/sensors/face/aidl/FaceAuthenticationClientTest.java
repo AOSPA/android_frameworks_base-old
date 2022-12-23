@@ -44,9 +44,9 @@ import androidx.test.platform.app.InstrumentationRegistry;
 
 import com.android.server.biometrics.log.BiometricContext;
 import com.android.server.biometrics.log.BiometricLogger;
+import com.android.server.biometrics.sensors.AuthSessionCoordinator;
 import com.android.server.biometrics.sensors.ClientMonitorCallback;
 import com.android.server.biometrics.sensors.ClientMonitorCallbackConverter;
-import com.android.server.biometrics.sensors.LockoutCache;
 import com.android.server.biometrics.sensors.face.UsageStats;
 
 import org.junit.Before;
@@ -84,8 +84,6 @@ public class FaceAuthenticationClientTest {
     @Mock
     private BiometricContext mBiometricContext;
     @Mock
-    private LockoutCache mLockoutCache;
-    @Mock
     private UsageStats mUsageStats;
     @Mock
     private ClientMonitorCallback mCallback;
@@ -95,6 +93,8 @@ public class FaceAuthenticationClientTest {
     private ActivityTaskManager mActivityTaskManager;
     @Mock
     private ICancellationSignal mCancellationSignal;
+    @Mock
+    private AuthSessionCoordinator mAuthSessionCoordinator;
     @Captor
     private ArgumentCaptor<OperationContext> mOperationContextCaptor;
 
@@ -105,6 +105,7 @@ public class FaceAuthenticationClientTest {
     public void setup() {
         when(mBiometricContext.updateContext(any(), anyBoolean())).thenAnswer(
                 i -> i.getArgument(0));
+        when(mBiometricContext.getAuthSessionCoordinator()).thenReturn(mAuthSessionCoordinator);
     }
 
     @Test
@@ -157,8 +158,9 @@ public class FaceAuthenticationClientTest {
                 false /* restricted */, "test-owner", 4 /* cookie */,
                 false /* requireConfirmation */, 9 /* sensorId */,
                 mBiometricLogger, mBiometricContext, true /* isStrongBiometric */,
-                mUsageStats, mLockoutCache, false /* allowBackgroundAuthentication */,
-                false /* isKeyguardBypassEnabled */, null /* sensorPrivacyManager */) {
+                mUsageStats, null /* mLockoutCache */, false /* allowBackgroundAuthentication */,
+                false /* isKeyguardBypassEnabled */, null /* sensorPrivacyManager */,
+                0 /* biometricStrength */) {
             @Override
             protected ActivityTaskManager getActivityTaskManager() {
                 return mActivityTaskManager;

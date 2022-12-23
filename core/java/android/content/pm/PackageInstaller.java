@@ -47,6 +47,7 @@ import android.content.pm.PackageManager.DeleteFlags;
 import android.content.pm.PackageManager.InstallReason;
 import android.content.pm.PackageManager.InstallScenario;
 import android.graphics.Bitmap;
+import android.icu.util.ULocale;
 import android.net.Uri;
 import android.os.Build;
 import android.os.FileBridge;
@@ -65,6 +66,7 @@ import android.text.TextUtils;
 import android.util.ArraySet;
 import android.util.ExceptionUtils;
 
+import com.android.internal.util.DataClass;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
 import com.android.internal.util.function.pooled.PooledLambda;
@@ -168,6 +170,10 @@ public class PackageInstaller {
     /** {@hide} */
     public static final String ACTION_CONFIRM_INSTALL = "android.content.pm.action.CONFIRM_INSTALL";
 
+    /** @hide */
+    public static final String ACTION_CONFIRM_PRE_APPROVAL =
+            "android.content.pm.action.CONFIRM_PRE_APPROVAL";
+
     /**
      * An integer session ID that an operation is working with.
      *
@@ -203,6 +209,17 @@ public class PackageInstaller {
      * @see Intent#getIntExtra(String, int)
      */
     public static final String EXTRA_STATUS = "android.content.pm.extra.STATUS";
+
+    /**
+     * Indicate if the status is for a pre-approval request.
+     *
+     * If callers use the same {@link IntentSender} for both
+     * {@link Session#requestUserPreapproval(PreapprovalDetails, IntentSender)} and
+     * {@link Session#commit(IntentSender)}, they can use this to differentiate between them.
+     *
+     * @see Intent#getBooleanExtra(String, boolean)
+     */
+    public static final String EXTRA_PRE_APPROVAL = "android.content.pm.extra.PRE_APPROVAL";
 
     /**
      * Detailed string representation of the status, including raw details that
@@ -1665,6 +1682,41 @@ public class PackageInstaller {
                 e.rethrowFromSystemServer();
             }
         }
+
+        /**
+         * Attempt to request the approval before committing this session.
+         *
+         * For installers that have been granted the
+         * {@link android.Manifest.permission#REQUEST_INSTALL_PACKAGES REQUEST_INSTALL_PACKAGES}
+         * permission, they can request the approval from users before
+         * {@link Session#commit(IntentSender)} is called. This may require user intervention as
+         * well. The result of the request will be reported through the given callback.
+         *
+         * @param details the adequate context to this session for requesting the approval from
+         *                users prior to commit.
+         * @param statusReceiver called when the state of the session changes.
+         *                       Intents sent to this receiver contain
+         *                       {@link #EXTRA_STATUS}. Refer to the individual
+         *                       status codes on how to handle them.
+         *
+         * @throws IllegalArgumentException when {@link PreapprovalDetails} is {@code null}.
+         * @throws IllegalArgumentException if {@link IntentSender} is {@code null}.
+         * @throws IllegalStateException if called on a multi-package session (no matter
+         *                               the parent session or any of the children sessions).
+         * @throws IllegalStateException if called again after this method has been called on
+         *                               this session.
+         * @throws SecurityException when the caller does not own this session.
+         */
+        public void requestUserPreapproval(@NonNull PreapprovalDetails details,
+                @NonNull IntentSender statusReceiver) {
+            Preconditions.checkArgument(details != null, "preapprovalDetails cannot be null.");
+            Preconditions.checkArgument(statusReceiver != null, "statusReceiver cannot be null.");
+            try {
+                mSession.requestUserPreapproval(details, statusReceiver);
+            } catch (RemoteException e) {
+                e.rethrowFromSystemServer();
+            }
+        }
     }
 
     /**
@@ -2629,6 +2681,9 @@ public class PackageInstaller {
         /** {@hide} */
         public int installerUid;
 
+        /** @hide */
+        public boolean isPreapprovalRequested;
+
         /** {@hide} */
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public SessionInfo() {
@@ -2676,6 +2731,7 @@ public class PackageInstaller {
             mSessionErrorCode = source.readInt();
             mSessionErrorMessage = source.readString();
             isCommitted = source.readBoolean();
+            isPreapprovalRequested = source.readBoolean();
             rollbackDataPolicy = source.readInt();
             createdMillis = source.readLong();
             requireUserAction = source.readInt();
@@ -3097,7 +3153,7 @@ public class PackageInstaller {
         }
 
         /**
-         * Returns the set of session IDs that will be committed when this session is commited if
+         * Returns the set of session IDs that will be committed when this session is committed if
          * this session is a multi-package session.
          */
         @NonNull
@@ -3255,6 +3311,7 @@ public class PackageInstaller {
             dest.writeInt(mSessionErrorCode);
             dest.writeString(mSessionErrorMessage);
             dest.writeBoolean(isCommitted);
+            dest.writeBoolean(isPreapprovalRequested);
             dest.writeInt(rollbackDataPolicy);
             dest.writeLong(createdMillis);
             dest.writeInt(requireUserAction);
@@ -3274,5 +3331,281 @@ public class PackageInstaller {
                         return new SessionInfo[size];
                     }
                 };
+    }
+
+    /**
+     * Details for requesting the pre-commit install approval.
+     */
+    @DataClass(genParcelable = true, genHiddenConstructor = true, genBuilder = true,
+            genToString = true)
+    public static final class PreapprovalDetails implements Parcelable {
+        /**
+         * The icon representing the app to be installed.
+         */
+        private final @Nullable Bitmap mIcon;
+        /**
+         * The label representing the app to be installed.
+         */
+        private final @NonNull CharSequence mLabel;
+        /**
+         * The locale of the app label being used.
+         */
+        private final @NonNull ULocale mLocale;
+        /**
+         * The package name of the app to be installed.
+         */
+        private final @NonNull String mPackageName;
+
+
+
+
+        // Code below generated by codegen v1.0.23.
+        //
+        // DO NOT MODIFY!
+        // CHECKSTYLE:OFF Generated code
+        //
+        // To regenerate run:
+        // $ codegen $ANDROID_BUILD_TOP/frameworks/base/core/java/android/content/pm/PackageInstaller.java
+        //
+        // To exclude the generated code from IntelliJ auto-formatting enable (one-time):
+        //   Settings > Editor > Code Style > Formatter Control
+        //@formatter:off
+
+
+        /**
+         * Creates a new PreapprovalDetails.
+         *
+         * @param icon
+         *   The icon representing the app to be installed.
+         * @param label
+         *   The label representing the app to be installed.
+         * @param locale
+         *   The locale of the app label being used.
+         * @param packageName
+         *   The package name of the app to be installed.
+         * @hide
+         */
+        @DataClass.Generated.Member
+        public PreapprovalDetails(
+                @Nullable Bitmap icon,
+                @NonNull CharSequence label,
+                @NonNull ULocale locale,
+                @NonNull String packageName) {
+            this.mIcon = icon;
+            this.mLabel = label;
+            com.android.internal.util.AnnotationValidations.validate(
+                    NonNull.class, null, mLabel);
+            this.mLocale = locale;
+            com.android.internal.util.AnnotationValidations.validate(
+                    NonNull.class, null, mLocale);
+            this.mPackageName = packageName;
+            com.android.internal.util.AnnotationValidations.validate(
+                    NonNull.class, null, mPackageName);
+
+            // onConstructed(); // You can define this method to get a callback
+        }
+
+        /**
+         * The icon representing the app to be installed.
+         */
+        @DataClass.Generated.Member
+        public @Nullable Bitmap getIcon() {
+            return mIcon;
+        }
+
+        /**
+         * The label representing the app to be installed.
+         */
+        @DataClass.Generated.Member
+        public @NonNull CharSequence getLabel() {
+            return mLabel;
+        }
+
+        /**
+         * The locale of the app label being used.
+         */
+        @DataClass.Generated.Member
+        public @NonNull ULocale getLocale() {
+            return mLocale;
+        }
+
+        /**
+         * The package name of the app to be installed.
+         */
+        @DataClass.Generated.Member
+        public @NonNull String getPackageName() {
+            return mPackageName;
+        }
+
+        @Override
+        @DataClass.Generated.Member
+        public String toString() {
+            // You can override field toString logic by defining methods like:
+            // String fieldNameToString() { ... }
+
+            return "PreapprovalDetails { " +
+                    "icon = " + mIcon + ", " +
+                    "label = " + mLabel + ", " +
+                    "locale = " + mLocale + ", " +
+                    "packageName = " + mPackageName +
+            " }";
+        }
+
+        @Override
+        @DataClass.Generated.Member
+        public void writeToParcel(@NonNull Parcel dest, int flags) {
+            // You can override field parcelling by defining methods like:
+            // void parcelFieldName(Parcel dest, int flags) { ... }
+
+            byte flg = 0;
+            if (mIcon != null) flg |= 0x1;
+            dest.writeByte(flg);
+            if (mIcon != null) mIcon.writeToParcel(dest, flags);
+            dest.writeCharSequence(mLabel);
+            dest.writeString8(mLocale.toString());
+            dest.writeString8(mPackageName);
+        }
+
+        @Override
+        @DataClass.Generated.Member
+        public int describeContents() { return 0; }
+
+        /** @hide */
+        @SuppressWarnings({"unchecked", "RedundantCast"})
+        @DataClass.Generated.Member
+        /* package-private */ PreapprovalDetails(@NonNull Parcel in) {
+            // You can override field unparcelling by defining methods like:
+            // static FieldType unparcelFieldName(Parcel in) { ... }
+
+            byte flg = in.readByte();
+            Bitmap icon = (flg & 0x1) == 0 ? null : Bitmap.CREATOR.createFromParcel(in);
+            CharSequence label = (CharSequence) in.readCharSequence();
+            ULocale locale = new ULocale(in.readString8());
+            String packageName = in.readString8();
+
+            this.mIcon = icon;
+            this.mLabel = label;
+            com.android.internal.util.AnnotationValidations.validate(
+                    NonNull.class, null, mLabel);
+            this.mLocale = locale;
+            com.android.internal.util.AnnotationValidations.validate(
+                    NonNull.class, null, mLocale);
+            this.mPackageName = packageName;
+            com.android.internal.util.AnnotationValidations.validate(
+                    NonNull.class, null, mPackageName);
+
+            // onConstructed(); // You can define this method to get a callback
+        }
+
+        @DataClass.Generated.Member
+        public static final @NonNull Parcelable.Creator<PreapprovalDetails> CREATOR
+                = new Parcelable.Creator<PreapprovalDetails>() {
+            @Override
+            public PreapprovalDetails[] newArray(int size) {
+                return new PreapprovalDetails[size];
+            }
+
+            @Override
+            public PreapprovalDetails createFromParcel(@NonNull Parcel in) {
+                return new PreapprovalDetails(in);
+            }
+        };
+
+        /**
+         * A builder for {@link PreapprovalDetails}
+         */
+        @SuppressWarnings("WeakerAccess")
+        @DataClass.Generated.Member
+        public static final class Builder {
+
+            private @Nullable Bitmap mIcon;
+            private @NonNull CharSequence mLabel;
+            private @NonNull ULocale mLocale;
+            private @NonNull String mPackageName;
+
+            private long mBuilderFieldsSet = 0L;
+
+            /**
+             * Creates a new Builder.
+             */
+            public Builder() {}
+
+            /**
+             * The icon representing the app to be installed.
+             */
+            @DataClass.Generated.Member
+            public @NonNull Builder setIcon(@NonNull Bitmap value) {
+                checkNotUsed();
+                mBuilderFieldsSet |= 0x1;
+                mIcon = value;
+                return this;
+            }
+
+            /**
+             * The label representing the app to be installed.
+             */
+            @DataClass.Generated.Member
+            public @NonNull Builder setLabel(@NonNull CharSequence value) {
+                checkNotUsed();
+                mBuilderFieldsSet |= 0x2;
+                mLabel = value;
+                return this;
+            }
+
+            /**
+             * The locale of the app label being used.
+             */
+            @DataClass.Generated.Member
+            public @NonNull Builder setLocale(@NonNull ULocale value) {
+                checkNotUsed();
+                mBuilderFieldsSet |= 0x4;
+                mLocale = value;
+                return this;
+            }
+
+            /**
+             * The package name of the app to be installed.
+             */
+            @DataClass.Generated.Member
+            public @NonNull Builder setPackageName(@NonNull String value) {
+                checkNotUsed();
+                mBuilderFieldsSet |= 0x8;
+                mPackageName = value;
+                return this;
+            }
+
+            /** Builds the instance. This builder should not be touched after calling this! */
+            public @NonNull PreapprovalDetails build() {
+                checkNotUsed();
+                mBuilderFieldsSet |= 0x10; // Mark builder used
+
+                PreapprovalDetails o = new PreapprovalDetails(
+                        mIcon,
+                        mLabel,
+                        mLocale,
+                        mPackageName);
+                return o;
+            }
+
+            private void checkNotUsed() {
+                if ((mBuilderFieldsSet & 0x10) != 0) {
+                    throw new IllegalStateException(
+                            "This Builder should not be reused. Use a new Builder instance instead");
+                }
+            }
+        }
+
+        @DataClass.Generated(
+                time = 1666748098353L,
+                codegenVersion = "1.0.23",
+                sourceFile = "frameworks/base/core/java/android/content/pm/PackageInstaller.java",
+                inputSignatures = "private final @android.annotation.Nullable android.graphics.Bitmap mIcon\nprivate final @android.annotation.NonNull java.lang.CharSequence mLabel\nprivate final @android.annotation.NonNull android.icu.util.ULocale mLocale\nprivate final @android.annotation.NonNull java.lang.String mPackageName\nclass PreapprovalDetails extends java.lang.Object implements [android.os.Parcelable]\n@com.android.internal.util.DataClass(genParcelable=true, genHiddenConstructor=true, genBuilder=true, genToString=true)")
+        @Deprecated
+        private void __metadata() {}
+
+
+        //@formatter:on
+        // End of generated code
+
     }
 }

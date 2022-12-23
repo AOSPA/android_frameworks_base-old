@@ -58,6 +58,7 @@ import android.content.pm.PackageManagerInternal;
 import android.graphics.BLASTBufferQueue;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Insets;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
@@ -422,7 +423,7 @@ final class AccessibilityController {
         if (mAccessibilityTracing.isTracingEnabled(FLAGS_WINDOWS_FOR_ACCESSIBILITY_CALLBACK)) {
             mAccessibilityTracing.logTrace(TAG + ".onSomeWindowResizedOrMoved",
                     FLAGS_WINDOWS_FOR_ACCESSIBILITY_CALLBACK,
-                    "displayIds={" + displayIds.toString() + "}", "".getBytes(), callingUid);
+                    "displayIds={" + Arrays.toString(displayIds) + "}", "".getBytes(), callingUid);
         }
         // Not relevant for the display magnifier.
         for (int i = 0; i < displayIds.length; i++) {
@@ -1021,6 +1022,27 @@ final class AccessibilityController {
                 }
             }
 
+            private Region getLetterboxBounds(WindowState windowState) {
+                final ActivityRecord appToken = windowState.mActivityRecord;
+                if (appToken == null) {
+                    return new Region();
+                }
+
+                final Rect boundsWithoutLetterbox = windowState.getBounds();
+                final Rect letterboxInsets = appToken.getLetterboxInsets();
+
+                final Rect boundsIncludingLetterbox = Rect.copyOrNull(boundsWithoutLetterbox);
+                // Letterbox insets from mActivityRecord are positive, so we negate them to grow the
+                // bounds to include the letterbox.
+                boundsIncludingLetterbox.inset(
+                        Insets.subtract(Insets.NONE, Insets.of(letterboxInsets)));
+
+                final Region letterboxBounds = new Region();
+                letterboxBounds.set(boundsIncludingLetterbox);
+                letterboxBounds.op(boundsWithoutLetterbox, Region.Op.DIFFERENCE);
+                return letterboxBounds;
+            }
+
             private boolean isExcludedWindowType(int windowType) {
                 return windowType == TYPE_MAGNIFICATION_OVERLAY
                         // Omit the touch region of window magnification to avoid the cut out of the
@@ -1411,20 +1433,6 @@ final class AccessibilityController {
         return source != null ? source.getFrame() : EMPTY_RECT;
     }
 
-    static Region getLetterboxBounds(WindowState windowState) {
-        final ActivityRecord appToken = windowState.mActivityRecord;
-        if (appToken == null) {
-            return new Region();
-        }
-        final Rect letterboxInsets = appToken.getLetterboxInsets();
-        final Rect nonLetterboxRect = windowState.getBounds();
-        nonLetterboxRect.inset(letterboxInsets);
-        final Region letterboxBounds = new Region();
-        letterboxBounds.set(windowState.getBounds());
-        letterboxBounds.op(nonLetterboxRect, Region.Op.DIFFERENCE);
-        return letterboxBounds;
-    }
-
     /**
      * This class encapsulates the functionality related to computing the windows
      * reported for accessibility purposes. These windows are all windows a sighted
@@ -1678,18 +1686,17 @@ final class AccessibilityController {
                 a11yWindow.getTouchableRegionInScreen(touchableRegion);
                 unaccountedSpace.op(touchableRegion, unaccountedSpace,
                         Region.Op.REVERSE_DIFFERENCE);
-                // Account for the space of letterbox.
-                final Region letterboxBounds = mTempRegion1;
-                if (a11yWindow.setLetterBoxBoundsIfNeeded(letterboxBounds)) {
-                    unaccountedSpace.op(letterboxBounds,
-                            unaccountedSpace, Region.Op.REVERSE_DIFFERENCE);
-                }
             }
         }
 
         private static void addPopulatedWindowInfo(AccessibilityWindow a11yWindow,
                 Region regionInScreen, List<WindowInfo> out, Set<IBinder> tokenOut) {
             final WindowInfo window = a11yWindow.getWindowInfo();
+            if (window.token == null) {
+                // The window was used in calculating visible windows but does not have an
+                // associated IWindow token, so exclude it from the list returned to accessibility.
+                return;
+            }
             window.regionInScreen.set(regionInScreen);
             window.layer = tokenOut.size();
             out.add(window);
@@ -2218,8 +2225,7 @@ final class AccessibilityController {
                 ProtoOutputStream proto = new ProtoOutputStream();
                 proto.write(MAGIC_NUMBER, MAGIC_NUMBER_VALUE);
                 long timeOffsetNs =
-                        TimeUnit.NANOSECONDS.convert(System.currentTimeMillis(),
-                                                     TimeUnit.NANOSECONDS)
+                        TimeUnit.MILLISECONDS.toNanos(System.currentTimeMillis())
                         - SystemClock.elapsedRealtimeNanos();
                 proto.write(REAL_TO_ELAPSED_TIME_OFFSET_NANOS, timeOffsetNs);
                 mBuffer.writeTraceToFile(mTraceFile, proto);

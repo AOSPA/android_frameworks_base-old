@@ -22,6 +22,7 @@ import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_B
 import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_BUBBLES_EXPANDED;
 import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_BUBBLES_MANAGE_MENU_EXPANDED;
 import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_DIALOG_SHOWING;
+import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_FREEFORM_ACTIVE_IN_DESKTOP_MODE;
 import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_NOTIFICATION_PANEL_EXPANDED;
 import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_ONE_HANDED_ACTIVE;
 import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_QUICK_SETTINGS_EXPANDED;
@@ -34,7 +35,6 @@ import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.inputmethodservice.InputMethodService;
 import android.os.IBinder;
-import android.os.ParcelFileDescriptor;
 import android.view.KeyEvent;
 
 import androidx.annotation.NonNull;
@@ -49,6 +49,7 @@ import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.keyguard.ScreenLifecycle;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
 import com.android.systemui.model.SysUiState;
+import com.android.systemui.notetask.NoteTaskInitializer;
 import com.android.systemui.settings.UserTracker;
 import com.android.systemui.shared.tracing.ProtoTraceable;
 import com.android.systemui.statusbar.CommandQueue;
@@ -56,18 +57,18 @@ import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.tracing.ProtoTracer;
 import com.android.systemui.tracing.nano.SystemUiTraceProto;
+import com.android.wm.shell.desktopmode.DesktopMode;
+import com.android.wm.shell.desktopmode.DesktopModeTaskRepository;
 import com.android.wm.shell.nano.WmShellTraceProto;
 import com.android.wm.shell.onehanded.OneHanded;
 import com.android.wm.shell.onehanded.OneHandedEventCallback;
 import com.android.wm.shell.onehanded.OneHandedTransitionCallback;
 import com.android.wm.shell.onehanded.OneHandedUiEventLogger;
 import com.android.wm.shell.pip.Pip;
-import com.android.wm.shell.protolog.ShellProtoLogImpl;
 import com.android.wm.shell.splitscreen.SplitScreen;
 import com.android.wm.shell.sysui.ShellInterface;
 
 import java.io.PrintWriter;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Executor;
@@ -91,8 +92,10 @@ import javax.inject.Inject;
  *       -> WMShell starts and binds SysUI with Shell components via exported Shell interfaces
  */
 @SysUISingleton
-public final class WMShell extends CoreStartable
-        implements CommandQueue.Callbacks, ProtoTraceable<SystemUiTraceProto> {
+public final class WMShell implements
+        CoreStartable,
+        CommandQueue.Callbacks,
+        ProtoTraceable<SystemUiTraceProto> {
     private static final String TAG = WMShell.class.getName();
     private static final int INVALID_SYSUI_STATE_MASK =
             SYSUI_STATE_DIALOG_SHOWING
@@ -104,11 +107,13 @@ public final class WMShell extends CoreStartable
                     | SYSUI_STATE_BUBBLES_MANAGE_MENU_EXPANDED
                     | SYSUI_STATE_QUICK_SETTINGS_EXPANDED;
 
+    private final Context mContext;
     // Shell interfaces
     private final ShellInterface mShell;
     private final Optional<Pip> mPipOptional;
     private final Optional<SplitScreen> mSplitScreenOptional;
     private final Optional<OneHanded> mOneHandedOptional;
+    private final Optional<DesktopMode> mDesktopModeOptional;
 
     private final CommandQueue mCommandQueue;
     private final ConfigurationController mConfigurationController;
@@ -119,6 +124,7 @@ public final class WMShell extends CoreStartable
     private final WakefulnessLifecycle mWakefulnessLifecycle;
     private final ProtoTracer mProtoTracer;
     private final UserTracker mUserTracker;
+    private final NoteTaskInitializer mNoteTaskInitializer;
     private final Executor mSysUiMainExecutor;
 
     // Listeners and callbacks. Note that we prefer member variable over anonymous class here to
@@ -164,11 +170,13 @@ public final class WMShell extends CoreStartable
     private WakefulnessLifecycle.Observer mWakefulnessObserver;
 
     @Inject
-    public WMShell(Context context,
+    public WMShell(
+            Context context,
             ShellInterface shell,
             Optional<Pip> pipOptional,
             Optional<SplitScreen> splitScreenOptional,
             Optional<OneHanded> oneHandedOptional,
+            Optional<DesktopMode> desktopMode,
             CommandQueue commandQueue,
             ConfigurationController configurationController,
             KeyguardStateController keyguardStateController,
@@ -178,8 +186,9 @@ public final class WMShell extends CoreStartable
             ProtoTracer protoTracer,
             WakefulnessLifecycle wakefulnessLifecycle,
             UserTracker userTracker,
+            NoteTaskInitializer noteTaskInitializer,
             @Main Executor sysUiMainExecutor) {
-        super(context);
+        mContext = context;
         mShell = shell;
         mCommandQueue = commandQueue;
         mConfigurationController = configurationController;
@@ -190,9 +199,11 @@ public final class WMShell extends CoreStartable
         mPipOptional = pipOptional;
         mSplitScreenOptional = splitScreenOptional;
         mOneHandedOptional = oneHandedOptional;
+        mDesktopModeOptional = desktopMode;
         mWakefulnessLifecycle = wakefulnessLifecycle;
         mProtoTracer = protoTracer;
         mUserTracker = userTracker;
+        mNoteTaskInitializer = noteTaskInitializer;
         mSysUiMainExecutor = sysUiMainExecutor;
     }
 
@@ -214,6 +225,9 @@ public final class WMShell extends CoreStartable
         mPipOptional.ifPresent(this::initPip);
         mSplitScreenOptional.ifPresent(this::initSplitScreen);
         mOneHandedOptional.ifPresent(this::initOneHanded);
+        mDesktopModeOptional.ifPresent(this::initDesktopMode);
+
+        mNoteTaskInitializer.initialize();
     }
 
     @VisibleForTesting
@@ -321,6 +335,16 @@ public final class WMShell extends CoreStartable
         });
     }
 
+    void initDesktopMode(DesktopMode desktopMode) {
+        desktopMode.addListener(new DesktopModeTaskRepository.VisibleTasksListener() {
+            @Override
+            public void onVisibilityChanged(boolean hasFreeformTasks) {
+                mSysUiState.setFlag(SYSUI_STATE_FREEFORM_ACTIVE_IN_DESKTOP_MODE, hasFreeformTasks)
+                        .commitUpdate(DEFAULT_DISPLAY);
+            }
+        }, mSysUiMainExecutor);
+    }
+
     @Override
     public void writeToProto(SystemUiTraceProto proto) {
         if (proto.wmShell == null) {
@@ -336,44 +360,7 @@ public final class WMShell extends CoreStartable
         if (mShell.handleCommand(args, pw)) {
             return;
         }
-        // Handle logging commands if provided
-        if (handleLoggingCommand(args, pw)) {
-            return;
-        }
         // Dump WMShell stuff here if no commands were handled
         mShell.dump(pw);
-    }
-
-    @Override
-    public void handleWindowManagerLoggingCommand(String[] args, ParcelFileDescriptor outFd) {
-        PrintWriter pw = new PrintWriter(new ParcelFileDescriptor.AutoCloseOutputStream(outFd));
-        handleLoggingCommand(args, pw);
-        pw.flush();
-        pw.close();
-    }
-
-    private boolean handleLoggingCommand(String[] args, PrintWriter pw) {
-        ShellProtoLogImpl protoLogImpl = ShellProtoLogImpl.getSingleInstance();
-        for (int i = 0; i < args.length; i++) {
-            switch (args[i]) {
-                case "enable-text": {
-                    String[] groups = Arrays.copyOfRange(args, i + 1, args.length);
-                    int result = protoLogImpl.startTextLogging(groups, pw);
-                    if (result == 0) {
-                        pw.println("Starting logging on groups: " + Arrays.toString(groups));
-                    }
-                    return true;
-                }
-                case "disable-text": {
-                    String[] groups = Arrays.copyOfRange(args, i + 1, args.length);
-                    int result = protoLogImpl.stopTextLogging(groups, pw);
-                    if (result == 0) {
-                        pw.println("Stopping logging on groups: " + Arrays.toString(groups));
-                    }
-                    return true;
-                }
-            }
-        }
-        return false;
     }
 }

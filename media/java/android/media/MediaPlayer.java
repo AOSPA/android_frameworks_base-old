@@ -696,6 +696,13 @@ public class MediaPlayer extends PlayerBase
         baseRegisterPlayer(sessionId);
     }
 
+    private Parcel createPlayerIIdParcel() {
+        Parcel parcel = newRequest();
+        parcel.writeInt(INVOKE_ID_SET_PLAYER_IID);
+        parcel.writeInt(mPlayerIId);
+        return parcel;
+    }
+
     /*
      * Update the MediaPlayer SurfaceTexture.
      * Call after setting a new display surface.
@@ -712,6 +719,7 @@ public class MediaPlayer extends PlayerBase
     private static final int INVOKE_ID_DESELECT_TRACK = 5;
     private static final int INVOKE_ID_SET_VIDEO_SCALE_MODE = 6;
     private static final int INVOKE_ID_GET_SELECTED_TRACK = 7;
+    private static final int INVOKE_ID_SET_PLAYER_IID = 8;
 
     /**
      * Create a request parcel which can be routed to the native media
@@ -1309,16 +1317,26 @@ public class MediaPlayer extends PlayerBase
      * @throws IllegalStateException if it is called in an invalid state
      */
     public void prepare() throws IOException, IllegalStateException {
-        _prepare();
+        Parcel piidParcel = createPlayerIIdParcel();
+        try {
+            int retCode = _prepare(piidParcel);
+            if (retCode != 0) {
+                Log.w(TAG, "prepare(): could not set piid " + mPlayerIId);
+            }
+        } finally {
+            piidParcel.recycle();
+        }
         scanInternalSubtitleTracks();
 
         // DrmInfo, if any, has been resolved by now.
         synchronized (mDrmLock) {
             mDrmInfoResolved = true;
         }
+
     }
 
-    private native void _prepare() throws IOException, IllegalStateException;
+    /** Returns the result of sending the {@code piidParcel} to the MediaPlayerService. */
+    private native int _prepare(Parcel piidParcel) throws IOException, IllegalStateException;
 
     /**
      * Prepares the player for playback, asynchronously.
@@ -1330,7 +1348,20 @@ public class MediaPlayer extends PlayerBase
      *
      * @throws IllegalStateException if it is called in an invalid state
      */
-    public native void prepareAsync() throws IllegalStateException;
+    public void prepareAsync() throws IllegalStateException {
+        Parcel piidParcel = createPlayerIIdParcel();
+        try {
+            int retCode = _prepareAsync(piidParcel);
+            if (retCode != 0) {
+                Log.w(TAG, "prepareAsync(): could not set piid " + mPlayerIId);
+            }
+        } finally {
+            piidParcel.recycle();
+        }
+    }
+
+    /** Returns the result of sending the {@code piidParcel} to the MediaPlayerService. */
+    private native int _prepareAsync(Parcel piidParcel) throws IllegalStateException;
 
     /**
      * Starts or resumes playback. If playback had previously been paused,
@@ -2497,10 +2528,20 @@ public class MediaPlayer extends PlayerBase
         }
 
         /**
+         * Returns whether this track contains haptic channels in the audio track.
+         * @hide
+         */
+        public boolean hasHapticChannels() {
+            return mFormat != null && mFormat.containsKey(MediaFormat.KEY_HAPTIC_CHANNEL_COUNT)
+                    && mFormat.getInteger(MediaFormat.KEY_HAPTIC_CHANNEL_COUNT) > 0;
+        }
+
+        /**
          * Gets the {@link MediaFormat} of the track.  If the format is
          * unknown or could not be determined, null is returned.
          */
         public MediaFormat getFormat() {
+            // Note: The format isn't exposed for audio because it is incomplete.
             if (mTrackType == MEDIA_TRACK_TYPE_TIMEDTEXT
                     || mTrackType == MEDIA_TRACK_TYPE_SUBTITLE) {
                 return mFormat;
@@ -2543,6 +2584,11 @@ public class MediaPlayer extends PlayerBase
                 mFormat.setInteger(MediaFormat.KEY_IS_AUTOSELECT, in.readInt());
                 mFormat.setInteger(MediaFormat.KEY_IS_DEFAULT, in.readInt());
                 mFormat.setInteger(MediaFormat.KEY_IS_FORCED_SUBTITLE, in.readInt());
+            } else if (mTrackType == MEDIA_TRACK_TYPE_AUDIO) {
+                boolean hasHapticChannels = in.readBoolean();
+                if (hasHapticChannels) {
+                    mFormat.setInteger(MediaFormat.KEY_HAPTIC_CHANNEL_COUNT, in.readInt());
+                }
             }
         }
 
@@ -2573,6 +2619,13 @@ public class MediaPlayer extends PlayerBase
                 dest.writeInt(mFormat.getInteger(MediaFormat.KEY_IS_AUTOSELECT));
                 dest.writeInt(mFormat.getInteger(MediaFormat.KEY_IS_DEFAULT));
                 dest.writeInt(mFormat.getInteger(MediaFormat.KEY_IS_FORCED_SUBTITLE));
+            } else if (mTrackType == MEDIA_TRACK_TYPE_AUDIO) {
+                boolean hasHapticChannels =
+                        mFormat.containsKey(MediaFormat.KEY_HAPTIC_CHANNEL_COUNT);
+                dest.writeBoolean(hasHapticChannels);
+                if (hasHapticChannels) {
+                    dest.writeInt(mFormat.getInteger(MediaFormat.KEY_HAPTIC_CHANNEL_COUNT));
+                }
             }
         }
 
@@ -5092,9 +5145,12 @@ public class MediaPlayer extends PlayerBase
             @Nullable Map<String, String> optionalParameters)
             throws NoDrmSchemeException
     {
-        Log.v(TAG, "getKeyRequest: " +
-                " keySetId: " + keySetId + " initData:" + initData + " mimeType: " + mimeType +
-                " keyType: " + keyType + " optionalParameters: " + optionalParameters);
+        Log.v(TAG, "getKeyRequest: "
+                + " keySetId: " + Arrays.toString(keySetId)
+                + " initData:" + Arrays.toString(initData)
+                + " mimeType: " + mimeType
+                + " keyType: " + keyType
+                + " optionalParameters: " + optionalParameters);
 
         synchronized (mDrmLock) {
             if (!mActiveDrmScheme) {
@@ -5153,7 +5209,8 @@ public class MediaPlayer extends PlayerBase
     public byte[] provideKeyResponse(@Nullable byte[] keySetId, @NonNull byte[] response)
             throws NoDrmSchemeException, DeniedByServerException
     {
-        Log.v(TAG, "provideKeyResponse: keySetId: " + keySetId + " response: " + response);
+        Log.v(TAG, "provideKeyResponse: keySetId: " + Arrays.toString(keySetId)
+                + " response: " + Arrays.toString(response));
 
         synchronized (mDrmLock) {
 
@@ -5169,8 +5226,9 @@ public class MediaPlayer extends PlayerBase
 
                 byte[] keySetResult = mDrmObj.provideKeyResponse(scope, response);
 
-                Log.v(TAG, "provideKeyResponse: keySetId: " + keySetId + " response: " + response +
-                        " --> " + keySetResult);
+                Log.v(TAG, "provideKeyResponse: keySetId: " + Arrays.toString(keySetId)
+                        + " response: " + Arrays.toString(response)
+                        + " --> " + Arrays.toString(keySetResult));
 
 
                 return keySetResult;
@@ -5197,7 +5255,7 @@ public class MediaPlayer extends PlayerBase
     public void restoreKeys(@NonNull byte[] keySetId)
             throws NoDrmSchemeException
     {
-        Log.v(TAG, "restoreKeys: keySetId: " + keySetId);
+        Log.v(TAG, "restoreKeys: keySetId: " + Arrays.toString(keySetId));
 
         synchronized (mDrmLock) {
 
@@ -5484,7 +5542,8 @@ public class MediaPlayer extends PlayerBase
         // at prepareDrm/openSession rather than getKeyRequest/provideKeyResponse
         try {
             mDrmSessionId = mDrmObj.openSession();
-            Log.v(TAG, "prepareDrm_openSessionStep: mDrmSessionId=" + mDrmSessionId);
+            Log.v(TAG, "prepareDrm_openSessionStep: mDrmSessionId="
+                    + Arrays.toString(mDrmSessionId));
 
             // Sending it down to native/mediaserver to create the crypto object
             // This call could simply fail due to bad player state, e.g., after start().
@@ -5547,7 +5606,7 @@ public class MediaPlayer extends PlayerBase
                     response = Streams.readFully(connection.getInputStream());
 
                     Log.v(TAG, "HandleProvisioninig: Thread run: response " +
-                            response.length + " " + response);
+                            response.length + " " + Arrays.toString(response));
                 } catch (Exception e) {
                     status = PREPARE_DRM_STATUS_PROVISIONING_NETWORK_ERROR;
                     Log.w(TAG, "HandleProvisioninig: Thread run: connect " + e + " url: " + url);
@@ -5631,8 +5690,9 @@ public class MediaPlayer extends PlayerBase
             return PREPARE_DRM_STATUS_PREPARATION_ERROR;
         }
 
-        Log.v(TAG, "HandleProvisioninig provReq " +
-                " data: " + provReq.getData() + " url: " + provReq.getDefaultUrl());
+        Log.v(TAG, "HandleProvisioninig provReq "
+                + " data: " + Arrays.toString(provReq.getData())
+                + " url: " + provReq.getDefaultUrl());
 
         // networking in a background thread
         mDrmProvisioningInProgress = true;
@@ -5715,7 +5775,8 @@ public class MediaPlayer extends PlayerBase
     private void cleanDrmObj()
     {
         // the caller holds mDrmLock
-        Log.v(TAG, "cleanDrmObj: mDrmObj=" + mDrmObj + " mDrmSessionId=" + mDrmSessionId);
+        Log.v(TAG, "cleanDrmObj: mDrmObj=" + mDrmObj
+                + " mDrmSessionId=" + Arrays.toString(mDrmSessionId));
 
         if (mDrmSessionId != null)    {
             mDrmObj.closeSession(mDrmSessionId);

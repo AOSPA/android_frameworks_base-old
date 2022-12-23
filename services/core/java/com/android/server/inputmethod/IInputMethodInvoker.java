@@ -221,14 +221,12 @@ final class IInputMethodInvoker {
     }
 
     @AnyThread
-    boolean updateEditorToolType(int toolType) {
+    void updateEditorToolType(@MotionEvent.ToolType int toolType) {
         try {
             mTarget.updateEditorToolType(toolType);
         } catch (RemoteException e) {
             logRemoteException(e);
-            return false;
         }
-        return true;
     }
 
     @AnyThread
@@ -282,6 +280,15 @@ final class IInputMethodInvoker {
     void removeStylusHandwritingWindow() {
         try {
             mTarget.removeStylusHandwritingWindow();
+        } catch (RemoteException e) {
+            logRemoteException(e);
+        }
+    }
+
+    @AnyThread
+    void setStylusWindowIdleTimeoutForTest(long timeout) {
+        try {
+            mTarget.setStylusWindowIdleTimeoutForTest(timeout);
         } catch (RemoteException e) {
             logRemoteException(e);
         }

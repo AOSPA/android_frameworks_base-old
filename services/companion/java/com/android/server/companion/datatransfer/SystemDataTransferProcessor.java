@@ -63,7 +63,7 @@ import java.util.concurrent.TimeUnit;
  */
 public class SystemDataTransferProcessor {
 
-    private static final String LOG_TAG = SystemDataTransferProcessor.class.getSimpleName();
+    private static final String LOG_TAG = "CDM_SystemDataTransferProcessor";
 
     // Values from UI to SystemDataTransferProcessor via ResultReceiver
     private static final int RESULT_CODE_SYSTEM_DATA_TRANSFER_ALLOWED = 0;
@@ -150,8 +150,9 @@ public class SystemDataTransferProcessor {
         // Create a PendingIntent
         final long token = Binder.clearCallingIdentity();
         try {
-            return PendingIntent.getActivity(mContext, /*requestCode */ associationId, intent,
-                    FLAG_ONE_SHOT | FLAG_CANCEL_CURRENT | FLAG_IMMUTABLE);
+            return PendingIntent.getActivityAsUser(mContext, /*requestCode */ associationId, intent,
+                    FLAG_ONE_SHOT | FLAG_CANCEL_CURRENT | FLAG_IMMUTABLE, /* options= */ null,
+                    UserHandle.CURRENT);
         } finally {
             Binder.restoreCallingIdentity(token);
         }

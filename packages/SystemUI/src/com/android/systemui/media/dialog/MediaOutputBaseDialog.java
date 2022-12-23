@@ -99,6 +99,7 @@ public abstract class MediaOutputBaseDialog extends SystemUIDialog implements
     private Button mStopButton;
     private Button mAppButton;
     private int mListMaxHeight;
+    private int mItemHeight;
     private WallpaperColors mWallpaperColors;
     private Executor mExecutor;
     private boolean mShouldLaunchLeBroadcastDialog;
@@ -106,10 +107,12 @@ public abstract class MediaOutputBaseDialog extends SystemUIDialog implements
     MediaOutputBaseAdapter mAdapter;
 
     private final ViewTreeObserver.OnGlobalLayoutListener mDeviceListLayoutListener = () -> {
+        ViewGroup.LayoutParams params = mDeviceListLayout.getLayoutParams();
+        int totalItemsHeight = mAdapter.getItemCount() * mItemHeight;
+        int correctHeight = Math.min(totalItemsHeight, mListMaxHeight);
         // Set max height for list
-        if (mDeviceListLayout.getHeight() > mListMaxHeight) {
-            ViewGroup.LayoutParams params = mDeviceListLayout.getLayoutParams();
-            params.height = mListMaxHeight;
+        if (correctHeight != params.height) {
+            params.height = correctHeight;
             mDeviceListLayout.setLayoutParams(params);
         }
     };
@@ -212,6 +215,8 @@ public abstract class MediaOutputBaseDialog extends SystemUIDialog implements
         mLayoutManager = new LayoutManagerWrapper(mContext);
         mListMaxHeight = context.getResources().getDimensionPixelSize(
                 R.dimen.media_output_dialog_list_max_height);
+        mItemHeight = context.getResources().getDimensionPixelSize(
+                R.dimen.media_output_dialog_list_item_height);
         mExecutor = Executors.newSingleThreadExecutor();
     }
 
@@ -246,8 +251,10 @@ public abstract class MediaOutputBaseDialog extends SystemUIDialog implements
         mDeviceListLayout.getViewTreeObserver().addOnGlobalLayoutListener(
                 mDeviceListLayoutListener);
         // Init device list
+        mLayoutManager.setAutoMeasureEnabled(true);
         mDevicesRecyclerView.setLayoutManager(mLayoutManager);
         mDevicesRecyclerView.setAdapter(mAdapter);
+        mDevicesRecyclerView.setHasFixedSize(false);
         // Init header icon
         mHeaderIcon.setOnClickListener(v -> onHeaderIconClick());
         // Init bottom buttons
@@ -310,6 +317,7 @@ public abstract class MediaOutputBaseDialog extends SystemUIDialog implements
             if (icon.getType() != Icon.TYPE_BITMAP && icon.getType() != Icon.TYPE_ADAPTIVE_BITMAP) {
                 // icon doesn't support getBitmap, use default value for color scheme
                 updateButtonBackgroundColorFilter();
+                updateDialogBackgroundColor();
             } else {
                 Configuration config = mContext.getResources().getConfiguration();
                 int currentNightMode = config.uiMode & Configuration.UI_MODE_NIGHT_MASK;
@@ -319,11 +327,14 @@ public abstract class MediaOutputBaseDialog extends SystemUIDialog implements
                 if (colorSetUpdated) {
                     mAdapter.updateColorScheme(wallpaperColors, isDarkThemeOn);
                     updateButtonBackgroundColorFilter();
+                    updateDialogBackgroundColor();
                 }
             }
             mHeaderIcon.setVisibility(View.VISIBLE);
             mHeaderIcon.setImageIcon(icon);
         } else {
+            updateButtonBackgroundColorFilter();
+            updateDialogBackgroundColor();
             mHeaderIcon.setVisibility(View.GONE);
         }
         if (appSourceIcon != null) {
@@ -356,15 +367,6 @@ public abstract class MediaOutputBaseDialog extends SystemUIDialog implements
             mHeaderSubtitle.setText(subTitle);
             mHeaderTitle.setGravity(Gravity.NO_GRAVITY);
         }
-        if (!mAdapter.isDragging()) {
-            int currentActivePosition = mAdapter.getCurrentActivePosition();
-            if (!colorSetUpdated && !deviceSetChanged && currentActivePosition >= 0
-                    && currentActivePosition < mAdapter.getItemCount()) {
-                mAdapter.notifyItemChanged(currentActivePosition);
-            } else {
-                mAdapter.notifyDataSetChanged();
-            }
-        }
         // Show when remote media session is available or
         //      when the device supports BT LE audio + media is playing
         mStopButton.setVisibility(getStopButtonVisibility());
@@ -374,15 +376,32 @@ public abstract class MediaOutputBaseDialog extends SystemUIDialog implements
 
         mBroadcastIcon.setVisibility(getBroadcastIconVisibility());
         mBroadcastIcon.setOnClickListener(v -> onBroadcastIconClick());
+        if (!mAdapter.isDragging()) {
+            int currentActivePosition = mAdapter.getCurrentActivePosition();
+            if (!colorSetUpdated && !deviceSetChanged && currentActivePosition >= 0
+                    && currentActivePosition < mAdapter.getItemCount()) {
+                mAdapter.notifyItemChanged(currentActivePosition);
+            } else {
+                mAdapter.notifyDataSetChanged();
+            }
+        } else {
+            mMediaOutputController.setRefreshing(false);
+            mMediaOutputController.refreshDataSetIfNeeded();
+        }
     }
 
     private void updateButtonBackgroundColorFilter() {
         ColorFilter buttonColorFilter = new PorterDuffColorFilter(
-                mAdapter.getController().getColorButtonBackground(),
+                mMediaOutputController.getColorButtonBackground(),
                 PorterDuff.Mode.SRC_IN);
         mDoneButton.getBackground().setColorFilter(buttonColorFilter);
         mStopButton.getBackground().setColorFilter(buttonColorFilter);
-        mDoneButton.setTextColor(mAdapter.getController().getColorPositiveButtonText());
+        mDoneButton.setTextColor(mMediaOutputController.getColorPositiveButtonText());
+    }
+
+    private void updateDialogBackgroundColor() {
+        getDialogView().getBackground().setTint(mMediaOutputController.getColorDialogBackground());
+        mDeviceListLayout.setBackgroundColor(mMediaOutputController.getColorDialogBackground());
     }
 
     private Drawable resizeDrawable(Drawable drawable, int size) {
@@ -497,7 +516,7 @@ public abstract class MediaOutputBaseDialog extends SystemUIDialog implements
     abstract int getStopButtonVisibility();
 
     public CharSequence getStopButtonText() {
-        return mContext.getText(R.string.media_output_dialog_button_stop_casting);
+        return mContext.getText(R.string.keyboard_key_media_stop);
     }
 
     public void onStopButtonClick() {

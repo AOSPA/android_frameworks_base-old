@@ -23,6 +23,7 @@ import android.graphics.Rect
 import android.testing.AndroidTestingRunner
 import android.view.DisplayCutout
 import android.view.View
+import android.view.ViewPropertyAnimator
 import android.view.WindowInsets
 import android.widget.TextView
 import androidx.constraintlayout.motion.widget.MotionLayout
@@ -30,6 +31,7 @@ import androidx.constraintlayout.widget.ConstraintSet
 import androidx.test.filters.SmallTest
 import com.android.systemui.R
 import com.android.systemui.SysuiTestCase
+import com.android.systemui.animation.Interpolators
 import com.android.systemui.animation.ShadeInterpolation
 import com.android.systemui.battery.BatteryMeterView
 import com.android.systemui.battery.BatteryMeterViewController
@@ -64,6 +66,7 @@ import org.mockito.Answers
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers
 import org.mockito.Mock
+import org.mockito.Mockito
 import org.mockito.Mockito.anyBoolean
 import org.mockito.Mockito.anyFloat
 import org.mockito.Mockito.anyInt
@@ -173,7 +176,7 @@ class LargeScreenShadeHeaderControllerCombinedTest : SysuiTestCase() {
         }
         whenever(view.visibility).thenAnswer { _ -> viewVisibility }
 
-        whenever(iconManagerFactory.create(any())).thenReturn(iconManager)
+        whenever(iconManagerFactory.create(any(), any())).thenReturn(iconManager)
 
         whenever(featureFlags.isEnabled(Flags.COMBINED_QS_HEADERS)).thenReturn(true)
         whenever(featureFlags.isEnabled(Flags.NEW_HEADER)).thenReturn(true)
@@ -605,6 +608,100 @@ class LargeScreenShadeHeaderControllerCombinedTest : SysuiTestCase() {
         verify(mockConstraintsChanges.qqsConstraintsChanges)!!.invoke(any())
         verify(mockConstraintsChanges.qsConstraintsChanges)!!.invoke(any())
         verify(mockConstraintsChanges.largeScreenConstraintsChanges)!!.invoke(any())
+    }
+
+    @Test
+    fun alarmIconNotIgnored() {
+        verify(statusIcons, never()).addIgnoredSlot(
+                context.getString(com.android.internal.R.string.status_bar_alarm_clock)
+        )
+    }
+
+    @Test
+    fun animateOutOnStartCustomizing() {
+        val animator = Mockito.mock(ViewPropertyAnimator::class.java, Answers.RETURNS_SELF)
+        val duration = 1000L
+        whenever(view.animate()).thenReturn(animator)
+
+        controller.startCustomizingAnimation(show = true, duration)
+
+        verify(animator).setDuration(duration)
+        verify(animator).alpha(0f)
+        verify(animator).setInterpolator(Interpolators.ALPHA_OUT)
+        verify(animator).start()
+    }
+
+    @Test
+    fun animateInOnEndCustomizing() {
+        val animator = Mockito.mock(ViewPropertyAnimator::class.java, Answers.RETURNS_SELF)
+        val duration = 1000L
+        whenever(view.animate()).thenReturn(animator)
+
+        controller.startCustomizingAnimation(show = false, duration)
+
+        verify(animator).setDuration(duration)
+        verify(animator).alpha(1f)
+        verify(animator).setInterpolator(Interpolators.ALPHA_IN)
+        verify(animator).start()
+    }
+
+    @Test
+    fun privacyChipParentVisibleFromStart() {
+        verify(privacyIconsController).onParentVisible()
+    }
+
+    @Test
+    fun privacyChipParentVisibleAlways() {
+        controller.largeScreenActive = true
+        controller.largeScreenActive = false
+        controller.largeScreenActive = true
+
+        verify(privacyIconsController, never()).onParentInvisible()
+    }
+
+    @Test
+    fun clockPivotYInCenter() {
+        val captor = ArgumentCaptor.forClass(View.OnLayoutChangeListener::class.java)
+        verify(clock).addOnLayoutChangeListener(capture(captor))
+        var height = 100
+        val width = 50
+
+        clock.executeLayoutChange(0, 0, width, height, captor.value)
+        verify(clock).pivotY = height.toFloat() / 2
+
+        height = 150
+        clock.executeLayoutChange(0, 0, width, height, captor.value)
+        verify(clock).pivotY = height.toFloat() / 2
+    }
+
+    private fun View.executeLayoutChange(
+            left: Int,
+            top: Int,
+            right: Int,
+            bottom: Int,
+            listener: View.OnLayoutChangeListener
+    ) {
+        val oldLeft = this.left
+        val oldTop = this.top
+        val oldRight = this.right
+        val oldBottom = this.bottom
+        whenever(this.left).thenReturn(left)
+        whenever(this.top).thenReturn(top)
+        whenever(this.right).thenReturn(right)
+        whenever(this.bottom).thenReturn(bottom)
+        whenever(this.height).thenReturn(bottom - top)
+        whenever(this.width).thenReturn(right - left)
+        listener.onLayoutChange(
+                this,
+                oldLeft,
+                oldTop,
+                oldRight,
+                oldBottom,
+                left,
+                top,
+                right,
+                bottom
+        )
     }
 
     private fun createWindowInsets(

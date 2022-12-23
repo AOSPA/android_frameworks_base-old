@@ -43,8 +43,6 @@ import android.Manifest;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.SharedLibraryInfo;
-import com.android.server.pm.pkg.parsing.ParsingPackage;
-import com.android.server.pm.pkg.component.ParsedUsesPermissionImpl;
 import android.content.res.TypedArray;
 import android.os.Environment;
 import android.os.UserHandle;
@@ -53,9 +51,11 @@ import android.util.Pair;
 
 import com.android.server.compat.PlatformCompat;
 import com.android.server.pm.parsing.PackageInfoUtils;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.parsing.pkg.PackageImpl;
 import com.android.server.pm.parsing.pkg.ParsedPackage;
+import com.android.server.pm.pkg.AndroidPackage;
+import com.android.server.pm.pkg.component.ParsedUsesPermissionImpl;
+import com.android.server.pm.pkg.parsing.ParsingPackage;
 import com.android.server.pm.verify.domain.DomainVerificationManagerInternal;
 
 import org.hamcrest.BaseMatcher;
@@ -211,8 +211,8 @@ public class ScanTests {
 
         assertBasicPackageScanResult(scanResult, DUMMY_PACKAGE_NAME, false /*isInstant*/);
 
-        assertThat(scanResult.mPkgSetting.getPrimaryCpuAbi(), is("primaryCpuAbi"));
-        assertThat(scanResult.mPkgSetting.getSecondaryCpuAbi(), is("secondaryCpuAbi"));
+        assertThat(scanResult.mPkgSetting.getPrimaryCpuAbiLegacy(), is("primaryCpuAbi"));
+        assertThat(scanResult.mPkgSetting.getSecondaryCpuAbiLegacy(), is("secondaryCpuAbi"));
         assertThat(scanResult.mPkgSetting.getCpuAbiOverride(), nullValue());
 
         assertPathsNotDerived(scanResult);
@@ -241,7 +241,7 @@ public class ScanTests {
     @Test
     public void installSdkLibrary() throws Exception {
         final ParsedPackage pkg = ((ParsedPackage) createBasicPackage("ogl.sdk_123")
-                .setSdkLibName("ogl.sdk")
+                .setSdkLibraryName("ogl.sdk")
                 .setSdkLibVersionMajor(123)
                 .hideAsParsed())
                 .setPackageName("ogl.sdk_123")
@@ -272,7 +272,7 @@ public class ScanTests {
     @Test
     public void installStaticSharedLibrary() throws Exception {
         final ParsedPackage pkg = ((ParsedPackage) createBasicPackage("static.lib.pkg")
-                .setStaticSharedLibName("static.lib")
+                .setStaticSharedLibraryName("static.lib")
                 .setStaticSharedLibVersion(123L)
                 .hideAsParsed())
                 .setPackageName("static.lib.pkg.123")
@@ -568,7 +568,6 @@ public class ScanTests {
 
     private static void assertBasicPackageScanResult(
             ScanResult scanResult, String packageName, boolean isInstant) {
-        assertThat(scanResult.mSuccess, is(true));
 
         final PackageSetting pkgSetting = scanResult.mPkgSetting;
         assertBasicPackageSetting(scanResult, packageName, isInstant, pkgSetting);

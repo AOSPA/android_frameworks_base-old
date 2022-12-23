@@ -16,8 +16,15 @@
 
 package com.android.server.timezonedetector;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
 
+import android.app.time.TimeZoneCapabilitiesAndConfig;
+import android.app.time.TimeZoneConfiguration;
+import android.app.timezonedetector.ManualTimeZoneSuggestion;
 import android.content.Context;
 import android.os.HandlerThread;
 
@@ -35,15 +42,17 @@ import java.util.List;
 public class TimeZoneDetectorInternalImplTest {
 
     private static final long ARBITRARY_ELAPSED_REALTIME_MILLIS = 1234L;
-    private static final List<String> ARBITRARY_ZONE_IDS = Arrays.asList("TestZoneId");
+    private static final String ARBITRARY_ZONE_ID = "TestZoneId";
+    private static final List<String> ARBITRARY_ZONE_IDS = Arrays.asList(ARBITRARY_ZONE_ID);
+    private static final int ARBITRARY_USER_ID = 9999;
 
     private Context mMockContext;
-    private FakeTimeZoneDetectorStrategy mFakeTimeZoneDetectorStrategy;
-
-    private TimeZoneDetectorInternalImpl mTimeZoneDetectorInternal;
     private HandlerThread mHandlerThread;
     private TestHandler mTestHandler;
+    private TestCurrentUserIdentityInjector mTestCurrentUserIdentityInjector;
+    private FakeTimeZoneDetectorStrategy mFakeTimeZoneDetectorStrategySpy;
 
+    private TimeZoneDetectorInternalImpl mTimeZoneDetectorInternal;
 
     @Before
     public void setUp() {
@@ -53,11 +62,13 @@ public class TimeZoneDetectorInternalImplTest {
         mHandlerThread = new HandlerThread("TimeZoneDetectorInternalTest");
         mHandlerThread.start();
         mTestHandler = new TestHandler(mHandlerThread.getLooper());
-
-        mFakeTimeZoneDetectorStrategy = new FakeTimeZoneDetectorStrategy();
+        mTestCurrentUserIdentityInjector = new TestCurrentUserIdentityInjector();
+        mTestCurrentUserIdentityInjector.initializeCurrentUserId(ARBITRARY_USER_ID);
+        mFakeTimeZoneDetectorStrategySpy = spy(new FakeTimeZoneDetectorStrategy());
 
         mTimeZoneDetectorInternal = new TimeZoneDetectorInternalImpl(
-                mMockContext, mTestHandler, mFakeTimeZoneDetectorStrategy);
+                mMockContext, mTestHandler, mTestCurrentUserIdentityInjector,
+                mFakeTimeZoneDetectorStrategySpy);
     }
 
     @After
@@ -67,17 +78,88 @@ public class TimeZoneDetectorInternalImplTest {
     }
 
     @Test
+    public void testGetCapabilitiesAndConfigForDpm() throws Exception {
+        final boolean autoDetectionEnabled = true;
+        ConfigurationInternal testConfig = createConfigurationInternal(autoDetectionEnabled);
+        mFakeTimeZoneDetectorStrategySpy.initializeConfiguration(testConfig);
+
+        TimeZoneCapabilitiesAndConfig actualCapabilitiesAndConfig =
+                mTimeZoneDetectorInternal.getCapabilitiesAndConfigForDpm();
+
+        int expectedUserId = mTestCurrentUserIdentityInjector.getCurrentUserId();
+        final boolean expectedBypassUserPolicyChecks = true;
+        verify(mFakeTimeZoneDetectorStrategySpy).getCapabilitiesAndConfig(
+                expectedUserId, expectedBypassUserPolicyChecks);
+
+        TimeZoneCapabilitiesAndConfig expectedCapabilitiesAndConfig =
+                new TimeZoneCapabilitiesAndConfig(
+                        testConfig.asCapabilities(expectedBypassUserPolicyChecks),
+                        testConfig.asConfiguration());
+        assertEquals(expectedCapabilitiesAndConfig, actualCapabilitiesAndConfig);
+    }
+
+    @Test
+    public void testUpdateConfigurationForDpm() throws Exception {
+        final boolean autoDetectionEnabled = false;
+        ConfigurationInternal initialConfigurationInternal =
+                createConfigurationInternal(autoDetectionEnabled);
+        mFakeTimeZoneDetectorStrategySpy.initializeConfiguration(initialConfigurationInternal);
+
+        TimeZoneConfiguration timeConfiguration = new TimeZoneConfiguration.Builder()
+                .setAutoDetectionEnabled(true)
+                .build();
+        assertTrue(mTimeZoneDetectorInternal.updateConfigurationForDpm(timeConfiguration));
+
+        final boolean expectedBypassUserPolicyChecks = true;
+        verify(mFakeTimeZoneDetectorStrategySpy).updateConfiguration(
+                mTestCurrentUserIdentityInjector.getCurrentUserId(),
+                timeConfiguration,
+                expectedBypassUserPolicyChecks);
+    }
+
+    @Test
+    public void testSetManualTimeZoneForDpm() throws Exception {
+        ManualTimeZoneSuggestion timeZoneSuggestion = createManualTimeZoneSuggestion();
+
+        // The fake strategy always returns true.
+        assertTrue(mTimeZoneDetectorInternal.setManualTimeZoneForDpm(timeZoneSuggestion));
+
+        int expectedUserId = mTestCurrentUserIdentityInjector.getCurrentUserId();
+        boolean expectedBypassUserPolicyChecks = true;
+        verify(mFakeTimeZoneDetectorStrategySpy).suggestManualTimeZone(
+                expectedUserId, timeZoneSuggestion, expectedBypassUserPolicyChecks);
+    }
+
+    @Test
     public void testSuggestGeolocationTimeZone() throws Exception {
         GeolocationTimeZoneSuggestion timeZoneSuggestion = createGeolocationTimeZoneSuggestion();
         mTimeZoneDetectorInternal.suggestGeolocationTimeZone(timeZoneSuggestion);
         mTestHandler.assertTotalMessagesEnqueued(1);
 
         mTestHandler.waitForMessagesToBeProcessed();
-        mFakeTimeZoneDetectorStrategy.verifySuggestGeolocationTimeZoneCalled(timeZoneSuggestion);
+        verify(mFakeTimeZoneDetectorStrategySpy).suggestGeolocationTimeZone(timeZoneSuggestion);
+    }
+    private static ManualTimeZoneSuggestion createManualTimeZoneSuggestion() {
+        return new ManualTimeZoneSuggestion(ARBITRARY_ZONE_ID);
     }
 
     private static GeolocationTimeZoneSuggestion createGeolocationTimeZoneSuggestion() {
         return GeolocationTimeZoneSuggestion.createCertainSuggestion(
                 ARBITRARY_ELAPSED_REALTIME_MILLIS, ARBITRARY_ZONE_IDS);
+    }
+
+    private static ConfigurationInternal createConfigurationInternal(boolean autoDetectionEnabled) {
+        return new ConfigurationInternal.Builder()
+                .setUserId(ARBITRARY_USER_ID)
+                .setTelephonyDetectionFeatureSupported(true)
+                .setGeoDetectionFeatureSupported(true)
+                .setTelephonyFallbackSupported(false)
+                .setGeoDetectionRunInBackgroundEnabled(false)
+                .setEnhancedMetricsCollectionEnabled(false)
+                .setUserConfigAllowed(true)
+                .setAutoDetectionEnabledSetting(autoDetectionEnabled)
+                .setLocationEnabledSetting(false)
+                .setGeoDetectionEnabledSetting(false)
+                .build();
     }
 }

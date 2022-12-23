@@ -16,16 +16,26 @@
 
 package com.android.server.am;
 
-import android.content.BroadcastReceiver;
+import android.annotation.NonNull;
+import android.annotation.Nullable;
+import android.annotation.UptimeMillisLong;
 import android.content.ContentResolver;
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.DropBoxManager;
 import android.os.Handler;
-import android.os.IBinder;
+import android.os.Trace;
+import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
 
+import com.android.internal.annotations.GuardedBy;
+import com.android.server.DropBoxManagerInternal;
+import com.android.server.LocalServices;
+
 import java.io.FileDescriptor;
+import java.io.FileOutputStream;
 import java.io.PrintWriter;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -33,24 +43,62 @@ import java.util.Set;
  */
 public abstract class BroadcastQueue {
     public static final String TAG = "BroadcastQueue";
+    public static final String TAG_DUMP = "broadcast_queue_dump";
 
-    final ActivityManagerService mService;
-    final Handler mHandler;
-    final BroadcastConstants mConstants;
-    final BroadcastSkipPolicy mSkipPolicy;
-    final String mQueueName;
+    final @NonNull ActivityManagerService mService;
+    final @NonNull Handler mHandler;
+    final @NonNull BroadcastSkipPolicy mSkipPolicy;
+    final @NonNull BroadcastHistory mHistory;
+    final @NonNull String mQueueName;
 
-    BroadcastQueue(ActivityManagerService service, Handler handler,
-            String name, BroadcastConstants constants) {
-        mService = service;
-        mHandler = handler;
-        mQueueName = name;
-        mConstants = constants;
-        mSkipPolicy = new BroadcastSkipPolicy(service);
+    BroadcastQueue(@NonNull ActivityManagerService service, @NonNull Handler handler,
+            @NonNull String name, @NonNull BroadcastSkipPolicy skipPolicy,
+            @NonNull BroadcastHistory history) {
+        mService = Objects.requireNonNull(service);
+        mHandler = Objects.requireNonNull(handler);
+        mQueueName = Objects.requireNonNull(name);
+        mSkipPolicy = Objects.requireNonNull(skipPolicy);
+        mHistory = Objects.requireNonNull(history);
     }
 
-    void start(ContentResolver resolver) {
-        mConstants.startObserving(mHandler, resolver);
+    static void logw(@NonNull String msg) {
+        Slog.w(TAG, msg);
+    }
+
+    static void logv(@NonNull String msg) {
+        Slog.v(TAG, msg);
+    }
+
+    static void logv(@NonNull String msg, @Nullable PrintWriter pw) {
+        logv(msg);
+        if (pw != null) {
+            pw.println(msg);
+            pw.flush();
+        }
+    }
+
+    static void checkState(boolean expression, @NonNull String msg) {
+        if (!expression) {
+            throw new IllegalStateException(msg);
+        }
+    }
+
+    static void checkStateWtf(boolean expression, @NonNull String msg) {
+        if (!expression) {
+            Slog.wtf(TAG, new IllegalStateException(msg));
+        }
+    }
+
+    static int traceBegin(@NonNull String methodName) {
+        final int cookie = methodName.hashCode();
+        Trace.asyncTraceForTrackBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
+                TAG, methodName, cookie);
+        return cookie;
+    }
+
+    static void traceEnd(int cookie) {
+        Trace.asyncTraceForTrackEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER,
+                TAG, cookie);
     }
 
     @Override
@@ -58,11 +106,20 @@ public abstract class BroadcastQueue {
         return mQueueName;
     }
 
+    public abstract void start(@NonNull ContentResolver resolver);
+
     public abstract boolean isDelayBehindServices();
 
-    public abstract BroadcastRecord getPendingBroadcastLocked();
-
-    public abstract BroadcastRecord getActiveBroadcastLocked();
+    /**
+     * Return the preferred scheduling group for the given process, typically
+     * influenced by a broadcast being actively dispatched.
+     *
+     * @return scheduling group such as {@link ProcessList#SCHED_GROUP_DEFAULT},
+     *         otherwise {@link ProcessList#SCHED_GROUP_UNDEFINED} if this queue
+     *         has no opinion.
+     */
+    @GuardedBy("mService")
+    public abstract int getPreferredSchedulingGroupLocked(@NonNull ProcessRecord app);
 
     /**
      * Enqueue the given broadcast to be eventually dispatched.
@@ -73,78 +130,135 @@ public abstract class BroadcastQueue {
      * When {@link Intent#FLAG_RECEIVER_REPLACE_PENDING} is set, this method
      * internally handles replacement of any matching broadcasts.
      */
-    public abstract void enqueueBroadcastLocked(BroadcastRecord r);
-
-    public abstract BroadcastRecord getMatchingOrderedReceiver(IBinder receiver);
+    @GuardedBy("mService")
+    public abstract void enqueueBroadcastLocked(@NonNull BroadcastRecord r);
 
     /**
-     * Signal delivered back from a {@link BroadcastReceiver} to indicate that
-     * it's finished processing the current broadcast being dispatched to it.
+     * Signal delivered back from the given process to indicate that it's
+     * finished processing the current broadcast being dispatched to it.
      * <p>
      * If this signal isn't delivered back in a timely fashion, we assume the
      * receiver has somehow wedged and we trigger an ANR.
      */
-    public abstract boolean finishReceiverLocked(BroadcastRecord r, int resultCode,
-            String resultData, Bundle resultExtras, boolean resultAbort, boolean waitForServices);
+    @GuardedBy("mService")
+    public abstract boolean finishReceiverLocked(@NonNull ProcessRecord app, int resultCode,
+            @Nullable String resultData, @Nullable Bundle resultExtras, boolean resultAbort,
+            boolean waitForServices);
 
+    @GuardedBy("mService")
     public abstract void backgroundServicesFinishedLocked(int userId);
 
     /**
      * Signal from OS internals that the given process has just been actively
      * attached, and is ready to begin receiving broadcasts.
+     *
+     * @return if the queue performed an action on the given process, such as
+     *         dispatching a pending broadcast
      */
-    public abstract boolean onApplicationAttachedLocked(ProcessRecord app);
+    @GuardedBy("mService")
+    public abstract boolean onApplicationAttachedLocked(@NonNull ProcessRecord app);
 
     /**
      * Signal from OS internals that the given process has timed out during
      * an attempted start and attachment.
      */
-    public abstract boolean onApplicationTimeoutLocked(ProcessRecord app);
+    @GuardedBy("mService")
+    public abstract void onApplicationTimeoutLocked(@NonNull ProcessRecord app);
 
     /**
      * Signal from OS internals that the given process, which had already been
      * previously attached, has now encountered a problem such as crashing or
      * not responding.
      */
-    public abstract boolean onApplicationProblemLocked(ProcessRecord app);
+    @GuardedBy("mService")
+    public abstract void onApplicationProblemLocked(@NonNull ProcessRecord app);
 
     /**
      * Signal from OS internals that the given process has been killed, and is
      * no longer actively running.
      */
-    public abstract boolean onApplicationCleanupLocked(ProcessRecord app);
+    @GuardedBy("mService")
+    public abstract void onApplicationCleanupLocked(@NonNull ProcessRecord app);
 
     /**
      * Signal from OS internals that the given package (or some subset of that
      * package) has been disabled or uninstalled, and that any pending
      * broadcasts should be cleaned up.
      */
-    public abstract boolean cleanupDisabledPackageReceiversLocked(
-            String packageName, Set<String> filterByClasses, int userId, boolean doit);
+    @GuardedBy("mService")
+    public abstract boolean cleanupDisabledPackageReceiversLocked(@Nullable String packageName,
+            @Nullable Set<String> filterByClasses, int userId);
 
     /**
      * Quickly determine if this queue has broadcasts that are still waiting to
      * be delivered at some point in the future.
      *
-     * @see #flush()
+     * @see #waitForIdle
+     * @see #waitForBarrier
      */
-    public abstract boolean isIdle();
+    @GuardedBy("mService")
+    public abstract boolean isIdleLocked();
+
+    /**
+     * Quickly determine if this queue has broadcasts enqueued before the given
+     * barrier timestamp that are still waiting to be delivered.
+     *
+     * @see #waitForIdle
+     * @see #waitForBarrier
+     */
+    @GuardedBy("mService")
+    public abstract boolean isBeyondBarrierLocked(@UptimeMillisLong long barrierTime);
+
+    /**
+     * Wait until this queue becomes completely idle.
+     * <p>
+     * Any broadcasts waiting to be delivered at some point in the future will
+     * be dispatched as quickly as possible.
+     * <p>
+     * Callers are cautioned that the queue may take a long time to go idle,
+     * since running apps can continue sending new broadcasts in perpetuity;
+     * consider using {@link #waitForBarrier} instead.
+     */
+    public abstract void waitForIdle(@Nullable PrintWriter pw);
+
+    /**
+     * Wait until any currently waiting broadcasts have been dispatched.
+     * <p>
+     * Any broadcasts waiting to be delivered at some point in the future will
+     * be dispatched as quickly as possible.
+     * <p>
+     * Callers are advised that this method will <em>not</em> wait for any
+     * future broadcasts that are newly enqueued after being invoked.
+     */
+    public abstract void waitForBarrier(@Nullable PrintWriter pw);
 
     /**
      * Brief summary of internal state, useful for debugging purposes.
      */
-    public abstract String describeState();
+    @GuardedBy("mService")
+    public abstract @NonNull String describeStateLocked();
+
+    @GuardedBy("mService")
+    public abstract void dumpDebug(@NonNull ProtoOutputStream proto, long fieldId);
+
+    @GuardedBy("mService")
+    public abstract boolean dumpLocked(@NonNull FileDescriptor fd, @NonNull PrintWriter pw,
+            @NonNull String[] args, int opti, boolean dumpConstants, boolean dumpHistory,
+            boolean dumpAll, @Nullable String dumpPackage, boolean needSep);
 
     /**
-     * Flush any broadcasts still waiting to be delivered, causing them to be
-     * delivered as soon as possible.
-     *
-     * @see #isIdle()
+     * Execute {@link #dumpLocked} and store the output into
+     * {@link DropBoxManager} for later inspection.
      */
-    public abstract void flush();
-
-    public abstract void dumpDebug(ProtoOutputStream proto, long fieldId);
-
-    public abstract boolean dumpLocked(FileDescriptor fd, PrintWriter pw, String[] args,
-            int opti, boolean dumpAll, String dumpPackage, boolean needSep);
+    public void dumpToDropBoxLocked(@Nullable String msg) {
+        LocalServices.getService(DropBoxManagerInternal.class).addEntry(TAG_DUMP, (fd) -> {
+            try (FileOutputStream out = new FileOutputStream(fd);
+                    PrintWriter pw = new PrintWriter(out)) {
+                pw.print("Message: ");
+                pw.println(msg);
+                dumpLocked(fd, pw, null, 0, false, false, false, null, false);
+                pw.flush();
+            }
+        }, DropBoxManager.IS_TEXT);
+    }
 }

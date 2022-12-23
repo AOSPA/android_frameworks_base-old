@@ -18,6 +18,8 @@ package com.android.internal.app;
 
 import android.content.ComponentName;
 import android.content.Intent;
+import android.hardware.soundtrigger.KeyphraseMetadata;
+import android.hardware.soundtrigger.SoundTrigger;
 import android.media.AudioFormat;
 import android.media.permission.Identity;
 import android.os.Bundle;
@@ -25,18 +27,17 @@ import android.os.ParcelFileDescriptor;
 import android.os.PersistableBundle;
 import android.os.RemoteCallback;
 import android.os.SharedMemory;
+import android.service.voice.IMicrophoneHotwordDetectionVoiceInteractionCallback;
+import android.service.voice.IVoiceInteractionService;
+import android.service.voice.IVoiceInteractionSession;
+import android.service.voice.VisibleActivityInfo;
 
 import com.android.internal.app.IHotwordRecognitionStatusCallback;
 import com.android.internal.app.IVoiceActionCheckCallback;
-import com.android.internal.app.IVoiceInteractionSessionShowCallback;
-import com.android.internal.app.IVoiceInteractor;
 import com.android.internal.app.IVoiceInteractionSessionListener;
+import com.android.internal.app.IVoiceInteractionSessionShowCallback;
 import com.android.internal.app.IVoiceInteractionSoundTriggerSession;
-import android.hardware.soundtrigger.KeyphraseMetadata;
-import android.hardware.soundtrigger.SoundTrigger;
-import android.service.voice.IVoiceInteractionService;
-import android.service.voice.IVoiceInteractionSession;
-import android.service.voice.IMicrophoneHotwordDetectionVoiceInteractionCallback;
+import com.android.internal.app.IVoiceInteractor;
 
 interface IVoiceInteractionManagerService {
     void showSession(in Bundle sessionArgs, int flags, String attributionTag);
@@ -244,6 +245,23 @@ interface IVoiceInteractionManagerService {
 
     /**
      * Set configuration and pass read-only data to hotword detection service.
+     *
+     * @param options Application configuration data to provide to the
+     * {@link HotwordDetectionService}. PersistableBundle does not allow any remotable objects or
+     * other contents that can be used to communicate with other processes.
+     * @param sharedMemory The unrestricted data blob to provide to the
+     * {@link HotwordDetectionService}. Use this to provide the hotword models data or other
+     * such data to the trusted process.
+     */
+    @EnforcePermission("MANAGE_HOTWORD_DETECTION")
+    void updateState(
+            in PersistableBundle options,
+            in SharedMemory sharedMemory);
+
+    /**
+     * Set configuration and pass read-only data to hotword detection service when creating
+     * the detector.
+     *
      * Caller must provide an identity, used for permission tracking purposes.
      * The uid/pid elements of the identity will be ignored by the server and replaced with the ones
      * provided by binder.
@@ -258,7 +276,7 @@ interface IVoiceInteractionManagerService {
      * @param detectorType Indicate which detector is used.
      */
     @EnforcePermission("MANAGE_HOTWORD_DETECTION")
-    void updateState(
+    void initAndVerifyDetector(
             in Identity originatorIdentity,
             in PersistableBundle options,
             in SharedMemory sharedMemory,
@@ -270,7 +288,6 @@ interface IVoiceInteractionManagerService {
      */
     void shutdownHotwordDetectionService();
 
-    @EnforcePermission(allOf={"RECORD_AUDIO", "CAPTURE_AUDIO_HOTWORD"})
     void startListeningFromMic(
         in AudioFormat audioFormat,
         in IMicrophoneHotwordDetectionVoiceInteractionCallback callback);
@@ -286,7 +303,6 @@ interface IVoiceInteractionManagerService {
     /**
      * Test API to simulate to trigger hardware recognition event for test.
      */
-    @EnforcePermission(allOf={"RECORD_AUDIO", "CAPTURE_AUDIO_HOTWORD"})
     void triggerHardwareRecognitionEventForTest(
             in SoundTrigger.KeyphraseRecognitionEvent event,
             in IHotwordRecognitionStatusCallback callback);
@@ -305,4 +321,14 @@ interface IVoiceInteractionManagerService {
      * Notifies when the session window is shown or hidden.
      */
     void setSessionWindowVisible(in IBinder token, boolean visible);
+
+    /**
+     * Notifies when the Activity lifecycle event changed.
+     *
+     * @param activityToken The token of activity.
+     * @param type The type of lifecycle event of the activity lifecycle.
+     */
+    oneway void notifyActivityEventChanged(
+            in IBinder activityToken,
+            int type);
 }

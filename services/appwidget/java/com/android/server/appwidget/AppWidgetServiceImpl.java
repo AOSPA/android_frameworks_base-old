@@ -104,8 +104,6 @@ import android.util.SparseBooleanArray;
 import android.util.SparseIntArray;
 import android.util.SparseLongArray;
 import android.util.TypedValue;
-import android.util.TypedXmlPullParser;
-import android.util.TypedXmlSerializer;
 import android.util.Xml;
 import android.util.proto.ProtoOutputStream;
 import android.view.Display;
@@ -124,6 +122,8 @@ import com.android.internal.os.SomeArgs;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.widget.IRemoteViewsFactory;
+import com.android.modules.utils.TypedXmlPullParser;
+import com.android.modules.utils.TypedXmlSerializer;
 import com.android.server.LocalServices;
 import com.android.server.ServiceThread;
 import com.android.server.WidgetBackupProvider;
@@ -868,6 +868,33 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
             }
 
             return appWidgetId;
+        }
+    }
+
+    @Override
+    public void setAppWidgetHidden(String callingPackage, int hostId) {
+        final int userId = UserHandle.getCallingUserId();
+
+        if (DEBUG) {
+            Slog.i(TAG, "setAppWidgetHidden() " + userId);
+        }
+
+        mSecurityPolicy.enforceCallFromPackage(callingPackage);
+
+        synchronized (mLock) {
+            ensureGroupStateLoadedLocked(userId, /* enforceUserUnlockingOrUnlocked */false);
+
+            HostId id = new HostId(Binder.getCallingUid(), hostId, callingPackage);
+            Host host = lookupHostLocked(id);
+
+            if (host != null) {
+                try {
+                    mAppOpsManagerInternal.updateAppWidgetVisibility(host.getWidgetUids(), false);
+                } catch (NullPointerException e) {
+                    Slog.e(TAG, "setAppWidgetHidden(): Getting host uids: " + host.toString(), e);
+                    throw e;
+                }
+            }
         }
     }
 
@@ -3453,11 +3480,12 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
                 Slog.w(TAG, "Failed to retrieve app info for " + packageName
                         + " userId=" + userId, e);
             }
-            if (newAppInfo == null) {
+            if (newAppInfo == null || provider.info == null
+                    || provider.info.providerInfo == null) {
                 continue;
             }
             ApplicationInfo oldAppInfo = provider.info.providerInfo.applicationInfo;
-            if (!newAppInfo.sourceDir.equals(oldAppInfo.sourceDir)) {
+            if (oldAppInfo == null || !newAppInfo.sourceDir.equals(oldAppInfo.sourceDir)) {
                 // Overlay paths are generated against a particular version of an application.
                 // The overlays paths of a newly upgraded application are incompatible with the
                 // old version of the application.

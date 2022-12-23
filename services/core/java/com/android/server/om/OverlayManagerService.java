@@ -23,7 +23,9 @@ import static android.content.Intent.ACTION_PACKAGE_CHANGED;
 import static android.content.Intent.ACTION_PACKAGE_REMOVED;
 import static android.content.Intent.ACTION_USER_ADDED;
 import static android.content.Intent.ACTION_USER_REMOVED;
+import static android.content.Intent.EXTRA_PACKAGE_NAME;
 import static android.content.Intent.EXTRA_REASON;
+import static android.content.Intent.EXTRA_USER_ID;
 import static android.content.om.OverlayManagerTransaction.Request.TYPE_REGISTER_FABRICATED;
 import static android.content.om.OverlayManagerTransaction.Request.TYPE_SET_DISABLED;
 import static android.content.om.OverlayManagerTransaction.Request.TYPE_SET_ENABLED;
@@ -39,6 +41,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
+import android.app.ActivityManagerInternal;
 import android.app.IActivityManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -52,10 +55,13 @@ import android.content.om.OverlayableInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManagerInternal;
 import android.content.pm.UserInfo;
+import android.content.pm.UserPackage;
 import android.content.pm.overlay.OverlayPaths;
 import android.content.res.ApkAssets;
 import android.net.Uri;
 import android.os.Binder;
+import android.os.Build;
+import android.os.Bundle;
 import android.os.Environment;
 import android.os.FabricatedOverlayInternal;
 import android.os.HandlerThread;
@@ -84,7 +90,7 @@ import com.android.server.SystemConfig;
 import com.android.server.SystemService;
 import com.android.server.pm.KnownPackages;
 import com.android.server.pm.UserManagerService;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
+import com.android.server.pm.pkg.AndroidPackage;
 
 import libcore.util.EmptyArray;
 
@@ -876,14 +882,14 @@ public final class OverlayManagerService extends SystemService {
                     }
                     Slog.d(TAG, "commit failed: " + e.getMessage(), e);
                     throw new SecurityException("commit failed"
-                            + (DEBUG ? ": " + e.getMessage() : ""));
+                            + (DEBUG || Build.IS_DEBUGGABLE ? ": " + e.getMessage() : ""));
                 }
             } finally {
                 traceEnd(TRACE_TAG_RRO);
             }
         }
 
-        private Set<PackageAndUser> executeRequest(
+        private Set<UserPackage> executeRequest(
                 @NonNull final OverlayManagerTransaction.Request request)
                 throws OperationFailedException {
             Objects.requireNonNull(request, "Transaction contains a null request");
@@ -928,7 +934,7 @@ public final class OverlayManagerService extends SystemService {
             try {
                 switch (request.type) {
                     case TYPE_SET_ENABLED:
-                        Set<PackageAndUser> result = null;
+                        Set<UserPackage> result = null;
                         result = CollectionUtils.addAll(result,
                                 mImpl.setEnabled(request.overlay, true, realUserId));
                         result = CollectionUtils.addAll(result,
@@ -969,7 +975,7 @@ public final class OverlayManagerService extends SystemService {
 
             synchronized (mLock) {
                 // execute the requests (as calling user)
-                Set<PackageAndUser> affectedPackagesToUpdate = null;
+                Set<UserPackage> affectedPackagesToUpdate = null;
                 for (final OverlayManagerTransaction.Request request : transaction) {
                     affectedPackagesToUpdate = CollectionUtils.addAll(affectedPackagesToUpdate,
                             executeRequest(request));
@@ -1009,7 +1015,9 @@ public final class OverlayManagerService extends SystemService {
                 }
                 opti++;
 
-                if ("-h".equals(opt)) {
+                if ("-a".equals(opt)) {
+                    // dumpsys will pass in -a; silently ignore it
+                } else if ("-h".equals(opt)) {
                     pw.println("dump [-h] [--verbose] [--user USER_ID] [[FIELD] PACKAGE]");
                     pw.println("  Print debugging information about the overlay manager.");
                     pw.println("  With optional parameter PACKAGE, limit output to the specified");
@@ -1098,6 +1106,7 @@ public final class OverlayManagerService extends SystemService {
         private void enforceActor(@NonNull OverlayIdentifier overlay, @NonNull String methodName,
                 int realUserId) throws SecurityException {
             OverlayInfo overlayInfo = mImpl.getOverlayInfo(overlay, realUserId);
+
             if (overlayInfo == null) {
                 throw new IllegalArgumentException("Unable to retrieve overlay information for "
                         + overlay);
@@ -1363,13 +1372,13 @@ public final class OverlayManagerService extends SystemService {
         }
     }
 
-    private void updateTargetPackagesLocked(@Nullable PackageAndUser updatedTarget) {
+    private void updateTargetPackagesLocked(@Nullable UserPackage updatedTarget) {
         if (updatedTarget != null) {
             updateTargetPackagesLocked(Set.of(updatedTarget));
         }
     }
 
-    private void updateTargetPackagesLocked(@Nullable Set<PackageAndUser> updatedTargets) {
+    private void updateTargetPackagesLocked(@Nullable Set<UserPackage> updatedTargets) {
         if (CollectionUtils.isEmpty(updatedTargets)) {
             return;
         }
@@ -1398,7 +1407,7 @@ public final class OverlayManagerService extends SystemService {
 
     @Nullable
     private static SparseArray<ArraySet<String>> groupTargetsByUserId(
-            @Nullable final Set<PackageAndUser> targetsAndUsers) {
+            @Nullable final Set<UserPackage> targetsAndUsers) {
         final SparseArray<ArraySet<String>> userTargets = new SparseArray<>();
         CollectionUtils.forEach(targetsAndUsers, target -> {
             ArraySet<String> targets = userTargets.get(target.userId);
@@ -1416,17 +1425,38 @@ public final class OverlayManagerService extends SystemService {
 
     private static void broadcastActionOverlayChanged(@NonNull final Set<String> targetPackages,
             final int userId) {
+        final ActivityManagerInternal amInternal =
+                LocalServices.getService(ActivityManagerInternal.class);
         CollectionUtils.forEach(targetPackages, target -> {
             final Intent intent = new Intent(ACTION_OVERLAY_CHANGED,
                     Uri.fromParts("package", target, null));
             intent.setFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
-            try {
-                ActivityManager.getService().broadcastIntent(null, intent, null, null, 0, null,
-                        null, null, android.app.AppOpsManager.OP_NONE, null, false, false, userId);
-            } catch (RemoteException e) {
-                Slog.e(TAG, "broadcastActionOverlayChanged remote exception", e);
-            }
+            intent.putExtra(EXTRA_PACKAGE_NAME, target);
+            intent.putExtra(EXTRA_USER_ID, userId);
+            amInternal.broadcastIntent(intent, null /* resultTo */, null /* requiredPermissions */,
+                    false /* serialized */, userId, null /* appIdAllowList */,
+                    OverlayManagerService::filterReceiverAccess, null /* bOptions */);
         });
+    }
+
+    /**
+     * A callback from the broadcast queue to determine whether the intent
+     * {@link Intent#ACTION_OVERLAY_CHANGED} is visible to the receiver.
+     *
+     * @param callingUid The receiver's uid.
+     * @param extras The extras of intent that contains {@link Intent#EXTRA_PACKAGE_NAME} and
+     * {@link Intent#EXTRA_USER_ID} to check.
+     * @return {@code null} if the intent is not visible to the receiver.
+     */
+    @Nullable
+    private static Bundle filterReceiverAccess(int callingUid, @NonNull Bundle extras) {
+        final String packageName = extras.getString(EXTRA_PACKAGE_NAME);
+        final int userId = extras.getInt(EXTRA_USER_ID);
+        if (LocalServices.getService(PackageManagerInternal.class).filterAppAccess(
+                packageName, callingUid, userId, false /* filterUninstalled */)) {
+            return null;
+        }
+        return extras;
     }
 
     /**
@@ -1444,7 +1474,7 @@ public final class OverlayManagerService extends SystemService {
 
     @NonNull
     private SparseArray<List<String>> updatePackageManagerLocked(
-            @Nullable Set<PackageAndUser> targets) {
+            @Nullable Set<UserPackage> targets) {
         if (CollectionUtils.isEmpty(targets)) {
             return new SparseArray<>();
         }

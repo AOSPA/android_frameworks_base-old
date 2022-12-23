@@ -114,6 +114,7 @@ android_library {
         "androidx.dynamicanimation_dynamicanimation",
         "androidx-constraintlayout_constraintlayout",
         "androidx.exifinterface_exifinterface",
+        "androidx.test.ext.junit",
         "com.google.android.material_material",
         "kotlinx_coroutines_android",
         "kotlinx_coroutines",
@@ -124,6 +125,8 @@ android_library {
         "dagger2",
         "jsr330",
         "lottie",
+        "LowLightDreamLib",
+        "motion_tool_lib",
     ],
     manifest: "AndroidManifest.xml",
     defaults: [
@@ -224,20 +227,24 @@ android_library {
         "kotlinx-coroutines-android",
         "kotlinx-coroutines-core",
         "kotlinx_coroutines_test",
+        "kotlin-reflect",
         "iconloader_base",
         "SystemUI-tags",
         "SystemUI-proto",
         "metrics-helper-lib",
         "hamcrest-library",
         "androidx.test.rules",
-        "androidx.test.uiautomator",
+        "androidx.test.uiautomator_uiautomator",
         "mockito-target-extended-minus-junit4",
+        "androidx.test.ext.junit",
         "testables",
         "truth-prebuilt",
         "monet",
         "dagger2",
         "jsr330",
         "WindowManager-Shell",
+        "LowLightDreamLib",
+        "motion_tool_lib",
     ],
     libs: [
         "android.test.runner",
@@ -257,11 +264,9 @@ android_library {
     },
 }
 
-// Opt-in config for optimizing the SystemUI target using R8.
-// Enabled via `export SYSTEMUI_OPTIMIZE_JAVA=true`, or explicitly in Make via
-// the `SOONG_CONFIG_ANDROID_SYSTEMUI_OPTIMIZE_JAVA` variable.
-// TODO(b/203472868): Enable optimizations by default after stabilizing and
-// building out retrace infrastructure.
+// Opt-out config for optimizing the SystemUI target using R8.
+// Disabled via `export SYSTEMUI_OPTIMIZE_JAVA=false`, or explicitly in Make via
+// `SYSTEMUI_OPTIMIZE_JAVA := false`.
 soong_config_module_type {
     name: "systemui_optimized_java_defaults",
     module_type: "java_defaults",
@@ -319,5 +324,6 @@ android_app {
     dxflags: ["--multi-dex"],
     required: [
         "privapp_whitelist_com.android.systemui",
+        "wmshell.protolog.json.gz",
     ],
 }

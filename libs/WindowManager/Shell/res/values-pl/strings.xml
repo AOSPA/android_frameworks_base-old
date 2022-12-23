@@ -22,8 +22,7 @@
     <string name="pip_phone_settings" msgid="5468987116750491918">"Ustawienia"</string>
     <string name="pip_phone_enter_split" msgid="7042877263880641911">"Włącz podzielony ekran"</string>
     <string name="pip_menu_title" msgid="5393619322111827096">"Menu"</string>
-    <!-- no translation found for pip_menu_accessibility_title (8129016817688656249) -->
-    <skip />
+    <string name="pip_menu_accessibility_title" msgid="8129016817688656249">"Menu funkcji Obraz w obrazie."</string>
     <string name="pip_notification_title" msgid="1347104727641353453">"Aplikacja <xliff:g id="NAME">%s</xliff:g> działa w trybie obraz w obrazie"</string>
     <string name="pip_notification_message" msgid="8854051911700302620">"Jeśli nie chcesz, by aplikacja <xliff:g id="NAME">%s</xliff:g> korzystała z tej funkcji, otwórz ustawienia i wyłącz ją."</string>
     <string name="pip_play" msgid="3496151081459417097">"Odtwórz"</string>
@@ -38,8 +37,7 @@
     <string name="forced_resizable_secondary_display" msgid="1768046938673582671">"Aplikacja może nie działać na dodatkowym ekranie."</string>
     <string name="activity_launch_on_secondary_display_failed_text" msgid="4226485344988071769">"Aplikacja nie obsługuje uruchamiania na dodatkowych ekranach."</string>
     <string name="accessibility_divider" msgid="703810061635792791">"Linia dzielenia ekranu"</string>
-    <!-- no translation found for divider_title (5482989479865361192) -->
-    <skip />
+    <string name="divider_title" msgid="5482989479865361192">"Linia dzielenia ekranu"</string>
     <string name="accessibility_action_divider_left_full" msgid="1792313656305328536">"Lewa część ekranu na pełnym ekranie"</string>
     <string name="accessibility_action_divider_left_70" msgid="8859845045360659250">"70% lewej części ekranu"</string>
     <string name="accessibility_action_divider_left_50" msgid="3488317024557521561">"50% lewej części ekranu"</string>
@@ -80,12 +78,24 @@
     <string name="camera_compat_treatment_suggested_button_description" msgid="8103916969024076767">"Problemy z aparatem?\nKliknij, aby dopasować"</string>
     <string name="camera_compat_treatment_applied_button_description" msgid="2944157113330703897">"Naprawa się nie udała?\nKliknij, aby cofnąć"</string>
     <string name="camera_compat_dismiss_button_description" msgid="2795364433503817511">"Brak problemów z aparatem? Kliknij, aby zamknąć"</string>
-    <string name="letterbox_education_dialog_title" msgid="6688664582871779215">"Niektóre aplikacje działają najlepiej w orientacji pionowej"</string>
-    <string name="letterbox_education_dialog_subtext" msgid="4853542518367719562">"Wypróbuj jedną z tych opcji, aby jak najlepiej wykorzystać miejsce"</string>
-    <string name="letterbox_education_screen_rotation_text" msgid="5085786687366339027">"Obróć urządzenie, aby przejść do pełnego ekranu"</string>
-    <string name="letterbox_education_reposition_text" msgid="1068293354123934727">"Kliknij dwukrotnie obok aplikacji, aby ją przenieść"</string>
+    <string name="letterbox_education_dialog_title" msgid="7739895354143295358">"Zobacz i zrób więcej"</string>
+    <string name="letterbox_education_split_screen_text" msgid="6206339484068670830">"Przeciągnij drugą aplikację, aby podzielić ekran"</string>
+    <string name="letterbox_education_reposition_text" msgid="4589957299813220661">"Kliknij dwukrotnie poza aplikacją, aby ją przenieść"</string>
     <string name="letterbox_education_got_it" msgid="4057634570866051177">"OK"</string>
     <string name="letterbox_education_expand_button_description" msgid="1729796567101129834">"Rozwiń, aby wyświetlić więcej informacji."</string>
     <string name="maximize_button_text" msgid="1650859196290301963">"Maksymalizuj"</string>
+    <string name="minimize_button_text" msgid="271592547935841753">"Minimalizuj"</string>
     <string name="close_button_text" msgid="2913281996024033299">"Zamknij"</string>
+    <string name="back_button_text" msgid="1469718707134137085">"Wstecz"</string>
+    <string name="handle_text" msgid="1766582106752184456">"Uchwyt"</string>
+    <!-- no translation found for fullscreen_text (1162316685217676079) -->
+    <skip />
+    <!-- no translation found for desktop_text (1077633567027630454) -->
+    <skip />
+    <!-- no translation found for split_screen_text (1396336058129570886) -->
+    <skip />
+    <!-- no translation found for more_button_text (3655388105592893530) -->
+    <skip />
+    <!-- no translation found for float_button_text (9221657008391364581) -->
+    <skip />
 </resources>

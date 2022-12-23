@@ -30,6 +30,7 @@ import android.os.RemoteCallback;
 import android.os.RemoteException;
 import android.util.Log;
 import android.util.MergedConfiguration;
+import android.view.WindowInsets.Type.InsetsType;
 import android.window.ClientWindowFrames;
 import android.window.OnBackInvokedCallbackInfo;
 
@@ -147,7 +148,7 @@ public class WindowlessWindowManager implements IWindowSession {
      */
     @Override
     public int addToDisplay(IWindow window, WindowManager.LayoutParams attrs,
-            int viewVisibility, int displayId, InsetsVisibilities requestedVisibilities,
+            int viewVisibility, int displayId, @InsetsType int requestedVisibleTypes,
             InputChannel outInputChannel, InsetsState outInsetsState,
             InsetsSourceControl[] outActiveControls, Rect outAttachedFrame,
             float[] outSizeCompatScale) {
@@ -189,7 +190,8 @@ public class WindowlessWindowManager implements IWindowSession {
                         WindowManagerGlobal.ADD_FLAG_USE_BLAST;
 
         // Include whether the window is in touch mode.
-        return isInTouchMode() ? res | WindowManagerGlobal.ADD_FLAG_IN_TOUCH_MODE : res;
+        return isInTouchModeInternal(displayId) ? res | WindowManagerGlobal.ADD_FLAG_IN_TOUCH_MODE
+                : res;
     }
 
     /**
@@ -197,11 +199,11 @@ public class WindowlessWindowManager implements IWindowSession {
      */
     @Override
     public int addToDisplayAsUser(IWindow window, WindowManager.LayoutParams attrs,
-            int viewVisibility, int displayId, int userId, InsetsVisibilities requestedVisibilities,
+            int viewVisibility, int displayId, int userId, @InsetsType int requestedVisibleTypes,
             InputChannel outInputChannel, InsetsState outInsetsState,
             InsetsSourceControl[] outActiveControls, Rect outAttachedFrame,
             float[] outSizeCompatScale) {
-        return addToDisplay(window, attrs, viewVisibility, displayId, requestedVisibilities,
+        return addToDisplay(window, attrs, viewVisibility, displayId, requestedVisibleTypes,
                 outInputChannel, outInsetsState, outActiveControls, outAttachedFrame,
                 outSizeCompatScale);
     }
@@ -244,9 +246,9 @@ public class WindowlessWindowManager implements IWindowSession {
         return !PixelFormat.formatHasAlpha(attrs.format);
     }
 
-    private boolean isInTouchMode() {
+    private boolean isInTouchModeInternal(int displayId) {
         try {
-            return WindowManagerGlobal.getWindowSession().getInTouchMode();
+            return WindowManagerGlobal.getWindowManagerService().isInTouchMode(displayId);
         } catch (RemoteException e) {
             Log.e(TAG, "Unable to check if the window is in touch mode", e);
         }
@@ -399,15 +401,6 @@ public class WindowlessWindowManager implements IWindowSession {
     }
 
     @Override
-    public void setInTouchMode(boolean showFocus) {
-    }
-
-    @Override
-    public boolean getInTouchMode() {
-        return false;
-    }
-
-    @Override
     public boolean performHapticFeedback(int effectId, boolean always) {
         return false;
     }
@@ -499,7 +492,8 @@ public class WindowlessWindowManager implements IWindowSession {
     }
 
     @Override
-    public void updateRequestedVisibilities(IWindow window, InsetsVisibilities visibilities)  {
+    public void updateRequestedVisibleTypes(IWindow window,
+            @InsetsType int requestedVisibleTypes)  {
     }
 
     @Override

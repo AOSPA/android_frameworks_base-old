@@ -23,7 +23,6 @@ import com.android.server.wm.flicker.BaseTest
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
-import com.android.server.wm.flicker.annotation.Group4
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.TwoActivitiesAppHelper
 import com.android.server.wm.flicker.testapp.ActivityOptions
@@ -41,43 +40,37 @@ import org.junit.runners.Parameterized
  * To run this test: `atest FlickerTests:ActivitiesTransitionTest`
  *
  * Actions:
+ * ```
  *     Launch an app
  *     Launch a secondary activity within the app
  *     Close the secondary activity back to the initial one
- *
+ * ```
  * Notes:
+ * ```
  *     1. Part of the test setup occurs automatically via
  *        [com.android.server.wm.flicker.TransitionRunnerWithRules],
  *        including configuring navigation mode, initial orientation and ensuring no
  *        apps are running before setup
+ * ```
  */
 @RequiresDevice
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-@Group4
 class ActivitiesTransitionTest(testSpec: FlickerTestParameter) : BaseTest(testSpec) {
     private val testApp: TwoActivitiesAppHelper = TwoActivitiesAppHelper(instrumentation)
 
     /** {@inheritDoc} */
     override val transition: FlickerBuilder.() -> Unit = {
         setup {
-            test {
-                tapl.setExpectedRotation(testSpec.startRotation)
-                testApp.launchViaIntent(wmHelper)
-            }
+            tapl.setExpectedRotation(testSpec.startRotation)
+            testApp.launchViaIntent(wmHelper)
         }
-        teardown {
-            test {
-                testApp.exit(wmHelper)
-            }
-        }
+        teardown { testApp.exit(wmHelper) }
         transitions {
             testApp.openSecondActivity(device, wmHelper)
             tapl.pressBack()
-            wmHelper.StateSyncBuilder()
-                .withFullScreenApp(testApp)
-                .waitForAndVerify()
+            wmHelper.StateSyncBuilder().withFullScreenApp(testApp).waitForAndVerify()
         }
     }
 
@@ -87,19 +80,17 @@ class ActivitiesTransitionTest(testSpec: FlickerTestParameter) : BaseTest(testSp
     override fun navBarLayerPositionAtStartAndEnd() = super.navBarLayerPositionAtStartAndEnd()
 
     /**
-     * Checks that the [ActivityOptions.BUTTON_ACTIVITY_COMPONENT_NAME] activity is visible at
-     * the start of the transition, that
-     * [ActivityOptions.SIMPLE_ACTIVITY_AUTO_FOCUS_COMPONENT_NAME] becomes visible during the
-     * transition, and that [ActivityOptions.BUTTON_ACTIVITY_COMPONENT_NAME] is again visible
-     * at the end
+     * Checks that the [ActivityOptions.LaunchNewActivity] activity is visible at the start of the
+     * transition, that [ActivityOptions.SimpleActivity] becomes visible during the transition, and
+     * that [ActivityOptions.LaunchNewActivity] is again visible at the end
      */
     @Presubmit
     @Test
     fun finishSubActivity() {
-        val buttonActivityComponent = ActivityOptions
-            .BUTTON_ACTIVITY_COMPONENT_NAME.toFlickerComponent()
-        val imeAutoFocusActivityComponent = ActivityOptions
-            .SIMPLE_ACTIVITY_AUTO_FOCUS_COMPONENT_NAME.toFlickerComponent()
+        val buttonActivityComponent =
+            ActivityOptions.LaunchNewActivity.COMPONENT.toFlickerComponent()
+        val imeAutoFocusActivityComponent =
+            ActivityOptions.SimpleActivity.COMPONENT.toFlickerComponent()
         testSpec.assertWm {
             this.isAppWindowOnTop(buttonActivityComponent)
                 .then()
@@ -110,20 +101,18 @@ class ActivitiesTransitionTest(testSpec: FlickerTestParameter) : BaseTest(testSp
     }
 
     /**
-     * Checks that the [ComponentMatcher.LAUNCHER] window is not on top. The launcher cannot be
+     * Checks that the [ComponentNameMatcher.LAUNCHER] window is not on top. The launcher cannot be
      * asserted with `isAppWindowVisible` because it contains 2 windows with the exact same name,
      * and both are never simultaneously visible
      */
     @Presubmit
     @Test
     fun launcherWindowNotOnTop() {
-        testSpec.assertWm {
-            this.isAppWindowNotOnTop(ComponentNameMatcher.LAUNCHER)
-        }
+        testSpec.assertWm { this.isAppWindowNotOnTop(ComponentNameMatcher.LAUNCHER) }
     }
 
     /**
-     * Checks that the [ComponentMatcher.LAUNCHER] layer is never visible during the transition
+     * Checks that the [ComponentNameMatcher.LAUNCHER] layer is never visible during the transition
      */
     @Presubmit
     @Test
@@ -135,14 +124,13 @@ class ActivitiesTransitionTest(testSpec: FlickerTestParameter) : BaseTest(testSp
         /**
          * Creates the test configurations.
          *
-         * See [FlickerTestParameterFactory.getConfigNonRotationTests] for configuring
-         * repetitions, screen orientation and navigation modes.
+         * See [FlickerTestParameterFactory.getConfigNonRotationTests] for configuring repetitions,
+         * screen orientation and navigation modes.
          */
         @Parameterized.Parameters(name = "{0}")
         @JvmStatic
         fun getParams(): Collection<FlickerTestParameter> {
-            return FlickerTestParameterFactory.getInstance()
-                .getConfigNonRotationTests(repetitions = 3)
+            return FlickerTestParameterFactory.getInstance().getConfigNonRotationTests()
         }
     }
 }

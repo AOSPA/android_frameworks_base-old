@@ -79,6 +79,7 @@ import android.app.servertransaction.ResumeActivityItem;
 import android.content.res.Configuration;
 import android.graphics.Point;
 import android.graphics.Rect;
+import android.hardware.HardwareBuffer;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.UserHandle;
@@ -90,6 +91,7 @@ import android.view.DisplayInfo;
 import android.view.RemoteAnimationTarget;
 import android.view.SurfaceControl;
 import android.window.ITaskFragmentOrganizer;
+import android.window.ScreenCapture;
 import android.window.TaskFragmentInfo;
 import android.window.TaskFragmentOrganizerToken;
 
@@ -99,8 +101,7 @@ import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.internal.util.function.pooled.PooledPredicate;
 import com.android.server.am.HostingRecord;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
-import com.android.server.wm.utils.WmDisplayCutout;
+import com.android.server.pm.pkg.AndroidPackage;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -304,15 +305,19 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
     final Point mLastSurfaceSize = new Point();
 
-    private final Rect mTmpInsets = new Rect();
+    /** The latest updated value when there's a child {@link #onActivityVisibleRequestedChanged} */
+    boolean mVisibleRequested;
+
     private final Rect mTmpBounds = new Rect();
     private final Rect mTmpFullBounds = new Rect();
+    /** For calculating screenWidthDp and screenWidthDp, i.e. the area without the system bars. */
     private final Rect mTmpStableBounds = new Rect();
+    /** For calculating app bounds, i.e. the area without the nav bar and display cutout. */
     private final Rect mTmpNonDecorBounds = new Rect();
 
     //TODO(b/207481538) Remove once the infrastructure to support per-activity screenshot is
     // implemented
-    HashMap<String, SurfaceControl.ScreenshotHardwareBuffer> mBackScreenshots = new HashMap<>();
+    HashMap<String, ScreenCapture.ScreenshotHardwareBuffer> mBackScreenshots = new HashMap<>();
 
     private final EnsureActivitiesVisibleHelper mEnsureActivitiesVisibleHelper =
             new EnsureActivitiesVisibleHelper(this);
@@ -1627,12 +1632,14 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         boolean pauseImmediately = false;
         boolean shouldAutoPip = false;
         if (resuming != null) {
+            // We do not want to trigger auto-PiP upon launch of a translucent activity.
+            final boolean resumingOccludesParent = resuming.occludesParent();
             // Resuming the new resume activity only if the previous activity can't go into Pip
             // since we want to give Pip activities a chance to enter Pip before resuming the
             // next activity.
             final boolean lastResumedCanPip = prev.checkEnterPictureInPictureState(
                     "shouldAutoPipWhilePausing", userLeaving);
-            if (userLeaving && lastResumedCanPip
+            if (userLeaving && resumingOccludesParent && lastResumedCanPip
                     && prev.pictureInPictureArgs.isAutoEnterEnabled()) {
                 shouldAutoPip = true;
             } else if (!lastResumedCanPip) {
@@ -1745,7 +1752,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                 ProtoLog.v(WM_DEBUG_STATES, "Executing finish of activity: %s", prev);
                 prev = prev.completeFinishing(false /* updateVisibility */,
                         "completePausedLocked");
-            } else if (prev.hasProcess()) {
+            } else if (prev.attachedToProcess()) {
                 ProtoLog.v(WM_DEBUG_STATES, "Enqueue pending stop if needed: %s "
                                 + "wasStopping=%b visibleRequested=%b",  prev,  wasStopping,
                         prev.mVisibleRequested);
@@ -1885,13 +1892,12 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         super.addChild(child, index);
 
         if (isAddingActivity && task != null) {
-
             // TODO(b/207481538): temporary per-activity screenshoting
             if (r != null && BackNavigationController.isScreenshotEnabled()) {
                 ProtoLog.v(WM_DEBUG_BACK_PREVIEW, "Screenshotting Activity %s",
                         r.mActivityComponent.flattenToString());
                 Rect outBounds = r.getBounds();
-                SurfaceControl.ScreenshotHardwareBuffer backBuffer = SurfaceControl.captureLayers(
+                ScreenCapture.ScreenshotHardwareBuffer backBuffer = ScreenCapture.captureLayers(
                         r.mSurfaceControl,
                         new Rect(0, 0, outBounds.width(), outBounds.height()),
                         1f);
@@ -1917,10 +1923,10 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     RemoteAnimationTarget createRemoteAnimationTarget(
             RemoteAnimationController.RemoteAnimationRecord record) {
         final ActivityRecord activity = record.getMode() == RemoteAnimationTarget.MODE_OPENING
-                // There may be a trampoline activity without window on top of the existing task
-                // which is moving to front. Exclude the finishing activity so the window of next
-                // activity can be chosen to create the animation target.
-                ? getTopNonFinishingActivity()
+                // There may be a launching (e.g. trampoline or embedded) activity without a window
+                // on top of the existing task which is moving to front. Exclude finishing activity
+                // so the window of next activity can be chosen to create the animation target.
+                ? getActivity(r -> !r.finishing && r.hasChild())
                 : getTopMostActivity();
         return activity != null ? activity.createRemoteAnimationTarget(record) : null;
     }
@@ -2215,7 +2221,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                 compatScreenHeightDp = inOutConfig.screenHeightDp;
             }
             // Reducing the screen layout starting from its parent config.
-            inOutConfig.screenLayout = computeScreenLayoutOverride(parentConfig.screenLayout,
+            inOutConfig.screenLayout = computeScreenLayout(parentConfig.screenLayout,
                     compatScreenWidthDp, compatScreenHeightDp);
         }
     }
@@ -2234,21 +2240,16 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             DisplayInfo displayInfo) {
         outNonDecorBounds.set(bounds);
         outStableBounds.set(bounds);
-        final Task rootTask = getRootTaskFragment().asTask();
-        if (rootTask == null || rootTask.mDisplayContent == null) {
+        if (mDisplayContent == null) {
             return;
         }
         mTmpBounds.set(0, 0, displayInfo.logicalWidth, displayInfo.logicalHeight);
 
-        final DisplayPolicy policy = rootTask.mDisplayContent.getDisplayPolicy();
-        final WmDisplayCutout cutout =
-                rootTask.mDisplayContent.calculateDisplayCutoutForRotation(displayInfo.rotation);
-        final DisplayFrames displayFrames = policy.getSimulatedDisplayFrames(displayInfo.rotation,
-                displayInfo.logicalWidth, displayInfo.logicalHeight, cutout);
-        policy.getNonDecorInsetsWithSimulatedFrame(displayFrames, mTmpInsets);
-        intersectWithInsetsIfFits(outNonDecorBounds, mTmpBounds, mTmpInsets);
-        policy.getStableInsetsWithSimulatedFrame(displayFrames, mTmpInsets);
-        intersectWithInsetsIfFits(outStableBounds, mTmpBounds, mTmpInsets);
+        final DisplayPolicy policy = mDisplayContent.getDisplayPolicy();
+        final DisplayPolicy.DecorInsets.Info info = policy.getDecorInsetsInfo(
+                displayInfo.rotation, displayInfo.logicalWidth, displayInfo.logicalHeight);
+        intersectWithInsetsIfFits(outNonDecorBounds, mTmpBounds, info.mNonDecorInsets);
+        intersectWithInsetsIfFits(outStableBounds, mTmpBounds, info.mConfigInsets);
     }
 
     /**
@@ -2283,16 +2284,6 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         }
     }
 
-    /** Computes LONG, SIZE and COMPAT parts of {@link Configuration#screenLayout}. */
-    static int computeScreenLayoutOverride(int sourceScreenLayout, int screenWidthDp,
-            int screenHeightDp) {
-        sourceScreenLayout = sourceScreenLayout
-                & (Configuration.SCREENLAYOUT_LONG_MASK | Configuration.SCREENLAYOUT_SIZE_MASK);
-        final int longSize = Math.max(screenWidthDp, screenHeightDp);
-        final int shortSize = Math.min(screenWidthDp, screenHeightDp);
-        return Configuration.reduceScreenLayout(sourceScreenLayout, longSize, shortSize);
-    }
-
     @Override
     public int getActivityType() {
         final int applicationType = super.getActivityType();
@@ -2312,17 +2303,31 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
         super.onConfigurationChanged(newParentConfig);
 
-        if (shouldStartChangeTransition(mTmpPrevBounds)) {
+        final boolean shouldStartChangeTransition = shouldStartChangeTransition(mTmpPrevBounds);
+        if (shouldStartChangeTransition) {
             initializeChangeTransition(mTmpPrevBounds);
-        } else if (mTaskFragmentOrganizer != null) {
-            // Update the surface here instead of in the organizer so that we can make sure
-            // it can be synced with the surface freezer.
-            final SurfaceControl.Transaction t = getSyncTransaction();
-            updateSurfacePosition(t);
-            updateOrganizedTaskFragmentSurfaceSize(t, false /* forceUpdate */);
+        }
+        if (mTaskFragmentOrganizer != null) {
+            if (mTransitionController.isShellTransitionsEnabled()
+                    && !mTransitionController.isCollecting(this)) {
+                // TaskFragmentOrganizer doesn't have access to the surface for security reasons, so
+                // update the surface here if it is not collected by Shell transition.
+                updateOrganizedTaskFragmentSurface();
+            } else if (!mTransitionController.isShellTransitionsEnabled()
+                    && !shouldStartChangeTransition) {
+                // Update the surface here instead of in the organizer so that we can make sure
+                // it can be synced with the surface freezer for legacy app transition.
+                updateOrganizedTaskFragmentSurface();
+            }
         }
 
         sendTaskFragmentInfoChanged();
+    }
+
+    private void updateOrganizedTaskFragmentSurface() {
+        final SurfaceControl.Transaction t = getSyncTransaction();
+        updateSurfacePosition(t);
+        updateOrganizedTaskFragmentSurfaceSize(t, false /* forceUpdate */);
     }
 
     /** Updates the surface size so that the sub windows cannot be shown out of bounds. */
@@ -2354,6 +2359,11 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         if (mTaskFragmentOrganizer != null
                 && (mLastSurfaceSize.x != 0 || mLastSurfaceSize.y != 0)) {
             t.setWindowCrop(mSurfaceControl, 0, 0);
+            final SurfaceControl.Transaction syncTransaction = getSyncTransaction();
+            if (t != syncTransaction) {
+                // Avoid restoring to old window crop if the sync transaction is applied later.
+                syncTransaction.setWindowCrop(mSurfaceControl, 0, 0);
+            }
             mLastSurfaceSize.set(0, 0);
         }
     }
@@ -2379,33 +2389,16 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                 || endBounds.height() != startBounds.height();
     }
 
-    boolean canHaveEmbeddingActivityTransition(@NonNull ActivityRecord child) {
-        if (!isOrganizedTaskFragment() || !mTransitionController.isShellTransitionsEnabled()) {
-            return false;
-        }
-        // The activity should request open transition when it is becoming visible.
-        return child.isVisibleRequested();
-    }
-
-    void collectEmbeddedTaskFragmentIfNeeded() {
-        if (!isOrganizedTaskFragment() || mTransitionController.isCollecting(this)) {
-            return;
-        }
-        if (getChildCount() == 0) {
-            // The TaskFragment is new created, and just becoming non-empty.
-            mTransitionController.collectExistenceChange(this);
-        } else {
-            mTransitionController.collect(this);
-        }
+    @Override
+    boolean isSyncFinished() {
+        return super.isSyncFinished() && isReadyToTransit();
     }
 
     @Override
     void setSurfaceControl(SurfaceControl sc) {
         super.setSurfaceControl(sc);
         if (mTaskFragmentOrganizer != null) {
-            final SurfaceControl.Transaction t = getSyncTransaction();
-            updateSurfacePosition(t);
-            updateOrganizedTaskFragmentSurfaceSize(t, false /* forceUpdate */);
+            updateOrganizedTaskFragmentSurface();
             // If the TaskFragmentOrganizer was set before we created the SurfaceControl, we need to
             // emit the callbacks now.
             sendTaskFragmentAppeared();
@@ -2416,6 +2409,14 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         if (mTaskFragmentOrganizer != null) {
             mTaskFragmentOrganizerController
                     .onTaskFragmentInfoChanged(mTaskFragmentOrganizer, this);
+        }
+    }
+
+    void sendTaskFragmentParentInfoChanged() {
+        final Task parentTask = getParent().asTask();
+        if (mTaskFragmentOrganizer != null && parentTask != null) {
+            mTaskFragmentOrganizerController
+                    .onTaskFragmentParentInfoChanged(mTaskFragmentOrganizer, parentTask);
         }
     }
 
@@ -2454,7 +2455,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                 mRemoteToken.toWindowContainerToken(),
                 getConfiguration(),
                 getNonFinishingActivityCount(),
-                isVisible(),
+                isVisibleRequested(),
                 childActivities,
                 positionInParent,
                 mClearedTaskForReuse,
@@ -2562,6 +2563,19 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
     boolean shouldRemoveSelfOnLastChildRemoval() {
         return !mCreatedByOrganizer || mIsRemovalRequested;
+    }
+
+    @Nullable
+    HardwareBuffer getSnapshotForActivityRecord(@Nullable ActivityRecord r) {
+        if (!BackNavigationController.isScreenshotEnabled()) {
+            return null;
+        }
+        if (r != null && r.mActivityComponent != null) {
+            ScreenCapture.ScreenshotHardwareBuffer backBuffer =
+                    mBackScreenshots.get(r.mActivityComponent.flattenToString());
+            return backBuffer != null ? backBuffer.getHardwareBuffer() : null;
+        }
+        return null;
     }
 
     @Override
@@ -2704,6 +2718,32 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         // in fullscreen windowing mode even it doesn't match parent bounds because there will be
         // letterbox around its real content.
         return getWindowingMode() == WINDOWING_MODE_FULLSCREEN || matchParentBounds();
+    }
+
+    void onActivityVisibleRequestedChanged() {
+        final boolean isVisibleRequested = isVisibleRequested();
+        if (mVisibleRequested == isVisibleRequested) {
+            return;
+        }
+        mVisibleRequested = isVisibleRequested;
+        final WindowContainer<?> parent = getParent();
+        if (parent == null) {
+            return;
+        }
+        final TaskFragment parentTf = parent.asTaskFragment();
+        if (parentTf != null) {
+            parentTf.onActivityVisibleRequestedChanged();
+        }
+    }
+
+    @Nullable
+    @Override
+    TaskFragment getTaskFragment(Predicate<TaskFragment> callback) {
+        final TaskFragment taskFragment = super.getTaskFragment(callback);
+        if (taskFragment != null) {
+            return taskFragment;
+        }
+        return callback.test(this) ? this : null;
     }
 
     String toFullString() {

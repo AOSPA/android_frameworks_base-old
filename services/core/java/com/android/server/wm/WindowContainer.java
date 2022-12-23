@@ -41,6 +41,7 @@ import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_SYNC_ENGINE;
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
 import static com.android.server.wm.AppTransition.MAX_APP_TRANSITION_DURATION;
 import static com.android.server.wm.AppTransition.isActivityTransitOld;
+import static com.android.server.wm.AppTransition.isTaskFragmentTransitOld;
 import static com.android.server.wm.AppTransition.isTaskTransitOld;
 import static com.android.server.wm.DisplayContent.IME_TARGET_LAYERING;
 import static com.android.server.wm.IdentifierProto.HASH_CODE;
@@ -477,7 +478,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             }
             mLocalInsetsSourceProviders.remove(insetsTypes[i]);
         }
-        mDisplayContent.getInsetsStateController().updateAboveInsetsState(true);
+        // Update insets if this window is attached.
+        if (mDisplayContent != null) {
+            mDisplayContent.getInsetsStateController().updateAboveInsetsState(true);
+        }
     }
 
     /**
@@ -537,6 +541,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         if (mParent == newParent) {
             throw new IllegalArgumentException("WC=" + this + " already child of " + mParent);
         }
+
+        // Collect before removing child from old parent, because the old parent may be removed if
+        // this is the last child in it.
+        mTransitionController.collectReparentChange(this, newParent);
 
         // The display object before reparenting as that might lead to old parent getting removed
         // from the display if it no longer has any child.
@@ -622,7 +630,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         setInitialSurfaceControlProperties(makeSurface());
     }
 
-    void setInitialSurfaceControlProperties(SurfaceControl.Builder b) {
+    void setInitialSurfaceControlProperties(Builder b) {
         setSurfaceControl(b.setCallsite("WindowContainer.setInitialSurfaceControlProperties").build());
         if (showSurfaceOnCreation()) {
             getSyncTransaction().show(mSurfaceControl);
@@ -652,7 +660,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         mLastSurfacePosition.set(0, 0);
         mLastDeltaRotation = Surface.ROTATION_0;
 
-        final SurfaceControl.Builder b = mWmService.makeSurfaceBuilder(null)
+        final Builder b = mWmService.makeSurfaceBuilder(null)
                 .setContainerLayer()
                 .setName(getName());
 
@@ -1604,6 +1612,16 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         return false;
     }
 
+    /** Computes LONG, SIZE and COMPAT parts of {@link Configuration#screenLayout}. */
+    static int computeScreenLayout(int sourceScreenLayout, int screenWidthDp,
+            int screenHeightDp) {
+        sourceScreenLayout = sourceScreenLayout
+                & (Configuration.SCREENLAYOUT_LONG_MASK | Configuration.SCREENLAYOUT_SIZE_MASK);
+        final int longSize = Math.max(screenWidthDp, screenHeightDp);
+        final int shortSize = Math.min(screenWidthDp, screenHeightDp);
+        return Configuration.reduceScreenLayout(sourceScreenLayout, longSize, shortSize);
+    }
+
     // TODO: Users would have their own window containers under the display container?
     void switchUser(int userId) {
         for (int i = mChildren.size() - 1; i >= 0; --i) {
@@ -1835,6 +1853,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         }
 
         return null;
+    }
+
+    int getDistanceFromTop(WindowContainer child) {
+        int idx = mChildren.indexOf(child);
+        return idx < 0 ? -1 : mChildren.size() - 1 - idx;
     }
 
     private ActivityRecord processGetActivityWithBoundary(Predicate<ActivityRecord> callback,
@@ -2190,6 +2213,17 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
                 callback, boundary, includeBoundary, traverseTopToBottom, boundaryFound);
     }
 
+    @Nullable
+    TaskFragment getTaskFragment(Predicate<TaskFragment> callback) {
+        for (int i = mChildren.size() - 1; i >= 0; --i) {
+            final TaskFragment tf = mChildren.get(i).getTaskFragment(callback);
+            if (tf != null) {
+                return tf;
+            }
+        }
+        return null;
+    }
+
     WindowState getWindow(Predicate<WindowState> callback) {
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             final WindowState w = mChildren.get(i).getWindow(callback);
@@ -2432,7 +2466,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         } while (current != null);
     }
 
-    SurfaceControl.Builder makeSurface() {
+    Builder makeSurface() {
         final WindowContainer p = getParent();
         return p.makeChildSurface(this);
     }
@@ -2441,7 +2475,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * @param child The WindowContainer this child surface is for, or null if the Surface
      *              is not assosciated with a WindowContainer (e.g. a surface used for Dimming).
      */
-    SurfaceControl.Builder makeChildSurface(WindowContainer child) {
+    Builder makeChildSurface(WindowContainer child) {
         final WindowContainer p = getParent();
         // Give the parent a chance to set properties. In hierarchy v1 we rely
         // on this to set full-screen dimensions on all our Surface-less Layers.
@@ -2831,7 +2865,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     void initializeChangeTransition(Rect startBounds, @Nullable SurfaceControl freezeTarget) {
         if (mDisplayContent.mTransitionController.isShellTransitionsEnabled()) {
             mDisplayContent.mTransitionController.collectVisibleChange(this);
-            // TODO(b/207070762): request shell transition for activityEmbedding change.
             return;
         }
         mDisplayContent.prepareAppTransition(TRANSIT_CHANGE);
@@ -2971,10 +3004,17 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             // {@link Activity#overridePendingTransition(int, int, int)}.
             @ColorInt int backdropColor = 0;
             if (controller.isFromActivityEmbedding()) {
-                final int animAttr = AppTransition.mapOpenCloseTransitTypes(transit, enter);
-                final Animation a = animAttr != 0
-                        ? appTransition.loadAnimationAttr(lp, animAttr, transit) : null;
-                showBackdrop = a != null && a.getShowBackdrop();
+                if (isChanging) {
+                    // When there are more than one changing containers, it may leave part of the
+                    // screen empty. Show background color to cover that.
+                    showBackdrop = getDisplayContent().mChangingContainers.size() > 1;
+                } else {
+                    // Check whether or not to show backdrop for open/close transition.
+                    final int animAttr = AppTransition.mapOpenCloseTransitTypes(transit, enter);
+                    final Animation a = animAttr != 0
+                            ? appTransition.loadAnimationAttr(lp, animAttr, transit) : null;
+                    showBackdrop = a != null && a.getShowBackdrop();
+                }
                 backdropColor = appTransition.getNextAppTransitionBackgroundColor();
             }
             final Rect localBounds = new Rect(mTmpRect);
@@ -3077,9 +3117,16 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
                 }
             }
 
+            // Check if the animation requests to show background color for Activity and embedded
+            // TaskFragment.
             final ActivityRecord activityRecord = asActivityRecord();
-            if (activityRecord != null && isActivityTransitOld(transit)
-                    && adapter.getShowBackground()) {
+            final TaskFragment taskFragment = asTaskFragment();
+            if (adapter.getShowBackground()
+                    // Check if it is Activity transition.
+                    && ((activityRecord != null && isActivityTransitOld(transit))
+                    // Check if it is embedded TaskFragment transition.
+                    || (taskFragment != null && taskFragment.isEmbedded()
+                    && isTaskFragmentTransitOld(transit)))) {
                 final @ColorInt int backgroundColorForTransition;
                 if (adapter.getBackgroundColor() != 0) {
                     // If available use the background color provided through getBackgroundColor
@@ -3089,9 +3136,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
                     // Otherwise default to the window's background color if provided through
                     // the theme as the background color for the animation - the top most window
                     // with a valid background color and showBackground set takes precedence.
-                    final Task arTask = activityRecord.getTask();
+                    final Task parentTask = activityRecord != null
+                            ? activityRecord.getTask()
+                            : taskFragment.getTask();
                     backgroundColorForTransition = ColorUtils.setAlphaComponent(
-                            arTask.getTaskDescription().getBackgroundColor(), 255);
+                            parentTask.getTaskDescription().getBackgroundColor(), 255);
                 }
                 animationRunnerBuilder.setTaskBackgroundColor(backgroundColorForTransition);
             }
@@ -3228,9 +3277,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
     void resetSurfacePositionForAnimationLeash(Transaction t) {
         t.setPosition(mSurfaceControl, 0, 0);
-        if (mSyncState != SYNC_STATE_NONE && t != mSyncTransaction) {
+        final SurfaceControl.Transaction syncTransaction = getSyncTransaction();
+        if (t != syncTransaction) {
             // Avoid restoring to old position if the sync transaction is applied later.
-            mSyncTransaction.setPosition(mSurfaceControl, 0, 0);
+            syncTransaction.setPosition(mSurfaceControl, 0, 0);
         }
         mLastSurfacePosition.set(0, 0);
     }

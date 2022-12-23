@@ -69,10 +69,11 @@ import android.view.IWindowSessionCallback;
 import android.view.InputChannel;
 import android.view.InsetsSourceControl;
 import android.view.InsetsState;
-import android.view.InsetsVisibilities;
 import android.view.SurfaceControl;
 import android.view.SurfaceSession;
 import android.view.View;
+import android.view.WindowInsets;
+import android.view.WindowInsets.Type.InsetsType;
 import android.view.WindowManager;
 import android.window.ClientWindowFrames;
 import android.window.OnBackInvokedCallbackInfo;
@@ -117,7 +118,6 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
     private float mLastReportedAnimatorScale;
     private String mPackageName;
     private String mRelayoutTag;
-    private final InsetsVisibilities mDummyRequestedVisibilities = new InsetsVisibilities();
     private final InsetsSourceControl[] mDummyControls =  new InsetsSourceControl[0];
     final boolean mSetsUnrestrictedKeepClearAreas;
 
@@ -196,23 +196,23 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
 
     @Override
     public int addToDisplay(IWindow window, WindowManager.LayoutParams attrs,
-            int viewVisibility, int displayId, InsetsVisibilities requestedVisibilities,
+            int viewVisibility, int displayId, @InsetsType int requestedVisibleTypes,
             InputChannel outInputChannel, InsetsState outInsetsState,
             InsetsSourceControl[] outActiveControls, Rect outAttachedFrame,
             float[] outSizeCompatScale) {
         return mService.addWindow(this, window, attrs, viewVisibility, displayId,
-                UserHandle.getUserId(mUid), requestedVisibilities, outInputChannel, outInsetsState,
+                UserHandle.getUserId(mUid), requestedVisibleTypes, outInputChannel, outInsetsState,
                 outActiveControls, outAttachedFrame, outSizeCompatScale);
     }
 
     @Override
     public int addToDisplayAsUser(IWindow window, WindowManager.LayoutParams attrs,
-            int viewVisibility, int displayId, int userId, InsetsVisibilities requestedVisibilities,
+            int viewVisibility, int displayId, int userId, @InsetsType int requestedVisibleTypes,
             InputChannel outInputChannel, InsetsState outInsetsState,
             InsetsSourceControl[] outActiveControls, Rect outAttachedFrame,
             float[] outSizeCompatScale) {
         return mService.addWindow(this, window, attrs, viewVisibility, displayId, userId,
-                requestedVisibilities, outInputChannel, outInsetsState, outActiveControls,
+                requestedVisibleTypes, outInputChannel, outInsetsState, outActiveControls,
                 outAttachedFrame, outSizeCompatScale);
     }
 
@@ -221,8 +221,9 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
             int viewVisibility, int displayId, InsetsState outInsetsState, Rect outAttachedFrame,
             float[] outSizeCompatScale) {
         return mService.addWindow(this, window, attrs, viewVisibility, displayId,
-                UserHandle.getUserId(mUid), mDummyRequestedVisibilities, null /* outInputChannel */,
-                outInsetsState, mDummyControls, outAttachedFrame, outSizeCompatScale);
+                UserHandle.getUserId(mUid), WindowInsets.Type.defaultVisible(),
+                null /* outInputChannel */, outInsetsState, mDummyControls, outAttachedFrame,
+                outSizeCompatScale);
     }
 
     @Override
@@ -291,17 +292,11 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
     public void finishDrawing(IWindow window,
             @Nullable SurfaceControl.Transaction postDrawTransaction, int seqId) {
         if (DEBUG) Slog.v(TAG_WM, "IWindow finishDrawing called for " + window);
+        if (Trace.isTagEnabled(TRACE_TAG_WINDOW_MANAGER)) {
+            Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "finishDrawing: " + mPackageName);
+        }
         mService.finishDrawingWindow(this, window, postDrawTransaction, seqId);
-    }
-
-    @Override
-    public void setInTouchMode(boolean mode) {
-        mService.setInTouchMode(mode);
-    }
-
-    @Override
-    public boolean getInTouchMode() {
-        return mService.getInTouchMode();
+        Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
     }
 
     @Override
@@ -324,7 +319,7 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
         final int callingPid = Binder.getCallingPid();
         // Validate and resolve ClipDescription data before clearing the calling identity
         validateAndResolveDragMimeTypeExtras(data, callingUid, callingPid, mPackageName);
-        validateDragFlags(flags, callingUid);
+        validateDragFlags(flags);
         final long ident = Binder.clearCallingIdentity();
         try {
             return mDragDropController.performDrag(mPid, mUid, window, flags, surface, touchSource,
@@ -349,11 +344,7 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
      * Validates the given drag flags.
      */
     @VisibleForTesting
-    void validateDragFlags(int flags, int callingUid) {
-        if (callingUid == Process.SYSTEM_UID) {
-            throw new IllegalStateException("Need to validate before calling identify is cleared");
-        }
-
+    void validateDragFlags(int flags) {
         if ((flags & View.DRAG_FLAG_REQUEST_SURFACE_FOR_RETURN_ANIMATION) != 0) {
             if (!mCanStartTasksFromRecents) {
                 throw new SecurityException("Requires START_TASKS_FROM_RECENTS permission");
@@ -367,9 +358,6 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
     @VisibleForTesting
     void validateAndResolveDragMimeTypeExtras(ClipData data, int callingUid, int callingPid,
             String callingPackage) {
-        if (callingUid == Process.SYSTEM_UID) {
-            throw new IllegalStateException("Need to validate before calling identify is cleared");
-        }
         final ClipDescription desc = data != null ? data.getDescription() : null;
         if (desc == null) {
             return;
@@ -696,12 +684,12 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
     }
 
     @Override
-    public void updateRequestedVisibilities(IWindow window, InsetsVisibilities visibilities) {
+    public void updateRequestedVisibleTypes(IWindow window, @InsetsType int requestedVisibleTypes) {
         synchronized (mService.mGlobalLock) {
             final WindowState windowState = mService.windowForClientLocked(this, window,
                     false /* throwOnError */);
             if (windowState != null) {
-                windowState.setRequestedVisibilities(visibilities);
+                windowState.setRequestedVisibleTypes(requestedVisibleTypes);
                 windowState.getDisplayContent().getInsetsPolicy().onInsetsModified(windowState);
             }
         }

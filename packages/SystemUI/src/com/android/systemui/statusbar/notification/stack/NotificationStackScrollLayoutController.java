@@ -56,13 +56,14 @@ import com.android.internal.logging.UiEventLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.systemui.ExpandHelper;
 import com.android.systemui.Gefingerpoken;
-import com.android.systemui.R;
 import com.android.systemui.SwipeHelper;
 import com.android.systemui.classifier.Classifier;
 import com.android.systemui.classifier.FalsingCollector;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dump.DumpManager;
-import com.android.systemui.media.KeyguardMediaController;
+import com.android.systemui.flags.FeatureFlags;
+import com.android.systemui.flags.Flags;
+import com.android.systemui.media.controls.ui.KeyguardMediaController;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin.OnMenuEventListener;
@@ -81,14 +82,11 @@ import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.notification.DynamicPrivacyController;
 import com.android.systemui.statusbar.notification.LaunchAnimationParameters;
 import com.android.systemui.statusbar.notification.NotificationActivityStarter;
-import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.collection.NotifCollection;
 import com.android.systemui.statusbar.notification.collection.NotifPipeline;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.collection.PipelineDumpable;
 import com.android.systemui.statusbar.notification.collection.PipelineDumper;
-import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy;
-import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy.OnGroupChangeListener;
 import com.android.systemui.statusbar.notification.collection.notifcollection.DismissedByUserStats;
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifCollectionListener;
 import com.android.systemui.statusbar.notification.collection.render.GroupExpansionManager;
@@ -157,7 +155,6 @@ public class NotificationStackScrollLayoutController {
     private final ScrimController mScrimController;
     private final NotifPipeline mNotifPipeline;
     private final NotifCollection mNotifCollection;
-    private final NotificationEntryManager mNotificationEntryManager;
     private final UiEventLogger mUiEventLogger;
     private final NotificationRemoteInputManager mRemoteInputManager;
     private final ShadeController mShadeController;
@@ -179,10 +176,11 @@ public class NotificationStackScrollLayoutController {
     private NotificationStackScrollLayout mView;
     private boolean mFadeNotificationsOnDismiss;
     private NotificationSwipeHelper mSwipeHelper;
-    private boolean mShowEmptyShadeView;
     @Nullable private Boolean mHistoryEnabled;
     private int mBarState;
     private HeadsUpAppearanceController mHeadsUpAppearanceController;
+    private final FeatureFlags mFeatureFlags;
+    private final NotificationTargetsHelper mNotificationTargetsHelper;
 
     private View mLongPressedView;
 
@@ -310,7 +308,6 @@ public class NotificationStackScrollLayoutController {
                     mView.updateSensitiveness(mStatusBarStateController.goingToFullShade(),
                             mLockscreenUserManager.isAnyProfilePublicMode());
                     mView.onStatePostChange(mStatusBarStateController.fromShadeLocked());
-                    mNotificationEntryManager.updateNotifications("CentralSurfaces state changed");
                 }
             };
 
@@ -633,12 +630,10 @@ public class NotificationStackScrollLayoutController {
             NotificationSwipeHelper.Builder notificationSwipeHelperBuilder,
             CentralSurfaces centralSurfaces,
             ScrimController scrimController,
-            NotificationGroupManagerLegacy legacyGroupManager,
             GroupExpansionManager groupManager,
             @SilentHeader SectionHeaderController silentHeaderController,
             NotifPipeline notifPipeline,
             NotifCollection notifCollection,
-            NotificationEntryManager notificationEntryManager,
             LockscreenShadeTransitionController lockscreenShadeTransitionController,
             ShadeTransitionController shadeTransitionController,
             UiEventLogger uiEventLogger,
@@ -647,7 +642,9 @@ public class NotificationStackScrollLayoutController {
             InteractionJankMonitor jankMonitor,
             StackStateLogger stackLogger,
             NotificationStackScrollLogger logger,
-            NotificationStackSizeCalculator notificationStackSizeCalculator) {
+            NotificationStackSizeCalculator notificationStackSizeCalculator,
+            FeatureFlags featureFlags,
+            NotificationTargetsHelper notificationTargetsHelper) {
         mStackStateLogger = stackLogger;
         mLogger = logger;
         mAllowLongPress = allowLongPress;
@@ -677,19 +674,14 @@ public class NotificationStackScrollLayoutController {
         mJankMonitor = jankMonitor;
         mNotificationStackSizeCalculator = notificationStackSizeCalculator;
         mGroupExpansionManager = groupManager;
-        legacyGroupManager.registerGroupChangeListener(new OnGroupChangeListener() {
-            @Override
-            public void onGroupsChanged() {
-                mCentralSurfaces.requestNotificationUpdate("onGroupsChanged");
-            }
-        });
         mSilentHeaderController = silentHeaderController;
         mNotifPipeline = notifPipeline;
         mNotifCollection = notifCollection;
-        mNotificationEntryManager = notificationEntryManager;
         mUiEventLogger = uiEventLogger;
         mRemoteInputManager = remoteInputManager;
         mShadeController = shadeController;
+        mFeatureFlags = featureFlags;
+        mNotificationTargetsHelper = notificationTargetsHelper;
         updateResources();
     }
 
@@ -754,9 +746,7 @@ public class NotificationStackScrollLayoutController {
 
         mLockscreenUserManager.addUserChangedListener(mLockscreenUserChangeListener);
 
-        mFadeNotificationsOnDismiss =  // TODO: this should probably be injected directly
-                mResources.getBoolean(R.bool.config_fadeNotificationsOnDismiss);
-
+        mFadeNotificationsOnDismiss = mFeatureFlags.isEnabled(Flags.NOTIFICATION_DISMISSAL_FADE);
         mNotificationRoundnessManager.setOnRoundingChangedCallback(mView::invalidate);
         mView.addOnExpandedHeightChangedListener(mNotificationRoundnessManager::setExpanded);
 
@@ -1182,8 +1172,21 @@ public class NotificationStackScrollLayoutController {
     }
 
     /**
-     * Update whether we should show the empty shade view (no notifications in the shade).
-     * If so, send the update to our view.
+     * Set the visibility of the view, and propagate it to specific children.
+     *
+     * @param visible either the view is visible or not.
+     */
+    public void updateVisibility(boolean visible) {
+        mView.setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
+
+        if (mView.getVisibility() == View.VISIBLE) {
+            // Synchronize EmptyShadeView visibility with the parent container.
+            updateShowEmptyShadeView();
+        }
+    }
+
+    /**
+     * Update whether we should show the empty shade view ("no notifications" in the shade).
      *
      * When in split mode, notifications are always visible regardless of the state of the
      * QuickSettings panel. That being the case, empty view is always shown if the other conditions
@@ -1191,18 +1194,31 @@ public class NotificationStackScrollLayoutController {
      */
     public void updateShowEmptyShadeView() {
         Trace.beginSection("NSSLC.updateShowEmptyShadeView");
-        mShowEmptyShadeView = mStatusBarStateController.getCurrentOrUpcomingState() != KEYGUARD
-                && !mView.isQsFullScreen()
-                && getVisibleNotificationCount() == 0;
 
-        mView.updateEmptyShadeView(
-                mShowEmptyShadeView,
-                mZenModeController.areNotificationsHiddenInShade());
+        final boolean shouldShow = getVisibleNotificationCount() == 0
+                && !mView.isQsFullScreen()
+                // Hide empty shade view when in transition to Keyguard.
+                // That avoids "No Notifications" to blink when transitioning to AOD.
+                // For more details, see: b/228790482
+                && !isInTransitionToKeyguard();
+
+        mView.updateEmptyShadeView(shouldShow, mZenModeController.areNotificationsHiddenInShade());
+
         Trace.endSection();
     }
 
+    /**
+     * @return true if {@link StatusBarStateController} is in transition to the KEYGUARD
+     *         and false otherwise.
+     */
+    private boolean isInTransitionToKeyguard() {
+        final int currentState = mStatusBarStateController.getState();
+        final int upcomingState = mStatusBarStateController.getCurrentOrUpcomingState();
+        return (currentState != upcomingState && upcomingState == KEYGUARD);
+    }
+
     public boolean isShowingEmptyShadeView() {
-        return mShowEmptyShadeView;
+        return mView.isEmptyShadeViewVisible();
     }
 
     public void setHeadsUpAnimatingAway(boolean headsUpAnimatingAway) {
@@ -1367,7 +1383,7 @@ public class NotificationStackScrollLayoutController {
         return mView.calculateGapHeight(previousView, child, count);
     }
 
-    NotificationRoundnessManager getNoticationRoundessManager() {
+    NotificationRoundnessManager getNotificationRoundnessManager() {
         return mNotificationRoundnessManager;
     }
 
@@ -1522,6 +1538,10 @@ public class NotificationStackScrollLayoutController {
 
     public void setNotificationActivityStarter(NotificationActivityStarter activityStarter) {
         mNotificationActivityStarter = activityStarter;
+    }
+
+    public NotificationTargetsHelper getNotificationTargetsHelper() {
+        return mNotificationTargetsHelper;
     }
 
     /**

@@ -25,12 +25,12 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.graphics.GraphicsProtos.dumpPointProto;
 import static android.hardware.display.DisplayManager.SWITCHING_TYPE_NONE;
+import static android.hardware.display.DisplayManager.SWITCHING_TYPE_RENDER_FRAME_RATE_ONLY;
 import static android.os.InputConstants.DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
 import static android.os.PowerManager.DRAW_WAKE_LOCK;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.view.InsetsState.ITYPE_IME;
 import static android.view.InsetsState.ITYPE_INVALID;
-import static android.view.InsetsState.ITYPE_NAVIGATION_BAR;
 import static android.view.SurfaceControl.Transaction;
 import static android.view.SurfaceControl.getGlobalTransaction;
 import static android.view.ViewRootImpl.LOCAL_LAYOUT;
@@ -41,6 +41,7 @@ import static android.view.ViewTreeObserver.InternalInsetsInfo.TOUCHABLE_INSETS_
 import static android.view.WindowCallbacks.RESIZE_MODE_DOCKED_DIVIDER;
 import static android.view.WindowCallbacks.RESIZE_MODE_FREEFORM;
 import static android.view.WindowCallbacks.RESIZE_MODE_INVALID;
+import static android.view.WindowInsets.Type.navigationBars;
 import static android.view.WindowInsets.Type.systemBars;
 import static android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE;
 import static android.view.WindowLayout.UNSPECIFIED_LENGTH;
@@ -202,6 +203,7 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Region;
 import android.gui.TouchOcclusionMode;
+import android.hardware.display.DisplayManager;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Debug;
@@ -233,7 +235,6 @@ import android.view.InputWindowHandle;
 import android.view.InsetsSource;
 import android.view.InsetsState;
 import android.view.InsetsState.InternalInsetsType;
-import android.view.InsetsVisibilities;
 import android.view.Surface;
 import android.view.Surface.Rotation;
 import android.view.SurfaceControl;
@@ -474,7 +475,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     // Current transformation being applied.
     float mGlobalScale = 1f;
     float mInvGlobalScale = 1f;
-    float mSizeCompatScale = 1f;
+    float mCompatScale = 1f;
     final float mOverrideScale;
     float mHScale = 1f, mVScale = 1f;
     float mLastHScale = 1f, mLastVScale = 1f;
@@ -767,7 +768,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      */
     private boolean mIsDimming = false;
 
-    private final InsetsVisibilities mRequestedVisibilities = new InsetsVisibilities();
+    private @InsetsType int mRequestedVisibleTypes = WindowInsets.Type.defaultVisible();
 
     /**
      * Freeze the insets state in some cases that not necessarily keeps up-to-date to the client.
@@ -833,31 +834,33 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      */
     private int mSurfaceTranslationY;
 
+    @Override
+    public boolean isRequestedVisible(@InsetsType int types) {
+        return (mRequestedVisibleTypes & types) != 0;
+    }
+
     /**
-     * Returns the visibility of the given {@link InternalInsetsType type} requested by the client.
+     * Returns requested visible types of insets.
      *
-     * @param type the given {@link InternalInsetsType type}.
-     * @return {@code true} if the type is requested visible.
+     * @return an integer as the requested visible insets types.
      */
     @Override
-    public boolean getRequestedVisibility(@InternalInsetsType int type) {
-        return mRequestedVisibilities.getVisibility(type);
+    public @InsetsType int getRequestedVisibleTypes() {
+        return mRequestedVisibleTypes;
     }
 
     /**
-     * Returns all the requested visibilities.
-     *
-     * @return an {@link InsetsVisibilities} as the requested visibilities.
+     * @see #getRequestedVisibleTypes()
      */
-    InsetsVisibilities getRequestedVisibilities() {
-        return mRequestedVisibilities;
+    void setRequestedVisibleTypes(@InsetsType int requestedVisibleTypes) {
+        if (mRequestedVisibleTypes != requestedVisibleTypes) {
+            mRequestedVisibleTypes = requestedVisibleTypes;
+        }
     }
 
-    /**
-     * @see #getRequestedVisibility(int)
-     */
-    void setRequestedVisibilities(InsetsVisibilities visibilities) {
-        mRequestedVisibilities.set(visibilities);
+    @VisibleForTesting
+    void setRequestedVisibleTypes(@InsetsType int requestedVisibleTypes, @InsetsType int mask) {
+        setRequestedVisibleTypes(mRequestedVisibleTypes & ~mask | requestedVisibleTypes & mask);
     }
 
     /**
@@ -973,7 +976,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     boolean isImplicitlyExcludingAllSystemGestures() {
         final boolean stickyHideNav =
                 mAttrs.insetsFlags.behavior == BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                        && !getRequestedVisibility(ITYPE_NAVIGATION_BAR);
+                        && !isRequestedVisible(navigationBars());
         return stickyHideNav && mWmService.mConstants.mSystemGestureExcludedByPreQStickyImmersive
                 && mActivityRecord != null && mActivityRecord.mTargetSdk < Build.VERSION_CODES.Q;
     }
@@ -1253,19 +1256,21 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     void updateGlobalScale() {
         if (hasCompatScale()) {
-            mSizeCompatScale = (mOverrideScale == 1f || mToken.hasSizeCompatBounds())
-                    ? mToken.getSizeCompatScale()
+            mCompatScale = (mOverrideScale == 1f || mToken.hasSizeCompatBounds())
+                    ? mToken.getCompatScale()
                     : 1f;
-            mGlobalScale = mSizeCompatScale * mOverrideScale;
+            mGlobalScale = mCompatScale * mOverrideScale;
             mInvGlobalScale = 1f / mGlobalScale;
             return;
         }
 
-        mGlobalScale = mInvGlobalScale = mSizeCompatScale = 1f;
+        mGlobalScale = mInvGlobalScale = mCompatScale = 1f;
     }
 
-    float getSizeCompatScale() {
-        return mSizeCompatScale;
+    float getCompatScaleForClient() {
+        // If this window in the size compat mode. The scaling is fully controlled at the server
+        // side. The client doesn't need to take it into account.
+        return mToken.hasSizeCompatBounds() ? 1f : mCompatScale;
     }
 
     /**
@@ -1718,7 +1723,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     InsetsState getInsetsStateWithVisibilityOverride() {
         final InsetsState state = new InsetsState(getInsetsState());
         for (@InternalInsetsType int type = 0; type < InsetsState.SIZE; type++) {
-            final boolean requestedVisible = getRequestedVisibility(type);
+            final boolean requestedVisible = isRequestedVisible(InsetsState.toPublicType(type));
             InsetsSource source = state.peekSource(type);
             if (source != null && source.isVisible() != requestedVisible) {
                 source = new InsetsSource(source);
@@ -1841,8 +1846,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      * @return {@code true} if one or more windows have been displayed, else false.
      */
     boolean hasAppShownWindows() {
-        return mActivityRecord != null
-                && (mActivityRecord.firstWindowDrawn || mActivityRecord.startingDisplayed);
+        return mActivityRecord != null && (mActivityRecord.firstWindowDrawn
+                || mActivityRecord.isStartingWindowDisplayed());
     }
 
     @Override
@@ -2042,9 +2047,13 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      * it must be drawn before allDrawn can become true.
      */
     boolean isInteresting() {
+        final RecentsAnimationController recentsAnimationController =
+                mWmService.getRecentsAnimationController();
         return mActivityRecord != null && !mAppDied
                 && (!mActivityRecord.isFreezingScreen() || !mAppFreezing)
-                && mViewVisibility == View.VISIBLE;
+                && mViewVisibility == View.VISIBLE
+                && (recentsAnimationController == null
+                         || recentsAnimationController.isInterestingForAllDrawn(this));
     }
 
     /**
@@ -2510,6 +2519,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                     mWinAnimator.mSurfaceController,
                     Debug.getCallers(5));
 
+        final DisplayContent displayContent = getDisplayContent();
         final long origId = Binder.clearCallingIdentity();
 
         try {
@@ -2564,7 +2574,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                     // Set up a replacement input channel since the app is now dead.
                     // We need to catch tapping on the dead window to restart the app.
                     openInputChannel(null);
-                    getDisplayContent().getInputMonitor().updateInputWindowsLw(true /*force*/);
+                    displayContent.getInputMonitor().updateInputWindowsLw(true /*force*/);
                     return;
                 }
 
@@ -2572,7 +2582,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 // usually unnoticeable (e.g. covered by rotation animation) and the animation
                 // bounds could be inconsistent, such as depending on when the window applies
                 // its draw transaction with new rotation.
-                final boolean allowExitAnimation = !getDisplayContent().inTransition()
+                final boolean allowExitAnimation = !displayContent.inTransition()
                         // There will be a new window so the exit animation may not be visible or
                         // look weird if its orientation is changed.
                         && !inRelaunchingActivity();
@@ -2621,19 +2631,20 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 }
             }
 
+            // Check if window provides non decor insets before clearing its provided insets.
+            final boolean windowProvidesNonDecorInsets = providesNonDecorInsets();
+
             removeImmediately();
-            boolean sentNewConfig = false;
-            if (wasVisible) {
-                // Removing a visible window will effect the computed orientation
-                // So just update orientation if needed.
-                final DisplayContent displayContent = getDisplayContent();
-                if (displayContent.updateOrientation()) {
-                    displayContent.sendNewConfiguration();
-                    sentNewConfig = true;
-                }
+            // Removing a visible window may affect the display orientation so just update it if
+            // needed. Also recompute configuration if it provides screen decor insets.
+            boolean needToSendNewConfiguration = wasVisible && displayContent.updateOrientation();
+            if (windowProvidesNonDecorInsets) {
+                needToSendNewConfiguration |=
+                        displayContent.getDisplayPolicy().updateDecorInsetsInfo();
             }
-            if (!sentNewConfig && providesNonDecorInsets()) {
-                getDisplayContent().sendNewConfiguration();
+
+            if (needToSendNewConfiguration) {
+                displayContent.sendNewConfiguration();
             }
             mWmService.updateFocusedWindowLocked(isFocused()
                             ? UPDATE_FOCUS_REMOVING_FOCUS
@@ -3473,7 +3484,13 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                     "Setting visibility of " + this + ": " + clientVisible);
             mClient.dispatchAppVisibility(clientVisible);
         } catch (RemoteException e) {
+            // The remote client fails to process the visibility message. That means it is in a
+            // wrong state. E.g. the binder buffer is running out or the binder threads are dead.
+            // The window visibility is out-of-sync that may cause blank content or left over, so
+            // just kill it. And if it is a window of foreground activity, the activity can be
+            // restarted automatically if needed.
             Slog.w(TAG, "Exception thrown during dispatchAppVisibility " + this, e);
+            android.os.Process.killProcess(mSession.mPid);
         }
     }
 
@@ -3690,7 +3707,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
 
         return win.showForAllUsers()
-                || mWmService.isCurrentProfile(win.mShowUserId);
+                || mWmService.isUserVisible(win.mShowUserId);
     }
 
     private static void applyInsets(Region outRegion, Rect frame, Rect inset) {
@@ -3850,14 +3867,15 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 outFrames.attachedFrame.scale(mInvGlobalScale);
             }
         }
-        outFrames.sizeCompatScale = mSizeCompatScale;
+
+        outFrames.compatScale = getCompatScaleForClient();
 
         // Note: in the cases where the window is tied to an activity, we should not send a
         // configuration update when the window has requested to be hidden. Doing so can lead to
         // the client erroneously accepting a configuration that would have otherwise caused an
         // activity restart. We instead hand back the last reported {@link MergedConfiguration}.
-        if (useLatestConfig || (relayoutVisible && (shouldCheckTokenVisibleRequested()
-                || mToken.isVisibleRequested()))) {
+        if (useLatestConfig || (relayoutVisible && (mActivityRecord == null
+                || mActivityRecord.mVisibleRequested))) {
             final Configuration globalConfig = getProcessGlobalConfiguration();
             final Configuration overrideConfig = getMergedOverrideConfiguration();
             outMergedConfiguration.setConfiguration(globalConfig, overrideConfig);
@@ -3917,7 +3935,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         final boolean forceRelayout = syncWithBuffers || isDragResizeChanged;
         final DisplayContent displayContent = getDisplayContent();
         final boolean alwaysConsumeSystemBars =
-                displayContent.getDisplayPolicy().areSystemBarsForcedShownLw();
+                displayContent.getDisplayPolicy().areSystemBarsForcedConsumedLw();
         final int displayId = displayContent.getDisplayId();
 
         if (isDragResizeChanged) {
@@ -4424,9 +4442,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         pw.println(prefix + "keepClearAreas: restricted=" + mKeepClearAreas
                           + ", unrestricted=" + mUnrestrictedKeepClearAreas);
         if (dumpAll) {
-            final String visibilityString = mRequestedVisibilities.toString();
-            if (!visibilityString.isEmpty()) {
-                pw.println(prefix + "Requested visibilities: " + visibilityString);
+            if (mRequestedVisibleTypes != WindowInsets.Type.defaultVisible()) {
+                pw.println(prefix + "Requested non-default-visibility types: "
+                        + WindowInsets.Type.toString(
+                                mRequestedVisibleTypes ^ WindowInsets.Type.defaultVisible()));
             }
         }
 
@@ -4568,7 +4587,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     float translateToWindowX(float x) {
         float winX = x - mWindowFrames.mFrame.left;
         if (mGlobalScale != 1f) {
-            winX *= mGlobalScale;
+            winX *= mInvGlobalScale;
         }
         return winX;
     }
@@ -4576,7 +4595,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     float translateToWindowY(float y) {
         float winY = y - mWindowFrames.mFrame.top;
         if (mGlobalScale != 1f) {
-            winY *= mGlobalScale;
+            winY *= mInvGlobalScale;
         }
         return winY;
     }
@@ -5465,8 +5484,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // If refresh rate switching is disabled there is no point to set the frame rate on the
         // surface as the refresh rate will be limited by display manager to a single value
         // and SurfaceFlinger wouldn't be able to change it anyways.
-        if (mWmService.mDisplayManagerInternal.getRefreshRateSwitchingType()
-                != SWITCHING_TYPE_NONE) {
+        @DisplayManager.SwitchingType int refreshRateSwitchingType =
+                mWmService.mDisplayManagerInternal.getRefreshRateSwitchingType();
+        if (refreshRateSwitchingType != SWITCHING_TYPE_NONE
+                && refreshRateSwitchingType != SWITCHING_TYPE_RENDER_FRAME_RATE_ONLY) {
             final float refreshRate = refreshRatePolicy.getPreferredRefreshRate(this);
             if (mAppPreferredFrameRate != refreshRate) {
                 mAppPreferredFrameRate = refreshRate;
@@ -5697,6 +5718,15 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             return mStartingData.mAssociatedTask.mSurfaceControl;
         }
         return super.getAnimationLeashParent();
+    }
+
+    @Override
+    public void onAnimationLeashCreated(Transaction t, SurfaceControl leash) {
+        super.onAnimationLeashCreated(t, leash);
+        if (isStartingWindowAssociatedToTask()) {
+            // Make sure the animation leash is still on top of the task.
+            t.setLayer(leash, Integer.MAX_VALUE);
+        }
     }
 
     // TODO(b/70040778): We should aim to eliminate the last user of TYPE_APPLICATION_MEDIA
@@ -5953,10 +5983,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     @Override
     boolean isSyncFinished() {
-        if (mSyncState == SYNC_STATE_WAITING_FOR_DRAW && mViewVisibility == View.GONE
+        if (mSyncState == SYNC_STATE_WAITING_FOR_DRAW && mViewVisibility != View.VISIBLE
                 && !isVisibleRequested()) {
-            // Don't wait for GONE windows. However, we don't alter the state in case the window
-            // becomes un-gone while the syncset is still active.
+            // Don't wait for invisible windows. However, we don't alter the state in case the
+            // window becomes visible while the sync group is still active.
             return true;
         }
         return super.isSyncFinished();
@@ -5988,7 +6018,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             final long duration =
                     SystemClock.elapsedRealtime() - mActivityRecord.mRelaunchStartTime;
             Slog.i(TAG, "finishDrawing of relaunch: " + this + " " + duration + "ms");
-            mActivityRecord.mRelaunchStartTime = 0;
+            mActivityRecord.finishOrAbortReplacingWindow();
         }
         if (mActivityRecord != null && mAttrs.type == TYPE_APPLICATION_STARTING) {
             mWmService.mAtmService.mTaskSupervisor.getActivityMetricsLogger()
@@ -6080,8 +6110,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         if (mRedrawForSyncReported) {
             return false;
         }
-        // TODO(b/233286785): Remove mIsWallpaper once WallpaperService handles syncId of relayout.
-        if (mInRelayout && !mIsWallpaper) {
+        if (mInRelayout && mPrepareSyncSeqId > 0) {
             // The last sync seq id will return to the client, so there is no need to request the
             // client to redraw.
             return false;

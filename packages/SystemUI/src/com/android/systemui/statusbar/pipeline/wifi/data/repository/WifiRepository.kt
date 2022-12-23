@@ -17,10 +17,12 @@
 package com.android.systemui.statusbar.pipeline.wifi.data.repository
 
 import android.annotation.SuppressLint
+import android.content.IntentFilter
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkCapabilities.NET_CAPABILITY_NOT_VPN
+import android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED
 import android.net.NetworkCapabilities.TRANSPORT_CELLULAR
 import android.net.NetworkCapabilities.TRANSPORT_WIFI
 import android.net.NetworkRequest
@@ -29,46 +31,122 @@ import android.net.wifi.WifiManager
 import android.net.wifi.WifiManager.TrafficStateCallback
 import android.util.Log
 import com.android.settingslib.Utils
+import com.android.systemui.broadcast.BroadcastDispatcher
 import com.android.systemui.common.coroutine.ConflatedCallbackFlow.conflatedCallbackFlow
 import com.android.systemui.dagger.SysUISingleton
+import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.statusbar.pipeline.shared.ConnectivityPipelineLogger
 import com.android.systemui.statusbar.pipeline.shared.ConnectivityPipelineLogger.Companion.SB_LOGGING_TAG
-import com.android.systemui.statusbar.pipeline.wifi.data.model.WifiActivityModel
+import com.android.systemui.statusbar.pipeline.shared.ConnectivityPipelineLogger.Companion.logInputChange
 import com.android.systemui.statusbar.pipeline.wifi.data.model.WifiNetworkModel
+import com.android.systemui.statusbar.pipeline.wifi.shared.model.WifiActivityModel
 import java.util.concurrent.Executor
 import javax.inject.Inject
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.stateIn
 
-/**
- * Provides data related to the wifi state.
- */
+/** Provides data related to the wifi state. */
 interface WifiRepository {
-    /**
-     * Observable for the current wifi network.
-     */
-    val wifiNetwork: Flow<WifiNetworkModel>
+    /** Observable for the current wifi enabled status. */
+    val isWifiEnabled: StateFlow<Boolean>
 
-    /**
-     * Observable for the current wifi network activity.
-     */
-    val wifiActivity: Flow<WifiActivityModel>
+    /** Observable for the current wifi default status. */
+    val isWifiDefault: StateFlow<Boolean>
+
+    /** Observable for the current wifi network. */
+    val wifiNetwork: StateFlow<WifiNetworkModel>
+
+    /** Observable for the current wifi network activity. */
+    val wifiActivity: StateFlow<WifiActivityModel>
 }
 
 /** Real implementation of [WifiRepository]. */
+@Suppress("EXPERIMENTAL_IS_NOT_ENABLED")
 @OptIn(ExperimentalCoroutinesApi::class)
 @SysUISingleton
 @SuppressLint("MissingPermission")
 class WifiRepositoryImpl @Inject constructor(
-        connectivityManager: ConnectivityManager,
-        wifiManager: WifiManager?,
-        @Main mainExecutor: Executor,
-        logger: ConnectivityPipelineLogger,
+    broadcastDispatcher: BroadcastDispatcher,
+    connectivityManager: ConnectivityManager,
+    logger: ConnectivityPipelineLogger,
+    @Main mainExecutor: Executor,
+    @Application scope: CoroutineScope,
+    wifiManager: WifiManager?,
 ) : WifiRepository {
-    override val wifiNetwork: Flow<WifiNetworkModel> = conflatedCallbackFlow {
+
+    private val wifiStateChangeEvents: Flow<Unit> = broadcastDispatcher.broadcastFlow(
+        IntentFilter(WifiManager.WIFI_STATE_CHANGED_ACTION)
+    )
+        .logInputChange(logger, "WIFI_STATE_CHANGED_ACTION intent")
+
+    private val wifiNetworkChangeEvents: MutableSharedFlow<Unit> =
+        MutableSharedFlow(extraBufferCapacity = 1)
+
+    override val isWifiEnabled: StateFlow<Boolean> =
+        if (wifiManager == null) {
+            MutableStateFlow(false).asStateFlow()
+        } else {
+            // Because [WifiManager] doesn't expose a wifi enabled change listener, we do it
+            // internally by fetching [WifiManager.isWifiEnabled] whenever we think the state may
+            // have changed.
+            merge(wifiNetworkChangeEvents, wifiStateChangeEvents)
+                .mapLatest { wifiManager.isWifiEnabled }
+                .distinctUntilChanged()
+                .logInputChange(logger, "enabled")
+                .stateIn(
+                    scope = scope,
+                    started = SharingStarted.WhileSubscribed(),
+                    initialValue = wifiManager.isWifiEnabled
+                )
+        }
+
+    override val isWifiDefault: StateFlow<Boolean> = conflatedCallbackFlow {
+        // Note: This callback doesn't do any logging because we already log every network change
+        // in the [wifiNetwork] callback.
+        val callback = object : ConnectivityManager.NetworkCallback(FLAG_INCLUDE_LOCATION_INFO) {
+            override fun onCapabilitiesChanged(
+                network: Network,
+                networkCapabilities: NetworkCapabilities
+            ) {
+                // This method will always be called immediately after the network becomes the
+                // default, in addition to any time the capabilities change while the network is
+                // the default.
+                // If this network contains valid wifi info, then wifi is the default network.
+                val wifiInfo = networkCapabilitiesToWifiInfo(networkCapabilities)
+                trySend(wifiInfo != null)
+            }
+
+            override fun onLost(network: Network) {
+                // The system no longer has a default network, so wifi is definitely not default.
+                trySend(false)
+            }
+        }
+
+        connectivityManager.registerDefaultNetworkCallback(callback)
+        awaitClose { connectivityManager.unregisterNetworkCallback(callback) }
+    }
+        .distinctUntilChanged()
+        .logInputChange(logger, "isWifiDefault")
+        .stateIn(
+            scope,
+            started = SharingStarted.WhileSubscribed(),
+            initialValue = false
+        )
+
+    override val wifiNetwork: StateFlow<WifiNetworkModel> = conflatedCallbackFlow {
         var currentWifi: WifiNetworkModel = WIFI_NETWORK_DEFAULT
 
         val callback = object : ConnectivityManager.NetworkCallback(FLAG_INCLUDE_LOCATION_INFO) {
@@ -78,9 +156,16 @@ class WifiRepositoryImpl @Inject constructor(
             ) {
                 logger.logOnCapabilitiesChanged(network, networkCapabilities)
 
+                wifiNetworkChangeEvents.tryEmit(Unit)
+
                 val wifiInfo = networkCapabilitiesToWifiInfo(networkCapabilities)
                 if (wifiInfo?.isPrimary == true) {
-                    val wifiNetworkModel = wifiInfoToModel(wifiInfo, network.getNetId())
+                    val wifiNetworkModel = createWifiNetworkModel(
+                        wifiInfo,
+                        network,
+                        networkCapabilities,
+                        wifiManager,
+                    )
                     logger.logTransformation(
                         WIFI_NETWORK_CALLBACK_NAME,
                         oldValue = currentWifi,
@@ -93,6 +178,9 @@ class WifiRepositoryImpl @Inject constructor(
 
             override fun onLost(network: Network) {
                 logger.logOnLost(network)
+
+                wifiNetworkChangeEvents.tryEmit(Unit)
+
                 val wifi = currentWifi
                 if (wifi is WifiNetworkModel.Active && wifi.networkId == network.getNetId()) {
                     val newNetworkModel = WifiNetworkModel.Inactive
@@ -107,13 +195,21 @@ class WifiRepositoryImpl @Inject constructor(
             }
         }
 
-        trySend(WIFI_NETWORK_DEFAULT)
         connectivityManager.registerNetworkCallback(WIFI_NETWORK_CALLBACK_REQUEST, callback)
 
         awaitClose { connectivityManager.unregisterNetworkCallback(callback) }
     }
+        // There will be multiple wifi icons in different places that will frequently
+        // subscribe/unsubscribe to flows as the views attach/detach. Using [stateIn] ensures that
+        // new subscribes will get the latest value immediately upon subscription. Otherwise, the
+        // views could show stale data. See b/244173280.
+        .stateIn(
+            scope,
+            started = SharingStarted.WhileSubscribed(),
+            initialValue = WIFI_NETWORK_DEFAULT
+        )
 
-    override val wifiActivity: Flow<WifiActivityModel> =
+    override val wifiActivity: StateFlow<WifiActivityModel> =
             if (wifiManager == null) {
                 Log.w(SB_LOGGING_TAG, "Null WifiManager; skipping activity callback")
                 flowOf(ACTIVITY_DEFAULT)
@@ -123,13 +219,15 @@ class WifiRepositoryImpl @Inject constructor(
                         logger.logInputChange("onTrafficStateChange", prettyPrintActivity(state))
                         trySend(trafficStateToWifiActivityModel(state))
                     }
-
-                    trySend(ACTIVITY_DEFAULT)
                     wifiManager.registerTrafficStateCallback(mainExecutor, callback)
-
                     awaitClose { wifiManager.unregisterTrafficStateCallback(callback) }
                 }
             }
+                .stateIn(
+                    scope,
+                    started = SharingStarted.WhileSubscribed(),
+                    initialValue = ACTIVITY_DEFAULT
+                )
 
     companion object {
         val ACTIVITY_DEFAULT = WifiActivityModel(hasActivityIn = false, hasActivityOut = false)
@@ -164,14 +262,25 @@ class WifiRepositoryImpl @Inject constructor(
             }
         }
 
-        private fun wifiInfoToModel(wifiInfo: WifiInfo, networkId: Int): WifiNetworkModel {
-            return WifiNetworkModel.Active(
-                networkId,
-                wifiInfo.ssid,
-                wifiInfo.isPasspointAp,
-                wifiInfo.isOsuAp,
-                wifiInfo.passpointProviderFriendlyName
-            )
+        private fun createWifiNetworkModel(
+            wifiInfo: WifiInfo,
+            network: Network,
+            networkCapabilities: NetworkCapabilities,
+            wifiManager: WifiManager?,
+        ): WifiNetworkModel {
+            return if (wifiInfo.isCarrierMerged) {
+                WifiNetworkModel.CarrierMerged
+            } else {
+                WifiNetworkModel.Active(
+                        network.getNetId(),
+                        isValidated = networkCapabilities.hasCapability(NET_CAPABILITY_VALIDATED),
+                        level = wifiManager?.calculateSignalLevel(wifiInfo.rssi),
+                        wifiInfo.ssid,
+                        wifiInfo.isPasspointAp,
+                        wifiInfo.isOsuAp,
+                        wifiInfo.passpointProviderFriendlyName
+                )
+            }
         }
 
         private fun prettyPrintActivity(activity: Int): String {

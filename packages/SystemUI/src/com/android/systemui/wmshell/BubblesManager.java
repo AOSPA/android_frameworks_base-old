@@ -25,6 +25,7 @@ import static android.service.notification.NotificationListenerService.REASON_GR
 import static android.service.notification.NotificationStats.DISMISSAL_BUBBLE;
 import static android.service.notification.NotificationStats.DISMISS_SENTIMENT_NEUTRAL;
 
+import static com.android.systemui.flags.Flags.WM_BUBBLE_BAR;
 import static com.android.wm.shell.bubbles.BubbleDebugConfig.TAG_BUBBLES;
 import static com.android.wm.shell.bubbles.BubbleDebugConfig.TAG_WITH_CLASS_NAME;
 
@@ -51,18 +52,16 @@ import androidx.annotation.Nullable;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.systemui.dagger.SysUISingleton;
+import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.model.SysUiState;
 import com.android.systemui.shade.ShadeController;
 import com.android.systemui.shared.system.QuickStepContract;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.notification.NotificationChannelHelper;
-import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.collection.NotifCollection;
 import com.android.systemui.statusbar.notification.collection.NotifPipeline;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
-import com.android.systemui.statusbar.notification.collection.coordinator.BubbleCoordinator;
-import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy;
 import com.android.systemui.statusbar.notification.collection.notifcollection.CommonNotifCollection;
 import com.android.systemui.statusbar.notification.collection.notifcollection.DismissedByUserStats;
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifCollectionListener;
@@ -103,7 +102,6 @@ public class BubblesManager {
     private final NotificationVisibilityProvider mVisibilityProvider;
     private final NotificationInterruptStateProvider mNotificationInterruptStateProvider;
     private final NotificationLockscreenUserManager mNotifUserManager;
-    private final NotificationGroupManagerLegacy mNotificationGroupManager;
     private final CommonNotifCollection mCommonNotifCollection;
     private final NotifPipeline mNotifPipeline;
     private final Executor mSysuiMainExecutor;
@@ -130,10 +128,10 @@ public class BubblesManager {
             NotificationInterruptStateProvider interruptionStateProvider,
             ZenModeController zenModeController,
             NotificationLockscreenUserManager notifUserManager,
-            NotificationGroupManagerLegacy groupManager,
             CommonNotifCollection notifCollection,
             NotifPipeline notifPipeline,
             SysUiState sysUiState,
+            FeatureFlags featureFlags,
             Executor sysuiMainExecutor) {
         if (bubblesOptional.isPresent()) {
             return new BubblesManager(context,
@@ -148,10 +146,10 @@ public class BubblesManager {
                     interruptionStateProvider,
                     zenModeController,
                     notifUserManager,
-                    groupManager,
                     notifCollection,
                     notifPipeline,
                     sysUiState,
+                    featureFlags,
                     sysuiMainExecutor);
         } else {
             return null;
@@ -171,10 +169,10 @@ public class BubblesManager {
             NotificationInterruptStateProvider interruptionStateProvider,
             ZenModeController zenModeController,
             NotificationLockscreenUserManager notifUserManager,
-            NotificationGroupManagerLegacy groupManager,
             CommonNotifCollection notifCollection,
             NotifPipeline notifPipeline,
             SysUiState sysUiState,
+            FeatureFlags featureFlags,
             Executor sysuiMainExecutor) {
         mContext = context;
         mBubbles = bubbles;
@@ -185,7 +183,6 @@ public class BubblesManager {
         mVisibilityProvider = visibilityProvider;
         mNotificationInterruptStateProvider = interruptionStateProvider;
         mNotifUserManager = notifUserManager;
-        mNotificationGroupManager = groupManager;
         mCommonNotifCollection = notifCollection;
         mNotifPipeline = notifPipeline;
         mSysuiMainExecutor = sysuiMainExecutor;
@@ -319,43 +316,11 @@ public class BubblesManager {
             }
 
             @Override
-            public void notifyMaybeCancelSummary(String key) {
-                sysuiMainExecutor.execute(() -> {
-                    final NotificationEntry entry = mCommonNotifCollection.getEntry(key);
-                    if (entry != null) {
-                        for (NotifCallback cb : mCallbacks) {
-                            cb.maybeCancelSummary(entry);
-                        }
-                    }
-                });
-            }
-
-            @Override
-            public void removeNotificationEntry(String key) {
-                sysuiMainExecutor.execute(() -> {
-                    final NotificationEntry entry = mCommonNotifCollection.getEntry(key);
-                    if (entry != null) {
-                        mNotificationGroupManager.onEntryRemoved(entry);
-                    }
-                });
-            }
-
-            @Override
             public void updateNotificationBubbleButton(String key) {
                 sysuiMainExecutor.execute(() -> {
                     final NotificationEntry entry = mCommonNotifCollection.getEntry(key);
                     if (entry != null && entry.getRow() != null) {
                         entry.getRow().updateBubbleButton();
-                    }
-                });
-            }
-
-            @Override
-            public void updateNotificationSuppression(String key) {
-                sysuiMainExecutor.execute(() -> {
-                    final NotificationEntry entry = mCommonNotifCollection.getEntry(key);
-                    if (entry != null) {
-                        mNotificationGroupManager.updateSuppression(entry);
                     }
                 });
             }
@@ -392,6 +357,7 @@ public class BubblesManager {
                 });
             }
         };
+        mBubbles.setBubbleBarEnabled(featureFlags.isEnabled(WM_BUBBLE_BAR));
         mBubbles.setSysuiProxy(mSysuiProxy);
     }
 
@@ -486,11 +452,6 @@ public class BubblesManager {
         mBubbles.onNotificationChannelModified(pkg, user, channel, modificationType);
     }
 
-    /**
-     * Gets the DismissedByUserStats used by {@link NotificationEntryManager}.
-     * Will not be necessary when using the new notification pipeline's {@link NotifCollection}.
-     * Instead, this is taken care of by {@link BubbleCoordinator}.
-     */
     private DismissedByUserStats getDismissedByUserStats(
             NotificationEntry entry,
             boolean isVisible) {
@@ -532,7 +493,10 @@ public class BubblesManager {
                                     REASON_GROUP_SUMMARY_CANCELED);
                         }
                     } else {
-                        mNotificationGroupManager.onEntryRemoved(entry);
+                        for (NotifCallback cb : mCallbacks) {
+                            cb.removeNotification(entry, getDismissedByUserStats(entry, true),
+                                    REASON_GROUP_SUMMARY_CANCELED);
+                        }
                     }
                 }, mSysuiMainExecutor);
     }
@@ -676,15 +640,5 @@ public class BubblesManager {
          * filtered from the shade.
          */
         void invalidateNotifications(@NonNull String reason);
-
-        /**
-         * Called on a bubbled entry that has been removed when there are no longer
-         * bubbled entries in its group.
-         *
-         * Checks whether its group has any other (non-bubbled) children. If it doesn't,
-         * removes all remnants of the group's summary from the notification pipeline.
-         * TODO: (b/145659174) Only old pipeline needs this - delete post-migration.
-         */
-        void maybeCancelSummary(@NonNull NotificationEntry entry);
     }
 }

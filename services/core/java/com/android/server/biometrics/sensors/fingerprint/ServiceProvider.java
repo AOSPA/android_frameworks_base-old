@@ -26,6 +26,7 @@ import android.hardware.fingerprint.FingerprintManager;
 import android.hardware.fingerprint.FingerprintSensorPropertiesInternal;
 import android.hardware.fingerprint.IFingerprintServiceReceiver;
 import android.hardware.fingerprint.ISidefpsController;
+import android.hardware.fingerprint.IUdfpsOverlay;
 import android.hardware.fingerprint.IUdfpsOverlayController;
 import android.os.IBinder;
 
@@ -129,6 +130,12 @@ public interface ServiceProvider extends
 
     void setUdfpsOverlayController(@NonNull IUdfpsOverlayController controller);
 
+    /**
+     * Sets udfps overlay
+     * @param controller udfps overlay
+     */
+    void setUdfpsOverlay(@NonNull IUdfpsOverlay controller);
+
     void onPowerPressed();
 
     /**
@@ -140,4 +147,10 @@ public interface ServiceProvider extends
     @NonNull
     ITestSession createTestSession(int sensorId, @NonNull ITestSessionCallback callback,
             @NonNull String opPackageName);
+
+    /**
+     * Schedules watchdog for canceling hung operations
+     * @param sensorId sensor ID of the associated operation
+     */
+    default void scheduleWatchdog(int sensorId) {}
 }

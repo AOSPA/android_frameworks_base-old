@@ -351,22 +351,8 @@ public class InsetsState implements Parcelable {
         return insets;
     }
 
-    // TODO: Remove this once the task bar is treated as navigation bar.
-    public Insets calculateInsetsWithInternalTypes(Rect frame, @InternalInsetsType int[] types,
-            boolean ignoreVisibility) {
-        Insets insets = Insets.NONE;
-        for (int i = types.length - 1; i >= 0; i--) {
-            InsetsSource source = mSources[types[i]];
-            if (source == null) {
-                continue;
-            }
-            insets = Insets.max(source.calculateInsets(frame, ignoreVisibility), insets);
-        }
-        return insets;
-    }
-
     public Insets calculateInsets(Rect frame, @InsetsType int types,
-            InsetsVisibilities overrideVisibilities) {
+            @InsetsType int requestedVisibleTypes) {
         Insets insets = Insets.NONE;
         for (int type = FIRST_TYPE; type <= LAST_TYPE; type++) {
             InsetsSource source = mSources[type];
@@ -374,10 +360,7 @@ public class InsetsState implements Parcelable {
                 continue;
             }
             int publicType = InsetsState.toPublicType(type);
-            if ((publicType & types) == 0) {
-                continue;
-            }
-            if (!overrideVisibilities.getVisibility(type)) {
+            if ((publicType & types & requestedVisibleTypes) == 0) {
                 continue;
             }
             insets = Insets.max(source.calculateInsets(frame, true), insets);
@@ -719,7 +702,7 @@ public class InsetsState implements Parcelable {
             result.add(ITYPE_NAVIGATION_BAR);
             result.add(ITYPE_EXTRA_NAVIGATION_BAR);
         }
-        if ((types & Type.GENERIC_OVERLAYS) != 0) {
+        if ((types & Type.SYSTEM_OVERLAYS) != 0) {
             result.add(ITYPE_LEFT_GENERIC_OVERLAY);
             result.add(ITYPE_TOP_GENERIC_OVERLAY);
             result.add(ITYPE_RIGHT_GENERIC_OVERLAY);
@@ -769,7 +752,7 @@ public class InsetsState implements Parcelable {
             case ITYPE_TOP_GENERIC_OVERLAY:
             case ITYPE_RIGHT_GENERIC_OVERLAY:
             case ITYPE_BOTTOM_GENERIC_OVERLAY:
-                return Type.GENERIC_OVERLAYS;
+                return Type.SYSTEM_OVERLAYS;
             case ITYPE_CAPTION_BAR:
                 return Type.CAPTION_BAR;
             case ITYPE_IME:

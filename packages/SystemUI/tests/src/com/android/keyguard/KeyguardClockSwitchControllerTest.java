@@ -29,6 +29,7 @@ import static org.mockito.Mockito.when;
 
 import android.content.res.Resources;
 import android.database.ContentObserver;
+import android.graphics.Rect;
 import android.net.Uri;
 import android.os.UserHandle;
 import android.provider.Settings;
@@ -43,9 +44,9 @@ import androidx.test.filters.SmallTest;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.dump.DumpManager;
-import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.keyguard.KeyguardUnlockAnimationController;
-import com.android.systemui.plugins.Clock;
+import com.android.systemui.plugins.ClockAnimations;
+import com.android.systemui.plugins.ClockController;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.shared.clocks.AnimatableClockView;
 import com.android.systemui.shared.clocks.ClockRegistry;
@@ -87,7 +88,7 @@ public class KeyguardClockSwitchControllerTest extends SysuiTestCase {
     @Mock
     KeyguardUnlockAnimationController mKeyguardUnlockAnimationController;
     @Mock
-    private Clock mClock;
+    private ClockController mClock;
     @Mock
     DumpManager mDumpManager;
     @Mock
@@ -103,8 +104,6 @@ public class KeyguardClockSwitchControllerTest extends SysuiTestCase {
     private FrameLayout mLargeClockFrame;
     @Mock
     private SecureSettings mSecureSettings;
-    @Mock
-    private FeatureFlags mFeatureFlags;
 
     private final View mFakeSmartspaceView = new View(mContext);
 
@@ -141,8 +140,7 @@ public class KeyguardClockSwitchControllerTest extends SysuiTestCase {
                 mSecureSettings,
                 mExecutor,
                 mDumpManager,
-                mClockEventController,
-                mFeatureFlags
+                mClockEventController
         );
 
         when(mStatusBarStateController.getState()).thenReturn(StatusBarState.SHADE);
@@ -262,9 +260,22 @@ public class KeyguardClockSwitchControllerTest extends SysuiTestCase {
         verify(mView).switchToClock(KeyguardClockSwitch.SMALL, /* animate */ true);
     }
 
+    @Test
+    public void testGetClockAnimationsForwardsToClock() {
+        ClockController mockClockController = mock(ClockController.class);
+        ClockAnimations mockClockAnimations = mock(ClockAnimations.class);
+        when(mClockEventController.getClock()).thenReturn(mockClockController);
+        when(mockClockController.getAnimations()).thenReturn(mockClockAnimations);
+
+        Rect r1 = new Rect(1, 2, 3, 4);
+        Rect r2 = new Rect(5, 6, 7, 8);
+        mController.getClockAnimations().onPositionUpdated(r1, r2, 0.2f);
+        verify(mockClockAnimations).onPositionUpdated(r1, r2, 0.2f);
+    }
+
     private void verifyAttachment(VerificationMode times) {
         verify(mClockRegistry, times).registerClockChangeListener(
                 any(ClockRegistry.ClockChangeListener.class));
-        verify(mClockEventController, times).registerListeners();
+        verify(mClockEventController, times).registerListeners(mView);
     }
 }

@@ -20,10 +20,14 @@ import static android.hardware.biometrics.BiometricAuthenticator.TYPE_FINGERPRIN
 import static android.hardware.biometrics.BiometricManager.Authenticators;
 import static android.hardware.biometrics.BiometricManager.BIOMETRIC_MULTI_SENSOR_FINGERPRINT_AND_FACE;
 
+import static com.android.systemui.keyguard.WakefulnessLifecycle.WAKEFULNESS_AWAKE;
+
 import static com.google.common.truth.Truth.assertThat;
 
 import static junit.framework.Assert.assertEquals;
+import static junit.framework.Assert.assertFalse;
 import static junit.framework.Assert.assertNull;
+import static junit.framework.Assert.assertTrue;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -75,6 +79,8 @@ import android.testing.AndroidTestingRunner;
 import android.testing.TestableContext;
 import android.testing.TestableLooper;
 import android.testing.TestableLooper.RunWithLooper;
+import android.view.DisplayInfo;
+import android.view.Surface;
 import android.view.WindowManager;
 
 import androidx.test.filters.SmallTest;
@@ -83,9 +89,12 @@ import com.android.internal.R;
 import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.biometrics.domain.interactor.BiometricPromptCredentialInteractor;
+import com.android.systemui.biometrics.ui.viewmodel.CredentialViewModel;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.CommandQueue;
+import com.android.systemui.statusbar.VibratorHelper;
 import com.android.systemui.util.concurrency.DelayableExecutor;
 import com.android.systemui.util.concurrency.Execution;
 import com.android.systemui.util.concurrency.FakeExecution;
@@ -143,7 +152,7 @@ public class AuthControllerTest extends SysuiTestCase {
     @Mock
     private UdfpsController mUdfpsController;
     @Mock
-    private SidefpsController mSidefpsController;
+    private SideFpsController mSideFpsController;
     @Mock
     private DisplayManager mDisplayManager;
     @Mock
@@ -155,15 +164,24 @@ public class AuthControllerTest extends SysuiTestCase {
     @Mock
     private StatusBarStateController mStatusBarStateController;
     @Mock
+    private UdfpsLogger mUdfpsLogger;
+    @Mock
     private InteractionJankMonitor mInteractionJankMonitor;
+    @Mock
+    private BiometricPromptCredentialInteractor mBiometricPromptCredentialInteractor;
+    @Mock
+    private CredentialViewModel mCredentialViewModel;
+
     @Captor
-    ArgumentCaptor<IFingerprintAuthenticatorsRegisteredCallback> mFpAuthenticatorsRegisteredCaptor;
+    private ArgumentCaptor<IFingerprintAuthenticatorsRegisteredCallback> mFpAuthenticatorsRegisteredCaptor;
     @Captor
-    ArgumentCaptor<IFaceAuthenticatorsRegisteredCallback> mFaceAuthenticatorsRegisteredCaptor;
+    private ArgumentCaptor<IFaceAuthenticatorsRegisteredCallback> mFaceAuthenticatorsRegisteredCaptor;
     @Captor
-    ArgumentCaptor<BiometricStateListener> mBiometricStateCaptor;
+    private ArgumentCaptor<BiometricStateListener> mBiometricStateCaptor;
     @Captor
-    ArgumentCaptor<StatusBarStateController.StateListener> mStatusBarStateListenerCaptor;
+    private ArgumentCaptor<StatusBarStateController.StateListener> mStatusBarStateListenerCaptor;
+    @Captor
+    private ArgumentCaptor<WakefulnessLifecycle.Observer> mWakefullnessObserverCaptor;
 
     private TestableContext mContextSpy;
     private Execution mExecution;
@@ -171,6 +189,9 @@ public class AuthControllerTest extends SysuiTestCase {
     private Handler mHandler;
     private DelayableExecutor mBackgroundExecutor;
     private TestableAuthController mAuthController;
+
+    @Mock
+    private VibratorHelper mVibratorHelper;
 
     @Before
     public void setup() throws RemoteException {
@@ -224,16 +245,18 @@ public class AuthControllerTest extends SysuiTestCase {
                         2 /* sensorId */,
                         SensorProperties.STRENGTH_STRONG,
                         1 /* maxEnrollmentsPerUser */,
-                        fpComponentInfo,
+                        faceComponentInfo,
                         FaceSensorProperties.TYPE_RGB,
                         true /* supportsFaceDetection */,
                         true /* supportsSelfIllumination */,
                         true /* resetLockoutRequireHardwareAuthToken */));
         when(mFaceManager.getSensorPropertiesInternal()).thenReturn(faceProps);
+        when(mVibratorHelper.hasVibrator()).thenReturn(true);
 
         mAuthController = new TestableAuthController(mContextSpy, mExecution, mCommandQueue,
                 mActivityTaskManager, mWindowManager, mFingerprintManager, mFaceManager,
-                () -> mUdfpsController, () -> mSidefpsController, mStatusBarStateController);
+                () -> mUdfpsController, () -> mSideFpsController, mStatusBarStateController,
+                mVibratorHelper);
 
         mAuthController.start();
         verify(mFingerprintManager).addAuthenticatorsRegisteredCallback(
@@ -242,7 +265,9 @@ public class AuthControllerTest extends SysuiTestCase {
                 mFaceAuthenticatorsRegisteredCaptor.capture());
 
         when(mStatusBarStateController.isDozing()).thenReturn(false);
+        when(mWakefulnessLifecycle.getWakefulness()).thenReturn(WAKEFULNESS_AWAKE);
         verify(mStatusBarStateController).addCallback(mStatusBarStateListenerCaptor.capture());
+        verify(mWakefulnessLifecycle).addObserver(mWakefullnessObserverCaptor.capture());
 
         mFpAuthenticatorsRegisteredCaptor.getValue().onAllAuthenticatorsRegistered(fpProps);
         mFaceAuthenticatorsRegisteredCaptor.getValue().onAllAuthenticatorsRegistered(faceProps);
@@ -263,8 +288,8 @@ public class AuthControllerTest extends SysuiTestCase {
         // This test requires an uninitialized AuthController.
         AuthController authController = new TestableAuthController(mContextSpy, mExecution,
                 mCommandQueue, mActivityTaskManager, mWindowManager, mFingerprintManager,
-                mFaceManager, () -> mUdfpsController, () -> mSidefpsController,
-                mStatusBarStateController);
+                mFaceManager, () -> mUdfpsController, () -> mSideFpsController,
+                mStatusBarStateController, mVibratorHelper);
         authController.start();
 
         verify(mFingerprintManager).addAuthenticatorsRegisteredCallback(
@@ -293,8 +318,8 @@ public class AuthControllerTest extends SysuiTestCase {
         // This test requires an uninitialized AuthController.
         AuthController authController = new TestableAuthController(mContextSpy, mExecution,
                 mCommandQueue, mActivityTaskManager, mWindowManager, mFingerprintManager,
-                mFaceManager, () -> mUdfpsController, () -> mSidefpsController,
-                mStatusBarStateController);
+                mFaceManager, () -> mUdfpsController, () -> mSideFpsController,
+                mStatusBarStateController, mVibratorHelper);
         authController.start();
 
         verify(mFingerprintManager).addAuthenticatorsRegisteredCallback(
@@ -321,6 +346,36 @@ public class AuthControllerTest extends SysuiTestCase {
 
         // Nothing should crash.
     }
+
+    @Test
+    public void testFaceAuthEnrollmentStatus() throws RemoteException {
+        final int userId = 0;
+
+        reset(mFaceManager);
+        mAuthController.start();
+
+        verify(mFaceManager).addAuthenticatorsRegisteredCallback(
+                mFaceAuthenticatorsRegisteredCaptor.capture());
+
+        mFaceAuthenticatorsRegisteredCaptor.getValue().onAllAuthenticatorsRegistered(
+                mFaceManager.getSensorPropertiesInternal());
+        mTestableLooper.processAllMessages();
+
+        verify(mFaceManager).registerBiometricStateListener(
+                mBiometricStateCaptor.capture());
+
+        assertFalse(mAuthController.isFaceAuthEnrolled(userId));
+
+        // Enrollments changed for an unknown sensor.
+        for (BiometricStateListener listener : mBiometricStateCaptor.getAllValues()) {
+            listener.onEnrollmentsChanged(userId,
+                    2 /* sensorId */, true /* hasEnrollments */);
+        }
+        mTestableLooper.processAllMessages();
+
+        assertTrue(mAuthController.isFaceAuthEnrolled(userId));
+    }
+
 
     @Test
     public void testSendsReasonUserCanceled_whenDismissedByUserCancel() throws Exception {
@@ -720,13 +775,8 @@ public class AuthControllerTest extends SysuiTestCase {
     }
 
     @Test
-    public void testSubscribesToOrientationChangesWhenShowingDialog() {
-        showDialog(new int[]{1} /* sensorIds */, false /* credentialAllowed */);
-
+    public void testSubscribesToOrientationChangesOnStart() {
         verify(mDisplayManager).registerDisplayListener(any(), eq(mHandler), anyLong());
-
-        mAuthController.hideAuthenticationDialog(REQUEST_ID);
-        verify(mDisplayManager).unregisterDisplayListener(any());
     }
 
     @Test
@@ -759,19 +809,148 @@ public class AuthControllerTest extends SysuiTestCase {
     }
 
     @Test
-    public void testForwardsDozeEvent() throws RemoteException {
+    public void testForwardsDozeEvents() throws RemoteException {
+        when(mStatusBarStateController.isDozing()).thenReturn(true);
+        when(mWakefulnessLifecycle.getWakefulness()).thenReturn(WAKEFULNESS_AWAKE);
         mAuthController.setBiometicContextListener(mContextListener);
 
-        mStatusBarStateListenerCaptor.getValue().onDozingChanged(false);
         mStatusBarStateListenerCaptor.getValue().onDozingChanged(true);
+        mStatusBarStateListenerCaptor.getValue().onDozingChanged(false);
 
         InOrder order = inOrder(mContextListener);
-        // invoked twice since the initial state is false
-        order.verify(mContextListener, times(2)).onDozeChanged(eq(false));
-        order.verify(mContextListener).onDozeChanged(eq(true));
+        order.verify(mContextListener, times(2)).onDozeChanged(eq(true), eq(true));
+        order.verify(mContextListener).onDozeChanged(eq(false), eq(true));
+        order.verifyNoMoreInteractions();
     }
 
-    // Helpers
+    @Test
+    public void testForwardsWakeEvents() throws RemoteException {
+        when(mStatusBarStateController.isDozing()).thenReturn(false);
+        when(mWakefulnessLifecycle.getWakefulness()).thenReturn(WAKEFULNESS_AWAKE);
+        mAuthController.setBiometicContextListener(mContextListener);
+
+        mWakefullnessObserverCaptor.getValue().onStartedGoingToSleep();
+        mWakefullnessObserverCaptor.getValue().onFinishedGoingToSleep();
+        mWakefullnessObserverCaptor.getValue().onStartedWakingUp();
+        mWakefullnessObserverCaptor.getValue().onFinishedWakingUp();
+        mWakefullnessObserverCaptor.getValue().onPostFinishedWakingUp();
+
+        InOrder order = inOrder(mContextListener);
+        order.verify(mContextListener).onDozeChanged(eq(false), eq(true));
+        order.verify(mContextListener).onDozeChanged(eq(false), eq(false));
+        order.verify(mContextListener).onDozeChanged(eq(false), eq(true));
+        order.verifyNoMoreInteractions();
+    }
+
+    @Test
+    public void testGetFingerprintSensorLocationChanges_differentRotations() {
+        // GIVEN fp default location and mocked device dimensions
+        // Rotation 0, where "o" is the location of the FP sensor, if x or y = 0, it's the edge of
+        // the screen which is why a 1x1 width and height is represented by a 2x2 grid below:
+        //   [* o]
+        //   [* *]
+        Point fpDefaultLocation = new Point(1, 0);
+        final DisplayInfo displayInfo = new DisplayInfo();
+        displayInfo.logicalWidth = 1;
+        displayInfo.logicalHeight = 1;
+
+        // WHEN the rotation is 0, THEN no rotation applied
+        displayInfo.rotation = Surface.ROTATION_0;
+        assertEquals(
+                fpDefaultLocation,
+                mAuthController.rotateToCurrentOrientation(
+                        new Point(fpDefaultLocation), displayInfo)
+        );
+
+        // WHEN the rotation is 270, THEN rotation is applied
+        //   [* *]
+        //   [* o]
+        displayInfo.rotation = Surface.ROTATION_270;
+        assertEquals(
+                new Point(1, 1),
+                mAuthController.rotateToCurrentOrientation(
+                        new Point(fpDefaultLocation), displayInfo)
+        );
+
+        // WHEN the rotation is 180, THEN rotation is applied
+        //   [* *]
+        //   [o *]
+        displayInfo.rotation = Surface.ROTATION_180;
+        assertEquals(
+                new Point(0, 1),
+                mAuthController.rotateToCurrentOrientation(
+                        new Point(fpDefaultLocation), displayInfo)
+        );
+
+        // WHEN the rotation is 90, THEN rotation is applied
+        //   [o *]
+        //   [* *]
+        displayInfo.rotation = Surface.ROTATION_90;
+        assertEquals(
+                new Point(0, 0),
+                mAuthController.rotateToCurrentOrientation(
+                        new Point(fpDefaultLocation), displayInfo)
+        );
+    }
+
+    @Test
+    public void testGetFingerprintSensorLocationChanges_rotateRectangle() {
+        // GIVEN fp default location and mocked device dimensions
+        // Rotation 0, where "o" is the location of the FP sensor, if x or y = 0, it's the edge of
+        // the screen.
+        //   [* * o *]
+        //   [* * * *]
+        Point fpDefaultLocation = new Point(2, 0);
+        final DisplayInfo displayInfo = new DisplayInfo();
+        displayInfo.logicalWidth = 3;
+        displayInfo.logicalHeight = 1;
+
+        // WHEN the rotation is 0, THEN no rotation applied
+        displayInfo.rotation = Surface.ROTATION_0;
+        assertEquals(
+                fpDefaultLocation,
+                mAuthController.rotateToCurrentOrientation(
+                        new Point(fpDefaultLocation), displayInfo)
+        );
+
+        // WHEN the rotation is 180, THEN rotation is applied
+        //   [* * * *]
+        //   [* o * *]
+        displayInfo.rotation = Surface.ROTATION_180;
+        assertEquals(
+                new Point(1, 1),
+                mAuthController.rotateToCurrentOrientation(
+                        new Point(fpDefaultLocation), displayInfo)
+        );
+
+        // Rotation 270 & 90 have swapped logical width and heights
+        displayInfo.logicalWidth = 1;
+        displayInfo.logicalHeight = 3;
+
+        // WHEN the rotation is 270, THEN rotation is applied
+        //   [* *]
+        //   [* *]
+        //   [* o]
+        //   [* *]
+        displayInfo.rotation = Surface.ROTATION_270;
+        assertEquals(
+                new Point(1, 2),
+                mAuthController.rotateToCurrentOrientation(
+                        new Point(fpDefaultLocation), displayInfo)
+        );
+
+        // WHEN the rotation is 90, THEN rotation is applied
+        //   [* *]
+        //   [o *]
+        //   [* *]
+        //   [* *]
+        displayInfo.rotation = Surface.ROTATION_90;
+        assertEquals(
+                new Point(0, 1),
+                mAuthController.rotateToCurrentOrientation(
+                        new Point(fpDefaultLocation), displayInfo)
+        );
+    }
 
     private void showDialog(int[] sensorIds, boolean credentialAllowed) {
         mAuthController.showAuthenticationDialog(createTestPromptInfo(),
@@ -830,13 +1009,15 @@ public class AuthControllerTest extends SysuiTestCase {
                 FingerprintManager fingerprintManager,
                 FaceManager faceManager,
                 Provider<UdfpsController> udfpsControllerFactory,
-                Provider<SidefpsController> sidefpsControllerFactory,
-                StatusBarStateController statusBarStateController) {
+                Provider<SideFpsController> sidefpsControllerFactory,
+                StatusBarStateController statusBarStateController,
+                VibratorHelper vibratorHelper) {
             super(context, execution, commandQueue, activityTaskManager, windowManager,
                     fingerprintManager, faceManager, udfpsControllerFactory,
                     sidefpsControllerFactory, mDisplayManager, mWakefulnessLifecycle,
-                    mUserManager, mLockPatternUtils, statusBarStateController,
-                    mInteractionJankMonitor, mHandler, mBackgroundExecutor);
+                    mUserManager, mLockPatternUtils, mUdfpsLogger, statusBarStateController,
+                    () -> mBiometricPromptCredentialInteractor, () -> mCredentialViewModel,
+                    mInteractionJankMonitor, mHandler, mBackgroundExecutor, vibratorHelper);
         }
 
         @Override

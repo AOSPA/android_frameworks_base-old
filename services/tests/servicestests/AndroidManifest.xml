@@ -113,7 +113,7 @@
     <uses-sdk android:minSdkVersion="1"
          android:targetSdkVersion="26"/>
 
-    <application android:testOnly="true">
+    <application android:testOnly="true" android:debuggable="true">
         <uses-library android:name="android.test.runner"/>
 
         <service android:name="com.android.server.accounts.TestAccountType1AuthenticatorService"
@@ -145,6 +145,19 @@
             <meta-data
                 android:name="android.service.dream"
                 android:resource="@xml/test_dream_metadata" />
+        </service>
+
+        <service
+            android:name="com.android.server.dreams.TestDreamServiceWithInvalidSettings"
+            android:exported="false"
+            android:label="Test Dream" >
+            <intent-filter>
+                <action android:name="android.service.dreams.DreamService" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.dream"
+                android:resource="@xml/test_dream_metadata_invalid" />
         </service>
 
         <receiver android:name="com.android.server.devicepolicy.ApplicationRestrictionsTest$AdminReceiver"

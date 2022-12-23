@@ -42,18 +42,19 @@ import android.util.Pair;
 import android.util.Slog;
 import android.util.BoostFramework;
 import android.util.SparseArray;
+
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.os.ProcLocksReader;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.ServiceThread;
+
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumMap;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
@@ -91,6 +92,8 @@ public final class CachedAppOptimizer {
             "compact_proc_state_throttle";
     @VisibleForTesting static final String KEY_FREEZER_DEBOUNCE_TIMEOUT =
             "freeze_debounce_timeout";
+    @VisibleForTesting static final String KEY_FREEZER_EXEMPT_INST_PKG =
+            "freeze_exempt_inst_pkg";
 
     // RSS Indices
     private static final int RSS_TOTAL_INDEX = 0;
@@ -112,6 +115,9 @@ public final class CachedAppOptimizer {
     private static final int COMPACT_ACTION_ANON_FLAG = 2;
 
     private static final String ATRACE_COMPACTION_TRACK = "Compaction";
+    private static final String ATRACE_FREEZER_TRACK = "Freezer";
+
+    private static final int FREEZE_BINDER_TIMEOUT_MS = 100;
 
     // Defaults for phenotype flags.
     @VisibleForTesting static final Boolean DEFAULT_USE_COMPACTION = false;
@@ -136,6 +142,7 @@ public final class CachedAppOptimizer {
     @VisibleForTesting static final String DEFAULT_COMPACT_PROC_STATE_THROTTLE =
             String.valueOf(ActivityManager.PROCESS_STATE_RECEIVER);
     @VisibleForTesting static final long DEFAULT_FREEZER_DEBOUNCE_TIMEOUT = 600_000L;
+    @VisibleForTesting static final Boolean DEFAULT_FREEZER_EXEMPT_INST_PKG = true;
 
     @VisibleForTesting static final Uri CACHED_APP_FREEZER_ENABLED_URI = Settings.Global.getUriFor(
                 Settings.Global.CACHED_APPS_FREEZER_ENABLED);
@@ -277,6 +284,8 @@ public final class CachedAppOptimizer {
                         for (String name : properties.getKeyset()) {
                             if (KEY_FREEZER_DEBOUNCE_TIMEOUT.equals(name)) {
                                 updateFreezerDebounceTimeout();
+                            } else if (KEY_FREEZER_EXEMPT_INST_PKG.equals(name)) {
+                                updateFreezerExemptInstPkg();
                             }
                         }
                     }
@@ -358,6 +367,7 @@ public final class CachedAppOptimizer {
     private boolean mFreezerOverride = false;
 
     @VisibleForTesting volatile long mFreezerDebounceTimeout = DEFAULT_FREEZER_DEBOUNCE_TIMEOUT;
+    @VisibleForTesting volatile boolean mFreezerExemptInstPkg = DEFAULT_FREEZER_EXEMPT_INST_PKG;
 
     // Maps process ID to last compaction statistics for processes that we've fully compacted. Used
     // when evaluating throttles that we only consider for "full" compaction, so we don't store
@@ -650,6 +660,15 @@ public final class CachedAppOptimizer {
         }
     }
 
+    /**
+     * Returns whether freezer exempts INSTALL_PACKAGES.
+     */
+    public boolean freezerExemptInstPkg() {
+        synchronized (mPhenotypeFlagLock) {
+            return mUseFreezer && mFreezerExemptInstPkg;
+        }
+    }
+
     @GuardedBy("mProcLock")
     void dump(PrintWriter pw) {
         pw.println("CachedAppOptimizer settings");
@@ -732,6 +751,7 @@ public final class CachedAppOptimizer {
             pw.println("  " + KEY_USE_FREEZER + "=" + mUseFreezer);
             pw.println("  " + KEY_FREEZER_STATSD_SAMPLE_RATE + "=" + mFreezerStatsdSampleRate);
             pw.println("  " + KEY_FREEZER_DEBOUNCE_TIMEOUT + "=" + mFreezerDebounceTimeout);
+            pw.println("  " + KEY_FREEZER_EXEMPT_INST_PKG + "=" + mFreezerExemptInstPkg);
             synchronized (mProcLock) {
                 int size = mFrozenProcesses.size();
                 pw.println("  Apps frozen: " + size);
@@ -1025,11 +1045,13 @@ public final class CachedAppOptimizer {
      * @param pid the target pid for which binder transactions are to be frozen
      * @param freeze specifies whether to flush transactions and then freeze (true) or unfreeze
      * binder for the specificed pid.
+     * @param timeoutMs the timeout in milliseconds to wait for the binder interface to freeze
+     * before giving up.
      *
      * @throws RuntimeException in case a flush/freeze operation could not complete successfully.
      * @return 0 if success, or -EAGAIN indicating there's pending transaction.
      */
-    private static native int freezeBinder(int pid, boolean freeze);
+    public static native int freezeBinder(int pid, boolean freeze, int timeoutMs);
 
     /**
      * Retrieves binder freeze info about a process.
@@ -1099,6 +1121,7 @@ public final class CachedAppOptimizer {
                     KEY_USE_FREEZER, DEFAULT_USE_FREEZER)) {
             mUseFreezer = isFreezerSupported();
             updateFreezerDebounceTimeout();
+            updateFreezerExemptInstPkg();
         } else {
             mUseFreezer = false;
         }
@@ -1287,6 +1310,15 @@ public final class CachedAppOptimizer {
         if (mFreezerDebounceTimeout < 0) {
             mFreezerDebounceTimeout = DEFAULT_FREEZER_DEBOUNCE_TIMEOUT;
         }
+        Slog.d(TAG_AM, "Freezer timeout set to " + mFreezerDebounceTimeout);
+    }
+
+    @GuardedBy("mPhenotypeFlagLock")
+    private void updateFreezerExemptInstPkg() {
+        mFreezerExemptInstPkg = DeviceConfig.getBoolean(
+                DeviceConfig.NAMESPACE_ACTIVITY_MANAGER_NATIVE_BOOT,
+                KEY_FREEZER_EXEMPT_INST_PKG, DEFAULT_FREEZER_EXEMPT_INST_PKG);
+        Slog.d(TAG_AM, "Freezer exemption set to " + mFreezerExemptInstPkg);
     }
 
     private boolean parseProcStateThrottle(String procStateThrottleString) {
@@ -1397,7 +1429,7 @@ public final class CachedAppOptimizer {
         long freezeTime = opt.getFreezeUnfreezeTime();
 
         try {
-            freezeBinder(pid, false);
+            freezeBinder(pid, false, FREEZE_BINDER_TIMEOUT_MS);
         } catch (RuntimeException e) {
             Slog.e(TAG_AM, "Unable to unfreeze binder for " + pid + " " + app.processName
                     + ". Killing it");
@@ -1408,6 +1440,7 @@ public final class CachedAppOptimizer {
         }
 
         try {
+            traceAppFreeze(app.processName, pid, false);
             Process.setProcessFrozen(pid, app.uid, false);
 
             opt.setFreezeUnfreezeTime(SystemClock.uptimeMillis());
@@ -1450,8 +1483,25 @@ public final class CachedAppOptimizer {
                 return;
             }
             Slog.d(TAG_AM, "quick sync unfreeze " + pid);
-            unfreezeAppLSP(app, reason);
+            try {
+                freezeBinder(pid, false, FREEZE_BINDER_TIMEOUT_MS);
+            } catch (RuntimeException e) {
+                Slog.e(TAG_AM, "Unable to quick unfreeze binder for " + pid);
+                return;
+            }
+
+            try {
+                traceAppFreeze(app.processName, pid, false);
+                Process.setProcessFrozen(pid, app.uid, false);
+            } catch (Exception e) {
+                Slog.e(TAG_AM, "Unable to quick unfreeze " + pid);
+            }
         }
+    }
+
+    private static void traceAppFreeze(String processName, int pid, boolean freeze) {
+        Trace.instantForTrack(Trace.TRACE_TAG_ACTIVITY_MANAGER, ATRACE_FREEZER_TRACK,
+                (freeze ? "Freeze " : "Unfreeze ") + processName + ":" + pid);
     }
 
     /**
@@ -1528,7 +1578,8 @@ public final class CachedAppOptimizer {
                 && (newAdj == ProcessList.PREVIOUS_APP_ADJ || newAdj == ProcessList.HOME_APP_ADJ)) {
             // Perform a minor compaction when a perceptible app becomes the prev/home app
             compactApp(app, CompactProfile.SOME, CompactSource.APP, false);
-        } else if (oldAdj < ProcessList.CACHED_APP_MIN_ADJ
+        } else if ((oldAdj < ProcessList.CACHED_APP_MIN_ADJ
+                || oldAdj > ProcessList.CACHED_APP_MAX_ADJ)
                 && newAdj >= ProcessList.CACHED_APP_MIN_ADJ
                 && newAdj <= ProcessList.CACHED_APP_MAX_ADJ) {
             // Perform a major compaction when any app enters cached
@@ -2029,7 +2080,7 @@ public final class CachedAppOptimizer {
                 // Freeze binder interface before the process, to flush any
                 // transactions that might be pending.
                 try {
-                    if (freezeBinder(pid, true) != 0) {
+                    if (freezeBinder(pid, true, FREEZE_BINDER_TIMEOUT_MS) != 0) {
                         rescheduleFreeze(proc, "outstanding txns");
                         return;
                     }
@@ -2047,6 +2098,7 @@ public final class CachedAppOptimizer {
                 long unfreezeTime = opt.getFreezeUnfreezeTime();
 
                 try {
+                    traceAppFreeze(proc.processName, pid, true);
                     Process.setProcessFrozen(pid, proc.uid, true);
 
                     opt.setFreezeUnfreezeTime(SystemClock.uptimeMillis());

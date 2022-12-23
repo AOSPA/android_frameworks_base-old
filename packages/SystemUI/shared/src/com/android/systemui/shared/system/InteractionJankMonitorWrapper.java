@@ -49,6 +49,12 @@ public final class InteractionJankMonitorWrapper {
             InteractionJankMonitor.CUJ_LAUNCHER_APP_LAUNCH_FROM_WIDGET;
     public static final int CUJ_SPLIT_SCREEN_ENTER =
             InteractionJankMonitor.CUJ_SPLIT_SCREEN_ENTER;
+    public static final int CUJ_LAUNCHER_UNLOCK_ENTRANCE_ANIMATION =
+            InteractionJankMonitor.CUJ_LAUNCHER_UNLOCK_ENTRANCE_ANIMATION;
+    public static final int CUJ_RECENTS_SCROLLING =
+            InteractionJankMonitor.CUJ_RECENTS_SCROLLING;
+    public static final int CUJ_APP_SWIPE_TO_RECENTS =
+            InteractionJankMonitor.CUJ_LAUNCHER_APP_SWIPE_TO_RECENTS;
 
     @IntDef({
             CUJ_APP_LAUNCH_FROM_RECENTS,
@@ -57,6 +63,9 @@ public final class InteractionJankMonitorWrapper {
             CUJ_APP_CLOSE_TO_PIP,
             CUJ_QUICK_SWITCH,
             CUJ_APP_LAUNCH_FROM_WIDGET,
+            CUJ_LAUNCHER_UNLOCK_ENTRANCE_ANIMATION,
+            CUJ_RECENTS_SCROLLING,
+            CUJ_APP_SWIPE_TO_RECENTS
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface CujType {

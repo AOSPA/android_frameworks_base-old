@@ -33,13 +33,14 @@ import android.view.WindowManager.ScreenshotSource.SCREENSHOT_KEY_CHORD
 import android.view.WindowManager.ScreenshotSource.SCREENSHOT_OVERVIEW
 import android.view.WindowManager.TAKE_SCREENSHOT_FULLSCREEN
 import android.view.WindowManager.TAKE_SCREENSHOT_PROVIDED_IMAGE
-import android.view.WindowManager.TAKE_SCREENSHOT_SELECTED_REGION
+import androidx.test.filters.SmallTest
 import com.android.internal.logging.testing.UiEventLoggerFake
 import com.android.internal.util.ScreenshotHelper
 import com.android.internal.util.ScreenshotHelper.ScreenshotRequest
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.flags.FakeFeatureFlags
 import com.android.systemui.flags.Flags.SCREENSHOT_REQUEST_PROCESSOR
+import com.android.systemui.flags.Flags.SCREENSHOT_WORK_PROFILE_POLICY
 import com.android.systemui.screenshot.ScreenshotEvent.SCREENSHOT_REQUESTED_KEY_CHORD
 import com.android.systemui.screenshot.ScreenshotEvent.SCREENSHOT_REQUESTED_OVERVIEW
 import com.android.systemui.screenshot.TakeScreenshotService.RequestCallback
@@ -47,20 +48,24 @@ import com.android.systemui.util.mockito.any
 import com.android.systemui.util.mockito.argThat
 import com.android.systemui.util.mockito.eq
 import com.android.systemui.util.mockito.mock
+import java.util.function.Consumer
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.ArgumentMatchers.anyInt
 import org.mockito.ArgumentMatchers.isNull
+import org.mockito.Mockito.doAnswer
+import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyZeroInteractions
 import org.mockito.Mockito.`when` as whenever
 
 private const val USER_ID = 1
-private const val TASK_ID = 1
+private const val TASK_ID = 11
 
 @RunWith(AndroidTestingRunner::class)
+@SmallTest
 class TakeScreenshotServiceTest : SysuiTestCase() {
 
     private val application = mock<Application>()
@@ -88,7 +93,16 @@ class TakeScreenshotServiceTest : SysuiTestCase() {
             .thenReturn(false)
         whenever(userManager.isUserUnlocked).thenReturn(true)
 
+        // Stub request processor as a synchronous no-op for tests with the flag enabled
+        doAnswer {
+            val request: ScreenshotRequest = it.getArgument(0) as ScreenshotRequest
+            val consumer: Consumer<ScreenshotRequest> = it.getArgument(1)
+            consumer.accept(request)
+        }.`when`(requestProcessor).processAsync(/* request= */ any(), /* callback= */ any())
+
+        // Flipped in selected test cases
         flags.set(SCREENSHOT_REQUEST_PROCESSOR, false)
+        flags.set(SCREENSHOT_WORK_PROFILE_POLICY, false)
 
         service.attach(
             mContext,
@@ -105,10 +119,10 @@ class TakeScreenshotServiceTest : SysuiTestCase() {
         service.onBind(null /* unused: Intent */)
 
         service.onUnbind(null /* unused: Intent */)
-        verify(controller).removeWindow()
+        verify(controller, times(1)).removeWindow()
 
         service.onDestroy()
-        verify(controller).onDestroy()
+        verify(controller, times(1)).onDestroy()
     }
 
     @Test
@@ -120,7 +134,7 @@ class TakeScreenshotServiceTest : SysuiTestCase() {
 
         service.handleRequest(request, { /* onSaved */ }, callback)
 
-        verify(controller).takeScreenshotFullscreen(
+        verify(controller, times(1)).takeScreenshotFullscreen(
             eq(topComponent),
             /* onSavedListener = */ any(),
             /* requestCallback = */ any())
@@ -135,16 +149,18 @@ class TakeScreenshotServiceTest : SysuiTestCase() {
     }
 
     @Test
-    fun takeScreenshotPartial() {
+    fun takeScreenshot_requestProcessorEnabled() {
+        flags.set(SCREENSHOT_REQUEST_PROCESSOR, true)
+
         val request = ScreenshotRequest(
-            TAKE_SCREENSHOT_SELECTED_REGION,
+            TAKE_SCREENSHOT_FULLSCREEN,
             SCREENSHOT_KEY_CHORD,
-            /* topComponent = */ null)
+            topComponent)
 
         service.handleRequest(request, { /* onSaved */ }, callback)
 
-        verify(controller).takeScreenshotPartial(
-            /* topComponent = */ isNull(),
+        verify(controller, times(1)).takeScreenshotFullscreen(
+            eq(topComponent),
             /* onSavedListener = */ any(),
             /* requestCallback = */ any())
 
@@ -153,7 +169,8 @@ class TakeScreenshotServiceTest : SysuiTestCase() {
 
         assertEquals("Expected SCREENSHOT_REQUESTED UiEvent",
             logEvent.eventId, SCREENSHOT_REQUESTED_KEY_CHORD.id)
-        assertEquals("Expected empty package name in UiEvent", "", eventLogger.get(0).packageName)
+        assertEquals("Expected supplied package name",
+            topComponent.packageName, eventLogger.get(0).packageName)
     }
 
     @Test
@@ -167,7 +184,7 @@ class TakeScreenshotServiceTest : SysuiTestCase() {
 
         service.handleRequest(request, { /* onSaved */ }, callback)
 
-        verify(controller).handleImageAsScreenshot(
+        verify(controller, times(1)).handleImageAsScreenshot(
             argThat { b -> b.equalsHardwareBitmap(bitmap) },
             eq(bounds),
             eq(Insets.NONE), eq(TASK_ID), eq(USER_ID), eq(topComponent),
@@ -193,8 +210,8 @@ class TakeScreenshotServiceTest : SysuiTestCase() {
 
         service.handleRequest(request, { /* onSaved */ }, callback)
 
-        verify(notificationsController).notifyScreenshotError(anyInt())
-        verify(callback).reportError()
+        verify(notificationsController, times(1)).notifyScreenshotError(anyInt())
+        verify(callback, times(1)).reportError()
         verifyZeroInteractions(controller)
     }
 
@@ -217,7 +234,7 @@ class TakeScreenshotServiceTest : SysuiTestCase() {
         service.handleRequest(request, { /* onSaved */ }, callback)
 
         // error shown: Toast.makeText(...).show(), untestable
-        verify(callback).reportError()
+        verify(callback, times(1)).reportError()
         verifyZeroInteractions(controller)
     }
 }

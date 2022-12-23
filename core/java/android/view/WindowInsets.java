@@ -1425,9 +1425,11 @@ public final class WindowInsets {
 
         static final int WINDOW_DECOR = 1 << 8;
 
-        static final int GENERIC_OVERLAYS = 1 << 9;
-        static final int LAST = GENERIC_OVERLAYS;
+        static final int SYSTEM_OVERLAYS = 1 << 9;
+        static final int LAST = SYSTEM_OVERLAYS;
         static final int SIZE = 10;
+
+        static final int DEFAULT_VISIBLE = ~IME;
 
         static int indexOf(@InsetsType int type) {
             switch (type) {
@@ -1449,7 +1451,7 @@ public final class WindowInsets {
                     return 7;
                 case WINDOW_DECOR:
                     return 8;
-                case GENERIC_OVERLAYS:
+                case SYSTEM_OVERLAYS:
                     return 9;
                 default:
                     throw new IllegalArgumentException("type needs to be >= FIRST and <= LAST,"
@@ -1457,7 +1459,8 @@ public final class WindowInsets {
             }
         }
 
-        static String toString(@InsetsType int types) {
+        /** @hide */
+        public static String toString(@InsetsType int types) {
             StringBuilder result = new StringBuilder();
             if ((types & STATUS_BARS) != 0) {
                 result.append("statusBars |");
@@ -1486,8 +1489,8 @@ public final class WindowInsets {
             if ((types & WINDOW_DECOR) != 0) {
                 result.append("windowDecor |");
             }
-            if ((types & GENERIC_OVERLAYS) != 0) {
-                result.append("genericOverlays |");
+            if ((types & SYSTEM_OVERLAYS) != 0) {
+                result.append("systemOverlays |");
             }
             if (result.length() > 0) {
                 result.delete(result.length() - 2, result.length());
@@ -1502,7 +1505,7 @@ public final class WindowInsets {
         @Retention(RetentionPolicy.SOURCE)
         @IntDef(flag = true, value = {STATUS_BARS, NAVIGATION_BARS, CAPTION_BAR, IME, WINDOW_DECOR,
                 SYSTEM_GESTURES, MANDATORY_SYSTEM_GESTURES, TAPPABLE_ELEMENT, DISPLAY_CUTOUT,
-                GENERIC_OVERLAYS})
+                SYSTEM_OVERLAYS})
         public @interface InsetsType {
         }
 
@@ -1590,11 +1593,36 @@ public final class WindowInsets {
         }
 
         /**
+         * System overlays represent the insets caused by the system visible elements. Unlike
+         * {@link #navigationBars()} or {@link #statusBars()}, system overlays might not be
+         * hidden by the client.
+         *
+         * For compatibility reasons, this type is included in {@link #systemBars()}. In this
+         * way, views which fit {@link #systemBars()} fit {@link #systemOverlays()}.
+         *
+         * Examples include climate controls, multi-tasking affordances, etc.
+         *
+         * @return An insets type representing the system overlays.
+         */
+        public static @InsetsType int systemOverlays() {
+            return SYSTEM_OVERLAYS;
+        }
+
+        /**
          * @return All system bars. Includes {@link #statusBars()}, {@link #captionBar()} as well as
-         *         {@link #navigationBars()}, but not {@link #ime()}.
+         *         {@link #navigationBars()}, {@link #systemOverlays()}, but not {@link #ime()}.
          */
         public static @InsetsType int systemBars() {
-            return STATUS_BARS | NAVIGATION_BARS | CAPTION_BAR | GENERIC_OVERLAYS;
+            return STATUS_BARS | NAVIGATION_BARS | CAPTION_BAR | SYSTEM_OVERLAYS;
+        }
+
+        /**
+         * @return Default visible types.
+         *
+         * @hide
+         */
+        public static @InsetsType int defaultVisible() {
+            return DEFAULT_VISIBLE;
         }
 
         /**
@@ -1604,6 +1632,15 @@ public final class WindowInsets {
          */
         public static @InsetsType int all() {
             return 0xFFFFFFFF;
+        }
+
+        /**
+         * @return System bars which can be controlled by {@link View.SystemUiVisibility}.
+         *
+         * @hide
+         */
+        public static boolean hasCompatSystemBars(@InsetsType int types) {
+            return (types & (STATUS_BARS | NAVIGATION_BARS)) != 0;
         }
     }
 

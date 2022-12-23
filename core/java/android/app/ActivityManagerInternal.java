@@ -23,6 +23,7 @@ import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager.ProcessCapability;
 import android.app.ActivityManager.RestrictionLevel;
+import android.app.assist.ActivityId;
 import android.content.ComponentName;
 import android.content.IIntentReceiver;
 import android.content.IIntentSender;
@@ -30,6 +31,8 @@ import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ActivityPresentationInfo;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.PermissionMethod;
+import android.content.pm.PermissionName;
 import android.content.pm.UserInfo;
 import android.net.Uri;
 import android.os.Bundle;
@@ -218,6 +221,18 @@ public abstract class ActivityManagerInternal {
     public abstract boolean isSystemReady();
 
     /**
+     * @return {@code true} if system is using the "modern" broadcast queue,
+     *         {@code false} otherwise.
+     */
+    public abstract boolean isModernQueueEnabled();
+
+    /**
+     * Enforce capability restrictions on use of the given BroadcastOptions
+     */
+    public abstract void enforceBroadcastOptionsPermissions(@Nullable Bundle options,
+            int callingUid);
+
+    /**
      * Returns package name given pid.
      *
      * @param pid The pid we are searching package name for.
@@ -291,8 +306,9 @@ public abstract class ActivityManagerInternal {
     public abstract int handleIncomingUser(int callingPid, int callingUid, @UserIdInt int userId,
             boolean allowAll, int allowMode, String name, String callerPackage);
 
-    /** Checks if the calling binder pid as the permission. */
-    public abstract void enforceCallingPermission(String permission, String func);
+    /** Checks if the calling binder pid/uid has the given permission. */
+    @PermissionMethod
+    public abstract void enforceCallingPermission(@PermissionName String permission, String func);
 
     /** Returns the current user id. */
     public abstract int getCurrentUserId();
@@ -340,7 +356,7 @@ public abstract class ActivityManagerInternal {
      */
     public abstract void updateActivityUsageStats(
             ComponentName activity, @UserIdInt int userId, int event, IBinder appToken,
-            ComponentName taskRoot);
+            ComponentName taskRoot, ActivityId activityId);
     public abstract void updateForegroundTimeIfOnBattery(
             String packageName, int uid, long cpuTimeDiff);
     public abstract void sendForegroundProfileChanged(@UserIdInt int userId);
@@ -379,6 +395,10 @@ public abstract class ActivityManagerInternal {
      */
     public abstract boolean isAppStartModeDisabled(int uid, String packageName);
 
+    /**
+     * Returns the ids of the current user and all of its profiles (if any), regardless of the
+     * running state of the profiles.
+     */
     public abstract int[] getCurrentProfileIds();
     public abstract UserInfo getCurrentUser();
     public abstract void ensureNotSpecialUser(@UserIdInt int userId);
@@ -416,10 +436,11 @@ public abstract class ActivityManagerInternal {
 
     public abstract int broadcastIntentInPackage(String packageName, @Nullable String featureId,
             int uid, int realCallingUid, int realCallingPid, Intent intent, String resolvedType,
-            IIntentReceiver resultTo, int resultCode, String resultData, Bundle resultExtras,
-            String requiredPermission, Bundle bOptions, boolean serialized, boolean sticky,
-            @UserIdInt int userId, boolean allowBackgroundActivityStarts,
-            @Nullable IBinder backgroundActivityStartsToken, @Nullable int[] broadcastAllowList);
+            IApplicationThread resultToThread, IIntentReceiver resultTo, int resultCode,
+            String resultData, Bundle resultExtras, String requiredPermission, Bundle bOptions,
+            boolean serialized, boolean sticky, @UserIdInt int userId,
+            boolean allowBackgroundActivityStarts, @Nullable IBinder backgroundActivityStartsToken,
+            @Nullable int[] broadcastAllowList);
 
     public abstract ComponentName startServiceInPackage(int uid, Intent service,
             String resolvedType, boolean fgRequired, String callingPackage,
@@ -628,6 +649,8 @@ public abstract class ActivityManagerInternal {
      * using the rules of package visibility. Returns extras with legitimate package info that the
      * receiver is able to access, or {@code null} if none of the packages is visible to the
      * receiver.
+     * @param serialized Specifies whether or not the broadcast should be delivered to the
+     *                   receivers in a serial order.
      *
      * @see com.android.server.am.ActivityManagerService#broadcastIntentWithFeature(
      *      IApplicationThread, String, Intent, String, IIntentReceiver, int, String, Bundle,
@@ -636,6 +659,19 @@ public abstract class ActivityManagerInternal {
     public abstract int broadcastIntent(Intent intent,
             IIntentReceiver resultTo,
             String[] requiredPermissions, boolean serialized,
+            int userId, int[] appIdAllowList,
+            @Nullable BiFunction<Integer, Bundle, Bundle> filterExtrasForReceiver,
+            @Nullable Bundle bOptions);
+
+    /**
+     * Variant of
+     * {@link #broadcastIntent(Intent, IIntentReceiver, String[], boolean, int, int[], BiFunction, Bundle)}
+     * that allows sender to receive a finish callback once the broadcast delivery is completed,
+     * but provides no ordering guarantee for how the broadcast is delivered to receivers.
+     */
+    public abstract int broadcastIntentWithCallback(Intent intent,
+            IIntentReceiver resultTo,
+            String[] requiredPermissions,
             int userId, int[] appIdAllowList,
             @Nullable BiFunction<Integer, Bundle, Bundle> filterExtrasForReceiver,
             @Nullable Bundle bOptions);
@@ -747,10 +783,9 @@ public abstract class ActivityManagerInternal {
      */
     public interface VoiceInteractionManagerProvider {
         /**
-         * Notifies the service when a high-level activity event has been changed, for example,
-         * an activity was resumed or stopped.
+         * Notifies the service when an activity is destroyed.
          */
-        void notifyActivityEventChanged();
+        void notifyActivityDestroyed(IBinder activityToken);
     }
 
     /**

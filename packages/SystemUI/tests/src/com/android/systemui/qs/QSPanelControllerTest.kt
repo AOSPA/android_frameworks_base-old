@@ -6,8 +6,9 @@ import com.android.internal.logging.MetricsLogger
 import com.android.internal.logging.UiEventLogger
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.dump.DumpManager
-import com.android.systemui.media.MediaHost
-import com.android.systemui.media.MediaHostState
+import com.android.systemui.flags.FeatureFlags
+import com.android.systemui.media.controls.ui.MediaHost
+import com.android.systemui.media.controls.ui.MediaHostState
 import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.plugins.qs.QSTile
 import com.android.systemui.qs.customize.QSCustomizerController
@@ -27,8 +28,8 @@ import org.mockito.Mockito
 import org.mockito.Mockito.any
 import org.mockito.Mockito.reset
 import org.mockito.Mockito.verify
-import org.mockito.MockitoAnnotations
 import org.mockito.Mockito.`when` as whenever
+import org.mockito.MockitoAnnotations
 
 @SmallTest
 @RunWith(AndroidTestingRunner::class)
@@ -52,6 +53,7 @@ class QSPanelControllerTest : SysuiTestCase() {
     @Mock private lateinit var tile: QSTile
     @Mock private lateinit var otherTile: QSTile
     @Mock private lateinit var statusBarKeyguardViewManager: StatusBarKeyguardViewManager
+    @Mock private lateinit var featureFlags: FeatureFlags
 
     private lateinit var controller: QSPanelController
 
@@ -62,7 +64,7 @@ class QSPanelControllerTest : SysuiTestCase() {
         whenever(brightnessSliderFactory.create(any(), any())).thenReturn(brightnessSlider)
         whenever(brightnessControllerFactory.create(any())).thenReturn(brightnessController)
         whenever(qsPanel.resources).thenReturn(mContext.orCreateTestableResources.resources)
-        whenever(statusBarKeyguardViewManager.isBouncerInTransit()).thenReturn(false)
+        whenever(statusBarKeyguardViewManager.isPrimaryBouncerInTransit()).thenReturn(false)
         whenever(qsPanel.setListening(anyBoolean())).then {
             whenever(qsPanel.isListening).thenReturn(it.getArgument(0))
         }
@@ -82,7 +84,8 @@ class QSPanelControllerTest : SysuiTestCase() {
             brightnessControllerFactory,
             brightnessSliderFactory,
             falsingManager,
-            statusBarKeyguardViewManager
+            statusBarKeyguardViewManager,
+            featureFlags
         )
     }
 
@@ -113,9 +116,9 @@ class QSPanelControllerTest : SysuiTestCase() {
 
     @Test
     fun testIsBouncerInTransit() {
-        whenever(statusBarKeyguardViewManager.isBouncerInTransit()).thenReturn(true)
+        whenever(statusBarKeyguardViewManager.isPrimaryBouncerInTransit()).thenReturn(true)
         assertThat(controller.isBouncerInTransit()).isEqualTo(true)
-        whenever(statusBarKeyguardViewManager.isBouncerInTransit()).thenReturn(false)
+        whenever(statusBarKeyguardViewManager.isPrimaryBouncerInTransit()).thenReturn(false)
         assertThat(controller.isBouncerInTransit()).isEqualTo(false)
     }
 }

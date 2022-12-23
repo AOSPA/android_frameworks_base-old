@@ -148,6 +148,9 @@ public final class SelectionActionModeHelper {
             startSelectionActionMode(null);
         } else {
             resetTextClassificationHelper();
+            if (mSmartSelectSprite != null && mSmartSelectSprite.isAnimationActive()) {
+                mSmartSelectSprite.cancelAnimation();
+            }
             mTextClassificationAsyncTask = new TextClassificationAsyncTask(
                     mTextView,
                     mTextClassificationHelper.getTimeoutDuration(),
@@ -301,7 +304,7 @@ public final class SelectionActionModeHelper {
             final SelectionModifierCursorController controller = mEditor.getSelectionController();
             if (controller != null
                     && (mTextView.isTextSelectable() || mTextView.isTextEditable())) {
-                if (mEditor.showUIForTouchScreen()) {
+                if (mTextView.showUIForTouchScreen()) {
                     controller.show();
                 } else {
                     controller.hide();

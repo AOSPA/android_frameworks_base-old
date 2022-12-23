@@ -30,7 +30,6 @@ import static android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DEFAULT;
 import static android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED;
 import static android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED;
 import static android.content.pm.PackageManager.INTENT_FILTER_DOMAIN_VERIFICATION_STATUS_NEVER;
-import static android.content.pm.PackageManager.MATCH_ALL;
 import static android.content.pm.PackageManager.MATCH_ANY_USER;
 import static android.content.pm.PackageManager.MATCH_APEX;
 import static android.content.pm.PackageManager.MATCH_DIRECT_BOOT_AWARE;
@@ -49,7 +48,6 @@ import static android.os.Trace.TRACE_TAG_PACKAGE_MANAGER;
 
 import static com.android.internal.app.IntentForwarderActivity.FORWARD_INTENT_TO_MANAGED_PROFILE;
 import static com.android.internal.app.IntentForwarderActivity.FORWARD_INTENT_TO_PARENT;
-import static com.android.server.pm.PackageManagerService.DEBUG_DOMAIN_VERIFICATION;
 import static com.android.server.pm.PackageManagerService.DEBUG_INSTALL;
 import static com.android.server.pm.PackageManagerService.DEBUG_INSTANT;
 import static com.android.server.pm.PackageManagerService.DEBUG_PACKAGE_INFO;
@@ -65,7 +63,6 @@ import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
-import android.apex.ApexInfo;
 import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Context;
@@ -114,10 +111,9 @@ import android.util.LogPrinter;
 import android.util.LongSparseLongArray;
 import android.util.MathUtils;
 import android.util.Pair;
+import android.util.PrintWriterPrinter;
 import android.util.Slog;
 import android.util.SparseArray;
-import android.util.SparseBooleanArray;
-import android.util.TypedXmlSerializer;
 import android.util.Xml;
 import android.util.proto.ProtoOutputStream;
 
@@ -126,12 +122,13 @@ import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.CollectionUtils;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
+import com.android.modules.utils.TypedXmlSerializer;
 import com.android.server.pm.dex.DexManager;
 import com.android.server.pm.dex.PackageDexUsage;
 import com.android.server.pm.parsing.PackageInfoUtils;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.parsing.pkg.AndroidPackageUtils;
 import com.android.server.pm.permission.PermissionManagerServiceInternal;
+import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.PackageStateInternal;
 import com.android.server.pm.pkg.PackageStateUtils;
 import com.android.server.pm.pkg.PackageUserStateInternal;
@@ -145,7 +142,6 @@ import com.android.server.pm.pkg.component.ParsedProvider;
 import com.android.server.pm.pkg.component.ParsedService;
 import com.android.server.pm.resolution.ComponentResolverApi;
 import com.android.server.pm.verify.domain.DomainVerificationManagerInternal;
-import com.android.server.pm.verify.domain.DomainVerificationUtils;
 import com.android.server.uri.UriGrantsManagerInternal;
 import com.android.server.utils.WatchedArrayMap;
 import com.android.server.utils.WatchedLongSparseArray;
@@ -400,7 +396,6 @@ public class ComputerEngine implements Computer {
     private final UserManagerService mUserManager;
     private final PermissionManagerServiceInternal mPermissionManager;
     private final ApexManager mApexManager;
-    private final ApexPackageInfo mApexPackageInfo;
     private final PackageManagerServiceInjector mInjector;
     private final ComponentResolverApi mComponentResolver;
     private final InstantAppResolverConnection mInstantAppResolverConnection;
@@ -411,6 +406,7 @@ public class ComputerEngine implements Computer {
     private final CompilerStats mCompilerStats;
     private final BackgroundDexOptService mBackgroundDexOptService;
     private final PackageManagerInternal.ExternalSourcesPolicy mExternalSourcesPolicy;
+    private final CrossProfileIntentResolverEngine mCrossProfileIntentResolverEngine;
 
     // PackageManagerService attributes that are primitives are referenced through the
     // pms object directly.  Primitives are the only attributes so referenced.
@@ -455,7 +451,6 @@ public class ComputerEngine implements Computer {
         mContext = args.service.mContext;
         mInjector = args.service.mInjector;
         mApexManager = args.service.mApexManager;
-        mApexPackageInfo = args.service.mApexPackageInfo;
         mInstantAppResolverConnection = args.service.mInstantAppResolverConnection;
         mDefaultAppProvider = args.service.getDefaultAppProvider();
         mDomainVerificationManager = args.service.mDomainVerificationManager;
@@ -464,6 +459,8 @@ public class ComputerEngine implements Computer {
         mCompilerStats = args.service.mCompilerStats;
         mBackgroundDexOptService = args.service.mBackgroundDexOptService;
         mExternalSourcesPolicy = args.service.mExternalSourcesPolicy;
+        mCrossProfileIntentResolverEngine = new CrossProfileIntentResolverEngine(
+                mUserManager, mDomainVerificationManager, mDefaultAppProvider, mContext);
 
         // Used to reference PMS attributes that are primitives and which are not
         // updated under control of the PMS lock.
@@ -735,101 +732,72 @@ public class ComputerEngine implements Computer {
         // reader
         boolean sortResult = false;
         boolean addInstant = false;
-        List<ResolveInfo> result = null;
+        List<ResolveInfo> result = new ArrayList<>();
+        // crossProfileResults will hold resolve infos from resolution across profiles.
+        List<CrossProfileDomainInfo> crossProfileResults = new ArrayList<>();
         if (pkgName == null) {
-            List<CrossProfileIntentFilter> matchingFilters =
-                    getMatchingCrossProfileIntentFilters(intent, resolvedType, userId);
-            // Check for results that need to skip the current profile.
-            ResolveInfo skipProfileInfo  = querySkipCurrentProfileIntents(matchingFilters,
-                    intent, resolvedType, flags, userId);
-            if (skipProfileInfo != null) {
-                List<ResolveInfo> xpResult = new ArrayList<>(1);
-                xpResult.add(skipProfileInfo);
-                return new QueryIntentActivitiesResult(
-                        applyPostResolutionFilter(
-                                filterIfNotSystemUser(xpResult, userId), instantAppPkgName,
-                                allowDynamicSplits, filterCallingUid, resolveForStart, userId,
-                                intent));
+            if (!mCrossProfileIntentResolverEngine.shouldSkipCurrentProfile(this, intent,
+                    resolvedType, userId)) {
+                /*
+                 Check for results in the current profile only if there is no
+                 {@link CrossProfileIntentFilter} for user with flag
+                 {@link PackageManager.SKIP_CURRENT_PROFILE} set.
+                 */
+                result.addAll(filterIfNotSystemUser(mComponentResolver.queryActivities(this,
+                        intent, resolvedType, flags, userId), userId));
             }
-
-            // Check for results in the current profile.
-            result = filterIfNotSystemUser(mComponentResolver.queryActivities(this,
-                    intent, resolvedType, flags, userId), userId);
             addInstant = isInstantAppResolutionAllowed(intent, result, userId,
                     false /*skipPackageCheck*/, flags);
-            // Check for cross profile results.
+
             boolean hasNonNegativePriorityResult = hasNonNegativePriority(result);
-            CrossProfileDomainInfo specificXpInfo = queryCrossProfileIntents(
-                    matchingFilters, intent, resolvedType, flags, userId,
-                    hasNonNegativePriorityResult);
-            if (intent.hasWebURI()) {
-                CrossProfileDomainInfo generalXpInfo = null;
-                final UserInfo parent = getProfileParent(userId);
-                if (parent != null) {
-                    generalXpInfo = getCrossProfileDomainPreferredLpr(intent, resolvedType,
-                            flags, userId, parent.id);
-                }
 
-                // Generalized cross profile intents take precedence over specific.
-                // Note that this is the opposite of the intuitive order.
-                CrossProfileDomainInfo prioritizedXpInfo =
-                        generalXpInfo != null ? generalXpInfo : specificXpInfo;
-
-                if (!addInstant) {
-                    if (result.isEmpty() && prioritizedXpInfo != null) {
-                        // No result in current profile, but found candidate in parent user.
-                        // And we are not going to add ephemeral app, so we can return the
-                        // result straight away.
-                        result.add(prioritizedXpInfo.mResolveInfo);
-                        return new QueryIntentActivitiesResult(
-                                applyPostResolutionFilter(result, instantAppPkgName,
-                                        allowDynamicSplits, filterCallingUid, resolveForStart,
-                                        userId, intent));
-                    } else if (result.size() <= 1 && prioritizedXpInfo == null) {
-                        // No result in parent user and <= 1 result in current profile, and we
-                        // are not going to add ephemeral app, so we can return the result
-                        // without further processing.
-                        return new QueryIntentActivitiesResult(
-                                applyPostResolutionFilter(result, instantAppPkgName,
-                                        allowDynamicSplits, filterCallingUid, resolveForStart,
-                                        userId, intent));
-                    }
-                }
-
-                // We have more than one candidate (combining results from current and parent
-                // profile), so we need filtering and sorting.
-                result = filterCandidatesWithDomainPreferredActivitiesLPr(
-                        intent, flags, result, prioritizedXpInfo, userId);
-                sortResult = true;
-            } else {
-                // If not web Intent, just add result to candidate set and let ResolverActivity
-                // figure it out.
-                if (specificXpInfo != null) {
-                    result.add(specificXpInfo.mResolveInfo);
-                    sortResult = true;
-                }
-            }
+            /*
+             Calling {@link com.android.server.pm.CrossProfileIntentResolverEngine#resolveIntent} to
+             get list of {@link CrossProfileDomainInfo} which have {@link ResolveInfo}s from linked
+             profiles.
+             */
+            crossProfileResults = mCrossProfileIntentResolverEngine.resolveIntent(this, intent,
+                    resolvedType, userId, flags, pkgName, hasNonNegativePriorityResult,
+                    mSettings::getPackage);
+            if (intent.hasWebURI() || !crossProfileResults.isEmpty()) sortResult = true;
         } else {
             final PackageStateInternal setting =
                     getPackageStateInternal(pkgName, Process.SYSTEM_UID);
-            result = null;
+
             if (setting != null && setting.getAndroidPackage() != null && (resolveForStart
                     || !shouldFilterApplication(setting, filterCallingUid, userId))) {
-                result = filterIfNotSystemUser(mComponentResolver.queryActivities(this,
+                result.addAll(filterIfNotSystemUser(mComponentResolver.queryActivities(this,
                         intent, resolvedType, flags, setting.getAndroidPackage().getActivities(),
-                        userId), userId);
+                        userId), userId));
             }
             if (result == null || result.size() == 0) {
                 // the caller wants to resolve for a particular package; however, there
                 // were no installed results, so, try to find an ephemeral result
                 addInstant = isInstantAppResolutionAllowed(intent, null /*result*/, userId,
                         true /*skipPackageCheck*/, flags);
-                if (result == null) {
-                    result = new ArrayList<>();
-                }
             }
+            /*
+             Calling {@link com.android.server.pm.CrossProfileIntentResolverEngine#resolveIntent} to
+             get list of {@link CrossProfileDomainInfo} which have {@link ResolveInfo}s from linked
+             profiles.
+             */
+            crossProfileResults = mCrossProfileIntentResolverEngine.resolveIntent(this, intent,
+                    resolvedType, userId, flags, pkgName, false,
+                    mSettings::getPackage);
         }
-        return new QueryIntentActivitiesResult(sortResult, addInstant, result);
+
+        /*
+             Calling {@link com.android.server.pm.
+             CrossProfileIntentResolverEngine#combineFilterAndCreateQueryAcitivitesResponse} to
+             combine results from current and cross profiles. This also filters any resolve info
+             based on domain preference(if required).
+         */
+        return mCrossProfileIntentResolverEngine
+                .combineFilterAndCreateQueryActivitiesResponse(this, intent, resolvedType,
+                        instantAppPkgName, pkgName, allowDynamicSplits, flags, userId,
+                        filterCallingUid, resolveForStart, result, crossProfileResults,
+                        areWebInstantAppsDisabled(userId), addInstant, sortResult,
+                        mSettings::getPackage);
     }
 
     /**
@@ -998,10 +966,8 @@ public class ComputerEngine implements Computer {
         if (p != null) {
             PackageStateInternal ps = mSettings.getPackage(packageName);
             if (ps == null) return null;
-            if (ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
-                if (!matchApex && p.isApex()) {
-                    return null;
-                }
+            if (!matchApex && p.isApex()) {
+                return null;
             }
             if (filterSharedLibPackage(ps, filterCallingUid, userId, flags)) {
                 return null;
@@ -1017,24 +983,6 @@ public class ComputerEngine implements Computer {
             }
             return ai;
         }
-        if (!ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
-            if (matchApex) {
-                // For APKs, PackageInfo.applicationInfo is not exactly the same as ApplicationInfo
-                // returned from getApplicationInfo, but for APEX packages difference shouldn't be
-                // very big.
-                // TODO(b/155328545): generate proper application info for APEXes as well.
-                int apexFlags = ApexManager.MATCH_ACTIVE_PACKAGE;
-                if ((flags & PackageManager.MATCH_SYSTEM_ONLY) != 0) {
-                    apexFlags = ApexManager.MATCH_FACTORY_PACKAGE;
-                }
-                final var pair = mApexPackageInfo.getPackageInfo(packageName, apexFlags);
-                if (pair == null) {
-                    return null;
-                }
-                return PackageInfoUtils.generateApplicationInfo(pair.second, flags,
-                        PackageUserStateInternal.DEFAULT, userId, null);
-            }
-        }
         if ("android".equals(packageName) || "system".equals(packageName)) {
             return androidApplication();
         }
@@ -1044,126 +992,6 @@ public class ComputerEngine implements Computer {
                     flags, filterCallingUid, userId);
         }
         return null;
-    }
-
-    protected ArrayList<ResolveInfo> filterCandidatesWithDomainPreferredActivitiesLPrBody(
-            Intent intent, long matchFlags, List<ResolveInfo> candidates,
-            CrossProfileDomainInfo xpDomainInfo, int userId, boolean debug) {
-        final ArrayList<ResolveInfo> result = new ArrayList<>();
-        final ArrayList<ResolveInfo> matchAllList = new ArrayList<>();
-        final ArrayList<ResolveInfo> undefinedList = new ArrayList<>();
-
-        // Blocking instant apps is usually done in applyPostResolutionFilter, but since
-        // domain verification can resolve to a single result, which can be an instant app,
-        // it will then be filtered to an empty list in that method. Instead, do blocking
-        // here so that instant apps can be ignored for approval filtering and a lower
-        // priority result chosen instead.
-        final boolean blockInstant = intent.isWebIntent() && areWebInstantAppsDisabled(userId);
-
-        final int count = candidates.size();
-        // First, try to use approved apps.
-        for (int n = 0; n < count; n++) {
-            ResolveInfo info = candidates.get(n);
-            if (blockInstant && (info.isInstantAppAvailable
-                    || isInstantAppInternal(info.activityInfo.packageName, userId,
-                            Process.SYSTEM_UID))) {
-                continue;
-            }
-
-            // Add to the special match all list (Browser use case)
-            if (info.handleAllWebDataURI) {
-                matchAllList.add(info);
-            } else {
-                undefinedList.add(info);
-            }
-        }
-
-        // We'll want to include browser possibilities in a few cases
-        boolean includeBrowser = false;
-
-        if (!DomainVerificationUtils.isDomainVerificationIntent(intent, matchFlags)) {
-            result.addAll(undefinedList);
-            // Maybe add one for the other profile.
-            if (xpDomainInfo != null && xpDomainInfo.mHighestApprovalLevel
-                    > DomainVerificationManagerInternal.APPROVAL_LEVEL_NONE) {
-                result.add(xpDomainInfo.mResolveInfo);
-            }
-            includeBrowser = true;
-        } else {
-            Pair<List<ResolveInfo>, Integer> infosAndLevel = mDomainVerificationManager
-                    .filterToApprovedApp(intent, undefinedList, userId,
-                            mSettings::getPackage);
-            List<ResolveInfo> approvedInfos = infosAndLevel.first;
-            Integer highestApproval = infosAndLevel.second;
-
-            // If no apps are approved for the domain, resolve only to browsers
-            if (approvedInfos.isEmpty()) {
-                includeBrowser = true;
-                if (xpDomainInfo != null && xpDomainInfo.mHighestApprovalLevel
-                        > DomainVerificationManagerInternal.APPROVAL_LEVEL_NONE) {
-                    result.add(xpDomainInfo.mResolveInfo);
-                }
-            } else {
-                result.addAll(approvedInfos);
-
-                // If the other profile has an app that's higher approval, add it
-                if (xpDomainInfo != null
-                        && xpDomainInfo.mHighestApprovalLevel > highestApproval) {
-                    result.add(xpDomainInfo.mResolveInfo);
-                }
-            }
-        }
-
-        if (includeBrowser) {
-            // Also add browsers (all of them or only the default one)
-            if (DEBUG_DOMAIN_VERIFICATION) {
-                Slog.v(TAG, "   ...including browsers in candidate set");
-            }
-            if ((matchFlags & MATCH_ALL) != 0) {
-                result.addAll(matchAllList);
-            } else {
-                // Browser/generic handling case.  If there's a default browser, go straight
-                // to that (but only if there is no other higher-priority match).
-                final String defaultBrowserPackageName = mDefaultAppProvider.getDefaultBrowser(
-                        userId);
-                int maxMatchPrio = 0;
-                ResolveInfo defaultBrowserMatch = null;
-                final int numCandidates = matchAllList.size();
-                for (int n = 0; n < numCandidates; n++) {
-                    ResolveInfo info = matchAllList.get(n);
-                    // track the highest overall match priority...
-                    if (info.priority > maxMatchPrio) {
-                        maxMatchPrio = info.priority;
-                    }
-                    // ...and the highest-priority default browser match
-                    if (info.activityInfo.packageName.equals(defaultBrowserPackageName)) {
-                        if (defaultBrowserMatch == null
-                                || (defaultBrowserMatch.priority < info.priority)) {
-                            if (debug) {
-                                Slog.v(TAG, "Considering default browser match " + info);
-                            }
-                            defaultBrowserMatch = info;
-                        }
-                    }
-                }
-                if (defaultBrowserMatch != null
-                        && defaultBrowserMatch.priority >= maxMatchPrio
-                        && !TextUtils.isEmpty(defaultBrowserPackageName)) {
-                    if (debug) {
-                        Slog.v(TAG, "Default browser match " + defaultBrowserMatch);
-                    }
-                    result.add(defaultBrowserMatch);
-                } else {
-                    result.addAll(matchAllList);
-                }
-            }
-
-            // If there is nothing selected, add all candidates
-            if (result.size() == 0) {
-                result.addAll(candidates);
-            }
-        }
-        return result;
     }
 
     /**
@@ -1279,7 +1107,8 @@ public class ComputerEngine implements Computer {
 
             if (result == null) {
                 result = new CrossProfileDomainInfo(createForwardingResolveInfoUnchecked(
-                        new WatchedIntentFilter(), sourceUserId, parentUserId), approvalLevel);
+                        new WatchedIntentFilter(), sourceUserId, parentUserId), approvalLevel,
+                        parentUserId);
             } else {
                 result.mHighestApprovalLevel =
                         Math.max(approvalLevel, result.mHighestApprovalLevel);
@@ -1303,7 +1132,8 @@ public class ComputerEngine implements Computer {
             Intent intent, String resolvedType, int userId) {
         CrossProfileIntentResolver resolver = mSettings.getCrossProfileIntentResolver(userId);
         if (resolver != null) {
-            return resolver.queryIntent(this, intent, resolvedType, false /*defaultOnly*/, userId);
+            return resolver.queryIntent(this, intent, resolvedType, false /*defaultOnly*/,
+                    userId);
         }
         return null;
     }
@@ -1465,30 +1295,6 @@ public class ComputerEngine implements Computer {
             resolveInfos.remove(i);
         }
         return resolveInfos;
-    }
-
-    private List<ResolveInfo> filterCandidatesWithDomainPreferredActivitiesLPr(Intent intent,
-            long matchFlags, List<ResolveInfo> candidates, CrossProfileDomainInfo xpDomainInfo,
-            int userId) {
-        final boolean debug = (intent.getFlags() & Intent.FLAG_DEBUG_LOG_RESOLUTION) != 0;
-
-        if (DEBUG_PREFERRED || DEBUG_DOMAIN_VERIFICATION) {
-            Slog.v(TAG, "Filtering results with preferred activities. Candidates count: "
-                    + candidates.size());
-        }
-
-        final ArrayList<ResolveInfo> result =
-                filterCandidatesWithDomainPreferredActivitiesLPrBody(
-                        intent, matchFlags, candidates, xpDomainInfo, userId, debug);
-
-        if (DEBUG_PREFERRED || DEBUG_DOMAIN_VERIFICATION) {
-            Slog.v(TAG, "Filtered results with preferred activities. New candidates count: "
-                    + result.size());
-            for (ResolveInfo info : result) {
-                Slog.v(TAG, "  + " + info.activityInfo);
-            }
-        }
-        return result;
     }
 
     /**
@@ -1674,8 +1480,8 @@ public class ComputerEngine implements Computer {
             ApplicationInfo ai = new ApplicationInfo();
             ai.packageName = ps.getPackageName();
             ai.uid = UserHandle.getUid(userId, ps.getAppId());
-            ai.primaryCpuAbi = ps.getPrimaryCpuAbi();
-            ai.secondaryCpuAbi = ps.getSecondaryCpuAbi();
+            ai.primaryCpuAbi = ps.getPrimaryCpuAbiLegacy();
+            ai.secondaryCpuAbi = ps.getSecondaryCpuAbiLegacy();
             ai.setVersionCode(ps.getVersionCode());
             ai.flags = ps.getFlags();
             ai.privateFlags = ps.getPrivateFlags();
@@ -1725,22 +1531,10 @@ public class ComputerEngine implements Computer {
         final boolean matchApex = (flags & MATCH_APEX) != 0;
         if (matchFactoryOnly) {
             // Instant app filtering for APEX modules is ignored
-            if (!ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
-                if (matchApex) {
-                    final var pair = mApexPackageInfo.getPackageInfo(packageName,
-                            ApexManager.MATCH_FACTORY_PACKAGE);
-                    if (pair == null) {
-                        return null;
-                    }
-                    return PackageInfoUtils.generate(pair.second, pair.first, flags, null, userId);
-                }
-            }
             final PackageStateInternal ps = mSettings.getDisabledSystemPkg(packageName);
             if (ps != null) {
-                if (ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
-                    if (!matchApex && ps.getPkg() != null && ps.getPkg().isApex()) {
-                        return null;
-                    }
+                if (!matchApex && ps.getPkg() != null && ps.getPkg().isApex()) {
+                    return null;
                 }
                 if (filterSharedLibPackage(ps, filterCallingUid, userId, flags)) {
                     return null;
@@ -1761,10 +1555,8 @@ public class ComputerEngine implements Computer {
         }
         if (p != null) {
             final PackageStateInternal ps = getPackageStateInternal(p.getPackageName());
-            if (ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
-                if (!matchApex && p.isApex()) {
-                    return null;
-                }
+            if (!matchApex && p.isApex()) {
+                return null;
             }
             if (filterSharedLibPackage(ps, filterCallingUid, userId, flags)) {
                 return null;
@@ -1786,16 +1578,6 @@ public class ComputerEngine implements Computer {
             }
             return generatePackageInfo(ps, flags, userId);
         }
-        if (!ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
-            if (matchApex) {
-                final var pair = mApexPackageInfo.getPackageInfo(packageName,
-                        ApexManager.MATCH_ACTIVE_PACKAGE);
-                if (pair == null) {
-                    return null;
-                }
-                return PackageInfoUtils.generate(pair.second, pair.first, flags, null, userId);
-            }
-        }
         return null;
     }
 
@@ -1814,6 +1596,19 @@ public class ComputerEngine implements Computer {
         packageName = resolveInternalPackageNameInternalLocked(
                 packageName, PackageManager.VERSION_CODE_HIGHEST, callingUid);
         return mSettings.getPackage(packageName);
+    }
+
+    @Override
+    public PackageStateInternal getPackageStateFiltered(@NonNull String packageName,
+            int callingUid, @UserIdInt int userId) {
+        packageName = resolveInternalPackageNameInternalLocked(
+                packageName, PackageManager.VERSION_CODE_HIGHEST, callingUid);
+        var packageState = mSettings.getPackage(packageName);
+        if (shouldFilterApplication(packageState, callingUid, userId)) {
+            return null;
+        } else {
+            return packageState;
+        }
     }
 
     public final ParceledListSlice<PackageInfo> getInstalledPackages(long flags, int userId) {
@@ -1851,10 +1646,8 @@ public class ComputerEngine implements Computer {
                         ps = psDisabled;
                     }
                 }
-                if (ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
-                    if (!listApex && ps.getPkg() != null && ps.getPkg().isApex()) {
-                        continue;
-                    }
+                if (!listApex && ps.getPkg() != null && ps.getPkg().isApex()) {
+                    continue;
                 }
                 if (filterSharedLibPackage(ps, callingUid, userId, flags)) {
                     continue;
@@ -1881,10 +1674,8 @@ public class ComputerEngine implements Computer {
                         ps = psDisabled;
                     }
                 }
-                if (ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
-                    if (!listApex && p.isApex()) {
-                        continue;
-                    }
+                if (!listApex && p.isApex()) {
+                    continue;
                 }
                 if (filterSharedLibPackage(ps, callingUid, userId, flags)) {
                     continue;
@@ -1898,80 +1689,7 @@ public class ComputerEngine implements Computer {
                 }
             }
         }
-        if (!ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
-            if (listApex) {
-                List<Pair<ApexInfo, AndroidPackage>> pairs;
-                if (listFactory) {
-                    pairs = mApexPackageInfo.getFactoryPackages();
-                } else {
-                    pairs = mApexPackageInfo.getActivePackages();
-                }
-
-                for (int index = 0; index < pairs.size(); index++) {
-                    var pair = pairs.get(index);
-                    list.add(PackageInfoUtils.generate(pair.second, pair.first, flags, null,
-                            userId));
-                }
-            }
-        }
         return new ParceledListSlice<>(list);
-    }
-
-    /**
-     * If the filter's target user can handle the intent and is enabled: a [ResolveInfo] that
-     * will forward the intent to the filter's target user, along with the highest approval of
-     * any handler in the target user. Otherwise, returns null.
-     */
-    @Nullable
-    private CrossProfileDomainInfo createForwardingResolveInfo(
-            @NonNull CrossProfileIntentFilter filter, @NonNull Intent intent,
-            @Nullable String resolvedType, @PackageManager.ResolveInfoFlagsBits long flags,
-            int sourceUserId) {
-        int targetUserId = filter.getTargetUserId();
-        if (!isUserEnabled(targetUserId)) {
-            return null;
-        }
-
-        List<ResolveInfo> resultTargetUser = mComponentResolver.queryActivities(this, intent,
-                resolvedType, flags, targetUserId);
-        if (CollectionUtils.isEmpty(resultTargetUser)) {
-            return null;
-        }
-
-        ResolveInfo forwardingInfo = null;
-        for (int i = resultTargetUser.size() - 1; i >= 0; i--) {
-            ResolveInfo targetUserResolveInfo = resultTargetUser.get(i);
-            if ((targetUserResolveInfo.activityInfo.applicationInfo.flags
-                    & ApplicationInfo.FLAG_SUSPENDED) == 0) {
-                forwardingInfo = createForwardingResolveInfoUnchecked(filter, sourceUserId,
-                        targetUserId);
-                break;
-            }
-        }
-
-        if (forwardingInfo == null) {
-            // If all the matches in the target profile are suspended, return null.
-            return null;
-        }
-
-        int highestApprovalLevel = DomainVerificationManagerInternal.APPROVAL_LEVEL_NONE;
-
-        int size = resultTargetUser.size();
-        for (int i = 0; i < size; i++) {
-            ResolveInfo riTargetUser = resultTargetUser.get(i);
-            if (riTargetUser.handleAllWebDataURI) {
-                continue;
-            }
-            String packageName = riTargetUser.activityInfo.packageName;
-            PackageStateInternal ps = mSettings.getPackage(packageName);
-            if (ps == null) {
-                continue;
-            }
-            highestApprovalLevel = Math.max(highestApprovalLevel, mDomainVerificationManager
-                    .approvalLevelForDomain(ps, intent, flags, targetUserId));
-        }
-
-        return new CrossProfileDomainInfo(forwardingInfo, highestApprovalLevel);
     }
 
     public final ResolveInfo createForwardingResolveInfoUnchecked(WatchedIntentFilter filter,
@@ -2007,83 +1725,6 @@ public class ComputerEngine implements Computer {
         forwardingResolveInfo.filter = new IntentFilter(filter.getIntentFilter());
         forwardingResolveInfo.targetUserId = targetUserId;
         return forwardingResolveInfo;
-    }
-
-    // Return matching ResolveInfo in target user if any.
-    @Nullable
-    private CrossProfileDomainInfo queryCrossProfileIntents(
-            List<CrossProfileIntentFilter> matchingFilters, Intent intent, String resolvedType,
-            long flags, int sourceUserId, boolean matchInCurrentProfile) {
-        if (matchingFilters == null) {
-            return null;
-        }
-        // Two {@link CrossProfileIntentFilter}s can have the same targetUserId and
-        // match the same intent. For performance reasons, it is better not to
-        // run queryIntent twice for the same userId
-        SparseBooleanArray alreadyTriedUserIds = new SparseBooleanArray();
-
-        CrossProfileDomainInfo resultInfo = null;
-
-        int size = matchingFilters.size();
-        for (int i = 0; i < size; i++) {
-            CrossProfileIntentFilter filter = matchingFilters.get(i);
-            int targetUserId = filter.getTargetUserId();
-            boolean skipCurrentProfile =
-                    (filter.getFlags() & PackageManager.SKIP_CURRENT_PROFILE) != 0;
-            boolean skipCurrentProfileIfNoMatchFound =
-                    (filter.getFlags() & PackageManager.ONLY_IF_NO_MATCH_FOUND) != 0;
-            if (!skipCurrentProfile && !alreadyTriedUserIds.get(targetUserId)
-                    && (!skipCurrentProfileIfNoMatchFound || !matchInCurrentProfile)) {
-                // Checking if there are activities in the target user that can handle the
-                // intent.
-                CrossProfileDomainInfo info = createForwardingResolveInfo(filter, intent,
-                        resolvedType, flags, sourceUserId);
-                if (info != null) {
-                    resultInfo = info;
-                    break;
-                }
-                alreadyTriedUserIds.put(targetUserId, true);
-            }
-        }
-
-        if (resultInfo == null) {
-            return null;
-        }
-
-        ResolveInfo forwardingResolveInfo = resultInfo.mResolveInfo;
-        if (!isUserEnabled(forwardingResolveInfo.targetUserId)) {
-            return null;
-        }
-
-        List<ResolveInfo> filteredResult =
-                filterIfNotSystemUser(Collections.singletonList(forwardingResolveInfo),
-                        sourceUserId);
-        if (filteredResult.isEmpty()) {
-            return null;
-        }
-
-        return resultInfo;
-    }
-
-    private ResolveInfo querySkipCurrentProfileIntents(
-            List<CrossProfileIntentFilter> matchingFilters, Intent intent, String resolvedType,
-            long flags, int sourceUserId) {
-        if (matchingFilters != null) {
-            int size = matchingFilters.size();
-            for (int i = 0; i < size; i++) {
-                CrossProfileIntentFilter filter = matchingFilters.get(i);
-                if ((filter.getFlags() & PackageManager.SKIP_CURRENT_PROFILE) != 0) {
-                    // Checking if there are activities in the target user that can handle the
-                    // intent.
-                    CrossProfileDomainInfo info = createForwardingResolveInfo(filter, intent,
-                            resolvedType, flags, sourceUserId);
-                    if (info != null) {
-                        return info.mResolveInfo;
-                    }
-                }
-            }
-        }
-        return null;
     }
 
     public final ServiceInfo getServiceInfo(ComponentName component,
@@ -2161,7 +1802,7 @@ public class ComputerEngine implements Computer {
     }
 
     public final String resolveExternalPackageName(AndroidPackage pkg) {
-        if (pkg.getStaticSharedLibName() != null) {
+        if (pkg.getStaticSharedLibraryName() != null) {
             return pkg.getManifestPackageName();
         }
         return pkg.getPackageName();
@@ -2378,7 +2019,7 @@ public class ComputerEngine implements Computer {
         }
 
         final SharedLibraryInfo libraryInfo = getSharedLibraryInfo(
-                ps.getPkg().getStaticSharedLibName(), ps.getPkg().getStaticSharedLibVersion());
+                ps.getPkg().getStaticSharedLibraryName(), ps.getPkg().getStaticSharedLibVersion());
         if (libraryInfo == null) {
             return false;
         }
@@ -2434,7 +2075,7 @@ public class ComputerEngine implements Computer {
         }
 
         final SharedLibraryInfo libraryInfo = getSharedLibraryInfo(
-                ps.getPkg().getSdkLibName(), ps.getPkg().getSdkLibVersionMajor());
+                ps.getPkg().getSdkLibraryName(), ps.getPkg().getSdkLibVersionMajor());
         if (libraryInfo == null) {
             return false;
         }
@@ -2502,11 +2143,19 @@ public class ComputerEngine implements Computer {
     }
 
     public final boolean isCallerSameApp(String packageName, int uid) {
+        return isCallerSameApp(packageName, uid, false /* resolveIsolatedUid */);
+    }
+
+    @Override
+    public final boolean isCallerSameApp(String packageName, int uid, boolean resolveIsolatedUid) {
         if (Process.isSdkSandboxUid(uid)) {
             return (packageName != null
                     && packageName.equals(mService.getSdkSandboxPackageName()));
         }
         AndroidPackage pkg = mPackages.get(packageName);
+        if (resolveIsolatedUid && Process.isIsolated(uid)) {
+            uid = getIsolatedOwner(uid);
+        }
         return pkg != null
                 && UserHandle.getAppId(uid) == pkg.getUid();
     }
@@ -2724,16 +2373,6 @@ public class ComputerEngine implements Computer {
             return UserManagerService.getInstance().isSameProfileGroup(callerUserId, userId);
         } finally {
             Binder.restoreCallingIdentity(identity);
-        }
-    }
-
-    private boolean isUserEnabled(int userId) {
-        final long callingId = Binder.clearCallingIdentity();
-        try {
-            UserInfo userInfo = mUserManager.getUserInfo(userId);
-            return userInfo != null && userInfo.isEnabled();
-        } finally {
-            Binder.restoreCallingIdentity(callingId);
         }
     }
 
@@ -3450,24 +3089,56 @@ public class ComputerEngine implements Computer {
     }
 
     private void dumpApex(PrintWriter pw, String packageName) {
-        if (ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
-            final IndentingPrintWriter ipw = new IndentingPrintWriter(pw, "  ", 120);
-            List<PackageStateInternal> activePackages = new ArrayList<>();
-            List<PackageStateInternal> inactivePackages = new ArrayList<>();
-            List<PackageStateInternal> factoryActivePackages = new ArrayList<>();
-            List<PackageStateInternal> factoryInactivePackages = new ArrayList<>();
-            generateApexPackageInfo(activePackages, inactivePackages, factoryActivePackages,
-                    factoryInactivePackages);
-            ipw.println("Active APEX packages:");
-            ApexPackageInfo.dumpPackageStates(activePackages, true, packageName, ipw);
-            ipw.println("Inactive APEX packages:");
-            ApexPackageInfo.dumpPackageStates(inactivePackages, false, packageName, ipw);
-            ipw.println("Factory APEX packages:");
-            ApexPackageInfo.dumpPackageStates(factoryActivePackages, true, packageName, ipw);
-            ApexPackageInfo.dumpPackageStates(factoryInactivePackages, false, packageName, ipw);
-        } else {
-            mApexPackageInfo.dump(pw, packageName);
+        final IndentingPrintWriter ipw = new IndentingPrintWriter(pw, "  ", 120);
+        List<PackageStateInternal> activePackages = new ArrayList<>();
+        List<PackageStateInternal> inactivePackages = new ArrayList<>();
+        List<PackageStateInternal> factoryActivePackages = new ArrayList<>();
+        List<PackageStateInternal> factoryInactivePackages = new ArrayList<>();
+        generateApexPackageInfo(activePackages, inactivePackages, factoryActivePackages,
+                factoryInactivePackages);
+        ipw.println("Active APEX packages:");
+        dumpApexPackageStates(activePackages, true, packageName, ipw);
+        ipw.println("Inactive APEX packages:");
+        dumpApexPackageStates(inactivePackages, false, packageName, ipw);
+        ipw.println("Factory APEX packages:");
+        dumpApexPackageStates(factoryActivePackages, true, packageName, ipw);
+        dumpApexPackageStates(factoryInactivePackages, false, packageName, ipw);
+    }
+
+
+    /**
+     * Dump information about the packages contained in a particular cache
+     * @param packageStates the states to print information about.
+     * @param packageName a {@link String} containing a package name, or {@code null}. If set,
+     *                    only information about that specific package will be dumped.
+     * @param ipw the {@link IndentingPrintWriter} object to send information to.
+     */
+    private static void dumpApexPackageStates(List<PackageStateInternal> packageStates,
+            boolean isActive, @Nullable String packageName, IndentingPrintWriter ipw) {
+        ipw.println();
+        ipw.increaseIndent();
+        for (int i = 0, size = packageStates.size(); i < size; i++) {
+            final var packageState = packageStates.get(i);
+            var pkg = packageState.getPkg();
+            if (packageName != null && !packageName.equals(pkg.getPackageName())) {
+                continue;
+            }
+            ipw.println(pkg.getPackageName());
+            ipw.increaseIndent();
+            ipw.println("Version: " + pkg.getLongVersionCode());
+            ipw.println("Path: " + pkg.getBaseApkPath());
+            ipw.println("IsActive: " + isActive);
+            ipw.println("IsFactory: " + !packageState.isUpdatedSystemApp());
+            ipw.println("ApplicationInfo: ");
+            ipw.increaseIndent();
+            // TODO: Dump the package manually
+            AndroidPackageUtils.generateAppInfoWithoutState(pkg)
+                    .dump(new PrintWriterPrinter(ipw), "");
+            ipw.decreaseIndent();
+            ipw.decreaseIndent();
         }
+        ipw.decreaseIndent();
+        ipw.println();
     }
 
     // The body of findPreferredActivity.
@@ -3846,12 +3517,8 @@ public class ComputerEngine implements Computer {
 
     @Override
     public boolean isApexPackage(String packageName) {
-        if (!ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
-            return mApexPackageInfo.isApexPackage(packageName);
-        } else {
-            final AndroidPackage pkg = mPackages.get(packageName);
-            return pkg != null && pkg.isApex();
-        }
+        final AndroidPackage pkg = mPackages.get(packageName);
+        return pkg != null && pkg.isApex();
     }
 
     @Override
@@ -4858,10 +4525,8 @@ public class ComputerEngine implements Computer {
                     effectiveFlags |= PackageManager.MATCH_ANY_USER;
                 }
                 if (ps.getPkg() != null) {
-                    if (ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
-                        if (!listApex && ps.getPkg().isApex()) {
-                            continue;
-                        }
+                    if (!listApex && ps.getPkg().isApex()) {
+                        continue;
                     }
                     if (filterSharedLibPackage(ps, callingUid, userId, flags)) {
                         continue;
@@ -4891,10 +4556,8 @@ public class ComputerEngine implements Computer {
                 if (pkg == null) {
                     continue;
                 }
-                if (ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
-                    if (!listApex && pkg.isApex()) {
-                        continue;
-                    }
+                if (!listApex && pkg.isApex()) {
+                    continue;
                 }
                 if (filterSharedLibPackage(packageState, Binder.getCallingUid(), userId, flags)) {
                     continue;
@@ -5231,9 +4894,9 @@ public class ComputerEngine implements Computer {
 
     @Nullable
     @Override
-    public String getInstallerPackageName(@NonNull String packageName) {
+    public String getInstallerPackageName(@NonNull String packageName, @UserIdInt int userId) {
         final int callingUid = Binder.getCallingUid();
-        final InstallSource installSource = getInstallSource(packageName, callingUid);
+        final InstallSource installSource = getInstallSource(packageName, callingUid, userId);
         if (installSource == null) {
             throw new IllegalArgumentException("Unknown package: " + packageName);
         }
@@ -5249,7 +4912,8 @@ public class ComputerEngine implements Computer {
     }
 
     @Nullable
-    private InstallSource getInstallSource(@NonNull String packageName, int callingUid) {
+    private InstallSource getInstallSource(@NonNull String packageName, int callingUid,
+            int userId) {
         final PackageStateInternal ps = mSettings.getPackage(packageName);
 
         // Installer info for Apex is not stored in PackageManager
@@ -5257,8 +4921,7 @@ public class ComputerEngine implements Computer {
             return InstallSource.EMPTY;
         }
 
-        if (ps == null || shouldFilterApplicationIncludingUninstalled(
-                ps, callingUid, UserHandle.getUserId(callingUid))) {
+        if (ps == null || shouldFilterApplicationIncludingUninstalled(ps, callingUid, userId)) {
             return null;
         }
 
@@ -5275,7 +4938,7 @@ public class ComputerEngine implements Computer {
         String initiatingPackageName;
         String originatingPackageName;
 
-        final InstallSource installSource = getInstallSource(packageName, callingUid);
+        final InstallSource installSource = getInstallSource(packageName, callingUid, userId);
         if (installSource == null) {
             return null;
         }
@@ -5678,13 +5341,9 @@ public class ComputerEngine implements Computer {
             @UserIdInt int sourceUserId, @UserIdInt int targetUserId) {
         mContext.enforceCallingOrSelfPermission(
                 android.Manifest.permission.INTERACT_ACROSS_USERS_FULL, null);
-        List<CrossProfileIntentFilter> matches =
-                getMatchingCrossProfileIntentFilters(intent, resolvedType, sourceUserId);
-        if (matches != null) {
-            int size = matches.size();
-            for (int i = 0; i < size; i++) {
-                if (matches.get(i).getTargetUserId() == targetUserId) return true;
-            }
+        if (mCrossProfileIntentResolverEngine.canReachTo(this, intent, resolvedType,
+                sourceUserId, targetUserId)) {
+            return true;
         }
         if (intent.hasWebURI()) {
             // cross-profile app linking works only towards the parent.

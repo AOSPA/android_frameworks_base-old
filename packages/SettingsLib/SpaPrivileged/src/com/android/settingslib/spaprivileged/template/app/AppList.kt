@@ -16,23 +16,28 @@
 
 package com.android.settingslib.spaprivileged.template.app
 
-import android.content.pm.UserInfo
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.UserHandle
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.android.settingslib.spa.framework.compose.LogCompositions
+import com.android.settingslib.spa.framework.compose.TimeMeasurer.Companion.rememberTimeMeasurer
+import com.android.settingslib.spa.framework.compose.rememberLazyListStateAndHideKeyboardWhenStartScroll
 import com.android.settingslib.spa.framework.compose.toState
-import com.android.settingslib.spa.framework.theme.SettingsDimension
 import com.android.settingslib.spa.widget.ui.PlaceholderTitle
 import com.android.settingslib.spaprivileged.R
+import com.android.settingslib.spaprivileged.framework.compose.DisposableBroadcastReceiverAsUser
+import com.android.settingslib.spaprivileged.model.app.AppListConfig
 import com.android.settingslib.spaprivileged.model.app.AppListData
 import com.android.settingslib.spaprivileged.model.app.AppListModel
 import com.android.settingslib.spaprivileged.model.app.AppListViewModel
@@ -40,37 +45,60 @@ import com.android.settingslib.spaprivileged.model.app.AppRecord
 import kotlinx.coroutines.Dispatchers
 
 private const val TAG = "AppList"
+private const val CONTENT_TYPE_HEADER = "header"
 
+internal data class AppListState(
+    val showSystem: State<Boolean>,
+    val option: State<Int>,
+    val searchQuery: State<String>,
+)
+
+/**
+ * The template to render an App List.
+ *
+ * This UI element will take the remaining space on the screen to show the App List.
+ */
 @Composable
 internal fun <T : AppRecord> AppList(
-    userInfo: UserInfo,
+    config: AppListConfig,
     listModel: AppListModel<T>,
-    showSystem: State<Boolean>,
-    option: State<Int>,
-    searchQuery: State<String>,
+    state: AppListState,
+    header: @Composable () -> Unit,
     appItem: @Composable (itemState: AppListItemModel<T>) -> Unit,
+    bottomPadding: Dp,
+    appListDataSupplier: @Composable () -> State<AppListData<T>?> = {
+        loadAppListData(config, listModel, state)
+    },
 ) {
-    LogCompositions(TAG, userInfo.id.toString())
-    val appListData = loadAppEntries(userInfo, listModel, showSystem, option, searchQuery)
-    AppListWidget(appListData, listModel, appItem)
+    LogCompositions(TAG, config.userId.toString())
+    val appListData = appListDataSupplier()
+    AppListWidget(appListData, listModel, header, appItem, bottomPadding)
 }
 
 @Composable
 private fun <T : AppRecord> AppListWidget(
     appListData: State<AppListData<T>?>,
     listModel: AppListModel<T>,
+    header: @Composable () -> Unit,
     appItem: @Composable (itemState: AppListItemModel<T>) -> Unit,
+    bottomPadding: Dp,
 ) {
+    val timeMeasurer = rememberTimeMeasurer(TAG)
     appListData.value?.let { (list, option) ->
+        timeMeasurer.logFirst("app list first loaded")
         if (list.isEmpty()) {
             PlaceholderTitle(stringResource(R.string.no_applications))
             return
         }
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            state = rememberLazyListState(),
-            contentPadding = PaddingValues(bottom = SettingsDimension.itemPaddingVertical),
+            state = rememberLazyListStateAndHideKeyboardWhenStartScroll(),
+            contentPadding = PaddingValues(bottom = bottomPadding),
         ) {
+            item(contentType = CONTENT_TYPE_HEADER) {
+                header()
+            }
+
             items(count = list.size, key = { option to list[it].record.app.packageName }) {
                 val appEntry = list[it]
                 val summary = listModel.getSummary(option, appEntry.record) ?: "".toState()
@@ -84,19 +112,27 @@ private fun <T : AppRecord> AppListWidget(
 }
 
 @Composable
-private fun <T : AppRecord> loadAppEntries(
-    userInfo: UserInfo,
+private fun <T : AppRecord> loadAppListData(
+    config: AppListConfig,
     listModel: AppListModel<T>,
-    showSystem: State<Boolean>,
-    option: State<Int>,
-    searchQuery: State<String>,
+    state: AppListState,
 ): State<AppListData<T>?> {
-    val viewModel: AppListViewModel<T> = viewModel(key = userInfo.id.toString())
-    viewModel.userInfo.setIfAbsent(userInfo)
+    val viewModel: AppListViewModel<T> = viewModel(key = config.userId.toString())
+    viewModel.appListConfig.setIfAbsent(config)
     viewModel.listModel.setIfAbsent(listModel)
-    viewModel.showSystem.Sync(showSystem)
-    viewModel.option.Sync(option)
-    viewModel.searchQuery.Sync(searchQuery)
+    viewModel.showSystem.Sync(state.showSystem)
+    viewModel.option.Sync(state.option)
+    viewModel.searchQuery.Sync(state.searchQuery)
 
-    return viewModel.appListDataFlow.collectAsState(null, Dispatchers.Default)
+    DisposableBroadcastReceiverAsUser(
+        intentFilter = IntentFilter(Intent.ACTION_PACKAGE_ADDED).apply {
+            addAction(Intent.ACTION_PACKAGE_REMOVED)
+            addAction(Intent.ACTION_PACKAGE_CHANGED)
+            addDataScheme("package")
+        },
+        userHandle = UserHandle.of(config.userId),
+        onStart = { viewModel.reloadApps() },
+    ) { viewModel.reloadApps() }
+
+    return viewModel.appListDataFlow.collectAsState(null, Dispatchers.IO)
 }

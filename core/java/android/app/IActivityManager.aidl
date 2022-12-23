@@ -522,14 +522,32 @@ interface IActivityManager {
     @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     boolean stopBinderTrackingAndDump(in ParcelFileDescriptor fd);
 
-    /** Enables server-side binder tracing for the calling uid. */
-    void enableBinderTracing();
-
     @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     void suppressResizeConfigChanges(boolean suppress);
+
+    /**
+     * @deprecated Use {@link #unlockUser2(int, IProgressListener)} instead, since the token and
+     * secret arguments no longer do anything.  This method still exists only because it is marked
+     * with {@code @UnsupportedAppUsage}, so it might not be safe to remove it or change its
+     * signature.
+     */
     @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     boolean unlockUser(int userid, in byte[] token, in byte[] secret,
             in IProgressListener listener);
+
+    /**
+     * Tries to unlock the given user.
+     * <p>
+     * This will succeed only if the user's CE storage key is already unlocked or if the user
+     * doesn't have a lockscreen credential set.
+     *
+     * @param userId The ID of the user to unlock.
+     * @param listener An optional progress listener.
+     *
+     * @return true if the user was successfully unlocked, otherwise false.
+     */
+    boolean unlockUser2(int userId, in IProgressListener listener);
+
     void killPackageDependents(in String packageName, int userId);
     void makePackageIdle(String packageName, int userId);
     int getMemoryTrimLevel();
@@ -538,7 +556,8 @@ interface IActivityManager {
     void startConfirmDeviceCredentialIntent(in Intent intent, in Bundle options);
     @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     void sendIdleJobTrigger();
-    int sendIntentSender(in IIntentSender target, in IBinder whitelistToken, int code,
+    int sendIntentSender(in IApplicationThread caller, in IIntentSender target,
+            in IBinder whitelistToken, int code,
             in Intent intent, in String resolvedType, in IIntentReceiver finishedReceiver,
             in String requiredPermission, in Bundle options);
     boolean isBackgroundRestricted(in String packageName);
@@ -769,6 +788,14 @@ interface IActivityManager {
      *
      * <p>Typically used only by automotive builds when the vehicle has multiple displays.
      */
+    @JavaPassthrough(annotation=
+            "@android.annotation.RequiresPermission(anyOf = {android.Manifest.permission.MANAGE_USERS, android.Manifest.permission.CREATE_USERS}, conditional = true)")
     boolean startUserInBackgroundOnSecondaryDisplay(int userid, int displayId);
 
+    /**
+     * Gets the ids of displays that can be used on {@link #startUserInBackgroundOnSecondaryDisplay(int userId, int displayId)}.
+     *
+     * <p>Typically used only by automotive builds when the vehicle has multiple displays.
+     */
+    @nullable int[] getSecondaryDisplayIdsForStartingBackgroundUsers();
 }

@@ -45,8 +45,8 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.Preconditions;
 import com.android.server.SystemServerInitThreadPool;
 import com.android.server.pm.dex.ArtManagerService;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.parsing.pkg.AndroidPackageUtils;
+import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.PackageStateInternal;
 import com.android.server.pm.pkg.SELinuxUtil;
 
@@ -61,7 +61,7 @@ import java.util.concurrent.Future;
 /**
  * Prepares app data for users
  */
-final class AppDataHelper {
+public class AppDataHelper {
     private static final boolean DEBUG_APP_DATA = false;
 
     private final PackageManagerService mPm;
@@ -298,7 +298,8 @@ final class AppDataHelper {
             // Create a native library symlink only if we have native libraries
             // and if the native libraries are 32 bit libraries. We do not provide
             // this symlink for 64 bit libraries.
-            String primaryCpuAbi = AndroidPackageUtils.getPrimaryCpuAbi(pkg, pkgSetting);
+            String primaryCpuAbi = pkgSetting == null
+                    ? AndroidPackageUtils.getRawPrimaryCpuAbi(pkg) : pkgSetting.getPrimaryCpuAbi();
             if (primaryCpuAbi != null && !VMRuntime.is64BitAbi(primaryCpuAbi)) {
                 final String nativeLibPath = pkg.getNativeLibraryDir();
                 if (!(new File(nativeLibPath).exists())) {

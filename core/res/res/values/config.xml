@@ -79,7 +79,7 @@
     <string translatable="false" name="status_bar_tty">tty</string>
     <string translatable="false" name="status_bar_speakerphone">speakerphone</string>
     <string translatable="false" name="status_bar_zen">zen</string>
-    <string translatable="false" name="status_bar_mute">mute</string>
+    <string translatable="false" name="status_bar_mute">status_bar_mute</string>
     <string translatable="false" name="status_bar_volume">volume</string>
     <string translatable="false" name="status_bar_wifi">wifi</string>
     <string translatable="false" name="status_bar_cdma_eri">cdma_eri</string>
@@ -342,22 +342,6 @@
     <!-- Mask to use when checking skb mark defined in config_networkWakeupPacketMark above. -->
     <integer name="config_networkWakeupPacketMask">0</integer>
 
-    <!-- Whether the APF Filter in the device should filter out IEEE 802.3 Frames
-         Those frames are identified by the field Eth-type having values
-         less than 0x600 -->
-    <bool translatable="false" name="config_apfDrop802_3Frames">true</bool>
-
-    <!-- An array of Denylisted EtherType, packets with EtherTypes within this array
-         will be dropped
-         TODO: need to put proper values, these are for testing purposes only -->
-    <integer-array translatable="false" name="config_apfEthTypeBlackList">
-        <item>0x88A2</item>
-        <item>0x88A4</item>
-        <item>0x88B8</item>
-        <item>0x88CD</item>
-        <item>0x88E3</item>
-    </integer-array>
-
     <!-- Default value for ConnectivityManager.getMultipathPreference() on metered networks. Actual
          device behaviour is controlled by Settings.Global.NETWORK_METERED_MULTIPATH_PREFERENCE.
          This is the default value of that setting. -->
@@ -553,6 +537,14 @@
     <!-- If this is true, then keep dreaming when undocking. -->
     <bool name="config_keepDreamingWhenUndocking">false</bool>
 
+    <!-- The timeout (in ms) to wait before attempting to reconnect to the dream overlay service if
+         it becomes disconnected -->
+    <integer name="config_dreamOverlayReconnectTimeoutMs">1000</integer> <!-- 1 second -->
+    <!-- The maximum number of times to attempt reconnecting to the dream overlay service -->
+    <integer name="config_dreamOverlayMaxReconnectAttempts">3</integer>
+    <!-- The duration after which the dream overlay connection should be considered stable -->
+    <integer name="config_minDreamOverlayDurationMs">10000</integer> <!-- 10 seconds -->
+
     <!-- Auto-rotation behavior -->
 
     <!-- If true, enables auto-rotation features using the accelerometer.
@@ -650,6 +642,20 @@
         -->
     </integer-array>
 
+    <!-- The device states (supplied by DeviceStateManager) that should be treated as half-folded by
+     the display fold controller. Default is empty. -->
+    <integer-array name="config_halfFoldedDeviceStates">
+        <!-- Example:
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+        -->
+    </integer-array>
+
+    <!-- Indicates whether the window manager reacts to half-fold device states by overriding
+     rotation. -->
+    <bool name="config_windowManagerHalfFoldAutoRotateOverride">false</bool>
+
     <!-- When a device enters any of these states, it should be woken up. States are defined in
          device_state_configuration.xml. -->
     <integer-array name="config_deviceStatesOnWhichToWakeUp">
@@ -679,7 +685,7 @@
 
     <!-- Indicates the time needed to time out the fold animation if the device stops in half folded
          mode. -->
-    <integer name="config_unfoldTransitionHalfFoldedTimeout">600</integer>
+    <integer name="config_unfoldTransitionHalfFoldedTimeout">1000</integer>
 
     <!-- Indicates that the device supports having more than one internal display on at the same
          time. Only applicable to devices with more than one internal display. If this option is
@@ -935,6 +941,8 @@
         <!-- Nominal White Z --> <item>1.089058</item>
     </string-array>
 
+    <!-- Boolean indicating whether light mode is allowed when DWB is turned on. -->
+    <bool name="config_displayWhiteBalanceLightModeAllowed">true</bool>
 
     <!-- Indicate available ColorDisplayManager.COLOR_MODE_xxx. -->
     <integer-array name="config_availableColorModes">
@@ -1660,13 +1668,18 @@
          darkening hysteresis constraint value is the n-th element of
          config_screenDarkeningThresholds.
 
+         Historically, it has been assumed that this will be an integer array with values in the
+         range of [0, 255]. However, it is now assumed to be a float array with values in the
+         range of [0, 1]. To accommodate both the possibilities, we internally check the scale on
+         which the thresholds are defined, and calibrate it accordingly.
+
          The (zero-based) index is calculated as follows: (MAX is the largest index of the array)
          condition                       calculated index
          value < level[0]                0
          level[n] <= value < level[n+1]  n+1
          level[MAX] <= value             MAX+1 -->
-    <integer-array name="config_screenThresholdLevels">
-    </integer-array>
+    <array name="config_screenThresholdLevels">
+    </array>
 
     <!-- Array of hysteresis constraint values for brightening, represented as tenths of a
          percent. The length of this array is assumed to be one greater than
@@ -1731,7 +1744,7 @@
     <item name="default_lock_wallpaper" type="drawable">@null</item>
 
     <!-- Component name of the built in wallpaper used to display bitmap wallpapers. This must not be null. -->
-    <string name="image_wallpaper_component" translatable="false">com.android.systemui/com.android.systemui.ImageWallpaper</string>
+    <string name="image_wallpaper_component" translatable="false">com.android.systemui/com.android.systemui.wallpapers.ImageWallpaper</string>
 
     <!-- True if WallpaperService is enabled -->
     <bool name="config_enableWallpaperService">true</bool>
@@ -2001,10 +2014,6 @@
          STREAM_MUSIC as if it's on TV platform. -->
     <bool name="config_single_volume">false</bool>
 
-    <!-- Flag indicating whether notification and ringtone volumes
-         are controlled together (aliasing is true) or not. -->
-    <bool name="config_alias_ring_notif_stream_types">true</bool>
-
     <!-- The number of volume steps for the notification stream -->
     <integer name="config_audio_notif_vol_steps">7</integer>
 
@@ -2016,6 +2025,10 @@
 
     <!-- The default volume for the ring stream -->
     <integer name="config_audio_ring_vol_default">5</integer>
+
+    <!-- The default value for whether head tracking for
+         spatial audio is enabled for a newly connected audio device -->
+    <bool name="config_spatial_audio_head_tracking_enabled_default">false</bool>
 
     <!-- Flag indicating whether platform level volume adjustments are enabled for remote sessions
          on grouped devices. -->
@@ -2414,13 +2427,22 @@
     <integer name="config_attentionMaximumExtension">900000</integer> <!-- 15 minutes.  -->
     <!-- Is the system user the only user allowed to dream. -->
     <bool name="config_dreamsOnlyEnabledForSystemUser">false</bool>
+    <!-- Whether dreams are disabled when ambient mode is suppressed. -->
+    <bool name="config_dreamsDisabledByAmbientModeSuppressionConfig">false</bool>
+
+    <!-- The duration in milliseconds of the dream opening animation.  -->
+    <integer name="config_dreamOpenAnimationDuration">250</integer>
+    <!-- The duration in milliseconds of the dream closing animation.  -->
+    <integer name="config_dreamCloseAnimationDuration">100</integer>
 
     <!-- Whether to dismiss the active dream when an activity is started. Doesn't apply to
          assistant activities (ACTIVITY_TYPE_ASSISTANT) -->
     <bool name="config_dismissDreamOnActivityStart">false</bool>
 
-    <!-- The prefix of dream component names that are loggable. If empty, logs "other" for all. -->
-    <string name="config_loggable_dream_prefix" translatable="false"></string>
+    <!-- The prefixes of dream component names that are loggable.
+         Matched against ComponentName#flattenToString() for dream components.
+         If empty, logs "other" for all. -->
+    <string-array name="config_loggable_dream_prefixes"></string-array>
 
     <!-- ComponentName of a dream to show whenever the system would otherwise have
          gone to sleep.  When the PowerManager is asked to go to sleep, it will instead
@@ -2579,6 +2601,9 @@
     <!-- Base "hover slop" value used by ViewConfiguration as a
          movement threshold under which hover is considered "stationary". -->
     <dimen name="config_viewConfigurationHoverSlop">4dp</dimen>
+
+    <!-- Margin around text line bounds where stylus handwriting gestures should be supported. -->
+    <dimen name="config_viewConfigurationHandwritingGestureLineMargin">16dp</dimen>
 
     <!-- Multiplier for gesture thresholds when a MotionEvent classification is ambiguous. -->
     <item name="config_ambiguousGestureMultiplier" format="float" type="dimen">2.0</item>
@@ -2863,7 +2888,7 @@
             >com.android.systemui/com.android.systemui.usb.UsbDebuggingActivity</string>
 
     <!-- Name of the activity that prompts the secondary user to acknowledge they need to
-         switch to the primary user to enable USB debugging.
+         switch to an admin user to enable USB debugging.
          Can be customized for other product types -->
     <string name="config_customAdbPublicKeyConfirmationSecondaryUserComponent"
             >com.android.systemui/com.android.systemui.usb.UsbDebuggingSecondaryUserActivity</string>
@@ -2875,7 +2900,7 @@
             >com.android.systemui/com.android.systemui.wifi.WifiDebuggingActivity</string>
 
     <!-- Name of the activity that prompts the secondary user to acknowledge they need to
-         switch to the primary user to enable wireless debugging.
+         switch to an admin user to enable wireless debugging.
          Can be customized for other product types -->
     <string name="config_customAdbWifiNetworkConfirmationSecondaryUserComponent"
             >com.android.systemui/com.android.systemui.wifi.WifiDebuggingSecondaryUserActivity</string>
@@ -2901,6 +2926,9 @@
          in. -->
     <string name="config_usbResolverActivity" translatable="false"
             >com.android.systemui/com.android.systemui.usb.UsbResolverActivity</string>
+
+    <!-- Component name of the activity used to inform a user about a sensor privacy state chage. -->
+    <string name="config_sensorStateChangedActivity" translatable="false"></string>
 
     <!-- Component name of the activity used to inform a user about a sensory being blocked because
      of privacy settings. -->
@@ -2932,6 +2960,10 @@
     <!-- Name of the dialog that is used to install the carrier app when the SIM is inserted -->
     <string name="config_carrierAppInstallDialogComponent" translatable="false"
             >com.android.simappdialog/com.android.simappdialog.InstallCarrierAppActivity</string>
+
+    <!-- Name of the dialog that is used to get or save an app credential -->
+    <string name="config_credentialManagerDialogComponent" translatable="false"
+            >com.android.credentialmanager/com.android.credentialmanager.CredentialSelectorActivity</string>
 
     <!-- Apps that are authorized to access shared accounts, overridden by product overlays -->
     <string name="config_appsAuthorizedForSharedAccounts" translatable="false">;com.android.settings;</string>
@@ -3013,6 +3045,12 @@
     <!-- set to false if we need to show user confirmation
          when alpha identifier is not provided by the UICC -->
     <bool name="config_stkNoAlphaUsrCnf">true</bool>
+
+    <!-- Flag indicating whether the current device allows stk sms send service via framework.
+         If true,this means that the device supports sending of stk triggered sms via the telephony.
+         This can be overridden to false for devices which can't send stk sms message via
+         framework, but would be sent via modem. -->
+    <bool name="config_stk_sms_send_support">false</bool>
 
     <!-- Threshold (in ms) under which a screen off / screen on will be considered a reset of the
          immersive mode confirmation prompt.-->
@@ -3320,7 +3358,7 @@
     <!--From SmsMessage-->
     <!--Support decoding the user data payload as pack GSM 8-bit (a GSM alphabet
         string that's stored in 8-bit unpacked format) characters.-->
-    <bool translatable="false" name="config_sms_decode_gsm_8bit_data">false</bool>
+    <bool translatable="false" name="config_sms_decode_gsm_8bit_data">true</bool>
 
     <!-- Configures encoding type to parse the User Data of an SMS for reserved TP-DCS value.
          Refer to SmsConstants.java
@@ -3521,9 +3559,9 @@
          config_sidefpsSkipWaitForPowerVendorAcquireMessage -->
     <integer name="config_sidefpsSkipWaitForPowerAcquireMessage">6</integer>
 
-    <!-- This vendor acquired message that will cause the sidefpsKgPowerPress window to be skipped.
-         config_sidefpsSkipWaitForPowerOnFingerUp must be true and
-         config_sidefpsSkipWaitForPowerAcquireMessage must be BIOMETRIC_ACQUIRED_VENDOR == 6. -->
+    <!-- This vendor acquired message will cause the sidefpsKgPowerPress window to be skipped
+         when config_sidefpsSkipWaitForPowerAcquireMessage == 6 (VENDOR) and the vendor acquire
+         message equals this constant -->
     <integer name="config_sidefpsSkipWaitForPowerVendorAcquireMessage">2</integer>
 
     <!-- This config is used to force VoiceInteractionService to start on certain low ram devices.
@@ -3655,10 +3693,6 @@
     <!-- Allow the gesture power + volume up to change the ringer mode while the device
          is interactive. -->
     <bool name="config_volumeHushGestureEnabled">true</bool>
-
-    <!-- Name of the component to handle network policy notifications. If present,
-         disables NetworkPolicyManagerService's presentation of data-usage notifications. -->
-    <string translatable="false" name="config_networkPolicyNotificationComponent"></string>
 
     <!-- The BT name of the keyboard packaged with the device. If this is defined, SystemUI will
          automatically try to pair with it when the device exits tablet mode. -->
@@ -3940,7 +3974,7 @@
     <!-- Colon separated list of package names that should be granted DND access -->
     <string name="config_defaultDndAccessPackages" translatable="false">com.android.camera2</string>
 
-    <!-- User restrictions set when the first user is created.
+    <!-- User restrictions set on the SYSTEM user when it is first created.
          Note: Also update appropriate overlay files. -->
     <string-array translatable="false" name="config_defaultFirstUserRestrictions">
     </string-array>
@@ -4382,17 +4416,21 @@
         or empty if the default should be used. -->
     <string translatable="false" name="config_deviceSpecificDeviceStatePolicyProvider"></string>
 
+    <!-- Class name of the device specific implementation of InputMethodManagerService
+        or empty if the default should be used. -->
+    <string translatable="false" name="config_deviceSpecificInputMethodManagerService"></string>
+
     <!-- Component name of media projection permission dialog -->
     <string name="config_mediaProjectionPermissionDialogComponent" translatable="false">com.android.systemui/com.android.systemui.media.MediaProjectionPermissionActivity</string>
 
     <!-- Corner radius of system dialogs -->
-    <dimen name="config_dialogCornerRadius">2dp</dimen>
+    <dimen name="config_dialogCornerRadius">28dp</dimen>
     <!-- Corner radius of system buttons -->
-    <dimen name="config_buttonCornerRadius">@dimen/control_corner_material</dimen>
+    <dimen name="config_buttonCornerRadius">4dp</dimen>
     <!-- Corner radius for bottom sheet system dialogs -->
-    <dimen name="config_bottomDialogCornerRadius">@dimen/config_dialogCornerRadius</dimen>
+    <dimen name="config_bottomDialogCornerRadius">16dp</dimen>
     <!-- Corner radius of system progress bars -->
-    <dimen name="config_progressBarCornerRadius">@dimen/progress_bar_corner_material</dimen>
+    <dimen name="config_progressBarCornerRadius">1000dp</dimen>
     <!-- Controls whether system buttons use all caps for text -->
     <bool name="config_buttonTextAllCaps">true</bool>
     <!-- Name of the font family used for system surfaces where the font should use medium weight -->
@@ -4863,9 +4901,6 @@
         -->
     </array>
 
-    <!-- How long it takes for the HW to start illuminating after the illumination is requested. -->
-    <integer name="config_udfps_illumination_transition_ms">50</integer>
-
     <!-- Indicates whether device has a power button fingerprint sensor. -->
     <bool name="config_is_powerbutton_fps" translatable="false" >false</bool>
 
@@ -4876,6 +4911,14 @@
         <item>0.75</item>
         <item>0.875</item>
     </string-array>
+
+    <!-- When each intermediate SFPS enroll stage ends, as a fraction of total progress. -->
+    <string-array name="config_sfps_enroll_stage_thresholds" translatable="false">
+        <item>0</item> <!-- [-1 // <0/25] No animation 1x -->
+        <item>0.36</item> <!-- [0 to 8 // <9/25] Pad center 9x -->
+        <item>0.52</item> <!-- [9 to 12 // <13/25] Tip 4x -->
+        <item>0.76</item> <!-- [13 to 18 // <19/25] Left 6x -->
+    </string-array> <!-- [19 to 24 // <25/25] Right 6x -->
 
     <!-- Messages that should not be shown to the user during face auth enrollment. This should be
          used to hide messages that may be too chatty or messages that the user can't do much about.
@@ -4913,6 +4956,11 @@
 
     <!-- If face auth sends the user directly to home/last open app, or stays on keyguard -->
     <bool name="config_faceAuthDismissesKeyguard">true</bool>
+
+    <!-- Default value for whether a SFPS device is required to be
+        {@link KeyguardUpdateMonitor#isDeviceInteractive()} for fingerprint auth
+        to unlock the device. -->
+    <bool name="config_requireScreenOnToAuthEnabled">false</bool>
 
     <!-- The component name for the default profile supervisor, which can be set as a profile owner
     even after user setup is complete. The defined component should be used for supervision purposes
@@ -5084,6 +5132,10 @@
     <!-- If true, the wallpaper will scale regardless of the value of shouldZoomOutWallpaper() -->
     <bool name="config_alwaysScaleWallpaper">false</bool>
 
+    <!-- Set to true to offset the wallpaper when using multiple displays so that it's centered
+         at the same position as in the largest display.-->
+    <bool name="config_offsetWallpaperToCenterOfLargestDisplay">false</bool>
+
     <!-- Package name that will receive an explicit manifest broadcast for
          android.os.action.POWER_SAVE_MODE_CHANGED. -->
     <string name="config_powerSaveModeChangedListenerPackage" translatable="false"></string>
@@ -5182,7 +5234,7 @@
             but isn't supported on the device or both dark scrim alpha and blur radius aren't
             provided.
      -->
-    <color name="config_letterboxBackgroundColor">@android:color/system_neutral2_900</color>
+    <color name="config_letterboxBackgroundColor">@color/letterbox_background</color>
 
     <!-- Horizontal position of a center of the letterboxed app window.
         0 corresponds to the left side of the screen and 1 to the right side. If given value < 0
@@ -5192,7 +5244,7 @@
     <!-- Vertical position of a center of the letterboxed app window.
         0 corresponds to the upper side of the screen and 1 to the lower side. If given value < 0
         or > 1, it is ignored and central position is used (0.5). -->
-    <item name="config_letterboxVerticalPositionMultiplier" format="float" type="dimen">0.5</item>
+    <item name="config_letterboxVerticalPositionMultiplier" format="float" type="dimen">0.0</item>
 
     <!-- Whether horizontal reachability repositioning is allowed for letterboxed fullscreen apps.
     -->
@@ -5907,7 +5959,17 @@
     -->
     <integer name="config_deviceStateRearDisplay">-1</integer>
 
+    <!-- Whether the lock screen is allowed to run its own live wallpaper,
+         different from the home screen wallpaper. -->
+    <bool name="config_independentLockscreenLiveWallpaper">false</bool>
+
+    <!-- List of certificate to be used for font fs-verity integrity verification -->
+    <string-array translatable="false" name="config_fontManagerServiceCerts">
+    </string-array>
+
+
     <!-- Maximum time in millisecs for telephony should wait to deactivate data call
          when user turned off mobile data or data roaming during CIWLAN -->
     <integer name="config_maximumDelayTimeToDeactivateDataCall">7000</integer>
+
 </resources>

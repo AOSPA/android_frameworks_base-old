@@ -14,10 +14,11 @@
 package com.android.systemui.plugins
 
 import android.content.res.Resources
+import android.graphics.Rect
 import android.graphics.drawable.Drawable
 import android.view.View
 import com.android.systemui.plugins.annotations.ProvidesInterface
-import com.android.systemui.shared.regionsampling.RegionDarkness
+import com.android.systemui.plugins.log.LogBuffer
 import java.io.PrintWriter
 import java.util.Locale
 import java.util.TimeZone
@@ -40,19 +41,19 @@ interface ClockProvider {
     fun getClocks(): List<ClockMetadata>
 
     /** Initializes and returns the target clock design */
-    fun createClock(id: ClockId): Clock
+    fun createClock(id: ClockId): ClockController
 
     /** A static thumbnail for rendering in some examples */
     fun getClockThumbnail(id: ClockId): Drawable?
 }
 
 /** Interface for controlling an active clock */
-interface Clock {
+interface ClockController {
     /** A small version of the clock, appropriate for smaller viewports */
-    val smallClock: View
+    val smallClock: ClockFaceController
 
     /** A large version of the clock, appropriate when a bigger viewport is available */
-    val largeClock: View
+    val largeClock: ClockFaceController
 
     /** Events that clocks may need to respond to */
     val events: ClockEvents
@@ -62,7 +63,7 @@ interface Clock {
 
     /** Initializes various rendering parameters. If never called, provides reasonable defaults. */
     fun initialize(resources: Resources, dozeFraction: Float, foldFraction: Float) {
-        events.onColorPaletteChanged(resources, RegionDarkness.DEFAULT, RegionDarkness.DEFAULT)
+        events.onColorPaletteChanged(resources)
         animations.doze(dozeFraction)
         animations.fold(foldFraction)
         events.onTimeTick()
@@ -70,12 +71,24 @@ interface Clock {
 
     /** Optional method for dumping debug information */
     fun dump(pw: PrintWriter) { }
+
+    /** Optional method for debug logging */
+    fun setLogBuffer(logBuffer: LogBuffer) { }
+}
+
+/** Interface for a specific clock face version rendered by the clock */
+interface ClockFaceController {
+    /** View that renders the clock face */
+    val view: View
+
+    /** Events specific to this clock face */
+    val events: ClockFaceEvents
 }
 
 /** Events that should call when various rendering parameters change */
 interface ClockEvents {
     /** Call every time tick */
-    fun onTimeTick()
+    fun onTimeTick() { }
 
     /** Call whenever timezone changes */
     fun onTimeZoneChanged(timeZone: TimeZone) { }
@@ -90,11 +103,7 @@ interface ClockEvents {
     fun onFontSettingChanged() { }
 
     /** Call whenever the color palette should update */
-    fun onColorPaletteChanged(
-            resources: Resources,
-            smallClockIsDark: RegionDarkness,
-            largeClockIsDark: RegionDarkness
-    ) { }
+    fun onColorPaletteChanged(resources: Resources) { }
 }
 
 /** Methods which trigger various clock animations */
@@ -110,6 +119,23 @@ interface ClockAnimations {
 
     /** Runs the battery animation (if any). */
     fun charge() { }
+
+    /** Move the clock, for example, if the notification tray appears in split-shade mode. */
+    fun onPositionUpdated(fromRect: Rect, toRect: Rect, fraction: Float) { }
+
+    /**
+     * Whether this clock has a custom position update animation. If true, the keyguard will call
+     * `onPositionUpdated` to notify the clock of a position update animation. If false, a default
+     * animation will be used (e.g. a simple translation).
+     */
+    val hasCustomPositionUpdatedAnimation
+        get() = false
+}
+
+/** Events that have specific data about the related face */
+interface ClockFaceEvents {
+    /** Region Darkness specific to the clock face */
+    fun onRegionDarknessChanged(isDark: Boolean) { }
 }
 
 /** Some data about a clock design */

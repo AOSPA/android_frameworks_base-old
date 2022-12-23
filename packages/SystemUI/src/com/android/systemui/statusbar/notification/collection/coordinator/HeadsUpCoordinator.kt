@@ -18,6 +18,8 @@ package com.android.systemui.statusbar.notification.collection.coordinator
 import android.app.Notification
 import android.app.Notification.GROUP_ALERT_SUMMARY
 import android.util.ArrayMap
+import android.util.ArraySet
+import com.android.internal.annotations.VisibleForTesting
 import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.statusbar.NotificationRemoteInputManager
 import com.android.systemui.statusbar.notification.collection.GroupEntry
@@ -31,6 +33,7 @@ import com.android.systemui.statusbar.notification.collection.listbuilder.plugga
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifCollectionListener
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifLifetimeExtender
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifLifetimeExtender.OnEndLifetimeExtensionCallback
+import com.android.systemui.statusbar.notification.collection.provider.LaunchFullScreenIntentProvider
 import com.android.systemui.statusbar.notification.collection.render.NodeController
 import com.android.systemui.statusbar.notification.dagger.IncomingHeader
 import com.android.systemui.statusbar.notification.interruption.HeadsUpViewBinder
@@ -66,10 +69,12 @@ class HeadsUpCoordinator @Inject constructor(
     private val mHeadsUpViewBinder: HeadsUpViewBinder,
     private val mNotificationInterruptStateProvider: NotificationInterruptStateProvider,
     private val mRemoteInputManager: NotificationRemoteInputManager,
+    private val mLaunchFullScreenIntentProvider: LaunchFullScreenIntentProvider,
     @IncomingHeader private val mIncomingHeaderController: NodeController,
     @Main private val mExecutor: DelayableExecutor,
 ) : Coordinator {
     private val mEntriesBindingUntil = ArrayMap<String, Long>()
+    private val mEntriesUpdateTimes = ArrayMap<String, Long>()
     private var mEndLifetimeExtension: OnEndLifetimeExtensionCallback? = null
     private lateinit var mNotifPipeline: NotifPipeline
     private var mNow: Long = -1
@@ -195,6 +200,13 @@ class HeadsUpCoordinator @Inject constructor(
             // At this point we just need to initiate the transfer
             val summaryUpdate = mPostedEntries[logicalSummary.key]
 
+            // Because we now know for certain that some child is going to alert for this summary
+            // (as we have found a child to transfer the alert to), mark the group as having
+            // interrupted. This will allow us to know in the future that the "should heads up"
+            // state of this group has already been handled, just not via the summary entry itself.
+            logicalSummary.setInterruption()
+            mLogger.logSummaryMarkedInterrupted(logicalSummary.key, childToReceiveParentAlert.key)
+
             // If the summary was not attached, then remove the alert from the detached summary.
             // Otherwise we can simply ignore its posted update.
             if (!isSummaryAttached) {
@@ -264,6 +276,9 @@ class HeadsUpCoordinator @Inject constructor(
         }
         // After this method runs, all posted entries should have been handled (or skipped).
         mPostedEntries.clear()
+
+        // Also take this opportunity to clean up any stale entry update times
+        cleanUpEntryUpdateTimes()
     }
 
     /**
@@ -367,6 +382,12 @@ class HeadsUpCoordinator @Inject constructor(
          * Notification was just added and if it should heads up, bind the view and then show it.
          */
         override fun onEntryAdded(entry: NotificationEntry) {
+            // First check whether this notification should launch a full screen intent, and
+            // launch it if needed.
+            if (mNotificationInterruptStateProvider.shouldLaunchFullScreenIntentWhenAdded(entry)) {
+                mLaunchFullScreenIntentProvider.launchFullScreenIntent(entry)
+            }
+
             // shouldHeadsUp includes check for whether this notification should be filtered
             val shouldHeadsUpEver = mNotificationInterruptStateProvider.shouldHeadsUp(entry)
             mPostedEntries[entry.key] = PostedEntry(
@@ -378,6 +399,9 @@ class HeadsUpCoordinator @Inject constructor(
                 isAlerting = false,
                 isBinding = false,
             )
+
+            // Record the last updated time for this key
+            setUpdateTime(entry, mSystemClock.currentTimeMillis())
         }
 
         /**
@@ -393,7 +417,7 @@ class HeadsUpCoordinator @Inject constructor(
             val posted = mPostedEntries.compute(entry.key) { _, value ->
                 value?.also { update ->
                     update.wasUpdated = true
-                    update.shouldHeadsUpEver = update.shouldHeadsUpEver || shouldHeadsUpEver
+                    update.shouldHeadsUpEver = shouldHeadsUpEver
                     update.shouldHeadsUpAgain = update.shouldHeadsUpAgain || shouldHeadsUpAgain
                     update.isAlerting = isAlerting
                     update.isBinding = isBinding
@@ -419,6 +443,9 @@ class HeadsUpCoordinator @Inject constructor(
                     cancelHeadsUpBind(posted.entry)
                 }
             }
+
+            // Update last updated time for this entry
+            setUpdateTime(entry, mSystemClock.currentTimeMillis())
         }
 
         /**
@@ -426,6 +453,7 @@ class HeadsUpCoordinator @Inject constructor(
          */
         override fun onEntryRemoved(entry: NotificationEntry, reason: Int) {
             mPostedEntries.remove(entry.key)
+            mEntriesUpdateTimes.remove(entry.key)
             cancelHeadsUpBind(entry)
             val entryKey = entry.key
             if (mHeadsUpManager.isAlerting(entryKey)) {
@@ -440,6 +468,47 @@ class HeadsUpCoordinator @Inject constructor(
         override fun onEntryCleanUp(entry: NotificationEntry) {
             mHeadsUpViewBinder.abortBindCallback(entry)
         }
+
+        /**
+         * Identify notifications whose heads-up state changes when the notification rankings are
+         * updated, and have those changed notifications alert if necessary.
+         *
+         * This method will occur after any operations in onEntryAdded or onEntryUpdated, so any
+         * handling of ranking changes needs to take into account that we may have just made a
+         * PostedEntry for some of these notifications.
+         */
+        override fun onRankingApplied() {
+            // Because a ranking update may cause some notifications that are no longer (or were
+            // never) in mPostedEntries to need to alert, we need to check every notification
+            // known to the pipeline.
+            for (entry in mNotifPipeline.allNotifs) {
+                // Only consider entries that are recent enough, since we want to apply a fairly
+                // strict threshold for when an entry should be updated via only ranking and not an
+                // app-provided notification update.
+                if (!isNewEnoughForRankingUpdate(entry)) continue
+
+                // The only entries we consider alerting for here are entries that have never
+                // interrupted and that now say they should heads up; if they've alerted in the
+                // past, we don't want to incorrectly alert a second time if there wasn't an
+                // explicit notification update.
+                if (entry.hasInterrupted()) continue
+
+                // The cases where we should consider this notification to be updated:
+                // - if this entry is not present in PostedEntries, and is now in a shouldHeadsUp
+                //   state
+                // - if it is present in PostedEntries and the previous state of shouldHeadsUp
+                //   differs from the updated one
+                val shouldHeadsUpEver = mNotificationInterruptStateProvider.checkHeadsUp(entry,
+                                /* log= */ false)
+                val postedShouldHeadsUpEver = mPostedEntries[entry.key]?.shouldHeadsUpEver ?: false
+                val shouldUpdateEntry = postedShouldHeadsUpEver != shouldHeadsUpEver
+
+                if (shouldUpdateEntry) {
+                    mLogger.logEntryUpdatedByRanking(entry.key, shouldHeadsUpEver)
+                    onEntryUpdated(entry)
+                }
+            }
+        }
     }
 
     /**
@@ -448,6 +517,41 @@ class HeadsUpCoordinator @Inject constructor(
     private fun shouldHunAgain(entry: NotificationEntry): Boolean {
         return (!entry.hasInterrupted() ||
                 (entry.sbn.notification.flags and Notification.FLAG_ONLY_ALERT_ONCE) == 0)
+    }
+
+    /**
+     * Sets the updated time for the given entry to the specified time.
+     */
+    @VisibleForTesting
+    fun setUpdateTime(entry: NotificationEntry, time: Long) {
+        mEntriesUpdateTimes[entry.key] = time
+    }
+
+    /**
+     * Checks whether the entry is new enough to be updated via ranking update.
+     * We want to avoid updating an entry too long after it was originally posted/updated when we're
+     * only reacting to a ranking change, as relevant ranking updates are expected to come in
+     * fairly soon after the posting of a notification.
+     */
+    private fun isNewEnoughForRankingUpdate(entry: NotificationEntry): Boolean {
+        // If we don't have an update time for this key, default to "too old"
+        if (!mEntriesUpdateTimes.containsKey(entry.key)) return false
+
+        val updateTime = mEntriesUpdateTimes[entry.key] ?: return false
+        return (mSystemClock.currentTimeMillis() - updateTime) <= MAX_RANKING_UPDATE_DELAY_MS
+    }
+
+    private fun cleanUpEntryUpdateTimes() {
+        // Because we won't update entries that are older than this amount of time anyway, clean
+        // up any entries that are too old to notify.
+        val toRemove = ArraySet<String>()
+        for ((key, updateTime) in mEntriesUpdateTimes) {
+            if (updateTime == null ||
+                    (mSystemClock.currentTimeMillis() - updateTime) > MAX_RANKING_UPDATE_DELAY_MS) {
+                toRemove.add(key)
+            }
+        }
+        mEntriesUpdateTimes.removeAll(toRemove)
     }
 
     /** When an action is pressed on a notification, end HeadsUp lifetime extension. */
@@ -561,6 +665,9 @@ class HeadsUpCoordinator @Inject constructor(
     companion object {
         private const val TAG = "HeadsUpCoordinator"
         private const val BIND_TIMEOUT = 1000L
+
+        // This value is set to match MAX_SOUND_DELAY_MS in NotificationRecord.
+        private const val MAX_RANKING_UPDATE_DELAY_MS: Long = 2000
     }
 
     data class PostedEntry(

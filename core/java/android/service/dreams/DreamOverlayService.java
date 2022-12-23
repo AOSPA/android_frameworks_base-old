@@ -20,6 +20,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.TestApi;
 import android.app.Service;
+import android.content.ComponentName;
 import android.content.Intent;
 import android.os.IBinder;
 import android.os.RemoteException;
@@ -36,12 +37,16 @@ public abstract class DreamOverlayService extends Service {
     private static final String TAG = "DreamOverlayService";
     private static final boolean DEBUG = false;
     private boolean mShowComplications;
+    private ComponentName mDreamComponent;
 
     private IDreamOverlay mDreamOverlay = new IDreamOverlay.Stub() {
         @Override
         public void startDream(WindowManager.LayoutParams layoutParams,
-                IDreamOverlayCallback callback) {
+                IDreamOverlayCallback callback, String dreamComponent,
+                boolean shouldShowComplications) {
             mDreamOverlayCallback = callback;
+            mDreamComponent = ComponentName.unflattenFromString(dreamComponent);
+            mShowComplications = shouldShowComplications;
             onStartDream(layoutParams);
         }
     };
@@ -54,8 +59,6 @@ public abstract class DreamOverlayService extends Service {
     @Nullable
     @Override
     public final IBinder onBind(@NonNull Intent intent) {
-        mShowComplications = intent.getBooleanExtra(DreamService.EXTRA_SHOW_COMPLICATIONS,
-                DreamService.DEFAULT_SHOW_COMPLICATIONS);
         return mDreamOverlay.asBinder();
     }
 
@@ -83,5 +86,13 @@ public abstract class DreamOverlayService extends Service {
      */
     public final boolean shouldShowComplications() {
         return mShowComplications;
+    }
+
+    /**
+     * Returns the active dream component.
+     * @hide
+     */
+    public final ComponentName getDreamComponent() {
+        return mDreamComponent;
     }
 }

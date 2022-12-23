@@ -49,7 +49,7 @@ public final class BLASTBufferQueue {
             TransactionHangCallback callback);
 
     public interface TransactionHangCallback {
-        void onTransactionHang(boolean isGpuHang);
+        void onTransactionHang(String reason);
     }
 
     /** Create a new connection with the surface flinger. */

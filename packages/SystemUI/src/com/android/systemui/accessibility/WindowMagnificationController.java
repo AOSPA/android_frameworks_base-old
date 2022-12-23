@@ -62,6 +62,7 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
 import android.view.WindowManager;
+import android.view.WindowManagerGlobal;
 import android.view.WindowMetrics;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction;
@@ -75,7 +76,6 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.graphics.SfVsyncFrameCallbackProvider;
 import com.android.systemui.R;
 import com.android.systemui.model.SysUiState;
-import com.android.systemui.shared.system.WindowManagerWrapper;
 
 import java.io.PrintWriter;
 import java.text.NumberFormat;
@@ -104,7 +104,7 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
     private final Context mContext;
     private final Resources mResources;
     private final Handler mHandler;
-    private Rect mWindowBounds;
+    private final Rect mWindowBounds;
     private final int mDisplayId;
     @Surface.Rotation
     @VisibleForTesting
@@ -193,11 +193,11 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
     private final SfVsyncFrameCallbackProvider mSfVsyncFrameProvider;
     private final MagnificationGestureDetector mGestureDetector;
     private final int mBounceEffectDuration;
-    private Choreographer.FrameCallback mMirrorViewGeometryVsyncCallback;
+    private final Choreographer.FrameCallback mMirrorViewGeometryVsyncCallback;
     private Locale mLocale;
     private NumberFormat mPercentFormat;
     private float mBounceEffectAnimationScale;
-    private SysUiState mSysUiState;
+    private final SysUiState mSysUiState;
     // Set it to true when the view is overlapped with the gesture insets at the bottom.
     private boolean mOverlapWithGestureInsets;
     private boolean mIsDragging;
@@ -215,7 +215,7 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
     private boolean mEditSizeEnable = false;
 
     @Nullable
-    private MirrorWindowControl mMirrorWindowControl;
+    private final MirrorWindowControl mMirrorWindowControl;
 
     WindowMagnificationController(
             @UiContext Context context,
@@ -562,9 +562,7 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
     /** Returns the rotation degree change of two {@link Surface.Rotation} */
     private int getDegreeFromRotation(@Surface.Rotation int newRotation,
                                       @Surface.Rotation int oldRotation) {
-        final int rotationDiff = oldRotation - newRotation;
-        final int degree = (rotationDiff + 4) % 4 * 90;
-        return degree;
+        return (oldRotation - newRotation + 4) % 4 * 90;
     }
 
     private void createMirrorWindow() {
@@ -689,7 +687,7 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
         if (Float.isNaN(centerX)) {
             centerX = mMagnificationFrame.centerX();
         }
-        if (Float.isNaN(centerX)) {
+        if (Float.isNaN(centerY)) {
             centerY = mMagnificationFrame.centerY();
         }
 
@@ -723,13 +721,32 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
      * child of the surfaceView.
      */
     private void createMirror() {
-        mMirrorSurface = WindowManagerWrapper.getInstance().mirrorDisplay(mDisplayId);
+        mMirrorSurface = mirrorDisplay(mDisplayId);
         if (!mMirrorSurface.isValid()) {
             return;
         }
         mTransaction.show(mMirrorSurface)
                 .reparent(mMirrorSurface, mMirrorSurfaceView.getSurfaceControl());
         modifyWindowMagnification(false);
+    }
+
+    /**
+     * Mirrors a specified display. The SurfaceControl returned is the root of the mirrored
+     * hierarchy.
+     *
+     * @param displayId The id of the display to mirror
+     * @return The SurfaceControl for the root of the mirrored hierarchy.
+     */
+    private SurfaceControl mirrorDisplay(final int displayId) {
+        try {
+            SurfaceControl outSurfaceControl = new SurfaceControl();
+            WindowManagerGlobal.getWindowManagerService().mirrorDisplay(displayId,
+                    outSurfaceControl);
+            return outSurfaceControl;
+        } catch (RemoteException e) {
+            Log.e(TAG, "Unable to reach window manager", e);
+        }
+        return null;
     }
 
     private void addDragTouchListeners() {

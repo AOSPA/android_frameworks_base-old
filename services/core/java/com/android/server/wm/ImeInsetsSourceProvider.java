@@ -34,6 +34,7 @@ import android.os.Trace;
 import android.util.proto.ProtoOutputStream;
 import android.view.InsetsSource;
 import android.view.InsetsSourceControl;
+import android.view.InsetsState;
 import android.view.WindowInsets;
 import android.window.TaskSnapshot;
 
@@ -53,6 +54,12 @@ final class ImeInsetsSourceProvider extends WindowContainerInsetsSourceProvider 
     private boolean mIsImeLayoutDrawn;
     private boolean mImeShowing;
     private final InsetsSource mLastSource = new InsetsSource(ITYPE_IME);
+
+    /** @see #setFrozen(boolean) */
+    private boolean mFrozen;
+
+    /** @see #setServerVisible(boolean) */
+    private boolean mServerVisible;
 
     ImeInsetsSourceProvider(InsetsSource source,
             InsetsStateController stateController, DisplayContent displayContent) {
@@ -80,6 +87,32 @@ final class ImeInsetsSourceProvider extends WindowContainerInsetsSourceProvider 
     }
 
     @Override
+    void setServerVisible(boolean serverVisible) {
+        mServerVisible = serverVisible;
+        if (!mFrozen) {
+            super.setServerVisible(serverVisible);
+        }
+    }
+
+    /**
+     * Freeze IME insets source state when required.
+     *
+     * When setting {@param frozen} as {@code true}, the IME insets provider will freeze the
+     * current IME insets state and pending the IME insets state update until setting
+     * {@param frozen} as {@code false}.
+     */
+    void setFrozen(boolean frozen) {
+        if (mFrozen == frozen) {
+            return;
+        }
+        mFrozen = frozen;
+        if (!frozen) {
+            // Unfreeze and process the pending IME insets states.
+            super.setServerVisible(mServerVisible);
+        }
+    }
+
+    @Override
     void updateSourceFrame(Rect frame) {
         super.updateSourceFrame(frame);
         onSourceChanged();
@@ -104,7 +137,7 @@ final class ImeInsetsSourceProvider extends WindowContainerInsetsSourceProvider 
     @Override
     protected boolean updateClientVisibility(InsetsControlTarget caller) {
         boolean changed = super.updateClientVisibility(caller);
-        if (changed && caller.getRequestedVisibility(mSource.getType())) {
+        if (changed && caller.isRequestedVisible(InsetsState.toPublicType(mSource.getType()))) {
             reportImeDrawnForOrganizer(caller);
         }
         return changed;
@@ -218,6 +251,12 @@ final class ImeInsetsSourceProvider extends WindowContainerInsetsSourceProvider 
         if (dcTarget == null || mImeRequester == null) {
             return false;
         }
+        // Not ready to show if there is no IME control target.
+        final InsetsControlTarget controlTarget = mDisplayContent.getImeTarget(IME_TARGET_CONTROL);
+        if (controlTarget == null) {
+            return false;
+        }
+
         ProtoLog.d(WM_DEBUG_IME, "dcTarget: %s mImeRequester: %s",
                 dcTarget.getWindow().getName(), mImeRequester.getWindow() == null
                         ? mImeRequester : mImeRequester.getWindow().getName());

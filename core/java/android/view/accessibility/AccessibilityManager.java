@@ -585,18 +585,46 @@ public final class AccessibilityManager {
 
     /**
      * Returns if the accessibility in the system is enabled.
+     * <p>
+     * <b>Note:</b> This query is used for sending {@link AccessibilityEvent}s, since events are
+     * only needed if accessibility is on. Avoid changing UI or app behavior based on the state of
+     * accessibility. While well-intentioned, doing this creates brittle, less
+     * well-maintained code that works for some users but not others. Shared code leads to more
+     * equitable experiences and less technical debt.
+     *
+     *<p>
+     * For example, if you want to expose a unique interaction with your app, use
+     * ViewCompat#addAccessibilityAction in AndroidX to make this interaction - ideally
+     * with the same code path used for non-accessibility users - available to accessibility
+     * services. Services can then expose this action in the way best fit for their users.
      *
      * @return True if accessibility is enabled, false otherwise.
      */
     public boolean isEnabled() {
         synchronized (mLock) {
-            return mIsEnabled || (mAccessibilityPolicy != null
-                    && mAccessibilityPolicy.isEnabled(mIsEnabled));
+            return mIsEnabled || hasAnyDirectConnection()
+                    || (mAccessibilityPolicy != null && mAccessibilityPolicy.isEnabled(mIsEnabled));
         }
     }
 
     /**
+     * @see AccessibilityInteractionClient#hasAnyDirectConnection
+     * @hide
+     */
+    @TestApi
+    public boolean hasAnyDirectConnection() {
+        return AccessibilityInteractionClient.hasAnyDirectConnection();
+    }
+
+    /**
      * Returns if the touch exploration in the system is enabled.
+     * <p>
+     * <b>Note:</b> This query is used for dispatching hover events, such as
+     * {@link android.view.MotionEvent#ACTION_HOVER_ENTER}, to accessibility services to manage
+     * touch exploration. Avoid changing UI or app behavior based on the state of accessibility.
+     * While well-intentioned, doing this creates brittle, less well-maintained code that works for
+     * som users but not others. Shared code leads to more equitable experiences and less technical
+     * debt.
      *
      * @return True if touch exploration is enabled, false otherwise.
      */
@@ -1893,6 +1921,67 @@ public final class AccessibilityManager {
         }
     }
 
+    /**
+     * Registers an {@link AccessibilityDisplayProxy}, so this proxy can access UI content specific
+     * to its display.
+     *
+     * @param proxy the {@link AccessibilityDisplayProxy} to register.
+     * @return {@code true} if the proxy is successfully registered.
+     *
+     * @throws IllegalArgumentException if the proxy's display is not currently tracked by a11y, is
+     * {@link android.view.Display#DEFAULT_DISPLAY}, is or lower than
+     * {@link android.view.Display#INVALID_DISPLAY}, or is already being proxy-ed.
+     *
+     * @throws SecurityException if the app does not hold the
+     * {@link Manifest.permission#MANAGE_ACCESSIBILITY} permission.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(Manifest.permission.MANAGE_ACCESSIBILITY)
+    public boolean registerDisplayProxy(@NonNull AccessibilityDisplayProxy proxy) {
+        final IAccessibilityManager service;
+        synchronized (mLock) {
+            service = getServiceLocked();
+            if (service == null) {
+                return false;
+            }
+        }
+
+        try {
+            return service.registerProxyForDisplay(proxy.mServiceClient, proxy.getDisplayId());
+        }  catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Unregisters an {@link AccessibilityDisplayProxy}.
+     *
+     * @return {@code true} if the proxy is successfully unregistered.
+     *
+     * @throws SecurityException if the app does not hold the
+     * {@link Manifest.permission#MANAGE_ACCESSIBILITY} permission.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(Manifest.permission.MANAGE_ACCESSIBILITY)
+    public boolean unregisterDisplayProxy(@NonNull AccessibilityDisplayProxy proxy)  {
+        final IAccessibilityManager service;
+        synchronized (mLock) {
+            service = getServiceLocked();
+            if (service == null) {
+                return false;
+            }
+        }
+        try {
+            return service.unregisterProxyForDisplay(proxy.getDisplayId());
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
     private IAccessibilityManager getServiceLocked() {
         if (mService == null) {
             tryConnectToServiceLocked(null);
@@ -1923,8 +2012,13 @@ public final class AccessibilityManager {
 
     /**
      * Notifies the registered {@link AccessibilityStateChangeListener}s.
+     *
+     * Note: this method notifies only the listeners of this single instance.
+     * AccessibilityManagerService is responsible for calling this method on all of
+     * its AccessibilityManager clients in order to notify all listeners.
+     * @hide
      */
-    private void notifyAccessibilityStateChanged() {
+    public void notifyAccessibilityStateChanged() {
         final boolean isEnabled;
         final ArrayMap<AccessibilityStateChangeListener, Handler> listeners;
         synchronized (mLock) {

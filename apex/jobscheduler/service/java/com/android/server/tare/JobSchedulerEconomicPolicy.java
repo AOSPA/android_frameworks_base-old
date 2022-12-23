@@ -38,11 +38,16 @@ import static android.app.tare.EconomyManager.DEFAULT_JS_ACTION_JOB_MIN_START_BA
 import static android.app.tare.EconomyManager.DEFAULT_JS_ACTION_JOB_MIN_START_CTP_CAKES;
 import static android.app.tare.EconomyManager.DEFAULT_JS_ACTION_JOB_TIMEOUT_PENALTY_BASE_PRICE_CAKES;
 import static android.app.tare.EconomyManager.DEFAULT_JS_ACTION_JOB_TIMEOUT_PENALTY_CTP_CAKES;
-import static android.app.tare.EconomyManager.DEFAULT_JS_HARD_CONSUMPTION_LIMIT_CAKES;
 import static android.app.tare.EconomyManager.DEFAULT_JS_INITIAL_CONSUMPTION_LIMIT_CAKES;
+import static android.app.tare.EconomyManager.DEFAULT_JS_MAX_CONSUMPTION_LIMIT_CAKES;
 import static android.app.tare.EconomyManager.DEFAULT_JS_MAX_SATIATED_BALANCE_CAKES;
+import static android.app.tare.EconomyManager.DEFAULT_JS_MIN_CONSUMPTION_LIMIT_CAKES;
 import static android.app.tare.EconomyManager.DEFAULT_JS_MIN_SATIATED_BALANCE_EXEMPTED_CAKES;
+import static android.app.tare.EconomyManager.DEFAULT_JS_MIN_SATIATED_BALANCE_INCREMENT_APP_UPDATER_CAKES;
 import static android.app.tare.EconomyManager.DEFAULT_JS_MIN_SATIATED_BALANCE_OTHER_APP_CAKES;
+import static android.app.tare.EconomyManager.DEFAULT_JS_REWARD_APP_INSTALL_INSTANT_CAKES;
+import static android.app.tare.EconomyManager.DEFAULT_JS_REWARD_APP_INSTALL_MAX_CAKES;
+import static android.app.tare.EconomyManager.DEFAULT_JS_REWARD_APP_INSTALL_ONGOING_CAKES;
 import static android.app.tare.EconomyManager.DEFAULT_JS_REWARD_NOTIFICATION_INTERACTION_INSTANT_CAKES;
 import static android.app.tare.EconomyManager.DEFAULT_JS_REWARD_NOTIFICATION_INTERACTION_MAX_CAKES;
 import static android.app.tare.EconomyManager.DEFAULT_JS_REWARD_NOTIFICATION_INTERACTION_ONGOING_CAKES;
@@ -80,11 +85,16 @@ import static android.app.tare.EconomyManager.KEY_JS_ACTION_JOB_MIN_START_BASE_P
 import static android.app.tare.EconomyManager.KEY_JS_ACTION_JOB_MIN_START_CTP;
 import static android.app.tare.EconomyManager.KEY_JS_ACTION_JOB_TIMEOUT_PENALTY_BASE_PRICE;
 import static android.app.tare.EconomyManager.KEY_JS_ACTION_JOB_TIMEOUT_PENALTY_CTP;
-import static android.app.tare.EconomyManager.KEY_JS_HARD_CONSUMPTION_LIMIT;
 import static android.app.tare.EconomyManager.KEY_JS_INITIAL_CONSUMPTION_LIMIT;
+import static android.app.tare.EconomyManager.KEY_JS_MAX_CONSUMPTION_LIMIT;
 import static android.app.tare.EconomyManager.KEY_JS_MAX_SATIATED_BALANCE;
+import static android.app.tare.EconomyManager.KEY_JS_MIN_CONSUMPTION_LIMIT;
 import static android.app.tare.EconomyManager.KEY_JS_MIN_SATIATED_BALANCE_EXEMPTED;
+import static android.app.tare.EconomyManager.KEY_JS_MIN_SATIATED_BALANCE_INCREMENT_APP_UPDATER;
 import static android.app.tare.EconomyManager.KEY_JS_MIN_SATIATED_BALANCE_OTHER_APP;
+import static android.app.tare.EconomyManager.KEY_JS_REWARD_APP_INSTALL_INSTANT;
+import static android.app.tare.EconomyManager.KEY_JS_REWARD_APP_INSTALL_MAX;
+import static android.app.tare.EconomyManager.KEY_JS_REWARD_APP_INSTALL_ONGOING;
 import static android.app.tare.EconomyManager.KEY_JS_REWARD_NOTIFICATION_INTERACTION_INSTANT;
 import static android.app.tare.EconomyManager.KEY_JS_REWARD_NOTIFICATION_INTERACTION_MAX;
 import static android.app.tare.EconomyManager.KEY_JS_REWARD_NOTIFICATION_INTERACTION_ONGOING;
@@ -125,17 +135,19 @@ import android.util.SparseArray;
 public class JobSchedulerEconomicPolicy extends EconomicPolicy {
     private static final String TAG = "TARE- " + JobSchedulerEconomicPolicy.class.getSimpleName();
 
-    public static final int ACTION_JOB_MAX_START = TYPE_ACTION | POLICY_JS | 0;
-    public static final int ACTION_JOB_MAX_RUNNING = TYPE_ACTION | POLICY_JS | 1;
-    public static final int ACTION_JOB_HIGH_START = TYPE_ACTION | POLICY_JS | 2;
-    public static final int ACTION_JOB_HIGH_RUNNING = TYPE_ACTION | POLICY_JS | 3;
-    public static final int ACTION_JOB_DEFAULT_START = TYPE_ACTION | POLICY_JS | 4;
-    public static final int ACTION_JOB_DEFAULT_RUNNING = TYPE_ACTION | POLICY_JS | 5;
-    public static final int ACTION_JOB_LOW_START = TYPE_ACTION | POLICY_JS | 6;
-    public static final int ACTION_JOB_LOW_RUNNING = TYPE_ACTION | POLICY_JS | 7;
-    public static final int ACTION_JOB_MIN_START = TYPE_ACTION | POLICY_JS | 8;
-    public static final int ACTION_JOB_MIN_RUNNING = TYPE_ACTION | POLICY_JS | 9;
-    public static final int ACTION_JOB_TIMEOUT = TYPE_ACTION | POLICY_JS | 10;
+    public static final int ACTION_JOB_MAX_START = TYPE_ACTION | POLICY_JOB | 0;
+    public static final int ACTION_JOB_MAX_RUNNING = TYPE_ACTION | POLICY_JOB | 1;
+    public static final int ACTION_JOB_HIGH_START = TYPE_ACTION | POLICY_JOB | 2;
+    public static final int ACTION_JOB_HIGH_RUNNING = TYPE_ACTION | POLICY_JOB | 3;
+    public static final int ACTION_JOB_DEFAULT_START = TYPE_ACTION | POLICY_JOB | 4;
+    public static final int ACTION_JOB_DEFAULT_RUNNING = TYPE_ACTION | POLICY_JOB | 5;
+    public static final int ACTION_JOB_LOW_START = TYPE_ACTION | POLICY_JOB | 6;
+    public static final int ACTION_JOB_LOW_RUNNING = TYPE_ACTION | POLICY_JOB | 7;
+    public static final int ACTION_JOB_MIN_START = TYPE_ACTION | POLICY_JOB | 8;
+    public static final int ACTION_JOB_MIN_RUNNING = TYPE_ACTION | POLICY_JOB | 9;
+    public static final int ACTION_JOB_TIMEOUT = TYPE_ACTION | POLICY_JOB | 10;
+
+    public static final int REWARD_APP_INSTALL = TYPE_REWARD | POLICY_JOB | 0;
 
     private static final int[] COST_MODIFIERS = new int[]{
             COST_MODIFIER_CHARGING,
@@ -146,9 +158,11 @@ public class JobSchedulerEconomicPolicy extends EconomicPolicy {
 
     private long mMinSatiatedBalanceExempted;
     private long mMinSatiatedBalanceOther;
+    private long mMinSatiatedBalanceIncrementalAppUpdater;
     private long mMaxSatiatedBalance;
     private long mInitialSatiatedConsumptionLimit;
-    private long mHardSatiatedConsumptionLimit;
+    private long mMinSatiatedConsumptionLimit;
+    private long mMaxSatiatedConsumptionLimit;
 
     private final KeyValueListParser mParser = new KeyValueListParser(',');
     private final Injector mInjector;
@@ -175,11 +189,20 @@ public class JobSchedulerEconomicPolicy extends EconomicPolicy {
         if (mIrs.isPackageRestricted(userId, pkgName)) {
             return 0;
         }
+
+        final long baseBalance;
         if (mIrs.isPackageExempted(userId, pkgName)) {
-            return mMinSatiatedBalanceExempted;
+            baseBalance = mMinSatiatedBalanceExempted;
+        } else {
+            baseBalance = mMinSatiatedBalanceOther;
         }
-        // TODO: take other exemptions into account
-        return mMinSatiatedBalanceOther;
+
+        long minBalance = baseBalance;
+
+        final int updateResponsibilityCount = mIrs.getAppUpdateResponsibilityCount(userId, pkgName);
+        minBalance += updateResponsibilityCount * mMinSatiatedBalanceIncrementalAppUpdater;
+
+        return Math.min(minBalance, mMaxSatiatedBalance);
     }
 
     @Override
@@ -196,8 +219,13 @@ public class JobSchedulerEconomicPolicy extends EconomicPolicy {
     }
 
     @Override
-    long getHardSatiatedConsumptionLimit() {
-        return mHardSatiatedConsumptionLimit;
+    long getMinSatiatedConsumptionLimit() {
+        return mMinSatiatedConsumptionLimit;
+    }
+
+    @Override
+    long getMaxSatiatedConsumptionLimit() {
+        return mMaxSatiatedConsumptionLimit;
     }
 
     @NonNull
@@ -234,15 +262,21 @@ public class JobSchedulerEconomicPolicy extends EconomicPolicy {
         mMinSatiatedBalanceExempted = getConstantAsCake(mParser, properties,
             KEY_JS_MIN_SATIATED_BALANCE_EXEMPTED, DEFAULT_JS_MIN_SATIATED_BALANCE_EXEMPTED_CAKES,
             mMinSatiatedBalanceOther);
+        mMinSatiatedBalanceIncrementalAppUpdater = getConstantAsCake(mParser, properties,
+                KEY_JS_MIN_SATIATED_BALANCE_INCREMENT_APP_UPDATER,
+                DEFAULT_JS_MIN_SATIATED_BALANCE_INCREMENT_APP_UPDATER_CAKES);
         mMaxSatiatedBalance = getConstantAsCake(mParser, properties,
             KEY_JS_MAX_SATIATED_BALANCE, DEFAULT_JS_MAX_SATIATED_BALANCE_CAKES,
             Math.max(arcToCake(1), mMinSatiatedBalanceExempted));
+        mMinSatiatedConsumptionLimit = getConstantAsCake(mParser, properties,
+                KEY_JS_MIN_CONSUMPTION_LIMIT, DEFAULT_JS_MIN_CONSUMPTION_LIMIT_CAKES,
+                arcToCake(1));
         mInitialSatiatedConsumptionLimit = getConstantAsCake(mParser, properties,
-            KEY_JS_INITIAL_CONSUMPTION_LIMIT, DEFAULT_JS_INITIAL_CONSUMPTION_LIMIT_CAKES,
-            arcToCake(1));
-        mHardSatiatedConsumptionLimit = getConstantAsCake(mParser, properties,
-            KEY_JS_HARD_CONSUMPTION_LIMIT, DEFAULT_JS_HARD_CONSUMPTION_LIMIT_CAKES,
-            mInitialSatiatedConsumptionLimit);
+                KEY_JS_INITIAL_CONSUMPTION_LIMIT, DEFAULT_JS_INITIAL_CONSUMPTION_LIMIT_CAKES,
+                mMinSatiatedConsumptionLimit);
+        mMaxSatiatedConsumptionLimit = getConstantAsCake(mParser, properties,
+                KEY_JS_MAX_CONSUMPTION_LIMIT, DEFAULT_JS_MAX_CONSUMPTION_LIMIT_CAKES,
+                mInitialSatiatedConsumptionLimit);
 
         mActions.put(ACTION_JOB_MAX_START, new Action(ACTION_JOB_MAX_START,
                 getConstantAsCake(mParser, properties,
@@ -374,20 +408,34 @@ public class JobSchedulerEconomicPolicy extends EconomicPolicy {
                         getConstantAsCake(mParser, properties,
                                 KEY_JS_REWARD_OTHER_USER_INTERACTION_MAX,
                                 DEFAULT_JS_REWARD_OTHER_USER_INTERACTION_MAX_CAKES)));
+        mRewards.put(REWARD_APP_INSTALL,
+                new Reward(REWARD_APP_INSTALL,
+                        getConstantAsCake(mParser, properties,
+                                KEY_JS_REWARD_APP_INSTALL_INSTANT,
+                                DEFAULT_JS_REWARD_APP_INSTALL_INSTANT_CAKES),
+                        getConstantAsCake(mParser, properties,
+                                KEY_JS_REWARD_APP_INSTALL_ONGOING,
+                                DEFAULT_JS_REWARD_APP_INSTALL_ONGOING_CAKES),
+                        getConstantAsCake(mParser, properties,
+                                KEY_JS_REWARD_APP_INSTALL_MAX,
+                                DEFAULT_JS_REWARD_APP_INSTALL_MAX_CAKES)));
     }
 
     @Override
     void dump(IndentingPrintWriter pw) {
-        pw.println("Min satiated balances:");
+        pw.println("Min satiated balance:");
         pw.increaseIndent();
         pw.print("Exempted", cakeToString(mMinSatiatedBalanceExempted)).println();
         pw.print("Other", cakeToString(mMinSatiatedBalanceOther)).println();
+        pw.print("+App Updater", cakeToString(mMinSatiatedBalanceIncrementalAppUpdater)).println();
         pw.decreaseIndent();
         pw.print("Max satiated balance", cakeToString(mMaxSatiatedBalance)).println();
         pw.print("Consumption limits: [");
+        pw.print(cakeToString(mMinSatiatedConsumptionLimit));
+        pw.print(", ");
         pw.print(cakeToString(mInitialSatiatedConsumptionLimit));
         pw.print(", ");
-        pw.print(cakeToString(mHardSatiatedConsumptionLimit));
+        pw.print(cakeToString(mMaxSatiatedConsumptionLimit));
         pw.println("]");
 
         pw.println();

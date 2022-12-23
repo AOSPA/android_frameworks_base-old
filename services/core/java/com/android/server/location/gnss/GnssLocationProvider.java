@@ -1447,7 +1447,9 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
      * @return the cell ID or -1 if invalid
      */
     private static long getCidFromCellIdentity(CellIdentity id) {
-        if (id == null) return -1;
+        if (id == null) {
+            return -1;
+        }
         long cid = -1;
         switch(id.getType()) {
             case CellInfo.TYPE_GSM: cid = ((CellIdentityGsm) id).getCid(); break;
@@ -1522,7 +1524,8 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
 
                 for (CellInfo ci : cil) {
                     int status = ci.getCellConnectionStatus();
-                    if (status == CellInfo.CONNECTION_PRIMARY_SERVING
+                    if (ci.isRegistered()
+                            || status == CellInfo.CONNECTION_PRIMARY_SERVING
                             || status == CellInfo.CONNECTION_SECONDARY_SERVING) {
                         CellIdentity c = ci.getCellIdentity();
                         int t = getCellType(ci);
@@ -1616,6 +1619,10 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
             updateEnabled();
             restartLocationRequest();
         }
+
+        // Re-register network callbacks to get an update of available networks right away.
+        mNetworkConnectivityHandler.unregisterNetworkCallbacks();
+        mNetworkConnectivityHandler.registerNetworkCallbacks();
     }
 
     @Override
@@ -1722,7 +1729,8 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         String setId = null;
 
         int subId = SubscriptionManager.getDefaultDataSubscriptionId();
-        if (mNIHandler.getInEmergency() && mNetworkConnectivityHandler.getActiveSubId() >= 0) {
+        if (mGnssConfiguration.isActiveSimEmergencySuplEnabled() && mNIHandler.getInEmergency()
+                && mNetworkConnectivityHandler.getActiveSubId() >= 0) {
             subId = mNetworkConnectivityHandler.getActiveSubId();
         }
         if (SubscriptionManager.isValidSubscriptionId(subId)) {

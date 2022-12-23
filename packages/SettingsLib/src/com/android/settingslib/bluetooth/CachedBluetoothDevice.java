@@ -87,6 +87,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     private long mHiSyncId;
     // Need this since there is no method for getting RSSI
     short mRssi;
+
     // mProfiles and mRemovedProfiles does not do swap() between main and sub device. It is
     // because current sub device is only for HearingAid and its profile is the same.
     private final Collection<LocalBluetoothProfile> mProfiles = new CopyOnWriteArrayList<>();
@@ -143,6 +144,8 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     private final int UNKNOWN = -1, BREDR = 100, GROUPID_START = 0, GROUPID_END = 15;
     private int mType = UNKNOWN;
     static final int PRIVATE_ADDR = 101;
+
+    private boolean mIsLeAudioEnabled = false;
 
 
     private final Handler mHandler = new Handler(Looper.getMainLooper()) {
@@ -463,6 +466,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     * @param id the group id from the CSIP.
     */
     public void setGroupId(int id) {
+        Log.d(TAG, this.getDevice().getAnonymizedAddress() + " set GroupId " + id);
         mGroupId = id;
     }
 
@@ -599,7 +603,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         fetchActiveDevices();
         migratePhonebookPermissionChoice();
         migrateMessagePermissionChoice();
-
+        setLeAudioEnabled();
         dispatchAttributesChanged();
     }
 
@@ -1038,7 +1042,14 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
 
     @Override
     public String toString() {
-        return mDevice.toString();
+        return "CachedBluetoothDevice ("
+                + "anonymizedAddress="
+                + mDevice.getAnonymizedAddress()
+                + ", name="
+                + getName()
+                + ", groupId="
+                + mGroupId
+                + ")";
     }
 
     @Override
@@ -1584,11 +1595,10 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
      * first connected device in the coordinated set, and then switch the content of the main
      * device and member devices.
      *
-     * @param prevMainDevice the previous Main device, it will be added into the member device set.
-     * @param newMainDevice the new Main device, it will be removed from the member device set.
+     * @param newMainDevice the new Main device which is from the previous main device's member
+     *                      list.
      */
-    public void switchMemberDeviceContent(CachedBluetoothDevice prevMainDevice,
-            CachedBluetoothDevice newMainDevice) {
+    public void switchMemberDeviceContent(CachedBluetoothDevice newMainDevice) {
         // Backup from main device
         final BluetoothDevice tmpDevice = mDevice;
         final short tmpRssi = mRssi;
@@ -1597,8 +1607,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         mDevice = newMainDevice.mDevice;
         mRssi = newMainDevice.mRssi;
         mJustDiscovered = newMainDevice.mJustDiscovered;
-        addMemberDevice(prevMainDevice);
-        mMemberDevices.remove(newMainDevice);
+
         // Set sub device from backup
         newMainDevice.mDevice = tmpDevice;
         newMainDevice.mRssi = tmpRssi;
@@ -1679,5 +1688,13 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
 
     boolean getUnpairing() {
         return mUnpairing;
+    }
+
+    void setLeAudioEnabled(){
+        mIsLeAudioEnabled =  (mProfileManager.getLeAudioProfile() != null );
+    }
+
+    boolean isLeAudioEnabled(){
+        return mIsLeAudioEnabled;
     }
 }

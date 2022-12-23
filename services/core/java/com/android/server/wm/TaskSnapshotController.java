@@ -58,6 +58,7 @@ import android.view.ThreadedRenderer;
 import android.view.WindowInsets.Type;
 import android.view.WindowInsetsController.Appearance;
 import android.view.WindowManager.LayoutParams;
+import android.window.ScreenCapture;
 import android.window.TaskSnapshot;
 
 import com.android.internal.R;
@@ -389,11 +390,11 @@ class TaskSnapshotController {
     }
 
     @Nullable
-    SurfaceControl.ScreenshotHardwareBuffer createTaskSnapshot(@NonNull Task task,
+    ScreenCapture.ScreenshotHardwareBuffer createTaskSnapshot(@NonNull Task task,
             TaskSnapshot.Builder builder) {
         Point taskSize = new Point();
         Trace.traceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "createTaskSnapshot");
-        final SurfaceControl.ScreenshotHardwareBuffer taskSnapshot = createTaskSnapshot(task,
+        final ScreenCapture.ScreenshotHardwareBuffer taskSnapshot = createTaskSnapshot(task,
                 mHighResTaskSnapshotScale, builder.getPixelFormat(), taskSize, builder);
         Trace.traceEnd(Trace.TRACE_TAG_WINDOW_MANAGER);
         builder.setTaskSize(taskSize);
@@ -401,7 +402,7 @@ class TaskSnapshotController {
     }
 
     @Nullable
-    private SurfaceControl.ScreenshotHardwareBuffer createImeSnapshot(@NonNull Task task,
+    private ScreenCapture.ScreenshotHardwareBuffer createImeSnapshot(@NonNull Task task,
             int pixelFormat) {
         if (task.getSurfaceControl() == null) {
             if (DEBUG_SCREENSHOT) {
@@ -410,11 +411,11 @@ class TaskSnapshotController {
             return null;
         }
         final WindowState imeWindow = task.getDisplayContent().mInputMethodWindow;
-        SurfaceControl.ScreenshotHardwareBuffer imeBuffer = null;
+        ScreenCapture.ScreenshotHardwareBuffer imeBuffer = null;
         if (imeWindow != null && imeWindow.isWinVisibleLw()) {
             final Rect bounds = imeWindow.getParentFrame();
             bounds.offsetTo(0, 0);
-            imeBuffer = SurfaceControl.captureLayersExcluding(imeWindow.getSurfaceControl(),
+            imeBuffer = ScreenCapture.captureLayersExcluding(imeWindow.getSurfaceControl(),
                     bounds, 1.0f, pixelFormat, null);
         }
         return imeBuffer;
@@ -425,7 +426,7 @@ class TaskSnapshotController {
      * task to keep IME visibility while app transitioning.
      */
     @Nullable
-    SurfaceControl.ScreenshotHardwareBuffer snapshotImeFromAttachedTask(@NonNull Task task) {
+    ScreenCapture.ScreenshotHardwareBuffer snapshotImeFromAttachedTask(@NonNull Task task) {
         // Check if the IME targets task ready to take the corresponding IME snapshot, if not,
         // means the task is not yet visible for some reasons and no need to snapshot IME surface.
         if (checkIfReadyToSnapshot(task) == null) {
@@ -438,7 +439,7 @@ class TaskSnapshotController {
     }
 
     @Nullable
-    SurfaceControl.ScreenshotHardwareBuffer createTaskSnapshot(@NonNull Task task,
+    ScreenCapture.ScreenshotHardwareBuffer createTaskSnapshot(@NonNull Task task,
             float scaleFraction, int pixelFormat, Point outTaskSize, TaskSnapshot.Builder builder) {
         if (task.getSurfaceControl() == null) {
             if (DEBUG_SCREENSHOT) {
@@ -473,8 +474,8 @@ class TaskSnapshotController {
         }
         builder.setHasImeSurface(!excludeIme && imeWindow != null && imeWindow.isVisible());
 
-        final SurfaceControl.ScreenshotHardwareBuffer screenshotBuffer =
-                SurfaceControl.captureLayersExcluding(
+        final ScreenCapture.ScreenshotHardwareBuffer screenshotBuffer =
+                ScreenCapture.captureLayersExcluding(
                         task.getSurfaceControl(), mTmpRect, scaleFraction,
                         pixelFormat, excludeLayers);
         if (outTaskSize != null) {
@@ -508,7 +509,7 @@ class TaskSnapshotController {
             return null;
         }
 
-        final SurfaceControl.ScreenshotHardwareBuffer screenshotBuffer =
+        final ScreenCapture.ScreenshotHardwareBuffer screenshotBuffer =
                 createTaskSnapshot(task, builder);
 
         if (screenshotBuffer == null) {
@@ -586,7 +587,7 @@ class TaskSnapshotController {
         final Rect systemBarInsets = getSystemBarInsets(mainWindow.getFrame(), insetsState);
         final SystemBarBackgroundPainter decorPainter = new SystemBarBackgroundPainter(attrs.flags,
                 attrs.privateFlags, attrs.insetsFlags.appearance, task.getTaskDescription(),
-                mHighResTaskSnapshotScale, insetsState);
+                mHighResTaskSnapshotScale, mainWindow.getRequestedVisibleTypes());
         final int taskWidth = taskBounds.width();
         final int taskHeight = taskBounds.height();
         final int width = (int) (taskWidth * mHighResTaskSnapshotScale);
@@ -749,12 +750,12 @@ class TaskSnapshotController {
         private final int mWindowFlags;
         private final int mWindowPrivateFlags;
         private final float mScale;
-        private final InsetsState mInsetsState;
+        private final @Type.InsetsType int mRequestedVisibleTypes;
         private final Rect mSystemBarInsets = new Rect();
 
         SystemBarBackgroundPainter(int windowFlags, int windowPrivateFlags, int appearance,
                 ActivityManager.TaskDescription taskDescription, float scale,
-                InsetsState insetsState) {
+                @Type.InsetsType int requestedVisibleTypes) {
             mWindowFlags = windowFlags;
             mWindowPrivateFlags = windowPrivateFlags;
             mScale = scale;
@@ -773,7 +774,7 @@ class TaskSnapshotController {
                             && context.getResources().getBoolean(R.bool.config_navBarNeedsScrim));
             mStatusBarPaint.setColor(mStatusBarColor);
             mNavigationBarPaint.setColor(mNavigationBarColor);
-            mInsetsState = insetsState;
+            mRequestedVisibleTypes = requestedVisibleTypes;
         }
 
         void setInsets(Rect systemBarInsets) {
@@ -784,7 +785,7 @@ class TaskSnapshotController {
             final boolean forceBarBackground =
                     (mWindowPrivateFlags & PRIVATE_FLAG_FORCE_DRAW_BAR_BACKGROUNDS) != 0;
             if (STATUS_BAR_COLOR_VIEW_ATTRIBUTES.isVisible(
-                    mInsetsState, mStatusBarColor, mWindowFlags, forceBarBackground)) {
+                    mRequestedVisibleTypes, mStatusBarColor, mWindowFlags, forceBarBackground)) {
                 return (int) (mSystemBarInsets.top * mScale);
             } else {
                 return 0;
@@ -795,7 +796,7 @@ class TaskSnapshotController {
             final boolean forceBarBackground =
                     (mWindowPrivateFlags & PRIVATE_FLAG_FORCE_DRAW_BAR_BACKGROUNDS) != 0;
             return NAVIGATION_BAR_COLOR_VIEW_ATTRIBUTES.isVisible(
-                    mInsetsState, mNavigationBarColor, mWindowFlags, forceBarBackground);
+                    mRequestedVisibleTypes, mNavigationBarColor, mWindowFlags, forceBarBackground);
         }
 
         void drawDecors(Canvas c) {

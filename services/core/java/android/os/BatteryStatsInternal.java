@@ -16,9 +16,14 @@
 
 package android.os;
 
+import android.annotation.IntDef;
+import android.annotation.NonNull;
+
 import com.android.internal.os.BinderCallsStats;
 import com.android.server.power.stats.SystemServerCpuThreadReader.SystemServiceCpuThreadTimes;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.Collection;
 import java.util.List;
 
@@ -29,6 +34,19 @@ import java.util.List;
  * @hide Only for use within Android OS.
  */
 public abstract class BatteryStatsInternal {
+
+    public static final int CPU_WAKEUP_SUBSYSTEM_UNKNOWN = -1;
+    public static final int CPU_WAKEUP_SUBSYSTEM_ALARM = 1;
+
+    /** @hide */
+    @IntDef(prefix = {"CPU_WAKEUP_SUBSYSTEM_"}, value = {
+            CPU_WAKEUP_SUBSYSTEM_UNKNOWN,
+            CPU_WAKEUP_SUBSYSTEM_ALARM,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    @interface CpuWakeupSubsystem {
+    }
+
     /**
      * Returns the wifi interfaces.
      */
@@ -56,9 +74,10 @@ public abstract class BatteryStatsInternal {
     /**
      * Inform battery stats how many deferred jobs existed when the app got launched and how
      * long ago was the last job execution for the app.
-     * @param uid the uid of the app.
+     *
+     * @param uid         the uid of the app.
      * @param numDeferred number of deferred jobs.
-     * @param sinceLast how long in millis has it been since a job was run
+     * @param sinceLast   how long in millis has it been since a job was run
      */
     public abstract void noteJobsDeferred(int uid, int numDeferred, long sinceLast);
 
@@ -72,4 +91,11 @@ public abstract class BatteryStatsInternal {
      * Informs battery stats of native thread IDs of threads taking incoming binder calls.
      */
     public abstract void noteBinderThreadNativeIds(int[] binderThreadNativeTids);
+
+    /**
+     * Reports any activity that could potentially have caused the CPU to wake up.
+     * Accepts a timestamp to allow the reporter to report it before or after the event.
+     */
+    public abstract void noteCpuWakingActivity(@CpuWakeupSubsystem int subsystem,
+            long elapsedMillis, @NonNull int... uids);
 }

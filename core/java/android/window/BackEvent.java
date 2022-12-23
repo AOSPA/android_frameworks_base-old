@@ -62,8 +62,8 @@ public class BackEvent implements Parcelable {
      * @param touchY Absolute Y location of the touch point of this event.
      * @param progress Value between 0 and 1 on how far along the back gesture is.
      * @param swipeEdge Indicates which edge the swipe starts from.
-     * @param departingAnimationTarget The remote animation target of the departing application
-     *                                 window.
+     * @param departingAnimationTarget The remote animation target of the departing
+     *                                 application window.
      */
     public BackEvent(float touchX, float touchY, float progress, @SwipeEdge int swipeEdge,
             @Nullable RemoteAnimationTarget departingAnimationTarget) {
@@ -153,7 +153,6 @@ public class BackEvent implements Parcelable {
                 + ", mTouchY=" + mTouchY
                 + ", mProgress=" + mProgress
                 + ", mSwipeEdge" + mSwipeEdge
-                + ", mDepartingAnimationTarget" + mDepartingAnimationTarget
                 + "}";
     }
 }

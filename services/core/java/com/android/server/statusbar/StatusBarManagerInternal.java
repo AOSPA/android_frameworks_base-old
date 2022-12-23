@@ -18,12 +18,11 @@ package com.android.server.statusbar;
 
 import android.annotation.Nullable;
 import android.app.ITransientNotificationCallback;
-import android.hardware.fingerprint.IUdfpsHbmListener;
+import android.hardware.fingerprint.IUdfpsRefreshRateRequestCallback;
 import android.os.Bundle;
 import android.os.IBinder;
-import android.os.ParcelFileDescriptor;
 import android.view.InsetsState.InternalInsetsType;
-import android.view.InsetsVisibilities;
+import android.view.WindowInsets.Type.InsetsType;
 import android.view.WindowInsetsController.Appearance;
 import android.view.WindowInsetsController.Behavior;
 
@@ -49,6 +48,31 @@ public interface StatusBarManagerInternal {
 
     void dismissKeyboardShortcutsMenu();
     void toggleKeyboardShortcutsMenu(int deviceId);
+
+    /**
+     * Used by InputMethodManagerService to notify the IME status.
+     *
+     * @param displayId The display to which the IME is bound to.
+     * @param token The IME token.
+     * @param vis Bit flags about the IME visibility.
+     *            (e.g. {@link android.inputmethodservice.InputMethodService#IME_ACTIVE})
+     * @param backDisposition Bit flags about the IME back disposition.
+     *         (e.g. {@link android.inputmethodservice.InputMethodService#BACK_DISPOSITION_DEFAULT})
+     * @param showImeSwitcher {@code true} when the IME switcher button should be shown.
+     */
+    void setImeWindowStatus(int displayId, IBinder token, int vis,
+            int backDisposition, boolean showImeSwitcher);
+
+    /**
+     * See {@link android.app.StatusBarManager#setIcon(String, int, int, String)}.
+     */
+    void setIcon(String slot, String iconPackage, int iconId, int iconLevel,
+            String contentDescription);
+
+    /**
+     * See {@link android.app.StatusBarManager#setIconVisibility(String, boolean)}.
+     */
+    void setIconVisibility(String slot, boolean visibility);
 
     void showChargingAnimation(int batteryLevel);
 
@@ -134,7 +158,7 @@ public interface StatusBarManagerInternal {
     /** @see com.android.internal.statusbar.IStatusBar#onSystemBarAttributesChanged */
     void onSystemBarAttributesChanged(int displayId, @Appearance int appearance,
             AppearanceRegion[] appearanceRegions, boolean navbarColorManagedByIme,
-            @Behavior int behavior, InsetsVisibilities requestedVisibilities, String packageName,
+            @Behavior int behavior, @InsetsType int requestedVisibleTypes, String packageName,
             LetterboxDetails[] letterboxDetails);
 
     /** @see com.android.internal.statusbar.IStatusBar#showTransient */
@@ -162,20 +186,16 @@ public interface StatusBarManagerInternal {
     boolean requestWindowMagnificationConnection(boolean request);
 
     /**
-     * Handles a logging command from the WM shell command.
-     */
-    void handleWindowManagerLoggingCommand(String[] args, ParcelFileDescriptor outFd);
-
-    /**
      * @see com.android.internal.statusbar.IStatusBar#setNavigationBarLumaSamplingEnabled(int,
      * boolean)
      */
     void setNavigationBarLumaSamplingEnabled(int displayId, boolean enable);
 
     /**
-     * Sets the system-wide listener for UDFPS HBM status changes.
+     * Sets the system-wide callback for UDFPS refresh rate changes.
      *
-     * @see com.android.internal.statusbar.IStatusBar#setUdfpsHbmListener(IUdfpsHbmListener)
+     * @see com.android.internal.statusbar.IStatusBar#setUdfpsRefreshRateCallback
+     * (IUdfpsRefreshRateRequestCallback)
      */
-    void setUdfpsHbmListener(IUdfpsHbmListener listener);
+    void setUdfpsRefreshRateCallback(IUdfpsRefreshRateRequestCallback callback);
 }

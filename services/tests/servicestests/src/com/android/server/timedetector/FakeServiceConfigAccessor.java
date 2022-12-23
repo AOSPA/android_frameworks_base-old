@@ -25,25 +25,25 @@ import android.app.time.TimeCapabilities;
 import android.app.time.TimeCapabilitiesAndConfig;
 import android.app.time.TimeConfiguration;
 
-import com.android.server.timezonedetector.ConfigurationChangeListener;
+import com.android.server.timezonedetector.StateChangeListener;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /** A partially implemented, fake implementation of ServiceConfigAccessor for tests. */
-class FakeServiceConfigAccessor implements ServiceConfigAccessor {
+public class FakeServiceConfigAccessor implements ServiceConfigAccessor {
 
-    private final List<ConfigurationChangeListener> mConfigurationInternalChangeListeners =
+    private final List<StateChangeListener> mConfigurationInternalChangeListeners =
             new ArrayList<>();
     private ConfigurationInternal mConfigurationInternal;
 
     @Override
-    public void addConfigurationInternalChangeListener(ConfigurationChangeListener listener) {
+    public void addConfigurationInternalChangeListener(StateChangeListener listener) {
         mConfigurationInternalChangeListeners.add(listener);
     }
 
     @Override
-    public void removeConfigurationInternalChangeListener(ConfigurationChangeListener listener) {
+    public void removeConfigurationInternalChangeListener(StateChangeListener listener) {
         mConfigurationInternalChangeListeners.remove(listener);
     }
 
@@ -54,7 +54,8 @@ class FakeServiceConfigAccessor implements ServiceConfigAccessor {
 
     @Override
     public boolean updateConfiguration(
-            @UserIdInt int userID, @NonNull TimeConfiguration requestedChanges) {
+            @UserIdInt int userID, @NonNull TimeConfiguration requestedChanges,
+            boolean bypassUserPolicyChecks) {
         assertNotNull(mConfigurationInternal);
         assertNotNull(requestedChanges);
 
@@ -62,7 +63,7 @@ class FakeServiceConfigAccessor implements ServiceConfigAccessor {
         // old configuration merged with the new if the user has the capability to up the settings.
         // Then, if the configuration changed, the change listener is invoked.
         TimeCapabilitiesAndConfig capabilitiesAndConfig =
-                mConfigurationInternal.capabilitiesAndConfig();
+                mConfigurationInternal.createCapabilitiesAndConfig(bypassUserPolicyChecks);
         TimeCapabilities capabilities = capabilitiesAndConfig.getCapabilities();
         TimeConfiguration configuration = capabilitiesAndConfig.getConfiguration();
         TimeConfiguration newConfiguration =
@@ -85,7 +86,7 @@ class FakeServiceConfigAccessor implements ServiceConfigAccessor {
     }
 
     void simulateConfigurationChangeForTests() {
-        for (ConfigurationChangeListener listener : mConfigurationInternalChangeListeners) {
+        for (StateChangeListener listener : mConfigurationInternalChangeListeners) {
             listener.onChange();
         }
     }

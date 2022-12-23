@@ -26,6 +26,7 @@ import android.view.ViewGroup;
 
 import com.android.systemui.R;
 import com.android.systemui.animation.ActivityLaunchAnimator;
+import com.android.systemui.animation.Expandable;
 import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.flags.Flags;
 import com.android.systemui.plugins.ActivityStarter;
@@ -33,6 +34,7 @@ import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.qs.FooterActionsView;
 import com.android.systemui.qs.dagger.QSScope;
 import com.android.systemui.qs.user.UserSwitchDialogController;
+import com.android.systemui.statusbar.policy.BaseUserSwitcherAdapter;
 import com.android.systemui.statusbar.policy.UserSwitcherController;
 import com.android.systemui.user.UserSwitcherActivity;
 import com.android.systemui.util.ViewController;
@@ -49,7 +51,7 @@ public class MultiUserSwitchController extends ViewController<MultiUserSwitch> {
     private final ActivityStarter mActivityStarter;
     private final FeatureFlags mFeatureFlags;
 
-    private UserSwitcherController.BaseUserAdapter mUserListener;
+    private BaseUserSwitcherAdapter mUserListener;
 
     private final View.OnClickListener mOnClickListener = new View.OnClickListener() {
         @Override
@@ -66,7 +68,7 @@ public class MultiUserSwitchController extends ViewController<MultiUserSwitch> {
                         ActivityLaunchAnimator.Controller.fromView(v, null),
                         true /* showOverlockscreenwhenlocked */, UserHandle.SYSTEM);
             } else {
-                mUserSwitchDialogController.showDialog(v);
+                mUserSwitchDialogController.showDialog(v.getContext(), Expandable.fromView(v));
             }
         }
     };
@@ -135,7 +137,7 @@ public class MultiUserSwitchController extends ViewController<MultiUserSwitch> {
 
             final UserSwitcherController controller = mUserSwitcherController;
             if (controller != null) {
-                mUserListener = new UserSwitcherController.BaseUserAdapter(controller) {
+                mUserListener = new BaseUserSwitcherAdapter(controller) {
                     @Override
                     public void notifyDataSetChanged() {
                         mView.refreshContentDescription(getCurrentUser());

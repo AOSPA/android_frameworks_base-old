@@ -54,6 +54,7 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.ConnectivityManager;
+import android.net.NetworkCapabilities;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Binder;
@@ -3006,7 +3007,11 @@ public class TelephonyManager {
     public static final int NETWORK_TYPE_HSUPA = TelephonyProtoEnums.NETWORK_TYPE_HSUPA; // = 9.
     /** Current network is HSPA */
     public static final int NETWORK_TYPE_HSPA = TelephonyProtoEnums.NETWORK_TYPE_HSPA; // = 10.
-    /** Current network is iDen */
+    /**
+     * Current network is iDen
+     * @deprecated Legacy network type no longer being used.
+     */
+    @Deprecated
     public static final int NETWORK_TYPE_IDEN = TelephonyProtoEnums.NETWORK_TYPE_IDEN; // = 11.
     /** Current network is EVDO revision B*/
     public static final int NETWORK_TYPE_EVDO_B = TelephonyProtoEnums.NETWORK_TYPE_EVDO_B; // = 12.
@@ -3354,15 +3359,14 @@ public class TelephonyManager {
             case NETWORK_TYPE_TD_SCDMA:
                 return NETWORK_TYPE_BITMASK_TD_SCDMA;
             case NETWORK_TYPE_LTE:
-                return NETWORK_TYPE_BITMASK_LTE;
             case NETWORK_TYPE_LTE_CA:
-                return NETWORK_TYPE_BITMASK_LTE_CA;
+                return NETWORK_TYPE_BITMASK_LTE;
             case NETWORK_TYPE_NR:
                 return NETWORK_TYPE_BITMASK_NR;
             case NETWORK_TYPE_IWLAN:
                 return NETWORK_TYPE_BITMASK_IWLAN;
             case NETWORK_TYPE_IDEN:
-                return (1 << (NETWORK_TYPE_IDEN - 1));
+                return NETWORK_TYPE_BITMASK_IDEN;
             default:
                 return NETWORK_TYPE_BITMASK_UNKNOWN;
         }
@@ -6928,11 +6932,11 @@ public class TelephonyManager {
      *
      * @hide
      */
-    public void setCellInfoListRate(int rateInMillis) {
+    public void setCellInfoListRate(int rateInMillis, int subId) {
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null)
-                telephony.setCellInfoListRate(rateInMillis);
+                telephony.setCellInfoListRate(rateInMillis, subId);
         } catch (RemoteException ex) {
         } catch (NullPointerException ex) {
         }
@@ -9148,7 +9152,8 @@ public class TelephonyManager {
      * <p>Requires Permission:
      * {@link android.Manifest.permission#MODIFY_PHONE_STATE MODIFY_PHONE_STATE} or that the calling
      * app has carrier privileges (see {@link #hasCarrierPrivileges})
-     * and {@link android.Manifest.permission#ACCESS_FINE_LOCATION}.
+     * and {@link android.Manifest.permission#ACCESS_FINE_LOCATION} if includeLocationData is
+     * set to {@link #INCLUDE_LOCATION_DATA_FINE}.
      *
      * If the system-wide location switch is off, apps may still call this API, with the
      * following constraints:
@@ -9162,7 +9167,10 @@ public class TelephonyManager {
      * </ol>
      *
      * @param includeLocationData Specifies if the caller would like to receive
-     * location related information.
+     * location related information. If this parameter is set to
+     * {@link #INCLUDE_LOCATION_DATA_FINE} then the application will be checked for
+     * {@link android.Manifest.permission#ACCESS_FINE_LOCATION} permission and available
+     * location related information received during network scan will be sent to the caller.
      * @param request Contains all the RAT with bands/channels that need to be scanned.
      * @param executor The executor through which the callback should be invoked. Since the scan
      *        request may trigger multiple callbacks and they must be invoked in the same order as
@@ -9173,8 +9181,7 @@ public class TelephonyManager {
      */
     @SuppressAutoDoc // Blocked by b/72967236 - no support for carrier privileges
     @RequiresPermission(allOf = {
-            android.Manifest.permission.MODIFY_PHONE_STATE,
-            Manifest.permission.ACCESS_FINE_LOCATION
+            android.Manifest.permission.MODIFY_PHONE_STATE
     })
     public @Nullable NetworkScan requestNetworkScan(
             @IncludeLocationData int includeLocationData,
@@ -9508,7 +9515,8 @@ public class TelephonyManager {
             ALLOWED_NETWORK_TYPES_REASON_USER,
             ALLOWED_NETWORK_TYPES_REASON_POWER,
             ALLOWED_NETWORK_TYPES_REASON_CARRIER,
-            ALLOWED_NETWORK_TYPES_REASON_ENABLE_2G
+            ALLOWED_NETWORK_TYPES_REASON_ENABLE_2G,
+            ALLOWED_NETWORK_TYPES_REASON_USER_RESTRICTIONS,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface AllowedNetworkTypesReason {
@@ -9545,6 +9553,15 @@ public class TelephonyManager {
      */
     @SystemApi
     public static final int ALLOWED_NETWORK_TYPES_REASON_ENABLE_2G = 3;
+
+    /**
+     * To indicate allowed network type change is requested by an update to the
+     * {@link android.os.UserManager.DISALLOW_CELLULAR_2G} user restriction.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int ALLOWED_NETWORK_TYPES_REASON_USER_RESTRICTIONS = 4;
 
     /**
      * Set the allowed network types of the device and provide the reason triggering the allowed
@@ -9638,6 +9655,7 @@ public class TelephonyManager {
             case TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_POWER:
             case TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_CARRIER:
             case TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_ENABLE_2G:
+            case ALLOWED_NETWORK_TYPES_REASON_USER_RESTRICTIONS:
                 return true;
         }
         return false;
@@ -13942,7 +13960,8 @@ public class TelephonyManager {
                     NETWORK_TYPE_BITMASK_LTE,
                     NETWORK_TYPE_BITMASK_LTE_CA,
                     NETWORK_TYPE_BITMASK_NR,
-                    NETWORK_TYPE_BITMASK_IWLAN
+                    NETWORK_TYPE_BITMASK_IWLAN,
+                    NETWORK_TYPE_BITMASK_IDEN
             })
     public @interface NetworkTypeBitMask {}
 
@@ -14002,6 +14021,11 @@ public class TelephonyManager {
      */
     public static final long NETWORK_TYPE_BITMASK_HSPA = (1 << (NETWORK_TYPE_HSPA -1));
     /**
+     * network type bitmask indicating the support of radio tech iDen.
+     * @hide
+     */
+    public static final long NETWORK_TYPE_BITMASK_IDEN = (1 << (NETWORK_TYPE_IDEN - 1));
+    /**
      * network type bitmask indicating the support of radio tech HSPAP.
      */
     public static final long NETWORK_TYPE_BITMASK_HSPAP = (1 << (NETWORK_TYPE_HSPAP -1));
@@ -14019,12 +14043,13 @@ public class TelephonyManager {
      */
     public static final long NETWORK_TYPE_BITMASK_LTE = (1 << (NETWORK_TYPE_LTE -1));
     /**
-     * NOT USED; this bitmask is exposed accidentally, will be deprecated in U.
+     * NOT USED; this bitmask is exposed accidentally.
      * If used, will be converted to {@link #NETWORK_TYPE_BITMASK_LTE}.
      * network type bitmask indicating the support of radio tech LTE CA (carrier aggregation).
      *
-     * @see #NETWORK_TYPE_BITMASK_LTE
+     * @deprecated Please use {@link #NETWORK_TYPE_BITMASK_LTE} instead.
      */
+    @Deprecated
     public static final long NETWORK_TYPE_BITMASK_LTE_CA = (1 << (NETWORK_TYPE_LTE_CA -1));
 
     /**
@@ -15658,11 +15683,29 @@ public class TelephonyManager {
     public static final int MOBILE_DATA_POLICY_MMS_ALWAYS_ALLOWED = 2;
 
     /**
+     * Allow switching mobile data to the non-default SIM if the non-default SIM has better
+     * availability.
+     *
+     * This is used for temporarily allowing data on the non-default data SIM when on-default SIM
+     * has better availability on DSDS devices, where better availability means strong
+     * signal/connectivity.
+     * If this policy is enabled, data will be temporarily enabled on the non-default data SIM,
+     * including during any voice calls(equivalent to enabling
+     * {@link #MOBILE_DATA_POLICY_DATA_ON_NON_DEFAULT_DURING_VOICE_CALL}).
+     *
+     * This policy can be enabled and disabled via {@link #setMobileDataPolicyEnabled}.
+     * @hide
+     */
+    @SystemApi
+    public static final int MOBILE_DATA_POLICY_AUTO_DATA_SWITCH = 3;
+
+    /**
      * @hide
      */
     @IntDef(prefix = { "MOBILE_DATA_POLICY_" }, value = {
             MOBILE_DATA_POLICY_DATA_ON_NON_DEFAULT_DURING_VOICE_CALL,
             MOBILE_DATA_POLICY_MMS_ALWAYS_ALLOWED,
+            MOBILE_DATA_POLICY_AUTO_DATA_SWITCH,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface MobileDataPolicy { }
@@ -17143,6 +17186,310 @@ public class TelephonyManager {
             });
         } catch (RemoteException ex) {
             ex.rethrowAsRuntimeException();
+        }
+    }
+
+    /**
+     * A premium capability that boosts the network to allow for real-time interactive traffic
+     * by prioritizing low latency communication.
+     * Corresponds to {@link NetworkCapabilities#NET_CAPABILITY_PRIORITIZE_LATENCY}.
+     */
+    public static final int PREMIUM_CAPABILITY_PRIORITIZE_LATENCY =
+            NetworkCapabilities.NET_CAPABILITY_PRIORITIZE_LATENCY;
+
+    /**
+     * Purchasable premium capabilities.
+     * @hide
+     */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(prefix = { "PREMIUM_CAPABILITY_" }, value = {
+            PREMIUM_CAPABILITY_PRIORITIZE_LATENCY})
+    public @interface PremiumCapability {}
+
+    /**
+     * Returns the premium capability {@link PremiumCapability} as a String.
+     *
+     * @param capability The premium capability.
+     * @return The premium capability as a String.
+     * @hide
+     */
+    public static String convertPremiumCapabilityToString(@PremiumCapability int capability) {
+        switch (capability) {
+            case PREMIUM_CAPABILITY_PRIORITIZE_LATENCY:
+                return "PRIORITIZE_LATENCY";
+            default:
+                return "UNKNOWN (" + capability + ")";
+        }
+    }
+
+    /**
+     * Check whether the given premium capability is available for purchase from the carrier.
+     * If this is {@code true}, the capability can be purchased from the carrier using
+     * {@link #purchasePremiumCapability(int, Executor, Consumer)}.
+     *
+     * @param capability The premium capability to check.
+     * @return Whether the given premium capability is available to purchase.
+     * @throws SecurityException if the caller does not hold permission READ_BASIC_PHONE_STATE.
+     */
+    @RequiresPermission(android.Manifest.permission.READ_BASIC_PHONE_STATE)
+    public boolean isPremiumCapabilityAvailableForPurchase(@PremiumCapability int capability) {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony == null) {
+                throw new IllegalStateException("telephony service is null.");
+            }
+            return telephony.isPremiumCapabilityAvailableForPurchase(capability, getSubId());
+        } catch (RemoteException ex) {
+            ex.rethrowAsRuntimeException();
+        }
+        return false;
+    }
+
+    /**
+     * Purchase premium capability request was successful.
+     * Once the purchase result is successful, the network must set up a slicing configuration
+     * for the purchased premium capability within the timeout specified by
+     * {@link CarrierConfigManager#KEY_PREMIUM_CAPABILITY_NETWORK_SETUP_TIME_MILLIS_LONG}.
+     * During the setup time, subsequent attempts will return
+     * {@link #PURCHASE_PREMIUM_CAPABILITY_RESULT_PENDING_NETWORK_SETUP}.
+     * After setup is complete, subsequent attempts will return
+     * {@link #PURCHASE_PREMIUM_CAPABILITY_RESULT_ALREADY_PURCHASED} until the booster expires.
+     * The expiry time is determined by the type or duration of boost purchased from the carrier,
+     * provided at {@link CarrierConfigManager#KEY_PREMIUM_CAPABILITY_PURCHASE_URL_STRING}.
+     */
+    public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_SUCCESS = 1;
+
+    /**
+     * Purchase premium capability failed because the request is throttled.
+     * If purchasing premium capabilities is throttled, it will be for the amount of time
+     * specified by {@link CarrierConfigManager
+     * #KEY_PREMIUM_CAPABILITY_PURCHASE_CONDITION_BACKOFF_HYSTERESIS_TIME_MILLIS_LONG}.
+     * If displaying the network boost notification is throttled, it will be for the amount of time
+     * specified by {@link CarrierConfigManager
+     * #KEY_PREMIUM_CAPABILITY_NOTIFICATION_BACKOFF_HYSTERESIS_TIME_MILLIS_LONG}.
+     * If a foreground application requests premium capabilities, the network boost notification
+     * will be displayed to the user regardless of the throttled status.
+     * We will show the network boost notification to the user up to the daily and monthly maximum
+     * number of times specified by
+     * {@link CarrierConfigManager#KEY_PREMIUM_CAPABILITY_MAXIMUM_DAILY_NOTIFICATION_COUNT_INT} and
+     * {@link CarrierConfigManager#KEY_PREMIUM_CAPABILITY_MAXIMUM_MONTHLY_NOTIFICATION_COUNT_INT}.
+     * Subsequent attempts will return the same error until the request is no longer throttled
+     * or throttling conditions change.
+     */
+    public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_THROTTLED = 2;
+
+    /**
+     * Purchase premium capability failed because it is already purchased and available.
+     * Subsequent attempts will return the same error until the booster expires.
+     */
+    public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_ALREADY_PURCHASED = 3;
+
+    /**
+     * Purchase premium capability failed because a request was already made and is in progress.
+     * This may have been requested by either the same app or another app.
+     * Subsequent attempts will return the same error until the previous request completes.
+     */
+    public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_ALREADY_IN_PROGRESS = 4;
+
+    /**
+     * Purchase premium capability failed because a foreground application requested the same
+     * capability. The notification for the current application will be dismissed and a new
+     * notification will be displayed to the user for the foreground application.
+     * Subsequent attempts will return
+     * {@link #PURCHASE_PREMIUM_CAPABILITY_RESULT_ALREADY_IN_PROGRESS} until the foreground
+     * application's request is completed.
+     */
+    public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_OVERRIDDEN = 5;
+
+    /**
+     * Purchase premium capability failed because the user canceled the operation.
+     * Subsequent attempts will be throttled for the amount of time specified by
+     * {@link CarrierConfigManager
+     * #KEY_PREMIUM_CAPABILITY_NOTIFICATION_BACKOFF_HYSTERESIS_TIME_MILLIS_LONG}
+     * and return {@link #PURCHASE_PREMIUM_CAPABILITY_RESULT_THROTTLED}.
+     */
+    public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_USER_CANCELED = 6;
+
+    /**
+     * Purchase premium capability failed because the carrier disabled or does not support
+     * the capability, as specified in
+     * {@link CarrierConfigManager#KEY_SUPPORTED_PREMIUM_CAPABILITIES_INT_ARRAY}.
+     * Subsequent attempts will return the same error until the carrier enables the feature.
+     */
+    public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_CARRIER_DISABLED = 7;
+
+    /**
+     * Purchase premium capability failed because the carrier app did not indicate success.
+     * Subsequent attempts will be throttled for the amount of time specified by
+     * {@link CarrierConfigManager
+     * #KEY_PREMIUM_CAPABILITY_PURCHASE_CONDITION_BACKOFF_HYSTERESIS_TIME_MILLIS_LONG}
+     * and return {@link #PURCHASE_PREMIUM_CAPABILITY_RESULT_THROTTLED}.
+     */
+    public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_CARRIER_ERROR = 8;
+
+    /**
+     * Purchase premium capability failed because we did not receive a response from the user
+     * for the booster notification within the time specified by
+     * {@link CarrierConfigManager#KEY_PREMIUM_CAPABILITY_NOTIFICATION_DISPLAY_TIMEOUT_MILLIS_LONG}.
+     * The booster notification will be automatically dismissed and subsequent attempts will be
+     * throttled for the amount of time specified by
+     * {@link CarrierConfigManager
+     * #KEY_PREMIUM_CAPABILITY_NOTIFICATION_BACKOFF_HYSTERESIS_TIME_MILLIS_LONG}
+     * and return {@link #PURCHASE_PREMIUM_CAPABILITY_RESULT_THROTTLED}.
+     */
+    public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_TIMEOUT = 9;
+
+    /**
+     * Purchase premium capability failed because the device does not support the feature.
+     * Subsequent attempts will return the same error.
+     */
+    public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_FEATURE_NOT_SUPPORTED = 10;
+
+    /**
+     * Purchase premium capability failed because the telephony service is unavailable
+     * or there was an error in the phone process.
+     * Subsequent attempts will return the same error until request conditions are satisfied.
+     */
+    public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_REQUEST_FAILED = 11;
+
+    /**
+     * Purchase premium capability failed because the network is not available.
+     * Subsequent attempts will return the same error until network conditions change.
+     */
+    public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_NETWORK_NOT_AVAILABLE = 12;
+
+    /**
+     * Purchase premium capability failed because the entitlement check failed.
+     * Subsequent attempts will be throttled for the amount of time specified by
+     * {@link CarrierConfigManager
+     * #KEY_PREMIUM_CAPABILITY_PURCHASE_CONDITION_BACKOFF_HYSTERESIS_TIME_MILLIS_LONG}
+     * and return {@link #PURCHASE_PREMIUM_CAPABILITY_RESULT_THROTTLED}.
+     * Throttling will be reevaluated when the network is no longer congested.
+     */
+    public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_ENTITLEMENT_CHECK_FAILED = 13;
+
+    /**
+     * Purchase premium capability failed because the request was not made on the default data
+     * subscription, indicated by {@link SubscriptionManager#getDefaultDataSubscriptionId()}.
+     * Subsequent attempts will return the same error until the request is made on the default
+     * data subscription.
+     */
+    public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_NOT_DEFAULT_DATA_SUB = 14;
+
+    /**
+     * Purchase premium capability was successful and is waiting for the network to setup the
+     * slicing configuration. If the setup is complete within the time specified by
+     * {@link CarrierConfigManager#KEY_PREMIUM_CAPABILITY_NETWORK_SETUP_TIME_MILLIS_LONG},
+     * subsequent requests will return {@link #PURCHASE_PREMIUM_CAPABILITY_RESULT_ALREADY_PURCHASED}
+     * until the purchase expires. If the setup is not complete within the time specified above,
+     * applications can request the premium capability again.
+     */
+    public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_PENDING_NETWORK_SETUP = 15;
+
+    /**
+     * Results of the purchase premium capability request.
+     * @hide
+     */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(prefix = { "PURCHASE_PREMIUM_CAPABILITY_RESULT_" }, value = {
+            PURCHASE_PREMIUM_CAPABILITY_RESULT_SUCCESS,
+            PURCHASE_PREMIUM_CAPABILITY_RESULT_THROTTLED,
+            PURCHASE_PREMIUM_CAPABILITY_RESULT_ALREADY_PURCHASED,
+            PURCHASE_PREMIUM_CAPABILITY_RESULT_ALREADY_IN_PROGRESS,
+            PURCHASE_PREMIUM_CAPABILITY_RESULT_OVERRIDDEN,
+            PURCHASE_PREMIUM_CAPABILITY_RESULT_USER_CANCELED,
+            PURCHASE_PREMIUM_CAPABILITY_RESULT_CARRIER_DISABLED,
+            PURCHASE_PREMIUM_CAPABILITY_RESULT_CARRIER_ERROR,
+            PURCHASE_PREMIUM_CAPABILITY_RESULT_TIMEOUT,
+            PURCHASE_PREMIUM_CAPABILITY_RESULT_FEATURE_NOT_SUPPORTED,
+            PURCHASE_PREMIUM_CAPABILITY_RESULT_NETWORK_NOT_AVAILABLE,
+            PURCHASE_PREMIUM_CAPABILITY_RESULT_ENTITLEMENT_CHECK_FAILED,
+            PURCHASE_PREMIUM_CAPABILITY_RESULT_NOT_DEFAULT_DATA_SUB,
+            PURCHASE_PREMIUM_CAPABILITY_RESULT_PENDING_NETWORK_SETUP})
+    public @interface PurchasePremiumCapabilityResult {}
+
+    /**
+     * Returns the purchase result {@link PurchasePremiumCapabilityResult} as a String.
+     *
+     * @param result The purchase premium capability result.
+     * @return The purchase result as a String.
+     * @hide
+     */
+    public static String convertPurchaseResultToString(
+            @PurchasePremiumCapabilityResult int result) {
+        switch (result) {
+            case PURCHASE_PREMIUM_CAPABILITY_RESULT_SUCCESS:
+                return "SUCCESS";
+            case PURCHASE_PREMIUM_CAPABILITY_RESULT_THROTTLED:
+                return "THROTTLED";
+            case PURCHASE_PREMIUM_CAPABILITY_RESULT_ALREADY_PURCHASED:
+                return "ALREADY_PURCHASED";
+            case PURCHASE_PREMIUM_CAPABILITY_RESULT_ALREADY_IN_PROGRESS:
+                return "ALREADY_IN_PROGRESS";
+            case PURCHASE_PREMIUM_CAPABILITY_RESULT_OVERRIDDEN:
+                return "OVERRIDDEN";
+            case PURCHASE_PREMIUM_CAPABILITY_RESULT_USER_CANCELED:
+                return "USER_CANCELED";
+            case PURCHASE_PREMIUM_CAPABILITY_RESULT_CARRIER_DISABLED:
+                return "CARRIER_DISABLED";
+            case PURCHASE_PREMIUM_CAPABILITY_RESULT_CARRIER_ERROR:
+                return "CARRIER_ERROR";
+            case PURCHASE_PREMIUM_CAPABILITY_RESULT_TIMEOUT:
+                return "TIMEOUT";
+            case PURCHASE_PREMIUM_CAPABILITY_RESULT_FEATURE_NOT_SUPPORTED:
+                return "FEATURE_NOT_SUPPORTED";
+            case PURCHASE_PREMIUM_CAPABILITY_RESULT_REQUEST_FAILED:
+                return "REQUEST_FAILED";
+            case PURCHASE_PREMIUM_CAPABILITY_RESULT_NETWORK_NOT_AVAILABLE:
+                return "NETWORK_NOT_AVAILABLE";
+            case PURCHASE_PREMIUM_CAPABILITY_RESULT_ENTITLEMENT_CHECK_FAILED:
+                return "ENTITLEMENT_CHECK_FAILED";
+            case PURCHASE_PREMIUM_CAPABILITY_RESULT_NOT_DEFAULT_DATA_SUB:
+                return "NOT_DEFAULT_DATA_SUB";
+            case PURCHASE_PREMIUM_CAPABILITY_RESULT_PENDING_NETWORK_SETUP:
+                return "PENDING_NETWORK_SETUP";
+            default:
+                return "UNKNOWN (" + result + ")";
+        }
+    }
+
+    /**
+     * Purchase the given premium capability from the carrier.
+     * This requires user action to purchase the boost from the carrier.
+     * If this returns {@link #PURCHASE_PREMIUM_CAPABILITY_RESULT_SUCCESS} or
+     * {@link #PURCHASE_PREMIUM_CAPABILITY_RESULT_ALREADY_PURCHASED}, applications can request
+     * the premium capability via {@link ConnectivityManager#requestNetwork}.
+     *
+     * @param capability The premium capability to purchase.
+     * @param executor The callback executor for the response.
+     * @param callback The result of the purchase request.
+     *                 One of {@link PurchasePremiumCapabilityResult}.
+     * @throws SecurityException if the caller does not hold permission READ_BASIC_PHONE_STATE.
+     * @see #isPremiumCapabilityAvailableForPurchase(int) to check whether the capability is valid.
+     */
+    @RequiresPermission(android.Manifest.permission.READ_BASIC_PHONE_STATE)
+    public void purchasePremiumCapability(@PremiumCapability int capability,
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull @PurchasePremiumCapabilityResult Consumer<Integer> callback) {
+        Objects.requireNonNull(executor);
+        Objects.requireNonNull(callback);
+
+        IIntegerConsumer internalCallback = new IIntegerConsumer.Stub() {
+            @Override
+            public void accept(int result) {
+                executor.execute(() -> callback.accept(result));
+            }
+        };
+
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony == null) {
+                callback.accept(PURCHASE_PREMIUM_CAPABILITY_RESULT_REQUEST_FAILED);
+                return;
+            }
+            telephony.purchasePremiumCapability(capability, internalCallback, getSubId());
+        } catch (RemoteException ex) {
+            callback.accept(PURCHASE_PREMIUM_CAPABILITY_RESULT_REQUEST_FAILED);
         }
     }
 

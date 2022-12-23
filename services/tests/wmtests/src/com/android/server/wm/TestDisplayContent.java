@@ -18,13 +18,6 @@ package com.android.server.wm;
 
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.view.DisplayAdjustments.DEFAULT_DISPLAY_ADJUSTMENTS;
-import static android.view.InsetsState.ITYPE_BOTTOM_DISPLAY_CUTOUT;
-import static android.view.InsetsState.ITYPE_CLIMATE_BAR;
-import static android.view.InsetsState.ITYPE_LEFT_DISPLAY_CUTOUT;
-import static android.view.InsetsState.ITYPE_NAVIGATION_BAR;
-import static android.view.InsetsState.ITYPE_RIGHT_DISPLAY_CUTOUT;
-import static android.view.InsetsState.ITYPE_STATUS_BAR;
-import static android.view.InsetsState.ITYPE_TOP_DISPLAY_CUTOUT;
 import static android.view.WindowManagerPolicyConstants.NAV_BAR_BOTTOM;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.any;
@@ -33,7 +26,6 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.anyInt;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doAnswer;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
-import static com.android.dx.mockito.inline.extended.ExtendedMockito.eq;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
 
 import android.annotation.Nullable;
@@ -47,7 +39,6 @@ import android.util.DisplayMetrics;
 import android.view.Display;
 import android.view.DisplayCutout;
 import android.view.DisplayInfo;
-import android.view.WindowInsets;
 
 import com.android.server.wm.DisplayWindowSettings.SettingsProvider.SettingsEntry;
 
@@ -152,10 +143,23 @@ class TestDisplayContent extends DisplayContent {
             mInfo.ownerUid = ownerUid;
             return this;
         }
-        Builder setNotch(int height) {
+        Builder setCutout(int left, int top, int right, int bottom) {
+            final int cutoutFillerSize = 80;
+            Rect boundLeft = left != 0 ? new Rect(0, 0, left, cutoutFillerSize) : null;
+            Rect boundTop = top != 0 ? new Rect(0, 0, cutoutFillerSize, top) : null;
+            Rect boundRight = right != 0 ? new Rect(mInfo.logicalWidth - right, 0,
+                    mInfo.logicalWidth, cutoutFillerSize) : null;
+            Rect boundBottom = bottom != 0
+                    ? new Rect(0, mInfo.logicalHeight - bottom, cutoutFillerSize,
+                    mInfo.logicalHeight) : null;
+
             mInfo.displayCutout = new DisplayCutout(
-                    Insets.of(0, height, 0, 0), null, new Rect(20, 0, 80, height), null, null);
+                    Insets.of(left, top, right, bottom),
+                    boundLeft, boundTop, boundRight, boundBottom);
             return this;
+        }
+        Builder setNotch(int height) {
+            return setCutout(0, height, 0, 0);
         }
         Builder setStatusBarHeight(int height) {
             mStatusBarHeight = height;
@@ -209,26 +213,6 @@ class TestDisplayContent extends DisplayContent {
                 doReturn(true).when(newDisplay).supportsSystemDecorations();
                 doReturn(true).when(displayPolicy).hasNavigationBar();
                 doReturn(NAV_BAR_BOTTOM).when(displayPolicy).navigationBarPosition(anyInt());
-                doReturn(Insets.of(0, 0, 0, 20)).when(displayPolicy).getInsets(any(),
-                        eq(WindowInsets.Type.displayCutout() | WindowInsets.Type.navigationBars()));
-                doReturn(Insets.of(0, 20, 0, 20)).when(displayPolicy).getInsets(any(),
-                        eq(WindowInsets.Type.displayCutout() | WindowInsets.Type.navigationBars()
-                                | WindowInsets.Type.statusBars()));
-                final int[] nonDecorTypes = new int[]{
-                        ITYPE_TOP_DISPLAY_CUTOUT, ITYPE_RIGHT_DISPLAY_CUTOUT,
-                        ITYPE_BOTTOM_DISPLAY_CUTOUT, ITYPE_LEFT_DISPLAY_CUTOUT, ITYPE_NAVIGATION_BAR
-                };
-                doReturn(Insets.of(0, 0, 0, 20)).when(displayPolicy).getInsetsWithInternalTypes(
-                        any(),
-                        eq(nonDecorTypes));
-                final int[] stableTypes = new int[]{
-                        ITYPE_TOP_DISPLAY_CUTOUT, ITYPE_RIGHT_DISPLAY_CUTOUT,
-                        ITYPE_BOTTOM_DISPLAY_CUTOUT, ITYPE_LEFT_DISPLAY_CUTOUT,
-                        ITYPE_NAVIGATION_BAR, ITYPE_STATUS_BAR, ITYPE_CLIMATE_BAR
-                };
-                doReturn(Insets.of(0, 20, 0, 20)).when(displayPolicy).getInsetsWithInternalTypes(
-                        any(),
-                        eq(stableTypes));
             } else {
                 doReturn(false).when(displayPolicy).hasNavigationBar();
                 doReturn(false).when(displayPolicy).hasStatusBar();
@@ -241,11 +225,6 @@ class TestDisplayContent extends DisplayContent {
             displayPolicy.finishScreenTurningOn();
             if (mStatusBarHeight > 0) {
                 doReturn(true).when(displayPolicy).hasStatusBar();
-                doAnswer(invocation -> {
-                    Rect inOutInsets = (Rect) invocation.getArgument(0);
-                    inOutInsets.top = mStatusBarHeight;
-                    return null;
-                }).when(displayPolicy).convertNonDecorInsetsToStableInsets(any(), anyInt());
             }
             Configuration c = new Configuration();
             newDisplay.computeScreenConfiguration(c);

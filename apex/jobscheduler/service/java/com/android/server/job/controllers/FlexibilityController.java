@@ -38,6 +38,7 @@ import android.os.UserHandle;
 import android.provider.DeviceConfig;
 import android.util.ArraySet;
 import android.util.IndentingPrintWriter;
+import android.util.Log;
 import android.util.Slog;
 import android.util.SparseArrayMap;
 
@@ -49,7 +50,6 @@ import com.android.server.utils.AlarmQueue;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 import java.util.function.Predicate;
 
 /**
@@ -57,7 +57,9 @@ import java.util.function.Predicate;
  * Drops constraint for TOP apps and lowers number of required constraints with time.
  */
 public final class FlexibilityController extends StateController {
-    private static final String TAG = "JobScheduler.Flexibility";
+    private static final String TAG = "JobScheduler.Flex";
+    private static final boolean DEBUG = JobSchedulerService.DEBUG
+            || Log.isLoggable(TAG, Log.DEBUG);
 
     /** List of all system-wide flexible constraints whose satisfaction is independent of job. */
     static final int SYSTEM_WIDE_FLEXIBLE_CONSTRAINTS = CONSTRAINT_BATTERY_NOT_LOW
@@ -211,7 +213,7 @@ public final class FlexibilityController extends StateController {
 
     @Override
     @GuardedBy("mLock")
-    public void maybeStopTrackingJobLocked(JobStatus js, JobStatus incomingJob, boolean forUpdate) {
+    public void maybeStopTrackingJobLocked(JobStatus js, JobStatus incomingJob) {
         if (js.clearTrackingController(JobStatus.TRACKING_FLEXIBILITY)) {
             mFlexibilityAlarmQueue.removeAlarmForKey(js);
             mFlexibilityTracker.remove(js);
@@ -235,7 +237,7 @@ public final class FlexibilityController extends StateController {
     @GuardedBy("mLock")
     boolean isFlexibilitySatisfiedLocked(JobStatus js) {
         return !mFlexibilityEnabled
-                || mService.getUidBias(js.getUid()) == JobInfo.BIAS_TOP_APP
+                || mService.getUidBias(js.getSourceUid()) == JobInfo.BIAS_TOP_APP
                 || mService.isCurrentlyRunningLocked(js)
                 || getNumSatisfiedRequiredConstraintsLocked(js)
                 >= js.getNumRequiredFlexibleConstraints();
@@ -258,6 +260,11 @@ public final class FlexibilityController extends StateController {
             final boolean old = (mSatisfiedFlexibleConstraints & constraint) != 0;
             if (old == state) {
                 return;
+            }
+
+            if (DEBUG) {
+                Slog.d(TAG, "setConstraintSatisfied: "
+                       + " constraint: " + constraint + " state: " + state);
             }
 
             final int prevSatisfied = Integer.bitCount(mSatisfiedFlexibleConstraints);
@@ -335,10 +342,10 @@ public final class FlexibilityController extends StateController {
             // There is no deadline and no estimated launch time.
             return NO_LIFECYCLE_END;
         }
-        if (js.getNumFailures() > 1) {
-            // Number of failures will not equal one as per restriction in JobStatus constructor.
+        // Increase the flex deadline for jobs rescheduled more than once.
+        if (js.getNumPreviousAttempts() > 1) {
             return earliest + Math.min(
-                    (long) Math.scalb(mRescheduledJobDeadline, js.getNumFailures() - 2),
+                    (long) Math.scalb(mRescheduledJobDeadline, js.getNumPreviousAttempts() - 2),
                     mMaxRescheduledDeadline);
         }
         return js.getLatestRunTimeElapsed() == JobStatus.NO_LATEST_RUNTIME
@@ -389,10 +396,10 @@ public final class FlexibilityController extends StateController {
             return;
         }
         final long nowElapsed = sElapsedRealtimeClock.millis();
-        List<JobStatus> jobsByUid = mService.getJobStore().getJobsByUid(uid);
+        ArraySet<JobStatus> jobsByUid = mService.getJobStore().getJobsBySourceUid(uid);
         boolean hasPrefetch = false;
         for (int i = 0; i < jobsByUid.size(); i++) {
-            JobStatus js = jobsByUid.get(i);
+            JobStatus js = jobsByUid.valueAt(i);
             if (js.hasFlexibilityConstraint()) {
                 js.setFlexibilityConstraintSatisfied(nowElapsed, isFlexibilitySatisfiedLocked(js));
                 hasPrefetch |= js.getJob().isPrefetch();
@@ -488,9 +495,6 @@ public final class FlexibilityController extends StateController {
 
         /** Removes a JobStatus object. */
         public void remove(JobStatus js) {
-            if (js.getNumRequiredFlexibleConstraints() == 0) {
-                return;
-            }
             mTrackedJobs.get(js.getNumRequiredFlexibleConstraints()).remove(js);
         }
 
@@ -555,7 +559,7 @@ public final class FlexibilityController extends StateController {
     class FlexibilityAlarmQueue extends AlarmQueue<JobStatus> {
         private FlexibilityAlarmQueue(Context context, Looper looper) {
             super(context, looper, "*job.flexibility_check*",
-                    "Flexible Constraint Check", false,
+                    "Flexible Constraint Check", true,
                     mMinTimeBetweenFlexibilityAlarmsMs);
         }
 
@@ -571,7 +575,20 @@ public final class FlexibilityController extends StateController {
                 final long nextTimeElapsed =
                         getNextConstraintDropTimeElapsedLocked(js, earliest, latest);
 
+                if (DEBUG) {
+                    Slog.d(TAG, "scheduleDropNumConstraintsAlarm: "
+                            + js.getSourcePackageName() + " " + js.getSourceUserId()
+                            + " numRequired: " + js.getNumRequiredFlexibleConstraints()
+                            + " numSatisfied: " + Integer.bitCount(mSatisfiedFlexibleConstraints)
+                            + " curTime: " + nowElapsed
+                            + " earliest: " + earliest
+                            + " latest: " + latest
+                            + " nextTime: " + nextTimeElapsed);
+                }
                 if (latest - nowElapsed < mDeadlineProximityLimitMs) {
+                    if (DEBUG) {
+                        Slog.d(TAG, "deadline proximity met: " + js);
+                    }
                     mFlexibilityTracker.adjustJobsRequiredConstraints(js,
                             -js.getNumRequiredFlexibleConstraints(), nowElapsed);
                     return;
@@ -581,7 +598,10 @@ public final class FlexibilityController extends StateController {
                     removeAlarmForKey(js);
                     return;
                 }
-                if (latest - nextTimeElapsed < mDeadlineProximityLimitMs) {
+                if (latest - nextTimeElapsed <= mDeadlineProximityLimitMs) {
+                    if (DEBUG) {
+                        Slog.d(TAG, "last alarm set: " + js);
+                    }
                     addAlarm(js, latest - mDeadlineProximityLimitMs);
                     return;
                 }
@@ -597,6 +617,7 @@ public final class FlexibilityController extends StateController {
                 for (int i = 0; i < expired.size(); i++) {
                     JobStatus js = expired.valueAt(i);
                     boolean wasFlexibilitySatisfied = js.isConstraintSatisfied(CONSTRAINT_FLEXIBLE);
+
                     if (mFlexibilityTracker.adjustJobsRequiredConstraints(js, -1, nowElapsed)) {
                         scheduleDropNumConstraintsAlarm(js, nowElapsed);
                     }
@@ -622,7 +643,7 @@ public final class FlexibilityController extends StateController {
         static final String KEY_FALLBACK_FLEXIBILITY_DEADLINE =
                 FC_CONFIG_PREFIX + "fallback_flexibility_deadline_ms";
         static final String KEY_MIN_TIME_BETWEEN_FLEXIBILITY_ALARMS_MS =
-                FC_CONFIG_PREFIX + "min_alarm_time_flexibility_ms";
+                FC_CONFIG_PREFIX + "min_time_between_flexibility_alarms_ms";
         static final String KEY_PERCENTS_TO_DROP_NUM_FLEXIBLE_CONSTRAINTS =
                 FC_CONFIG_PREFIX + "percents_to_drop_num_flexible_constraints";
         static final String KEY_MAX_RESCHEDULED_DEADLINE_MS =
@@ -717,6 +738,8 @@ public final class FlexibilityController extends StateController {
                     if (mMinTimeBetweenFlexibilityAlarmsMs
                             != MIN_TIME_BETWEEN_FLEXIBILITY_ALARMS_MS) {
                         mMinTimeBetweenFlexibilityAlarmsMs = MIN_TIME_BETWEEN_FLEXIBILITY_ALARMS_MS;
+                        mFlexibilityAlarmQueue
+                                .setMinTimeBetweenAlarmsMs(MIN_TIME_BETWEEN_FLEXIBILITY_ALARMS_MS);
                         mShouldReevaluateConstraints = true;
                     }
                     break;
@@ -787,6 +810,12 @@ public final class FlexibilityController extends StateController {
 
     @Override
     @GuardedBy("mLock")
+    public void dumpConstants(IndentingPrintWriter pw) {
+        mFcConfig.dump(pw);
+    }
+
+    @Override
+    @GuardedBy("mLock")
     public void dumpControllerStateLocked(IndentingPrintWriter pw, Predicate<JobStatus> predicate) {
         pw.println("# Constraints Satisfied: " + Integer.bitCount(mSatisfiedFlexibleConstraints));
         pw.print("Satisfied Flexible Constraints: ");
@@ -797,7 +826,5 @@ public final class FlexibilityController extends StateController {
         mFlexibilityTracker.dump(pw, predicate);
         pw.println();
         mFlexibilityAlarmQueue.dump(pw);
-        pw.println();
-        mFcConfig.dump(pw);
     }
 }

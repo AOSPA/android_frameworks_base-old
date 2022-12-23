@@ -18,45 +18,35 @@ import android.database.ContentObserver
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Handler
-import android.os.UserHandle
 import android.provider.Settings
 import android.util.Log
-import com.android.systemui.dagger.qualifiers.Main
-import com.android.systemui.plugins.Clock
+import com.android.internal.annotations.Keep
+import com.android.systemui.plugins.ClockController
 import com.android.systemui.plugins.ClockId
 import com.android.systemui.plugins.ClockMetadata
 import com.android.systemui.plugins.ClockProvider
 import com.android.systemui.plugins.ClockProviderPlugin
 import com.android.systemui.plugins.PluginListener
 import com.android.systemui.shared.plugins.PluginManager
-import com.google.gson.Gson
-import javax.inject.Inject
+import org.json.JSONObject
 
 private val TAG = ClockRegistry::class.simpleName
-private val DEBUG = true
+private const val DEBUG = true
 
 /** ClockRegistry aggregates providers and plugins */
 open class ClockRegistry(
     val context: Context,
     val pluginManager: PluginManager,
     val handler: Handler,
-    defaultClockProvider: ClockProvider
+    val isEnabled: Boolean,
+    userHandle: Int,
+    defaultClockProvider: ClockProvider,
 ) {
-    @Inject constructor(
-        context: Context,
-        pluginManager: PluginManager,
-        @Main handler: Handler,
-        defaultClockProvider: DefaultClockProvider
-    ) : this(context, pluginManager, handler, defaultClockProvider as ClockProvider) { }
-
     // Usually this would be a typealias, but a SAM provides better java interop
     fun interface ClockChangeListener {
         fun onClockChanged()
     }
 
-    var isEnabled: Boolean = false
-
-    private val gson = Gson()
     private val availableClocks = mutableMapOf<ClockId, ClockInfo>()
     private val clockChangeListeners = mutableListOf<ClockChangeListener>()
     private val settingObserver = object : ContentObserver(handler) {
@@ -79,7 +69,7 @@ open class ClockRegistry(
                     context.contentResolver,
                     Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_FACE
                 )
-                gson.fromJson(json, ClockSetting::class.java)?.clockId ?: DEFAULT_CLOCK_ID
+                ClockSetting.deserialize(json)?.clockId ?: DEFAULT_CLOCK_ID
             } catch (ex: Exception) {
                 Log.e(TAG, "Failed to parse clock setting", ex)
                 DEFAULT_CLOCK_ID
@@ -87,7 +77,7 @@ open class ClockRegistry(
         }
         set(value) {
             try {
-                val json = gson.toJson(ClockSetting(value, System.currentTimeMillis()))
+                val json = ClockSetting.serialize(ClockSetting(value, System.currentTimeMillis()))
                 Settings.Secure.putString(
                     context.contentResolver,
                     Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_FACE, json
@@ -105,13 +95,19 @@ open class ClockRegistry(
             )
         }
 
-        pluginManager.addPluginListener(pluginListener, ClockProviderPlugin::class.java)
-        context.contentResolver.registerContentObserver(
-            Settings.Secure.getUriFor(Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_FACE),
-            false,
-            settingObserver,
-            UserHandle.USER_ALL
-        )
+        if (isEnabled) {
+            pluginManager.addPluginListener(
+                pluginListener,
+                ClockProviderPlugin::class.java,
+                /*allowMultiple=*/ true
+            )
+            context.contentResolver.registerContentObserver(
+                Settings.Secure.getUriFor(Settings.Secure.LOCK_SCREEN_CUSTOM_CLOCK_FACE),
+                /*notifyForDescendants=*/ false,
+                settingObserver,
+                userHandle
+            )
+        }
     }
 
     private fun connectClocks(provider: ClockProvider) {
@@ -129,6 +125,10 @@ open class ClockRegistry(
             }
 
             availableClocks[id] = ClockInfo(clock, provider)
+            if (DEBUG) {
+                Log.i(TAG, "Added ${clock.clockId}")
+            }
+
             if (currentId == id) {
                 if (DEBUG) {
                     Log.i(TAG, "Current clock ($currentId) was connected")
@@ -142,6 +142,9 @@ open class ClockRegistry(
         val currentId = currentClockId
         for (clock in provider.getClocks()) {
             availableClocks.remove(clock.clockId)
+            if (DEBUG) {
+                Log.i(TAG, "Removed ${clock.clockId}")
+            }
 
             if (currentId == clock.clockId) {
                 Log.w(TAG, "Current clock ($currentId) was disconnected")
@@ -160,7 +163,7 @@ open class ClockRegistry(
     fun getClockThumbnail(clockId: ClockId): Drawable? =
         availableClocks[clockId]?.provider?.getClockThumbnail(clockId)
 
-    fun createExampleClock(clockId: ClockId): Clock? = createClock(clockId)
+    fun createExampleClock(clockId: ClockId): ClockController? = createClock(clockId)
 
     fun registerClockChangeListener(listener: ClockChangeListener) =
         clockChangeListeners.add(listener)
@@ -168,11 +171,14 @@ open class ClockRegistry(
     fun unregisterClockChangeListener(listener: ClockChangeListener) =
         clockChangeListeners.remove(listener)
 
-    fun createCurrentClock(): Clock {
+    fun createCurrentClock(): ClockController {
         val clockId = currentClockId
         if (isEnabled && clockId.isNotEmpty()) {
             val clock = createClock(clockId)
             if (clock != null) {
+                if (DEBUG) {
+                    Log.i(TAG, "Rendering clock $clockId")
+                }
                 return clock
             } else {
                 Log.e(TAG, "Clock $clockId not found; using default")
@@ -182,7 +188,7 @@ open class ClockRegistry(
         return createClock(DEFAULT_CLOCK_ID)!!
     }
 
-    private fun createClock(clockId: ClockId): Clock? =
+    private fun createClock(clockId: ClockId): ClockController? =
         availableClocks[clockId]?.provider?.createClock(clockId)
 
     private data class ClockInfo(
@@ -190,8 +196,28 @@ open class ClockRegistry(
         val provider: ClockProvider
     )
 
-    private data class ClockSetting(
+    @Keep
+    data class ClockSetting(
         val clockId: ClockId,
         val _applied_timestamp: Long?
-    )
+    ) {
+        companion object {
+            private val KEY_CLOCK_ID = "clockId"
+            private val KEY_TIMESTAMP = "_applied_timestamp"
+
+            fun serialize(setting: ClockSetting): String {
+                return JSONObject()
+                    .put(KEY_CLOCK_ID, setting.clockId)
+                    .put(KEY_TIMESTAMP, setting._applied_timestamp)
+                    .toString()
+            }
+
+            fun deserialize(jsonStr: String): ClockSetting {
+                val json = JSONObject(jsonStr)
+                return ClockSetting(
+                    json.getString(KEY_CLOCK_ID),
+                    if (!json.isNull(KEY_TIMESTAMP)) json.getLong(KEY_TIMESTAMP) else null)
+            }
+        }
+    }
 }

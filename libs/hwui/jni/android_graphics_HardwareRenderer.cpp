@@ -271,6 +271,16 @@ static void android_view_ThreadedRenderer_setIsHighEndGfx(JNIEnv* env, jobject c
     Properties::setIsHighEndGfx(jIsHighEndGfx);
 }
 
+static void android_view_ThreadedRenderer_setIsLowRam(JNIEnv* env, jobject clazz,
+                                                      jboolean isLowRam) {
+    Properties::setIsLowRam(isLowRam);
+}
+
+static void android_view_ThreadedRenderer_setIsSystemOrPersistent(JNIEnv* env, jobject clazz,
+                                                                  jboolean isSystemOrPersistent) {
+    Properties::setIsSystemOrPersistent(isSystemOrPersistent);
+}
+
 static int android_view_ThreadedRenderer_syncAndDrawFrame(JNIEnv* env, jobject clazz,
                                                           jlong proxyPtr, jlongArray frameInfo,
                                                           jint frameInfoSize) {
@@ -857,17 +867,19 @@ static void android_view_ThreadedRenderer_setDisplayDensityDpi(JNIEnv*, jclass, 
     DeviceInfo::setDensity(density);
 }
 
-static void android_view_ThreadedRenderer_initDisplayInfo(JNIEnv*, jclass, jint physicalWidth,
+static void android_view_ThreadedRenderer_initDisplayInfo(JNIEnv* env, jclass, jint physicalWidth,
                                                           jint physicalHeight, jfloat refreshRate,
                                                           jint wideColorDataspace,
                                                           jlong appVsyncOffsetNanos,
-                                                          jlong presentationDeadlineNanos) {
+                                                          jlong presentationDeadlineNanos,
+                                                          jboolean supportFp16ForHdr) {
     DeviceInfo::setWidth(physicalWidth);
     DeviceInfo::setHeight(physicalHeight);
     DeviceInfo::setRefreshRate(refreshRate);
     DeviceInfo::setWideColorDataspace(static_cast<ADataSpace>(wideColorDataspace));
     DeviceInfo::setAppVsyncOffsetNanos(appVsyncOffsetNanos);
     DeviceInfo::setPresentationDeadlineNanos(presentationDeadlineNanos);
+    DeviceInfo::setSupportFp16ForHdr(supportFp16ForHdr);
 }
 
 static void android_view_ThreadedRenderer_setDrawingEnabled(JNIEnv*, jclass, jboolean enabled) {
@@ -949,6 +961,9 @@ static const JNINativeMethod gMethods[] = {
         {"nSetColorMode", "(JI)V", (void*)android_view_ThreadedRenderer_setColorMode},
         {"nSetSdrWhitePoint", "(JF)V", (void*)android_view_ThreadedRenderer_setSdrWhitePoint},
         {"nSetIsHighEndGfx", "(Z)V", (void*)android_view_ThreadedRenderer_setIsHighEndGfx},
+        {"nSetIsLowRam", "(Z)V", (void*)android_view_ThreadedRenderer_setIsLowRam},
+        {"nSetIsSystemOrPersistent", "(Z)V",
+         (void*)android_view_ThreadedRenderer_setIsSystemOrPersistent},
         {"nSyncAndDrawFrame", "(J[JI)I", (void*)android_view_ThreadedRenderer_syncAndDrawFrame},
         {"nDestroy", "(JJ)V", (void*)android_view_ThreadedRenderer_destroy},
         {"nRegisterAnimatingRenderNode", "(JJ)V",
@@ -1014,7 +1029,7 @@ static const JNINativeMethod gMethods[] = {
         {"nSetForceDark", "(JZ)V", (void*)android_view_ThreadedRenderer_setForceDark},
         {"nSetDisplayDensityDpi", "(I)V",
          (void*)android_view_ThreadedRenderer_setDisplayDensityDpi},
-        {"nInitDisplayInfo", "(IIFIJJ)V", (void*)android_view_ThreadedRenderer_initDisplayInfo},
+        {"nInitDisplayInfo", "(IIFIJJZ)V", (void*)android_view_ThreadedRenderer_initDisplayInfo},
         {"preload", "()V", (void*)android_view_ThreadedRenderer_preload},
         {"isWebViewOverlaysEnabled", "()Z",
          (void*)android_view_ThreadedRenderer_isWebViewOverlaysEnabled},

@@ -18,6 +18,7 @@ package android.app.time;
 
 import android.annotation.NonNull;
 import android.annotation.StringDef;
+import android.annotation.SystemApi;
 import android.os.Bundle;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -40,6 +41,7 @@ import java.util.Objects;
  *
  * @hide
  */
+@SystemApi
 public final class TimeConfiguration implements Parcelable {
 
     public static final @NonNull Creator<TimeConfiguration> CREATOR =
@@ -55,10 +57,16 @@ public final class TimeConfiguration implements Parcelable {
                 }
             };
 
+    /**
+     * All configuration properties
+     *
+     * @hide
+     */
     @StringDef(SETTING_AUTO_DETECTION_ENABLED)
     @Retention(RetentionPolicy.SOURCE)
     @interface Setting {}
 
+    /** See {@link TimeConfiguration#isAutoDetectionEnabled()} for details. */
     @Setting
     private static final String SETTING_AUTO_DETECTION_ENABLED = "autoDetectionEnabled";
 
@@ -149,6 +157,7 @@ public final class TimeConfiguration implements Parcelable {
      *
      * @hide
      */
+    @SystemApi
     public static final class Builder {
 
         private final Bundle mBundle = new Bundle();

@@ -142,7 +142,6 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.content.ReferrerIntent;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.ArrayUtils;
-import com.android.internal.util.function.pooled.PooledConsumer;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.LocalServices;
 import com.android.server.am.ActivityManagerService;
@@ -651,15 +650,6 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     void reportActivityLaunched(boolean timeout, ActivityRecord r, long totalTime,
             @WaitResult.LaunchState int launchState) {
         boolean changed = false;
-        if (totalTime > 0) {
-            if (mPerfBoost != null) {
-                if (r.app != null) {
-                    mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_DRAW,
-                        r.packageName, r.app.getPid(),
-                        BoostFramework.Draw.EVENT_TYPE_V1);
-                }
-            }
-        }
         for (int i = mWaitingActivityLaunched.size() - 1; i >= 0; i--) {
             final WaitInfo info = mWaitingActivityLaunched.get(i);
             if (!info.matches(r)) {
@@ -791,7 +781,7 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
             // (e.g. AMS.startActivityAsUser).
             final long token = Binder.clearCallingIdentity();
             try {
-                return mService.getPackageManagerInternalLocked().resolveIntent(
+                return mService.getPackageManagerInternalLocked().resolveIntentExported(
                         intent, resolvedType, modifiedFlags, privateResolveFlags, userId, true,
                         filterCallingUid);
             } finally {
@@ -1234,10 +1224,14 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
         }
 
         if (!displayContent.isPrivate()) {
-            // Anyone can launch on a public display.
-            ProtoLog.d(WM_DEBUG_TASKS, "Launch on display check: allow launch on public "
-                    + "display");
-            return true;
+            // Checks if the caller can be shown in the given public display.
+            int userId = UserHandle.getUserId(callingUid);
+            int displayId = display.getDisplayId();
+            boolean allowed = mWindowManager.mUmInternal.isUserVisible(userId, displayId);
+            ProtoLog.d(WM_DEBUG_TASKS,
+                    "Launch on display check: %s launch for userId=%d on displayId=%d",
+                    (allowed ? "allow" : "disallow"), userId, displayId);
+            return allowed;
         }
 
         // Check if the caller is the owner of the display.
@@ -1539,7 +1533,7 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
             handleNonResizableTaskIfNeeded(task, WINDOWING_MODE_UNDEFINED,
                     mRootWindowContainer.getDefaultTaskDisplayArea(), currentRootTask,
                     forceNonResizeable);
-            if (r != null) {
+            if (r != null && (options == null || !options.getDisableStartingWindow())) {
                 // Use a starting window to reduce the transition latency for reshowing the task.
                 // Note that with shell transition, this should be executed before requesting
                 // transition to avoid delaying the starting window.
@@ -1635,15 +1629,10 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
         if (rootTask.getWindowingMode() == WINDOWING_MODE_PINNED) {
             removePinnedRootTaskInSurfaceTransaction(rootTask);
         } else {
-            final PooledConsumer c = PooledLambda.obtainConsumer(
-                    ActivityTaskSupervisor::processRemoveTask, this, PooledLambda.__(Task.class));
-            rootTask.forAllLeafTasks(c, true /* traverseTopToBottom */);
-            c.recycle();
+            rootTask.forAllLeafTasks(task -> {
+                removeTask(task, true /* killProcess */, REMOVE_FROM_RECENTS, "remove-root-task");
+            }, true /* traverseTopToBottom */);
         }
-    }
-
-    private void processRemoveTask(Task task) {
-        removeTask(task, true /* killProcess */, REMOVE_FROM_RECENTS, "remove-root-task");
     }
 
     /**
@@ -1984,9 +1973,11 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
                 mIsPerfBoostAcquired = true;
             // Start IOP
             if (r.info.applicationInfo != null && r.info.applicationInfo.sourceDir != null) {
-                mPerfBoost.perfIOPrefetchStart(-1,r.packageName,
-                       r.info.applicationInfo.sourceDir.substring(0,
-                        r.info.applicationInfo.sourceDir.lastIndexOf('/')));
+                if (mPerfBoost.board_first_api_lvl < BoostFramework.VENDOR_T_API_LEVEL &&
+                    mPerfBoost.board_api_lvl < BoostFramework.VENDOR_T_API_LEVEL) {
+                        mPerfBoost.perfIOPrefetchStart(-1,r.packageName,
+                           r.info.applicationInfo.sourceDir.substring(0, r.info.applicationInfo.sourceDir.lastIndexOf('/')));
+                }
             }
         }
     }
@@ -2407,20 +2398,14 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     }
 
     void scheduleUpdateMultiWindowMode(Task task) {
-        final PooledConsumer c = PooledLambda.obtainConsumer(
-                ActivityTaskSupervisor::addToMultiWindowModeChangedList, this,
-                PooledLambda.__(ActivityRecord.class));
-        task.forAllActivities(c);
-        c.recycle();
+        task.forAllActivities(r -> {
+            if (r.attachedToProcess()) {
+                mMultiWindowModeChangedActivities.add(r);
+            }
+        });
 
         if (!mHandler.hasMessages(REPORT_MULTI_WINDOW_MODE_CHANGED_MSG)) {
             mHandler.sendEmptyMessage(REPORT_MULTI_WINDOW_MODE_CHANGED_MSG);
-        }
-    }
-
-    private void addToMultiWindowModeChangedList(ActivityRecord r) {
-        if (r.attachedToProcess()) {
-            mMultiWindowModeChangedActivities.add(r);
         }
     }
 
@@ -2435,27 +2420,20 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     }
 
     void scheduleUpdatePictureInPictureModeIfNeeded(Task task, Rect targetRootTaskBounds) {
-        final PooledConsumer c = PooledLambda.obtainConsumer(
-                ActivityTaskSupervisor::addToPipModeChangedList, this,
-                PooledLambda.__(ActivityRecord.class));
-        task.forAllActivities(c);
-        c.recycle();
+        task.forAllActivities(r -> {
+            if (!r.attachedToProcess()) return;
+            mPipModeChangedActivities.add(r);
+            // If we are scheduling pip change, then remove this activity from multi-window
+            // change list as the processing of pip change will make sure multi-window changed
+            // message is processed in the right order relative to pip changed.
+            mMultiWindowModeChangedActivities.remove(r);
+        });
 
         mPipModeChangedTargetRootTaskBounds = targetRootTaskBounds;
 
         if (!mHandler.hasMessages(REPORT_PIP_MODE_CHANGED_MSG)) {
             mHandler.sendEmptyMessage(REPORT_PIP_MODE_CHANGED_MSG);
         }
-    }
-
-    private void addToPipModeChangedList(ActivityRecord r) {
-        if (!r.attachedToProcess()) return;
-
-        mPipModeChangedActivities.add(r);
-        // If we are scheduling pip change, then remove this activity from multi-window
-        // change list as the processing of pip change will make sure multi-window changed
-        // message is processed in the right order relative to pip changed.
-        mMultiWindowModeChangedActivities.remove(r);
     }
 
     void wakeUp(String reason) {
@@ -2736,6 +2714,9 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
                         // activity lifecycle transaction to make sure the override pending app
                         // transition will be applied immediately.
                         targetActivity.applyOptionsAnimation();
+                        if (activityOptions != null && activityOptions.getLaunchCookie() != null) {
+                            targetActivity.mLaunchCookie = activityOptions.getLaunchCookie();
+                        }
                     } finally {
                         mActivityMetricsLogger.notifyActivityLaunched(launchingState,
                                 START_TASK_TO_FRONT, false /* newActivityCreated */,
@@ -2861,10 +2842,15 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
             }
             if (mUxPerf != null
                    && trimLevel < ProcessStats.ADJ_MEM_FACTOR_CRITICAL) {
-                res = mUxPerf.perfUXEngine_trigger(BoostFramework.UXE_TRIGGER);
+                if (mUxPerf.board_first_api_lvl < BoostFramework.VENDOR_T_API_LEVEL &&
+                    mUxPerf.board_api_lvl < BoostFramework.VENDOR_T_API_LEVEL) {
+                    res = mUxPerf.perfUXEngine_trigger(BoostFramework.UXE_TRIGGER);
+                } else {
+                    res = mUxPerf.perfSyncRequest(BoostFramework.VENDOR_FEEDBACK_PA_FW);
+                }
                 if (res == null)
                     return null;
-                String[] p_apps = res.split("/");
+                String[] p_apps = res.trim().split("/");
                 if (p_apps.length != 0) {
                     ArrayList<String> apps_l = new ArrayList(Arrays.asList(p_apps));
                     Bundle bParams = new Bundle();

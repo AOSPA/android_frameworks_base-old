@@ -16,6 +16,7 @@
 
 package com.android.wm.shell.flicker.splitscreen
 
+import android.platform.test.annotations.IwTest
 import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
 import android.view.WindowManagerPolicyConstants
@@ -23,16 +24,17 @@ import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
-import com.android.server.wm.flicker.annotation.Group1
 import com.android.server.wm.flicker.dsl.FlickerBuilder
+import com.android.server.wm.flicker.helpers.isShellTransitionsEnabled
+import com.android.wm.shell.flicker.SPLIT_SCREEN_DIVIDER_COMPONENT
 import com.android.wm.shell.flicker.appWindowBecomesVisible
 import com.android.wm.shell.flicker.appWindowIsVisibleAtEnd
-import com.android.wm.shell.flicker.helpers.SplitScreenHelper
 import com.android.wm.shell.flicker.layerBecomesVisible
 import com.android.wm.shell.flicker.layerIsVisibleAtEnd
-import com.android.wm.shell.flicker.splitAppLayerBoundsBecomesVisible
+import com.android.wm.shell.flicker.splitAppLayerBoundsBecomesVisibleByDrag
 import com.android.wm.shell.flicker.splitAppLayerBoundsIsVisibleAtEnd
 import com.android.wm.shell.flicker.splitScreenDividerBecomesVisible
+import com.android.wm.shell.flicker.splitScreenEntered
 import org.junit.Assume
 import org.junit.Before
 import org.junit.FixMethodOrder
@@ -51,7 +53,6 @@ import org.junit.runners.Parameterized
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-@Group1
 class EnterSplitScreenByDragFromAllApps(
     testSpec: FlickerTestParameter
 ) : SplitScreenBase(testSpec) {
@@ -65,23 +66,39 @@ class EnterSplitScreenByDragFromAllApps(
         get() = {
             super.transition(this)
             setup {
-                eachRun {
-                    tapl.goHome()
-                    primaryApp.launchViaIntent(wmHelper)
-                }
+                tapl.goHome()
+                primaryApp.launchViaIntent(wmHelper)
             }
             transitions {
                 tapl.launchedAppState.taskbar
                         .openAllApps()
                         .getAppIcon(secondaryApp.appName)
                         .dragToSplitscreen(secondaryApp.`package`, primaryApp.`package`)
-                SplitScreenHelper.waitForSplitComplete(wmHelper, primaryApp, secondaryApp)
+                SplitScreenUtils.waitForSplitComplete(wmHelper, primaryApp, secondaryApp)
             }
         }
 
+    @IwTest(focusArea = "sysui")
     @Presubmit
     @Test
-    fun splitScreenDividerBecomesVisible() = testSpec.splitScreenDividerBecomesVisible()
+    fun cujCompleted() = testSpec.splitScreenEntered(primaryApp, secondaryApp, fromOtherApp = false)
+
+    @Presubmit
+    @Test
+    fun splitScreenDividerBecomesVisible() {
+        Assume.assumeFalse(isShellTransitionsEnabled)
+        testSpec.splitScreenDividerBecomesVisible()
+    }
+
+    // TODO(b/245472831): Back to splitScreenDividerBecomesVisible after shell transition ready.
+    @Presubmit
+    @Test
+    fun splitScreenDividerIsVisibleAtEnd_ShellTransit() {
+        Assume.assumeTrue(isShellTransitionsEnabled)
+        testSpec.assertLayersEnd {
+            this.isVisible(SPLIT_SCREEN_DIVIDER_COMPONENT)
+        }
+    }
 
     @Presubmit
     @Test
@@ -98,8 +115,8 @@ class EnterSplitScreenByDragFromAllApps(
 
     @Presubmit
     @Test
-    fun secondaryAppBoundsBecomesVisible() = testSpec.splitAppLayerBoundsBecomesVisible(
-        secondaryApp, landscapePosLeft = true, portraitPosTop = true)
+    fun secondaryAppBoundsBecomesVisible() = testSpec.splitAppLayerBoundsBecomesVisibleByDrag(
+        secondaryApp)
 
     @Presubmit
     @Test
@@ -180,7 +197,6 @@ class EnterSplitScreenByDragFromAllApps(
         @JvmStatic
         fun getParams(): List<FlickerTestParameter> {
             return FlickerTestParameterFactory.getInstance().getConfigNonRotationTests(
-                repetitions = SplitScreenHelper.TEST_REPETITIONS,
                 // TODO(b/176061063):The 3 buttons of nav bar do not exist in the hierarchy.
                 supportedNavigationModes =
                     listOf(WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL_OVERLAY))

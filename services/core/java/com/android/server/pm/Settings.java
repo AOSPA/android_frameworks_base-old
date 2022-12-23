@@ -83,8 +83,6 @@ import android.util.SparseArray;
 import android.util.SparseBooleanArray;
 import android.util.SparseIntArray;
 import android.util.SparseLongArray;
-import android.util.TypedXmlPullParser;
-import android.util.TypedXmlSerializer;
 import android.util.Xml;
 import android.util.proto.ProtoOutputStream;
 
@@ -96,18 +94,20 @@ import com.android.internal.util.CollectionUtils;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.JournaledFile;
 import com.android.internal.util.XmlUtils;
+import com.android.modules.utils.TypedXmlPullParser;
+import com.android.modules.utils.TypedXmlSerializer;
 import com.android.permission.persistence.RuntimePermissionsPersistence;
 import com.android.permission.persistence.RuntimePermissionsState;
 import com.android.server.LocalServices;
 import com.android.server.backup.PreferredActivityBackupHelper;
 import com.android.server.pm.Installer.InstallerException;
 import com.android.server.pm.parsing.PackageInfoUtils;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.parsing.pkg.AndroidPackageUtils;
 import com.android.server.pm.permission.LegacyPermissionDataProvider;
 import com.android.server.pm.permission.LegacyPermissionSettings;
 import com.android.server.pm.permission.LegacyPermissionState;
 import com.android.server.pm.permission.LegacyPermissionState.PermissionState;
+import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.PackageStateInternal;
 import com.android.server.pm.pkg.PackageUserState;
 import com.android.server.pm.pkg.PackageUserStateInternal;
@@ -455,19 +455,24 @@ public final class Settings implements Watchable, Snappable {
     // The user's preferred activities associated with particular intent
     // filters.
     @Watched
-    private final WatchedSparseArray<PreferredIntentResolver>
-            mPreferredActivities = new WatchedSparseArray<>();
+    private final WatchedSparseArray<PreferredIntentResolver> mPreferredActivities;
+    private final SnapshotCache<WatchedSparseArray<PreferredIntentResolver>>
+            mPreferredActivitiesSnapshot;
 
     // The persistent preferred activities of the user's profile/device owner
     // associated with particular intent filters.
     @Watched
     private final WatchedSparseArray<PersistentPreferredIntentResolver>
-            mPersistentPreferredActivities = new WatchedSparseArray<>();
+            mPersistentPreferredActivities;
+    private final SnapshotCache<WatchedSparseArray<PersistentPreferredIntentResolver>>
+            mPersistentPreferredActivitiesSnapshot;
+
 
     // For every user, it is used to find to which other users the intent can be forwarded.
     @Watched
-    private final WatchedSparseArray<CrossProfileIntentResolver>
-            mCrossProfileIntentResolvers = new WatchedSparseArray<>();
+    private final WatchedSparseArray<CrossProfileIntentResolver> mCrossProfileIntentResolvers;
+    private final SnapshotCache<WatchedSparseArray<CrossProfileIntentResolver>>
+            mCrossProfileIntentResolversSnapshot;
 
     @Watched
     final WatchedArrayMap<String, SharedUserSetting> mSharedUsers = new WatchedArrayMap<>();
@@ -476,11 +481,12 @@ public final class Settings implements Watchable, Snappable {
 
     // For reading/writing settings file.
     @Watched
-    private final WatchedArrayList<Signature> mPastSignatures =
-            new WatchedArrayList<Signature>();
+    private final WatchedArrayList<Signature> mPastSignatures;
+    private final SnapshotCache<WatchedArrayList<Signature>> mPastSignaturesSnapshot;
+
     @Watched
-    private final WatchedArrayMap<Long, Integer> mKeySetRefs =
-            new WatchedArrayMap<Long, Integer>();
+    private final WatchedArrayMap<Long, Integer> mKeySetRefs;
+    private final SnapshotCache<WatchedArrayMap<Long, Integer>> mKeySetRefsSnapshot;
 
     // Packages that have been renamed since they were first installed.
     // Keys are the new names of the packages, values are the original
@@ -511,7 +517,8 @@ public final class Settings implements Watchable, Snappable {
      * scanning to make it less confusing.
      */
     @Watched
-    private final WatchedArrayList<PackageSetting> mPendingPackages = new WatchedArrayList<>();
+    private final WatchedArrayList<PackageSetting> mPendingPackages;
+    private final SnapshotCache<WatchedArrayList<PackageSetting>> mPendingPackagesSnapshot;
 
     private final File mSystemDir;
 
@@ -583,6 +590,26 @@ public final class Settings implements Watchable, Snappable {
         mInstallerPackagesSnapshot =
                 new SnapshotCache.Auto<>(mInstallerPackages, mInstallerPackages,
                                          "Settings.mInstallerPackages");
+        mPreferredActivities = new WatchedSparseArray<>();
+        mPreferredActivitiesSnapshot = new SnapshotCache.Auto<>(mPreferredActivities,
+                mPreferredActivities, "Settings.mPreferredActivities");
+        mPersistentPreferredActivities = new WatchedSparseArray<>();
+        mPersistentPreferredActivitiesSnapshot = new SnapshotCache.Auto<>(
+                mPersistentPreferredActivities, mPersistentPreferredActivities,
+                "Settings.mPersistentPreferredActivities");
+        mCrossProfileIntentResolvers = new WatchedSparseArray<>();
+        mCrossProfileIntentResolversSnapshot = new SnapshotCache.Auto<>(
+                mCrossProfileIntentResolvers, mCrossProfileIntentResolvers,
+                "Settings.mCrossProfileIntentResolvers");
+        mPastSignatures = new WatchedArrayList<>();
+        mPastSignaturesSnapshot = new SnapshotCache.Auto<>(mPastSignatures, mPastSignatures,
+                "Settings.mPastSignatures");
+        mKeySetRefs = new WatchedArrayMap<>();
+        mKeySetRefsSnapshot = new SnapshotCache.Auto<>(mKeySetRefs, mKeySetRefs,
+                "Settings.mKeySetRefs");
+        mPendingPackages = new WatchedArrayList<>();
+        mPendingPackagesSnapshot = new SnapshotCache.Auto<>(mPendingPackages, mPendingPackages,
+                "Settings.mPendingPackages");
         mKeySetManagerService = new KeySetManagerService(mPackages);
 
         // Test-only handler working on background thread.
@@ -623,6 +650,26 @@ public final class Settings implements Watchable, Snappable {
         mInstallerPackagesSnapshot =
                 new SnapshotCache.Auto<>(mInstallerPackages, mInstallerPackages,
                                          "Settings.mInstallerPackages");
+        mPreferredActivities = new WatchedSparseArray<>();
+        mPreferredActivitiesSnapshot = new SnapshotCache.Auto<>(mPreferredActivities,
+                mPreferredActivities, "Settings.mPreferredActivities");
+        mPersistentPreferredActivities = new WatchedSparseArray<>();
+        mPersistentPreferredActivitiesSnapshot = new SnapshotCache.Auto<>(
+                mPersistentPreferredActivities, mPersistentPreferredActivities,
+                "Settings.mPersistentPreferredActivities");
+        mCrossProfileIntentResolvers = new WatchedSparseArray<>();
+        mCrossProfileIntentResolversSnapshot = new SnapshotCache.Auto<>(
+                mCrossProfileIntentResolvers, mCrossProfileIntentResolvers,
+                "Settings.mCrossProfileIntentResolvers");
+        mPastSignatures = new WatchedArrayList<>();
+        mPastSignaturesSnapshot = new SnapshotCache.Auto<>(mPastSignatures, mPastSignatures,
+                "Settings.mPastSignatures");
+        mKeySetRefs = new WatchedArrayMap<>();
+        mKeySetRefsSnapshot = new SnapshotCache.Auto<>(mKeySetRefs, mKeySetRefs,
+                "Settings.mKeySetRefs");
+        mPendingPackages = new WatchedArrayList<>();
+        mPendingPackagesSnapshot = new SnapshotCache.Auto<>(mPendingPackages, mPendingPackages,
+                "Settings.mPendingPackages");
         mKeySetManagerService = new KeySetManagerService(mPackages);
 
         mHandler = handler;
@@ -699,24 +746,27 @@ public final class Settings implements Watchable, Snappable {
         mBlockUninstallPackages.snapshot(r.mBlockUninstallPackages);
         mVersion.putAll(r.mVersion);
         mVerifierDeviceIdentity = r.mVerifierDeviceIdentity;
-        WatchedSparseArray.snapshot(
-                mPreferredActivities, r.mPreferredActivities);
-        WatchedSparseArray.snapshot(
-                mPersistentPreferredActivities, r.mPersistentPreferredActivities);
-        WatchedSparseArray.snapshot(
-                mCrossProfileIntentResolvers, r.mCrossProfileIntentResolvers);
+        mPreferredActivities = r.mPreferredActivitiesSnapshot.snapshot();
+        mPreferredActivitiesSnapshot = new SnapshotCache.Sealed<>();
+        mPersistentPreferredActivities = r.mPersistentPreferredActivitiesSnapshot.snapshot();
+        mPersistentPreferredActivitiesSnapshot = new SnapshotCache.Sealed<>();
+        mCrossProfileIntentResolvers = r.mCrossProfileIntentResolversSnapshot.snapshot();
+        mCrossProfileIntentResolversSnapshot = new SnapshotCache.Sealed<>();
+
         mSharedUsers.snapshot(r.mSharedUsers);
         mAppIds = r.mAppIds.snapshot();
-        WatchedArrayList.snapshot(
-                mPastSignatures, r.mPastSignatures);
-        WatchedArrayMap.snapshot(
-                mKeySetRefs, r.mKeySetRefs);
+
+        mPastSignatures = r.mPastSignaturesSnapshot.snapshot();
+        mPastSignaturesSnapshot = new SnapshotCache.Sealed<>();
+        mKeySetRefs = r.mKeySetRefsSnapshot.snapshot();
+        mKeySetRefsSnapshot = new SnapshotCache.Sealed<>();
+
         mRenamedPackages.snapshot(r.mRenamedPackages);
         mNextAppLinkGeneration.snapshot(r.mNextAppLinkGeneration);
         mDefaultBrowserApp.snapshot(r.mDefaultBrowserApp);
         // mReadMessages
-        WatchedArrayList.snapshot(
-                mPendingPackages, r.mPendingPackages);
+        mPendingPackages = r.mPendingPackagesSnapshot.snapshot();
+        mPendingPackagesSnapshot = new SnapshotCache.Sealed<>();
         mSystemDir = null;
         // mKeySetManagerService;
         mPermissions = r.mPermissions;
@@ -837,8 +887,8 @@ public final class Settings implements Watchable, Snappable {
         }
         p.getPkgState().setUpdatedSystemApp(false);
         PackageSetting ret = addPackageLPw(name, p.getRealName(), p.getPath(),
-                p.getLegacyNativeLibraryPath(), p.getPrimaryCpuAbi(),
-                p.getSecondaryCpuAbi(), p.getCpuAbiOverride(),
+                p.getLegacyNativeLibraryPath(), p.getPrimaryCpuAbiLegacy(),
+                p.getSecondaryCpuAbiLegacy(), p.getCpuAbiOverride(),
                 p.getAppId(), p.getVersionCode(), p.getFlags(), p.getPrivateFlags(),
                 p.getUsesSdkLibraries(), p.getUsesSdkLibrariesVersionsMajor(),
                 p.getUsesStaticLibraries(), p.getUsesStaticLibrariesVersions(), p.getMimeGroups(),
@@ -2796,11 +2846,11 @@ public final class Settings implements Watchable, Snappable {
         if (pkg.getLegacyNativeLibraryPath() != null) {
             serializer.attribute(null, "nativeLibraryPath", pkg.getLegacyNativeLibraryPath());
         }
-        if (pkg.getPrimaryCpuAbi() != null) {
-           serializer.attribute(null, "primaryCpuAbi", pkg.getPrimaryCpuAbi());
+        if (pkg.getPrimaryCpuAbiLegacy() != null) {
+           serializer.attribute(null, "primaryCpuAbi", pkg.getPrimaryCpuAbiLegacy());
         }
-        if (pkg.getSecondaryCpuAbi() != null) {
-            serializer.attribute(null, "secondaryCpuAbi", pkg.getSecondaryCpuAbi());
+        if (pkg.getSecondaryCpuAbiLegacy() != null) {
+            serializer.attribute(null, "secondaryCpuAbi", pkg.getSecondaryCpuAbiLegacy());
         }
         if (pkg.getCpuAbiOverride() != null) {
             serializer.attribute(null, "cpuAbiOverride", pkg.getCpuAbiOverride());
@@ -2834,11 +2884,11 @@ public final class Settings implements Watchable, Snappable {
         if (pkg.getLegacyNativeLibraryPath() != null) {
             serializer.attribute(null, "nativeLibraryPath", pkg.getLegacyNativeLibraryPath());
         }
-        if (pkg.getPrimaryCpuAbi() != null) {
-            serializer.attribute(null, "primaryCpuAbi", pkg.getPrimaryCpuAbi());
+        if (pkg.getPrimaryCpuAbiLegacy() != null) {
+            serializer.attribute(null, "primaryCpuAbi", pkg.getPrimaryCpuAbiLegacy());
         }
-        if (pkg.getSecondaryCpuAbi() != null) {
-            serializer.attribute(null, "secondaryCpuAbi", pkg.getSecondaryCpuAbi());
+        if (pkg.getSecondaryCpuAbiLegacy() != null) {
+            serializer.attribute(null, "secondaryCpuAbi", pkg.getSecondaryCpuAbiLegacy());
         }
         if (pkg.getCpuAbiOverride() != null) {
             serializer.attribute(null, "cpuAbiOverride", pkg.getCpuAbiOverride());
@@ -4185,15 +4235,16 @@ public final class Settings implements Watchable, Snappable {
                         // such as APEX
                         continue;
                     }
-                    // Need to create a data directory for all apps installed for this user.
-                    // Accumulate all required args and call the installer after mPackages lock
-                    // has been released
+                    // We need to create the DE data directory for all apps installed for this user.
+                    // (CE storage is not ready yet; the CE data directories will be created later,
+                    // when the user is "unlocked".)  Accumulate all required args, and call the
+                    // installer after the mPackages lock has been released.
                     final String seInfo = AndroidPackageUtils.getSeInfo(ps.getPkg(), ps);
                     final boolean usesSdk = !ps.getPkg().getUsesSdkLibraries().isEmpty();
                     final CreateAppDataArgs args = Installer.buildCreateAppDataArgs(
                             ps.getVolumeUuid(), ps.getPackageName(), userHandle,
-                            StorageManager.FLAG_STORAGE_CE | StorageManager.FLAG_STORAGE_DE,
-                            ps.getAppId(), seInfo, ps.getPkg().getTargetSdkVersion(), usesSdk);
+                            StorageManager.FLAG_STORAGE_DE, ps.getAppId(), seInfo,
+                            ps.getPkg().getTargetSdkVersion(), usesSdk);
                     batch.createAppData(args);
                 } else {
                     // Make sure the app is excluded from storage mapping for this user
@@ -4561,8 +4612,8 @@ public final class Settings implements Watchable, Snappable {
             pw.print(prefix); pw.print("  extractNativeLibs=");
             pw.println((ps.getFlags() & ApplicationInfo.FLAG_EXTRACT_NATIVE_LIBS) != 0
                     ? "true" : "false");
-            pw.print(prefix); pw.print("  primaryCpuAbi="); pw.println(ps.getPrimaryCpuAbi());
-            pw.print(prefix); pw.print("  secondaryCpuAbi="); pw.println(ps.getSecondaryCpuAbi());
+            pw.print(prefix); pw.print("  primaryCpuAbi="); pw.println(ps.getPrimaryCpuAbiLegacy());
+            pw.print(prefix); pw.print("  secondaryCpuAbi="); pw.println(ps.getSecondaryCpuAbiLegacy());
             pw.print(prefix); pw.print("  cpuAbiOverride="); pw.println(ps.getCpuAbiOverride());
         }
         pw.print(prefix); pw.print("  versionCode="); pw.print(ps.getVersionCode());
@@ -4667,17 +4718,17 @@ public final class Settings implements Watchable, Snappable {
                             pw.println(libraryNames.get(i));
                 }
             }
-            if (pkg.getStaticSharedLibName() != null) {
+            if (pkg.getStaticSharedLibraryName() != null) {
                 pw.print(prefix); pw.println("  static library:");
                 pw.print(prefix); pw.print("    ");
-                pw.print("name:"); pw.print(pkg.getStaticSharedLibName());
+                pw.print("name:"); pw.print(pkg.getStaticSharedLibraryName());
                 pw.print(" version:"); pw.println(pkg.getStaticSharedLibVersion());
             }
 
-            if (pkg.getSdkLibName() != null) {
+            if (pkg.getSdkLibraryName() != null) {
                 pw.print(prefix); pw.println("  SDK library:");
                 pw.print(prefix); pw.print("    ");
-                pw.print("name:"); pw.print(pkg.getSdkLibName());
+                pw.print("name:"); pw.print(pkg.getSdkLibraryName());
                 pw.print(" versionMajor:"); pw.println(pkg.getSdkLibVersionMajor());
             }
 
@@ -5503,6 +5554,7 @@ public final class Settings implements Watchable, Snappable {
                                     + "set before trying to update the fingerprint.");
                 }
                 mFingerprints.put(userId, mExtendedFingerprint);
+                mPermissionUpgradeNeeded.put(userId, false);
                 writeStateForUserAsync(userId);
             }
         }

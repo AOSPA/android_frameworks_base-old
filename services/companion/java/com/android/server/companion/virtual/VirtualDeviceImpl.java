@@ -95,6 +95,7 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
     private final AssociationInfo mAssociationInfo;
     private final PendingTrampolineCallback mPendingTrampolineCallback;
     private final int mOwnerUid;
+    private final int mDeviceId;
     private final InputController mInputController;
     private VirtualAudioController mVirtualAudioController;
     @VisibleForTesting
@@ -140,19 +141,40 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
     private final SparseArray<GenericWindowPolicyController> mWindowPolicyControllers =
             new SparseArray<>();
 
-    VirtualDeviceImpl(Context context, AssociationInfo associationInfo,
-            IBinder token, int ownerUid, OnDeviceCloseListener listener,
+    VirtualDeviceImpl(
+            Context context,
+            AssociationInfo associationInfo,
+            IBinder token,
+            int ownerUid,
+            int deviceId,
+            OnDeviceCloseListener listener,
             PendingTrampolineCallback pendingTrampolineCallback,
             IVirtualDeviceActivityListener activityListener,
             Consumer<ArraySet<Integer>> runningAppsChangedCallback,
             VirtualDeviceParams params) {
-        this(context, associationInfo, token, ownerUid, /* inputController= */ null, listener,
-                pendingTrampolineCallback, activityListener, runningAppsChangedCallback, params);
+        this(
+                context,
+                associationInfo,
+                token,
+                ownerUid,
+                deviceId,
+                /* inputController= */ null,
+                listener,
+                pendingTrampolineCallback,
+                activityListener,
+                runningAppsChangedCallback,
+                params);
     }
 
     @VisibleForTesting
-    VirtualDeviceImpl(Context context, AssociationInfo associationInfo, IBinder token,
-            int ownerUid, InputController inputController, OnDeviceCloseListener listener,
+    VirtualDeviceImpl(
+            Context context,
+            AssociationInfo associationInfo,
+            IBinder token,
+            int ownerUid,
+            int deviceId,
+            InputController inputController,
+            OnDeviceCloseListener listener,
             PendingTrampolineCallback pendingTrampolineCallback,
             IVirtualDeviceActivityListener activityListener,
             Consumer<ArraySet<Integer>> runningAppsChangedCallback,
@@ -164,6 +186,7 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
         mActivityListener = activityListener;
         mRunningAppsChangedCallback = runningAppsChangedCallback;
         mOwnerUid = ownerUid;
+        mDeviceId = deviceId;
         mAppToken = token;
         mParams = params;
         if (inputController == null) {
@@ -197,6 +220,17 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
     /** Returns the device display name. */
     CharSequence getDisplayName() {
         return mAssociationInfo.getDisplayName();
+    }
+
+    /** Returns the optional name of the device. */
+    String getDeviceName() {
+        return mParams.getName();
+    }
+
+    /** Returns the unique device ID of this device. */
+    @Override // Binder call
+    public int getDeviceId() {
+        return mDeviceId;
     }
 
     @Override // Binder call
@@ -344,6 +378,33 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
         }
     }
 
+    @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)
+    @Override // Binder call
+    public void createVirtualDpad(
+            int displayId,
+            @NonNull String deviceName,
+            int vendorId,
+            int productId,
+            @NonNull IBinder deviceToken) {
+        mContext.enforceCallingOrSelfPermission(
+                android.Manifest.permission.CREATE_VIRTUAL_DEVICE,
+                "Permission required to create a virtual dpad");
+        synchronized (mVirtualDeviceLock) {
+            if (!mVirtualDisplayIds.contains(displayId)) {
+                throw new SecurityException(
+                        "Cannot create a virtual dpad for a display not associated with "
+                                + "this virtual device");
+            }
+        }
+        final long token = Binder.clearCallingIdentity();
+        try {
+            mInputController.createDpad(deviceName, vendorId, productId, deviceToken,
+                    displayId);
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
     @Override // Binder call
     public void createVirtualKeyboard(
             int displayId,
@@ -431,6 +492,27 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
         final long binderToken = Binder.clearCallingIdentity();
         try {
             mInputController.unregisterInputDevice(token);
+        } finally {
+            Binder.restoreCallingIdentity(binderToken);
+        }
+    }
+
+    @Override // Binder call
+    public int getInputDeviceId(IBinder token) {
+        final long binderToken = Binder.clearCallingIdentity();
+        try {
+            return mInputController.getInputDeviceId(token);
+        } finally {
+            Binder.restoreCallingIdentity(binderToken);
+        }
+    }
+
+
+    @Override // Binder call
+    public boolean sendDpadKeyEvent(IBinder token, VirtualKeyEvent event) {
+        final long binderToken = Binder.clearCallingIdentity();
+        try {
+            return mInputController.sendDpadKeyEvent(token, event);
         } finally {
             Binder.restoreCallingIdentity(binderToken);
         }

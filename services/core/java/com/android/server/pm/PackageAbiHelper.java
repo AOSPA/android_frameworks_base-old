@@ -22,9 +22,8 @@ import android.util.ArraySet;
 import android.util.Pair;
 
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
-import com.android.server.pm.parsing.pkg.AndroidPackageUtils;
 import com.android.server.pm.parsing.pkg.ParsedPackage;
+import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.PackageStateInternal;
 
 import java.io.File;
@@ -117,11 +116,6 @@ public interface PackageAbiHelper {
         Abis(String primary, String secondary) {
             this.primary = primary;
             this.secondary = secondary;
-        }
-
-        Abis(AndroidPackage pkg, PackageSetting pkgSetting)  {
-            this(AndroidPackageUtils.getPrimaryCpuAbi(pkg, pkgSetting),
-                    AndroidPackageUtils.getSecondaryCpuAbi(pkg, pkgSetting));
         }
 
         public void applyTo(ParsedPackage pkg) {

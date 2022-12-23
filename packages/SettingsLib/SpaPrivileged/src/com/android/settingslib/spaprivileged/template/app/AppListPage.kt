@@ -16,69 +16,79 @@
 
 package com.android.settingslib.spaprivileged.template.app
 
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.DropdownMenu
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import com.android.settingslib.spa.framework.compose.stateOf
 import com.android.settingslib.spa.widget.scaffold.MoreOptionsAction
-import com.android.settingslib.spa.widget.scaffold.SettingsScaffold
+import com.android.settingslib.spa.widget.scaffold.SearchScaffold
+import com.android.settingslib.spa.widget.ui.Spinner
 import com.android.settingslib.spaprivileged.R
+import com.android.settingslib.spaprivileged.model.app.AppListConfig
 import com.android.settingslib.spaprivileged.model.app.AppListModel
 import com.android.settingslib.spaprivileged.model.app.AppRecord
 import com.android.settingslib.spaprivileged.template.common.WorkProfilePager
 
+/**
+ * The full screen template for an App List page.
+ *
+ * @param header the description header appears before all the applications.
+ */
 @Composable
 fun <T : AppRecord> AppListPage(
     title: String,
     listModel: AppListModel<T>,
+    showInstantApps: Boolean = false,
+    primaryUserOnly: Boolean = false,
+    header: @Composable () -> Unit = {},
     appItem: @Composable (itemState: AppListItemModel<T>) -> Unit,
 ) {
     val showSystem = rememberSaveable { mutableStateOf(false) }
-    // TODO: Use SearchScaffold here.
-    SettingsScaffold(
+    SearchScaffold(
         title = title,
         actions = {
             ShowSystemAction(showSystem.value) { showSystem.value = it }
         },
-    ) { paddingValues ->
-        Spacer(Modifier.padding(paddingValues))
-        WorkProfilePager { userInfo ->
-            // TODO: Add a Spinner here.
-            AppList(
-                userInfo = userInfo,
-                listModel = listModel,
-                showSystem = showSystem,
-                option = stateOf(0),
-                searchQuery = stateOf(""),
-                appItem = appItem,
-            )
+    ) { bottomPadding, searchQuery ->
+        WorkProfilePager(primaryUserOnly) { userInfo ->
+            Column(Modifier.fillMaxSize()) {
+                val options = remember { listModel.getSpinnerOptions() }
+                val selectedOption = rememberSaveable { mutableStateOf(0) }
+                Spinner(options, selectedOption.value) { selectedOption.value = it }
+                AppList(
+                    config = AppListConfig(
+                        userId = userInfo.id,
+                        showInstantApps = showInstantApps,
+                    ),
+                    listModel = listModel,
+                    state = AppListState(
+                        showSystem = showSystem,
+                        option = selectedOption,
+                        searchQuery = searchQuery,
+                    ),
+                    header = header,
+                    appItem = appItem,
+                    bottomPadding = bottomPadding,
+                )
+            }
         }
     }
 }
 
 @Composable
 private fun ShowSystemAction(showSystem: Boolean, setShowSystem: (showSystem: Boolean) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    MoreOptionsAction { expanded = true }
-    DropdownMenu(
-        expanded = expanded,
-        onDismissRequest = { expanded = false },
-    ) {
+    MoreOptionsAction { onDismissRequest ->
         val menuText = if (showSystem) R.string.menu_hide_system else R.string.menu_show_system
         DropdownMenuItem(
             text = { Text(stringResource(menuText)) },
             onClick = {
-                expanded = false
+                onDismissRequest()
                 setShowSystem(!showSystem)
             },
         )

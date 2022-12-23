@@ -17,6 +17,7 @@
 package com.android.server.pm;
 
 import static android.app.AppOpsManager.MODE_DEFAULT;
+import static android.content.pm.PackageInstaller.SessionParams.MODE_INHERIT_EXISTING;
 import static android.content.pm.PackageManager.INSTALL_FAILED_INTERNAL_ERROR;
 import static android.content.pm.PackageManager.INSTALL_STAGED;
 import static android.content.pm.PackageManager.INSTALL_SUCCEEDED;
@@ -42,7 +43,7 @@ import android.content.pm.parsing.PackageLite;
 import android.os.Environment;
 import android.os.Trace;
 import android.os.UserHandle;
-import android.util.ArrayMap;
+import android.util.ArraySet;
 import android.util.Pair;
 import android.util.Slog;
 
@@ -51,7 +52,7 @@ import com.android.internal.content.InstallLocationUtils;
 import com.android.internal.content.NativeLibraryHelper;
 import com.android.internal.util.Preconditions;
 import com.android.server.pm.parsing.PackageParser2;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
+import com.android.server.pm.pkg.AndroidPackage;
 
 import libcore.io.IoUtils;
 
@@ -60,7 +61,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
 
 class InstallingSession {
     final OriginInfo mOriginInfo;
@@ -93,6 +94,7 @@ class InstallingSession {
     final PackageManagerService mPm;
     final InstallPackageHelper mInstallPackageHelper;
     final RemovePackageHelper mRemovePackageHelper;
+    final boolean mIsInherit;
 
     InstallingSession(OriginInfo originInfo, MoveInfo moveInfo, IPackageInstallObserver2 observer,
             int installFlags, InstallSource installSource, String volumeUuid,
@@ -121,6 +123,7 @@ class InstallingSession {
         mRequiredInstalledVersionCode = PackageManager.VERSION_CODE_HIGHEST;
         mPackageSource = packageSource;
         mPackageLite = packageLite;
+        mIsInherit = false;
     }
 
     InstallingSession(File stagedDir, IPackageInstallObserver2 observer,
@@ -151,6 +154,7 @@ class InstallingSession {
         mRequiredInstalledVersionCode = sessionParams.requiredInstalledVersionCode;
         mPackageSource = sessionParams.packageSource;
         mPackageLite = packageLite;
+        mIsInherit = sessionParams.mode == MODE_INHERIT_EXISTING;
     }
 
     @Override
@@ -253,68 +257,69 @@ class InstallingSession {
     }
 
     private void processPendingInstall() {
-        InstallArgs args = new InstallArgs(this);
+        InstallRequest installRequest = new InstallRequest(this);
         if (mRet == PackageManager.INSTALL_SUCCEEDED) {
-            mRet = copyApk(args);
+            mRet = copyApk(installRequest);
         }
         if (mRet == PackageManager.INSTALL_SUCCEEDED) {
             F2fsUtils.releaseCompressedBlocks(
-                    mPm.mContext.getContentResolver(), new File(args.getCodePath()));
+                    mPm.mContext.getContentResolver(), new File(installRequest.getCodePath()));
         }
+        installRequest.setReturnCode(mRet);
         if (mParentInstallingSession != null) {
-            mParentInstallingSession.tryProcessInstallRequest(args, mRet);
+            mParentInstallingSession.tryProcessInstallRequest(installRequest);
         } else {
-            PackageInstalledInfo res = new PackageInstalledInfo(mRet);
             // Queue up an async operation since the package installation may take a little while.
             mPm.mHandler.post(() -> processInstallRequests(
-                    res.mReturnCode == PackageManager.INSTALL_SUCCEEDED /* success */,
-                    Collections.singletonList(new InstallRequest(args, res))));
+                    mRet == PackageManager.INSTALL_SUCCEEDED /* success */,
+                    Collections.singletonList(installRequest)));
         }
     }
 
-    private int copyApk(InstallArgs args) {
+    private int copyApk(InstallRequest request) {
         if (mMoveInfo == null) {
-            return copyApkForFileInstall(args);
+            return copyApkForFileInstall(request);
         } else {
-            return copyApkForMoveInstall(args);
+            return copyApkForMoveInstall(request);
         }
     }
 
-    private int copyApkForFileInstall(InstallArgs args) {
+    private int copyApkForFileInstall(InstallRequest request) {
         Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "copyApk");
         try {
             if (mOriginInfo.mStaged) {
                 if (DEBUG_INSTALL) {
                     Slog.d(TAG, mOriginInfo.mFile + " already staged; skipping copy");
                 }
-                args.mCodeFile = mOriginInfo.mFile;
+                request.setCodeFile(mOriginInfo.mFile);
                 return PackageManager.INSTALL_SUCCEEDED;
             }
 
             try {
                 final boolean isEphemeral =
                         (mInstallFlags & PackageManager.INSTALL_INSTANT_APP) != 0;
-                args.mCodeFile =
-                        mPm.mInstallerService.allocateStageDirLegacy(mVolumeUuid, isEphemeral);
+                request.setCodeFile(
+                        mPm.mInstallerService.allocateStageDirLegacy(mVolumeUuid, isEphemeral));
             } catch (IOException e) {
                 Slog.w(TAG, "Failed to create copy file: " + e);
                 return PackageManager.INSTALL_FAILED_INSUFFICIENT_STORAGE;
             }
 
             int ret = PackageManagerServiceUtils.copyPackage(
-                    mOriginInfo.mFile.getAbsolutePath(), args.mCodeFile);
+                    mOriginInfo.mFile.getAbsolutePath(), request.getCodeFile());
             if (ret != PackageManager.INSTALL_SUCCEEDED) {
                 Slog.e(TAG, "Failed to copy package");
                 return ret;
             }
 
-            final boolean isIncremental = isIncrementalPath(args.mCodeFile.getAbsolutePath());
-            final File libraryRoot = new File(args.mCodeFile, LIB_DIR_NAME);
+            final boolean isIncremental = isIncrementalPath(
+                    request.getCodeFile().getAbsolutePath());
+            final File libraryRoot = new File(request.getCodeFile(), LIB_DIR_NAME);
             NativeLibraryHelper.Handle handle = null;
             try {
-                handle = NativeLibraryHelper.Handle.create(args.mCodeFile);
+                handle = NativeLibraryHelper.Handle.create(request.getCodeFile());
                 ret = NativeLibraryHelper.copyNativeBinariesWithOverride(handle, libraryRoot,
-                        args.mAbiOverride, isIncremental);
+                        request.getAbiOverride(), isIncremental);
             } catch (IOException e) {
                 Slog.e(TAG, "Copying native libraries failed", e);
                 ret = PackageManager.INSTALL_FAILED_INTERNAL_ERROR;
@@ -328,7 +333,7 @@ class InstallingSession {
         }
     }
 
-    private int copyApkForMoveInstall(InstallArgs args) {
+    private int copyApkForMoveInstall(InstallRequest request) {
         if (DEBUG_INSTALL) {
             Slog.d(TAG, "Moving " + mMoveInfo.mPackageName + " from "
                     + mMoveInfo.mFromUuid + " to " + mMoveInfo.mToUuid);
@@ -345,8 +350,9 @@ class InstallingSession {
         }
 
         final String toPathName = new File(mMoveInfo.mFromCodePath).getName();
-        args.mCodeFile = new File(Environment.getDataAppDirectory(mMoveInfo.mToUuid), toPathName);
-        if (DEBUG_INSTALL) Slog.d(TAG, "codeFile after move is " + args.mCodeFile);
+        request.setCodeFile(
+                new File(Environment.getDataAppDirectory(mMoveInfo.mToUuid), toPathName));
+        if (DEBUG_INSTALL) Slog.d(TAG, "codeFile after move is " + request.getCodeFile());
 
         return PackageManager.INSTALL_SUCCEEDED;
     }
@@ -460,7 +466,7 @@ class InstallingSession {
         List<InstallRequest> apexInstallRequests = new ArrayList<>();
         List<InstallRequest> apkInstallRequests = new ArrayList<>();
         for (InstallRequest request : installRequests) {
-            if ((request.mArgs.mInstallFlags & PackageManager.INSTALL_APEX) != 0) {
+            if ((request.getInstallFlags() & PackageManager.INSTALL_APEX) != 0) {
                 apexInstallRequests.add(request);
             } else {
                 apkInstallRequests.add(request);
@@ -485,7 +491,7 @@ class InstallingSession {
                 // processInstallRequestAsync. In that case just notify the observer about the
                 // failure.
                 InstallRequest request = apexInstallRequests.get(0);
-                mPm.notifyInstallObserver(request.mInstallResult, request.mArgs.mObserver);
+                mPm.notifyInstallObserver(request);
             }
             return;
         }
@@ -496,28 +502,26 @@ class InstallingSession {
     private void processApkInstallRequests(boolean success, List<InstallRequest> installRequests) {
         if (success) {
             for (InstallRequest request : installRequests) {
-                if (request.mInstallResult.mReturnCode != PackageManager.INSTALL_SUCCEEDED) {
-                    cleanUpForFailedInstall(request.mArgs);
+                if (request.getReturnCode() != PackageManager.INSTALL_SUCCEEDED) {
+                    cleanUpForFailedInstall(request);
                 }
             }
 
             mInstallPackageHelper.installPackagesTraced(installRequests);
 
             for (InstallRequest request : installRequests) {
-                doPostInstall(request.mInstallResult.mReturnCode, request.mArgs);
+                request.onInstallCompleted();
+                doPostInstall(request);
             }
         }
         for (InstallRequest request : installRequests) {
-            mInstallPackageHelper.restoreAndPostInstall(request.mArgs.mUser.getIdentifier(),
-                    request.mInstallResult,
-                    new PostInstallData(request.mArgs,
-                            request.mInstallResult, null));
+            mInstallPackageHelper.restoreAndPostInstall(request);
         }
     }
 
-    private void doPostInstall(int status, InstallArgs args) {
+    private void doPostInstall(InstallRequest request) {
         if (mMoveInfo != null) {
-            if (status == PackageManager.INSTALL_SUCCEEDED) {
+            if (request.getReturnCode() == PackageManager.INSTALL_SUCCEEDED) {
                 mRemovePackageHelper.cleanUpForMoveInstall(mMoveInfo.mFromUuid,
                         mMoveInfo.mPackageName, mMoveInfo.mFromCodePath);
             } else {
@@ -525,18 +529,18 @@ class InstallingSession {
                         mMoveInfo.mPackageName, mMoveInfo.mFromCodePath);
             }
         } else {
-            if (status != PackageManager.INSTALL_SUCCEEDED) {
-                mRemovePackageHelper.removeCodePath(args.mCodeFile);
+            if (request.getReturnCode() != PackageManager.INSTALL_SUCCEEDED) {
+                mRemovePackageHelper.removeCodePath(request.getCodeFile());
             }
         }
     }
 
-    private void cleanUpForFailedInstall(InstallArgs args) {
-        if (args.mMoveInfo != null) {
-            mRemovePackageHelper.cleanUpForMoveInstall(args.mMoveInfo.mToUuid,
-                    args.mMoveInfo.mPackageName, args.mMoveInfo.mFromCodePath);
+    private void cleanUpForFailedInstall(InstallRequest request) {
+        if (request.isInstallMove()) {
+            mRemovePackageHelper.cleanUpForMoveInstall(request.getMoveToUuid(),
+                    request.getMovePackageName(), request.getMoveFromCodePath());
         } else {
-            mRemovePackageHelper.removeCodePath(args.mCodeFile);
+            mRemovePackageHelper.removeCodePath(request.getCodeFile());
         }
     }
 
@@ -560,7 +564,7 @@ class InstallingSession {
         InstallRequest request = requests.get(0);
         try {
             // Should directory scanning logic be moved to ApexManager for better test coverage?
-            final File dir = request.mArgs.mOriginInfo.mResolvedFile;
+            final File dir = request.getOriginInfo().mResolvedFile;
             final File[] apexes = dir.listFiles();
             if (apexes == null) {
                 throw new PackageManagerException(INSTALL_FAILED_INTERNAL_ERROR,
@@ -573,25 +577,21 @@ class InstallingSession {
             }
             try (PackageParser2 packageParser = mPm.mInjector.getScanningPackageParser()) {
                 ApexInfo apexInfo = mPm.mApexManager.installPackage(apexes[0]);
-                if (ApexPackageInfo.ENABLE_FEATURE_SCAN_APEX) {
-                    // APEX has been handled successfully by apexd. Let's continue the install flow
-                    // so it will be scanned and registered with the system.
-                    // TODO(b/225756739): Improve atomicity of rebootless APEX install.
-                    // The newly installed APEX will not be reverted even if
-                    // processApkInstallRequests() fails. Need a way to keep info stored in apexd
-                    // and PMS in sync in the face of install failures.
-                    request.mInstallResult.mApexInfo = apexInfo;
-                    mPm.mHandler.post(() -> processApkInstallRequests(true, requests));
-                    return;
-                } else {
-                    mPm.mApexPackageInfo.notifyPackageInstalled(apexInfo, packageParser);
-                }
+                // APEX has been handled successfully by apexd. Let's continue the install flow
+                // so it will be scanned and registered with the system.
+                // TODO(b/225756739): Improve atomicity of rebootless APEX install.
+                // The newly installed APEX will not be reverted even if
+                // processApkInstallRequests() fails. Need a way to keep info stored in apexd
+                // and PMS in sync in the face of install failures.
+                request.setApexInfo(apexInfo);
+                mPm.mHandler.post(() -> processApkInstallRequests(true, requests));
+                return;
             }
         } catch (PackageManagerException e) {
-            request.mInstallResult.setError("APEX installation failed", e);
+            request.setError("APEX installation failed", e);
         }
         PackageManagerService.invalidatePackageInfoCache();
-        mPm.notifyInstallObserver(request.mInstallResult, request.mArgs.mObserver);
+        mPm.notifyInstallObserver(request);
     }
 
     /**
@@ -600,7 +600,7 @@ class InstallingSession {
      */
     private class MultiPackageInstallingSession {
         private final List<InstallingSession> mChildInstallingSessions;
-        private final Map<InstallArgs, Integer> mCurrentState;
+        private final Set<InstallRequest> mCurrentInstallRequests;
         @NonNull
         final PackageManagerService mPm;
         final UserHandle mUser;
@@ -619,7 +619,7 @@ class InstallingSession {
                 final InstallingSession childInstallingSession = childInstallingSessions.get(i);
                 childInstallingSession.mParentInstallingSession = this;
             }
-            this.mCurrentState = new ArrayMap<>(mChildInstallingSessions.size());
+            mCurrentInstallRequests = new ArraySet<>(mChildInstallingSessions.size());
         }
 
         public void start() {
@@ -636,24 +636,25 @@ class InstallingSession {
             Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
         }
 
-        public void tryProcessInstallRequest(InstallArgs args, int currentStatus) {
-            mCurrentState.put(args, currentStatus);
-            if (mCurrentState.size() != mChildInstallingSessions.size()) {
+        public void tryProcessInstallRequest(InstallRequest request) {
+            mCurrentInstallRequests.add(request);
+            if (mCurrentInstallRequests.size() != mChildInstallingSessions.size()) {
                 return;
             }
             int completeStatus = PackageManager.INSTALL_SUCCEEDED;
-            for (Integer status : mCurrentState.values()) {
-                if (status == PackageManager.INSTALL_UNKNOWN) {
+            for (InstallRequest installRequest : mCurrentInstallRequests) {
+                if (installRequest.getReturnCode() == PackageManager.INSTALL_UNKNOWN) {
                     return;
-                } else if (status != PackageManager.INSTALL_SUCCEEDED) {
-                    completeStatus = status;
+                } else if (installRequest.getReturnCode() != PackageManager.INSTALL_SUCCEEDED) {
+                    completeStatus = installRequest.getReturnCode();
                     break;
                 }
             }
-            final List<InstallRequest> installRequests = new ArrayList<>(mCurrentState.size());
-            for (Map.Entry<InstallArgs, Integer> entry : mCurrentState.entrySet()) {
-                installRequests.add(new InstallRequest(entry.getKey(),
-                        new PackageInstalledInfo(completeStatus)));
+            final List<InstallRequest> installRequests = new ArrayList<>(
+                    mCurrentInstallRequests.size());
+            for (InstallRequest installRequest : mCurrentInstallRequests) {
+                installRequest.setReturnCode(completeStatus);
+                installRequests.add(installRequest);
             }
             int finalCompleteStatus = completeStatus;
             mPm.mHandler.post(() -> processInstallRequests(

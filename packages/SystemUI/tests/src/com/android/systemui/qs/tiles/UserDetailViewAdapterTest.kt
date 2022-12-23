@@ -30,8 +30,11 @@ import com.android.systemui.R
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.classifier.FalsingManagerFake
 import com.android.systemui.qs.QSUserSwitcherEvent
+import com.android.systemui.qs.user.UserSwitchDialogController
 import com.android.systemui.statusbar.policy.UserSwitcherController
+import com.android.systemui.user.data.source.UserRecord
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -40,6 +43,7 @@ import org.mockito.ArgumentMatchers.anyBoolean
 import org.mockito.ArgumentMatchers.anyInt
 import org.mockito.Mock
 import org.mockito.Mockito.`when`
+import org.mockito.Mockito.mock
 import org.mockito.Mockito.verify
 import org.mockito.MockitoAnnotations
 
@@ -47,13 +51,18 @@ import org.mockito.MockitoAnnotations
 @SmallTest
 class UserDetailViewAdapterTest : SysuiTestCase() {
 
-    @Mock private lateinit var mUserSwitcherController: UserSwitcherController
-    @Mock private lateinit var mParent: ViewGroup
-    @Mock private lateinit var mUserDetailItemView: UserDetailItemView
-    @Mock private lateinit var mOtherView: View
-    @Mock private lateinit var mInflatedUserDetailItemView: UserDetailItemView
-    @Mock private lateinit var mUserInfo: UserInfo
-    @Mock private lateinit var mLayoutInflater: LayoutInflater
+    @Mock
+    private lateinit var mUserSwitcherController: UserSwitcherController
+    @Mock
+    private lateinit var mParent: ViewGroup
+    @Mock
+    private lateinit var mUserDetailItemView: UserDetailItemView
+    @Mock
+    private lateinit var mOtherView: View
+    @Mock
+    private lateinit var mInflatedUserDetailItemView: UserDetailItemView
+    @Mock
+    private lateinit var mLayoutInflater: LayoutInflater
     private var falsingManagerFake: FalsingManagerFake = FalsingManagerFake()
     private lateinit var adapter: UserDetailView.Adapter
     private lateinit var uiEventLogger: UiEventLoggerFake
@@ -66,10 +75,12 @@ class UserDetailViewAdapterTest : SysuiTestCase() {
 
         mContext.addMockSystemService(Context.LAYOUT_INFLATER_SERVICE, mLayoutInflater)
         `when`(mLayoutInflater.inflate(anyInt(), any(ViewGroup::class.java), anyBoolean()))
-                .thenReturn(mInflatedUserDetailItemView)
+            .thenReturn(mInflatedUserDetailItemView)
         `when`(mParent.context).thenReturn(mContext)
-        adapter = UserDetailView.Adapter(mContext, mUserSwitcherController, uiEventLogger,
-                falsingManagerFake)
+        adapter = UserDetailView.Adapter(
+            mContext, mUserSwitcherController, uiEventLogger,
+            falsingManagerFake
+        )
         mPicture = UserIcons.convertToBitmap(mContext.getDrawable(R.drawable.ic_avatar_user))
     }
 
@@ -139,14 +150,29 @@ class UserDetailViewAdapterTest : SysuiTestCase() {
         clickableTest(false, false, mUserDetailItemView, true)
     }
 
+    @Test
+    fun testManageUsersIsNotAvailable() {
+        assertNull(adapter.users.find { it.isManageUsers })
+    }
+
+    @Test
+    fun clickDismissDialog() {
+        val shower: UserSwitchDialogController.DialogShower =
+            mock(UserSwitchDialogController.DialogShower::class.java)
+        adapter.injectDialogShower(shower)
+        adapter.onUserListItemClicked(createUserRecord(current = true, guest = false), shower)
+        verify(shower).dismiss()
+    }
+
     private fun createUserRecord(current: Boolean, guest: Boolean) =
-            UserSwitcherController.UserRecord(
-                    mUserInfo,
-                    mPicture,
-                    guest,
-                    current,
-                    false /* isAddUser */,
-                    false /* isRestricted */,
-                    true /* isSwitchToEnabled */,
-                    false /* isAddSupervisedUser */)
+        UserRecord(
+            UserInfo(0 /* id */, "name", 0 /* flags */),
+            mPicture,
+            guest,
+            current,
+            false /* isAddUser */,
+            false /* isRestricted */,
+            true /* isSwitchToEnabled */,
+            false /* isAddSupervisedUser */
+        )
 }

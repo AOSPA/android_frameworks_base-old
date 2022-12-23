@@ -31,6 +31,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.Mock
 import org.mockito.Mockito
+import org.mockito.Mockito.`when`
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.MockitoAnnotations
@@ -64,9 +65,10 @@ class KeyguardPasswordViewControllerTest : SysuiTestCase() {
     @Mock
     lateinit var keyguardViewController: KeyguardViewController
     @Mock
-    private lateinit var mKeyguardMessageArea: KeyguardMessageArea
+    private lateinit var mKeyguardMessageArea: BouncerKeyguardMessageArea
     @Mock
-    private lateinit var mKeyguardMessageAreaController: KeyguardMessageAreaController
+    private lateinit var mKeyguardMessageAreaController:
+        KeyguardMessageAreaController<BouncerKeyguardMessageArea>
 
     private lateinit var keyguardPasswordViewController: KeyguardPasswordViewController
 
@@ -74,7 +76,8 @@ class KeyguardPasswordViewControllerTest : SysuiTestCase() {
     fun setup() {
         MockitoAnnotations.initMocks(this)
         Mockito.`when`(
-            keyguardPasswordView.findViewById<KeyguardMessageArea>(R.id.keyguard_message_area)
+            keyguardPasswordView
+                .requireViewById<BouncerKeyguardMessageArea>(R.id.bouncer_message_area)
         ).thenReturn(mKeyguardMessageArea)
         Mockito.`when`(messageAreaControllerFactory.create(mKeyguardMessageArea))
             .thenReturn(mKeyguardMessageAreaController)
@@ -112,9 +115,18 @@ class KeyguardPasswordViewControllerTest : SysuiTestCase() {
     }
 
     @Test
-    fun onResume_testSetInitialText() {
-        keyguardPasswordViewController.onResume(KeyguardSecurityView.SCREEN_ON)
-        verify(mKeyguardMessageAreaController)
-            .setMessageIfEmpty(R.string.keyguard_enter_your_password)
+    fun startAppearAnimation() {
+        keyguardPasswordViewController.startAppearAnimation()
+        verify(mKeyguardMessageAreaController).setMessage(R.string.keyguard_enter_your_password)
+    }
+
+    @Test
+    fun startAppearAnimation_withExistingMessage() {
+        `when`(mKeyguardMessageAreaController.message).thenReturn("Unlock to continue.")
+        keyguardPasswordViewController.startAppearAnimation()
+        verify(
+            mKeyguardMessageAreaController,
+            never()
+        ).setMessage(R.string.keyguard_enter_your_password)
     }
 }

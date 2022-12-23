@@ -130,14 +130,14 @@ static const char IMAGE_FRAG_DYNAMIC_COLORING_SHADER_SOURCE[] = R"(
     uniform sampler2D uTexture;
     uniform float uFade;
     uniform float uColorProgress;
-    uniform vec4 uStartColor0;
-    uniform vec4 uStartColor1;
-    uniform vec4 uStartColor2;
-    uniform vec4 uStartColor3;
-    uniform vec4 uEndColor0;
-    uniform vec4 uEndColor1;
-    uniform vec4 uEndColor2;
-    uniform vec4 uEndColor3;
+    uniform vec3 uStartColor0;
+    uniform vec3 uStartColor1;
+    uniform vec3 uStartColor2;
+    uniform vec3 uStartColor3;
+    uniform vec3 uEndColor0;
+    uniform vec3 uEndColor1;
+    uniform vec3 uEndColor2;
+    uniform vec3 uEndColor3;
     varying highp vec2 vUv;
     void main() {
         vec4 mask = texture2D(uTexture, vUv);
@@ -150,12 +150,12 @@ static const char IMAGE_FRAG_DYNAMIC_COLORING_SHADER_SOURCE[] = R"(
             * step(cWhiteMaskThreshold, g)
             * step(cWhiteMaskThreshold, b)
             * step(cWhiteMaskThreshold, a);
-        vec4 color = r * mix(uStartColor0, uEndColor0, uColorProgress)
+        vec3 color = r * mix(uStartColor0, uEndColor0, uColorProgress)
                 + g * mix(uStartColor1, uEndColor1, uColorProgress)
                 + b * mix(uStartColor2, uEndColor2, uColorProgress)
                 + a * mix(uStartColor3, uEndColor3, uColorProgress);
-        color = mix(color, vec4(vec3((r + g + b + a) * 0.25), 1.0), useWhiteMask);
-        gl_FragColor = vec4(color.x, color.y, color.z, (1.0 - uFade)) * color.a;
+        color = mix(color, vec3((r + g + b + a) * 0.25), useWhiteMask);
+        gl_FragColor = vec4(color.x, color.y, color.z, (1.0 - uFade));
     })";
 static const char IMAGE_FRAG_SHADER_SOURCE[] = R"(
     precision mediump float;
@@ -494,28 +494,13 @@ ui::Size BootAnimation::limitSurfaceSize(int width, int height) const {
 status_t BootAnimation::readyToRun() {
     mAssets.addDefaultAssets();
 
-    mDisplayToken = SurfaceComposerClient::getInternalDisplayToken();
-    if (mDisplayToken == nullptr)
+    const std::vector<PhysicalDisplayId> ids = SurfaceComposerClient::getPhysicalDisplayIds();
+    if (ids.empty()) {
+        SLOGE("Failed to get ID for any displays\n");
         return NAME_NOT_FOUND;
+    }
 
-    DisplayMode displayMode;
-    const status_t error =
-            SurfaceComposerClient::getActiveDisplayMode(mDisplayToken, &displayMode);
-    if (error != NO_ERROR)
-        return error;
-
-    mMaxWidth = android::base::GetIntProperty("ro.surface_flinger.max_graphics_width", 0);
-    mMaxHeight = android::base::GetIntProperty("ro.surface_flinger.max_graphics_height", 0);
-    ui::Size resolution = displayMode.resolution;
-    resolution = limitSurfaceSize(resolution.width, resolution.height);
-    // create the native surface
-    sp<SurfaceControl> control = session()->createSurface(String8("BootAnimation"),
-            resolution.getWidth(), resolution.getHeight(), PIXEL_FORMAT_RGB_565,
-            ISurfaceComposerClient::eOpaque);
-
-    SurfaceComposerClient::Transaction t;
-
-    // this guest property specifies multi-display IDs to show the boot animation
+    // this system property specifies multi-display IDs to show the boot animation
     // multiple ids can be set with comma (,) as separator, for example:
     // setprop persist.boot.animation.displays 19260422155234049,19261083906282754
     Vector<PhysicalDisplayId> physicalDisplayIds;
@@ -542,9 +527,44 @@ status_t BootAnimation::readyToRun() {
                 stream.ignore();
         }
 
+        // the first specified display id is used to retrieve mDisplayToken
+        for (const auto id : physicalDisplayIds) {
+            if (std::find(ids.begin(), ids.end(), id) != ids.end()) {
+                if (const auto token = SurfaceComposerClient::getPhysicalDisplayToken(id)) {
+                    mDisplayToken = token;
+                    break;
+                }
+            }
+        }
+    }
+
+    // If the system property is not present or invalid, display 0 is used
+    if (mDisplayToken == nullptr) {
+        mDisplayToken = SurfaceComposerClient::getPhysicalDisplayToken(ids.front());
+        if (mDisplayToken == nullptr) {
+            return NAME_NOT_FOUND;
+        }
+    }
+
+    DisplayMode displayMode;
+    const status_t error =
+            SurfaceComposerClient::getActiveDisplayMode(mDisplayToken, &displayMode);
+    if (error != NO_ERROR) {
+        return error;
+    }
+
+    mMaxWidth = android::base::GetIntProperty("ro.surface_flinger.max_graphics_width", 0);
+    mMaxHeight = android::base::GetIntProperty("ro.surface_flinger.max_graphics_height", 0);
+    ui::Size resolution = displayMode.resolution;
+    resolution = limitSurfaceSize(resolution.width, resolution.height);
+    // create the native surface
+    sp<SurfaceControl> control = session()->createSurface(String8("BootAnimation"),
+            resolution.getWidth(), resolution.getHeight(), PIXEL_FORMAT_RGB_565,
+            ISurfaceComposerClient::eOpaque);
+
+    SurfaceComposerClient::Transaction t;
+    if (isValid) {
         // In the case of multi-display, boot animation shows on the specified displays
-        // in addition to the primary display
-        const auto ids = SurfaceComposerClient::getPhysicalDisplayIds();
         for (const auto id : physicalDisplayIds) {
             if (std::find(ids.begin(), ids.end(), id) != ids.end()) {
                 if (const auto token = SurfaceComposerClient::getPhysicalDisplayToken(id)) {
@@ -572,8 +592,9 @@ status_t BootAnimation::readyToRun() {
     eglQuerySurface(display, surface, EGL_WIDTH, &w);
     eglQuerySurface(display, surface, EGL_HEIGHT, &h);
 
-    if (eglMakeCurrent(display, surface, surface, context) == EGL_FALSE)
+    if (eglMakeCurrent(display, surface, surface, context) == EGL_FALSE) {
         return NO_INIT;
+    }
 
     mDisplay = display;
     mContext = context;
@@ -1432,12 +1453,12 @@ void BootAnimation::initDynamicColors() {
     for (int i = 0; i < DYNAMIC_COLOR_COUNT; i++) {
         float *startColor = mAnimation->startColors[i];
         float *endColor = mAnimation->endColors[i];
-        glUniform4f(glGetUniformLocation(mImageShader,
+        glUniform3f(glGetUniformLocation(mImageShader,
             (U_START_COLOR_PREFIX + std::to_string(i)).c_str()),
-            startColor[0], startColor[1], startColor[2], 1 /* alpha */);
-        glUniform4f(glGetUniformLocation(mImageShader,
+            startColor[0], startColor[1], startColor[2]);
+        glUniform3f(glGetUniformLocation(mImageShader,
             (U_END_COLOR_PREFIX + std::to_string(i)).c_str()),
-            endColor[0], endColor[1], endColor[2], 1 /* alpha */);
+            endColor[0], endColor[1], endColor[2]);
     }
     mImageColorProgressLocation = glGetUniformLocation(mImageShader, U_COLOR_PROGRESS);
 }

@@ -49,6 +49,7 @@ import android.accessibilityservice.TouchInteractionController;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
+import android.annotation.UserIdInt;
 import android.app.ActivityOptions;
 import android.app.AlertDialog;
 import android.app.PendingIntent;
@@ -276,6 +277,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
     final SparseArray<AccessibilityUserState> mUserStates = new SparseArray<>();
 
     private final UiAutomationManager mUiAutomationManager = new UiAutomationManager(mLock);
+    private final ProxyManager mProxyManager;
     private final AccessibilityTraceManager mTraceManager;
     private final CaptioningManagerImpl mCaptioningManagerImpl;
 
@@ -356,6 +358,13 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                 EditorInfo editorInfo, boolean restarting) {
             mService.scheduleStartInput(remoteAccessibilityInputConnection, editorInfo, restarting);
         }
+
+        @Override
+        public boolean isTouchExplorationEnabled(@UserIdInt int userId) {
+            synchronized (mService.mLock) {
+                return mService.getUserStateLocked(userId).isTouchExplorationEnabledLocked();
+            }
+        }
     }
 
     public static final class Lifecycle extends SystemService {
@@ -388,7 +397,8 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             AccessibilityWindowManager a11yWindowManager,
             AccessibilityDisplayListener a11yDisplayListener,
             MagnificationController magnificationController,
-            @Nullable AccessibilityInputFilter inputFilter) {
+            @Nullable AccessibilityInputFilter inputFilter,
+            ProxyManager proxyManager) {
         mContext = context;
         mPowerManager =  (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
         mWindowManagerService = LocalServices.getService(WindowManagerInternal.class);
@@ -404,6 +414,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         mMagnificationController = magnificationController;
         mMagnificationProcessor = new MagnificationProcessor(mMagnificationController);
         mCaptioningManagerImpl = new CaptioningManagerImpl(mContext);
+        mProxyManager = proxyManager;
         if (inputFilter != null) {
             mInputFilter = inputFilter;
             mHasInputFilter = true;
@@ -437,6 +448,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                 new MagnificationScaleProvider(mContext));
         mMagnificationProcessor = new MagnificationProcessor(mMagnificationController);
         mCaptioningManagerImpl = new CaptioningManagerImpl(mContext);
+        mProxyManager = new ProxyManager(mLock);
         init();
     }
 
@@ -655,24 +667,26 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                     userState.mBindingServices.removeIf(filter);
                     userState.mCrashedServices.removeIf(filter);
                     final Iterator<ComponentName> it = userState.mEnabledServices.iterator();
+                    boolean anyServiceRemoved = false;
                     while (it.hasNext()) {
                         final ComponentName comp = it.next();
                         final String compPkg = comp.getPackageName();
                         if (compPkg.equals(packageName)) {
                             it.remove();
-                            // Update the enabled services setting.
-                            persistComponentNamesToSettingLocked(
-                                    Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
-                                    userState.mEnabledServices, userId);
-                            // Update the touch exploration granted services setting.
                             userState.mTouchExplorationGrantedServices.remove(comp);
-                            persistComponentNamesToSettingLocked(
-                                    Settings.Secure.
-                                    TOUCH_EXPLORATION_GRANTED_ACCESSIBILITY_SERVICES,
-                                    userState.mTouchExplorationGrantedServices, userId);
-                            onUserStateChangedLocked(userState);
-                            return;
+                            anyServiceRemoved = true;
                         }
+                    }
+                    if (anyServiceRemoved) {
+                        // Update the enabled services setting.
+                        persistComponentNamesToSettingLocked(
+                                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+                                userState.mEnabledServices, userId);
+                        // Update the touch exploration granted services setting.
+                        persistComponentNamesToSettingLocked(
+                                Settings.Secure.TOUCH_EXPLORATION_GRANTED_ACCESSIBILITY_SERVICES,
+                                userState.mTouchExplorationGrantedServices, userId);
+                        onUserStateChangedLocked(userState);
                     }
                 }
             }
@@ -683,8 +697,8 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                 if (mTraceManager.isA11yTracingEnabledForTypes(FLAGS_PACKAGE_BROADCAST_RECEIVER)) {
                     mTraceManager.logTrace(LOG_TAG + ".PM.onHandleForceStop",
                             FLAGS_PACKAGE_BROADCAST_RECEIVER,
-                            "intent=" + intent + ";packages=" + packages + ";uid=" + uid
-                            + ";doit=" + doit);
+                            "intent=" + intent + ";packages=" + Arrays.toString(packages)
+                            + ";uid=" + uid + ";doit=" + doit);
                 }
                 synchronized (mLock) {
                     final int userId = getChangingUserId();
@@ -726,7 +740,6 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         intentFilter.addAction(Intent.ACTION_USER_SWITCHED);
         intentFilter.addAction(Intent.ACTION_USER_UNLOCKED);
         intentFilter.addAction(Intent.ACTION_USER_REMOVED);
-        intentFilter.addAction(Intent.ACTION_USER_PRESENT);
         intentFilter.addAction(Intent.ACTION_SETTING_RESTORED);
 
         mContext.registerReceiverAsUser(new BroadcastReceiver() {
@@ -744,14 +757,6 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                     unlockUser(intent.getIntExtra(Intent.EXTRA_USER_HANDLE, 0));
                 } else if (Intent.ACTION_USER_REMOVED.equals(action)) {
                     removeUser(intent.getIntExtra(Intent.EXTRA_USER_HANDLE, 0));
-                } else if (Intent.ACTION_USER_PRESENT.equals(action)) {
-                    // We will update when the automation service dies.
-                    synchronized (mLock) {
-                        AccessibilityUserState userState = getCurrentUserStateLocked();
-                        if (readConfigurationForUserStateLocked(userState)) {
-                            onUserStateChangedLocked(userState);
-                        }
-                    }
                 } else if (Intent.ACTION_SETTING_RESTORED.equals(action)) {
                     final String which = intent.getStringExtra(Intent.EXTRA_SETTING_NAME);
                     if (Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES.equals(which)) {
@@ -952,10 +957,11 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             // current state of the windows as the window manager may be delaying
             // the computation for performance reasons.
             boolean shouldComputeWindows = false;
-            int displayId = Display.INVALID_DISPLAY;
+            int displayId = event.getDisplayId();
             synchronized (mLock) {
                 final int windowId = event.getWindowId();
-                if (windowId != AccessibilityWindowInfo.UNDEFINED_WINDOW_ID) {
+                if (windowId != AccessibilityWindowInfo.UNDEFINED_WINDOW_ID
+                        && displayId == Display.INVALID_DISPLAY) {
                     displayId = mA11yWindowManager.getDisplayIdByUserIdAndWindowIdLocked(
                             resolvedUserId, windowId);
                     event.setDisplayId(displayId);
@@ -1107,7 +1113,8 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             final List<AccessibilityServiceInfo> result = new ArrayList<>(serviceCount);
             for (int i = 0; i < serviceCount; ++i) {
                 final AccessibilityServiceConnection service = services.get(i);
-                if ((service.mFeedbackType & feedbackType) != 0) {
+                if ((service.mFeedbackType & feedbackType) != 0
+                        || feedbackType == AccessibilityServiceInfo.FEEDBACK_ALL_MASK) {
                     result.add(service.getServiceInfo());
                 }
             }
@@ -1688,31 +1695,34 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
     }
 
     private boolean scheduleNotifyMotionEvent(MotionEvent event) {
+        boolean result = false;
+        int displayId = event.getDisplayId();
         synchronized (mLock) {
             AccessibilityUserState state = getCurrentUserStateLocked();
             for (int i = state.mBoundServices.size() - 1; i >= 0; i--) {
                 AccessibilityServiceConnection service = state.mBoundServices.get(i);
-                if (service.mRequestTouchExplorationMode) {
+                if (service.isServiceDetectsGesturesEnabled(displayId)) {
                     service.notifyMotionEvent(event);
-                    return true;
+                    result = true;
                 }
             }
         }
-        return false;
+        return result;
     }
 
     private boolean scheduleNotifyTouchState(int displayId, int touchState) {
+        boolean result = false;
         synchronized (mLock) {
             AccessibilityUserState state = getCurrentUserStateLocked();
             for (int i = state.mBoundServices.size() - 1; i >= 0; i--) {
                 AccessibilityServiceConnection service = state.mBoundServices.get(i);
-                if (service.mRequestTouchExplorationMode) {
+                if (service.isServiceDetectsGesturesEnabled(displayId)) {
                     service.notifyTouchState(displayId, touchState);
-                    return true;
+                    result = true;
                 }
             }
         }
-        return false;
+        return result;
     }
 
     private void notifyClearAccessibilityCacheLocked() {
@@ -2285,8 +2295,9 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                 if (!mHasInputFilter) {
                     mHasInputFilter = true;
                     if (mInputFilter == null) {
-                        mInputFilter = new AccessibilityInputFilter(mContext,
-                                AccessibilityManagerService.this);
+                        mInputFilter =
+                                new AccessibilityInputFilter(
+                                        mContext, AccessibilityManagerService.this);
                     }
                     inputFilter = mInputFilter;
                     setInputFilter = true;
@@ -2296,6 +2307,17 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                 if (mHasInputFilter) {
                     mHasInputFilter = false;
                     mInputFilter.setUserAndEnabledFeatures(userState.mUserId, 0);
+                    mInputFilter.resetServiceDetectsGestures();
+                    if (userState.isTouchExplorationEnabledLocked()) {
+                        //  Service gesture detection is turned on and off on a per-display
+                        // basis.
+                        final ArrayList<Display> displays = getValidDisplayList();
+                        for (Display display : displays) {
+                            int displayId = display.getDisplayId();
+                            boolean mode = userState.isServiceDetectsGesturesEnabled(displayId);
+                            mInputFilter.setServiceDetectsGesturesEnabled(displayId, mode);
+                        }
+                    }
                     inputFilter = null;
                     setInputFilter = true;
                 }
@@ -2609,6 +2631,18 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                         userState.mUserId);
             } finally {
                 Binder.restoreCallingIdentity(identity);
+            }
+        }
+        // Service gesture detection is turned on and off on a per-display
+        // basis.
+        userState.resetServiceDetectsGestures();
+        final ArrayList<Display> displays = getValidDisplayList();
+        for (AccessibilityServiceConnection service: userState.mBoundServices) {
+            for (Display display : displays) {
+                int displayId = display.getDisplayId();
+                if (service.isServiceDetectsGesturesEnabled(displayId)) {
+                    userState.setServiceDetectsGesturesEnabled(displayId, true);
+                }
             }
         }
         userState.setServiceHandlesDoubleTapLocked(serviceHandlesDoubleTapEnabled);
@@ -3601,6 +3635,38 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
     }
 
     @Override
+    public boolean registerProxyForDisplay(IAccessibilityServiceClient client, int displayId)
+            throws RemoteException {
+        mSecurityPolicy.enforceCallingOrSelfPermission(Manifest.permission.MANAGE_ACCESSIBILITY);
+        if (client == null) {
+            return false;
+        }
+        if (displayId < 0) {
+            throw new IllegalArgumentException("The display id " + displayId + " is invalid.");
+        }
+        if (displayId == Display.DEFAULT_DISPLAY) {
+            throw new IllegalArgumentException("The default display cannot be proxy-ed.");
+        }
+        if (!isTrackedDisplay(displayId)) {
+            throw new IllegalArgumentException("The display " + displayId + " does not exist or is"
+                    + " not tracked by accessibility.");
+        }
+        if (mProxyManager.isProxyed(displayId)) {
+            throw new IllegalArgumentException("The display " + displayId + " is already being"
+                    + "proxy-ed");
+        }
+
+        mProxyManager.registerProxy(client, displayId);
+        return true;
+    }
+
+    @Override
+    public boolean unregisterProxyForDisplay(int displayId) throws RemoteException {
+        mSecurityPolicy.enforceCallingOrSelfPermission(Manifest.permission.MANAGE_ACCESSIBILITY);
+        return mProxyManager.unregisterProxy(displayId);
+    }
+
+    @Override
     public void dump(FileDescriptor fd, final PrintWriter pw, String[] args) {
         if (!DumpUtils.checkDumpPermission(mContext, LOG_TAG, pw)) return;
         synchronized (mLock) {
@@ -3827,6 +3893,21 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
      */
     public ArrayList<Display> getValidDisplayList() {
         return mA11yDisplayListener.getValidDisplayList();
+    }
+
+
+    /**
+     *  Returns {@code true} if the display id is in the list of currently valid logical displays
+     *  being tracked by a11y.
+     */
+    private boolean isTrackedDisplay(int displayId) {
+        final ArrayList<Display> displays = getValidDisplayList();
+        for (Display display : displays) {
+            if (display.getDisplayId() == displayId) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -4094,7 +4175,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                     if (readEnabledAccessibilityServicesLocked(userState)) {
                         mSecurityPolicy.onEnabledServicesChangedLocked(userState.mUserId,
                                 userState.mEnabledServices);
-                        userState.updateCrashedServicesIfNeededLocked();
+                        userState.removeDisabledServicesFromTemporaryStatesLocked();
                         onUserStateChangedLocked(userState);
                     }
                 } else if (mTouchExplorationGrantedAccessibilityServicesUri.equals(uri)) {
@@ -4292,6 +4373,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
 
     private void setServiceDetectsGesturesInternal(int displayId, boolean mode) {
         synchronized (mLock) {
+            getCurrentUserStateLocked().setServiceDetectsGesturesEnabled(displayId, mode);
             if (mHasInputFilter && mInputFilter != null) {
                 mInputFilter.setServiceDetectsGesturesEnabled(displayId, mode);
             }

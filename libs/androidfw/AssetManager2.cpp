@@ -601,10 +601,6 @@ base::expected<FindEntryResult, NullOrIOError> AssetManager2::FindEntry(
     return base::unexpected(result.error());
   }
 
-  if (type_idx == 0x1c) {
-    LOG(ERROR) << base::StringPrintf("foobar first result %s", result->package_name->c_str());
-  }
-
   bool overlaid = false;
   if (!stop_at_first_match && !ignore_configuration && !apk_assets_[result->cookie]->IsLoader()) {
     for (const auto& id_map : package_group.overlays_) {
@@ -615,7 +611,21 @@ base::expected<FindEntryResult, NullOrIOError> AssetManager2::FindEntry(
       }
       if (overlay_entry.IsInlineValue()) {
         // The target resource is overlaid by an inline value not represented by a resource.
-        result->entry = overlay_entry.GetInlineValue();
+        ConfigDescription best_frro_config;
+        Res_value best_frro_value;
+        bool frro_found = false;
+        for( const auto& [config, value] : overlay_entry.GetInlineValue()) {
+          if ((!frro_found || config.isBetterThan(best_frro_config, desired_config))
+              && config.match(*desired_config)) {
+            frro_found = true;
+            best_frro_config = config;
+            best_frro_value = value;
+          }
+        }
+        if (!frro_found) {
+          continue;
+        }
+        result->entry = best_frro_value;
         result->dynamic_ref_table = id_map.overlay_res_maps_.GetOverlayDynamicRefTable();
         result->cookie = id_map.cookie;
 
@@ -1058,7 +1068,7 @@ base::expected<const ResolvedBag*, NullOrIOError> AssetManager2::ResolveBag(
 base::expected<const ResolvedBag*, NullOrIOError> AssetManager2::GetBag(uint32_t resid) const {
   std::vector<uint32_t> found_resids;
   const auto bag = GetBag(resid, found_resids);
-  cached_bag_resid_stacks_.emplace(resid, found_resids);
+  cached_bag_resid_stacks_.emplace(resid, std::move(found_resids));
   return bag;
 }
 
@@ -1458,7 +1468,6 @@ base::expected<std::monostate, NullOrIOError> Theme::ApplyStyle(uint32_t resid, 
       continue;
     }
 
-    Theme::Entry new_entry{attr_res_id, it->cookie, (*bag)->type_spec_flags, it->value};
     auto entry_it = std::lower_bound(entries_.begin(), entries_.end(), attr_res_id,
                                      ThemeEntryKeyComparer{});
     if (entry_it != entries_.end() && entry_it->attr_res_id == attr_res_id) {
@@ -1467,10 +1476,10 @@ base::expected<std::monostate, NullOrIOError> Theme::ApplyStyle(uint32_t resid, 
         /// true.
         entries_.erase(entry_it);
       } else if (force) {
-        *entry_it = new_entry;
+        *entry_it = Entry{attr_res_id, it->cookie, (*bag)->type_spec_flags, it->value};
       }
     } else {
-      entries_.insert(entry_it, new_entry);
+      entries_.insert(entry_it, Entry{attr_res_id, it->cookie, (*bag)->type_spec_flags, it->value});
     }
   }
   return {};

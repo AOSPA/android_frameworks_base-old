@@ -57,6 +57,7 @@ system_optimized_java_defaults {
                 // retracing infra.
                 optimize: false,
                 shrink: true,
+                ignore_warnings: false,
                 proguard_flags_files: ["proguard.flags"],
             },
             // Note: Optimizations are disabled by default if unspecified in
@@ -88,12 +89,11 @@ filegroup {
         ":services.autofill-sources",
         ":services.backup-sources",
         ":services.bluetooth-sources", // TODO(b/214988855) : Remove once apex/service-bluetooth jar is ready
-        ":backuplib-sources",
-        ":services.cloudsearch-sources",
         ":services.companion-sources",
         ":services.contentcapture-sources",
         ":services.contentsuggestions-sources",
         ":services.coverage-sources",
+        ":services.credentials-sources",
         ":services.devicepolicy-sources",
         ":services.midi-sources",
         ":services.musicsearch-sources",
@@ -143,11 +143,11 @@ java_library {
         "services.appwidget",
         "services.autofill",
         "services.backup",
-        "services.cloudsearch",
         "services.companion",
         "services.contentcapture",
         "services.contentsuggestions",
         "services.coverage",
+        "services.credentials",
         "services.devicepolicy",
         "services.midi",
         "services.musicsearch",
@@ -176,6 +176,8 @@ java_library {
         "android.hidl.manager-V1.0-java",
         "framework-tethering.stubs.module_lib",
         "service-art.stubs.system_server",
+        "service-permission.stubs.system_server",
+        "service-sdksandbox.stubs.system_server",
     ],
 
     // Uncomment to enable output of certain warnings (deprecated, unchecked)

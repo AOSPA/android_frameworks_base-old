@@ -16,6 +16,7 @@
 
 package android.view;
 
+import android.annotation.IdRes;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.graphics.Rect;
@@ -116,9 +117,6 @@ public class HandwritingInitiator {
                     // The motion event is not from a stylus event, ignore it.
                     return false;
                 }
-                if (!mImm.isStylusHandwritingAvailable()) {
-                    return false;
-                }
                 mState = new State(motionEvent);
                 break;
             case MotionEvent.ACTION_POINTER_UP:
@@ -164,8 +162,23 @@ public class HandwritingInitiator {
                     if (candidateView != null) {
                         if (candidateView == getConnectedView()) {
                             startHandwriting(candidateView);
+                        } else if (candidateView.getHandwritingDelegateConfiguration() != null) {
+                            mState.mDelegatorViewId =
+                                    candidateView
+                                            .getHandwritingDelegateConfiguration()
+                                            .getDelegatorViewId();
+                            candidateView
+                                    .getHandwritingDelegateConfiguration()
+                                    .getInitiationCallback()
+                                    .run();
                         } else {
-                            candidateView.requestFocus();
+                            if (candidateView.getRevealOnFocusHint()) {
+                                candidateView.setRevealOnFocusHint(false);
+                                candidateView.requestFocus();
+                                candidateView.setRevealOnFocusHint(true);
+                            } else {
+                                candidateView.requestFocus();
+                            }
                         }
                     }
                 }
@@ -256,8 +269,10 @@ public class HandwritingInitiator {
         }
 
         final Rect handwritingArea = getViewHandwritingArea(connectedView);
-        if (isInHandwritingArea(handwritingArea, mState.mStylusDownX,
-                mState.mStylusDownY, connectedView)) {
+        if ((mState.mDelegatorViewId != View.NO_ID
+                        && mState.mDelegatorViewId == connectedView.getId())
+                || isInHandwritingArea(
+                        handwritingArea, mState.mStylusDownX, mState.mStylusDownY, connectedView)) {
             startHandwriting(connectedView);
         } else {
             mState.mShouldInitHandwriting = false;
@@ -280,6 +295,18 @@ public class HandwritingInitiator {
         mHandwritingAreasTracker.updateHandwritingAreaForView(view);
     }
 
+    private static boolean shouldTriggerStylusHandwritingForView(@NonNull View view) {
+        if (!view.isAutoHandwritingEnabled()) {
+            return false;
+        }
+        // The view may be a handwriting initiation delegate, in which case it is not the editor
+        // view for which handwriting would be started. However, in almost all cases, the return
+        // values of View#isStylusHandwritingAvailable will be the same for the delegate view and
+        // the delegator editor view. So the delegate view can be used to decide whether handwriting
+        // should be triggered.
+        return view.isStylusHandwritingAvailable();
+    }
+
     /**
      * Given the location of the stylus event, return the best candidate view to initialize
      * handwriting mode.
@@ -296,9 +323,10 @@ public class HandwritingInitiator {
         // whether the connectedView's boundary contains the initial stylus position. If true,
         // directly return the connectedView.
         final View connectedView = getConnectedView();
-        if (connectedView != null && connectedView.isAutoHandwritingEnabled()) {
+        if (connectedView != null) {
             Rect handwritingArea = getViewHandwritingArea(connectedView);
-            if (isInHandwritingArea(handwritingArea, x, y, connectedView)) {
+            if (isInHandwritingArea(handwritingArea, x, y, connectedView)
+                    && shouldTriggerStylusHandwritingForView(connectedView)) {
                 final float distance = distance(handwritingArea, x, y);
                 if (distance == 0f) return connectedView;
 
@@ -313,10 +341,12 @@ public class HandwritingInitiator {
         for (HandwritableViewInfo viewInfo : handwritableViewInfos) {
             final View view = viewInfo.getView();
             final Rect handwritingArea = viewInfo.getHandwritingArea();
-            if (!isInHandwritingArea(handwritingArea, x, y, view)) continue;
+            if (!isInHandwritingArea(handwritingArea, x, y, view)
+                    || !shouldTriggerStylusHandwritingForView(view)) {
+                continue;
+            }
 
             final float distance = distance(handwritingArea, x, y);
-
             if (distance == 0f) return view;
             if (distance < minDistance) {
                 minDistance = distance;
@@ -460,6 +490,13 @@ public class HandwritingInitiator {
          * built InputConnection.
          */
         private boolean mExceedHandwritingSlop;
+        /**
+         * If the current ongoing stylus MotionEvent sequence started over a handwriting initiation
+         * delegate view, then this is the view identifier of the corresponding delegator view. If
+         * the delegator view creates an input connection while the MotionEvent sequence is still
+         * ongoing, then handwriting mode will be initiated for the delegator view.
+         */
+        @IdRes private int mDelegatorViewId = View.NO_ID;
 
         /** The pointer id of the stylus pointer that is being tracked. */
         private final int mStylusPointerId;

@@ -115,6 +115,7 @@ import com.android.server.location.injector.Injector;
 import com.android.server.location.injector.LocationPermissionsHelper;
 import com.android.server.location.injector.LocationPowerSaveModeHelper;
 import com.android.server.location.injector.LocationUsageLogger;
+import com.android.server.location.injector.PackageResetHelper;
 import com.android.server.location.injector.ScreenInteractiveHelper;
 import com.android.server.location.injector.SettingsHelper;
 import com.android.server.location.injector.SystemAlarmHelper;
@@ -125,6 +126,7 @@ import com.android.server.location.injector.SystemDeviceStationaryHelper;
 import com.android.server.location.injector.SystemEmergencyHelper;
 import com.android.server.location.injector.SystemLocationPermissionsHelper;
 import com.android.server.location.injector.SystemLocationPowerSaveModeHelper;
+import com.android.server.location.injector.SystemPackageResetHelper;
 import com.android.server.location.injector.SystemScreenInteractiveHelper;
 import com.android.server.location.injector.SystemSettingsHelper;
 import com.android.server.location.injector.SystemUserInfoHelper;
@@ -138,7 +140,9 @@ import com.android.server.location.provider.StationaryThrottlingLocationProvider
 import com.android.server.location.provider.proxy.ProxyLocationProvider;
 import com.android.server.location.settings.LocationSettings;
 import com.android.server.location.settings.LocationUserSettings;
+import com.android.server.pm.UserManagerInternal;
 import com.android.server.pm.permission.LegacyPermissionManagerInternal;
+import com.android.server.utils.Slogf;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -311,6 +315,10 @@ public class LocationManagerService extends ILocationManager.Stub implements
         permissionManagerInternal.setLocationExtraPackagesProvider(
                 userId -> mContext.getResources().getStringArray(
                         com.android.internal.R.array.config_locationExtraPackageNames));
+
+        // TODO(b/241604546): properly handle this callback
+        LocalServices.getService(UserManagerInternal.class).addUserVisibilityListener(
+                (u, v) -> Slogf.i(TAG, "onUserVisibilityChanged(): %d -> %b", u, v));
     }
 
     @Nullable
@@ -688,6 +696,11 @@ public class LocationManagerService extends ILocationManager.Stub implements
         return mInjector.getSettingsHelper().getIgnoreSettingsAllowlist();
     }
 
+    @Override
+    public PackageTagsList getAdasAllowlist() {
+        return mInjector.getSettingsHelper().getAdasAllowlist();
+    }
+
     @Nullable
     @Override
     public ICancellationSignal getCurrentLocation(String provider, LocationRequest request,
@@ -955,6 +968,8 @@ public class LocationManagerService extends ILocationManager.Stub implements
     @Override
     public void injectLocation(Location location) {
 
+        super.injectLocation_enforcePermission();
+
         Preconditions.checkArgument(location.isComplete());
 
         int userId = UserHandle.getCallingUserId();
@@ -1165,6 +1180,8 @@ public class LocationManagerService extends ILocationManager.Stub implements
     @android.annotation.EnforcePermission(android.Manifest.permission.LOCATION_HARDWARE)
     @Override
     public void setExtraLocationControllerPackage(String packageName) {
+        super.setExtraLocationControllerPackage_enforcePermission();
+
         synchronized (mLock) {
             mExtraLocationControllerPackage = packageName;
         }
@@ -1180,6 +1197,8 @@ public class LocationManagerService extends ILocationManager.Stub implements
     @android.annotation.EnforcePermission(android.Manifest.permission.LOCATION_HARDWARE)
     @Override
     public void setExtraLocationControllerPackageEnabled(boolean enabled) {
+        super.setExtraLocationControllerPackageEnabled_enforcePermission();
+
         synchronized (mLock) {
             mExtraLocationControllerPackageEnabled = enabled;
         }
@@ -1239,6 +1258,8 @@ public class LocationManagerService extends ILocationManager.Stub implements
     @RequiresPermission(android.Manifest.permission.CONTROL_AUTOMOTIVE_GNSS)
     public void setAutomotiveGnssSuspended(boolean suspended) {
 
+        super.setAutomotiveGnssSuspended_enforcePermission();
+
         if (!mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)) {
             throw new IllegalStateException(
                     "setAutomotiveGnssSuspended only allowed on automotive devices");
@@ -1251,6 +1272,8 @@ public class LocationManagerService extends ILocationManager.Stub implements
     @Override
     @RequiresPermission(android.Manifest.permission.CONTROL_AUTOMOTIVE_GNSS)
     public boolean isAutomotiveGnssSuspended() {
+
+        super.isAutomotiveGnssSuspended_enforcePermission();
 
         if (!mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)) {
             throw new IllegalStateException(
@@ -1703,11 +1726,13 @@ public class LocationManagerService extends ILocationManager.Stub implements
         private final SystemDeviceStationaryHelper mDeviceStationaryHelper;
         private final SystemDeviceIdleHelper mDeviceIdleHelper;
         private final LocationUsageLogger mLocationUsageLogger;
+        private final PackageResetHelper mPackageResetHelper;
 
         // lazily instantiated since they may not always be used
 
         @GuardedBy("this")
-        private @Nullable SystemEmergencyHelper mEmergencyCallHelper;
+        @Nullable
+        private SystemEmergencyHelper mEmergencyCallHelper;
 
         @GuardedBy("this")
         private boolean mSystemReady;
@@ -1728,6 +1753,7 @@ public class LocationManagerService extends ILocationManager.Stub implements
             mDeviceStationaryHelper = new SystemDeviceStationaryHelper();
             mDeviceIdleHelper = new SystemDeviceIdleHelper(context);
             mLocationUsageLogger = new LocationUsageLogger();
+            mPackageResetHelper = new SystemPackageResetHelper(context);
         }
 
         synchronized void onSystemReady() {
@@ -1817,6 +1843,11 @@ public class LocationManagerService extends ILocationManager.Stub implements
         @Override
         public LocationUsageLogger getLocationUsageLogger() {
             return mLocationUsageLogger;
+        }
+
+        @Override
+        public PackageResetHelper getPackageResetHelper() {
+            return mPackageResetHelper;
         }
     }
 }

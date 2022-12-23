@@ -192,6 +192,21 @@ public final class Settings {
             "android.settings.LOCATION_SCANNING_SETTINGS";
 
     /**
+     * Activity Action: Show settings to manage creation/deletion of cloned apps.
+     * <p>
+     * In some cases, a matching Activity may not exist, so ensure you
+     * safeguard against this.
+     * <p>
+     * Input: Nothing.
+     * <p>
+     * Output: Nothing.
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_MANAGE_CLONED_APPS_SETTINGS =
+            "android.settings.MANAGE_CLONED_APPS_SETTINGS";
+
+    /**
      * Activity Action: Show settings to allow configuration of users.
      * <p>
      * In some cases, a matching Activity may not exist, so ensure you
@@ -393,6 +408,21 @@ public final class Settings {
             "android.settings.ACCESSIBILITY_DETAILS_SETTINGS";
 
     /**
+     * Activity Action: Show settings to allow configuration of accessibility color and motion.
+     * <p>
+     * In some cases, a matching Activity may not exist, so ensure you
+     * safeguard against this.
+     * <p>
+     * Input: Nothing.
+     * <p>
+     * Output: Nothing.
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_ACCESSIBILITY_COLOR_MOTION_SETTINGS =
+            "android.settings.ACCESSIBILITY_COLOR_MOTION_SETTINGS";
+
+    /**
      * Activity Action: Show settings to allow configuration of Reduce Bright Colors.
      * <p>
      * In some cases, a matching Activity may not exist, so ensure you
@@ -436,6 +466,21 @@ public final class Settings {
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_COLOR_INVERSION_SETTINGS =
             "android.settings.COLOR_INVERSION_SETTINGS";
+
+    /**
+     * Activity Action: Show settings to allow configuration of text reading.
+     * <p>
+     * In some cases, a matching Activity may not exist, so ensure you
+     * safeguard against this.
+     * <p>
+     * Input: Nothing.
+     * <p>
+     * Output: Nothing.
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_TEXT_READING_SETTINGS =
+            "android.settings.TEXT_READING_SETTINGS";
 
     /**
      * Activity Action: Show settings to control access to usage information.
@@ -643,6 +688,22 @@ public final class Settings {
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_WIFI_SETTINGS =
             "android.settings.WIFI_SETTINGS";
+
+    /**
+     * Activity Action: Show settings to allow configuration of MTE.
+     * <p>
+     * Memory Tagging Extension (MTE) is a CPU extension that allows to protect against certain
+     * classes of security problems at a small runtime performance cost overhead.
+     * <p>
+     * In some cases, a matching Activity may not exist, so ensure you safeguard against this.
+     * <p>
+     * Input: Nothing.
+     * <p>
+     * Output: Nothing.
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_MEMTAG_SETTINGS =
+            "android.settings.MEMTAG_SETTINGS";
 
     /**
      * Activity Action: Show settings to allow configuration of a static IP
@@ -3344,9 +3405,26 @@ public final class Settings {
                     }
                 }
 
-                // Fetch all flags for the namespace at once for caching purposes
-                Bundle b = cp.call(cr.getAttributionSource(),
-                        mProviderHolder.mUri.getAuthority(), mCallListCommand, null, args);
+                Bundle b;
+                // b/252663068: if we're in system server and the caller did not call
+                // clearCallingIdentity, the read would fail due to mismatched AttributionSources.
+                // TODO(b/256013480): remove this bypass after fixing the callers in system server.
+                if (namespace.equals(DeviceConfig.NAMESPACE_DEVICE_POLICY_MANAGER)
+                        && Settings.isInSystemServer()
+                        && Binder.getCallingUid() != Process.myUid()) {
+                    final long token = Binder.clearCallingIdentity();
+                    try {
+                        // Fetch all flags for the namespace at once for caching purposes
+                        b = cp.call(cr.getAttributionSource(),
+                                mProviderHolder.mUri.getAuthority(), mCallListCommand, null, args);
+                    } finally {
+                        Binder.restoreCallingIdentity(token);
+                    }
+                } else {
+                    // Fetch all flags for the namespace at once for caching purposes
+                    b = cp.call(cr.getAttributionSource(),
+                            mProviderHolder.mUri.getAuthority(), mCallListCommand, null, args);
+                }
                 if (b == null) {
                     // Invalid response, return an empty map
                     return keyValues;
@@ -6706,6 +6784,26 @@ public final class Settings {
         public static final String BLUETOOTH_ADDR_VALID = "bluetooth_addr_valid";
 
         /**
+         * This is used by LocalBluetoothLeBroadcast to store the broadcast program info.
+         * @hide
+         */
+        public static final String BLUETOOTH_LE_BROADCAST_PROGRAM_INFO =
+                "bluetooth_le_broadcast_program_info";
+
+        /**
+         * This is used by LocalBluetoothLeBroadcast to store the broadcast code.
+         * @hide
+         */
+        public static final String BLUETOOTH_LE_BROADCAST_CODE = "bluetooth_le_broadcast_code";
+
+        /**
+         * This is used by LocalBluetoothLeBroadcast to store the app source name.
+         * @hide
+         */
+        public static final String BLUETOOTH_LE_BROADCAST_APP_SOURCE_NAME =
+                "bluetooth_le_broadcast_app_source_name";
+
+        /**
          * Setting to indicate that on device captions are enabled.
          *
          * @hide
@@ -6835,6 +6933,14 @@ public final class Settings {
         @TestApi
         @Readable
         public static final String VOICE_INTERACTION_SERVICE = "voice_interaction_service";
+
+
+        /**
+         * The currently selected credential service(s) flattened ComponentName.
+         *
+         * @hide
+         */
+        public static final String CREDENTIAL_SERVICE = "credential_service";
 
         /**
          * The currently selected autofill service flattened ComponentName.
@@ -7088,7 +7194,7 @@ public final class Settings {
          * Format like "ime0;subtype0;subtype1;subtype2:ime1:ime2;subtype0"
          * where imeId is ComponentName and subtype is int32.
          */
-        @Readable
+        @Readable(maxTargetSdk = Build.VERSION_CODES.TIRAMISU)
         public static final String ENABLED_INPUT_METHODS = "enabled_input_methods";
 
         /**
@@ -7097,7 +7203,7 @@ public final class Settings {
          * by ':'.
          * @hide
          */
-        @Readable
+        @Readable(maxTargetSdk = Build.VERSION_CODES.TIRAMISU)
         public static final String DISABLED_SYSTEM_INPUT_METHODS = "disabled_system_input_methods";
 
         /**
@@ -7451,6 +7557,13 @@ public final class Settings {
         @Readable
         public static final String TRUST_AGENTS_INITIALIZED =
                 "trust_agents_initialized";
+
+        /**
+         * Set to 1 by the system after the list of known trust agents have been initialized.
+         * @hide
+         */
+        public static final String KNOWN_TRUST_AGENTS_INITIALIZED =
+                "known_trust_agents_initialized";
 
         /**
          * The Logging ID (a unique 64-bit value) as a hex string.
@@ -9805,6 +9918,13 @@ public final class Settings {
                 "fingerprint_side_fps_auth_downtime";
 
         /**
+         * Whether or not a SFPS device is required to be interactive for auth to unlock the device.
+         * @hide
+         */
+        public static final String SFPS_REQUIRE_SCREEN_ON_TO_AUTH_ENABLED =
+                "sfps_require_screen_on_to_auth_enabled";
+
+        /**
          * Whether or not debugging is enabled.
          * @hide
          */
@@ -9816,6 +9936,7 @@ public final class Settings {
          * Whether or not virtual sensors are enabled.
          * @hide
          */
+        @TestApi
         @Readable
         public static final String BIOMETRIC_VIRTUAL_ENABLED = "biometric_virtual_enabled";
 
@@ -10848,30 +10969,6 @@ public final class Settings {
          */
         public static final String ACCESSIBILITY_FLOATING_MENU_MIGRATION_TOOLTIP_PROMPT =
                 "accessibility_floating_menu_migration_tooltip_prompt";
-
-        /**
-         * Setting that specifies whether the software cursor accessibility service is enabled.
-         * @hide
-         */
-        public static final String ACCESSIBILITY_SOFTWARE_CURSOR_ENABLED =
-                "accessibility_software_cursor_enabled";
-
-        /**
-         * Software Cursor settings that specifies whether trigger hints are enabled.
-         *
-         * @hide
-         */
-        public static final String ACCESSIBILITY_SOFTWARE_CURSOR_TRIGGER_HINTS_ENABLED =
-                "accessibility_software_cursor_trigger_hints_enabled";
-
-        /**
-         * Software Cursor settings that specifies whether triggers are shifted when the keyboard
-         * is shown.
-         *
-         * @hide
-         */
-        public static final String ACCESSIBILITY_SOFTWARE_CURSOR_KEYBOARD_SHIFT_ENABLED =
-                "accessibility_software_cursor_keyboard_shift_enabled";
 
         /**
          * Whether the Adaptive connectivity option is enabled.
@@ -16025,6 +16122,18 @@ public final class Settings {
                 "key_chord_power_volume_up";
 
         /**
+         * Record audio from near-field microphone (ie. TV remote)
+         * Allows audio recording regardless of sensor privacy state,
+         * as it is an intentional user interaction: hold-to-talk
+         *
+         * Type: int (0 to disable, 1 to enable)
+         *
+         * @hide
+         */
+        public static final String RECEIVE_EXPLICIT_USER_INTERACTION_AUDIO_ENABLED =
+                "receive_explicit_user_interaction_audio_enabled";
+
+        /**
          * Keyguard should be on the left hand side of the screen, for wide screen layouts.
          *
          * @hide
@@ -17596,6 +17705,11 @@ public final class Settings {
              * @hide
              */
             public static final String BEDTIME_MODE = "bedtime_mode";
+
+            /**
+             * Whether hard bedtime mode is active thus limiting user interactions.
+             */
+            public static final String BEDTIME_HARD_MODE = "bedtime_hard_mode";
 
             /**
              * Whether the current watchface is decomposable.

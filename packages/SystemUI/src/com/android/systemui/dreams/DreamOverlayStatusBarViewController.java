@@ -16,11 +16,6 @@
 
 package com.android.systemui.dreams;
 
-import static android.app.StatusBarManager.WINDOW_STATE_HIDDEN;
-import static android.app.StatusBarManager.WINDOW_STATE_HIDING;
-import static android.app.StatusBarManager.WINDOW_STATE_SHOWING;
-
-import android.annotation.Nullable;
 import android.app.AlarmManager;
 import android.app.StatusBarManager;
 import android.content.res.Resources;
@@ -35,6 +30,8 @@ import android.provider.Settings;
 import android.text.format.DateFormat;
 import android.util.PluralsMessageFormatter;
 import android.view.View;
+
+import androidx.annotation.Nullable;
 
 import com.android.systemui.R;
 import com.android.systemui.dagger.qualifiers.Main;
@@ -73,12 +70,17 @@ public class DreamOverlayStatusBarViewController extends ViewController<DreamOve
     private final Optional<DreamOverlayNotificationCountProvider>
             mDreamOverlayNotificationCountProvider;
     private final ZenModeController mZenModeController;
+    private final DreamOverlayStateController mDreamOverlayStateController;
+    private final StatusBarWindowStateController mStatusBarWindowStateController;
     private final DreamOverlayStatusBarItemsProvider mStatusBarItemsProvider;
     private final Executor mMainExecutor;
     private final List<DreamOverlayStatusBarItemsProvider.StatusBarItem> mExtraStatusBarItems =
             new ArrayList<>();
 
     private boolean mIsAttached;
+
+    // Whether dream entry animations are finished.
+    private boolean mEntryAnimationsFinished = false;
 
     private final NetworkRequest mNetworkRequest = new NetworkRequest.Builder()
             .clearCapabilities()
@@ -101,6 +103,16 @@ public class DreamOverlayStatusBarViewController extends ViewController<DreamOve
             updateWifiUnavailableStatusIcon();
         }
     };
+
+    private final DreamOverlayStateController.Callback mDreamOverlayStateCallback =
+            new DreamOverlayStateController.Callback() {
+                @Override
+                public void onStateChanged() {
+                    mEntryAnimationsFinished =
+                            mDreamOverlayStateController.areEntryAnimationsFinished();
+                    updateVisibility();
+                }
+            };
 
     private final IndividualSensorPrivacyController.Callback mSensorCallback =
             (sensor, blocked) -> updateMicCameraBlockedStatusIcon();
@@ -140,7 +152,8 @@ public class DreamOverlayStatusBarViewController extends ViewController<DreamOve
             Optional<DreamOverlayNotificationCountProvider> dreamOverlayNotificationCountProvider,
             ZenModeController zenModeController,
             StatusBarWindowStateController statusBarWindowStateController,
-            DreamOverlayStatusBarItemsProvider statusBarItemsProvider) {
+            DreamOverlayStatusBarItemsProvider statusBarItemsProvider,
+            DreamOverlayStateController dreamOverlayStateController) {
         super(view);
         mResources = resources;
         mMainExecutor = mainExecutor;
@@ -151,8 +164,10 @@ public class DreamOverlayStatusBarViewController extends ViewController<DreamOve
         mDateFormatUtil = dateFormatUtil;
         mSensorPrivacyController = sensorPrivacyController;
         mDreamOverlayNotificationCountProvider = dreamOverlayNotificationCountProvider;
+        mStatusBarWindowStateController = statusBarWindowStateController;
         mStatusBarItemsProvider = statusBarItemsProvider;
         mZenModeController = zenModeController;
+        mDreamOverlayStateController = dreamOverlayStateController;
 
         // Register to receive show/hide updates for the system status bar. Our custom status bar
         // needs to hide when the system status bar is showing to ovoid overlapping status bars.
@@ -180,6 +195,8 @@ public class DreamOverlayStatusBarViewController extends ViewController<DreamOve
 
         mStatusBarItemsProvider.addCallback(mStatusBarItemsProviderCallback);
 
+        mDreamOverlayStateController.addCallback(mDreamOverlayStateCallback);
+
         mTouchInsetSession.addViewToTracking(mView);
     }
 
@@ -192,10 +209,31 @@ public class DreamOverlayStatusBarViewController extends ViewController<DreamOve
         mDreamOverlayNotificationCountProvider.ifPresent(
                 provider -> provider.removeCallback(mNotificationCountCallback));
         mStatusBarItemsProvider.removeCallback(mStatusBarItemsProviderCallback);
-        mView.removeAllStatusBarItemViews();
+        mView.removeAllExtraStatusBarItemViews();
+        mDreamOverlayStateController.removeCallback(mDreamOverlayStateCallback);
         mTouchInsetSession.clear();
 
         mIsAttached = false;
+    }
+
+    /**
+     * Sets alpha of the dream overlay status bar.
+     *
+     * No-op if the dream overlay status bar should not be shown.
+     */
+    protected void setAlpha(float alpha) {
+        updateVisibility();
+
+        if (mView.getVisibility() != View.VISIBLE) {
+            return;
+        }
+
+        mView.setAlpha(alpha);
+    }
+
+    private boolean shouldShowStatusBar() {
+        return !mDreamOverlayStateController.isLowLightActive()
+                && !mStatusBarWindowStateController.windowIsShowing();
     }
 
     private void updateWifiUnavailableStatusIcon() {
@@ -215,6 +253,14 @@ public class DreamOverlayStatusBarViewController extends ViewController<DreamOve
                 DreamOverlayStatusBarView.STATUS_ICON_ALARM_SET,
                 hasAlarm,
                 hasAlarm ? buildAlarmContentDescription(alarm) : null);
+    }
+
+    private void updateVisibility() {
+        if (shouldShowStatusBar()) {
+            mView.setVisibility(View.VISIBLE);
+        } else {
+            mView.setVisibility(View.INVISIBLE);
+        }
     }
 
     private String buildAlarmContentDescription(AlarmManager.AlarmClockInfo alarm) {
@@ -271,21 +317,11 @@ public class DreamOverlayStatusBarViewController extends ViewController<DreamOve
     }
 
     private void onSystemStatusBarStateChanged(@StatusBarManager.WindowVisibleState int state) {
-        mMainExecutor.execute(() -> {
-            if (!mIsAttached) {
-                return;
-            }
+        if (!mIsAttached || !mEntryAnimationsFinished) {
+            return;
+        }
 
-            switch (state) {
-                case WINDOW_STATE_SHOWING:
-                    mView.setVisibility(View.INVISIBLE);
-                    break;
-                case WINDOW_STATE_HIDING:
-                case WINDOW_STATE_HIDDEN:
-                    mView.setVisibility(View.VISIBLE);
-                    break;
-            }
-        });
+        mMainExecutor.execute(this::updateVisibility);
     }
 
     private void onStatusBarItemsChanged(List<StatusBarItem> newItems) {

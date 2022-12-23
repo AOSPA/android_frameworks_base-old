@@ -34,6 +34,7 @@ import android.util.DisplayMetrics;
 import android.util.Slog;
 
 import com.android.internal.compat.IPlatformCompat;
+import com.android.internal.util.ArrayUtils;
 import com.android.server.pm.PackageManagerException;
 import com.android.server.pm.PackageManagerService;
 import com.android.server.pm.parsing.pkg.PackageImpl;
@@ -142,15 +143,12 @@ public class PackageParser2 implements AutoCloseable {
     @AnyThread
     public ParsedPackage parsePackage(File packageFile, int flags, boolean useCaches)
             throws PackageManagerException {
-        return parsePackage(packageFile, flags, useCaches, /* frameworkSplits= */ null);
-    }
+        var files = packageFile.listFiles();
+        // Apk directory is directly nested under the current directory
+        if (ArrayUtils.size(files) == 1 && files[0].isDirectory()) {
+            packageFile = files[0];
+        }
 
-    /**
-     * TODO(b/135203078): Document new package parsing
-     */
-    @AnyThread
-    public ParsedPackage parsePackage(File packageFile, int flags, boolean useCaches,
-            List<File> frameworkSplits) throws PackageManagerException {
         if (useCaches && mCacher != null) {
             ParsedPackage parsed = mCacher.getCachedResult(packageFile, flags);
             if (parsed != null) {
@@ -160,8 +158,7 @@ public class PackageParser2 implements AutoCloseable {
 
         long parseTime = LOG_PARSE_TIMINGS ? SystemClock.uptimeMillis() : 0;
         ParseInput input = mSharedResult.get().reset();
-        ParseResult<ParsingPackage> result = parsingUtils.parsePackage(input, packageFile, flags,
-                frameworkSplits);
+        ParseResult<ParsingPackage> result = parsingUtils.parsePackage(input, packageFile, flags);
         if (result.isError()) {
             throw new PackageManagerException(result.getErrorCode(), result.getErrorMessage(),
                     result.getException());

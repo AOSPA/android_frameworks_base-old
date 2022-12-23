@@ -27,6 +27,8 @@ import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.service.voice.VoiceInteractionSession.SHOW_SOURCE_APPLICATION;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
+import static android.view.WindowManager.TRANSIT_TO_BACK;
+import static android.view.WindowManager.TRANSIT_TO_FRONT;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_CONFIGURATION;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_IMMERSIVE;
@@ -84,10 +86,11 @@ import android.window.TransitionInfo;
 import com.android.internal.app.AssistUtils;
 import com.android.internal.policy.IKeyguardDismissCallback;
 import com.android.internal.protolog.common.ProtoLog;
+import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.LocalServices;
 import com.android.server.Watchdog;
 import com.android.server.pm.KnownPackages;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
+import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.uri.NeededUriGrants;
 import com.android.server.vr.VrManagerInternal;
 
@@ -332,8 +335,8 @@ class ActivityClientController extends IActivityClientController.Stub {
     }
 
     @Override
-    public boolean navigateUpTo(IBinder token, Intent destIntent, int resultCode,
-            Intent resultData) {
+    public boolean navigateUpTo(IBinder token, Intent destIntent, String resolvedType,
+            int resultCode, Intent resultData) {
         final ActivityRecord r;
         synchronized (mGlobalLock) {
             r = ActivityRecord.isInRootTaskLocked(token);
@@ -348,7 +351,7 @@ class ActivityClientController extends IActivityClientController.Stub {
 
         synchronized (mGlobalLock) {
             return r.getRootTask().navigateUpTo(
-                    r, destIntent, destGrants, resultCode, resultData, resultGrants);
+                    r, destIntent, resolvedType, destGrants, resultCode, resultData, resultGrants);
         }
     }
 
@@ -452,6 +455,39 @@ class ActivityClientController extends IActivityClientController.Stub {
                         finishTask == Activity.FINISH_TASK_WITH_ROOT_ACTIVITY;
                 if (finishTask == Activity.FINISH_TASK_WITH_ACTIVITY
                         || (finishWithRootActivity && r == rootR)) {
+                    ActivityRecord topActivity =
+                            r.getTask().getTopNonFinishingActivity();
+                    boolean passesAsmChecks = topActivity != null
+                            && topActivity.getUid() == r.getUid();
+                    if (!passesAsmChecks) {
+                        Slog.i(TAG, "Finishing task from background. r: " + r);
+                        FrameworkStatsLog.write(FrameworkStatsLog.ACTIVITY_ACTION_BLOCKED,
+                                /* caller_uid */
+                                r.getUid(),
+                                /* caller_activity_class_name */
+                                r.info.name,
+                                /* target_task_top_activity_uid */
+                                topActivity == null ? -1 : topActivity.getUid(),
+                                /* target_task_top_activity_class_name */
+                                topActivity == null ? null : topActivity.info.name,
+                                /* target_task_is_different */
+                                false,
+                                /* target_activity_uid */
+                                -1,
+                                /* target_activity_class_name */
+                                null,
+                                /* target_intent_action */
+                                null,
+                                /* target_intent_flags */
+                                0,
+                                /* action */
+                                FrameworkStatsLog.ACTIVITY_ACTION_BLOCKED__ACTION__FINISH_TASK,
+                                /* version */
+                                1,
+                                /* multi_window */
+                                false
+                        );
+                    }
                     // If requested, remove the task that is associated to this activity only if it
                     // was the root activity in the task. The result code and data is ignored
                     // because we don't support returning them across task boundaries. Also, to
@@ -707,7 +743,26 @@ class ActivityClientController extends IActivityClientController.Stub {
         try {
             synchronized (mGlobalLock) {
                 final ActivityRecord r = ActivityRecord.isInRootTaskLocked(token);
-                return r != null && r.setOccludesParent(true);
+                // Create a transition if the activity is playing in case the below activity didn't
+                // commit invisible. That's because if any activity below this one has changed its
+                // visibility while playing transition, there won't able to commit visibility until
+                // the running transition finish.
+                final Transition transition = r != null
+                        && r.mTransitionController.inPlayingTransition(r)
+                        ? r.mTransitionController.createTransition(TRANSIT_TO_BACK) : null;
+                if (transition != null) {
+                    r.mTransitionController.requestStartTransition(transition, null /*startTask */,
+                            null /* remoteTransition */, null /* displayChange */);
+                }
+                final boolean changed = r != null && r.setOccludesParent(true);
+                if (transition != null) {
+                    if (changed) {
+                        r.mTransitionController.setReady(r.getDisplayContent());
+                    } else {
+                        transition.abort();
+                    }
+                }
+                return changed;
             }
         } finally {
             Binder.restoreCallingIdentity(origId);
@@ -728,7 +783,25 @@ class ActivityClientController extends IActivityClientController.Stub {
                 if (under != null) {
                     under.returningOptions = safeOptions != null ? safeOptions.getOptions(r) : null;
                 }
-                return r.setOccludesParent(false);
+                // Create a transition if the activity is playing in case the current activity
+                // didn't commit invisible. That's because if this activity has changed its
+                // visibility while playing transition, there won't able to commit visibility until
+                // the running transition finish.
+                final Transition transition = r.mTransitionController.inPlayingTransition(r)
+                        ? r.mTransitionController.createTransition(TRANSIT_TO_FRONT) : null;
+                if (transition != null) {
+                    r.mTransitionController.requestStartTransition(transition, null /*startTask */,
+                            null /* remoteTransition */, null /* displayChange */);
+                }
+                final boolean changed = r.setOccludesParent(false);
+                if (transition != null) {
+                    if (changed) {
+                        r.mTransitionController.setReady(r.getDisplayContent());
+                    } else {
+                        transition.abort();
+                    }
+                }
+                return changed;
             }
         } finally {
             Binder.restoreCallingIdentity(origId);

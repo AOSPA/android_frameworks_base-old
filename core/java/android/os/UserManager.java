@@ -91,7 +91,6 @@ import java.util.Set;
 public class UserManager {
 
     private static final String TAG = "UserManager";
-    private static final boolean VERBOSE = false;
 
     @UnsupportedAppUsage
     private final IUserManager mService;
@@ -103,6 +102,9 @@ public class UserManager {
 
     /** The userType of UserHandle.myUserId(); empty string if not a profile; null until cached. */
     private String mProfileTypeOfProcessUser = null;
+
+    /** Whether the device is in headless system user mode; null until cached. */
+    private static Boolean sIsHeadlessSystemUser = null;
 
     /**
      * User type representing a {@link UserHandle#USER_SYSTEM system} user that is a human user.
@@ -1488,6 +1490,46 @@ public class UserManager {
     public static final String KEY_RESTRICTIONS_PENDING = "restrictions_pending";
 
     /**
+     * Specifies if a user is not allowed to use 2g networks.
+     *
+     * <p>This restriction can only be set by a device owner or a profile owner of an
+     * organization-owned managed profile on the parent profile.
+     * In all cases, the setting applies globally on the device and will prevent the device from
+     * scanning for or connecting to 2g networks, except in the case of an emergency.
+     *
+     * <p>The default value is <code>false</code>.
+     *
+     * @see DevicePolicyManager#addUserRestriction(ComponentName, String)
+     * @see DevicePolicyManager#clearUserRestriction(ComponentName, String)
+     * @see #getUserRestrictions()
+     */
+    public static final String DISALLOW_CELLULAR_2G = "no_cellular_2g";
+
+    /**
+     * This user restriction specifies if Ultra-wideband is disallowed on the device. If
+     * Ultra-wideband is disallowed it cannot be turned on via Settings.
+     *
+     * <p>This restriction can only be set by a device owner or a profile owner of an
+     * organization-owned managed profile on the parent profile.
+     * In both cases, the restriction applies globally on the device and will turn off the
+     * ultra-wideband radio if it's currently on and prevent the radio from being turned on in
+     * the future.
+     *
+     * <p>
+     * Ultra-wideband (UWB) is a radio technology that can use a very low energy level
+     * for short-range, high-bandwidth communications over a large portion of the radio spectrum.
+     *
+     * <p>Default is <code>false</code>.
+     *
+     * <p>Key for user restrictions.
+     * <p>Type: Boolean
+     * @see DevicePolicyManager#addUserRestriction(ComponentName, String)
+     * @see DevicePolicyManager#clearUserRestriction(ComponentName, String)
+     * @see #getUserRestrictions()
+     */
+    public static final String DISALLOW_ULTRA_WIDEBAND_RADIO = "no_ultra_wideband_radio";
+
+    /**
      * List of key values that can be passed into the various user restriction related methods
      * in {@link UserManager} & {@link DevicePolicyManager}.
      * Note: This is slightly different from the real set of user restrictions listed in {@link
@@ -1568,6 +1610,8 @@ public class UserManager {
             DISALLOW_SHARING_ADMIN_CONFIGURED_WIFI,
             DISALLOW_WIFI_DIRECT,
             DISALLOW_ADD_WIFI_CONFIG,
+            DISALLOW_CELLULAR_2G,
+            DISALLOW_ULTRA_WIDEBAND_RADIO,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface UserRestrictionKey {}
@@ -2051,28 +2095,20 @@ public class UserManager {
      * @return whether the device is running in a headless system user mode.
      */
     public static boolean isHeadlessSystemUserMode() {
-        final boolean realMode = RoSystemProperties.MULTIUSER_HEADLESS_SYSTEM_USER;
-        if (!Build.isDebuggable()) {
-            return realMode;
+        // No need for synchronization.  Once it becomes non-null, it'll be non-null forever.
+        // (Its value is determined when UMS is constructed and cannot change.)
+        // Worst case we might end up calling the AIDL method multiple times but that's fine.
+        if (sIsHeadlessSystemUser == null) {
+            // Unfortunately this API is static, but the property no longer is. So go fetch the UMS.
+            try {
+                final IUserManager service = IUserManager.Stub.asInterface(
+                        ServiceManager.getService(Context.USER_SERVICE));
+                sIsHeadlessSystemUser = service.isHeadlessSystemUserMode();
+            } catch (RemoteException re) {
+                throw re.rethrowFromSystemServer();
+            }
         }
-
-        final String emulatedMode = SystemProperties.get(SYSTEM_USER_MODE_EMULATION_PROPERTY);
-        switch (emulatedMode) {
-            case SYSTEM_USER_MODE_EMULATION_FULL:
-                if (VERBOSE) Log.v(TAG, "isHeadlessSystemUserMode(): emulating as false");
-                return false;
-            case SYSTEM_USER_MODE_EMULATION_HEADLESS:
-                if (VERBOSE) Log.v(TAG, "isHeadlessSystemUserMode(): emulating as true");
-                return true;
-            case SYSTEM_USER_MODE_EMULATION_DEFAULT:
-            case "": // property not set
-                return realMode;
-            default:
-                Log.wtf(TAG, "isHeadlessSystemUserMode(): invalid value of property "
-                        + SYSTEM_USER_MODE_EMULATION_PROPERTY + " (" + emulatedMode + "); using"
-                                + " default value (headless=" + realMode + ")");
-                return realMode;
-        }
+        return sIsHeadlessSystemUser;
     }
 
     /**
@@ -2843,7 +2879,6 @@ public class UserManager {
     /**
      * @hide
      */
-    @TestApi
     public static boolean isUsersOnSecondaryDisplaysEnabled() {
         return SystemProperties.getBoolean("fw.users_on_secondary_displays",
                 Resources.getSystem()
@@ -2853,10 +2888,12 @@ public class UserManager {
     /**
      * Returns whether the device allows users to run (and launch activities) on secondary displays.
      *
-     * @return {@code false} for most devices, except automotive vehicles with passenger displays.
+     * @return {@code false} for most devices, except on automotive builds for vehiches with
+     * passenger displays.
      *
      * @hide
      */
+    @TestApi
     public boolean isUsersOnSecondaryDisplaysSupported() {
         return isUsersOnSecondaryDisplaysEnabled();
     }
@@ -2868,10 +2905,10 @@ public class UserManager {
      * It includes:
      *
      * <ol>
-     *   <li>The current foreground user in the main display.
-     *   <li>Current background users in secondary displays (for example, passenger users on
-     *   automotive, using the display associated with their seats).
-     *   <li>Profile users (in the running / started state) of other visible users.
+     *   <li>The current foreground user.
+     *   <li>(Running) profiles of the current foreground user.
+     *   <li>Background users assigned to secondary displays (for example, passenger users on
+     *   automotive builds, using the display associated with their seats).
      * </ol>
      *
      * @return whether the user is visible at the moment, as defined above.
@@ -2892,12 +2929,19 @@ public class UserManager {
      */
     @RequiresPermission(anyOf = {Manifest.permission.MANAGE_USERS,
             Manifest.permission.INTERACT_ACROSS_USERS})
-    public @NonNull List<UserHandle> getVisibleUsers() {
+    public @NonNull Set<UserHandle> getVisibleUsers() {
+        ArraySet<UserHandle> result = new ArraySet<>();
         try {
-            return mService.getVisibleUsers();
+            int[] visibleUserIds = mService.getVisibleUsers();
+            if (visibleUserIds != null) {
+                for (int userId : visibleUserIds) {
+                    result.add(UserHandle.of(userId));
+                }
+            }
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }
+        return result;
     }
 
     /**
@@ -4992,7 +5036,7 @@ public class UserManager {
     }
 
     /**
-     * Removes a user and all associated data.
+     * Removes a user and its profiles along with their associated data.
      * @param userId the integer handle of the user.
      * @hide
      */
@@ -5008,7 +5052,7 @@ public class UserManager {
     }
 
     /**
-     * Removes a user and all associated data.
+     * Removes a user and its profiles along with their associated data.
      *
      * @param user the user that needs to be removed.
      * @return {@code true} if the user was successfully removed, {@code false} otherwise.
@@ -5045,9 +5089,9 @@ public class UserManager {
     }
 
     /**
-     * Immediately removes the user or, if the user cannot be removed, such as when the user is
-     * the current user, then set the user as ephemeral so that it will be removed when it is
-     * stopped.
+     * Immediately removes the user and its profiles or, if the user cannot be removed, such as
+     * when the user is the current user, then set the user as ephemeral
+     * so that it will be removed when it is stopped.
      *
      * @param overrideDevicePolicy when {@code true}, user is removed even if the caller has
      * the {@link #DISALLOW_REMOVE_USER} or {@link #DISALLOW_REMOVE_MANAGED_PROFILE} restriction
@@ -5264,36 +5308,10 @@ public class UserManager {
     public boolean isUserSwitcherEnabled(boolean showEvenIfNotActionable) {
 
         try {
-            if (!mService.isUserSwitcherEnabled(mUserId)) {
-                return false;
-            }
+            return mService.isUserSwitcherEnabled(showEvenIfNotActionable, mUserId);
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }
-
-        // The feature is enabled. But is it worth showing?
-        return showEvenIfNotActionable
-                || areThereUsersToWhichToSwitch() // There are switchable users.
-                || !hasUserRestrictionForUser(DISALLOW_ADD_USER, mUserId); // New users can be added
-    }
-
-    /** Returns whether there are any users (other than the current user) to which to switch. */
-    @RequiresPermission(anyOf = {
-            android.Manifest.permission.MANAGE_USERS,
-            android.Manifest.permission.CREATE_USERS
-    })
-    private boolean areThereUsersToWhichToSwitch() {
-        final List<UserInfo> users = getAliveUsers();
-        if (users == null) {
-            return false;
-        }
-        int switchableUserCount = 0;
-        for (UserInfo user : users) {
-            if (user.supportsSwitchToByUser()) {
-                ++switchableUserCount;
-            }
-        }
-        return switchableUserCount > 1;
     }
 
     /**

@@ -25,6 +25,7 @@ import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
 import android.app.ILocaleManager;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -38,6 +39,8 @@ import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.ShellCallback;
 import android.os.UserHandle;
+import android.provider.Settings;
+import android.text.TextUtils;
 import android.util.Slog;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -91,9 +94,11 @@ public class LocaleManagerService extends SystemService {
 
         mBackupHelper = new LocaleManagerBackupHelper(this,
                 mPackageManager, broadcastHandlerThread);
+        AppUpdateTracker appUpdateTracker =
+                new AppUpdateTracker(mContext, this, mBackupHelper);
 
         mPackageMonitor = new LocaleManagerServicePackageMonitor(mBackupHelper,
-                systemAppUpdateTracker);
+                systemAppUpdateTracker, appUpdateTracker);
         mPackageMonitor.register(context, broadcastHandlerThread.getLooper(),
                 UserHandle.ALL,
                 true);
@@ -144,8 +149,9 @@ public class LocaleManagerService extends SystemService {
     private final class LocaleManagerBinderService extends ILocaleManager.Stub {
         @Override
         public void setApplicationLocales(@NonNull String appPackageName, @UserIdInt int userId,
-                @NonNull LocaleList locales) throws RemoteException {
-            LocaleManagerService.this.setApplicationLocales(appPackageName, userId, locales);
+                @NonNull LocaleList locales, boolean fromDelegate) throws RemoteException {
+            LocaleManagerService.this.setApplicationLocales(appPackageName, userId, locales,
+                    fromDelegate);
         }
 
         @Override
@@ -175,7 +181,8 @@ public class LocaleManagerService extends SystemService {
      * Sets the current UI locales for a specified app.
      */
     public void setApplicationLocales(@NonNull String appPackageName, @UserIdInt int userId,
-            @NonNull LocaleList locales) throws RemoteException, IllegalArgumentException {
+            @NonNull LocaleList locales, boolean fromDelegate)
+            throws RemoteException, IllegalArgumentException {
         AppLocaleChangedAtomRecord atomRecordForMetrics = new
                 AppLocaleChangedAtomRecord(Binder.getCallingUid());
         try {
@@ -200,6 +207,8 @@ public class LocaleManagerService extends SystemService {
                 enforceChangeConfigurationPermission(atomRecordForMetrics);
             }
 
+            mBackupHelper.persistLocalesModificationInfo(userId, appPackageName, fromDelegate,
+                    locales.isEmpty());
             final long token = Binder.clearCallingIdentity();
             try {
                 setApplicationLocalesUnchecked(appPackageName, userId, locales,
@@ -357,17 +366,23 @@ public class LocaleManagerService extends SystemService {
                 false /* allowAll */, ActivityManagerInternal.ALLOW_NON_FULL,
                 "getApplicationLocales", /* callerPackage= */ null);
 
-        // This function handles three types of query operations:
+        // This function handles four types of query operations:
         // 1.) A normal, non-privileged app querying its own locale.
-        // 2.) The installer of the given app querying locales of a package installed
-        // by said installer.
-        // 3.) A privileged system service querying locales of another package.
-        // The least privileged case is a normal app performing a query, so check that first and
-        // get locales if the package name is owned by the app. Next check if the calling app
-        // is the installer of the given app and get locales. If neither conditions matched,
-        // check if the caller has the necessary permission and fetch locales.
+        // 2.) The installer of the given app querying locales of a package installed by said
+        // installer.
+        // 3.) The current input method querying locales of the current foreground app.
+        // 4.) A privileged system service querying locales of another package.
+        // The least privileged case is a normal app performing a query, so check that first and get
+        // locales if the package name is owned by the app. Next check if the calling app is the
+        // installer of the given app and get locales. Finally check if the calling app is the
+        // current input method, and that app is querying locales of the current foreground app. If
+        // neither conditions matched, check if the caller has the necessary permission and fetch
+        // locales.
         if (!isPackageOwnedByCaller(appPackageName, userId)
-                && !isCallerInstaller(appPackageName, userId)) {
+                && !isCallerInstaller(appPackageName, userId)
+                && !(isCallerFromCurrentInputMethod(userId)
+                    && mActivityManagerInternal.isAppForeground(
+                            getPackageUid(appPackageName, userId)))) {
             enforceReadAppSpecificLocalesPermission();
         }
         final long token = Binder.clearCallingIdentity();
@@ -409,6 +424,26 @@ public class LocaleManagerService extends SystemService {
             int installerUid = getPackageUid(installingPackageName, userId);
             return installerUid >= 0 && UserHandle.isSameApp(Binder.getCallingUid(), installerUid);
         }
+        return false;
+    }
+
+    /**
+     * Checks if the calling app is the current input method.
+     */
+    private boolean isCallerFromCurrentInputMethod(int userId) {
+        String currentInputMethod = Settings.Secure.getStringForUser(
+                mContext.getContentResolver(),
+                Settings.Secure.DEFAULT_INPUT_METHOD,
+                userId);
+        if (!TextUtils.isEmpty(currentInputMethod)) {
+            String inputMethodPkgName = ComponentName
+                    .unflattenFromString(currentInputMethod)
+                    .getPackageName();
+            int inputMethodUid = getPackageUid(inputMethodPkgName, userId);
+            return inputMethodUid >= 0 && UserHandle.isSameApp(Binder.getCallingUid(),
+                    inputMethodUid);
+        }
+
         return false;
     }
 

@@ -16,21 +16,23 @@
 
 package com.android.wm.shell.flicker.splitscreen
 
+import android.platform.test.annotations.FlakyTest
+import android.platform.test.annotations.IwTest
 import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
-import android.view.Surface
-import android.view.WindowManagerPolicyConstants
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
-import com.android.server.wm.flicker.annotation.Group1
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.wm.shell.flicker.SPLIT_SCREEN_DIVIDER_COMPONENT
+import com.android.wm.shell.flicker.appWindowIsVisibleAtEnd
+import com.android.wm.shell.flicker.appWindowIsVisibleAtStart
 import com.android.wm.shell.flicker.appWindowKeepVisible
-import com.android.wm.shell.flicker.helpers.SplitScreenHelper
 import com.android.wm.shell.flicker.layerKeepVisible
 import com.android.wm.shell.flicker.splitAppLayerBoundsChanges
+import com.android.wm.shell.flicker.splitScreenDividerIsVisibleAtEnd
+import com.android.wm.shell.flicker.splitScreenDividerIsVisibleAtStart
 import org.junit.Assume
 import org.junit.Before
 import org.junit.FixMethodOrder
@@ -48,34 +50,39 @@ import org.junit.runners.Parameterized
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-@Group1
-class DragDividerToResize (testSpec: FlickerTestParameter) : SplitScreenBase(testSpec) {
-
-    // TODO(b/231399940): Remove this once we can use recent shortcut to enter split.
-    @Before
-    open fun before() {
-        Assume.assumeTrue(tapl.isTablet)
-    }
+class DragDividerToResize(testSpec: FlickerTestParameter) : SplitScreenBase(testSpec) {
 
     override val transition: FlickerBuilder.() -> Unit
         get() = {
             super.transition(this)
             setup {
-                eachRun {
-                    tapl.goHome()
-                    primaryApp.launchViaIntent(wmHelper)
-                    // TODO(b/231399940): Use recent shortcut to enter split.
-                    tapl.launchedAppState.taskbar
-                        .openAllApps()
-                        .getAppIcon(secondaryApp.appName)
-                        .dragToSplitscreen(secondaryApp.`package`, primaryApp.`package`)
-                    SplitScreenHelper.waitForSplitComplete(wmHelper, primaryApp, secondaryApp)
-                }
+                SplitScreenUtils.enterSplit(wmHelper, tapl, device, primaryApp, secondaryApp)
             }
             transitions {
-                SplitScreenHelper.dragDividerToResizeAndWait(device, wmHelper)
+                SplitScreenUtils.dragDividerToResizeAndWait(device, wmHelper)
             }
         }
+
+    @Before
+    fun before() {
+        Assume.assumeTrue(tapl.isTablet || !testSpec.isLandscapeOrSeascapeAtStart)
+    }
+
+    @IwTest(focusArea = "sysui")
+    @Presubmit
+    @Test
+    fun cujCompleted() {
+        testSpec.appWindowIsVisibleAtStart(primaryApp)
+        testSpec.appWindowIsVisibleAtStart(secondaryApp)
+        testSpec.splitScreenDividerIsVisibleAtStart()
+
+        testSpec.appWindowIsVisibleAtEnd(primaryApp)
+        testSpec.appWindowIsVisibleAtEnd(secondaryApp)
+        testSpec.splitScreenDividerIsVisibleAtEnd()
+
+        // TODO(b/246490534): Add validation for resized app after withAppTransitionIdle is
+        // robust enough to get the correct end state.
+    }
 
     @Presubmit
     @Test
@@ -108,12 +115,18 @@ class DragDividerToResize (testSpec: FlickerTestParameter) : SplitScreenBase(tes
     @Presubmit
     @Test
     fun primaryAppBoundsChanges() = testSpec.splitAppLayerBoundsChanges(
-        primaryApp, landscapePosLeft = false, portraitPosTop = false)
+        primaryApp,
+        landscapePosLeft = true,
+        portraitPosTop = false
+    )
 
-    @Presubmit
+    @FlakyTest(bugId = 250530664)
     @Test
     fun secondaryAppBoundsChanges() = testSpec.splitAppLayerBoundsChanges(
-        secondaryApp, landscapePosLeft = true, portraitPosTop = true)
+        secondaryApp,
+        landscapePosLeft = false,
+        portraitPosTop = true
+    )
 
     /** {@inheritDoc} */
     @Postsubmit
@@ -185,12 +198,7 @@ class DragDividerToResize (testSpec: FlickerTestParameter) : SplitScreenBase(tes
         @Parameterized.Parameters(name = "{0}")
         @JvmStatic
         fun getParams(): List<FlickerTestParameter> {
-            return FlickerTestParameterFactory.getInstance().getConfigNonRotationTests(
-                repetitions = SplitScreenHelper.TEST_REPETITIONS,
-                supportedRotations = listOf(Surface.ROTATION_0),
-                // TODO(b/176061063):The 3 buttons of nav bar do not exist in the hierarchy.
-                supportedNavigationModes =
-                listOf(WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL_OVERLAY))
+            return FlickerTestParameterFactory.getInstance().getConfigNonRotationTests()
         }
     }
 }

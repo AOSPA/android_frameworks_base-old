@@ -28,11 +28,13 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.text.TextUtils;
 
+import java.io.PrintWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 
@@ -537,9 +539,9 @@ public final class MediaRoute2Info implements Parcelable {
     }
 
     /**
-     * Gets the Deduplication ID of the route if available.
-     * @see RouteDiscoveryPreference#shouldRemoveDuplicates()
-     * @hide
+     * Gets the deduplication IDs associated to the route.
+     *
+     * <p>Two routes with a matching deduplication ID originate from the same receiver device.
      */
     @NonNull
     public Set<String> getDeduplicationIds() {
@@ -620,6 +622,58 @@ public final class MediaRoute2Info implements Parcelable {
             return false;
         }
         return true;
+    }
+
+    /**
+     * Dumps the current state of the object to the given {@code pw} as a human-readable string.
+     *
+     * <p> Used in the context of dumpsys. </p>
+     *
+     * @hide
+     */
+    public void dump(@NonNull PrintWriter pw, @NonNull String prefix) {
+        pw.println(prefix + "MediaRoute2Info");
+
+        String indent = prefix + "  ";
+
+        pw.println(indent + "mId=" + mId);
+        pw.println(indent + "mName=" + mName);
+        pw.println(indent + "mFeatures=" + mFeatures);
+        pw.println(indent + "mIsSystem=" + mIsSystem);
+        pw.println(indent + "mIconUri=" + mIconUri);
+        pw.println(indent + "mDescription=" + mDescription);
+        pw.println(indent + "mConnectionState=" + mConnectionState);
+        pw.println(indent + "mClientPackageName=" + mClientPackageName);
+        pw.println(indent + "mPackageName=" + mPackageName);
+
+        dumpVolume(pw, indent);
+
+        pw.println(indent + "mAddress=" + mAddress);
+        pw.println(indent + "mDeduplicationIds=" + mDeduplicationIds);
+        pw.println(indent + "mExtras=" + mExtras);
+        pw.println(indent + "mProviderId=" + mProviderId);
+    }
+
+    private void dumpVolume(@NonNull PrintWriter pw, @NonNull String prefix) {
+        String volumeHandlingName;
+
+        switch (mVolumeHandling) {
+            case PLAYBACK_VOLUME_FIXED:
+                volumeHandlingName = "FIXED";
+                break;
+            case PLAYBACK_VOLUME_VARIABLE:
+                volumeHandlingName = "VARIABLE";
+                break;
+            default:
+                volumeHandlingName = "UNKNOWN";
+                break;
+        }
+
+        String volume = String.format(Locale.US,
+                "volume(current=%d, max=%d, handling=%s(%d))",
+                mVolume, mVolumeMax, volumeHandlingName, mVolumeHandling);
+
+        pw.println(prefix + volume);
     }
 
     @Override
@@ -963,13 +1017,7 @@ public final class MediaRoute2Info implements Parcelable {
         }
 
         /**
-         * Sets the deduplication ID of the route.
-         * Routes have the same ID could be removed even when
-         * they are from different providers.
-         * <p>
-         * If it's {@code null}, the route will not be removed.
-         * @see RouteDiscoveryPreference#shouldRemoveDuplicates()
-         * @hide
+         * Sets the {@link MediaRoute2Info#getDeduplicationIds() deduplication IDs} of the route.
          */
         @NonNull
         public Builder setDeduplicationIds(@NonNull Set<String> id) {

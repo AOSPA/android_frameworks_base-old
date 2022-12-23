@@ -58,6 +58,7 @@ import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.PackageManagerInternal;
 import android.content.pm.PackageManagerInternal.PackageListObserver;
 import android.content.pm.PermissionInfo;
+import android.content.pm.UserPackage;
 import android.content.res.Resources;
 import android.os.Build;
 import android.os.Bundle;
@@ -78,7 +79,6 @@ import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.Log;
 import android.util.LongSparseLongArray;
-import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseBooleanArray;
 
@@ -96,8 +96,8 @@ import com.android.server.PermissionThread;
 import com.android.server.SystemService;
 import com.android.server.notification.NotificationManagerInternal;
 import com.android.server.pm.UserManagerInternal;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.permission.PermissionManagerServiceInternal;
+import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.policy.PermissionPolicyInternal.OnInitializedCallback;
 import com.android.server.utils.TimingsTraceAndSlog;
 import com.android.server.wm.ActivityInterceptorCallback;
@@ -146,7 +146,7 @@ public final class PermissionPolicyService extends SystemService {
      * scheduled for a package/user.
      */
     @GuardedBy("mLock")
-    private final ArraySet<Pair<String, Integer>> mIsPackageSyncsScheduled = new ArraySet<>();
+    private final ArraySet<UserPackage> mIsPackageSyncsScheduled = new ArraySet<>();
 
     /**
      * Whether an async {@link #resetAppOpPermissionsIfNotRequestedForUid} is currently
@@ -223,9 +223,11 @@ public final class PermissionPolicyService extends SystemService {
                 this::synchronizePackagePermissionsAndAppOpsAsyncForUser);
 
         mAppOpsCallback = new IAppOpsCallback.Stub() {
-            public void opChanged(int op, int uid, String packageName) {
-                synchronizePackagePermissionsAndAppOpsAsyncForUser(packageName,
-                        UserHandle.getUserId(uid));
+            public void opChanged(int op, int uid, @Nullable String packageName) {
+                if (packageName != null) {
+                    synchronizePackagePermissionsAndAppOpsAsyncForUser(packageName,
+                            UserHandle.getUserId(uid));
+                }
                 resetAppOpPermissionsIfNotRequestedForUidAsync(uid);
             }
         };
@@ -372,7 +374,7 @@ public final class PermissionPolicyService extends SystemService {
             @UserIdInt int changedUserId) {
         if (isStarted(changedUserId)) {
             synchronized (mLock) {
-                if (mIsPackageSyncsScheduled.add(new Pair<>(packageName, changedUserId))) {
+                if (mIsPackageSyncsScheduled.add(UserPackage.of(changedUserId, packageName))) {
                     // TODO(b/165030092): migrate this to PermissionThread.getHandler().
                     // synchronizePackagePermissionsAndAppOpsForUser is a heavy operation.
                     // Dispatched on a PermissionThread, it interferes with user switch.
@@ -640,7 +642,7 @@ public final class PermissionPolicyService extends SystemService {
     private void synchronizePackagePermissionsAndAppOpsForUser(@NonNull String packageName,
             @UserIdInt int userId) {
         synchronized (mLock) {
-            mIsPackageSyncsScheduled.remove(new Pair<>(packageName, userId));
+            mIsPackageSyncsScheduled.remove(UserPackage.of(userId, packageName));
         }
 
         if (DEBUG) {

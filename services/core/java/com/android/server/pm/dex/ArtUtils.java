@@ -21,8 +21,8 @@ import static com.android.server.pm.InstructionSets.getAppDexInstructionSets;
 import android.annotation.NonNull;
 
 import com.android.server.pm.PackageDexOptimizer;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.parsing.pkg.AndroidPackageUtils;
+import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.PackageStateInternal;
 
 import java.io.File;
@@ -42,9 +42,8 @@ public final class ArtUtils {
             AndroidPackage pkg, PackageStateInternal pkgSetting) {
         return new ArtPackageInfo(
                 pkg.getPackageName(),
-                Arrays.asList(getAppDexInstructionSets(
-                        AndroidPackageUtils.getPrimaryCpuAbi(pkg, pkgSetting),
-                        AndroidPackageUtils.getSecondaryCpuAbi(pkg, pkgSetting))),
+                Arrays.asList(getAppDexInstructionSets(pkgSetting.getPrimaryCpuAbi(),
+                        pkgSetting.getSecondaryCpuAbi())),
                 AndroidPackageUtils.getAllCodePaths(pkg),
                 getOatDir(pkg, pkgSetting));
     }

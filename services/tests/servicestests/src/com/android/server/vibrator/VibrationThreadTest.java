@@ -94,6 +94,7 @@ public class VibrationThreadTest {
 
     private static final int TEST_TIMEOUT_MILLIS = 900;
     private static final int UID = Process.ROOT_UID;
+    private static final int DISPLAY_ID = 10;
     private static final int VIBRATOR_ID = 1;
     private static final String PACKAGE_NAME = "package";
     private static final VibrationAttributes ATTRS = new VibrationAttributes.Builder().build();
@@ -1158,7 +1159,7 @@ public class VibrationThreadTest {
 
         // 25% of the first waveform step will be spent on the native on() call.
         // 25% of each waveform step will be spent on the native setAmplitude() call..
-        mVibratorProviders.get(VIBRATOR_ID).setLatency(stepDuration / 4);
+        mVibratorProviders.get(VIBRATOR_ID).setOnLatency(stepDuration / 4);
         mVibratorProviders.get(VIBRATOR_ID).setCapabilities(IVibrator.CAP_AMPLITUDE_CONTROL);
 
         int stepCount = totalDuration / stepDuration;
@@ -1189,7 +1190,7 @@ public class VibrationThreadTest {
         fakeVibrator.setSupportedEffects(VibrationEffect.EFFECT_CLICK);
 
         long latency = 5_000; // 5s
-        fakeVibrator.setLatency(latency);
+        fakeVibrator.setOnLatency(latency);
 
         long vibrationId = 1;
         VibrationEffect effect = VibrationEffect.get(VibrationEffect.EFFECT_CLICK);
@@ -1203,8 +1204,7 @@ public class VibrationThreadTest {
         // fail at waitForCompletion(cancellingThread).
         Thread cancellingThread = new Thread(
                 () -> conductor.notifyCancelled(
-                        new Vibration.EndInfo(
-                                Vibration.Status.CANCELLED_BY_USER),
+                        new Vibration.EndInfo(Vibration.Status.CANCELLED_BY_USER),
                         /* immediate= */ false));
         cancellingThread.start();
 
@@ -1625,7 +1625,8 @@ public class VibrationThreadTest {
     }
 
     private Vibration createVibration(long id, CombinedVibration effect) {
-        return new Vibration(mVibrationToken, (int) id, effect, ATTRS, UID, PACKAGE_NAME, "reason");
+        return new Vibration(mVibrationToken, (int) id, effect, ATTRS, UID, DISPLAY_ID,
+                PACKAGE_NAME, "reason");
     }
 
     private SparseArray<VibratorController> createVibratorControllers() {

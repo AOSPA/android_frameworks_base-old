@@ -17,6 +17,7 @@
 package com.android.settingslib.spa.framework.theme
 
 import android.content.Context
+import android.os.Build
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -31,6 +32,10 @@ data class SettingsColorScheme(
     val secondaryText: Color = Color.Unspecified,
     val primaryContainer: Color = Color.Unspecified,
     val onPrimaryContainer: Color = Color.Unspecified,
+    val spinnerHeaderContainer: Color = Color.Unspecified,
+    val onSpinnerHeaderContainer: Color = Color.Unspecified,
+    val spinnerItemContainer: Color = Color.Unspecified,
+    val onSpinnerItemContainer: Color = Color.Unspecified,
 )
 
 internal val LocalColorScheme = staticCompositionLocalOf { SettingsColorScheme() }
@@ -40,8 +45,12 @@ internal fun settingsColorScheme(isDarkTheme: Boolean): SettingsColorScheme {
     val context = LocalContext.current
     return remember(isDarkTheme) {
         when {
-            isDarkTheme -> dynamicDarkColorScheme(context)
-            else -> dynamicLightColorScheme(context)
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+                if (isDarkTheme) dynamicDarkColorScheme(context)
+                else dynamicLightColorScheme(context)
+            }
+            isDarkTheme -> darkColorScheme()
+            else -> lightColorScheme()
         }
     }
 }
@@ -65,6 +74,10 @@ private fun dynamicLightColorScheme(context: Context): SettingsColorScheme {
         secondaryText = tonalPalette.neutralVariant30,
         primaryContainer = tonalPalette.primary90,
         onPrimaryContainer = tonalPalette.neutral10,
+        spinnerHeaderContainer = tonalPalette.primary90,
+        onSpinnerHeaderContainer = tonalPalette.neutral10,
+        spinnerItemContainer = tonalPalette.secondary90,
+        onSpinnerItemContainer = tonalPalette.neutralVariant30,
     )
 }
 
@@ -87,5 +100,43 @@ private fun dynamicDarkColorScheme(context: Context): SettingsColorScheme {
         secondaryText = tonalPalette.neutralVariant80,
         primaryContainer = tonalPalette.secondary90,
         onPrimaryContainer = tonalPalette.neutral10,
+        spinnerHeaderContainer = tonalPalette.primary90,
+        onSpinnerHeaderContainer = tonalPalette.neutral10,
+        spinnerItemContainer = tonalPalette.secondary90,
+        onSpinnerItemContainer = tonalPalette.neutralVariant30,
+    )
+}
+
+private fun darkColorScheme(): SettingsColorScheme {
+    val tonalPalette = tonalPalette()
+    return SettingsColorScheme(
+        background = tonalPalette.neutral10,
+        categoryTitle = tonalPalette.primary90,
+        surface = tonalPalette.neutral20,
+        surfaceHeader = tonalPalette.neutral30,
+        secondaryText = tonalPalette.neutralVariant80,
+        primaryContainer = tonalPalette.secondary90,
+        onPrimaryContainer = tonalPalette.neutral10,
+        spinnerHeaderContainer = tonalPalette.primary90,
+        onSpinnerHeaderContainer = tonalPalette.neutral10,
+        spinnerItemContainer = tonalPalette.secondary90,
+        onSpinnerItemContainer = tonalPalette.neutralVariant30,
+    )
+}
+
+private fun lightColorScheme(): SettingsColorScheme {
+    val tonalPalette = tonalPalette()
+    return SettingsColorScheme(
+        background = tonalPalette.neutral95,
+        categoryTitle = tonalPalette.primary40,
+        surface = tonalPalette.neutral99,
+        surfaceHeader = tonalPalette.neutral90,
+        secondaryText = tonalPalette.neutralVariant30,
+        primaryContainer = tonalPalette.primary90,
+        onPrimaryContainer = tonalPalette.neutral10,
+        spinnerHeaderContainer = tonalPalette.primary90,
+        onSpinnerHeaderContainer = tonalPalette.neutral10,
+        spinnerItemContainer = tonalPalette.secondary90,
+        onSpinnerItemContainer = tonalPalette.neutralVariant30,
     )
 }

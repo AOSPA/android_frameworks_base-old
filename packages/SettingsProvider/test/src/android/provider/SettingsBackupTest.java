@@ -31,7 +31,6 @@ import android.provider.settings.backup.SecureSettings;
 import android.provider.settings.backup.SystemSettings;
 
 import androidx.test.filters.SmallTest;
-import androidx.test.filters.Suppress;
 import androidx.test.runner.AndroidJUnit4;
 
 import org.junit.Test;
@@ -84,7 +83,6 @@ public class SettingsBackupTest {
                     Settings.System.SYSTEM_LOCALES, // bug?
                     Settings.System.USER_ROTATION, // backup candidate?
                     Settings.System.VIBRATE_IN_SILENT, // deprecated?
-                    Settings.System.VIBRATE_ON, // candidate for backup?
                     Settings.System.VOLUME_ACCESSIBILITY, // used internally, changing value will
                                                           // not change volume
                     Settings.System.VOLUME_ALARM, // deprecated since API 2?
@@ -102,7 +100,9 @@ public class SettingsBackupTest {
                     Settings.System.MIN_REFRESH_RATE, // depends on hardware capabilities
                     Settings.System.PEAK_REFRESH_RATE, // depends on hardware capabilities
                     Settings.System.SCREEN_BRIGHTNESS_FLOAT,
+                    Settings.System.SCREEN_BRIGHTNESS_FOR_VR,
                     Settings.System.SCREEN_BRIGHTNESS_FOR_VR_FLOAT,
+                    Settings.System.SCREEN_AUTO_BRIGHTNESS_ADJ,
                     Settings.System.MULTI_AUDIO_FOCUS_ENABLED // form-factor/OEM specific
                     );
 
@@ -657,6 +657,7 @@ public class SettingsBackupTest {
                     Settings.Global.Wearable.CHARGING_SOUNDS_ENABLED,
                     Settings.Global.Wearable.SCREEN_UNLOCK_SOUND_ENABLED,
                     Settings.Global.Wearable.BEDTIME_MODE,
+                    Settings.Global.Wearable.BEDTIME_HARD_MODE,
                     Settings.Global.Wearable.EARLY_UPDATES_STATUS);
 
     private static final Set<String> BACKUP_DENY_LIST_SECURE_SETTINGS =
@@ -709,7 +710,6 @@ public class SettingsBackupTest {
                  Settings.Secure.DOCKED_CLOCK_FACE,
                  Settings.Secure.DOZE_PULSE_ON_LONG_PRESS,
                  Settings.Secure.EMERGENCY_ASSISTANCE_APPLICATION,
-                 Settings.Secure.ENABLED_ACCESSIBILITY_AUDIO_DESCRIPTION_BY_DEFAULT,
                  Settings.Secure.ENABLED_INPUT_METHODS,  // Intentionally removed in P
                  Settings.Secure.ENABLED_NOTIFICATION_ASSISTANT,
                  Settings.Secure.ENABLED_NOTIFICATION_LISTENERS,
@@ -771,6 +771,7 @@ public class SettingsBackupTest {
                  Settings.Secure.SMS_DEFAULT_APPLICATION,
                  Settings.Secure.SPELL_CHECKER_ENABLED,  // Intentionally removed in Q
                  Settings.Secure.TRUST_AGENTS_INITIALIZED,
+                 Settings.Secure.KNOWN_TRUST_AGENTS_INITIALIZED,
                  Settings.Secure.TV_APP_USES_NON_SYSTEM_INPUTS,
                  Settings.Secure.TV_INPUT_CUSTOM_LABELS,
                  Settings.Secure.TV_INPUT_HIDDEN_INPUTS,
@@ -816,7 +817,8 @@ public class SettingsBackupTest {
                  Settings.Secure.REDUCE_BRIGHT_COLORS_ACTIVATED,
                  Settings.Secure.ACCESSIBILITY_SHOW_WINDOW_MAGNIFICATION_PROMPT,
                  Settings.Secure.ACCESSIBILITY_FLOATING_MENU_MIGRATION_TOOLTIP_PROMPT,
-                 Settings.Secure.UI_TRANSLATION_ENABLED);
+                 Settings.Secure.UI_TRANSLATION_ENABLED,
+                 Settings.Secure.CREDENTIAL_SERVICE);
 
     @Test
     public void systemSettingsBackedUpOrDenied() {
@@ -837,15 +839,64 @@ public class SettingsBackupTest {
     }
 
     @Test
-    @Suppress //("b/148236308")
     public void secureSettingsBackedUpOrDenied() {
+        // List of settings that were not added to either SETTINGS_TO_BACKUP or
+        // BACKUP_DENY_LIST_SECURE_SETTINGS while this test was suppressed in
+        // the last two years. Settings in this list are temporarily allowed to
+        // not be explicitly listed as backed up or denied so we can re-enable
+        // this test.
+        //
+        // DO NOT ADD NEW SETTINGS TO THIS LIST!
+        Set<String> settingsNotBackedUpOrDeniedTemporaryAllowList =
+                newHashSet(
+                        Settings.Secure.ACCESSIBILITY_ALLOW_DIAGONAL_SCROLLING,
+                        Settings.Secure.AMBIENT_CONTEXT_CONSENT_COMPONENT,
+                        Settings.Secure.AMBIENT_CONTEXT_EVENT_ARRAY_EXTRA_KEY,
+                        Settings.Secure.AMBIENT_CONTEXT_PACKAGE_NAME_EXTRA_KEY,
+                        Settings.Secure.AUTO_REVOKE_DISABLED,
+                        Settings.Secure.BIOMETRIC_APP_ENABLED,
+                        Settings.Secure.BIOMETRIC_KEYGUARD_ENABLED,
+                        Settings.Secure.BIOMETRIC_VIRTUAL_ENABLED,
+                        Settings.Secure.BLUETOOTH_ADDR_VALID,
+                        Settings.Secure.BLUETOOTH_ADDRESS,
+                        Settings.Secure.BLUETOOTH_NAME,
+                        Settings.Secure.BUBBLE_IMPORTANT_CONVERSATIONS,
+                        Settings.Secure.CLIPBOARD_SHOW_ACCESS_NOTIFICATIONS,
+                        Settings.Secure.COMMUNAL_MODE_ENABLED,
+                        Settings.Secure.COMMUNAL_MODE_TRUSTED_NETWORKS,
+                        Settings.Secure.DEFAULT_VOICE_INPUT_METHOD,
+                        Settings.Secure.DOCK_SETUP_STATE,
+                        Settings.Secure.EXTRA_AUTOMATIC_POWER_SAVE_MODE,
+                        Settings.Secure.GAME_DASHBOARD_ALWAYS_ON,
+                        Settings.Secure.HDMI_CEC_SET_MENU_LANGUAGE_DENYLIST,
+                        Settings.Secure.LAUNCHER_TASKBAR_EDUCATION_SHOWING,
+                        Settings.Secure.LOCATION_COARSE_ACCURACY_M,
+                        Settings.Secure.LOCATION_SHOW_SYSTEM_OPS,
+                        Settings.Secure.NAS_SETTINGS_UPDATED,
+                        Settings.Secure.NAV_BAR_FORCE_VISIBLE,
+                        Settings.Secure.NAV_BAR_KIDS_MODE,
+                        Settings.Secure.NEARBY_FAST_PAIR_SETTINGS_DEVICES_COMPONENT,
+                        Settings.Secure.NEARBY_SHARING_SLICE_URI,
+                        Settings.Secure.NOTIFIED_NON_ACCESSIBILITY_CATEGORY_SERVICES,
+                        Settings.Secure.ONE_HANDED_TUTORIAL_SHOW_COUNT,
+                        Settings.Secure.RELEASE_COMPRESS_BLOCKS_ON_INSTALL,
+                        Settings.Secure.SCREENSAVER_COMPLICATIONS_ENABLED,
+                        Settings.Secure.SHOW_QR_CODE_SCANNER_SETTING,
+                        Settings.Secure.SKIP_ACCESSIBILITY_SHORTCUT_DIALOG_TIMEOUT_RESTRICTION,
+                        Settings.Secure.SPATIAL_AUDIO_ENABLED,
+                        Settings.Secure.TIMEOUT_TO_USER_ZERO,
+                        Settings.Secure.UI_NIGHT_MODE_LAST_COMPUTED,
+                        Settings.Secure.UI_NIGHT_MODE_OVERRIDE_OFF,
+                        Settings.Secure.UI_NIGHT_MODE_OVERRIDE_ON);
+
         HashSet<String> keys = new HashSet<String>();
         Collections.addAll(keys, SecureSettings.SETTINGS_TO_BACKUP);
         Collections.addAll(keys, DEVICE_SPECIFIC_SETTINGS_TO_BACKUP);
-        checkSettingsBackedUpOrDenied(
-                getCandidateSettings(Settings.Secure.class),
-                keys,
-                BACKUP_DENY_LIST_SECURE_SETTINGS);
+
+        Set<String> allSettings = getCandidateSettings(Settings.Secure.class);
+        allSettings.removeAll(settingsNotBackedUpOrDeniedTemporaryAllowList);
+
+        checkSettingsBackedUpOrDenied(allSettings, keys, BACKUP_DENY_LIST_SECURE_SETTINGS);
     }
 
     private static void checkSettingsBackedUpOrDenied(

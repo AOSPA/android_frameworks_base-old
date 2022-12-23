@@ -28,18 +28,17 @@ import android.content.om.OverlayIdentifier;
 import android.content.om.OverlayInfo;
 import android.content.om.OverlayInfo.State;
 import android.content.om.OverlayableInfo;
+import android.content.pm.UserPackage;
 import android.os.FabricatedOverlayInfo;
 import android.os.FabricatedOverlayInternal;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
-import android.util.Pair;
 
 import androidx.annotation.Nullable;
 
 import com.android.internal.content.om.OverlayConfig;
-import com.android.internal.util.CollectionUtils;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
+import com.android.server.pm.pkg.AndroidPackage;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -166,7 +165,7 @@ class OverlayManagerServiceImplTestsBase {
      * @throws IllegalStateException if the package is currently installed
      */
     void installAndAssert(@NonNull FakeDeviceState.PackageBuilder pkg, int userId,
-            @NonNull Set<PackageAndUser> onAddedUpdatedPackages)
+            @NonNull Set<UserPackage> onAddedUpdatedPackages)
             throws OperationFailedException {
         if (mState.select(pkg.packageName, userId) != null) {
             throw new IllegalStateException("package " + pkg.packageName + " already installed");
@@ -187,8 +186,8 @@ class OverlayManagerServiceImplTestsBase {
      * @throws IllegalStateException if the package is not currently installed
      */
     void upgradeAndAssert(FakeDeviceState.PackageBuilder pkg, int userId,
-            @NonNull Set<PackageAndUser> onReplacingUpdatedPackages,
-            @NonNull Set<PackageAndUser> onReplacedUpdatedPackages)
+            @NonNull Set<UserPackage> onReplacingUpdatedPackages,
+            @NonNull Set<UserPackage> onReplacedUpdatedPackages)
             throws OperationFailedException {
         final FakeDeviceState.Package replacedPackage = mState.select(pkg.packageName, userId);
         if (replacedPackage == null) {
@@ -209,7 +208,7 @@ class OverlayManagerServiceImplTestsBase {
      * @throws IllegalStateException if the package is not currently installed
      */
     void uninstallAndAssert(@NonNull String packageName, int userId,
-            @NonNull Set<PackageAndUser> onRemovedUpdatedPackages) {
+            @NonNull Set<UserPackage> onRemovedUpdatedPackages) {
         final FakeDeviceState.Package pkg = mState.select(packageName, userId);
         if (pkg == null) {
             throw new IllegalStateException("package " + packageName + " not installed");

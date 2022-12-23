@@ -38,8 +38,8 @@ import android.os.Vibrator;
 import android.util.Log;
 import android.util.Slog;
 import android.view.InsetsState.InternalInsetsType;
-import android.view.InsetsVisibilities;
 import android.view.KeyEvent;
+import android.view.WindowInsets.Type.InsetsType;
 import android.view.WindowInsetsController.Appearance;
 import android.view.WindowInsetsController.Behavior;
 
@@ -55,12 +55,12 @@ import com.android.systemui.dagger.qualifiers.DisplayId;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
 import com.android.systemui.qs.QSPanelController;
-import com.android.systemui.shade.NotificationPanelView;
+import com.android.systemui.shade.CameraLauncher;
 import com.android.systemui.shade.NotificationPanelViewController;
 import com.android.systemui.shade.ShadeController;
 import com.android.systemui.statusbar.CommandQueue;
-import com.android.systemui.statusbar.DisableFlagsLogger;
 import com.android.systemui.statusbar.VibratorHelper;
+import com.android.systemui.statusbar.disableflags.DisableFlagsLogger;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayoutController;
 import com.android.systemui.statusbar.phone.dagger.CentralSurfacesComponent;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
@@ -71,6 +71,8 @@ import com.android.systemui.statusbar.policy.RemoteInputQuickSettingsDisabler;
 import java.util.Optional;
 
 import javax.inject.Inject;
+
+import dagger.Lazy;
 
 /** */
 @CentralSurfacesComponent.CentralSurfacesScope
@@ -100,6 +102,7 @@ public class CentralSurfacesCommandQueueCallbacks implements CommandQueue.Callba
     private final boolean mVibrateOnOpening;
     private final VibrationEffect mCameraLaunchGestureVibrationEffect;
     private final SystemBarAttributesListener mSystemBarAttributesListener;
+    private final Lazy<CameraLauncher> mCameraLauncherLazy;
 
     private static final VibrationAttributes HARDWARE_FEEDBACK_VIBRATION_ATTRIBUTES =
             VibrationAttributes.createForUsage(VibrationAttributes.USAGE_HARDWARE_FEEDBACK);
@@ -129,8 +132,8 @@ public class CentralSurfacesCommandQueueCallbacks implements CommandQueue.Callba
             Optional<Vibrator> vibratorOptional,
             DisableFlagsLogger disableFlagsLogger,
             @DisplayId int displayId,
-            SystemBarAttributesListener systemBarAttributesListener) {
-
+            SystemBarAttributesListener systemBarAttributesListener,
+            Lazy<CameraLauncher> cameraLauncherLazy) {
         mCentralSurfaces = centralSurfaces;
         mContext = context;
         mShadeController = shadeController;
@@ -153,6 +156,7 @@ public class CentralSurfacesCommandQueueCallbacks implements CommandQueue.Callba
         mVibratorOptional = vibratorOptional;
         mDisableFlagsLogger = disableFlagsLogger;
         mDisplayId = displayId;
+        mCameraLauncherLazy = cameraLauncherLazy;
 
         mVibrateOnOpening = resources.getBoolean(R.bool.config_vibrateOnIconAnimation);
         mCameraLaunchGestureVibrationEffect = getCameraGestureVibrationEffect(
@@ -326,12 +330,12 @@ public class CentralSurfacesCommandQueueCallbacks implements CommandQueue.Callba
                 mNotificationPanelViewController.expand(true /* animate */);
                 mNotificationStackScrollLayoutController.setWillExpand(true);
                 mHeadsUpManager.unpinAll(true /* userUnpinned */);
-                mMetricsLogger.count(NotificationPanelView.COUNTER_PANEL_OPEN, 1);
+                mMetricsLogger.count("panel_open", 1);
             } else if (!mNotificationPanelViewController.isInSettings()
                     && !mNotificationPanelViewController.isExpanding()) {
                 mNotificationPanelViewController.flingSettings(0 /* velocity */,
-                        NotificationPanelView.FLING_EXPAND);
-                mMetricsLogger.count(NotificationPanelView.COUNTER_PANEL_OPEN_QS, 1);
+                        NotificationPanelViewController.FLING_EXPAND);
+                mMetricsLogger.count("panel_open_qs", 1);
             }
         }
 
@@ -347,7 +351,8 @@ public class CentralSurfacesCommandQueueCallbacks implements CommandQueue.Callba
             mCentralSurfaces.setLaunchCameraOnFinishedGoingToSleep(true);
             return;
         }
-        if (!mNotificationPanelViewController.canCameraGestureBeLaunched()) {
+        if (!mCameraLauncherLazy.get().canCameraGestureBeLaunched(
+                mNotificationPanelViewController.getBarState())) {
             if (CentralSurfaces.DEBUG_CAMERA_LIFT) {
                 Slog.d(CentralSurfaces.TAG, "Can't launch camera right now");
             }
@@ -364,7 +369,7 @@ public class CentralSurfacesCommandQueueCallbacks implements CommandQueue.Callba
             mKeyguardUpdateMonitor.onCameraLaunched();
         }
 
-        if (!mStatusBarKeyguardViewManager.isShowing()) {
+        if (!mKeyguardStateController.isShowing()) {
             final Intent cameraIntent = CameraIntents.getInsecureCameraIntent(mContext);
             mCentralSurfaces.startActivityDismissingKeyguard(cameraIntent,
                     false /* onlyProvisioned */, true /* dismissShade */,
@@ -384,7 +389,8 @@ public class CentralSurfacesCommandQueueCallbacks implements CommandQueue.Callba
                 if (mStatusBarKeyguardViewManager.isBouncerShowing()) {
                     mStatusBarKeyguardViewManager.reset(true /* hide */);
                 }
-                mNotificationPanelViewController.launchCamera(source);
+                mCameraLauncherLazy.get().launchCamera(source,
+                        mNotificationPanelViewController.isFullyCollapsed());
                 mCentralSurfaces.updateScrimController();
             } else {
                 // We need to defer the camera launch until the screen comes on, since otherwise
@@ -421,7 +427,7 @@ public class CentralSurfacesCommandQueueCallbacks implements CommandQueue.Callba
         // TODO(b/169087248) Possibly add haptics here for emergency action. Currently disabled for
         // app-side haptic experimentation.
 
-        if (!mStatusBarKeyguardViewManager.isShowing()) {
+        if (!mKeyguardStateController.isShowing()) {
             mCentralSurfaces.startActivityDismissingKeyguard(emergencyIntent,
                     false /* onlyProvisioned */, true /* dismissShade */,
                     true /* disallowEnterPictureInPictureWhileLaunching */, null /* callback */, 0,
@@ -459,7 +465,7 @@ public class CentralSurfacesCommandQueueCallbacks implements CommandQueue.Callba
     @Override
     public void onSystemBarAttributesChanged(int displayId, @Appearance int appearance,
             AppearanceRegion[] appearanceRegions, boolean navbarColorManagedByIme,
-            @Behavior int behavior, InsetsVisibilities requestedVisibilities, String packageName,
+            @Behavior int behavior, @InsetsType int requestedVisibleTypes, String packageName,
             LetterboxDetails[] letterboxDetails) {
         if (displayId != mDisplayId) {
             return;
@@ -472,7 +478,7 @@ public class CentralSurfacesCommandQueueCallbacks implements CommandQueue.Callba
                 appearanceRegions,
                 navbarColorManagedByIme,
                 behavior,
-                requestedVisibilities,
+                requestedVisibleTypes,
                 packageName,
                 letterboxDetails
         );

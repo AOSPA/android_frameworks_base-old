@@ -272,6 +272,9 @@ public final class CameraExtensionCharacteristics {
                     @Override
                     public void onServiceConnected(ComponentName component, IBinder binder) {
                         mProxy = ICameraExtensionsProxyService.Stub.asInterface(binder);
+                        if (mProxy == null) {
+                            throw new IllegalStateException("Camera Proxy service is null");
+                        }
                         try {
                             mSupportsAdvancedExtensions = mProxy.advancedExtensionsSupported();
                         } catch (RemoteException e) {
@@ -796,6 +799,46 @@ public final class CameraExtensionCharacteristics {
         }
 
         return null;
+    }
+
+    /**
+     * Retrieve support for capture progress callbacks via
+     *  {@link CameraExtensionSession.ExtensionCaptureCallback#onCaptureProcessProgressed}.
+     *
+     * @param extension         the extension type
+     * @return {@code true} in case progress callbacks are supported, {@code false} otherwise
+     *
+     * @throws IllegalArgumentException in case of an unsupported extension.
+     */
+    public boolean isCaptureProcessProgressAvailable(@Extension int extension) {
+        long clientId = registerClient(mContext);
+        if (clientId < 0) {
+            throw new IllegalArgumentException("Unsupported extensions");
+        }
+
+        try {
+            if (!isExtensionSupported(mCameraId, extension, mChars)) {
+                throw new IllegalArgumentException("Unsupported extension");
+            }
+
+            if (areAdvancedExtensionsSupported()) {
+                IAdvancedExtenderImpl extender = initializeAdvancedExtension(extension);
+                extender.init(mCameraId);
+                return extender.isCaptureProcessProgressAvailable();
+            } else {
+                Pair<IPreviewExtenderImpl, IImageCaptureExtenderImpl> extenders =
+                        initializeExtension(extension);
+                extenders.second.init(mCameraId, mChars.getNativeMetadata());
+                return extenders.second.isCaptureProcessProgressAvailable();
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "Failed to query the extension progress callbacks! Extension service does"
+                    + " not respond!");
+        } finally {
+            unregisterClient(clientId);
+        }
+
+        return false;
     }
 
     /**

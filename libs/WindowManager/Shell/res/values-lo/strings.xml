@@ -22,8 +22,7 @@
     <string name="pip_phone_settings" msgid="5468987116750491918">"ການຕັ້ງຄ່າ"</string>
     <string name="pip_phone_enter_split" msgid="7042877263880641911">"ເຂົ້າການແບ່ງໜ້າຈໍ"</string>
     <string name="pip_menu_title" msgid="5393619322111827096">"ເມນູ"</string>
-    <!-- no translation found for pip_menu_accessibility_title (8129016817688656249) -->
-    <skip />
+    <string name="pip_menu_accessibility_title" msgid="8129016817688656249">"ເມນູການສະແດງຜົນຊ້ອນກັນ"</string>
     <string name="pip_notification_title" msgid="1347104727641353453">"<xliff:g id="NAME">%s</xliff:g> ແມ່ນເປັນການສະແດງຜົນຫຼາຍຢ່າງພ້ອມກັນ"</string>
     <string name="pip_notification_message" msgid="8854051911700302620">"ຫາກທ່ານບໍ່ຕ້ອງການ <xliff:g id="NAME">%s</xliff:g> ໃຫ້ໃຊ້ຄຸນສົມບັດນີ້, ໃຫ້ແຕະເພື່ອເປີດການຕັ້ງຄ່າ ແລ້ວປິດມັນໄວ້."</string>
     <string name="pip_play" msgid="3496151081459417097">"ຫຼິ້ນ"</string>
@@ -38,8 +37,7 @@
     <string name="forced_resizable_secondary_display" msgid="1768046938673582671">"ແອັບອາດບໍ່ສາມາດໃຊ້ໄດ້ໃນໜ້າຈໍທີສອງ."</string>
     <string name="activity_launch_on_secondary_display_failed_text" msgid="4226485344988071769">"ແອັບບໍ່ຮອງຮັບການເປີດໃນໜ້າຈໍທີສອງ."</string>
     <string name="accessibility_divider" msgid="703810061635792791">"ຕົວຂັ້ນການແບ່ງໜ້າຈໍ"</string>
-    <!-- no translation found for divider_title (5482989479865361192) -->
-    <skip />
+    <string name="divider_title" msgid="5482989479865361192">"ຕົວຂັ້ນການແບ່ງໜ້າຈໍ"</string>
     <string name="accessibility_action_divider_left_full" msgid="1792313656305328536">"ເຕັມໜ້າຈໍຊ້າຍ"</string>
     <string name="accessibility_action_divider_left_70" msgid="8859845045360659250">"ຊ້າຍ 70%"</string>
     <string name="accessibility_action_divider_left_50" msgid="3488317024557521561">"ຊ້າຍ 50%"</string>
@@ -80,12 +78,19 @@
     <string name="camera_compat_treatment_suggested_button_description" msgid="8103916969024076767">"ມີບັນຫາກ້ອງຖ່າຍຮູບບໍ?\nແຕະເພື່ອປັບໃໝ່"</string>
     <string name="camera_compat_treatment_applied_button_description" msgid="2944157113330703897">"ບໍ່ໄດ້ແກ້ໄຂມັນບໍ?\nແຕະເພື່ອແປງກັບຄືນ"</string>
     <string name="camera_compat_dismiss_button_description" msgid="2795364433503817511">"ບໍ່ມີບັນຫາກ້ອງຖ່າຍຮູບບໍ? ແຕະເພື່ອ​ປິດ​ໄວ້."</string>
-    <string name="letterbox_education_dialog_title" msgid="6688664582871779215">"ແອັບບາງຢ່າງເຮັດວຽກໄດ້ດີທີ່ສຸດໃນໂໝດລວງຕັ້ງ"</string>
-    <string name="letterbox_education_dialog_subtext" msgid="4853542518367719562">"ໃຫ້ລອງຕົວເລືອກໃດໜຶ່ງເຫຼົ່ານີ້ເພື່ອໃຊ້ປະໂຫຍດຈາກພື້ນທີ່ຂອງທ່ານໃຫ້ໄດ້ສູງສຸດ"</string>
-    <string name="letterbox_education_screen_rotation_text" msgid="5085786687366339027">"ໝຸນອຸປະກອນຂອງທ່ານເພື່ອໃຊ້ແບບເຕັມຈໍ"</string>
-    <string name="letterbox_education_reposition_text" msgid="1068293354123934727">"ແຕະສອງເທື່ອໃສ່ຖັດຈາກແອັບໃດໜຶ່ງເພື່ອຈັດຕຳແໜ່ງຂອງມັນຄືນໃໝ່"</string>
+    <string name="letterbox_education_dialog_title" msgid="7739895354143295358">"ເບິ່ງ ແລະ ເຮັດຫຼາຍຂຶ້ນ"</string>
+    <string name="letterbox_education_split_screen_text" msgid="6206339484068670830">"ລາກແອັບອື່ນເຂົ້າມາເພື່ອແບ່ງໜ້າຈໍ"</string>
+    <string name="letterbox_education_reposition_text" msgid="4589957299813220661">"ແຕະສອງເທື່ອໃສ່ນອກແອັບໃດໜຶ່ງເພື່ອຈັດຕຳແໜ່ງຂອງມັນຄືນໃໝ່"</string>
     <string name="letterbox_education_got_it" msgid="4057634570866051177">"ເຂົ້າໃຈແລ້ວ"</string>
     <string name="letterbox_education_expand_button_description" msgid="1729796567101129834">"ຂະຫຍາຍເພື່ອເບິ່ງຂໍ້ມູນເພີ່ມເຕີມ."</string>
     <string name="maximize_button_text" msgid="1650859196290301963">"ຂະຫຍາຍໃຫຍ່ສຸດ"</string>
+    <string name="minimize_button_text" msgid="271592547935841753">"ຫຍໍ້ລົງ"</string>
     <string name="close_button_text" msgid="2913281996024033299">"ປິດ"</string>
+    <string name="back_button_text" msgid="1469718707134137085">"ກັບຄືນ"</string>
+    <string name="handle_text" msgid="1766582106752184456">"ມືບັງຄັບ"</string>
+    <string name="fullscreen_text" msgid="1162316685217676079">"ເຕັມຈໍ"</string>
+    <string name="desktop_text" msgid="1077633567027630454">"ໂໝດເດັສທັອບ"</string>
+    <string name="split_screen_text" msgid="1396336058129570886">"ແບ່ງໜ້າຈໍ"</string>
+    <string name="more_button_text" msgid="3655388105592893530">"ເພີ່ມເຕີມ"</string>
+    <string name="float_button_text" msgid="9221657008391364581">"ລອຍ"</string>
 </resources>

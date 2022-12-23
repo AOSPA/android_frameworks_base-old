@@ -34,6 +34,7 @@ import com.android.systemui.statusbar.notification.collection.listbuilder.plugga
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifCollectionListener
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifLifetimeExtender
 import com.android.systemui.statusbar.notification.collection.notifcollection.NotifLifetimeExtender.OnEndLifetimeExtensionCallback
+import com.android.systemui.statusbar.notification.collection.provider.LaunchFullScreenIntentProvider
 import com.android.systemui.statusbar.notification.collection.render.NodeController
 import com.android.systemui.statusbar.notification.interruption.HeadsUpViewBinder
 import com.android.systemui.statusbar.notification.interruption.NotificationInterruptStateProvider
@@ -47,6 +48,8 @@ import com.android.systemui.util.mockito.eq
 import com.android.systemui.util.mockito.mock
 import com.android.systemui.util.mockito.withArgCaptor
 import com.android.systemui.util.time.FakeSystemClock
+import java.util.ArrayList
+import java.util.function.Consumer
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -57,10 +60,8 @@ import org.mockito.BDDMockito.given
 import org.mockito.Mockito.never
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
-import org.mockito.MockitoAnnotations
-import java.util.ArrayList
-import java.util.function.Consumer
 import org.mockito.Mockito.`when` as whenever
+import org.mockito.MockitoAnnotations
 
 @SmallTest
 @RunWith(AndroidTestingRunner::class)
@@ -86,6 +87,7 @@ class HeadsUpCoordinatorTest : SysuiTestCase() {
     private val mRemoteInputManager: NotificationRemoteInputManager = mock()
     private val mEndLifetimeExtension: OnEndLifetimeExtensionCallback = mock()
     private val mHeaderController: NodeController = mock()
+    private val mLaunchFullScreenIntentProvider: LaunchFullScreenIntentProvider = mock()
 
     private lateinit var mEntry: NotificationEntry
     private lateinit var mGroupSummary: NotificationEntry
@@ -110,6 +112,7 @@ class HeadsUpCoordinatorTest : SysuiTestCase() {
             mHeadsUpViewBinder,
             mNotificationInterruptStateProvider,
             mRemoteInputManager,
+            mLaunchFullScreenIntentProvider,
             mHeaderController,
             mExecutor)
         mCoordinator.attach(mNotifPipeline)
@@ -242,6 +245,20 @@ class HeadsUpCoordinatorTest : SysuiTestCase() {
     }
 
     @Test
+    fun testOnEntryAdded_shouldFullScreen() {
+        setShouldFullScreen(mEntry)
+        mCollectionListener.onEntryAdded(mEntry)
+        verify(mLaunchFullScreenIntentProvider).launchFullScreenIntent(mEntry)
+    }
+
+    @Test
+    fun testOnEntryAdded_shouldNotFullScreen() {
+        setShouldFullScreen(mEntry, should = false)
+        mCollectionListener.onEntryAdded(mEntry)
+        verify(mLaunchFullScreenIntentProvider, never()).launchFullScreenIntent(any())
+    }
+
+    @Test
     fun testPromotesAddedHUN() {
         // GIVEN the current entry should heads up
         whenever(mNotificationInterruptStateProvider.shouldHeadsUp(mEntry)).thenReturn(true)
@@ -337,6 +354,40 @@ class HeadsUpCoordinatorTest : SysuiTestCase() {
     }
 
     @Test
+    fun testOnEntryUpdated_toAlert() {
+        // GIVEN that an entry is posted that should not heads up
+        setShouldHeadsUp(mEntry, false)
+        mCollectionListener.onEntryAdded(mEntry)
+
+        // WHEN it's updated to heads up
+        setShouldHeadsUp(mEntry)
+        mCollectionListener.onEntryUpdated(mEntry)
+        mBeforeTransformGroupsListener.onBeforeTransformGroups(listOf(mEntry))
+        mBeforeFinalizeFilterListener.onBeforeFinalizeFilter(listOf(mEntry))
+
+        // THEN the notification alerts
+        finishBind(mEntry)
+        verify(mHeadsUpManager).showNotification(mEntry)
+    }
+
+    @Test
+    fun testOnEntryUpdated_toNotAlert() {
+        // GIVEN that an entry is posted that should heads up
+        setShouldHeadsUp(mEntry)
+        mCollectionListener.onEntryAdded(mEntry)
+
+        // WHEN it's updated to not heads up
+        setShouldHeadsUp(mEntry, false)
+        mCollectionListener.onEntryUpdated(mEntry)
+        mBeforeTransformGroupsListener.onBeforeTransformGroups(listOf(mEntry))
+        mBeforeFinalizeFilterListener.onBeforeFinalizeFilter(listOf(mEntry))
+
+        // THEN the notification is never bound or shown
+        verify(mHeadsUpViewBinder, never()).bindHeadsUpView(any(), any())
+        verify(mHeadsUpManager, never()).showNotification(any())
+    }
+
+    @Test
     fun testOnEntryRemovedRemovesHeadsUpNotification() {
         // GIVEN the current HUN is mEntry
         addHUN(mEntry)
@@ -372,6 +423,10 @@ class HeadsUpCoordinatorTest : SysuiTestCase() {
 
         verify(mHeadsUpManager, never()).showNotification(mGroupSummary)
         verify(mHeadsUpManager).showNotification(mGroupSibling1)
+
+        // In addition make sure we have explicitly marked the summary as having interrupted due
+        // to the alert being transferred
+        assertTrue(mGroupSummary.hasInterrupted())
     }
 
     @Test
@@ -390,6 +445,7 @@ class HeadsUpCoordinatorTest : SysuiTestCase() {
 
         verify(mHeadsUpManager, never()).showNotification(mGroupSummary)
         verify(mHeadsUpManager).showNotification(mGroupChild1)
+        assertTrue(mGroupSummary.hasInterrupted())
     }
 
     @Test
@@ -415,6 +471,7 @@ class HeadsUpCoordinatorTest : SysuiTestCase() {
         verify(mHeadsUpManager, never()).showNotification(mGroupSummary)
         verify(mHeadsUpManager).showNotification(mGroupSibling1)
         verify(mHeadsUpManager, never()).showNotification(mGroupSibling2)
+        assertTrue(mGroupSummary.hasInterrupted())
     }
 
     @Test
@@ -440,6 +497,7 @@ class HeadsUpCoordinatorTest : SysuiTestCase() {
         verify(mHeadsUpManager, never()).showNotification(mGroupSummary)
         verify(mHeadsUpManager).showNotification(mGroupChild1)
         verify(mHeadsUpManager, never()).showNotification(mGroupChild2)
+        assertTrue(mGroupSummary.hasInterrupted())
     }
 
     @Test
@@ -478,6 +536,7 @@ class HeadsUpCoordinatorTest : SysuiTestCase() {
         verify(mHeadsUpManager).showNotification(mGroupPriority)
         verify(mHeadsUpManager, never()).showNotification(mGroupSibling1)
         verify(mHeadsUpManager, never()).showNotification(mGroupSibling2)
+        assertTrue(mGroupSummary.hasInterrupted())
     }
 
     @Test
@@ -514,6 +573,7 @@ class HeadsUpCoordinatorTest : SysuiTestCase() {
         verify(mHeadsUpManager).showNotification(mGroupPriority)
         verify(mHeadsUpManager, never()).showNotification(mGroupSibling1)
         verify(mHeadsUpManager, never()).showNotification(mGroupSibling2)
+        assertTrue(mGroupSummary.hasInterrupted())
     }
 
     @Test
@@ -548,6 +608,7 @@ class HeadsUpCoordinatorTest : SysuiTestCase() {
         verify(mHeadsUpManager).showNotification(mGroupPriority)
         verify(mHeadsUpManager, never()).showNotification(mGroupSibling1)
         verify(mHeadsUpManager, never()).showNotification(mGroupSibling2)
+        assertTrue(mGroupSummary.hasInterrupted())
     }
 
     @Test
@@ -637,8 +698,122 @@ class HeadsUpCoordinatorTest : SysuiTestCase() {
         verify(mHeadsUpManager, never()).showNotification(mGroupChild2)
     }
 
+    @Test
+    fun testNoTransfer_groupSummaryNotAlerting() {
+        // When we have a group where the summary should not alert and exactly one child should
+        // alert, we should never mark the group summary as interrupted (because it doesn't).
+        setShouldHeadsUp(mGroupSummary, false)
+        setShouldHeadsUp(mGroupChild1, true)
+        setShouldHeadsUp(mGroupChild2, false)
+
+        mCollectionListener.onEntryAdded(mGroupSummary)
+        mCollectionListener.onEntryAdded(mGroupChild1)
+        mCollectionListener.onEntryAdded(mGroupChild2)
+        val groupEntry = GroupEntryBuilder()
+            .setSummary(mGroupSummary)
+            .setChildren(listOf(mGroupChild1, mGroupChild2))
+            .build()
+        mBeforeTransformGroupsListener.onBeforeTransformGroups(listOf(groupEntry))
+        verify(mHeadsUpViewBinder, never()).bindHeadsUpView(any(), any())
+        mBeforeFinalizeFilterListener.onBeforeFinalizeFilter(listOf(groupEntry))
+
+        verify(mHeadsUpViewBinder, never()).bindHeadsUpView(eq(mGroupSummary), any())
+        finishBind(mGroupChild1)
+        verify(mHeadsUpViewBinder, never()).bindHeadsUpView(eq(mGroupChild2), any())
+
+        verify(mHeadsUpManager, never()).showNotification(mGroupSummary)
+        verify(mHeadsUpManager).showNotification(mGroupChild1)
+        verify(mHeadsUpManager, never()).showNotification(mGroupChild2)
+        assertFalse(mGroupSummary.hasInterrupted())
+    }
+
+    @Test
+    fun testOnRankingApplied_newEntryShouldAlert() {
+        // GIVEN that mEntry has never interrupted in the past, and now should
+        // and is new enough to do so
+        assertFalse(mEntry.hasInterrupted())
+        mCoordinator.setUpdateTime(mEntry, mSystemClock.currentTimeMillis())
+        setShouldHeadsUp(mEntry)
+        whenever(mNotifPipeline.allNotifs).thenReturn(listOf(mEntry))
+
+        // WHEN a ranking applied update occurs
+        mCollectionListener.onRankingApplied()
+        mBeforeTransformGroupsListener.onBeforeTransformGroups(listOf(mEntry))
+        mBeforeFinalizeFilterListener.onBeforeFinalizeFilter(listOf(mEntry))
+
+        // THEN the notification is shown
+        finishBind(mEntry)
+        verify(mHeadsUpManager).showNotification(mEntry)
+    }
+
+    @Test
+    fun testOnRankingApplied_alreadyAlertedEntryShouldNotAlertAgain() {
+        // GIVEN that mEntry has alerted in the past, even if it's new
+        mEntry.setInterruption()
+        mCoordinator.setUpdateTime(mEntry, mSystemClock.currentTimeMillis())
+        setShouldHeadsUp(mEntry)
+        whenever(mNotifPipeline.allNotifs).thenReturn(listOf(mEntry))
+
+        // WHEN a ranking applied update occurs
+        mCollectionListener.onRankingApplied()
+        mBeforeTransformGroupsListener.onBeforeTransformGroups(listOf(mEntry))
+        mBeforeFinalizeFilterListener.onBeforeFinalizeFilter(listOf(mEntry))
+
+        // THEN the notification is never bound or shown
+        verify(mHeadsUpViewBinder, never()).bindHeadsUpView(any(), any())
+        verify(mHeadsUpManager, never()).showNotification(any())
+    }
+
+    @Test
+    fun testOnRankingApplied_entryUpdatedToHun() {
+        // GIVEN that mEntry is added in a state where it should not HUN
+        setShouldHeadsUp(mEntry, false)
+        mCollectionListener.onEntryAdded(mEntry)
+
+        // and it is then updated such that it should now HUN
+        setShouldHeadsUp(mEntry)
+        whenever(mNotifPipeline.allNotifs).thenReturn(listOf(mEntry))
+
+        // WHEN a ranking applied update occurs
+        mCollectionListener.onRankingApplied()
+        mBeforeTransformGroupsListener.onBeforeTransformGroups(listOf(mEntry))
+        mBeforeFinalizeFilterListener.onBeforeFinalizeFilter(listOf(mEntry))
+
+        // THEN the notification is shown
+        finishBind(mEntry)
+        verify(mHeadsUpManager).showNotification(mEntry)
+    }
+
+    @Test
+    fun testOnRankingApplied_entryUpdatedButTooOld() {
+        // GIVEN that mEntry is added in a state where it should not HUN
+        setShouldHeadsUp(mEntry, false)
+        mCollectionListener.onEntryAdded(mEntry)
+
+        // and it was actually added 10s ago
+        mCoordinator.setUpdateTime(mEntry, mSystemClock.currentTimeMillis() - 10000)
+
+        // WHEN it is updated to HUN and then a ranking update occurs
+        setShouldHeadsUp(mEntry)
+        whenever(mNotifPipeline.allNotifs).thenReturn(listOf(mEntry))
+        mCollectionListener.onRankingApplied()
+        mBeforeTransformGroupsListener.onBeforeTransformGroups(listOf(mEntry))
+        mBeforeFinalizeFilterListener.onBeforeFinalizeFilter(listOf(mEntry))
+
+        // THEN the notification is never bound or shown
+        verify(mHeadsUpViewBinder, never()).bindHeadsUpView(any(), any())
+        verify(mHeadsUpManager, never()).showNotification(any())
+    }
+
     private fun setShouldHeadsUp(entry: NotificationEntry, should: Boolean = true) {
         whenever(mNotificationInterruptStateProvider.shouldHeadsUp(entry)).thenReturn(should)
+        whenever(mNotificationInterruptStateProvider.checkHeadsUp(eq(entry), any()))
+                .thenReturn(should)
+    }
+
+    private fun setShouldFullScreen(entry: NotificationEntry, should: Boolean = true) {
+        whenever(mNotificationInterruptStateProvider.shouldLaunchFullScreenIntentWhenAdded(entry))
+            .thenReturn(should)
     }
 
     private fun finishBind(entry: NotificationEntry) {

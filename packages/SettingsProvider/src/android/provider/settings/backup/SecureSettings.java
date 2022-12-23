@@ -122,6 +122,7 @@ public class SecureSettings {
         Settings.Secure.FINGERPRINT_SIDE_FPS_BP_POWER_WINDOW,
         Settings.Secure.FINGERPRINT_SIDE_FPS_ENROLL_TAP_WINDOW,
         Settings.Secure.FINGERPRINT_SIDE_FPS_AUTH_DOWNTIME,
+        Settings.Secure.SFPS_REQUIRE_SCREEN_ON_TO_AUTH_ENABLED,
         Settings.Secure.ACTIVE_UNLOCK_ON_WAKE,
         Settings.Secure.ACTIVE_UNLOCK_ON_UNLOCK_INTENT,
         Settings.Secure.ACTIVE_UNLOCK_ON_BIOMETRIC_FAIL,
@@ -213,10 +214,10 @@ public class SecureSettings {
         Settings.Secure.STATUS_BAR_SHOW_VIBRATE_ICON,
         Settings.Secure.WEAR_TALKBACK_ENABLED,
         Settings.Secure.HBM_SETTING_KEY,
-        Settings.Secure.ACCESSIBILITY_SOFTWARE_CURSOR_ENABLED,
-        Settings.Secure.ACCESSIBILITY_SOFTWARE_CURSOR_TRIGGER_HINTS_ENABLED,
-        Settings.Secure.ACCESSIBILITY_SOFTWARE_CURSOR_KEYBOARD_SHIFT_ENABLED,
         Settings.Secure.ASSIST_TOUCH_GESTURE_ENABLED,
         Settings.Secure.ASSIST_LONG_PRESS_HOME_ENABLED,
+        Settings.Secure.BLUETOOTH_LE_BROADCAST_PROGRAM_INFO,
+        Settings.Secure.BLUETOOTH_LE_BROADCAST_CODE,
+        Settings.Secure.BLUETOOTH_LE_BROADCAST_APP_SOURCE_NAME
     };
 }

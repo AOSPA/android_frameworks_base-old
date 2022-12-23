@@ -55,8 +55,6 @@ import android.os.UserManager;
 import android.provider.Settings;
 import android.util.AtomicFile;
 import android.util.Slog;
-import android.util.TypedXmlPullParser;
-import android.util.TypedXmlSerializer;
 import android.util.Xml;
 import android.view.Display;
 
@@ -64,6 +62,8 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.util.RingBuffer;
+import com.android.modules.utils.TypedXmlPullParser;
+import com.android.modules.utils.TypedXmlSerializer;
 import com.android.server.LocalServices;
 
 import libcore.io.IoUtils;
@@ -220,6 +220,11 @@ public class BrightnessTracker {
     }
 
     private void backgroundStart(float initialBrightness) {
+        synchronized (mDataCollectionLock) {
+            if (mStarted) {
+                return;
+            }
+        }
         if (DEBUG) {
             Slog.d(TAG, "Background start");
         }
@@ -250,6 +255,11 @@ public class BrightnessTracker {
 
     /** Stop listening for events */
     void stop() {
+        synchronized (mDataCollectionLock) {
+            if (!mStarted) {
+                return;
+            }
+        }
         if (DEBUG) {
             Slog.d(TAG, "Stop");
         }
@@ -1123,7 +1133,7 @@ public class BrightnessTracker {
 
         public void registerReceiver(Context context,
                 BroadcastReceiver receiver, IntentFilter filter) {
-            context.registerReceiver(receiver, filter);
+            context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED_UNAUDITED);
         }
 
         public void unregisterReceiver(Context context,

@@ -407,7 +407,7 @@
     <dimen name="match_parent">-1px</dimen>
 
     <!-- Height of status bar in split shade mode - visible only on large screens -->
-    <dimen name="large_screen_shade_header_height">@*android:dimen/quick_qs_offset_height</dimen>
+    <dimen name="large_screen_shade_header_height">48dp</dimen>
     <dimen name="large_screen_shade_header_min_height">@dimen/qs_header_row_min_height</dimen>
     <dimen name="large_screen_shade_header_left_padding">@dimen/qs_horizontal_margin</dimen>
 
@@ -479,6 +479,10 @@
 
     <dimen name="volume_tool_tip_arrow_corner_radius">2dp</dimen>
 
+    <!-- Volume panel slices dimensions -->
+    <dimen name="volume_panel_slice_vertical_padding">8dp</dimen>
+    <dimen name="volume_panel_slice_horizontal_padding">24dp</dimen>
+
     <!-- Size of each item in the ringer selector drawer. -->
     <dimen name="volume_ringer_drawer_item_size">42dp</dimen>
     <dimen name="volume_ringer_drawer_item_size_half">21dp</dimen>
@@ -515,8 +519,8 @@
     <dimen name="qs_tile_margin_horizontal">8dp</dimen>
     <dimen name="qs_tile_margin_vertical">@dimen/qs_tile_margin_horizontal</dimen>
     <dimen name="qs_tile_margin_top_bottom">4dp</dimen>
-    <dimen name="qs_brightness_margin_top">8dp</dimen>
-    <dimen name="qs_brightness_margin_bottom">24dp</dimen>
+    <dimen name="qs_brightness_margin_top">12dp</dimen>
+    <dimen name="qs_brightness_margin_bottom">16dp</dimen>
     <dimen name="qqs_layout_margin_top">16dp</dimen>
     <dimen name="qqs_layout_padding_bottom">24dp</dimen>
 
@@ -555,7 +559,8 @@
     <dimen name="qs_dual_tile_padding_horizontal">6dp</dimen>
     <dimen name="qs_panel_elevation">4dp</dimen>
     <dimen name="qs_panel_padding_bottom">@dimen/footer_actions_height</dimen>
-    <dimen name="qs_panel_padding_top">80dp</dimen>
+    <dimen name="qs_panel_padding_top">48dp</dimen>
+    <dimen name="qs_panel_padding_top_combined_headers">80dp</dimen>
 
     <dimen name="qs_data_usage_text_size">14sp</dimen>
     <dimen name="qs_data_usage_usage_text_size">36sp</dimen>
@@ -567,6 +572,7 @@
     <dimen name="qs_header_row_min_height">48dp</dimen>
 
     <dimen name="qs_header_non_clickable_element_height">24dp</dimen>
+    <dimen name="new_qs_header_non_clickable_element_height">20dp</dimen>
 
     <dimen name="qs_footer_padding">20dp</dimen>
     <dimen name="qs_security_footer_height">88dp</dimen>
@@ -665,7 +671,7 @@
     <!-- When large clock is showing, offset the smartspace by this amount -->
     <dimen name="keyguard_smartspace_top_offset">12dp</dimen>
     <!-- With the large clock, move up slightly from the center -->
-    <dimen name="keyguard_large_clock_top_padding">100dp</dimen>
+    <dimen name="keyguard_large_clock_top_margin">-60dp</dimen>
 
     <dimen name="notification_scrim_corner_radius">32dp</dimen>
 
@@ -756,7 +762,7 @@
     <dimen name="keyguard_lock_padding">20dp</dimen>
 
     <dimen name="keyguard_indication_margin_bottom">32dp</dimen>
-    <dimen name="lock_icon_margin_bottom">110dp</dimen>
+    <dimen name="lock_icon_margin_bottom">74dp</dimen>
     <dimen name="ambient_indication_margin_bottom">71dp</dimen>
 
 
@@ -941,6 +947,8 @@
     <dimen name="biometric_dialog_medium_to_large_translation_offset">100dp</dimen>
     <!-- Y translation for credential contents when animating in -->
     <dimen name="biometric_dialog_credential_translation_offset">60dp</dimen>
+    <dimen name="biometric_dialog_width">240dp</dimen>
+    <dimen name="biometric_dialog_height">240dp</dimen>
 
     <!-- Biometric Auth Credential values -->
     <dimen name="biometric_auth_icon_size">48dp</dimen>
@@ -1053,9 +1061,8 @@
     <!-- Media tap-to-transfer chip for receiver device -->
     <dimen name="media_ttt_chip_size_receiver">100dp</dimen>
     <dimen name="media_ttt_icon_size_receiver">95dp</dimen>
-    <!-- Since the generic icon isn't circular, we need to scale it down so it still fits within
-         the circular chip. -->
-    <dimen name="media_ttt_generic_icon_size_receiver">70dp</dimen>
+    <!-- Add some padding for the generic icon so it doesn't go all the way to the border. -->
+    <dimen name="media_ttt_generic_icon_padding">12dp</dimen>
     <dimen name="media_ttt_receiver_vert_translation">20dp</dimen>
 
     <!-- Window magnification -->
@@ -1181,6 +1188,7 @@
 
     <!-- Output switcher panel related dimensions -->
     <dimen name="media_output_dialog_list_max_height">355dp</dimen>
+    <dimen name="media_output_dialog_list_item_height">76dp</dimen>
     <dimen name="media_output_dialog_header_album_icon_size">72dp</dimen>
     <dimen name="media_output_dialog_header_back_icon_size">32dp</dimen>
     <dimen name="media_output_dialog_header_icon_padding">16dp</dimen>
@@ -1218,6 +1226,17 @@
     <!-- Distance that the full shade transition takes in order for the Quick Settings to fully
          fade and expand. -->
     <dimen name="lockscreen_shade_qs_transition_distance">@dimen/lockscreen_shade_full_transition_distance</dimen>
+
+    <!-- Distance delay for the QS transition to start during the lockscreen shade expansion. -->
+    <dimen name="lockscreen_shade_qs_transition_delay">0dp</dimen>
+
+    <!-- Distance that it takes to complete the QS "squish" transition during the lockscreen shade
+         expansion. -->
+    <dimen name="lockscreen_shade_qs_squish_transition_distance">@dimen/lockscreen_shade_qs_transition_distance</dimen>
+
+    <!-- The fraction at which the QS "squish" transition should start during the lockscreen shade
+         expansion. 0 is fully collapsed, 1 is fully expanded. -->
+    <item type="dimen" format="float" name="lockscreen_shade_qs_squish_start_fraction">0.5</item>
 
     <!-- Distance that the full shade transition takes in order for depth of the wallpaper to fully
          change.  -->
@@ -1305,8 +1324,8 @@
 
     <!-- Accessibility floating menu -->
     <dimen name="accessibility_floating_menu_elevation">3dp</dimen>
-    <dimen name="accessibility_floating_menu_stroke_width">1dp</dimen>
-    <dimen name="accessibility_floating_menu_stroke_inset">-2dp</dimen>
+    <dimen name="accessibility_floating_menu_stroke_width">0dp</dimen>
+    <dimen name="accessibility_floating_menu_stroke_inset">0dp</dimen>
     <dimen name="accessibility_floating_menu_margin">16dp</dimen>
     <dimen name="accessibility_floating_menu_small_padding">6dp</dimen>
     <dimen name="accessibility_floating_menu_small_width_height">36dp</dimen>
@@ -1316,6 +1335,14 @@
     <dimen name="accessibility_floating_menu_large_width_height">56dp</dimen>
     <dimen name="accessibility_floating_menu_large_single_radius">35dp</dimen>
     <dimen name="accessibility_floating_menu_large_multiple_radius">35dp</dimen>
+
+    <dimen name="accessibility_floating_menu_message_container_horizontal_padding">15dp</dimen>
+    <dimen name="accessibility_floating_menu_message_text_vertical_padding">8dp</dimen>
+    <dimen name="accessibility_floating_menu_message_margin">8dp</dimen>
+    <dimen name="accessibility_floating_menu_message_elevation">5dp</dimen>
+    <dimen name="accessibility_floating_menu_message_text_size">14sp</dimen>
+    <dimen name="accessibility_floating_menu_message_min_width">312dp</dimen>
+    <dimen name="accessibility_floating_menu_message_min_height">48dp</dimen>
 
     <dimen name="accessibility_floating_tooltip_arrow_width">8dp</dimen>
     <dimen name="accessibility_floating_tooltip_arrow_height">16dp</dimen>
@@ -1449,6 +1476,13 @@
 
     <dimen name="fgs_manager_list_top_spacing">12dp</dimen>
 
+    <dimen name="media_projection_app_selector_icon_size">32dp</dimen>
+    <dimen name="media_projection_app_selector_recents_padding">16dp</dimen>
+    <dimen name="media_projection_app_selector_loader_size">32dp</dimen>
+    <dimen name="media_projection_app_selector_task_rounded_corners">10dp</dimen>
+    <dimen name="media_projection_app_selector_task_icon_size">24dp</dimen>
+    <dimen name="media_projection_app_selector_task_icon_margin">8dp</dimen>
+
     <!-- Dream overlay related dimensions -->
     <dimen name="dream_overlay_status_bar_height">60dp</dimen>
     <dimen name="dream_overlay_status_bar_margin">40dp</dimen>
@@ -1458,27 +1492,29 @@
     <dimen name="dream_overlay_camera_mic_off_indicator_size">8dp</dimen>
     <dimen name="dream_overlay_notification_indicator_size">6dp</dimen>
     <dimen name="dream_overlay_grey_chip_width">56dp</dimen>
-    <dimen name="dream_overlay_status_bar_extra_margin">16dp</dimen>
+    <dimen name="dream_overlay_status_bar_extra_margin">8dp</dimen>
 
     <!-- Dream overlay complications related dimensions -->
     <dimen name="dream_overlay_complication_clock_time_text_size">86sp</dimen>
+    <dimen name="dream_overlay_complication_clock_time_padding">20dp</dimen>
     <dimen name="dream_overlay_complication_clock_subtitle_text_size">24sp</dimen>
     <dimen name="dream_overlay_complication_preview_text_size">36sp</dimen>
     <dimen name="dream_overlay_complication_preview_icon_padding">28dp</dimen>
     <dimen name="dream_overlay_complication_shadow_padding">2dp</dimen>
+    <dimen name="dream_overlay_complication_smartspace_padding">24dp</dimen>
 
     <!-- The position of the end guide, which dream overlay complications can align their start with
          if their end is aligned with the parent end. Represented as the percentage over from the
          start of the parent container. -->
     <item name="dream_overlay_complication_guide_end_percent" format="float" type="dimen">
-        0.75
+        0.5
     </item>
 
     <!-- The position of the start guide, which dream overlay complications can align their end to
          if their start is aligned with the parent start. Represented as the percentage over from
          the start of the parent container. -->
     <item name="dream_overlay_complication_guide_start_percent" format="float" type="dimen">
-        0.25
+        0.5
     </item>
 
     <!-- The position of the bottom guide, which dream overlay complications can align their top to
@@ -1541,10 +1577,25 @@
     <dimen name="broadcast_dialog_btn_text_size">16sp</dimen>
     <dimen name="broadcast_dialog_btn_minHeight">44dp</dimen>
     <dimen name="broadcast_dialog_margin">16dp</dimen>
+
+    <!-- Shadow for dream overlay clock complication -->
     <dimen name="dream_overlay_clock_key_text_shadow_dx">0dp</dimen>
     <dimen name="dream_overlay_clock_key_text_shadow_dy">0dp</dimen>
-    <dimen name="dream_overlay_clock_key_text_shadow_radius">5dp</dimen>
+    <dimen name="dream_overlay_clock_key_text_shadow_radius">3dp</dimen>
     <dimen name="dream_overlay_clock_ambient_text_shadow_dx">0dp</dimen>
     <dimen name="dream_overlay_clock_ambient_text_shadow_dy">0dp</dimen>
     <dimen name="dream_overlay_clock_ambient_text_shadow_radius">1dp</dimen>
+
+    <!-- Shadow for dream overlay status bar complications -->
+    <dimen name="dream_overlay_status_bar_key_text_shadow_dx">0.5dp</dimen>
+    <dimen name="dream_overlay_status_bar_key_text_shadow_dy">0.5dp</dimen>
+    <dimen name="dream_overlay_status_bar_key_text_shadow_radius">1dp</dimen>
+    <dimen name="dream_overlay_status_bar_ambient_text_shadow_dx">0.5dp</dimen>
+    <dimen name="dream_overlay_status_bar_ambient_text_shadow_dy">0.5dp</dimen>
+    <dimen name="dream_overlay_status_bar_ambient_text_shadow_radius">2dp</dimen>
+
+    <!-- Default device corner radius, used for assist UI -->
+    <dimen name="config_rounded_mask_size">0px</dimen>
+    <dimen name="config_rounded_mask_size_top">0px</dimen>
+    <dimen name="config_rounded_mask_size_bottom">0px</dimen>
 </resources>

@@ -36,6 +36,7 @@ import static com.android.server.tare.TareUtils.getCurrentTimeMillis;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.Context;
+import android.content.pm.UserPackage;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
@@ -554,6 +555,25 @@ class Agent {
         }
     }
 
+    @GuardedBy("mLock")
+    void reclaimAllAssetsLocked(final int userId, @NonNull final String pkgName, int regulationId) {
+        final Ledger ledger = mScribe.getLedgerLocked(userId, pkgName);
+        final long curBalance = ledger.getCurrentBalance();
+        if (curBalance <= 0) {
+            return;
+        }
+        if (DEBUG) {
+            Slog.i(TAG, "Reclaiming " + cakeToString(curBalance)
+                    + " from " + appToString(userId, pkgName)
+                    + " because of " + eventToString(regulationId));
+        }
+
+        final long now = getCurrentTimeMillis();
+        recordTransactionLocked(userId, pkgName, ledger,
+                new Ledger.Transaction(now, now, regulationId, null, -curBalance, 0),
+                true);
+    }
+
     /**
      * Reclaim a percentage of unused ARCs from every app that hasn't been used recently. The
      * reclamation will not reduce an app's balance below its minimum balance as dictated by
@@ -564,7 +584,7 @@ class Agent {
      * @param minUnusedTimeMs The minimum amount of time (in milliseconds) that must have
      *                        transpired since the last user usage event before we will consider
      *                        reclaiming ARCs from the app.
-     * @param scaleMinBalance Whether or not to used the scaled minimum app balance. If false,
+     * @param scaleMinBalance Whether or not to use the scaled minimum app balance. If false,
      *                        this will use the constant min balance floor given by
      *                        {@link EconomicPolicy#getMinSatiatedBalance(int, String)}. If true,
      *                        this will use the scaled balance given by
@@ -603,7 +623,8 @@ class Agent {
                     }
                     if (toReclaim > 0) {
                         if (DEBUG) {
-                            Slog.i(TAG, "Reclaiming unused wealth! Taking " + toReclaim
+                            Slog.i(TAG, "Reclaiming unused wealth! Taking "
+                                    + cakeToString(toReclaim)
                                     + " from " + appToString(userId, pkgName));
                         }
 
@@ -667,21 +688,7 @@ class Agent {
      */
     @GuardedBy("mLock")
     void onAppRestrictedLocked(final int userId, @NonNull final String pkgName) {
-        final long curBalance = getBalanceLocked(userId, pkgName);
-        final long minBalance = mIrs.getMinBalanceLocked(userId, pkgName);
-        if (curBalance <= minBalance) {
-            return;
-        }
-        if (DEBUG) {
-            Slog.i(TAG, "App restricted! Taking " + curBalance
-                    + " from " + appToString(userId, pkgName));
-        }
-
-        final long now = getCurrentTimeMillis();
-        final Ledger ledger = mScribe.getLedgerLocked(userId, pkgName);
-        recordTransactionLocked(userId, pkgName, ledger,
-                new Ledger.Transaction(now, now, REGULATION_BG_RESTRICTED, null, -curBalance, 0),
-                true);
+        reclaimAllAssetsLocked(userId, pkgName, REGULATION_BG_RESTRICTED);
     }
 
     /**
@@ -816,35 +823,16 @@ class Agent {
 
     @GuardedBy("mLock")
     void onPackageRemovedLocked(final int userId, @NonNull final String pkgName) {
-        reclaimAssetsLocked(userId, pkgName);
-        mBalanceThresholdAlarmQueue.removeAlarmForKey(new Package(userId, pkgName));
-    }
-
-    /**
-     * Reclaims any ARCs granted to the app, making them available to other apps. Also deletes the
-     * app's ledger and stops any ongoing event tracking.
-     */
-    @GuardedBy("mLock")
-    private void reclaimAssetsLocked(final int userId, @NonNull final String pkgName) {
-        final Ledger ledger = mScribe.getLedgerLocked(userId, pkgName);
-        if (ledger.getCurrentBalance() != 0) {
-            mScribe.adjustRemainingConsumableCakesLocked(-ledger.getCurrentBalance());
-        }
         mScribe.discardLedgerLocked(userId, pkgName);
         mCurrentOngoingEvents.delete(userId, pkgName);
+        mBalanceThresholdAlarmQueue.removeAlarmForKey(UserPackage.of(userId, pkgName));
     }
 
     @GuardedBy("mLock")
-    void onUserRemovedLocked(final int userId, @NonNull final List<String> pkgNames) {
-        reclaimAssetsLocked(userId, pkgNames);
+    void onUserRemovedLocked(final int userId) {
+        mScribe.discardLedgersLocked(userId);
+        mCurrentOngoingEvents.delete(userId);
         mBalanceThresholdAlarmQueue.removeAlarmsForUserId(userId);
-    }
-
-    @GuardedBy("mLock")
-    private void reclaimAssetsLocked(final int userId, @NonNull final List<String> pkgNames) {
-        for (int i = 0; i < pkgNames.size(); ++i) {
-            reclaimAssetsLocked(userId, pkgNames.get(i));
-        }
     }
 
     @VisibleForTesting
@@ -972,7 +960,7 @@ class Agent {
                 mCurrentOngoingEvents.get(userId, pkgName);
         if (ongoingEvents == null || mIrs.isVip(userId, pkgName)) {
             // No ongoing transactions. No reason to schedule
-            mBalanceThresholdAlarmQueue.removeAlarmForKey(new Package(userId, pkgName));
+            mBalanceThresholdAlarmQueue.removeAlarmForKey(UserPackage.of(userId, pkgName));
             return;
         }
         mTrendCalculator.reset(getBalanceLocked(userId, pkgName),
@@ -985,7 +973,7 @@ class Agent {
         if (lowerTimeMs == TrendCalculator.WILL_NOT_CROSS_THRESHOLD) {
             if (upperTimeMs == TrendCalculator.WILL_NOT_CROSS_THRESHOLD) {
                 // Will never cross a threshold based on current events.
-                mBalanceThresholdAlarmQueue.removeAlarmForKey(new Package(userId, pkgName));
+                mBalanceThresholdAlarmQueue.removeAlarmForKey(UserPackage.of(userId, pkgName));
                 return;
             }
             timeToThresholdMs = upperTimeMs;
@@ -993,7 +981,7 @@ class Agent {
             timeToThresholdMs = (upperTimeMs == TrendCalculator.WILL_NOT_CROSS_THRESHOLD)
                     ? lowerTimeMs : Math.min(lowerTimeMs, upperTimeMs);
         }
-        mBalanceThresholdAlarmQueue.addAlarm(new Package(userId, pkgName),
+        mBalanceThresholdAlarmQueue.addAlarm(UserPackage.of(userId, pkgName),
                 SystemClock.elapsedRealtime() + timeToThresholdMs);
     }
 
@@ -1084,57 +1072,22 @@ class Agent {
 
     private final OngoingEventUpdater mOngoingEventUpdater = new OngoingEventUpdater();
 
-    private static final class Package {
-        public final String packageName;
-        public final int userId;
-
-        Package(int userId, String packageName) {
-            this.userId = userId;
-            this.packageName = packageName;
-        }
-
-        @Override
-        public String toString() {
-            return appToString(userId, packageName);
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (obj == null) {
-                return false;
-            }
-            if (this == obj) {
-                return true;
-            }
-            if (obj instanceof Package) {
-                Package other = (Package) obj;
-                return userId == other.userId && Objects.equals(packageName, other.packageName);
-            }
-            return false;
-        }
-
-        @Override
-        public int hashCode() {
-            return packageName.hashCode() + userId;
-        }
-    }
-
     /** Track when apps will cross the closest affordability threshold (in both directions). */
-    private class BalanceThresholdAlarmQueue extends AlarmQueue<Package> {
+    private class BalanceThresholdAlarmQueue extends AlarmQueue<UserPackage> {
         private BalanceThresholdAlarmQueue(Context context, Looper looper) {
             super(context, looper, ALARM_TAG_AFFORDABILITY_CHECK, "Affordability check", true,
                     15_000L);
         }
 
         @Override
-        protected boolean isForUser(@NonNull Package key, int userId) {
+        protected boolean isForUser(@NonNull UserPackage key, int userId) {
             return key.userId == userId;
         }
 
         @Override
-        protected void processExpiredAlarms(@NonNull ArraySet<Package> expired) {
+        protected void processExpiredAlarms(@NonNull ArraySet<UserPackage> expired) {
             for (int i = 0; i < expired.size(); ++i) {
-                Package p = expired.valueAt(i);
+                UserPackage p = expired.valueAt(i);
                 mHandler.obtainMessage(
                         MSG_CHECK_INDIVIDUAL_AFFORDABILITY, p.userId, 0, p.packageName)
                         .sendToTarget();
@@ -1209,7 +1162,11 @@ class Agent {
                 final EconomyManagerInternal.AnticipatedAction aa = anticipatedActions.get(i);
                 final EconomicPolicy.Action action = economicPolicy.getAction(aa.actionId);
                 if (action == null) {
-                    throw new IllegalArgumentException("Invalid action id: " + aa.actionId);
+                    if ((aa.actionId & EconomicPolicy.ALL_POLICIES) == 0) {
+                        throw new IllegalArgumentException("Invalid action id: " + aa.actionId);
+                    } else {
+                        Slog.w(TAG, "Tracking disabled policy's action? " + aa.actionId);
+                    }
                 }
             }
             mListener = listener;

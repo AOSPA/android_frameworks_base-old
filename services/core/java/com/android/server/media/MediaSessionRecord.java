@@ -922,7 +922,7 @@ public class MediaSessionRecord implements IBinder.DeathRecipient, MediaSessionR
                     return;
                 }
                 mMediaButtonReceiverHolder =
-                        MediaButtonReceiverHolder.create(mContext, mUserId, pi, mPackageName);
+                        MediaButtonReceiverHolder.create(mUserId, pi, mPackageName);
                 mService.onMediaButtonReceiverChanged(MediaSessionRecord.this);
             } finally {
                 Binder.restoreCallingIdentity(token);
@@ -936,12 +936,11 @@ public class MediaSessionRecord implements IBinder.DeathRecipient, MediaSessionR
                 //mPackageName has been verified in MediaSessionService.enforcePackageName().
                 if (receiver != null && !TextUtils.equals(
                         mPackageName, receiver.getPackageName())) {
-                    EventLog.writeEvent(0x534e4554, "238177121", -1, ""); // SafetyNet Logging.
+                    EventLog.writeEvent(0x534e4554, "238177121", -1, ""); // SafetyNet logging.
                     throw new IllegalArgumentException("receiver does not belong to "
                             + "package name provided to MediaSessionRecord. Pkg = " + mPackageName
                             + ", Receiver Pkg = " + receiver.getPackageName());
                 }
-
                 if ((mPolicies & MediaSessionPolicyProvider.SESSION_POLICY_IGNORE_BUTTON_RECEIVER)
                         != 0) {
                     return;

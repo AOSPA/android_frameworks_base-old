@@ -27,8 +27,9 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.util.IndentingPrintWriter;
 import android.util.Log;
-import android.util.TypedXmlPullParser;
-import android.util.TypedXmlSerializer;
+
+import com.android.modules.utils.TypedXmlPullParser;
+import com.android.modules.utils.TypedXmlSerializer;
 
 import org.xmlpull.v1.XmlPullParserException;
 
@@ -203,17 +204,14 @@ public final class PreferentialNetworkServiceConfig implements Parcelable {
         return mIsEnabled == that.mIsEnabled
                 && mAllowFallbackToDefaultConnection == that.mAllowFallbackToDefaultConnection
                 && mNetworkId == that.mNetworkId
-                && Objects.equals(mIncludedUids, that.mIncludedUids)
-                && Objects.equals(mExcludedUids, that.mExcludedUids);
+                && Arrays.equals(mIncludedUids, that.mIncludedUids)
+                && Arrays.equals(mExcludedUids, that.mExcludedUids);
     }
 
     @Override
     public int hashCode() {
-        return ((Objects.hashCode(mIsEnabled) * 17)
-                + (Objects.hashCode(mAllowFallbackToDefaultConnection) * 19)
-                + (Objects.hashCode(mIncludedUids) * 23)
-                + (Objects.hashCode(mExcludedUids) * 29)
-                + mNetworkId * 31);
+        return Objects.hash(mIsEnabled, mAllowFallbackToDefaultConnection,
+                Arrays.hashCode(mIncludedUids), Arrays.hashCode(mExcludedUids), mNetworkId);
     }
 
     /**

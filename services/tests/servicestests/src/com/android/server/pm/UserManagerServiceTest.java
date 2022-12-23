@@ -16,6 +16,7 @@
 
 package com.android.server.pm;
 
+import static android.os.UserManager.DISALLOW_BLUETOOTH;
 import static android.os.UserManager.DISALLOW_USER_SWITCH;
 
 import static com.google.common.truth.Truth.assertThat;
@@ -40,6 +41,7 @@ import androidx.test.runner.AndroidJUnit4;
 import com.android.server.LocalServices;
 
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -174,6 +176,28 @@ public class UserManagerServiceTest {
     }
 
     @Test
+    public void testHasUserRestriction_NonExistentUserReturnsFalse() {
+        int nonExistentUserId = UserHandle.USER_NULL;
+        assertThat(mUserManagerService.hasUserRestriction(DISALLOW_USER_SWITCH, nonExistentUserId))
+                .isFalse();
+    }
+
+    @Test
+    public void testSetUserRestrictionWithIncorrectID() throws Exception {
+        int incorrectId = 1;
+        while (mUserManagerService.userExists(incorrectId)) {
+            incorrectId++;
+        }
+        try {
+            mUserManagerService.setUserRestriction(DISALLOW_BLUETOOTH, true, incorrectId);
+            Assert.fail();
+        } catch (IllegalArgumentException e) {
+            //Exception is expected to be thrown if user ID does not exist.
+            // IllegalArgumentException thrown means this test is successful.
+        }
+    }
+
+    @Test
     public void assertIsUserSwitcherEnabledOnMultiUserSettings() throws Exception {
         int userId = ActivityManager.getCurrentUser();
         resetUserSwitcherEnabled();
@@ -199,6 +223,25 @@ public class UserManagerServiceTest {
         assertThat(mUserManagerService.isUserSwitcherEnabled(userId)).isTrue();
     }
 
+    @Test
+    public void assertIsUserSwitcherEnabled()  throws Exception {
+        int userId = ActivityManager.getCurrentUser();
+        setMaxSupportedUsers(8);
+        assertThat(mUserManagerService.isUserSwitcherEnabled(true, userId)).isTrue();
+
+        setUserSwitch(false);
+        assertThat(mUserManagerService.isUserSwitcherEnabled(true, userId)).isFalse();
+
+        setUserSwitch(true);
+        assertThat(mUserManagerService.isUserSwitcherEnabled(false, userId)).isTrue();
+
+        mUserManagerService.setUserRestriction(UserManager.DISALLOW_ADD_USER, true, userId);
+        assertThat(mUserManagerService.isUserSwitcherEnabled(false, userId)).isFalse();
+
+        mUserManagerService.setUserRestriction(UserManager.DISALLOW_ADD_USER, false, userId);
+        setMaxSupportedUsers(1);
+        assertThat(mUserManagerService.isUserSwitcherEnabled(true, userId)).isFalse();
+    }
 
     @Test
     public void assertIsUserSwitcherEnabledOnShowMultiuserUI()  throws Exception {

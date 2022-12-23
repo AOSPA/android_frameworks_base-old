@@ -44,6 +44,7 @@ import android.net.ConnectivityManager;
 import android.net.INetworkManagementEventObserver;
 import android.net.Network;
 import android.net.NetworkCapabilities;
+import android.os.BatteryConsumer;
 import android.os.BatteryManagerInternal;
 import android.os.BatteryStats;
 import android.os.BatteryStatsInternal;
@@ -80,9 +81,11 @@ import android.telephony.DataConnectionRealTimeInfo;
 import android.telephony.ModemActivityInfo;
 import android.telephony.SignalStrength;
 import android.telephony.TelephonyManager;
+import android.util.IndentingPrintWriter;
 import android.util.Slog;
 import android.util.StatsEvent;
 
+import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.app.IBatteryStats;
 import com.android.internal.os.BackgroundThread;
@@ -103,6 +106,7 @@ import com.android.server.power.stats.BatteryExternalStatsWorker;
 import com.android.server.power.stats.BatteryStatsImpl;
 import com.android.server.power.stats.BatteryUsageStatsProvider;
 import com.android.server.power.stats.BatteryUsageStatsStore;
+import com.android.server.power.stats.CpuWakeupStats;
 import com.android.server.power.stats.SystemServerCpuThreadReader.SystemServiceCpuThreadTimes;
 
 import java.io.File;
@@ -119,6 +123,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -141,6 +146,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
 
     private final PowerProfile mPowerProfile;
     final BatteryStatsImpl mStats;
+    @GuardedBy("mWakeupStats")
+    final CpuWakeupStats mCpuWakeupStats;
     private final BatteryUsageStatsStore mBatteryUsageStatsStore;
     private final BatteryStatsImpl.UserInfoProvider mUserManagerUserInfoProvider;
     private final Context mContext;
@@ -372,6 +379,7 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         }
         mBatteryUsageStatsProvider = new BatteryUsageStatsProvider(context, mStats,
                 mBatteryUsageStatsStore);
+        mCpuWakeupStats = new CpuWakeupStats(context, R.xml.irq_device_map);
     }
 
     public void publish() {
@@ -462,6 +470,12 @@ public final class BatteryStatsService extends IBatteryStats.Stub
             synchronized (BatteryStatsService.this.mLock) {
                 mStats.noteBinderThreadNativeIds(binderThreadNativeTids);
             }
+        }
+
+        @Override
+        public void noteCpuWakingActivity(int subsystem, long elapsedMillis, int... uids) {
+            Objects.requireNonNull(uids);
+            mCpuWakeupStats.noteWakingActivity(subsystem, elapsedMillis, uids);
         }
     }
 
@@ -717,6 +731,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(BATTERY_STATS)
     public List<BatteryUsageStats> getBatteryUsageStats(List<BatteryUsageStatsQuery> queries) {
+        super.getBatteryUsageStats_enforcePermission();
+
         awaitCompletion();
 
         if (mBatteryUsageStatsProvider.shouldUpdateStats(queries,
@@ -830,8 +846,34 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     }
 
     @Override
+    @EnforcePermission(BATTERY_STATS)
+    public long computeBatteryScreenOffRealtimeMs() {
+        super.computeBatteryScreenOffRealtimeMs_enforcePermission();
+
+        synchronized (mStats) {
+            final long curTimeUs = SystemClock.elapsedRealtimeNanos() / 1000;
+            long timeUs = mStats.computeBatteryScreenOffRealtime(curTimeUs,
+                    BatteryStats.STATS_SINCE_CHARGED);
+            return timeUs / 1000;
+        }
+    }
+
+    @Override
+    @EnforcePermission(BATTERY_STATS)
+    public long getScreenOffDischargeMah() {
+        super.getScreenOffDischargeMah_enforcePermission();
+
+        synchronized (mStats) {
+            long dischargeUah = mStats.getUahDischargeScreenOff(BatteryStats.STATS_SINCE_CHARGED);
+            return dischargeUah / 1000;
+        }
+    }
+
+    @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteEvent(final int code, final String name, final int uid) {
+        super.noteEvent_enforcePermission();
+
         if (name == null) {
             // TODO(b/194733136): Replace with an IllegalArgumentException throw.
             Slog.wtfStack(TAG, "noteEvent called with null name. code = " + code);
@@ -852,6 +894,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteSyncStart(final String name, final int uid) {
+        super.noteSyncStart_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -868,6 +912,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteSyncFinish(final String name, final int uid) {
+        super.noteSyncFinish_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -885,6 +931,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteJobStart(final String name, final int uid) {
+        super.noteJobStart_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -900,6 +948,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteJobFinish(final String name, final int uid, final int stopReason) {
+        super.noteJobFinish_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -973,6 +1023,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteStartWakelock(final int uid, final int pid, final String name,
             final String historyName, final int type, final boolean unimportantForLogging) {
+        super.noteStartWakelock_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -989,6 +1041,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteStopWakelock(final int uid, final int pid, final String name,
             final String historyName, final int type) {
+        super.noteStopWakelock_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1005,6 +1059,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteStartWakelockFromSource(final WorkSource ws, final int pid, final String name,
             final String historyName, final int type, final boolean unimportantForLogging) {
+        super.noteStartWakelockFromSource_enforcePermission();
+
         final WorkSource localWs = ws != null ? new WorkSource(ws) : null;
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
@@ -1024,6 +1080,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
             final String historyName, final int type, final WorkSource newWs, final int newPid,
             final String newName, final String newHistoryName, final int newType,
             final boolean newUnimportantForLogging) {
+        super.noteChangeWakelockFromSource_enforcePermission();
+
         final WorkSource localWs = ws != null ? new WorkSource(ws) : null;
         final WorkSource localNewWs = newWs != null ? new WorkSource(newWs) : null;
         synchronized (mLock) {
@@ -1043,6 +1101,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteStopWakelockFromSource(final WorkSource ws, final int pid, final String name,
             final String historyName, final int type) {
+        super.noteStopWakelockFromSource_enforcePermission();
+
         final WorkSource localWs = ws != null ? new WorkSource(ws) : null;
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
@@ -1060,6 +1120,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteLongPartialWakelockStart(final String name, final String historyName,
             final int uid) {
+        super.noteLongPartialWakelockStart_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1076,6 +1138,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteLongPartialWakelockStartFromSource(final String name, final String historyName,
             final WorkSource workSource) {
+        super.noteLongPartialWakelockStartFromSource_enforcePermission();
+
         final WorkSource localWs = workSource != null ? new WorkSource(workSource) : null;
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
@@ -1093,6 +1157,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteLongPartialWakelockFinish(final String name, final String historyName,
             final int uid) {
+        super.noteLongPartialWakelockFinish_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1109,6 +1175,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteLongPartialWakelockFinishFromSource(final String name, final String historyName,
             final WorkSource workSource) {
+        super.noteLongPartialWakelockFinishFromSource_enforcePermission();
+
         final WorkSource localWs = workSource != null ? new WorkSource(workSource) : null;
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
@@ -1125,6 +1193,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteStartSensor(final int uid, final int sensor) {
+        super.noteStartSensor_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1141,6 +1211,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteStopSensor(final int uid, final int sensor) {
+        super.noteStopSensor_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1157,6 +1229,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteVibratorOn(final int uid, final long durationMillis) {
+        super.noteVibratorOn_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1171,6 +1245,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteVibratorOff(final int uid) {
+        super.noteVibratorOff_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1185,6 +1261,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteGpsChanged(final WorkSource oldWs, final WorkSource newWs) {
+        super.noteGpsChanged_enforcePermission();
+
         final WorkSource localOldWs = oldWs != null ? new WorkSource(oldWs) : null;
         final WorkSource localNewWs = newWs != null ? new WorkSource(newWs) : null;
         synchronized (mLock) {
@@ -1201,6 +1279,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteGpsSignalQuality(final int signalLevel) {
+        super.noteGpsSignalQuality_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1215,6 +1295,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteScreenState(final int state) {
+        super.noteScreenState_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1233,6 +1315,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteScreenBrightness(final int brightness) {
+        super.noteScreenBrightness_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1248,6 +1332,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteUserActivity(final int uid, final int event) {
+        super.noteUserActivity_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1262,6 +1348,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteWakeUp(final String reason, final int reasonUid) {
+        super.noteWakeUp_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1276,6 +1364,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteInteractive(final boolean interactive) {
+        super.noteInteractive_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             mHandler.post(() -> {
@@ -1289,6 +1379,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteConnectivityChanged(final int type, final String extra) {
+        super.noteConnectivityChanged_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1304,6 +1396,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteMobileRadioPowerState(final int powerState, final long timestampNs,
             final int uid) {
+        super.noteMobileRadioPowerState_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1330,6 +1424,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void notePhoneOn() {
+        super.notePhoneOn_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1344,6 +1440,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void notePhoneOff() {
+        super.notePhoneOff_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1358,6 +1456,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void notePhoneSignalStrength(final SignalStrength signalStrength) {
+        super.notePhoneSignalStrength_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1373,6 +1473,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void notePhoneDataConnectionState(final int dataType, final boolean hasData,
             final int serviceType, final int nrFrequency) {
+        super.notePhoneDataConnectionState_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1388,6 +1490,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void notePhoneState(final int state) {
+        super.notePhoneState_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1403,6 +1507,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteWifiOn() {
+        super.noteWifiOn_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1419,6 +1525,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteWifiOff() {
+        super.noteWifiOff_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1435,6 +1543,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteStartAudio(final int uid) {
+        super.noteStartAudio_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1451,6 +1561,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteStopAudio(final int uid) {
+        super.noteStopAudio_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1467,6 +1579,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteStartVideo(final int uid) {
+        super.noteStartVideo_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1483,6 +1597,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteStopVideo(final int uid) {
+        super.noteStopVideo_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1499,6 +1615,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteResetAudio() {
+        super.noteResetAudio_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1515,6 +1633,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteResetVideo() {
+        super.noteResetVideo_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1531,6 +1651,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteFlashlightOn(final int uid) {
+        super.noteFlashlightOn_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1547,6 +1669,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteFlashlightOff(final int uid) {
+        super.noteFlashlightOff_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1563,6 +1687,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteStartCamera(final int uid) {
+        super.noteStartCamera_enforcePermission();
+
         if (DBG) Slog.d(TAG, "begin noteStartCamera");
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
@@ -1581,6 +1707,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteStopCamera(final int uid) {
+        super.noteStopCamera_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1597,6 +1725,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteResetCamera() {
+        super.noteResetCamera_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1613,6 +1743,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteResetFlashlight() {
+        super.noteResetFlashlight_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1629,6 +1761,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteWifiRadioPowerState(final int powerState, final long tsNanos, final int uid) {
+        super.noteWifiRadioPowerState_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1660,6 +1794,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteWifiRunning(final WorkSource ws) {
+        super.noteWifiRunning_enforcePermission();
+
         final WorkSource localWs = ws != null ? new WorkSource(ws) : null;
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
@@ -1678,6 +1814,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteWifiRunningChanged(final WorkSource oldWs, final WorkSource newWs) {
+        super.noteWifiRunningChanged_enforcePermission();
+
         final WorkSource localOldWs = oldWs != null ? new WorkSource(oldWs) : null;
         final WorkSource localNewWs = newWs != null ? new WorkSource(newWs) : null;
         synchronized (mLock) {
@@ -1699,6 +1837,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteWifiStopped(final WorkSource ws) {
+        super.noteWifiStopped_enforcePermission();
+
         final WorkSource localWs = ws != null ? new WorkSource(ws) : ws;
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
@@ -1716,6 +1856,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteWifiState(final int wifiState, final String accessPoint) {
+        super.noteWifiState_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             mHandler.post(() -> {
@@ -1729,6 +1871,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteWifiSupplicantStateChanged(final int supplState, final boolean failedAuth) {
+        super.noteWifiSupplicantStateChanged_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1744,6 +1888,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteWifiRssiChanged(final int newRssi) {
+        super.noteWifiRssiChanged_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1758,6 +1904,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteFullWifiLockAcquired(final int uid) {
+        super.noteFullWifiLockAcquired_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1772,6 +1920,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteFullWifiLockReleased(final int uid) {
+        super.noteFullWifiLockReleased_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1786,6 +1936,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteWifiScanStarted(final int uid) {
+        super.noteWifiScanStarted_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1800,6 +1952,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteWifiScanStopped(final int uid) {
+        super.noteWifiScanStopped_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1814,6 +1968,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteWifiMulticastEnabled(final int uid) {
+        super.noteWifiMulticastEnabled_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1828,6 +1984,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteWifiMulticastDisabled(final int uid) {
+        super.noteWifiMulticastDisabled_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -1842,6 +2000,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteFullWifiLockAcquiredFromSource(final WorkSource ws) {
+        super.noteFullWifiLockAcquiredFromSource_enforcePermission();
+
         final WorkSource localWs = ws != null ? new WorkSource(ws) : null;
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
@@ -1858,6 +2018,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteFullWifiLockReleasedFromSource(final WorkSource ws) {
+        super.noteFullWifiLockReleasedFromSource_enforcePermission();
+
         final WorkSource localWs = ws != null ? new WorkSource(ws) : null;
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
@@ -1874,6 +2036,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteWifiScanStartedFromSource(final WorkSource ws) {
+        super.noteWifiScanStartedFromSource_enforcePermission();
+
         final WorkSource localWs = ws != null ? new WorkSource(ws) : null;
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
@@ -1889,6 +2053,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteWifiScanStoppedFromSource(final WorkSource ws) {
+        super.noteWifiScanStoppedFromSource_enforcePermission();
+
         final WorkSource localWs = ws != null ? new WorkSource(ws) : null;
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
@@ -1904,6 +2070,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteWifiBatchedScanStartedFromSource(final WorkSource ws, final int csph) {
+        super.noteWifiBatchedScanStartedFromSource_enforcePermission();
+
         final WorkSource localWs = ws != null ? new WorkSource(ws) : null;
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
@@ -1920,6 +2088,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteWifiBatchedScanStoppedFromSource(final WorkSource ws) {
+        super.noteWifiBatchedScanStoppedFromSource_enforcePermission();
+
         final WorkSource localWs = ws != null ? new WorkSource(ws) : null;
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
@@ -1936,6 +2106,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(anyOf = {NETWORK_STACK, PERMISSION_MAINLINE_NETWORK_STACK})
     public void noteNetworkInterfaceForTransports(final String iface, int[] transportTypes) {
+        super.noteNetworkInterfaceForTransports_enforcePermission();
+
         synchronized (mLock) {
             mHandler.post(() -> {
                 mStats.noteNetworkInterfaceForTransports(iface, transportTypes);
@@ -1949,6 +2121,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         // During device boot, qtaguid isn't enabled until after the inital
         // loading of battery stats. Now that they're enabled, take our initial
         // snapshot for future delta calculation.
+        super.noteNetworkStatsEnabled_enforcePermission();
+
         synchronized (mLock) {
             // Still schedule it on the handler to make sure we have existing pending works done
             mHandler.post(() -> {
@@ -1962,6 +2136,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteDeviceIdleMode(final int mode, final String activeReason, final int activeUid) {
+        super.noteDeviceIdleMode_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -2005,6 +2181,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(BLUETOOTH_CONNECT)
     public void noteBluetoothOn(int uid, int reason, String packageName) {
+        super.noteBluetoothOn_enforcePermission();
+
         FrameworkStatsLog.write_non_chained(FrameworkStatsLog.BLUETOOTH_ENABLED_STATE_CHANGED,
                 Binder.getCallingUid(), null,
                 FrameworkStatsLog.BLUETOOTH_ENABLED_STATE_CHANGED__STATE__ENABLED,
@@ -2017,6 +2195,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(BLUETOOTH_CONNECT)
     public void noteBluetoothOff(int uid, int reason, String packageName) {
+        super.noteBluetoothOff_enforcePermission();
+
         FrameworkStatsLog.write_non_chained(FrameworkStatsLog.BLUETOOTH_ENABLED_STATE_CHANGED,
                 Binder.getCallingUid(), null,
                 FrameworkStatsLog.BLUETOOTH_ENABLED_STATE_CHANGED__STATE__DISABLED,
@@ -2026,6 +2206,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteBleScanStarted(final WorkSource ws, final boolean isUnoptimized) {
+        super.noteBleScanStarted_enforcePermission();
+
         final WorkSource localWs = ws != null ? new WorkSource(ws) : null;
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
@@ -2042,6 +2224,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteBleScanStopped(final WorkSource ws, final boolean isUnoptimized) {
+        super.noteBleScanStopped_enforcePermission();
+
         final WorkSource localWs = ws != null ? new WorkSource(ws) : null;
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
@@ -2058,6 +2242,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteBleScanReset() {
+        super.noteBleScanReset_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -2072,6 +2258,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteBleScanResults(final WorkSource ws, final int numNewResults) {
+        super.noteBleScanResults_enforcePermission();
+
         final WorkSource localWs = ws != null ? new WorkSource(ws) : null;
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
@@ -2088,6 +2276,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteWifiControllerActivity(final WifiActivityEnergyInfo info) {
+        super.noteWifiControllerActivity_enforcePermission();
+
         if (info == null || !info.isValid()) {
             Slog.e(TAG, "invalid wifi data given: " + info);
             return;
@@ -2108,6 +2298,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteBluetoothControllerActivity(final BluetoothActivityEnergyInfo info) {
+        super.noteBluetoothControllerActivity_enforcePermission();
+
         if (info == null || !info.isValid()) {
             Slog.e(TAG, "invalid bluetooth data given: " + info);
             return;
@@ -2128,6 +2320,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(UPDATE_DEVICE_STATS)
     public void noteModemControllerActivity(final ModemActivityInfo info) {
+        super.noteModemControllerActivity_enforcePermission();
+
         if (info == null) {
             Slog.e(TAG, "invalid modem data given: " + info);
             return;
@@ -2154,6 +2348,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     public void setBatteryState(final int status, final int health, final int plugType,
             final int level, final int temp, final int volt, final int chargeUAh,
             final int chargeFullUAh, final long chargeTimeToFullSeconds) {
+        super.setBatteryState_enforcePermission();
+
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
@@ -2196,12 +2392,16 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(BATTERY_STATS)
     public long getAwakeTimeBattery() {
+        super.getAwakeTimeBattery_enforcePermission();
+
         return mStats.getAwakeTimeBattery();
     }
 
     @Override
     @EnforcePermission(BATTERY_STATS)
     public long getAwakeTimePlugged() {
+        super.getAwakeTimePlugged_enforcePermission();
+
         return mStats.getAwakeTimePlugged();
     }
 
@@ -2230,12 +2430,13 @@ public final class BatteryStatsService extends IBatteryStats.Stub
             try {
                 String reason;
                 while ((reason = waitWakeup()) != null) {
+                    final long nowElapsed = SystemClock.elapsedRealtime();
+                    final long nowUptime = SystemClock.uptimeMillis();
                     // Wait for the completion of pending works if there is any
                     awaitCompletion();
-
+                    mCpuWakeupStats.noteWakeupTimeAndReason(nowElapsed, nowUptime, reason);
                     synchronized (mStats) {
-                        mStats.noteWakeupReasonLocked(reason,
-                                SystemClock.elapsedRealtime(), SystemClock.uptimeMillis());
+                        mStats.noteWakeupReasonLocked(reason, nowElapsed, nowUptime);
                     }
                 }
             } catch (RuntimeException e) {
@@ -2291,7 +2492,12 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         pw.println("  --read-daily: read-load last written daily stats.");
         pw.println("  --settings: dump the settings key/values related to batterystats");
         pw.println("  --cpu: dump cpu stats for debugging purpose");
+        pw.println("  --wakeups: dump CPU wakeup history and attribution.");
         pw.println("  --power-profile: dump the power profile constants");
+        pw.println("  --usage: write battery usage stats. Optional arguments:");
+        pw.println("     --proto: output as a binary protobuffer");
+        pw.println("     --model power-profile: use the power profile model"
+                + " even if measured energy is available");
         pw.println("  <package.name>: optional name of package to filter output by.");
         pw.println("  -h: print this help text.");
         pw.println("Battery stats (batterystats) commands:");
@@ -2332,6 +2538,31 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     private void dumpPowerProfile(PrintWriter pw) {
         synchronized (mStats) {
             mStats.dumpPowerProfileLocked(pw);
+        }
+    }
+
+    private void dumpUsageStatsToProto(FileDescriptor fd, PrintWriter pw, int model,
+            boolean proto) {
+        awaitCompletion();
+        syncStats("dump", BatteryExternalStatsWorker.UPDATE_ALL);
+
+        BatteryUsageStatsQuery.Builder builder = new BatteryUsageStatsQuery.Builder()
+                .setMaxStatsAgeMs(0)
+                .includeProcessStateData()
+                .includePowerModels();
+        if (model == BatteryConsumer.POWER_MODEL_POWER_PROFILE) {
+            builder.powerProfileModeledOnly();
+        }
+        BatteryUsageStatsQuery query = builder.build();
+        synchronized (mStats) {
+            mStats.prepareForDumpLocked();
+            BatteryUsageStats batteryUsageStats =
+                    mBatteryUsageStatsProvider.getBatteryUsageStats(query);
+            if (proto) {
+                batteryUsageStats.dumpToProto(fd);
+            } else {
+                batteryUsageStats.dump(pw, "");
+            }
         }
     }
 
@@ -2488,6 +2719,39 @@ public final class BatteryStatsService extends IBatteryStats.Stub
                 } else if ("--power-profile".equals(arg)) {
                     dumpPowerProfile(pw);
                     return;
+                } else if ("--usage".equals(arg)) {
+                    int model = BatteryConsumer.POWER_MODEL_UNDEFINED;
+                    boolean proto = false;
+                    for (int j = i + 1; j < args.length; j++) {
+                        switch (args[j]) {
+                            case "--proto":
+                                proto = true;
+                                break;
+                            case "--model": {
+                                if (j + 1 < args.length) {
+                                    j++;
+                                    if ("power-profile".equals(args[j])) {
+                                        model = BatteryConsumer.POWER_MODEL_POWER_PROFILE;
+                                    } else {
+                                        pw.println("Unknown power model: " + args[j]);
+                                        dumpHelp(pw);
+                                        return;
+                                    }
+                                } else {
+                                    pw.println("--model without a value");
+                                    dumpHelp(pw);
+                                    return;
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    dumpUsageStatsToProto(fd, pw, model, proto);
+                    return;
+                } else if ("--wakeups".equals(arg)) {
+                    mCpuWakeupStats.dump(new IndentingPrintWriter(pw, "  "),
+                            SystemClock.elapsedRealtime());
+                    return;
                 } else if ("-a".equals(arg)) {
                     flags |= BatteryStats.DUMP_VERBOSE;
                 } else if (arg.length() > 0 && arg.charAt(0) == '-'){
@@ -2618,12 +2882,16 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         } else {
             if (DBG) Slog.d(TAG, "begin dumpLocked from UID " + Binder.getCallingUid());
             awaitCompletion();
+
             synchronized (mStats) {
                 mStats.dumpLocked(mContext, pw, flags, reqUid, historyStart);
                 if (writeData) {
                     mStats.writeAsyncLocked();
                 }
             }
+            pw.println();
+            mCpuWakeupStats.dump(new IndentingPrintWriter(pw, "  "), SystemClock.elapsedRealtime());
+
             if (DBG) Slog.d(TAG, "end dumpLocked");
         }
     }
@@ -2636,6 +2904,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @EnforcePermission(anyOf = {UPDATE_DEVICE_STATS, BATTERY_STATS})
     public CellularBatteryStats getCellularBatteryStats() {
         // Wait for the completion of pending works if there is any
+        super.getCellularBatteryStats_enforcePermission();
+
         awaitCompletion();
         synchronized (mStats) {
             return mStats.getCellularBatteryStats();
@@ -2650,6 +2920,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @EnforcePermission(anyOf = {UPDATE_DEVICE_STATS, BATTERY_STATS})
     public WifiBatteryStats getWifiBatteryStats() {
         // Wait for the completion of pending works if there is any
+        super.getWifiBatteryStats_enforcePermission();
+
         awaitCompletion();
         synchronized (mStats) {
             return mStats.getWifiBatteryStats();
@@ -2664,6 +2936,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @EnforcePermission(BATTERY_STATS)
     public GpsBatteryStats getGpsBatteryStats() {
         // Wait for the completion of pending works if there is any
+        super.getGpsBatteryStats_enforcePermission();
+
         awaitCompletion();
         synchronized (mStats) {
             return mStats.getGpsBatteryStats();
@@ -2678,6 +2952,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @EnforcePermission(BATTERY_STATS)
     public WakeLockStats getWakeLockStats() {
         // Wait for the completion of pending works if there is any
+        super.getWakeLockStats_enforcePermission();
+
         awaitCompletion();
         synchronized (mStats) {
             return mStats.getWakeLockStats();
@@ -2692,6 +2968,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @EnforcePermission(BATTERY_STATS)
     public BluetoothBatteryStats getBluetoothBatteryStats() {
         // Wait for the completion of pending works if there is any
+        super.getBluetoothBatteryStats_enforcePermission();
+
         awaitCompletion();
         synchronized (mStats) {
             return mStats.getBluetoothBatteryStats();
@@ -2799,6 +3077,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
      */
     @EnforcePermission(POWER_SAVER)
     public boolean setChargingStateUpdateDelayMillis(int delayMillis) {
+        super.setChargingStateUpdateDelayMillis_enforcePermission();
+
         final long ident = Binder.clearCallingIdentity();
 
         try {
@@ -2949,6 +3229,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(DEVICE_POWER)
     public void setChargerAcOnline(boolean online, boolean forceUpdate) {
+        super.setChargerAcOnline_enforcePermission();
+
         mBatteryManagerInternal.setChargerAcOnline(online, forceUpdate);
     }
 
@@ -2958,6 +3240,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(DEVICE_POWER)
     public void setBatteryLevel(int level, boolean forceUpdate) {
+        super.setBatteryLevel_enforcePermission();
+
         mBatteryManagerInternal.setBatteryLevel(level, forceUpdate);
     }
 
@@ -2967,6 +3251,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(DEVICE_POWER)
     public void unplugBattery(boolean forceUpdate) {
+        super.unplugBattery_enforcePermission();
+
         mBatteryManagerInternal.unplugBattery(forceUpdate);
     }
 
@@ -2976,6 +3262,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(DEVICE_POWER)
     public void resetBattery(boolean forceUpdate) {
+        super.resetBattery_enforcePermission();
+
         mBatteryManagerInternal.resetBattery(forceUpdate);
     }
 
@@ -2985,6 +3273,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     @Override
     @EnforcePermission(DEVICE_POWER)
     public void suspendBatteryInput() {
+        super.suspendBatteryInput_enforcePermission();
+
         mBatteryManagerInternal.suspendBatteryInput();
     }
 }

@@ -16,6 +16,7 @@
 
 package com.android.server.input;
 
+import android.annotation.Nullable;
 import android.hardware.display.DisplayViewport;
 import android.hardware.input.InputSensorInfo;
 import android.hardware.lights.Light;
@@ -28,16 +29,13 @@ import android.view.InputEvent;
 import android.view.PointerIcon;
 import android.view.VerifiedInputEvent;
 
-import com.android.internal.annotations.VisibleForTesting;
-
 import java.util.List;
 
 /**
  * An interface for the native methods of InputManagerService. We use a public interface so that
  * this can be mocked for testing by Mockito.
  */
-@VisibleForTesting
-public interface NativeInputManagerService {
+interface NativeInputManagerService {
 
     void start();
 
@@ -141,6 +139,13 @@ public interface NativeInputManagerService {
 
     int getBatteryStatus(int deviceId);
 
+    /**
+     * Get the device path of the battery for an input device.
+     * @return the path for the input device battery, or null if there is none.
+     */
+    @Nullable
+    String getBatteryDevicePath(int deviceId);
+
     List<Light> getLights(int deviceId);
 
     int getLightPlayerId(int deviceId, int lightId);
@@ -198,6 +203,9 @@ public interface NativeInputManagerService {
 
     /** Set the displayId on which the mouse cursor should be shown. */
     void setPointerDisplayId(int displayId);
+
+    /** Get the bluetooth address of an input device if known, otherwise return null. */
+    String getBluetoothAddress(int deviceId);
 
     /** The native implementation of InputManagerService methods. */
     class NativeImpl implements NativeInputManagerService {
@@ -327,6 +335,9 @@ public interface NativeInputManagerService {
         public native int getBatteryStatus(int deviceId);
 
         @Override
+        public native String getBatteryDevicePath(int deviceId);
+
+        @Override
         public native List<Light> getLights(int deviceId);
 
         @Override
@@ -410,5 +421,8 @@ public interface NativeInputManagerService {
 
         @Override
         public native void setPointerDisplayId(int displayId);
+
+        @Override
+        public native String getBluetoothAddress(int deviceId);
     }
 }

@@ -25,11 +25,12 @@ import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
 import com.android.internal.annotations.GuardedBy
-import com.android.systemui.animation.Interpolators
 import com.android.systemui.R
+import com.android.systemui.animation.Interpolators
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.plugins.statusbar.StatusBarStateController
+import com.android.systemui.shade.ShadeExpansionStateManager
 import com.android.systemui.statusbar.StatusBarState.SHADE
 import com.android.systemui.statusbar.StatusBarState.SHADE_LOCKED
 import com.android.systemui.statusbar.phone.StatusBarContentInsetsChangedListener
@@ -42,7 +43,6 @@ import com.android.systemui.util.leak.RotationUtils.ROTATION_NONE
 import com.android.systemui.util.leak.RotationUtils.ROTATION_SEASCAPE
 import com.android.systemui.util.leak.RotationUtils.ROTATION_UPSIDE_DOWN
 import com.android.systemui.util.leak.RotationUtils.Rotation
-
 import java.util.concurrent.Executor
 import javax.inject.Inject
 
@@ -62,12 +62,13 @@ import javax.inject.Inject
  */
 
 @SysUISingleton
-class PrivacyDotViewController @Inject constructor(
+open class PrivacyDotViewController @Inject constructor(
     @Main private val mainExecutor: Executor,
     private val stateController: StatusBarStateController,
     private val configurationController: ConfigurationController,
     private val contentInsetsProvider: StatusBarContentInsetsProvider,
-    private val animationScheduler: SystemStatusAnimationScheduler
+    private val animationScheduler: SystemStatusAnimationScheduler,
+    shadeExpansionStateManager: ShadeExpansionStateManager
 ) {
     private lateinit var tl: View
     private lateinit var tr: View
@@ -75,7 +76,8 @@ class PrivacyDotViewController @Inject constructor(
     private lateinit var br: View
 
     // Only can be modified on @UiThread
-    private var currentViewState: ViewState = ViewState()
+    var currentViewState: ViewState = ViewState()
+        get() = field
 
     @GuardedBy("lock")
     private var nextViewState: ViewState = currentViewState.copy()
@@ -128,21 +130,25 @@ class PrivacyDotViewController @Inject constructor(
                 updateStatusBarState()
             }
         })
+
+        shadeExpansionStateManager.addQsExpansionListener { isQsExpanded ->
+            dlog("setQsExpanded $isQsExpanded")
+            synchronized(lock) {
+                nextViewState = nextViewState.copy(qsExpanded = isQsExpanded)
+            }
+        }
     }
 
     fun setUiExecutor(e: DelayableExecutor) {
         uiExecutor = e
     }
 
-    fun setShowingListener(l: ShowingListener?) {
-        showingListener = l
+    fun getUiExecutor(): DelayableExecutor? {
+        return uiExecutor
     }
 
-    fun setQsExpanded(expanded: Boolean) {
-        dlog("setQsExpanded $expanded")
-        synchronized(lock) {
-            nextViewState = nextViewState.copy(qsExpanded = expanded)
-        }
+    fun setShowingListener(l: ShowingListener?) {
+        showingListener = l
     }
 
     @UiThread
@@ -175,7 +181,7 @@ class PrivacyDotViewController @Inject constructor(
     }
 
     @UiThread
-    private fun hideDotView(dot: View, animate: Boolean) {
+    fun hideDotView(dot: View, animate: Boolean) {
         dot.clearAnimation()
         if (animate) {
             dot.animate()
@@ -194,7 +200,7 @@ class PrivacyDotViewController @Inject constructor(
     }
 
     @UiThread
-    private fun showDotView(dot: View, animate: Boolean) {
+    fun showDotView(dot: View, animate: Boolean) {
         dot.clearAnimation()
         if (animate) {
             dot.visibility = View.VISIBLE
@@ -502,6 +508,13 @@ class PrivacyDotViewController @Inject constructor(
             updateDesignatedCorner(state.designatedCorner, state.shouldShowDot())
         }
 
+        updateDotView(state)
+
+        currentViewState = state
+    }
+
+    @UiThread
+    open fun updateDotView(state: ViewState) {
         val shouldShow = state.shouldShowDot()
         if (shouldShow != currentViewState.shouldShowDot()) {
             if (shouldShow && state.designatedCorner != null) {
@@ -510,8 +523,6 @@ class PrivacyDotViewController @Inject constructor(
                 hideDotView(state.designatedCorner, true)
             }
         }
-
-        currentViewState = state
     }
 
     private val systemStatusAnimationCallback: SystemStatusAnimationCallback =
@@ -611,7 +622,7 @@ private fun Int.innerGravity(): Int {
     }
 }
 
-private data class ViewState(
+data class ViewState(
     val viewInitialized: Boolean = false,
 
     val systemPrivacyEventIsActive: Boolean = false,

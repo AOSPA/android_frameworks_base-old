@@ -174,6 +174,8 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
      */
     private final boolean mCanHostHomeTask;
 
+    private final Configuration mTempConfiguration = new Configuration();
+
     TaskDisplayArea(DisplayContent displayContent, WindowManagerService service, String name,
                     int displayAreaFeature) {
         this(displayContent, service, name, displayAreaFeature, false /* createdByOrganizer */,
@@ -455,7 +457,7 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
         }
 
         mLastLeafTaskToFrontId = t.mTaskId;
-        EventLogTags.writeWmTaskToFront(t.mUserId, t.mTaskId);
+        EventLogTags.writeWmTaskToFront(t.mUserId, t.mTaskId, getDisplayId());
         // Notifying only when a leaf task moved to front. Or the listeners would be notified
         // couple times from the leaf task all the way up to the root task.
         mAtmService.getTaskChangeNotificationController().notifyTaskMovedToFront(t.getTaskInfo());
@@ -1892,6 +1894,15 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
 
     void clearPreferredTopFocusableRootTask() {
         mPreferredTopFocusableRootTask = null;
+    }
+
+    @Override
+    public void setWindowingMode(int windowingMode) {
+        mTempConfiguration.setTo(getRequestedOverrideConfiguration());
+        WindowConfiguration tempRequestWindowConfiguration = mTempConfiguration.windowConfiguration;
+        tempRequestWindowConfiguration.setWindowingMode(windowingMode);
+        tempRequestWindowConfiguration.setDisplayWindowingMode(windowingMode);
+        onRequestedOverrideConfigurationChanged(mTempConfiguration);
     }
 
     @Override

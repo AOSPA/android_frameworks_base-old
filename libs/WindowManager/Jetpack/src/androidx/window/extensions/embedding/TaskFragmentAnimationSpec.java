@@ -161,7 +161,7 @@ class TaskFragmentAnimationSpec {
         // The position should be 0-based as we will post translate in
         // TaskFragmentAnimationAdapter#onAnimationUpdate
         final Animation endTranslate = new TranslateAnimation(startBounds.left - endBounds.left, 0,
-                0, 0);
+                startBounds.top - endBounds.top, 0);
         endTranslate.setDuration(CHANGE_ANIMATION_DURATION);
         endSet.addAnimation(endTranslate);
         // The end leash is resizing, we should update the window crop based on the clip rect.
@@ -195,7 +195,10 @@ class TaskFragmentAnimationSpec {
                     ? com.android.internal.R.anim.task_fragment_open_enter
                     : com.android.internal.R.anim.task_fragment_open_exit);
         }
-        animation.initialize(target.localBounds.width(), target.localBounds.height(),
+        // Use the whole animation bounds instead of the change bounds, so that when multiple change
+        // targets are opening at the same time, the animation applied to each will be the same.
+        // Otherwise, we may see gap between the activities that are launching together.
+        animation.initialize(wholeAnimationBounds.width(), wholeAnimationBounds.height(),
                 wholeAnimationBounds.width(), wholeAnimationBounds.height());
         animation.scaleCurrentDuration(mTransitionAnimationScaleSetting);
         return animation;
@@ -215,7 +218,10 @@ class TaskFragmentAnimationSpec {
                     ? com.android.internal.R.anim.task_fragment_close_enter
                     : com.android.internal.R.anim.task_fragment_close_exit);
         }
-        animation.initialize(target.localBounds.width(), target.localBounds.height(),
+        // Use the whole animation bounds instead of the change bounds, so that when multiple change
+        // targets are closing at the same time, the animation applied to each will be the same.
+        // Otherwise, we may see gap between the activities that are finishing together.
+        animation.initialize(wholeAnimationBounds.width(), wholeAnimationBounds.height(),
                 wholeAnimationBounds.width(), wholeAnimationBounds.height());
         animation.scaleCurrentDuration(mTransitionAnimationScaleSetting);
         return animation;

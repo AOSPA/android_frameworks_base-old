@@ -26,6 +26,12 @@ import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.os.Process.SYSTEM_UID;
+import static android.view.InsetsState.ITYPE_BOTTOM_MANDATORY_GESTURES;
+import static android.view.InsetsState.ITYPE_BOTTOM_TAPPABLE_ELEMENT;
+import static android.view.InsetsState.ITYPE_NAVIGATION_BAR;
+import static android.view.InsetsState.ITYPE_STATUS_BAR;
+import static android.view.InsetsState.ITYPE_TOP_MANDATORY_GESTURES;
+import static android.view.InsetsState.ITYPE_TOP_TAPPABLE_ELEMENT;
 import static android.view.View.VISIBLE;
 import static android.view.WindowManager.DISPLAY_IME_POLICY_FALLBACK_DISPLAY;
 import static android.view.WindowManager.DISPLAY_IME_POLICY_LOCAL;
@@ -69,6 +75,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
+import android.graphics.Insets;
 import android.graphics.Rect;
 import android.hardware.HardwareBuffer;
 import android.hardware.display.DisplayManager;
@@ -84,9 +91,9 @@ import android.view.DisplayInfo;
 import android.view.Gravity;
 import android.view.IDisplayWindowInsetsController;
 import android.view.IWindow;
+import android.view.InsetsFrameProvider;
 import android.view.InsetsSourceControl;
 import android.view.InsetsState;
-import android.view.InsetsVisibilities;
 import android.view.Surface;
 import android.view.SurfaceControl;
 import android.view.SurfaceControl.Transaction;
@@ -94,6 +101,7 @@ import android.view.View;
 import android.view.WindowManager;
 import android.view.WindowManager.DisplayImePolicy;
 import android.window.ITransitionPlayer;
+import android.window.ScreenCapture;
 import android.window.StartingWindowInfo;
 import android.window.StartingWindowRemovalInfo;
 import android.window.TaskFragmentOrganizer;
@@ -238,7 +246,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
         // Ensure letterbox vertical position multiplier is not overridden on any device target.
         // {@link com.android.internal.R.dimen.config_letterboxHorizontalPositionMultiplier},
         // may be set on some device form factors.
-        mAtm.mWindowManager.mLetterboxConfiguration.setLetterboxVerticalPositionMultiplier(0.5f);
+        mAtm.mWindowManager.mLetterboxConfiguration.setLetterboxVerticalPositionMultiplier(0.0f);
         // Ensure letterbox horizontal reachability treatment isn't overridden on any device target.
         // {@link com.android.internal.R.bool.config_letterboxIsHorizontalReachabilityEnabled},
         // may be set on some device form factors.
@@ -320,6 +328,11 @@ class WindowTestsBase extends SystemServiceTestsBase {
             mStatusBarWindow.mAttrs.layoutInDisplayCutoutMode =
                     LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
             mStatusBarWindow.mAttrs.setFitInsetsTypes(0);
+            mStatusBarWindow.mAttrs.providedInsets = new InsetsFrameProvider[] {
+                    new InsetsFrameProvider(ITYPE_STATUS_BAR),
+                    new InsetsFrameProvider(ITYPE_TOP_TAPPABLE_ELEMENT),
+                    new InsetsFrameProvider(ITYPE_TOP_MANDATORY_GESTURES)
+            };
         }
         if (addAll || ArrayUtils.contains(requestedWindows, W_NOTIFICATION_SHADE)) {
             mNotificationShadeWindow = createCommonWindow(null, TYPE_NOTIFICATION_SHADE,
@@ -335,6 +348,11 @@ class WindowTestsBase extends SystemServiceTestsBase {
                     LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
             mNavBarWindow.mAttrs.privateFlags |=
                     WindowManager.LayoutParams.PRIVATE_FLAG_LAYOUT_SIZE_EXTENDED_BY_CUTOUT;
+            mNavBarWindow.mAttrs.providedInsets = new InsetsFrameProvider[] {
+                    new InsetsFrameProvider(ITYPE_NAVIGATION_BAR),
+                    new InsetsFrameProvider(ITYPE_BOTTOM_MANDATORY_GESTURES),
+                    new InsetsFrameProvider(ITYPE_BOTTOM_TAPPABLE_ELEMENT)
+            };
             for (int rot = Surface.ROTATION_0; rot <= Surface.ROTATION_270; rot++) {
                 mNavBarWindow.mAttrs.paramsForRotation[rot] =
                         getNavBarLayoutParamsForRotation(rot);
@@ -388,6 +406,11 @@ class WindowTestsBase extends SystemServiceTestsBase {
         lp.privateFlags |=
                 WindowManager.LayoutParams.PRIVATE_FLAG_LAYOUT_SIZE_EXTENDED_BY_CUTOUT;
         lp.layoutInDisplayCutoutMode = LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+        lp.providedInsets = new InsetsFrameProvider[] {
+                new InsetsFrameProvider(ITYPE_NAVIGATION_BAR),
+                new InsetsFrameProvider(ITYPE_BOTTOM_MANDATORY_GESTURES),
+                new InsetsFrameProvider(ITYPE_BOTTOM_TAPPABLE_ELEMENT)
+        };
         return lp;
     }
 
@@ -417,6 +440,15 @@ class WindowTestsBase extends SystemServiceTestsBase {
     private WindowToken createWallpaperToken(DisplayContent dc) {
         return new WallpaperWindowToken(mWm, mock(IBinder.class), true /* explicit */, dc,
                 true /* ownerCanManageAppTokens */);
+    }
+
+    WindowState createNavBarWithProvidedInsets(DisplayContent dc) {
+        final WindowState navbar = createWindow(null, TYPE_NAVIGATION_BAR, dc, "navbar");
+        navbar.mAttrs.providedInsets = new InsetsFrameProvider[] {
+                new InsetsFrameProvider(ITYPE_NAVIGATION_BAR, Insets.of(0, 0, 0, NAV_BAR_HEIGHT))
+        };
+        dc.getDisplayPolicy().addWindowLw(navbar, navbar.mAttrs);
+        return navbar;
     }
 
     WindowState createAppWindow(Task task, int type, String name) {
@@ -708,6 +740,10 @@ class WindowTestsBase extends SystemServiceTestsBase {
         activity.mVisibleRequested = true;
     }
 
+    static TaskFragment createTaskFragmentWithParentTask(@NonNull Task parentTask) {
+        return createTaskFragmentWithParentTask(parentTask, false /* createEmbeddedTask */);
+    }
+
     /**
      * Creates a {@link TaskFragment} and attach it to the {@code parentTask}.
      *
@@ -821,7 +857,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
 
             @Override
             public void topFocusedWindowChanged(ComponentName component,
-                    InsetsVisibilities requestedVisibilities) {
+                    int requestedVisibleTypes) {
             }
         };
     }
@@ -934,8 +970,8 @@ class WindowTestsBase extends SystemServiceTestsBase {
 
     /** Mocks the behavior of taking a snapshot. */
     void mockSurfaceFreezerSnapshot(SurfaceFreezer surfaceFreezer) {
-        final SurfaceControl.ScreenshotHardwareBuffer screenshotBuffer =
-                mock(SurfaceControl.ScreenshotHardwareBuffer.class);
+        final ScreenCapture.ScreenshotHardwareBuffer screenshotBuffer =
+                mock(ScreenCapture.ScreenshotHardwareBuffer.class);
         final HardwareBuffer hardwareBuffer = mock(HardwareBuffer.class);
         spyOn(surfaceFreezer);
         doReturn(screenshotBuffer).when(surfaceFreezer)
@@ -1733,7 +1769,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
         }
 
         void startTransition() {
-            mOrganizer.startTransition(mLastRequest.getType(), mLastTransit, null);
+            mOrganizer.startTransition(mLastTransit, null);
         }
 
         void onTransactionReady(SurfaceControl.Transaction t) {

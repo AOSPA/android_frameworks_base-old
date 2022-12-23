@@ -16,6 +16,7 @@
 
 package com.android.server.wm.flicker.ime
 
+import android.platform.test.annotations.FlakyTest
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import android.view.WindowManagerPolicyConstants
@@ -24,10 +25,11 @@ import com.android.server.wm.flicker.BaseTest
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
-import com.android.server.wm.flicker.annotation.Group2
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.ImeAppHelper
 import com.android.server.wm.flicker.helpers.SimpleAppHelper
+import com.android.server.wm.flicker.helpers.isShellTransitionsEnabled
+import org.junit.Assume
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -44,7 +46,6 @@ import org.junit.runners.Parameterized
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-@Group2
 class OpenImeWindowAndCloseTest(testSpec: FlickerTestParameter) : BaseTest(testSpec) {
     private val simpleApp = SimpleAppHelper(instrumentation)
     private val testApp = ImeAppHelper(instrumentation)
@@ -52,29 +53,31 @@ class OpenImeWindowAndCloseTest(testSpec: FlickerTestParameter) : BaseTest(testS
     /** {@inheritDoc} */
     override val transition: FlickerBuilder.() -> Unit = {
         setup {
-            eachRun {
-                simpleApp.launchViaIntent(wmHelper)
-                testApp.launchViaIntent(wmHelper)
-                testApp.openIME(wmHelper)
-            }
+            simpleApp.launchViaIntent(wmHelper)
+            testApp.launchViaIntent(wmHelper)
+            testApp.openIME(wmHelper)
         }
-        transitions {
-            testApp.finishActivity(wmHelper)
-        }
-        teardown {
-            test {
-                simpleApp.exit(wmHelper)
-            }
-        }
+        transitions { testApp.finishActivity(wmHelper) }
+        teardown { simpleApp.exit(wmHelper) }
     }
 
-    @Presubmit
-    @Test
-    fun imeWindowBecomesInvisible() = testSpec.imeWindowBecomesInvisible()
+    @Presubmit @Test fun imeWindowBecomesInvisible() = testSpec.imeWindowBecomesInvisible()
+
+    @Presubmit @Test fun imeLayerBecomesInvisible() = testSpec.imeLayerBecomesInvisible()
 
     @Presubmit
     @Test
-    fun imeLayerBecomesInvisible() = testSpec.imeLayerBecomesInvisible()
+    override fun visibleLayersShownMoreThanOneConsecutiveEntry() {
+        Assume.assumeFalse(isShellTransitionsEnabled)
+        super.visibleLayersShownMoreThanOneConsecutiveEntry()
+    }
+
+    @FlakyTest(bugId = 246284124)
+    @Test
+    fun visibleLayersShownMoreThanOneConsecutiveEntry_shellTransit() {
+        Assume.assumeTrue(isShellTransitionsEnabled)
+        super.visibleLayersShownMoreThanOneConsecutiveEntry()
+    }
 
     companion object {
         @Parameterized.Parameters(name = "{0}")
@@ -82,12 +85,12 @@ class OpenImeWindowAndCloseTest(testSpec: FlickerTestParameter) : BaseTest(testS
         fun getParams(): Collection<FlickerTestParameter> {
             return FlickerTestParameterFactory.getInstance()
                 .getConfigNonRotationTests(
-                    repetitions = 3,
                     supportedRotations = listOf(Surface.ROTATION_0),
-                    supportedNavigationModes = listOf(
-                        WindowManagerPolicyConstants.NAV_BAR_MODE_3BUTTON_OVERLAY,
-                        WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL_OVERLAY
-                    )
+                    supportedNavigationModes =
+                        listOf(
+                            WindowManagerPolicyConstants.NAV_BAR_MODE_3BUTTON_OVERLAY,
+                            WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL_OVERLAY
+                        )
                 )
         }
     }

@@ -17,6 +17,9 @@
 package com.android.wm.shell.activityembedding;
 
 
+import static com.android.internal.policy.TransitionAnimation.WALLPAPER_TRANSITION_NONE;
+import static com.android.wm.shell.transition.TransitionAnimationHelper.loadAttributeAnimation;
+
 import android.content.Context;
 import android.graphics.Point;
 import android.graphics.Rect;
@@ -33,7 +36,6 @@ import android.window.TransitionInfo;
 
 import androidx.annotation.NonNull;
 
-import com.android.internal.R;
 import com.android.internal.policy.TransitionAnimation;
 import com.android.wm.shell.transition.Transitions;
 
@@ -156,7 +158,7 @@ class ActivityEmbeddingAnimationSpec {
         // The position should be 0-based as we will post translate in
         // ActivityEmbeddingAnimationAdapter#onAnimationUpdate
         final Animation endTranslate = new TranslateAnimation(startBounds.left - endBounds.left, 0,
-                0, 0);
+                startBounds.top - endBounds.top, 0);
         endTranslate.setDuration(CHANGE_ANIMATION_DURATION);
         endSet.addAnimation(endTranslate);
         // The end leash is resizing, we should update the window crop based on the clip rect.
@@ -175,38 +177,57 @@ class ActivityEmbeddingAnimationSpec {
     }
 
     @NonNull
-    Animation loadOpenAnimation(@NonNull TransitionInfo.Change change,
-            @NonNull Rect wholeAnimationBounds) {
+    Animation loadOpenAnimation(@NonNull TransitionInfo info,
+            @NonNull TransitionInfo.Change change, @NonNull Rect wholeAnimationBounds) {
         final boolean isEnter = Transitions.isOpeningType(change.getMode());
         final Animation animation;
-        // TODO(b/207070762):
-        // 1. Implement clearTop version: R.anim.task_fragment_clear_top_close_enter/exit
-        // 2. Implement edgeExtension version
-        animation = mTransitionAnimation.loadDefaultAnimationRes(isEnter
-                ? R.anim.task_fragment_open_enter
-                : R.anim.task_fragment_open_exit);
-        final Rect bounds = change.getEndAbsBounds();
-        animation.initialize(bounds.width(), bounds.height(),
+        if (shouldShowBackdrop(info, change)) {
+            animation = mTransitionAnimation.loadDefaultAnimationRes(isEnter
+                    ? com.android.internal.R.anim.task_fragment_clear_top_open_enter
+                    : com.android.internal.R.anim.task_fragment_clear_top_open_exit);
+        } else {
+            // Use the same edge extension animation as regular activity open.
+            animation = mTransitionAnimation.loadDefaultAnimationRes(isEnter
+                    ? com.android.internal.R.anim.activity_open_enter
+                    : com.android.internal.R.anim.activity_open_exit);
+        }
+        // Use the whole animation bounds instead of the change bounds, so that when multiple change
+        // targets are opening at the same time, the animation applied to each will be the same.
+        // Otherwise, we may see gap between the activities that are launching together.
+        animation.initialize(wholeAnimationBounds.width(), wholeAnimationBounds.height(),
                 wholeAnimationBounds.width(), wholeAnimationBounds.height());
         animation.scaleCurrentDuration(mTransitionAnimationScaleSetting);
         return animation;
     }
 
     @NonNull
-    Animation loadCloseAnimation(@NonNull TransitionInfo.Change change,
-            @NonNull Rect wholeAnimationBounds) {
+    Animation loadCloseAnimation(@NonNull TransitionInfo info,
+            @NonNull TransitionInfo.Change change, @NonNull Rect wholeAnimationBounds) {
         final boolean isEnter = Transitions.isOpeningType(change.getMode());
         final Animation animation;
-        // TODO(b/207070762):
-        // 1. Implement clearTop version: R.anim.task_fragment_clear_top_close_enter/exit
-        // 2. Implement edgeExtension version
-        animation = mTransitionAnimation.loadDefaultAnimationRes(isEnter
-                ? R.anim.task_fragment_close_enter
-                : R.anim.task_fragment_close_exit);
-        final Rect bounds = change.getEndAbsBounds();
-        animation.initialize(bounds.width(), bounds.height(),
+        if (shouldShowBackdrop(info, change)) {
+            animation = mTransitionAnimation.loadDefaultAnimationRes(isEnter
+                    ? com.android.internal.R.anim.task_fragment_clear_top_close_enter
+                    : com.android.internal.R.anim.task_fragment_clear_top_close_exit);
+        } else {
+            // Use the same edge extension animation as regular activity close.
+            animation = mTransitionAnimation.loadDefaultAnimationRes(isEnter
+                    ? com.android.internal.R.anim.activity_close_enter
+                    : com.android.internal.R.anim.activity_close_exit);
+        }
+        // Use the whole animation bounds instead of the change bounds, so that when multiple change
+        // targets are closing at the same time, the animation applied to each will be the same.
+        // Otherwise, we may see gap between the activities that are finishing together.
+        animation.initialize(wholeAnimationBounds.width(), wholeAnimationBounds.height(),
                 wholeAnimationBounds.width(), wholeAnimationBounds.height());
         animation.scaleCurrentDuration(mTransitionAnimationScaleSetting);
         return animation;
+    }
+
+    private boolean shouldShowBackdrop(@NonNull TransitionInfo info,
+            @NonNull TransitionInfo.Change change) {
+        final Animation a = loadAttributeAnimation(info, change, WALLPAPER_TRANSITION_NONE,
+                mTransitionAnimation);
+        return a != null && a.getShowBackdrop();
     }
 }

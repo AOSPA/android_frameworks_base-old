@@ -287,8 +287,10 @@ public abstract class ActivityTaskManagerInternal {
 
     /**
      * Called when the device changes its dreaming state.
+     *
+     * @param activeDreamComponent The currently active dream. If null, the device is not dreaming.
      */
-    public abstract void notifyDreamStateChanged(boolean dreaming);
+    public abstract void notifyActiveDreamChanged(@Nullable ComponentName activeDreamComponent);
 
     /**
      * Set a uid that is allowed to bypass stopped app switches, launching an app
@@ -313,6 +315,7 @@ public abstract class ActivityTaskManagerInternal {
     public abstract void onProcessRemoved(String name, int uid);
     public abstract void onCleanUpApplicationRecord(WindowProcessController proc);
     public abstract int getTopProcessState();
+    public abstract boolean useTopSchedGroupForTopProcess();
     public abstract void clearHeavyWeightProcessIfEquals(WindowProcessController proc);
     public abstract void finishHeavyWeightApp();
 

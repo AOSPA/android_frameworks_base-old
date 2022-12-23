@@ -69,6 +69,11 @@ public final class BatteryController extends RestrictingController {
      */
     private final ArraySet<JobStatus> mChangedJobs = new ArraySet<>();
 
+    @GuardedBy("mLock")
+    private Boolean mLastReportedStatsdBatteryNotLow = null;
+    @GuardedBy("mLock")
+    private Boolean mLastReportedStatsdStablePower = null;
+
     public BatteryController(JobSchedulerService service,
             FlexibilityController flexibilityController) {
         super(service);
@@ -128,7 +133,7 @@ public final class BatteryController extends RestrictingController {
     }
 
     @Override
-    public void maybeStopTrackingJobLocked(JobStatus taskStatus, JobStatus incomingJob, boolean forUpdate) {
+    public void maybeStopTrackingJobLocked(JobStatus taskStatus, JobStatus incomingJob) {
         if (taskStatus.clearTrackingController(JobStatus.TRACKING_BATTERY)) {
             mTrackedTasks.remove(taskStatus);
             mTopStartedJobs.remove(taskStatus);
@@ -138,7 +143,7 @@ public final class BatteryController extends RestrictingController {
     @Override
     public void stopTrackingRestrictedJobLocked(JobStatus jobStatus) {
         if (!jobStatus.hasPowerConstraint()) {
-            maybeStopTrackingJobLocked(jobStatus, null, false);
+            maybeStopTrackingJobLocked(jobStatus, null);
         }
     }
 
@@ -176,12 +181,25 @@ public final class BatteryController extends RestrictingController {
             Slog.d(TAG, "maybeReportNewChargingStateLocked: "
                     + powerConnected + "/" + stablePower + "/" + batteryNotLow);
         }
+
+        if (mLastReportedStatsdStablePower == null
+                || mLastReportedStatsdStablePower != stablePower) {
+            logDeviceWideConstraintStateToStatsd(JobStatus.CONSTRAINT_CHARGING, stablePower);
+            mLastReportedStatsdStablePower = stablePower;
+        }
+        if (mLastReportedStatsdBatteryNotLow == null
+                || mLastReportedStatsdBatteryNotLow != stablePower) {
+            logDeviceWideConstraintStateToStatsd(JobStatus.CONSTRAINT_BATTERY_NOT_LOW,
+                    batteryNotLow);
+            mLastReportedStatsdBatteryNotLow = batteryNotLow;
+        }
+
         final long nowElapsed = sElapsedRealtimeClock.millis();
 
         mFlexibilityController.setConstraintSatisfied(
                 JobStatus.CONSTRAINT_CHARGING, mService.isBatteryCharging(), nowElapsed);
         mFlexibilityController.setConstraintSatisfied(
-                        JobStatus.CONSTRAINT_BATTERY_NOT_LOW, batteryNotLow, nowElapsed);
+                JobStatus.CONSTRAINT_BATTERY_NOT_LOW, batteryNotLow, nowElapsed);
 
         for (int i = mTrackedTasks.size() - 1; i >= 0; i--) {
             final JobStatus ts = mTrackedTasks.valueAt(i);

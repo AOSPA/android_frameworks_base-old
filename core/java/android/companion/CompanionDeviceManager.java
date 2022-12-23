@@ -30,6 +30,7 @@ import android.annotation.UserHandleAware;
 import android.app.Activity;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.ComponentName;
 import android.content.Context;
@@ -81,7 +82,7 @@ import java.util.function.Consumer;
 public final class CompanionDeviceManager {
 
     private static final boolean DEBUG = false;
-    private static final String LOG_TAG = "CompanionDeviceManager";
+    private static final String LOG_TAG = "CDM_CompanionDeviceManager";
 
     /**
      * The result code to propagate back to the originating activity, indicates the association
@@ -144,7 +145,7 @@ public final class CompanionDeviceManager {
      *     <li>for WiFi - {@link android.net.wifi.ScanResult}</li>
      * </ul>
      *
-     * @deprecated use {@link #EXTRA_ASSOCIATION} instead.
+     * @deprecated use {@link AssociationInfo#getAssociatedDevice()} instead.
      */
     @Deprecated
     public static final String EXTRA_DEVICE = "android.companion.extra.DEVICE";
@@ -367,6 +368,10 @@ public final class CompanionDeviceManager {
      * recommended to do when an association is no longer relevant to avoid unnecessary battery
      * and/or data drain resulting from special privileges that the association provides</p>
      *
+     * <p>Note that if you use this api to associate with a Bluetooth device, please make sure
+     * to cancel your own Bluetooth discovery before calling this api, otherwise the callback
+     * may fail to return the desired device.</p>
+     *
      * <p>Calling this API requires a uses-feature
      * {@link PackageManager#FEATURE_COMPANION_DEVICE_SETUP} declaration in the manifest</p>
      **
@@ -377,6 +382,7 @@ public final class CompanionDeviceManager {
      * @see AssociationRequest.Builder
      * @see #getMyAssociations()
      * @see #disassociate(int)
+     * @see BluetoothAdapter#cancelDiscovery()
      */
     @UserHandleAware
     @RequiresPermission(anyOf = {
@@ -401,6 +407,34 @@ public final class CompanionDeviceManager {
             throw e.rethrowFromSystemServer();
         }
     }
+
+    /**
+     * Cancel the current association activity.
+     *
+     * <p>The app should launch the returned {@code intentSender} by calling
+     * {@link Activity#startIntentSenderForResult(IntentSender, int, Intent, int, int, int)} to
+     * cancel the current association activity</p>
+     *
+     * <p>Calling this API requires a uses-feature
+     * {@link PackageManager#FEATURE_COMPANION_DEVICE_SETUP} declaration in the manifest</p>
+     *
+     * @return An {@link IntentSender} that the app should use to launch in order to cancel the
+     * current association activity
+     */
+    @UserHandleAware
+    @Nullable
+    public IntentSender buildAssociationCancellationIntent() {
+        if (!checkFeaturePresent()) return null;
+
+        try {
+            PendingIntent pendingIntent = mService.buildAssociationCancellationIntent(
+                    mContext.getOpPackageName(), mContext.getUserId());
+            return pendingIntent.getIntentSender();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
 
     /**
      * <p>Calling this API requires a uses-feature
@@ -450,7 +484,8 @@ public final class CompanionDeviceManager {
      * <p>Calling this API requires a uses-feature
      * {@link PackageManager#FEATURE_COMPANION_DEVICE_SETUP} declaration in the manifest</p>
      *
-     * @param deviceMacAddress the MAC address of device to disassociate from this app
+     * @param deviceMacAddress the MAC address of device to disassociate from this app. Device
+     * address is case-sensitive in API level &lt; 33.
      *
      * @deprecated use {@link #disassociate(int)}
      */
@@ -709,27 +744,29 @@ public final class CompanionDeviceManager {
     /**
      * Register to receive callbacks whenever the associated device comes in and out of range.
      *
-     * The provided device must be {@link #associate associated} with the calling app before
-     * calling this method.
+     * <p>The provided device must be {@link #associate associated} with the calling app before
+     * calling this method.</p>
      *
-     * Caller must implement a single {@link CompanionDeviceService} which will be bound to and
+     * <p>Caller must implement a single {@link CompanionDeviceService} which will be bound to and
      * receive callbacks to {@link CompanionDeviceService#onDeviceAppeared} and
      * {@link CompanionDeviceService#onDeviceDisappeared}.
-     * The app doesn't need to remain running in order to receive its callbacks.
+     * The app doesn't need to remain running in order to receive its callbacks.</p>
      *
-     * Calling app must declare uses-permission
-     * {@link android.Manifest.permission#REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE}.
+     * <p>Calling app must declare uses-permission
+     * {@link android.Manifest.permission#REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE}.</p>
      *
-     * Calling app must check for feature presence of
-     * {@link PackageManager#FEATURE_COMPANION_DEVICE_SETUP} before calling this API.
+     * <p>Calling app must check for feature presence of
+     * {@link PackageManager#FEATURE_COMPANION_DEVICE_SETUP} before calling this API.</p>
      *
-     * For Bluetooth LE devices this is based on scanning for device with the given address.
-     * For Bluetooth classic devices this is triggered when the device connects/disconnects.
-     * WiFi devices are not supported.
+     * <p>For Bluetooth LE devices, this is based on scanning for device with the given address.
+     * The system will scan for the device when Bluetooth is ON or Bluetooth scanning is ON.</p>
      *
-     * If a Bluetooth LE device wants to use a rotating mac address, it is recommended to use
+     * <p>For Bluetooth classic devices this is triggered when the device connects/disconnects.
+     * WiFi devices are not supported.</p>
+     *
+     * <p>If a Bluetooth LE device wants to use a rotating mac address, it is recommended to use
      * Resolvable Private Address, and ensure the device is bonded to the phone so that android OS
-     * is able to resolve the address.
+     * is able to resolve the address.</p>
      *
      * @param deviceAddress a previously-associated companion device's address
      *

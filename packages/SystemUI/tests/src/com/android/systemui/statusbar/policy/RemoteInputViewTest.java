@@ -23,8 +23,12 @@ import static junit.framework.Assert.assertNotNull;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import android.app.ActivityManager;
 import android.app.PendingIntent;
@@ -43,10 +47,14 @@ import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
 import android.view.ContentInfo;
 import android.view.View;
+import android.view.ViewRootImpl;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 import android.widget.EditText;
 import android.widget.ImageButton;
+import android.window.OnBackInvokedCallback;
+import android.window.OnBackInvokedDispatcher;
+import android.window.WindowOnBackInvokedDispatcher;
 
 import androidx.annotation.NonNull;
 import androidx.test.filters.SmallTest;
@@ -67,6 +75,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -229,6 +238,67 @@ public class RemoteInputViewTest extends SysuiTestCase {
     }
 
     @Test
+    public void testPredictiveBack_registerAndUnregister() throws Exception {
+        NotificationTestHelper helper = new NotificationTestHelper(
+                mContext,
+                mDependency,
+                TestableLooper.get(this));
+        ExpandableNotificationRow row = helper.createRow();
+        RemoteInputView view = RemoteInputView.inflate(mContext, null, row.getEntry(), mController);
+
+        ViewRootImpl viewRoot = mock(ViewRootImpl.class);
+        WindowOnBackInvokedDispatcher backInvokedDispatcher = mock(
+                WindowOnBackInvokedDispatcher.class);
+        ArgumentCaptor<OnBackInvokedCallback> onBackInvokedCallbackCaptor = ArgumentCaptor.forClass(
+                OnBackInvokedCallback.class);
+        when(viewRoot.getOnBackInvokedDispatcher()).thenReturn(backInvokedDispatcher);
+        view.setViewRootImpl(viewRoot);
+
+        /* verify that predictive back callback registered when RemoteInputView becomes visible */
+        view.onVisibilityAggregated(true);
+        verify(backInvokedDispatcher).registerOnBackInvokedCallback(
+                eq(OnBackInvokedDispatcher.PRIORITY_OVERLAY),
+                onBackInvokedCallbackCaptor.capture());
+
+        /* verify that same callback unregistered when RemoteInputView becomes invisible */
+        view.onVisibilityAggregated(false);
+        verify(backInvokedDispatcher).unregisterOnBackInvokedCallback(
+                eq(onBackInvokedCallbackCaptor.getValue()));
+    }
+
+    @Test
+    public void testUiPredictiveBack_openAndDispatchCallback() throws Exception {
+        NotificationTestHelper helper = new NotificationTestHelper(
+                mContext,
+                mDependency,
+                TestableLooper.get(this));
+        ExpandableNotificationRow row = helper.createRow();
+        RemoteInputView view = RemoteInputView.inflate(mContext, null, row.getEntry(), mController);
+        ViewRootImpl viewRoot = mock(ViewRootImpl.class);
+        WindowOnBackInvokedDispatcher backInvokedDispatcher = mock(
+                WindowOnBackInvokedDispatcher.class);
+        ArgumentCaptor<OnBackInvokedCallback> onBackInvokedCallbackCaptor = ArgumentCaptor.forClass(
+                OnBackInvokedCallback.class);
+        when(viewRoot.getOnBackInvokedDispatcher()).thenReturn(backInvokedDispatcher);
+        view.setViewRootImpl(viewRoot);
+        view.onVisibilityAggregated(true);
+        view.setEditTextReferenceToSelf();
+
+        /* capture the callback during registration */
+        verify(backInvokedDispatcher).registerOnBackInvokedCallback(
+                eq(OnBackInvokedDispatcher.PRIORITY_OVERLAY),
+                onBackInvokedCallbackCaptor.capture());
+
+        view.focus();
+
+        /* invoke the captured callback */
+        onBackInvokedCallbackCaptor.getValue().onBackInvoked();
+
+        /* verify that the RemoteInputView goes away */
+        assertEquals(view.getVisibility(), View.GONE);
+    }
+
+    @Test
     public void testUiEventLogging_openAndSend() throws Exception {
         NotificationTestHelper helper = new NotificationTestHelper(
                 mContext,
@@ -275,10 +345,9 @@ public class RemoteInputViewTest extends SysuiTestCase {
         EditText editText = view.findViewById(R.id.remote_input_text);
         editText.setText(TEST_REPLY);
         ClipDescription description = new ClipDescription("", new String[] {"image/png"});
-        // We need to use an (arbitrary) real resource here so that an actual image gets attached.
+        // We need to use an (arbitrary) real resource here so that an actual image gets attached
         ClipData clip = new ClipData(description, new ClipData.Item(
-                Uri.parse("android.resource://com.android.systemui/"
-                        + R.drawable.default_thumbnail)));
+                Uri.parse("android.resource://android/" + android.R.drawable.btn_default)));
         ContentInfo payload =
                 new ContentInfo.Builder(clip, SOURCE_CLIPBOARD).build();
         view.setAttachment(payload);

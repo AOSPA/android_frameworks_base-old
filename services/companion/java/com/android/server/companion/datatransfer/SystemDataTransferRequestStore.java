@@ -35,12 +35,12 @@ import android.companion.datatransfer.SystemDataTransferRequest;
 import android.util.AtomicFile;
 import android.util.Slog;
 import android.util.SparseArray;
-import android.util.TypedXmlPullParser;
-import android.util.TypedXmlSerializer;
 import android.util.Xml;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.XmlUtils;
+import com.android.modules.utils.TypedXmlPullParser;
+import com.android.modules.utils.TypedXmlSerializer;
 
 import org.xmlpull.v1.XmlPullParserException;
 
@@ -75,7 +75,7 @@ import java.util.concurrent.TimeoutException;
  */
 public class SystemDataTransferRequestStore {
 
-    private static final String LOG_TAG = SystemDataTransferRequestStore.class.getSimpleName();
+    private static final String LOG_TAG = "CDM_SystemDataTransferRequestStore";
 
     private static final String FILE_NAME = "companion_device_system_data_transfer_requests.xml";
 

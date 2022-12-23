@@ -23,12 +23,12 @@ import com.android.server.wm.flicker.testapp.ActivityOptions
 import com.android.server.wm.traces.common.ComponentNameMatcher
 import com.android.server.wm.traces.parser.toFlickerComponent
 
-class SimpleAppHelper @JvmOverloads constructor(
+class SimpleAppHelper
+@JvmOverloads
+constructor(
     instr: Instrumentation,
-    launcherName: String = ActivityOptions.SIMPLE_ACTIVITY_LAUNCHER_NAME,
-    component: ComponentNameMatcher =
-        ActivityOptions.SIMPLE_ACTIVITY_AUTO_FOCUS_COMPONENT_NAME.toFlickerComponent(),
-    launcherStrategy: ILauncherStrategy = LauncherStrategyFactory
-        .getInstance(instr)
-        .launcherStrategy
+    launcherName: String = ActivityOptions.SimpleActivity.LABEL,
+    component: ComponentNameMatcher = ActivityOptions.SimpleActivity.COMPONENT.toFlickerComponent(),
+    launcherStrategy: ILauncherStrategy =
+        LauncherStrategyFactory.getInstance(instr).launcherStrategy
 ) : StandardAppHelper(instr, launcherName, component, launcherStrategy)

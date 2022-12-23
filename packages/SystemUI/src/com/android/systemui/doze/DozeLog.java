@@ -280,15 +280,22 @@ public class DozeLog implements Dumpable {
     /**
      * Appends pulse dropped event to logs
      */
-    public void tracePulseDropped(boolean pulsePending, DozeMachine.State state, boolean blocked) {
-        mLogger.logPulseDropped(pulsePending, state, blocked);
+    public void tracePulseDropped(String from, DozeMachine.State state) {
+        mLogger.logPulseDropped(from, state);
     }
 
     /**
      * Appends sensor event dropped event to logs
      */
-    public void traceSensorEventDropped(int sensorEvent, String reason) {
-        mLogger.logSensorEventDropped(sensorEvent, reason);
+    public void traceSensorEventDropped(@Reason int pulseReason, String reason) {
+        mLogger.logSensorEventDropped(pulseReason, reason);
+    }
+
+    /**
+     * Appends pulsing event to logs.
+     */
+    public void tracePulseEvent(String pulseEvent, boolean dozing, int pulseReason) {
+        mLogger.logPulseEvent(pulseEvent, dozing, DozeLog.reasonToString(pulseReason));
     }
 
     /**
@@ -379,6 +386,47 @@ public class DozeLog implements Dumpable {
         mLogger.logSetAodDimmingScrim((long) scrimOpacity);
     }
 
+    /**
+     * Appends sensor attempted to register and whether it was a successful registration.
+     */
+    public void traceSensorRegisterAttempt(String sensorName, boolean successfulRegistration) {
+        mLogger.logSensorRegisterAttempt(sensorName, successfulRegistration);
+    }
+
+    /**
+     * Appends sensor attempted to unregister and whether it was successfully unregistered.
+     */
+    public void traceSensorUnregisterAttempt(String sensorInfo, boolean successfullyUnregistered) {
+        mLogger.logSensorUnregisterAttempt(sensorInfo, successfullyUnregistered);
+    }
+
+    /**
+     * Appends sensor attempted to unregister and whether it was successfully unregistered
+     * with a reason the sensor is being unregistered.
+     */
+    public void traceSensorUnregisterAttempt(String sensorInfo, boolean successfullyUnregistered,
+            String reason) {
+        mLogger.logSensorUnregisterAttempt(sensorInfo, successfullyUnregistered, reason);
+    }
+
+    /**
+     * Appends the event of skipping a sensor registration since it's already registered.
+     */
+    public void traceSkipRegisterSensor(String sensorInfo) {
+        mLogger.logSkipSensorRegistration(sensorInfo);
+    }
+
+    /**
+     * Appends a plugin sensor was registered or unregistered event.
+     */
+    public void tracePluginSensorUpdate(boolean registered) {
+        if (registered) {
+            mLogger.log("register plugin sensor");
+        } else {
+            mLogger.log("unregister plugin sensor");
+        }
+    }
+
     private class SummaryStats {
         private int mCount;
 
@@ -424,8 +472,8 @@ public class DozeLog implements Dumpable {
         }
 
         @Override
-        public void onKeyguardVisibilityChanged(boolean showing) {
-            traceKeyguard(showing);
+        public void onKeyguardVisibilityChanged(boolean visible) {
+            traceKeyguard(visible);
         }
     };
 

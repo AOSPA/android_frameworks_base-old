@@ -42,6 +42,7 @@ import android.text.TextUtils;
 import android.util.Printer;
 import android.util.proto.ProtoOutputStream;
 import android.view.MotionEvent;
+import android.view.MotionEvent.ToolType;
 import android.view.View;
 import android.view.autofill.AutofillId;
 
@@ -54,8 +55,10 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * An EditorInfo describes several attributes of a text editing object
@@ -533,6 +536,8 @@ public class EditorInfo implements InputType, Parcelable {
 
     private @HandwritingGesture.GestureTypeFlags int mSupportedHandwritingGestureTypes;
 
+    private @HandwritingGesture.GestureTypeFlags int mSupportedHandwritingGesturePreviewTypes;
+
     /**
      * Set the Handwriting gestures supported by the current {@code Editor}.
      * For an editor that supports Stylus Handwriting
@@ -540,8 +545,11 @@ public class EditorInfo implements InputType, Parcelable {
      * supported gestures.
      * <p> If editor doesn't support one of the declared types, IME will not send those Gestures
      *  to the editor. Instead they will fallback to using normal text input. </p>
+     * <p>Note: A supported gesture may not have preview supported
+     * {@link #getSupportedHandwritingGesturePreviews()}.</p>
      * @param gestures List of supported gesture classes including any of {@link SelectGesture},
      * {@link InsertGesture}, {@link DeleteGesture}.
+     * @see #setSupportedHandwritingGesturePreviews(Set)
      */
     public void setSupportedHandwritingGestures(
             @NonNull List<Class<? extends HandwritingGesture>> gestures) {
@@ -556,10 +564,18 @@ public class EditorInfo implements InputType, Parcelable {
             Objects.requireNonNull(gesture);
             if (gesture.equals(SelectGesture.class)) {
                 supportedTypes |= HandwritingGesture.GESTURE_TYPE_SELECT;
+            } else if (gesture.equals(SelectRangeGesture.class)) {
+                supportedTypes |= HandwritingGesture.GESTURE_TYPE_SELECT_RANGE;
             } else if (gesture.equals(InsertGesture.class)) {
                 supportedTypes |= HandwritingGesture.GESTURE_TYPE_INSERT;
             } else if (gesture.equals(DeleteGesture.class)) {
                 supportedTypes |= HandwritingGesture.GESTURE_TYPE_DELETE;
+            } else if (gesture.equals(DeleteRangeGesture.class)) {
+                supportedTypes |= HandwritingGesture.GESTURE_TYPE_DELETE_RANGE;
+            } else if (gesture.equals(RemoveSpaceGesture.class)) {
+                supportedTypes |= HandwritingGesture.GESTURE_TYPE_REMOVE_SPACE;
+            } else if (gesture.equals(JoinOrSplitGesture.class)) {
+                supportedTypes |= HandwritingGesture.GESTURE_TYPE_JOIN_OR_SPLIT;
             } else {
                 throw new IllegalArgumentException("Unknown gesture type: " + gesture);
             }
@@ -575,6 +591,7 @@ public class EditorInfo implements InputType, Parcelable {
      * {@link InputMethodManager#startStylusHandwriting}, it also declares supported gestures.
      * @return List of supported gesture classes including any of {@link SelectGesture},
      * {@link InsertGesture}, {@link DeleteGesture}.
+     * @see #getSupportedHandwritingGesturePreviews()
      */
     @NonNull
     public List<Class<? extends HandwritingGesture>> getSupportedHandwritingGestures() {
@@ -586,6 +603,10 @@ public class EditorInfo implements InputType, Parcelable {
                 == HandwritingGesture.GESTURE_TYPE_SELECT) {
             list.add(SelectGesture.class);
         }
+        if ((mSupportedHandwritingGestureTypes & HandwritingGesture.GESTURE_TYPE_SELECT_RANGE)
+                == HandwritingGesture.GESTURE_TYPE_SELECT_RANGE) {
+            list.add(SelectRangeGesture.class);
+        }
         if ((mSupportedHandwritingGestureTypes & HandwritingGesture.GESTURE_TYPE_INSERT)
                 == HandwritingGesture.GESTURE_TYPE_INSERT) {
             list.add(InsertGesture.class);
@@ -594,7 +615,99 @@ public class EditorInfo implements InputType, Parcelable {
                 == HandwritingGesture.GESTURE_TYPE_DELETE) {
             list.add(DeleteGesture.class);
         }
+        if ((mSupportedHandwritingGestureTypes & HandwritingGesture.GESTURE_TYPE_DELETE_RANGE)
+                == HandwritingGesture.GESTURE_TYPE_DELETE_RANGE) {
+            list.add(DeleteRangeGesture.class);
+        }
+        if ((mSupportedHandwritingGestureTypes & HandwritingGesture.GESTURE_TYPE_REMOVE_SPACE)
+                == HandwritingGesture.GESTURE_TYPE_REMOVE_SPACE) {
+            list.add(RemoveSpaceGesture.class);
+        }
+        if ((mSupportedHandwritingGestureTypes & HandwritingGesture.GESTURE_TYPE_JOIN_OR_SPLIT)
+                == HandwritingGesture.GESTURE_TYPE_JOIN_OR_SPLIT) {
+            list.add(JoinOrSplitGesture.class);
+        }
         return list;
+    }
+
+    /**
+     * Set the Handwriting gesture previews supported by the current {@code Editor}.
+     * For an editor that supports Stylus Handwriting
+     * {@link InputMethodManager#startStylusHandwriting}, it is also recommended that it declares
+     * supported gesture previews.
+     * <p>Note: A supported gesture {@link EditorInfo#getSupportedHandwritingGestures()} may not
+     * have preview supported {@link EditorInfo#getSupportedHandwritingGesturePreviews()}.</p>
+     * <p> If editor doesn't support one of the declared types, gesture preview will be ignored.</p>
+     * @param gestures Set of supported gesture classes. One of {@link SelectGesture},
+     * {@link SelectRangeGesture}, {@link DeleteGesture}, {@link DeleteRangeGesture}.
+     * @see #setSupportedHandwritingGestures(List)
+     */
+    public void setSupportedHandwritingGesturePreviews(
+            @NonNull Set<Class<? extends PreviewableHandwritingGesture>> gestures) {
+        Objects.requireNonNull(gestures);
+        if (gestures.isEmpty()) {
+            mSupportedHandwritingGesturePreviewTypes = 0;
+            return;
+        }
+
+        int supportedTypes = 0;
+        for (Class<? extends PreviewableHandwritingGesture> gesture : gestures) {
+            Objects.requireNonNull(gesture);
+            if (gesture.equals(SelectGesture.class)) {
+                supportedTypes |= HandwritingGesture.GESTURE_TYPE_SELECT;
+            } else if (gesture.equals(SelectRangeGesture.class)) {
+                supportedTypes |= HandwritingGesture.GESTURE_TYPE_SELECT_RANGE;
+            } else if (gesture.equals(DeleteGesture.class)) {
+                supportedTypes |= HandwritingGesture.GESTURE_TYPE_DELETE;
+            } else if (gesture.equals(DeleteRangeGesture.class)) {
+                supportedTypes |= HandwritingGesture.GESTURE_TYPE_DELETE_RANGE;
+            } else {
+                throw new IllegalArgumentException(
+                        "Unsupported gesture type for preview: " + gesture);
+            }
+        }
+
+        mSupportedHandwritingGesturePreviewTypes = supportedTypes;
+    }
+
+    /**
+     * Returns the combination of Stylus handwriting gesture preview types
+     * supported by the current {@code Editor}.
+     * For an editor that supports Stylus Handwriting.
+     * {@link InputMethodManager#startStylusHandwriting}, it also declares supported gesture
+     * previews.
+     * <p>Note: A supported gesture {@link EditorInfo#getSupportedHandwritingGestures()} may not
+     * have preview supported {@link EditorInfo#getSupportedHandwritingGesturePreviews()}.</p>
+     * @return Set of supported gesture preview classes. One of {@link SelectGesture},
+     * {@link SelectRangeGesture}, {@link DeleteGesture}, {@link DeleteRangeGesture}.
+     * @see #getSupportedHandwritingGestures()
+     */
+    @NonNull
+    public Set<Class<? extends PreviewableHandwritingGesture>>
+            getSupportedHandwritingGesturePreviews() {
+        Set<Class<? extends PreviewableHandwritingGesture>> set  = new HashSet<>();
+        if (mSupportedHandwritingGesturePreviewTypes == 0) {
+            return set;
+        }
+        if ((mSupportedHandwritingGesturePreviewTypes & HandwritingGesture.GESTURE_TYPE_SELECT)
+                == HandwritingGesture.GESTURE_TYPE_SELECT) {
+            set.add(SelectGesture.class);
+        }
+        if ((mSupportedHandwritingGesturePreviewTypes
+                & HandwritingGesture.GESTURE_TYPE_SELECT_RANGE)
+                        == HandwritingGesture.GESTURE_TYPE_SELECT_RANGE) {
+            set.add(SelectRangeGesture.class);
+        }
+        if ((mSupportedHandwritingGesturePreviewTypes & HandwritingGesture.GESTURE_TYPE_DELETE)
+                == HandwritingGesture.GESTURE_TYPE_DELETE) {
+            set.add(DeleteGesture.class);
+        }
+        if ((mSupportedHandwritingGesturePreviewTypes
+                & HandwritingGesture.GESTURE_TYPE_DELETE_RANGE)
+                        == HandwritingGesture.GESTURE_TYPE_DELETE_RANGE) {
+            set.add(DeleteRangeGesture.class);
+        }
+        return set;
     }
 
     /**
@@ -639,8 +752,7 @@ public class EditorInfo implements InputType, Parcelable {
      * Initial {@link MotionEvent#ACTION_UP} tool type {@link MotionEvent#getToolType(int)} that
      * was used to focus this editor.
      */
-    private int mInitialToolType = MotionEvent.TOOL_TYPE_UNKNOWN;
-
+    private @ToolType int mInitialToolType = MotionEvent.TOOL_TYPE_UNKNOWN;
 
     /**
      * Editors may use this method to provide initial input text to IMEs. As the surrounding text
@@ -1022,7 +1134,7 @@ public class EditorInfo implements InputType, Parcelable {
      * @see InputMethodService#onUpdateEditorToolType(int)
      * @return toolType {@link MotionEvent#getToolType(int)}.
      */
-    public int getInitialToolType() {
+    public @ToolType int getInitialToolType() {
         return mInitialToolType;
     }
 
@@ -1034,7 +1146,7 @@ public class EditorInfo implements InputType, Parcelable {
      * @see MotionEvent#getToolType(int)
      * @see InputMethodService#onUpdateEditorToolType(int)
      */
-    public void setInitialToolType(int toolType) {
+    public void setInitialToolType(@ToolType int toolType) {
         mInitialToolType = toolType;
     }
 
@@ -1090,6 +1202,9 @@ public class EditorInfo implements InputType, Parcelable {
         pw.println(prefix + "supportedHandwritingGestureTypes="
                 + InputMethodDebug.handwritingGestureTypeFlagsToString(
                         mSupportedHandwritingGestureTypes));
+        pw.println(prefix + "supportedHandwritingGesturePreviewTypes="
+                + InputMethodDebug.handwritingGestureTypeFlagsToString(
+                        mSupportedHandwritingGesturePreviewTypes));
         pw.println(prefix + "contentMimeTypes=" + Arrays.toString(contentMimeTypes));
         if (targetInputMethodUser != null) {
             pw.println(prefix + "targetInputMethodUserId=" + targetInputMethodUser.getIdentifier());
@@ -1125,6 +1240,8 @@ public class EditorInfo implements InputType, Parcelable {
         newEditorInfo.contentMimeTypes = ArrayUtils.cloneOrNull(contentMimeTypes);
         newEditorInfo.targetInputMethodUser = targetInputMethodUser;
         newEditorInfo.mSupportedHandwritingGestureTypes = mSupportedHandwritingGestureTypes;
+        newEditorInfo.mSupportedHandwritingGesturePreviewTypes =
+                mSupportedHandwritingGesturePreviewTypes;
         return newEditorInfo;
     }
 
@@ -1153,6 +1270,7 @@ public class EditorInfo implements InputType, Parcelable {
         dest.writeString(fieldName);
         dest.writeBundle(extras);
         dest.writeInt(mSupportedHandwritingGestureTypes);
+        dest.writeInt(mSupportedHandwritingGesturePreviewTypes);
         dest.writeBoolean(mInitialSurroundingText != null);
         if (mInitialSurroundingText != null) {
             mInitialSurroundingText.writeToParcel(dest, flags);
@@ -1191,6 +1309,7 @@ public class EditorInfo implements InputType, Parcelable {
                     res.fieldName = source.readString();
                     res.extras = source.readBundle();
                     res.mSupportedHandwritingGestureTypes = source.readInt();
+                    res.mSupportedHandwritingGesturePreviewTypes = source.readInt();
                     boolean hasInitialSurroundingText = source.readBoolean();
                     if (hasInitialSurroundingText) {
                         res.mInitialSurroundingText =
@@ -1234,6 +1353,8 @@ public class EditorInfo implements InputType, Parcelable {
                 && initialCapsMode == that.initialCapsMode
                 && fieldId == that.fieldId
                 && mSupportedHandwritingGestureTypes == that.mSupportedHandwritingGestureTypes
+                && mSupportedHandwritingGesturePreviewTypes
+                        == that.mSupportedHandwritingGesturePreviewTypes
                 && Objects.equals(autofillId, that.autofillId)
                 && Objects.equals(privateImeOptions, that.privateImeOptions)
                 && Objects.equals(packageName, that.packageName)

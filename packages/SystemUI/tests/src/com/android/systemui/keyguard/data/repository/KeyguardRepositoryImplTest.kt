@@ -17,11 +17,19 @@
 package com.android.systemui.keyguard.data.repository
 
 import androidx.test.filters.SmallTest
+import com.android.keyguard.KeyguardUpdateMonitor
+import com.android.keyguard.KeyguardUpdateMonitorCallback
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.common.shared.model.Position
+import com.android.systemui.doze.DozeHost
+import com.android.systemui.keyguard.WakefulnessLifecycle
+import com.android.systemui.keyguard.shared.model.BiometricUnlockModel
+import com.android.systemui.keyguard.shared.model.WakefulnessModel
 import com.android.systemui.plugins.statusbar.StatusBarStateController
+import com.android.systemui.statusbar.phone.BiometricUnlockController
 import com.android.systemui.statusbar.policy.KeyguardStateController
 import com.android.systemui.util.mockito.argumentCaptor
+import com.android.systemui.util.mockito.whenever
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -32,7 +40,6 @@ import org.junit.runner.RunWith
 import org.junit.runners.JUnit4
 import org.mockito.Mock
 import org.mockito.Mockito.verify
-import org.mockito.Mockito.`when` as whenever
 import org.mockito.MockitoAnnotations
 
 @SmallTest
@@ -40,7 +47,11 @@ import org.mockito.MockitoAnnotations
 class KeyguardRepositoryImplTest : SysuiTestCase() {
 
     @Mock private lateinit var statusBarStateController: StatusBarStateController
+    @Mock private lateinit var dozeHost: DozeHost
     @Mock private lateinit var keyguardStateController: KeyguardStateController
+    @Mock private lateinit var wakefulnessLifecycle: WakefulnessLifecycle
+    @Mock private lateinit var keyguardUpdateMonitor: KeyguardUpdateMonitor
+    @Mock private lateinit var biometricUnlockController: BiometricUnlockController
 
     private lateinit var underTest: KeyguardRepositoryImpl
 
@@ -48,7 +59,15 @@ class KeyguardRepositoryImplTest : SysuiTestCase() {
     fun setUp() {
         MockitoAnnotations.initMocks(this)
 
-        underTest = KeyguardRepositoryImpl(statusBarStateController, keyguardStateController)
+        underTest =
+            KeyguardRepositoryImpl(
+                statusBarStateController,
+                dozeHost,
+                wakefulnessLifecycle,
+                biometricUnlockController,
+                keyguardStateController,
+                keyguardUpdateMonitor,
+            )
     }
 
     @Test
@@ -109,6 +128,7 @@ class KeyguardRepositoryImplTest : SysuiTestCase() {
         val job = underTest.isKeyguardShowing.onEach { latest = it }.launchIn(this)
 
         assertThat(latest).isFalse()
+        assertThat(underTest.isKeyguardShowing()).isFalse()
 
         val captor = argumentCaptor<KeyguardStateController.Callback>()
         verify(keyguardStateController).addCallback(captor.capture())
@@ -116,10 +136,12 @@ class KeyguardRepositoryImplTest : SysuiTestCase() {
         whenever(keyguardStateController.isShowing).thenReturn(true)
         captor.value.onKeyguardShowingChanged()
         assertThat(latest).isTrue()
+        assertThat(underTest.isKeyguardShowing()).isTrue()
 
         whenever(keyguardStateController.isShowing).thenReturn(false)
         captor.value.onKeyguardShowingChanged()
         assertThat(latest).isFalse()
+        assertThat(underTest.isKeyguardShowing()).isFalse()
 
         job.cancel()
     }
@@ -129,8 +151,8 @@ class KeyguardRepositoryImplTest : SysuiTestCase() {
         var latest: Boolean? = null
         val job = underTest.isDozing.onEach { latest = it }.launchIn(this)
 
-        val captor = argumentCaptor<StatusBarStateController.StateListener>()
-        verify(statusBarStateController).addCallback(captor.capture())
+        val captor = argumentCaptor<DozeHost.Callback>()
+        verify(dozeHost).addCallback(captor.capture())
 
         captor.value.onDozingChanged(true)
         assertThat(latest).isTrue()
@@ -139,7 +161,22 @@ class KeyguardRepositoryImplTest : SysuiTestCase() {
         assertThat(latest).isFalse()
 
         job.cancel()
-        verify(statusBarStateController).removeCallback(captor.value)
+        verify(dozeHost).removeCallback(captor.value)
+    }
+
+    @Test
+    fun `isDozing - starts with correct initial value for isDozing`() = runBlockingTest {
+        var latest: Boolean? = null
+
+        whenever(statusBarStateController.isDozing).thenReturn(true)
+        var job = underTest.isDozing.onEach { latest = it }.launchIn(this)
+        assertThat(latest).isTrue()
+        job.cancel()
+
+        whenever(statusBarStateController.isDozing).thenReturn(false)
+        job = underTest.isDozing.onEach { latest = it }.launchIn(this)
+        assertThat(latest).isFalse()
+        job.cancel()
     }
 
     @Test
@@ -158,5 +195,144 @@ class KeyguardRepositoryImplTest : SysuiTestCase() {
 
         job.cancel()
         verify(statusBarStateController).removeCallback(captor.value)
+    }
+
+    @Test
+    fun wakefulness() = runBlockingTest {
+        val values = mutableListOf<WakefulnessModel>()
+        val job = underTest.wakefulnessState.onEach(values::add).launchIn(this)
+
+        val captor = argumentCaptor<WakefulnessLifecycle.Observer>()
+        verify(wakefulnessLifecycle).addObserver(captor.capture())
+
+        captor.value.onStartedWakingUp()
+        captor.value.onFinishedWakingUp()
+        captor.value.onStartedGoingToSleep()
+        captor.value.onFinishedGoingToSleep()
+
+        assertThat(values)
+            .isEqualTo(
+                listOf(
+                    // Initial value will be ASLEEP
+                    WakefulnessModel.ASLEEP,
+                    WakefulnessModel.STARTING_TO_WAKE,
+                    WakefulnessModel.AWAKE,
+                    WakefulnessModel.STARTING_TO_SLEEP,
+                    WakefulnessModel.ASLEEP,
+                )
+            )
+
+        job.cancel()
+        verify(wakefulnessLifecycle).removeObserver(captor.value)
+    }
+
+    @Test
+    fun isUdfpsSupported() = runBlockingTest {
+        whenever(keyguardUpdateMonitor.isUdfpsSupported).thenReturn(true)
+        assertThat(underTest.isUdfpsSupported()).isTrue()
+
+        whenever(keyguardUpdateMonitor.isUdfpsSupported).thenReturn(false)
+        assertThat(underTest.isUdfpsSupported()).isFalse()
+    }
+
+    @Test
+    fun isBouncerShowing() = runBlockingTest {
+        whenever(keyguardStateController.isBouncerShowing).thenReturn(false)
+        var latest: Boolean? = null
+        val job = underTest.isBouncerShowing.onEach { latest = it }.launchIn(this)
+
+        assertThat(latest).isFalse()
+
+        val captor = argumentCaptor<KeyguardStateController.Callback>()
+        verify(keyguardStateController).addCallback(captor.capture())
+
+        whenever(keyguardStateController.isBouncerShowing).thenReturn(true)
+        captor.value.onBouncerShowingChanged()
+        assertThat(latest).isTrue()
+
+        whenever(keyguardStateController.isBouncerShowing).thenReturn(false)
+        captor.value.onBouncerShowingChanged()
+        assertThat(latest).isFalse()
+
+        job.cancel()
+    }
+
+    @Test
+    fun isKeyguardGoingAway() = runBlockingTest {
+        whenever(keyguardStateController.isKeyguardGoingAway).thenReturn(false)
+        var latest: Boolean? = null
+        val job = underTest.isKeyguardGoingAway.onEach { latest = it }.launchIn(this)
+
+        assertThat(latest).isFalse()
+
+        val captor = argumentCaptor<KeyguardStateController.Callback>()
+        verify(keyguardStateController).addCallback(captor.capture())
+
+        whenever(keyguardStateController.isKeyguardGoingAway).thenReturn(true)
+        captor.value.onKeyguardGoingAwayChanged()
+        assertThat(latest).isTrue()
+
+        whenever(keyguardStateController.isKeyguardGoingAway).thenReturn(false)
+        captor.value.onKeyguardGoingAwayChanged()
+        assertThat(latest).isFalse()
+
+        job.cancel()
+    }
+
+    @Test
+    fun isDreaming() = runBlockingTest {
+        whenever(keyguardUpdateMonitor.isDreaming()).thenReturn(false)
+        var latest: Boolean? = null
+        val job = underTest.isDreaming.onEach { latest = it }.launchIn(this)
+
+        assertThat(latest).isFalse()
+
+        val captor = argumentCaptor<KeyguardUpdateMonitorCallback>()
+        verify(keyguardUpdateMonitor).registerCallback(captor.capture())
+
+        captor.value.onDreamingStateChanged(true)
+        assertThat(latest).isTrue()
+
+        captor.value.onDreamingStateChanged(false)
+        assertThat(latest).isFalse()
+
+        job.cancel()
+    }
+
+    @Test
+    fun biometricUnlockState() = runBlockingTest {
+        val values = mutableListOf<BiometricUnlockModel>()
+        val job = underTest.biometricUnlockState.onEach(values::add).launchIn(this)
+
+        val captor = argumentCaptor<BiometricUnlockController.BiometricModeListener>()
+        verify(biometricUnlockController).addBiometricModeListener(captor.capture())
+
+        captor.value.onModeChanged(BiometricUnlockController.MODE_NONE)
+        captor.value.onModeChanged(BiometricUnlockController.MODE_WAKE_AND_UNLOCK)
+        captor.value.onModeChanged(BiometricUnlockController.MODE_WAKE_AND_UNLOCK_PULSING)
+        captor.value.onModeChanged(BiometricUnlockController.MODE_SHOW_BOUNCER)
+        captor.value.onModeChanged(BiometricUnlockController.MODE_ONLY_WAKE)
+        captor.value.onModeChanged(BiometricUnlockController.MODE_UNLOCK_COLLAPSING)
+        captor.value.onModeChanged(BiometricUnlockController.MODE_DISMISS_BOUNCER)
+        captor.value.onModeChanged(BiometricUnlockController.MODE_WAKE_AND_UNLOCK_FROM_DREAM)
+
+        assertThat(values)
+            .isEqualTo(
+                listOf(
+                    // Initial value will be NONE, followed by onModeChanged() call
+                    BiometricUnlockModel.NONE,
+                    BiometricUnlockModel.NONE,
+                    BiometricUnlockModel.WAKE_AND_UNLOCK,
+                    BiometricUnlockModel.WAKE_AND_UNLOCK_PULSING,
+                    BiometricUnlockModel.SHOW_BOUNCER,
+                    BiometricUnlockModel.ONLY_WAKE,
+                    BiometricUnlockModel.UNLOCK_COLLAPSING,
+                    BiometricUnlockModel.DISMISS_BOUNCER,
+                    BiometricUnlockModel.WAKE_AND_UNLOCK_FROM_DREAM,
+                )
+            )
+
+        job.cancel()
+        verify(biometricUnlockController).removeBiometricModeListener(captor.value)
     }
 }

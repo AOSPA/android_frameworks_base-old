@@ -21,7 +21,46 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import com.android.settingslib.spa.framework.common.EntryMacro
+import com.android.settingslib.spa.framework.common.EntrySearchData
+import com.android.settingslib.spa.framework.common.EntryStatusData
+import com.android.settingslib.spa.framework.compose.navigator
 import com.android.settingslib.spa.framework.compose.stateOf
+import com.android.settingslib.spa.framework.util.wrapOnClickWithLog
+import com.android.settingslib.spa.widget.ui.createSettingsIcon
+import com.android.settingslib.spa.widget.util.EntryHighlight
+
+data class SimplePreferenceMacro(
+    val title: String,
+    val summary: String? = null,
+    val icon: ImageVector? = null,
+    val disabled: Boolean = false,
+    val clickRoute: String? = null,
+    val searchKeywords: List<String> = emptyList(),
+) : EntryMacro {
+    @Composable
+    override fun UiLayout() {
+        Preference(model = object : PreferenceModel {
+            override val title: String = this@SimplePreferenceMacro.title
+            override val summary = stateOf(this@SimplePreferenceMacro.summary ?: "")
+            override val icon = createSettingsIcon(this@SimplePreferenceMacro.icon)
+            override val enabled = stateOf(!this@SimplePreferenceMacro.disabled)
+            override val onClick = navigator(clickRoute)
+        })
+    }
+
+    override fun getSearchData(): EntrySearchData {
+        return EntrySearchData(
+            title = this@SimplePreferenceMacro.title,
+            keyword = searchKeywords
+        )
+    }
+
+    override fun getStatusData(): EntryStatusData {
+        return EntryStatusData(isDisabled = false)
+    }
+}
 
 /**
  * The widget model for [Preference] widget.
@@ -69,17 +108,27 @@ interface PreferenceModel {
  * Data is provided through [PreferenceModel].
  */
 @Composable
-fun Preference(model: PreferenceModel) {
-    val modifier = remember(model.enabled.value, model.onClick) {
-      model.onClick?.let { onClick ->
-        Modifier.clickable(enabled = model.enabled.value, onClick = onClick)
-      } ?: Modifier
+fun Preference(
+    model: PreferenceModel,
+    singleLineSummary: Boolean = false,
+) {
+    val onClickWithLog = wrapOnClickWithLog(model.onClick)
+    val modifier = remember(model.enabled.value) {
+        if (onClickWithLog != null) {
+            Modifier.clickable(
+                enabled = model.enabled.value,
+                onClick = onClickWithLog
+            )
+        } else Modifier
     }
-    BasePreference(
-        title = model.title,
-        summary = model.summary,
-        modifier = modifier,
-        icon = model.icon,
-        enabled = model.enabled,
-    )
+    EntryHighlight {
+        BasePreference(
+            title = model.title,
+            summary = model.summary,
+            singleLineSummary = singleLineSummary,
+            modifier = modifier,
+            icon = model.icon,
+            enabled = model.enabled,
+        )
+    }
 }

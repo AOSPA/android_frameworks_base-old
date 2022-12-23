@@ -2205,6 +2205,13 @@ public abstract class PackageManager {
      */
     public static final int INSTALL_ACTIVATION_FAILED = -128;
 
+    /**
+     * Installation failed return code: requesting user pre-approval is currently unavailable.
+     *
+     * @hide
+     */
+    public static final int INSTALL_FAILED_PRE_APPROVAL_NOT_AVAILABLE = -129;
+
     /** @hide */
     @IntDef(flag = true, prefix = { "DELETE_" }, value = {
             DELETE_KEEP_DATA,
@@ -4186,6 +4193,21 @@ public abstract class PackageManager {
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_WINDOW_MAGNIFICATION =
             "android.software.window_magnification";
+
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}: The device
+     * supports retrieval of user credentials, via integration with credential providers.
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_CREDENTIALS = "android.software.credentials";
+
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}:
+     * The device supports locking (for example, by a financing provider in case of a missed
+     * payment).
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_DEVICE_LOCK = "android.software.device_lock";
 
     /** @hide */
     public static final boolean APP_ENUMERATION_ENABLED_BY_DEFAULT = true;
@@ -9628,6 +9650,7 @@ public abstract class PackageManager {
             case INSTALL_FAILED_NO_MATCHING_ABIS: return PackageInstaller.STATUS_FAILURE_INCOMPATIBLE;
             case INSTALL_FAILED_ABORTED: return PackageInstaller.STATUS_FAILURE_ABORTED;
             case INSTALL_FAILED_MISSING_SPLIT: return PackageInstaller.STATUS_FAILURE_INCOMPATIBLE;
+            case INSTALL_FAILED_PRE_APPROVAL_NOT_AVAILABLE: return PackageInstaller.STATUS_FAILURE_BLOCKED;
             default: return PackageInstaller.STATUS_FAILURE;
         }
     }

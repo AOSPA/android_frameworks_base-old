@@ -18,7 +18,6 @@ package com.android.server.am;
 
 import static android.app.ActivityManager.START_SUCCESS;
 
-import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_BROADCAST_LIGHT;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
 
@@ -26,6 +25,7 @@ import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.ActivityOptions;
 import android.app.BroadcastOptions;
+import android.app.IApplicationThread;
 import android.app.PendingIntent;
 import android.content.IIntentReceiver;
 import android.content.IIntentSender;
@@ -35,7 +35,6 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.os.PowerWhitelistManager;
 import android.os.PowerWhitelistManager.ReasonCode;
-import android.os.Process;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
 import android.os.TransactionTooLargeException;
@@ -302,13 +301,21 @@ public final class PendingIntentRecord extends IIntentSender.Stub {
 
     public void send(int code, Intent intent, String resolvedType, IBinder allowlistToken,
             IIntentReceiver finishedReceiver, String requiredPermission, Bundle options) {
-        sendInner(code, intent, resolvedType, allowlistToken, finishedReceiver,
+        sendInner(null, code, intent, resolvedType, allowlistToken, finishedReceiver,
                 requiredPermission, null, null, 0, 0, 0, options);
     }
 
-    public int sendWithResult(int code, Intent intent, String resolvedType, IBinder allowlistToken,
-            IIntentReceiver finishedReceiver, String requiredPermission, Bundle options) {
-        return sendInner(code, intent, resolvedType, allowlistToken, finishedReceiver,
+    public void send(IApplicationThread caller, int code, Intent intent, String resolvedType,
+            IBinder allowlistToken, IIntentReceiver finishedReceiver, String requiredPermission,
+            Bundle options) {
+        sendInner(caller, code, intent, resolvedType, allowlistToken, finishedReceiver,
+                requiredPermission, null, null, 0, 0, 0, options);
+    }
+
+    public int sendWithResult(IApplicationThread caller, int code, Intent intent,
+            String resolvedType, IBinder allowlistToken, IIntentReceiver finishedReceiver,
+            String requiredPermission, Bundle options) {
+        return sendInner(caller, code, intent, resolvedType, allowlistToken, finishedReceiver,
                 requiredPermission, null, null, 0, 0, 0, options);
     }
 
@@ -339,9 +346,19 @@ public final class PendingIntentRecord extends IIntentSender.Stub {
                 ActivityOptions.PENDING_INTENT_BAL_ALLOWED_DEFAULT);
     }
 
+    @Deprecated
     public int sendInner(int code, Intent intent, String resolvedType, IBinder allowlistToken,
             IIntentReceiver finishedReceiver, String requiredPermission, IBinder resultTo,
             String resultWho, int requestCode, int flagsMask, int flagsValues, Bundle options) {
+        return sendInner(null, code, intent, resolvedType, allowlistToken, finishedReceiver,
+                requiredPermission, resultTo, resultWho, requestCode, flagsMask, flagsValues,
+                options);
+    }
+
+    public int sendInner(IApplicationThread caller, int code, Intent intent,
+            String resolvedType, IBinder allowlistToken, IIntentReceiver finishedReceiver,
+            String requiredPermission, IBinder resultTo, String resultWho, int requestCode,
+            int flagsMask, int flagsValues, Bundle options) {
         if (intent != null) intent.setDefusable(true);
         if (options != null) options.setDefusable(true);
 
@@ -379,11 +396,16 @@ public final class PendingIntentRecord extends IIntentSender.Stub {
                 resolvedType = key.requestResolvedType;
             }
 
-            // Apply any launch flags from the ActivityOptions. This is to ensure that the caller
-            // can specify a consistent launch mode even if the PendingIntent is immutable
+            // Apply any launch flags from the ActivityOptions. This is used only by SystemUI
+            // to ensure that we can launch the pending intent with a consistent launch mode even
+            // if the provided PendingIntent is immutable (ie. to force an activity to launch into
+            // a new task, or to launch multiple instances if supported by the app)
             final ActivityOptions opts = ActivityOptions.fromBundle(options);
             if (opts != null) {
-                finalIntent.addFlags(opts.getPendingIntentLaunchFlags());
+                // TODO(b/254490217): Move this check into SafeActivityOptions
+                if (controller.mAtmInternal.isCallerRecents(Binder.getCallingUid())) {
+                    finalIntent.addFlags(opts.getPendingIntentLaunchFlags());
+                }
             }
 
             // Extract options before clearing calling identity
@@ -422,16 +444,8 @@ public final class PendingIntentRecord extends IIntentSender.Stub {
         // Only system senders can declare a broadcast to be alarm-originated.  We check
         // this here rather than in the general case handling below to fail before the other
         // invocation side effects such as allowlisting.
-        if (options != null && callingUid != Process.SYSTEM_UID
-                && key.type == ActivityManager.INTENT_SENDER_BROADCAST) {
-            if (options.containsKey(BroadcastOptions.KEY_ALARM_BROADCAST)) {
-                if (DEBUG_BROADCAST_LIGHT) {
-                    Slog.w(TAG, "Non-system caller " + callingUid
-                            + " may not flag broadcast as alarm-related");
-                }
-                throw new SecurityException(
-                        "Non-system callers may not flag broadcasts as alarm-related");
-            }
+        if (key.type == ActivityManager.INTENT_SENDER_BROADCAST) {
+            controller.mAmInternal.enforceBroadcastOptionsPermissions(options, callingUid);
         }
 
         final long origId = Binder.clearCallingIdentity();
@@ -468,7 +482,13 @@ public final class PendingIntentRecord extends IIntentSender.Stub {
                 }
             }
 
+            final IApplicationThread finishedReceiverThread = caller;
             boolean sendFinish = finishedReceiver != null;
+            if ((finishedReceiver != null) && (finishedReceiverThread == null)) {
+                Slog.w(TAG, "Sending of " + intent + " from " + Binder.getCallingUid()
+                        + " requested resultTo without an IApplicationThread!", new Throwable());
+            }
+
             int userId = key.userId;
             if (userId == UserHandle.USER_CURRENT) {
                 userId = controller.mUserController.getCurrentOrTargetUserId();
@@ -525,9 +545,9 @@ public final class PendingIntentRecord extends IIntentSender.Stub {
                         // that the broadcast be delivered synchronously
                         int sent = controller.mAmInternal.broadcastIntentInPackage(key.packageName,
                                 key.featureId, uid, callingUid, callingPid, finalIntent,
-                                resolvedType, finishedReceiver, code, null, null,
-                                requiredPermission, options, (finishedReceiver != null), false,
-                                userId, allowedByToken || allowTrampoline, bgStartsToken,
+                                resolvedType, finishedReceiverThread, finishedReceiver, code, null,
+                                null, requiredPermission, options, (finishedReceiver != null),
+                                false, userId, allowedByToken || allowTrampoline, bgStartsToken,
                                 null /* broadcastAllowList */);
                         if (sent == ActivityManager.BROADCAST_SUCCESS) {
                             sendFinish = false;

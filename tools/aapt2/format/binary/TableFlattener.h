@@ -29,12 +29,20 @@ namespace aapt {
 // preferred.
 constexpr const size_t kSparseEncodingThreshold = 60;
 
+enum class SparseEntriesMode {
+  // Disables sparse encoding for entries.
+  Disabled,
+  // Enables sparse encoding for all entries for APKs with O+ minSdk. For APKs with minSdk less
+  // than O only applies sparse encoding for resource configuration available on O+.
+  Enabled,
+  // Enables sparse encoding for all entries regardless of minSdk.
+  Forced,
+};
+
 struct TableFlattenerOptions {
-  // When true, types for configurations with a sparse set of entries are encoded
+  // When enabled, types for configurations with a sparse set of entries are encoded
   // as a sparse map of entry ID and offset to actual data.
-  // This is only available on platforms O+ and will only be respected when
-  // minSdk is O+.
-  bool use_sparse_entries = false;
+  SparseEntriesMode sparse_entries = SparseEntriesMode::Disabled;
 
   // When true, the key string pool in the final ResTable
   // is collapsed to a single entry. All resource entries
@@ -46,6 +54,20 @@ struct TableFlattenerOptions {
 
   // Map from original resource paths to shortened resource paths.
   std::map<std::string, std::string> shortened_path_map;
+
+  // When enabled, only unique pairs of entry and value are stored in type chunks.
+  //
+  // By default, all such pairs are unique because a reference to resource name in the string pool
+  // is a part of the pair. But when resource names are collapsed (using 'collapse_key_stringpool'
+  // flag or manually) the same data might be duplicated multiple times in the same type chunk.
+  //
+  // For example: an application has 3 boolean resources with collapsed names and 3 'true' values
+  // are defined for these resources in 'default' configuration. All pairs of entry and value for
+  // these resources will have the same binary representation and stored only once in type chunk
+  // instead of three times when this flag is disabled.
+  //
+  // This applies only to simple entries (entry->flags & ResTable_entry::FLAG_COMPLEX == 0).
+  bool deduplicate_entry_values = false;
 };
 
 class TableFlattener : public IResourceTableConsumer {

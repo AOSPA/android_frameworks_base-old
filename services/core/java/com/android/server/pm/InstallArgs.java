@@ -65,18 +65,14 @@ final class InstallArgs {
     // if we move dex files under the common app path.
     @Nullable String[] mInstructionSets;
 
-    @NonNull final PackageManagerService mPm;
-    @NonNull final RemovePackageHelper mRemovePackageHelper;
-
     InstallArgs(OriginInfo originInfo, MoveInfo moveInfo, IPackageInstallObserver2 observer,
             int installFlags, InstallSource installSource, String volumeUuid,
             UserHandle user, String[] instructionSets,
             String abiOverride, String[] installGrantPermissions,
             List<String> allowlistedRestrictedPermissions,
-            int autoRevokePermissionsMode,
-            String traceMethod, int traceCookie, SigningDetails signingDetails,
-            int installReason, int installScenario, boolean forceQueryableOverride,
-            int dataLoaderType, int packageSource, PackageManagerService pm) {
+            int autoRevokePermissionsMode, String traceMethod, int traceCookie,
+            SigningDetails signingDetails, int installReason, int installScenario,
+            boolean forceQueryableOverride, int dataLoaderType, int packageSource) {
         mOriginInfo = originInfo;
         mMoveInfo = moveInfo;
         mInstallFlags = installFlags;
@@ -97,32 +93,18 @@ final class InstallArgs {
         mForceQueryableOverride = forceQueryableOverride;
         mDataLoaderType = dataLoaderType;
         mPackageSource = packageSource;
-        mPm = pm;
-        mRemovePackageHelper = new RemovePackageHelper(mPm);
-    }
-
-    /** New install */
-    InstallArgs(InstallingSession params) {
-        this(params.mOriginInfo, params.mMoveInfo, params.mObserver, params.mInstallFlags,
-                params.mInstallSource, params.mVolumeUuid,
-                params.getUser(), null /*instructionSets*/, params.mPackageAbiOverride,
-                params.mGrantedRuntimePermissions, params.mAllowlistedRestrictedPermissions,
-                params.mAutoRevokePermissionsMode,
-                params.mTraceMethod, params.mTraceCookie, params.mSigningDetails,
-                params.mInstallReason, params.mInstallScenario, params.mForceQueryableOverride,
-                params.mDataLoaderType, params.mPackageSource, params.mPm);
     }
 
     /**
      * Create args that describe an existing installed package. Typically used
      * when cleaning up old installs, or used as a move source.
      */
-    InstallArgs(String codePath, String[] instructionSets, PackageManagerService pm) {
+    InstallArgs(String codePath, String[] instructionSets) {
         this(OriginInfo.fromNothing(), null, null, 0, InstallSource.EMPTY,
                 null, null, instructionSets, null, null, null, MODE_DEFAULT, null, 0,
                 SigningDetails.UNKNOWN, PackageManager.INSTALL_REASON_UNKNOWN,
                 PackageManager.INSTALL_SCENARIO_DEFAULT, false, DataLoaderType.NONE,
-                PackageInstaller.PACKAGE_SOURCE_UNSPECIFIED, pm);
+                PackageInstaller.PACKAGE_SOURCE_UNSPECIFIED);
         mCodeFile = (codePath != null) ? new File(codePath) : null;
     }
 

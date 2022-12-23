@@ -67,6 +67,7 @@ import android.view.SurfaceControl;
 import android.view.displayhash.DisplayHash;
 import android.view.displayhash.VerifiedDisplayHash;
 import android.window.ITaskFpsCallback;
+import android.window.ScreenCapture;
 
 /**
  * System private interface to the window manager.
@@ -114,6 +115,7 @@ interface IWindowManager
     @UnsupportedAppUsage
     int getInitialDisplayDensity(int displayId);
     int getBaseDisplayDensity(int displayId);
+    int getDisplayIdByUniqueId(String uniqueId);
     void setForcedDisplayDensityForUser(int displayId, int density, int userId);
     void clearForcedDisplayDensityForUser(int displayId, int userId);
     void setForcedDisplayScalingMode(int displayId, int mode); // 0 = auto, 1 = disable
@@ -225,9 +227,18 @@ interface IWindowManager
 
     float getCurrentAnimatorScale();
 
-    // For testing
-    @UnsupportedAppUsage(maxTargetSdk = 28)
-    void setInTouchMode(boolean showFocus);
+    // Request to change the touch mode on the display represented by the displayId parameter.
+    //
+    // If com.android.internal.R.bool.config_perDisplayFocusEnabled is false, then it will request
+    // to change the touch mode on all displays (disregarding displayId parameter).
+    void setInTouchMode(boolean inTouch, int displayId);
+
+    // Request to change the touch mode on all displays (disregarding the value
+    // com.android.internal.R.bool.config_perDisplayFocusEnabled).
+    void setInTouchModeOnAllDisplays(boolean inTouch);
+
+    // Returns the touch mode state for the display represented by the displayId parameter.
+    boolean isInTouchMode(int displayId);
 
     // For StrictMode flashing a red border on violations from the UI
     // thread.  The uid/pid is implicit from the Binder call, and the Window
@@ -710,7 +721,7 @@ interface IWindowManager
      * Called when a remote process updates the requested visibilities of insets on a display window
      * container.
      */
-    void updateDisplayWindowRequestedVisibilities(int displayId, in InsetsVisibilities vis);
+    void updateDisplayWindowRequestedVisibleTypes(int displayId, int requestedVisibleTypes);
 
     /**
      * Called to get the expected window insets.
@@ -967,4 +978,19 @@ interface IWindowManager
      * treatment.
      */
     boolean isLetterboxBackgroundMultiColored();
+
+    /**
+     * Captures the entire display specified by the displayId using the args provided. If the args
+     * are null or if the sourceCrop is invalid or null, the entire display bounds will be captured.
+     */
+    oneway void captureDisplay(int displayId, in @nullable ScreenCapture.CaptureArgs captureArgs,
+            in ScreenCapture.ScreenCaptureListener listener);
+
+    /**
+     * Returns {@code true} if the key will be handled globally and not forwarded to all apps.
+     *
+     * @param keyCode the key code to check
+     * @return {@code true} if the key will be handled globally.
+     */
+    boolean isGlobalKey(int keyCode);
 }

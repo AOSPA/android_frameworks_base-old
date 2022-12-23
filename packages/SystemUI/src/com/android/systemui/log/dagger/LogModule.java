@@ -22,11 +22,11 @@ import android.os.Looper;
 
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
-import com.android.systemui.log.LogBuffer;
 import com.android.systemui.log.LogBufferFactory;
-import com.android.systemui.log.LogcatEchoTracker;
-import com.android.systemui.log.LogcatEchoTrackerDebug;
-import com.android.systemui.log.LogcatEchoTrackerProd;
+import com.android.systemui.plugins.log.LogBuffer;
+import com.android.systemui.plugins.log.LogcatEchoTracker;
+import com.android.systemui.plugins.log.LogcatEchoTrackerDebug;
+import com.android.systemui.plugins.log.LogcatEchoTrackerProd;
 import com.android.systemui.statusbar.notification.NotifPipelineFlags;
 import com.android.systemui.util.Compile;
 
@@ -43,7 +43,7 @@ public class LogModule {
     @SysUISingleton
     @DozeLog
     public static LogBuffer provideDozeLogBuffer(LogBufferFactory factory) {
-        return factory.create("DozeLog", 100);
+        return factory.create("DozeLog", 150);
     }
 
     /** Provides a logging buffer for all logs related to the data layer of notifications. */
@@ -74,6 +74,14 @@ public class LogModule {
     @NotificationInterruptLog
     public static LogBuffer provideNotificationInterruptLogBuffer(LogBufferFactory factory) {
         return factory.create("NotifInterruptLog", 100);
+    }
+
+    /** Provides a logging buffer for notification rendering events. */
+    @Provides
+    @SysUISingleton
+    @NotificationRenderLog
+    public static LogBuffer provideNotificationRenderLogBuffer(LogBufferFactory factory) {
+        return factory.create("NotifRenderLog", 100);
     }
 
     /** Provides a logging buffer for all logs for lockscreen to shade transition events. */
@@ -242,7 +250,7 @@ public class LogModule {
     /**
      * Provides a buffer for our connections and disconnections to MediaBrowserService.
      *
-     * See {@link com.android.systemui.media.ResumeMediaBrowser}.
+     * See {@link com.android.systemui.media.controls.resume.ResumeMediaBrowser}.
      */
     @Provides
     @SysUISingleton
@@ -254,7 +262,7 @@ public class LogModule {
     /**
      * Provides a buffer for updates to the media carousel.
      *
-     * See {@link com.android.systemui.media.MediaCarouselController}.
+     * See {@link com.android.systemui.media.controls.ui.MediaCarouselController}.
      */
     @Provides
     @SysUISingleton
@@ -287,6 +295,17 @@ public class LogModule {
     }
 
     /**
+     * Provides a {@link LogBuffer} for use by
+     * {@link com.android.systemui.biometrics.FaceHelpMessageDeferral}.
+     */
+    @Provides
+    @SysUISingleton
+    @BiometricMessagesLog
+    public static LogBuffer provideBiometricMessagesLogBuffer(LogBufferFactory factory) {
+        return factory.create("BiometricMessagesLog", 150);
+    }
+
+    /**
      * Provides a {@link LogBuffer} for use by the status bar network controller.
      */
     @Provides
@@ -297,23 +316,52 @@ public class LogModule {
     }
 
     /**
+     * Provides a {@link LogBuffer} for keyguard clock logs.
+     */
+    @Provides
+    @SysUISingleton
+    @KeyguardClockLog
+    public static LogBuffer provideKeyguardClockLog(LogBufferFactory factory) {
+        return factory.create("KeyguardClockLog", 500);
+    }
+
+    /**
      * Provides a {@link LogBuffer} for use by {@link com.android.keyguard.KeyguardUpdateMonitor}.
      */
     @Provides
     @SysUISingleton
     @KeyguardUpdateMonitorLog
     public static LogBuffer provideKeyguardUpdateMonitorLogBuffer(LogBufferFactory factory) {
-        return factory.create("KeyguardUpdateMonitorLog", 200);
+        return factory.create("KeyguardUpdateMonitorLog", 400);
     }
 
     /**
-     * Provides a {@link LogBuffer} for use by
-     * {@link com.android.systemui.keyguard.KeyguardViewMediator}.
+     * Provides a {@link LogBuffer} for bluetooth-related logs.
      */
     @Provides
     @SysUISingleton
-    @KeyguardViewMediatorLog
-    public static LogBuffer provideKeyguardViewMediatorLogBuffer(LogBufferFactory factory) {
-        return factory.create("KeyguardViewMediatorLog", 100);
+    @BluetoothLog
+    public static LogBuffer providerBluetoothLogBuffer(LogBufferFactory factory) {
+        return factory.create("BluetoothLog", 50);
+    }
+
+    /**
+     * Provides a {@link LogBuffer} for Udfps logs.
+     */
+    @Provides
+    @SysUISingleton
+    @UdfpsLog
+    public static LogBuffer provideUdfpsLogBuffer(LogBufferFactory factory) {
+        return factory.create("UdfpsLog", 1000);
+    }
+
+    /**
+     * Provides a {@link LogBuffer} for general keyguard-related logs.
+     */
+    @Provides
+    @SysUISingleton
+    @KeyguardLog
+    public static LogBuffer provideKeyguardLogBuffer(LogBufferFactory factory) {
+        return factory.create("KeyguardLog", 250);
     }
 }

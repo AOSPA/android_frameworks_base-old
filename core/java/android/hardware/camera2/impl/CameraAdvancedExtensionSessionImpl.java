@@ -243,9 +243,16 @@ public final class CameraAdvancedExtensionSessionImpl extends CameraExtensionSes
             mCameraConfigMap.put(cameraOutput.getSurface(), output);
         }
 
-        SessionConfiguration sessionConfiguration = new SessionConfiguration(
-                SessionConfiguration.SESSION_REGULAR, outputList,
-                new CameraExtensionUtils.HandlerExecutor(mHandler), new SessionStateHandler());
+        int sessionType = SessionConfiguration.SESSION_REGULAR;
+        if (sessionConfig.sessionType != -1 &&
+                (sessionConfig.sessionType != SessionConfiguration.SESSION_HIGH_SPEED)) {
+            sessionType = sessionConfig.sessionType;
+            Log.v(TAG, "Using session type: " + sessionType);
+        }
+
+        SessionConfiguration sessionConfiguration = new SessionConfiguration(sessionType,
+                outputList, new CameraExtensionUtils.HandlerExecutor(mHandler),
+                new SessionStateHandler());
 
         if ((sessionConfig.sessionParameter != null) &&
                 (!sessionConfig.sessionParameter.isEmpty())) {
@@ -652,6 +659,19 @@ public final class CameraAdvancedExtensionSessionImpl extends CameraExtensionSes
                         () -> mClientCallbacks.onCaptureResultAvailable(
                                 CameraAdvancedExtensionSessionImpl.this, mClientRequest,
                                 totalResult));
+            } finally {
+                Binder.restoreCallingIdentity(ident);
+            }
+        }
+
+        @Override
+        public void onCaptureProcessProgressed(int progress) {
+            final long ident = Binder.clearCallingIdentity();
+            try {
+                mExecutor.execute(
+                        () -> mClientCallbacks.onCaptureProcessProgressed(
+                                CameraAdvancedExtensionSessionImpl.this, mClientRequest,
+                                progress));
             } finally {
                 Binder.restoreCallingIdentity(ident);
             }

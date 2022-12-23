@@ -16,20 +16,18 @@
 
 package com.android.wm.shell.flicker.pip
 
-import android.platform.test.annotations.FlakyTest
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
-import com.android.server.wm.flicker.annotation.Group4
 import com.android.server.wm.flicker.dsl.FlickerBuilder
+import com.android.server.wm.flicker.helpers.ImeAppHelper
 import com.android.server.wm.flicker.helpers.WindowUtils
 import com.android.server.wm.flicker.helpers.isShellTransitionsEnabled
 import com.android.server.wm.flicker.helpers.setRotation
 import com.android.server.wm.traces.common.ComponentNameMatcher
-import com.android.wm.shell.flicker.helpers.ImeAppHelper
 import org.junit.Assume.assumeFalse
 import org.junit.Before
 import org.junit.FixMethodOrder
@@ -38,15 +36,11 @@ import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
 import org.junit.runners.Parameterized
 
-/**
- * Test Pip launch.
- * To run this test: `atest WMShellFlickerTests:PipKeyboardTest`
- */
+/** Test Pip launch. To run this test: `atest WMShellFlickerTests:PipKeyboardTest` */
 @RequiresDevice
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-@Group4
 open class PipKeyboardTest(testSpec: FlickerTestParameter) : PipTransition(testSpec) {
     private val imeApp = ImeAppHelper(instrumentation)
 
@@ -55,20 +49,16 @@ open class PipKeyboardTest(testSpec: FlickerTestParameter) : PipTransition(testS
         assumeFalse(isShellTransitionsEnabled)
     }
 
-    /** {@inheritDoc}  */
+    /** {@inheritDoc} */
     override val transition: FlickerBuilder.() -> Unit
-        get() = buildTransition(eachRun = false) {
+        get() = buildTransition {
             setup {
-                test {
-                    imeApp.launchViaIntent(wmHelper)
-                    setRotation(testSpec.startRotation)
-                }
+                imeApp.launchViaIntent(wmHelper)
+                setRotation(testSpec.startRotation)
             }
             teardown {
-                test {
-                    imeApp.exit(wmHelper)
-                    setRotation(Surface.ROTATION_0)
-                }
+                imeApp.exit(wmHelper)
+                setRotation(Surface.ROTATION_0)
             }
             transitions {
                 // open the soft keyboard
@@ -80,15 +70,7 @@ open class PipKeyboardTest(testSpec: FlickerTestParameter) : PipTransition(testS
             }
         }
 
-    /** {@inheritDoc}  */
-    @FlakyTest(bugId = 206753786)
-    @Test
-    override fun statusBarLayerPositionAtStartAndEnd() =
-        super.statusBarLayerPositionAtStartAndEnd()
-
-    /**
-     * Ensure the pip window remains visible throughout any keyboard interactions
-     */
+    /** Ensure the pip window remains visible throughout any keyboard interactions */
     @Presubmit
     @Test
     open fun pipInVisibleBounds() {
@@ -98,15 +80,11 @@ open class PipKeyboardTest(testSpec: FlickerTestParameter) : PipTransition(testS
         }
     }
 
-    /**
-     * Ensure that the pip window does not obscure the keyboard
-     */
+    /** Ensure that the pip window does not obscure the keyboard */
     @Presubmit
     @Test
     open fun pipIsAboveAppWindow() {
-        testSpec.assertWmTag(TAG_IME_VISIBLE) {
-            isAboveWindow(ComponentNameMatcher.IME, pipApp)
-        }
+        testSpec.assertWmTag(TAG_IME_VISIBLE) { isAboveWindow(ComponentNameMatcher.IME, pipApp) }
     }
 
     companion object {
@@ -116,8 +94,7 @@ open class PipKeyboardTest(testSpec: FlickerTestParameter) : PipTransition(testS
         @JvmStatic
         fun getParams(): Collection<FlickerTestParameter> {
             return FlickerTestParameterFactory.getInstance()
-                .getConfigNonRotationTests(supportedRotations = listOf(Surface.ROTATION_0),
-                    repetitions = 3)
+                .getConfigNonRotationTests(supportedRotations = listOf(Surface.ROTATION_0))
         }
     }
 }

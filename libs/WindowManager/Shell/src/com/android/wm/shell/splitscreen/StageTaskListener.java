@@ -106,11 +106,6 @@ class StageTaskListener implements ShellTaskOrganizer.TaskListener {
         taskOrganizer.createRootTask(displayId, WINDOWING_MODE_MULTI_WINDOW, this);
     }
 
-    /**
-     * General function for dismiss this stage.
-     */
-    void dismiss(WindowContainerTransaction wct, boolean toTop) {}
-
     int getChildCount() {
         return mChildrenTaskInfo.size();
     }
@@ -293,9 +288,11 @@ class StageTaskListener implements ShellTaskOrganizer.TaskListener {
         }
     }
 
-    void onResizing(Rect newBounds, Rect sideBounds, SurfaceControl.Transaction t) {
+    void onResizing(Rect newBounds, Rect sideBounds, SurfaceControl.Transaction t, int offsetX,
+            int offsetY) {
         if (mSplitDecorManager != null && mRootTaskInfo != null) {
-            mSplitDecorManager.onResizing(mRootTaskInfo, newBounds, sideBounds, t);
+            mSplitDecorManager.onResizing(mRootTaskInfo, newBounds, sideBounds, t, offsetX,
+                    offsetY);
         }
     }
 

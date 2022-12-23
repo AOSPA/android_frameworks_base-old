@@ -75,13 +75,13 @@ public final class SystemServiceManager implements Dumpable {
     // Constants used on onUser(...)
     // NOTE: do not change their values, as they're used on Trace calls and changes might break
     // performance tests that rely on them.
-    private static final String USER_STARTING = "Start"; // Logged as onStartUser
-    private static final String USER_UNLOCKING = "Unlocking"; // Logged as onUnlockingUser
-    private static final String USER_UNLOCKED = "Unlocked"; // Logged as onUnlockedUser
-    private static final String USER_SWITCHING = "Switch"; // Logged as onSwitchUser
-    private static final String USER_STOPPING = "Stop"; // Logged as onStopUser
-    private static final String USER_STOPPED = "Cleanup"; // Logged as onCleanupUser
-    private static final String USER_COMPLETED_EVENT = "CompletedEvent"; // onCompletedEventUser
+    private static final String USER_STARTING = "Start"; // Logged as onUserStarting()
+    private static final String USER_UNLOCKING = "Unlocking"; // Logged as onUserUnlocking()
+    private static final String USER_UNLOCKED = "Unlocked"; // Logged as onUserUnlocked()
+    private static final String USER_SWITCHING = "Switch"; // Logged as onUserSwitching()
+    private static final String USER_STOPPING = "Stop"; // Logged as onUserStopping()
+    private static final String USER_STOPPED = "Cleanup"; // Logged as onUserStopped()
+    private static final String USER_COMPLETED_EVENT = "CompletedEvent"; // onUserCompletedEvent()
 
     // The default number of threads to use if lifecycle thread pool is enabled.
     private static final int DEFAULT_MAX_USER_POOL_THREADS = 3;
@@ -121,7 +121,7 @@ public final class SystemServiceManager implements Dumpable {
      * {@link #onUserSwitching(int, int)} as the previous user might have been removed already.
      */
     @GuardedBy("mTargetUsers")
-    private @Nullable TargetUser mCurrentUser;
+    @Nullable private TargetUser mCurrentUser;
 
     SystemServiceManager(Context context) {
         mContext = context;
@@ -335,13 +335,10 @@ public final class SystemServiceManager implements Dumpable {
         mUserManagerInternal = LocalServices.getService(UserManagerInternal.class);
     }
 
-    private @NonNull TargetUser getTargetUser(@UserIdInt int userId) {
-        final TargetUser targetUser;
+    @Nullable private TargetUser getTargetUser(@UserIdInt int userId) {
         synchronized (mTargetUsers) {
-            targetUser = mTargetUsers.get(userId);
+            return mTargetUsers.get(userId);
         }
-        Preconditions.checkState(targetUser != null, "No TargetUser for " + userId);
-        return targetUser;
     }
 
     private @NonNull TargetUser newTargetUser(@UserIdInt int userId) {
@@ -360,7 +357,6 @@ public final class SystemServiceManager implements Dumpable {
         synchronized (mTargetUsers) {
             mTargetUsers.put(userId, targetUser);
         }
-
         onUser(t, USER_STARTING, /* prevUser= */ null, targetUser);
     }
 
@@ -400,6 +396,7 @@ public final class SystemServiceManager implements Dumpable {
                 prevUser = mCurrentUser;
             }
             curUser = mCurrentUser = getTargetUser(to);
+            Preconditions.checkState(curUser != null, "No TargetUser for " + to);
             if (DEBUG) {
                 Slog.d(TAG, "Set mCurrentUser to " + mCurrentUser);
             }
@@ -441,21 +438,29 @@ public final class SystemServiceManager implements Dumpable {
         if (eventFlags == 0) {
             return;
         }
+
+        TargetUser targetUser = getTargetUser(userId);
+        if (targetUser == null) {
+            return;
+        }
+
         onUser(TimingsTraceAndSlog.newAsyncLog(),
                 USER_COMPLETED_EVENT,
                 /* prevUser= */ null,
-                getTargetUser(userId),
+                targetUser,
                 new UserCompletedEventType(eventFlags));
     }
 
     private void onUser(@NonNull String onWhat, @UserIdInt int userId) {
-        onUser(TimingsTraceAndSlog.newAsyncLog(), onWhat, /* prevUser= */ null,
-                getTargetUser(userId));
+        TargetUser targetUser = getTargetUser(userId);
+        Preconditions.checkState(targetUser != null, "No TargetUser for " + userId);
+
+        onUser(TimingsTraceAndSlog.newAsyncLog(), onWhat, /* prevUser= */ null, targetUser);
     }
 
     private void onUser(@NonNull TimingsTraceAndSlog t, @NonNull String onWhat,
             @Nullable TargetUser prevUser, @NonNull TargetUser curUser) {
-        onUser(t, onWhat, prevUser, curUser, /* completedEventType=*/ null);
+        onUser(t, onWhat, prevUser, curUser, /* completedEventType= */ null);
     }
 
     private void onUser(@NonNull TimingsTraceAndSlog t, @NonNull String onWhat,

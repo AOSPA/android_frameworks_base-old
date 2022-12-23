@@ -233,6 +233,7 @@ public class UsageStatsService extends SystemService implements
     final SparseArray<ActivityData> mVisibleActivities = new SparseArray();
     @GuardedBy("mLock")
     private final SparseArray<LaunchTimeAlarmQueue> mLaunchTimeAlarmQueues = new SparseArray<>();
+    @GuardedBy("mUsageEventListeners") // Don't hold the main lock when calling out
     private final ArraySet<UsageStatsManagerInternal.UsageEventListener> mUsageEventListeners =
             new ArraySet<>();
     private final CopyOnWriteArraySet<UsageStatsManagerInternal.EstimatedLaunchTimeChangedListener>
@@ -1189,9 +1190,11 @@ public class UsageStatsService extends SystemService implements
             service.reportEvent(event);
         }
 
-        final int size = mUsageEventListeners.size();
-        for (int i = 0; i < size; ++i) {
-            mUsageEventListeners.valueAt(i).onUsageEvent(userId, event);
+        synchronized (mUsageEventListeners) {
+            final int size = mUsageEventListeners.size();
+            for (int i = 0; i < size; ++i) {
+                mUsageEventListeners.valueAt(i).onUsageEvent(userId, event);
+            }
         }
     }
 
@@ -1682,7 +1685,7 @@ public class UsageStatsService extends SystemService implements
      * Called via the local interface.
      */
     private void registerListener(@NonNull UsageStatsManagerInternal.UsageEventListener listener) {
-        synchronized (mLock) {
+        synchronized (mUsageEventListeners) {
             mUsageEventListeners.add(listener);
         }
     }
@@ -1692,7 +1695,7 @@ public class UsageStatsService extends SystemService implements
      */
     private void unregisterListener(
             @NonNull UsageStatsManagerInternal.UsageEventListener listener) {
-        synchronized (mLock) {
+        synchronized (mUsageEventListeners) {
             mUsageEventListeners.remove(listener);
         }
     }
@@ -2389,6 +2392,8 @@ public class UsageStatsService extends SystemService implements
         @Override
         public void setAppStandbyBucket(String packageName, int bucket, int userId) {
 
+            super.setAppStandbyBucket_enforcePermission();
+
             final int callingUid = Binder.getCallingUid();
             final int callingPid = Binder.getCallingPid();
             final long token = Binder.clearCallingIdentity();
@@ -2438,6 +2443,8 @@ public class UsageStatsService extends SystemService implements
         @android.annotation.EnforcePermission(android.Manifest.permission.CHANGE_APP_IDLE_STATE)
         @Override
         public void setAppStandbyBuckets(ParceledListSlice appBuckets, int userId) {
+
+            super.setAppStandbyBuckets_enforcePermission();
 
             final int callingUid = Binder.getCallingUid();
             final int callingPid = Binder.getCallingPid();
@@ -2490,6 +2497,8 @@ public class UsageStatsService extends SystemService implements
         public void setEstimatedLaunchTime(String packageName, long estimatedLaunchTime,
                 int userId) {
 
+            super.setEstimatedLaunchTime_enforcePermission();
+
             final long token = Binder.clearCallingIdentity();
             try {
                 UsageStatsService.this
@@ -2502,6 +2511,8 @@ public class UsageStatsService extends SystemService implements
         @android.annotation.EnforcePermission(android.Manifest.permission.CHANGE_APP_LAUNCH_TIME_ESTIMATE)
         @Override
         public void setEstimatedLaunchTimes(ParceledListSlice estimatedLaunchTimes, int userId) {
+
+            super.setEstimatedLaunchTimes_enforcePermission();
 
             final long token = Binder.clearCallingIdentity();
             try {

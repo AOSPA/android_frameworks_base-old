@@ -78,8 +78,6 @@ import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
 import android.util.SparseIntArray;
-import android.util.TypedXmlPullParser;
-import android.util.TypedXmlSerializer;
 import android.util.Xml;
 
 import com.android.internal.R;
@@ -89,6 +87,8 @@ import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.util.ImageUtils;
 import com.android.internal.util.IndentingPrintWriter;
+import com.android.modules.utils.TypedXmlPullParser;
+import com.android.modules.utils.TypedXmlSerializer;
 import com.android.server.IoThread;
 import com.android.server.LocalServices;
 import com.android.server.SystemConfig;
@@ -1345,9 +1345,14 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         }
 
         private String getDeviceOwnerDeletedPackageMsg() {
-            DevicePolicyManager dpm = mContext.getSystemService(DevicePolicyManager.class);
-            return dpm.getResources().getString(PACKAGE_DELETED_BY_DO,
-                    () -> mContext.getString(R.string.package_deleted_device_owner));
+            final long ident = Binder.clearCallingIdentity();
+            try {
+                DevicePolicyManager dpm = mContext.getSystemService(DevicePolicyManager.class);
+                return dpm.getResources().getString(PACKAGE_DELETED_BY_DO,
+                        () -> mContext.getString(R.string.package_deleted_device_owner));
+            } finally {
+                Binder.restoreCallingIdentity(ident);
+            }
         }
 
         @Override

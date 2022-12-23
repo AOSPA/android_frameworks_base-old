@@ -26,14 +26,14 @@ import com.android.server.wm.traces.common.ComponentNameMatcher
 import com.android.server.wm.traces.parser.toFlickerComponent
 import com.android.server.wm.traces.parser.windowmanager.WindowManagerStateHelper
 
-open class ImeAppHelper @JvmOverloads constructor(
+open class ImeAppHelper
+@JvmOverloads
+constructor(
     instr: Instrumentation,
-    launcherName: String = ActivityOptions.IME_ACTIVITY_LAUNCHER_NAME,
-    component: ComponentNameMatcher =
-        ActivityOptions.IME_ACTIVITY_COMPONENT_NAME.toFlickerComponent(),
-    launcherStrategy: ILauncherStrategy = LauncherStrategyFactory
-            .getInstance(instr)
-            .launcherStrategy
+    launcherName: String = ActivityOptions.Ime.Default.LABEL,
+    component: ComponentNameMatcher = ActivityOptions.Ime.Default.COMPONENT.toFlickerComponent(),
+    launcherStrategy: ILauncherStrategy =
+        LauncherStrategyFactory.getInstance(instr).launcherStrategy
 ) : StandardAppHelper(instr, launcherName, component, launcherStrategy) {
     /**
      * Opens the IME and wait for it to be displayed
@@ -41,9 +41,8 @@ open class ImeAppHelper @JvmOverloads constructor(
      * @param wmHelper Helper used to wait for WindowManager states
      */
     open fun openIME(wmHelper: WindowManagerStateHelper) {
-        val editText = uiDevice.wait(
-            Until.findObject(By.res(getPackage(), "plain_text_input")),
-            FIND_TIMEOUT)
+        val editText =
+            uiDevice.wait(Until.findObject(By.res(getPackage(), "plain_text_input")), FIND_TIMEOUT)
 
         requireNotNull(editText) {
             "Text field not found, this usually happens when the device " +
@@ -54,9 +53,7 @@ open class ImeAppHelper @JvmOverloads constructor(
     }
 
     protected fun waitIMEShown(wmHelper: WindowManagerStateHelper) {
-        wmHelper.StateSyncBuilder()
-            .withImeShown()
-            .waitForAndVerify()
+        wmHelper.StateSyncBuilder().withImeShown().waitForAndVerify()
     }
 
     /**
@@ -66,21 +63,19 @@ open class ImeAppHelper @JvmOverloads constructor(
      */
     open fun closeIME(wmHelper: WindowManagerStateHelper) {
         uiDevice.pressBack()
-        wmHelper.StateSyncBuilder()
-            .withImeGone()
-            .waitForAndVerify()
+        wmHelper.StateSyncBuilder().withImeGone().waitForAndVerify()
     }
 
     open fun finishActivity(wmHelper: WindowManagerStateHelper) {
-        val finishButton = uiDevice.wait(
+        val finishButton =
+            uiDevice.wait(
                 Until.findObject(By.res(getPackage(), "finish_activity_btn")),
-                FIND_TIMEOUT)
+                FIND_TIMEOUT
+            )
         requireNotNull(finishButton) {
             "Finish activity button not found, probably IME activity is not on the screen?"
         }
         finishButton.click()
-        wmHelper.StateSyncBuilder()
-            .withActivityRemoved(this)
-            .waitForAndVerify()
+        wmHelper.StateSyncBuilder().withActivityRemoved(this).waitForAndVerify()
     }
 }

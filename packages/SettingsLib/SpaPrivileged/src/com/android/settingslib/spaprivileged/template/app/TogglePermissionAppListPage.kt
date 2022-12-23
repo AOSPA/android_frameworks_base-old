@@ -22,40 +22,70 @@ import android.os.Bundle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.core.os.bundleOf
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
-import com.android.settingslib.spa.framework.api.SettingsPageProvider
+import com.android.settingslib.spa.framework.common.SettingsEntry
+import com.android.settingslib.spa.framework.common.SettingsEntryBuilder
+import com.android.settingslib.spa.framework.common.SettingsPage
+import com.android.settingslib.spa.framework.common.SettingsPageProvider
 import com.android.settingslib.spa.framework.compose.navigator
+import com.android.settingslib.spa.framework.compose.rememberContext
+import com.android.settingslib.spa.framework.util.getStringArg
+import com.android.settingslib.spa.widget.preference.Preference
+import com.android.settingslib.spa.widget.preference.PreferenceModel
 import com.android.settingslib.spaprivileged.R
 import com.android.settingslib.spaprivileged.model.app.AppListModel
 import com.android.settingslib.spaprivileged.model.app.AppRecord
+import com.android.settingslib.spaprivileged.model.app.userId
+import com.android.settingslib.spaprivileged.model.enterprise.Restrictions
+import com.android.settingslib.spaprivileged.model.enterprise.RestrictionsProvider
+import com.android.settingslib.spaprivileged.template.preference.RestrictedSwitchPreference
 import kotlinx.coroutines.flow.Flow
 
-private const val NAME = "TogglePermissionAppList"
+private const val ENTRY_NAME = "AppList"
 private const val PERMISSION = "permission"
+private const val PAGE_NAME = "TogglePermissionAppList"
+private val PAGE_PARAMETER = listOf(
+    navArgument(PERMISSION) { type = NavType.StringType },
+)
 
 internal class TogglePermissionAppListPageProvider(
-    private val factory: TogglePermissionAppListModelFactory,
+    private val appListTemplate: TogglePermissionAppListTemplate,
 ) : SettingsPageProvider {
-    override val name = NAME
+    override val name = PAGE_NAME
 
-    override val arguments = listOf(
-        navArgument(PERMISSION) { type = NavType.StringType },
-    )
+    override val parameter = PAGE_PARAMETER
+
+    override fun buildEntry(arguments: Bundle?): List<SettingsEntry> {
+        val permissionType = parameter.getStringArg(PERMISSION, arguments)!!
+        val appListPage = SettingsPage.create(name, parameter = parameter, arguments = arguments)
+        val appInfoPage = TogglePermissionAppInfoPageProvider.buildPageData(permissionType)
+        val entryList = mutableListOf<SettingsEntry>()
+        // TODO: add more categories, such as personal, work, cloned, etc.
+        for (category in listOf("personal")) {
+            entryList.add(
+                SettingsEntryBuilder.createLinkFrom("${ENTRY_NAME}_$category", appListPage)
+                    .setLink(toPage = appInfoPage)
+                    .setIsAllowSearch(false)
+                    .build()
+            )
+        }
+        return entryList
+    }
 
     @Composable
     override fun Page(arguments: Bundle?) {
-        checkNotNull(arguments)
-        val permissionType = checkNotNull(arguments.getString(PERMISSION))
-        TogglePermissionAppList(permissionType)
+        TogglePermissionAppList(arguments?.getString(PERMISSION)!!)
     }
 
     @Composable
     private fun TogglePermissionAppList(permissionType: String) {
-        val listModel = factory.rememberModel(permissionType)
+        val listModel = appListTemplate.rememberModel(permissionType)
         val context = LocalContext.current
         val internalListModel = remember {
             TogglePermissionInternalAppListModel(context, listModel)
@@ -75,12 +105,37 @@ internal class TogglePermissionAppListPageProvider(
     }
 
     companion object {
-        @Composable
-        internal fun navigator(permissionType: String) = navigator(route = "$NAME/$permissionType")
+        /**
+         * Gets the route to this page.
+         *
+         * Expose route to enable enter from non-SPA pages.
+         */
+        fun getRoute(permissionType: String) = "$PAGE_NAME/$permissionType"
+
+        fun buildInjectEntry(
+            permissionType: String,
+            listModelSupplier: (Context) -> TogglePermissionAppListModel<out AppRecord>,
+        ): SettingsEntryBuilder {
+            val appListPage = SettingsPage.create(
+                name = PAGE_NAME,
+                parameter = PAGE_PARAMETER,
+                arguments = bundleOf(PERMISSION to permissionType)
+            )
+            return SettingsEntryBuilder.createInject(owner = appListPage).setIsAllowSearch(false)
+                .setUiLayoutFn {
+                    val listModel = rememberContext(listModelSupplier)
+                    Preference(
+                        object : PreferenceModel {
+                            override val title = stringResource(listModel.pageTitleResId)
+                            override val onClick = navigator(route = getRoute(permissionType))
+                        }
+                    )
+                }
+        }
     }
 }
 
-private class TogglePermissionInternalAppListModel<T : AppRecord>(
+internal class TogglePermissionInternalAppListModel<T : AppRecord>(
     private val context: Context,
     private val listModel: TogglePermissionAppListModel<T>,
 ) : AppListModel<T> {
@@ -92,15 +147,37 @@ private class TogglePermissionInternalAppListModel<T : AppRecord>(
 
     @Composable
     override fun getSummary(option: Int, record: T): State<String> {
+        return getSummary(record)
+    }
+
+    @Composable
+    fun getSummary(record: T): State<String> {
+        val restrictionsProvider = remember {
+            val restrictions = Restrictions(
+                userId = record.app.userId,
+                keys = listModel.switchRestrictionKeys,
+            )
+            RestrictionsProvider(context, restrictions)
+        }
+        val restrictedMode = restrictionsProvider.restrictedMode.observeAsState()
         val allowed = listModel.isAllowed(record)
         return remember {
             derivedStateOf {
-                when (allowed.value) {
-                    true -> context.getString(R.string.app_permission_summary_allowed)
-                    false -> context.getString(R.string.app_permission_summary_not_allowed)
-                    else -> ""
-                }
+                RestrictedSwitchPreference.getSummary(
+                    context = context,
+                    restrictedMode = restrictedMode.value,
+                    noRestrictedSummary = getNoRestrictedSummary(allowed),
+                    checked = allowed,
+                ).value
             }
+        }
+    }
+
+    private fun getNoRestrictedSummary(allowed: State<Boolean?>) = derivedStateOf {
+        when (allowed.value) {
+            true -> context.getString(R.string.app_permission_summary_allowed)
+            false -> context.getString(R.string.app_permission_summary_not_allowed)
+            else -> context.getString(R.string.summary_placeholder)
         }
     }
 }

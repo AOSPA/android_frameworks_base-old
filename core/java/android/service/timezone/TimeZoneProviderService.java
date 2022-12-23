@@ -203,6 +203,27 @@ public abstract class TimeZoneProviderService extends Service {
      * details.
      */
     public final void reportSuggestion(@NonNull TimeZoneProviderSuggestion suggestion) {
+        TimeZoneProviderStatus providerStatus = null;
+        reportSuggestionInternal(suggestion, providerStatus);
+    }
+
+    /**
+     * Indicates a successful time zone detection. See {@link TimeZoneProviderSuggestion} for
+     * details.
+     *
+     * @param providerStatus provider status information that can influence detector service
+     *   behavior and/or be reported via the device UI
+     *
+     * @hide
+     */
+    public final void reportSuggestion(@NonNull TimeZoneProviderSuggestion suggestion,
+            @NonNull TimeZoneProviderStatus providerStatus) {
+        Objects.requireNonNull(providerStatus);
+        reportSuggestionInternal(suggestion, providerStatus);
+    }
+
+    private void reportSuggestionInternal(@NonNull TimeZoneProviderSuggestion suggestion,
+            @Nullable TimeZoneProviderStatus providerStatus) {
         Objects.requireNonNull(suggestion);
 
         mHandler.post(() -> {
@@ -212,7 +233,7 @@ public abstract class TimeZoneProviderService extends Service {
                     try {
                         TimeZoneProviderEvent thisEvent =
                                 TimeZoneProviderEvent.createSuggestionEvent(
-                                        SystemClock.elapsedRealtime(), suggestion);
+                                        SystemClock.elapsedRealtime(), suggestion, providerStatus);
                         if (shouldSendEvent(thisEvent)) {
                             manager.onTimeZoneProviderEvent(thisEvent);
                             mLastEventSent = thisEvent;
@@ -231,6 +252,27 @@ public abstract class TimeZoneProviderService extends Service {
      * to a time zone.
      */
     public final void reportUncertain() {
+        TimeZoneProviderStatus providerStatus = null;
+        reportUncertainInternal(providerStatus);
+    }
+
+    /**
+     * Indicates the time zone is not known because of an expected runtime state or error.
+     *
+     * <p>When the status changes then a certain or uncertain report must be made to move the
+     * detector service to the new status.
+     *
+     * @param providerStatus provider status information that can influence detector service
+     *   behavior and/or be reported via the device UI
+     *
+     * @hide
+     */
+    public final void reportUncertain(@NonNull TimeZoneProviderStatus providerStatus) {
+        Objects.requireNonNull(providerStatus);
+        reportUncertainInternal(providerStatus);
+    }
+
+    private void reportUncertainInternal(@Nullable TimeZoneProviderStatus providerStatus) {
         mHandler.post(() -> {
             synchronized (mLock) {
                 ITimeZoneProviderManager manager = mManager;
@@ -238,7 +280,7 @@ public abstract class TimeZoneProviderService extends Service {
                     try {
                         TimeZoneProviderEvent thisEvent =
                                 TimeZoneProviderEvent.createUncertainEvent(
-                                        SystemClock.elapsedRealtime());
+                                        SystemClock.elapsedRealtime(), providerStatus);
                         if (shouldSendEvent(thisEvent)) {
                             manager.onTimeZoneProviderEvent(thisEvent);
                             mLastEventSent = thisEvent;

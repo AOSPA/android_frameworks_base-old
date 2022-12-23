@@ -35,6 +35,7 @@ import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dreams.complication.ComplicationHostViewController;
 import com.android.systemui.dreams.dagger.DreamOverlayComponent;
 import com.android.systemui.dreams.dagger.DreamOverlayModule;
+import com.android.systemui.keyguard.domain.interactor.PrimaryBouncerCallbackInteractor;
 import com.android.systemui.statusbar.BlurUtils;
 import com.android.systemui.statusbar.phone.KeyguardBouncer;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
@@ -53,6 +54,8 @@ public class DreamOverlayContainerViewController extends ViewController<DreamOve
     private final DreamOverlayStatusBarViewController mStatusBarViewController;
     private final StatusBarKeyguardViewManager mStatusBarKeyguardViewManager;
     private final BlurUtils mBlurUtils;
+    private final DreamOverlayAnimationsController mDreamOverlayAnimationsController;
+    private final DreamOverlayStateController mStateController;
 
     private final ComplicationHostViewController mComplicationHostViewController;
 
@@ -73,13 +76,14 @@ public class DreamOverlayContainerViewController extends ViewController<DreamOve
     // Main thread handler used to schedule periodic tasks (e.g. burn-in protection updates).
     private final Handler mHandler;
     private final int mDreamOverlayMaxTranslationY;
+    private final PrimaryBouncerCallbackInteractor mPrimaryBouncerCallbackInteractor;
 
     private long mJitterStartTimeMillis;
 
     private boolean mBouncerAnimating;
 
-    private final KeyguardBouncer.BouncerExpansionCallback mBouncerExpansionCallback =
-            new KeyguardBouncer.BouncerExpansionCallback() {
+    private final KeyguardBouncer.PrimaryBouncerExpansionCallback mBouncerExpansionCallback =
+            new KeyguardBouncer.PrimaryBouncerExpansionCallback() {
 
                 @Override
                 public void onStartingToShow() {
@@ -131,12 +135,17 @@ public class DreamOverlayContainerViewController extends ViewController<DreamOve
             @Named(DreamOverlayModule.MAX_BURN_IN_OFFSET) int maxBurnInOffset,
             @Named(DreamOverlayModule.BURN_IN_PROTECTION_UPDATE_INTERVAL) long
                     burnInProtectionUpdateInterval,
-            @Named(DreamOverlayModule.MILLIS_UNTIL_FULL_JITTER) long millisUntilFullJitter) {
+            @Named(DreamOverlayModule.MILLIS_UNTIL_FULL_JITTER) long millisUntilFullJitter,
+            PrimaryBouncerCallbackInteractor primaryBouncerCallbackInteractor,
+            DreamOverlayAnimationsController animationsController,
+            DreamOverlayStateController stateController) {
         super(containerView);
         mDreamOverlayContentView = contentView;
         mStatusBarViewController = statusBarViewController;
         mStatusBarKeyguardViewManager = statusBarKeyguardViewManager;
         mBlurUtils = blurUtils;
+        mDreamOverlayAnimationsController = animationsController;
+        mStateController = stateController;
 
         mComplicationHostViewController = complicationHostViewController;
         mDreamOverlayMaxTranslationY = resources.getDimensionPixelSize(
@@ -151,6 +160,7 @@ public class DreamOverlayContainerViewController extends ViewController<DreamOve
         mMaxBurnInOffset = maxBurnInOffset;
         mBurnInProtectionUpdateInterval = burnInProtectionUpdateInterval;
         mMillisUntilFullJitter = millisUntilFullJitter;
+        mPrimaryBouncerCallbackInteractor = primaryBouncerCallbackInteractor;
     }
 
     @Override
@@ -163,19 +173,28 @@ public class DreamOverlayContainerViewController extends ViewController<DreamOve
     protected void onViewAttached() {
         mJitterStartTimeMillis = System.currentTimeMillis();
         mHandler.postDelayed(this::updateBurnInOffsets, mBurnInProtectionUpdateInterval);
-        final KeyguardBouncer bouncer = mStatusBarKeyguardViewManager.getBouncer();
+        final KeyguardBouncer bouncer = mStatusBarKeyguardViewManager.getPrimaryBouncer();
         if (bouncer != null) {
             bouncer.addBouncerExpansionCallback(mBouncerExpansionCallback);
+        }
+        mPrimaryBouncerCallbackInteractor.addBouncerExpansionCallback(mBouncerExpansionCallback);
+
+        // Start dream entry animations. Skip animations for low light clock.
+        if (!mStateController.isLowLightActive()) {
+            mDreamOverlayAnimationsController.startEntryAnimations(mView);
         }
     }
 
     @Override
     protected void onViewDetached() {
         mHandler.removeCallbacks(this::updateBurnInOffsets);
-        final KeyguardBouncer bouncer = mStatusBarKeyguardViewManager.getBouncer();
+        final KeyguardBouncer bouncer = mStatusBarKeyguardViewManager.getPrimaryBouncer();
         if (bouncer != null) {
             bouncer.removeBouncerExpansionCallback(mBouncerExpansionCallback);
         }
+        mPrimaryBouncerCallbackInteractor.removeBouncerExpansionCallback(mBouncerExpansionCallback);
+
+        mDreamOverlayAnimationsController.cancelRunningEntryAnimations();
     }
 
     View getContainerView() {

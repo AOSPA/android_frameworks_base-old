@@ -21,10 +21,10 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.UserHandle;
 import android.util.Log;
-import android.util.TypedXmlPullParser;
-import android.util.TypedXmlSerializer;
 
 import com.android.internal.util.XmlUtils;
+import com.android.modules.utils.TypedXmlPullParser;
+import com.android.modules.utils.TypedXmlSerializer;
 import com.android.server.utils.SnapshotCache;
 
 import org.xmlpull.v1.XmlPullParser;
@@ -45,6 +45,9 @@ class CrossProfileIntentFilter extends WatchedIntentFilter {
     private static final String ATTR_OWNER_PACKAGE = "ownerPackage";
     private static final String ATTR_FILTER = "filter";
     private static final String ATTR_ACCESS_CONTROL = "accessControl";
+
+    //flag to decide if intent needs to be resolved cross profile if pkgName is already defined
+    public static final int FLAG_IS_PACKAGE_FOR_FILTER = 0x00000008;
 
     private static final String TAG = "CrossProfileIntentFilter";
 

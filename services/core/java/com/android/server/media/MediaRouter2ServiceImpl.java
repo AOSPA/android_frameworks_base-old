@@ -58,6 +58,9 @@ import android.util.SparseArray;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.function.pooled.PooledLambda;
+import com.android.server.LocalServices;
+import com.android.server.pm.UserManagerInternal;
+import com.android.server.utils.EventLogger;
 
 import java.io.PrintWriter;
 import java.lang.ref.WeakReference;
@@ -86,7 +89,10 @@ class MediaRouter2ServiceImpl {
     private static final long DUMMY_REQUEST_ID = -1;
     private static final int PACKAGE_IMPORTANCE_FOR_DISCOVERY = IMPORTANCE_FOREGROUND_SERVICE;
 
+    private static final int DUMP_EVENTS_MAX_COUNT = 70;
+
     private final Context mContext;
+    private final UserManagerInternal mUserManagerInternal;
     private final Object mLock = new Object();
     final AtomicInteger mNextRouterOrManagerId = new AtomicInteger(1);
     final ActivityManager mActivityManager;
@@ -99,7 +105,10 @@ class MediaRouter2ServiceImpl {
     @GuardedBy("mLock")
     private final ArrayMap<IBinder, ManagerRecord> mAllManagerRecords = new ArrayMap<>();
     @GuardedBy("mLock")
-    private int mCurrentUserId = -1;
+    private int mCurrentActiveUserId = -1;
+
+    private final EventLogger mEventLogger =
+            new EventLogger(DUMP_EVENTS_MAX_COUNT, "MediaRouter2ServiceImpl");
 
     private final ActivityManager.OnUidImportanceListener mOnUidImportanceListener =
             (uid, importance) -> {
@@ -125,12 +134,13 @@ class MediaRouter2ServiceImpl {
         }
     };
 
-    MediaRouter2ServiceImpl(Context context) {
+    /* package */ MediaRouter2ServiceImpl(Context context) {
         mContext = context;
         mActivityManager = mContext.getSystemService(ActivityManager.class);
         mActivityManager.addOnUidImportanceListener(mOnUidImportanceListener,
                 PACKAGE_IMPORTANCE_FOR_DISCOVERY);
         mPowerManager = mContext.getSystemService(PowerManager.class);
+        mUserManagerInternal = LocalServices.getService(UserManagerInternal.class);
 
         IntentFilter screenOnOffIntentFilter = new IntentFilter();
         screenOnOffIntentFilter.addAction(ACTION_SCREEN_ON);
@@ -139,10 +149,7 @@ class MediaRouter2ServiceImpl {
         mContext.registerReceiver(mScreenOnOffReceiver, screenOnOffIntentFilter);
     }
 
-    ////////////////////////////////////////////////////////////////
-    ////  Calls from MediaRouter2
-    ////   - Should not have @NonNull/@Nullable on any arguments
-    ////////////////////////////////////////////////////////////////
+    // Start of methods that implement MediaRouter2 operations.
 
     @NonNull
     public void enforceMediaContentControlPermission() {
@@ -190,6 +197,383 @@ class MediaRouter2ServiceImpl {
         }
     }
 
+    public void registerRouter2(@NonNull IMediaRouter2 router, @NonNull String packageName) {
+        Objects.requireNonNull(router, "router must not be null");
+        if (TextUtils.isEmpty(packageName)) {
+            throw new IllegalArgumentException("packageName must not be empty");
+        }
+
+        final int uid = Binder.getCallingUid();
+        final int pid = Binder.getCallingPid();
+        final int userId = UserHandle.getUserHandleForUid(uid).getIdentifier();
+        final boolean hasConfigureWifiDisplayPermission = mContext.checkCallingOrSelfPermission(
+                android.Manifest.permission.CONFIGURE_WIFI_DISPLAY)
+                == PackageManager.PERMISSION_GRANTED;
+        final boolean hasModifyAudioRoutingPermission = mContext.checkCallingOrSelfPermission(
+                android.Manifest.permission.MODIFY_AUDIO_ROUTING)
+                == PackageManager.PERMISSION_GRANTED;
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                registerRouter2Locked(router, uid, pid, packageName, userId,
+                        hasConfigureWifiDisplayPermission, hasModifyAudioRoutingPermission);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    public void unregisterRouter2(@NonNull IMediaRouter2 router) {
+        Objects.requireNonNull(router, "router must not be null");
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                unregisterRouter2Locked(router, false);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    public void setDiscoveryRequestWithRouter2(@NonNull IMediaRouter2 router,
+            @NonNull RouteDiscoveryPreference preference) {
+        Objects.requireNonNull(router, "router must not be null");
+        Objects.requireNonNull(preference, "preference must not be null");
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                RouterRecord routerRecord = mAllRouterRecords.get(router.asBinder());
+                if (routerRecord == null) {
+                    Slog.w(TAG, "Ignoring updating discoveryRequest of null routerRecord.");
+                    return;
+                }
+                setDiscoveryRequestWithRouter2Locked(routerRecord, preference);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    public void setRouteVolumeWithRouter2(@NonNull IMediaRouter2 router,
+            @NonNull MediaRoute2Info route, int volume) {
+        Objects.requireNonNull(router, "router must not be null");
+        Objects.requireNonNull(route, "route must not be null");
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                setRouteVolumeWithRouter2Locked(router, route, volume);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    public void requestCreateSessionWithRouter2(@NonNull IMediaRouter2 router, int requestId,
+            long managerRequestId, @NonNull RoutingSessionInfo oldSession,
+            @NonNull MediaRoute2Info route, Bundle sessionHints) {
+        Objects.requireNonNull(router, "router must not be null");
+        Objects.requireNonNull(oldSession, "oldSession must not be null");
+        Objects.requireNonNull(route, "route must not be null");
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                requestCreateSessionWithRouter2Locked(requestId, managerRequestId,
+                        router, oldSession, route, sessionHints);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    public void selectRouteWithRouter2(@NonNull IMediaRouter2 router,
+            @NonNull String uniqueSessionId, @NonNull MediaRoute2Info route) {
+        Objects.requireNonNull(router, "router must not be null");
+        Objects.requireNonNull(route, "route must not be null");
+        if (TextUtils.isEmpty(uniqueSessionId)) {
+            throw new IllegalArgumentException("uniqueSessionId must not be empty");
+        }
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                selectRouteWithRouter2Locked(router, uniqueSessionId, route);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    public void deselectRouteWithRouter2(@NonNull IMediaRouter2 router,
+            @NonNull String uniqueSessionId, @NonNull MediaRoute2Info route) {
+        Objects.requireNonNull(router, "router must not be null");
+        Objects.requireNonNull(route, "route must not be null");
+        if (TextUtils.isEmpty(uniqueSessionId)) {
+            throw new IllegalArgumentException("uniqueSessionId must not be empty");
+        }
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                deselectRouteWithRouter2Locked(router, uniqueSessionId, route);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    public void transferToRouteWithRouter2(@NonNull IMediaRouter2 router,
+            @NonNull String uniqueSessionId, @NonNull MediaRoute2Info route) {
+        Objects.requireNonNull(router, "router must not be null");
+        Objects.requireNonNull(route, "route must not be null");
+        if (TextUtils.isEmpty(uniqueSessionId)) {
+            throw new IllegalArgumentException("uniqueSessionId must not be empty");
+        }
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                transferToRouteWithRouter2Locked(router, uniqueSessionId, route);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    public void setSessionVolumeWithRouter2(@NonNull IMediaRouter2 router,
+            @NonNull String uniqueSessionId, int volume) {
+        Objects.requireNonNull(router, "router must not be null");
+        Objects.requireNonNull(uniqueSessionId, "uniqueSessionId must not be null");
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                setSessionVolumeWithRouter2Locked(router, uniqueSessionId, volume);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    public void releaseSessionWithRouter2(@NonNull IMediaRouter2 router,
+            @NonNull String uniqueSessionId) {
+        Objects.requireNonNull(router, "router must not be null");
+        if (TextUtils.isEmpty(uniqueSessionId)) {
+            throw new IllegalArgumentException("uniqueSessionId must not be empty");
+        }
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                releaseSessionWithRouter2Locked(router, uniqueSessionId);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    // End of methods that implement MediaRouter2 operations.
+
+    // Start of methods that implement MediaRouter2Manager operations.
+
+    @NonNull
+    public List<RoutingSessionInfo> getRemoteSessions(@NonNull IMediaRouter2Manager manager) {
+        Objects.requireNonNull(manager, "manager must not be null");
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                return getRemoteSessionsLocked(manager);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    public void registerManager(@NonNull IMediaRouter2Manager manager,
+            @NonNull String packageName) {
+        Objects.requireNonNull(manager, "manager must not be null");
+        if (TextUtils.isEmpty(packageName)) {
+            throw new IllegalArgumentException("packageName must not be empty");
+        }
+
+        final int uid = Binder.getCallingUid();
+        final int pid = Binder.getCallingPid();
+        final int userId = UserHandle.getUserHandleForUid(uid).getIdentifier();
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                registerManagerLocked(manager, uid, pid, packageName, userId);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    public void unregisterManager(@NonNull IMediaRouter2Manager manager) {
+        Objects.requireNonNull(manager, "manager must not be null");
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                unregisterManagerLocked(manager, false);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    public void startScan(@NonNull IMediaRouter2Manager manager) {
+        Objects.requireNonNull(manager, "manager must not be null");
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                startScanLocked(manager);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    public void stopScan(@NonNull IMediaRouter2Manager manager) {
+        Objects.requireNonNull(manager, "manager must not be null");
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                stopScanLocked(manager);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    public void setRouteVolumeWithManager(@NonNull IMediaRouter2Manager manager, int requestId,
+            @NonNull MediaRoute2Info route, int volume) {
+        Objects.requireNonNull(manager, "manager must not be null");
+        Objects.requireNonNull(route, "route must not be null");
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                setRouteVolumeWithManagerLocked(requestId, manager, route, volume);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    public void requestCreateSessionWithManager(@NonNull IMediaRouter2Manager manager,
+            int requestId, @NonNull RoutingSessionInfo oldSession, @NonNull MediaRoute2Info route) {
+        Objects.requireNonNull(manager, "manager must not be null");
+        Objects.requireNonNull(oldSession, "oldSession must not be null");
+        Objects.requireNonNull(route, "route must not be null");
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                requestCreateSessionWithManagerLocked(requestId, manager, oldSession, route);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    public void selectRouteWithManager(@NonNull IMediaRouter2Manager manager, int requestId,
+            @NonNull String uniqueSessionId, @NonNull MediaRoute2Info route) {
+        Objects.requireNonNull(manager, "manager must not be null");
+        if (TextUtils.isEmpty(uniqueSessionId)) {
+            throw new IllegalArgumentException("uniqueSessionId must not be empty");
+        }
+        Objects.requireNonNull(route, "route must not be null");
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                selectRouteWithManagerLocked(requestId, manager, uniqueSessionId, route);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    public void deselectRouteWithManager(@NonNull IMediaRouter2Manager manager, int requestId,
+            @NonNull String uniqueSessionId, @NonNull MediaRoute2Info route) {
+        Objects.requireNonNull(manager, "manager must not be null");
+        if (TextUtils.isEmpty(uniqueSessionId)) {
+            throw new IllegalArgumentException("uniqueSessionId must not be empty");
+        }
+        Objects.requireNonNull(route, "route must not be null");
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                deselectRouteWithManagerLocked(requestId, manager, uniqueSessionId, route);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    public void transferToRouteWithManager(@NonNull IMediaRouter2Manager manager, int requestId,
+            @NonNull String uniqueSessionId, @NonNull MediaRoute2Info route) {
+        Objects.requireNonNull(manager, "manager must not be null");
+        if (TextUtils.isEmpty(uniqueSessionId)) {
+            throw new IllegalArgumentException("uniqueSessionId must not be empty");
+        }
+        Objects.requireNonNull(route, "route must not be null");
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                transferToRouteWithManagerLocked(requestId, manager, uniqueSessionId, route);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    public void setSessionVolumeWithManager(@NonNull IMediaRouter2Manager manager, int requestId,
+            @NonNull String uniqueSessionId, int volume) {
+        Objects.requireNonNull(manager, "manager must not be null");
+        if (TextUtils.isEmpty(uniqueSessionId)) {
+            throw new IllegalArgumentException("uniqueSessionId must not be empty");
+        }
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                setSessionVolumeWithManagerLocked(requestId, manager, uniqueSessionId, volume);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    public void releaseSessionWithManager(@NonNull IMediaRouter2Manager manager, int requestId,
+            @NonNull String uniqueSessionId) {
+        Objects.requireNonNull(manager, "manager must not be null");
+        if (TextUtils.isEmpty(uniqueSessionId)) {
+            throw new IllegalArgumentException("uniqueSessionId must not be empty");
+        }
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                releaseSessionWithManagerLocked(requestId, manager, uniqueSessionId);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    // End of methods that implement MediaRouter2Manager operations.
+
+    // Start of methods that implements operations for both MediaRouter2 and MediaRouter2Manager.
+
     @NonNull
     public RoutingSessionInfo getSystemSessionInfo(
             @Nullable String packageName, boolean setDeviceRouteSelected) {
@@ -230,396 +614,50 @@ class MediaRouter2ServiceImpl {
         }
     }
 
-    public void registerRouter2(IMediaRouter2 router, String packageName) {
-        Objects.requireNonNull(router, "router must not be null");
-        if (TextUtils.isEmpty(packageName)) {
-            throw new IllegalArgumentException("packageName must not be empty");
-        }
+    // End of methods that implements operations for both MediaRouter2 and MediaRouter2Manager.
 
-        final int uid = Binder.getCallingUid();
-        final int pid = Binder.getCallingPid();
-        final int userId = UserHandle.getUserHandleForUid(uid).getIdentifier();
-        final boolean hasConfigureWifiDisplayPermission = mContext.checkCallingOrSelfPermission(
-                android.Manifest.permission.CONFIGURE_WIFI_DISPLAY)
-                == PackageManager.PERMISSION_GRANTED;
-        final boolean hasModifyAudioRoutingPermission = mContext.checkCallingOrSelfPermission(
-                android.Manifest.permission.MODIFY_AUDIO_ROUTING)
-                == PackageManager.PERMISSION_GRANTED;
+    public void dump(@NonNull PrintWriter pw, @NonNull String prefix) {
+        pw.println(prefix + "MediaRouter2ServiceImpl");
 
-        final long token = Binder.clearCallingIdentity();
-        try {
-            synchronized (mLock) {
-                registerRouter2Locked(router, uid, pid, packageName, userId,
-                        hasConfigureWifiDisplayPermission, hasModifyAudioRoutingPermission);
-            }
-        } finally {
-            Binder.restoreCallingIdentity(token);
-        }
-    }
+        String indent = prefix + "  ";
 
-    public void unregisterRouter2(IMediaRouter2 router) {
-        Objects.requireNonNull(router, "router must not be null");
-
-        final long token = Binder.clearCallingIdentity();
-        try {
-            synchronized (mLock) {
-                unregisterRouter2Locked(router, false);
-            }
-        } finally {
-            Binder.restoreCallingIdentity(token);
-        }
-    }
-
-    public void setDiscoveryRequestWithRouter2(IMediaRouter2 router,
-            RouteDiscoveryPreference preference) {
-        Objects.requireNonNull(router, "router must not be null");
-        Objects.requireNonNull(preference, "preference must not be null");
-
-        final long token = Binder.clearCallingIdentity();
-        try {
-            synchronized (mLock) {
-                RouterRecord routerRecord = mAllRouterRecords.get(router.asBinder());
-                if (routerRecord == null) {
-                    Slog.w(TAG, "Ignoring updating discoveryRequest of null routerRecord.");
-                    return;
-                }
-                setDiscoveryRequestWithRouter2Locked(routerRecord, preference);
-            }
-        } finally {
-            Binder.restoreCallingIdentity(token);
-        }
-    }
-
-    public void setRouteVolumeWithRouter2(IMediaRouter2 router,
-            MediaRoute2Info route, int volume) {
-        Objects.requireNonNull(router, "router must not be null");
-        Objects.requireNonNull(route, "route must not be null");
-
-        final long token = Binder.clearCallingIdentity();
-        try {
-            synchronized (mLock) {
-                setRouteVolumeWithRouter2Locked(router, route, volume);
-            }
-        } finally {
-            Binder.restoreCallingIdentity(token);
-        }
-    }
-
-    public void requestCreateSessionWithRouter2(IMediaRouter2 router, int requestId,
-            long managerRequestId, RoutingSessionInfo oldSession,
-            MediaRoute2Info route, Bundle sessionHints) {
-        Objects.requireNonNull(router, "router must not be null");
-        Objects.requireNonNull(oldSession, "oldSession must not be null");
-        Objects.requireNonNull(route, "route must not be null");
-
-        final long token = Binder.clearCallingIdentity();
-        try {
-            synchronized (mLock) {
-                requestCreateSessionWithRouter2Locked(requestId, managerRequestId,
-                        router, oldSession, route, sessionHints);
-            }
-        } finally {
-            Binder.restoreCallingIdentity(token);
-        }
-    }
-
-    public void selectRouteWithRouter2(IMediaRouter2 router, String uniqueSessionId,
-            MediaRoute2Info route) {
-        Objects.requireNonNull(router, "router must not be null");
-        Objects.requireNonNull(route, "route must not be null");
-        if (TextUtils.isEmpty(uniqueSessionId)) {
-            throw new IllegalArgumentException("uniqueSessionId must not be empty");
-        }
-
-        final long token = Binder.clearCallingIdentity();
-        try {
-            synchronized (mLock) {
-                selectRouteWithRouter2Locked(router, uniqueSessionId, route);
-            }
-        } finally {
-            Binder.restoreCallingIdentity(token);
-        }
-    }
-
-    public void deselectRouteWithRouter2(IMediaRouter2 router, String uniqueSessionId,
-            MediaRoute2Info route) {
-        Objects.requireNonNull(router, "router must not be null");
-        Objects.requireNonNull(route, "route must not be null");
-        if (TextUtils.isEmpty(uniqueSessionId)) {
-            throw new IllegalArgumentException("uniqueSessionId must not be empty");
-        }
-
-        final long token = Binder.clearCallingIdentity();
-        try {
-            synchronized (mLock) {
-                deselectRouteWithRouter2Locked(router, uniqueSessionId, route);
-            }
-        } finally {
-            Binder.restoreCallingIdentity(token);
-        }
-    }
-
-    public void transferToRouteWithRouter2(IMediaRouter2 router, String uniqueSessionId,
-            MediaRoute2Info route) {
-        Objects.requireNonNull(router, "router must not be null");
-        Objects.requireNonNull(route, "route must not be null");
-        if (TextUtils.isEmpty(uniqueSessionId)) {
-            throw new IllegalArgumentException("uniqueSessionId must not be empty");
-        }
-
-        final long token = Binder.clearCallingIdentity();
-        try {
-            synchronized (mLock) {
-                transferToRouteWithRouter2Locked(router, uniqueSessionId, route);
-            }
-        } finally {
-            Binder.restoreCallingIdentity(token);
-        }
-    }
-
-    public void setSessionVolumeWithRouter2(IMediaRouter2 router, String uniqueSessionId,
-            int volume) {
-        Objects.requireNonNull(router, "router must not be null");
-        Objects.requireNonNull(uniqueSessionId, "uniqueSessionId must not be null");
-
-        final long token = Binder.clearCallingIdentity();
-        try {
-            synchronized (mLock) {
-                setSessionVolumeWithRouter2Locked(router, uniqueSessionId, volume);
-            }
-        } finally {
-            Binder.restoreCallingIdentity(token);
-        }
-    }
-
-    public void releaseSessionWithRouter2(IMediaRouter2 router, String uniqueSessionId) {
-        Objects.requireNonNull(router, "router must not be null");
-        if (TextUtils.isEmpty(uniqueSessionId)) {
-            throw new IllegalArgumentException("uniqueSessionId must not be empty");
-        }
-
-        final long token = Binder.clearCallingIdentity();
-        try {
-            synchronized (mLock) {
-                releaseSessionWithRouter2Locked(router, uniqueSessionId);
-            }
-        } finally {
-            Binder.restoreCallingIdentity(token);
-        }
-    }
-
-    ////////////////////////////////////////////////////////////////
-    ////  Calls from MediaRouter2Manager
-    ////   - Should not have @NonNull/@Nullable on any arguments
-    ////////////////////////////////////////////////////////////////
-
-    @NonNull
-    public List<RoutingSessionInfo> getRemoteSessions(IMediaRouter2Manager manager) {
-        Objects.requireNonNull(manager, "manager must not be null");
-        final long token = Binder.clearCallingIdentity();
-        try {
-            synchronized (mLock) {
-                return getRemoteSessionsLocked(manager);
-            }
-        } finally {
-            Binder.restoreCallingIdentity(token);
-        }
-    }
-
-    public void registerManager(IMediaRouter2Manager manager, String packageName) {
-        Objects.requireNonNull(manager, "manager must not be null");
-        if (TextUtils.isEmpty(packageName)) {
-            throw new IllegalArgumentException("packageName must not be empty");
-        }
-
-        final int uid = Binder.getCallingUid();
-        final int pid = Binder.getCallingPid();
-        final int userId = UserHandle.getUserHandleForUid(uid).getIdentifier();
-
-        final long token = Binder.clearCallingIdentity();
-        try {
-            synchronized (mLock) {
-                registerManagerLocked(manager, uid, pid, packageName, userId);
-            }
-        } finally {
-            Binder.restoreCallingIdentity(token);
-        }
-    }
-
-    public void unregisterManager(IMediaRouter2Manager manager) {
-        Objects.requireNonNull(manager, "manager must not be null");
-
-        final long token = Binder.clearCallingIdentity();
-        try {
-            synchronized (mLock) {
-                unregisterManagerLocked(manager, false);
-            }
-        } finally {
-            Binder.restoreCallingIdentity(token);
-        }
-    }
-
-    public void startScan(IMediaRouter2Manager manager) {
-        Objects.requireNonNull(manager, "manager must not be null");
-        final long token = Binder.clearCallingIdentity();
-        try {
-            synchronized (mLock) {
-                startScanLocked(manager);
-            }
-        } finally {
-            Binder.restoreCallingIdentity(token);
-        }
-    }
-
-    public void stopScan(IMediaRouter2Manager manager) {
-        Objects.requireNonNull(manager, "manager must not be null");
-        final long token = Binder.clearCallingIdentity();
-        try {
-            synchronized (mLock) {
-                stopScanLocked(manager);
-            }
-        } finally {
-            Binder.restoreCallingIdentity(token);
-        }
-    }
-
-    public void setRouteVolumeWithManager(IMediaRouter2Manager manager, int requestId,
-            MediaRoute2Info route, int volume) {
-        Objects.requireNonNull(manager, "manager must not be null");
-        Objects.requireNonNull(route, "route must not be null");
-
-        final long token = Binder.clearCallingIdentity();
-        try {
-            synchronized (mLock) {
-                setRouteVolumeWithManagerLocked(requestId, manager, route, volume);
-            }
-        } finally {
-            Binder.restoreCallingIdentity(token);
-        }
-    }
-
-    public void requestCreateSessionWithManager(IMediaRouter2Manager manager, int requestId,
-            RoutingSessionInfo oldSession, MediaRoute2Info route) {
-        Objects.requireNonNull(manager, "manager must not be null");
-        Objects.requireNonNull(oldSession, "oldSession must not be null");
-
-        final long token = Binder.clearCallingIdentity();
-        try {
-            synchronized (mLock) {
-                requestCreateSessionWithManagerLocked(requestId, manager, oldSession, route);
-            }
-        } finally {
-            Binder.restoreCallingIdentity(token);
-        }
-    }
-
-    public void selectRouteWithManager(IMediaRouter2Manager manager, int requestId,
-            String uniqueSessionId, MediaRoute2Info route) {
-        Objects.requireNonNull(manager, "manager must not be null");
-        if (TextUtils.isEmpty(uniqueSessionId)) {
-            throw new IllegalArgumentException("uniqueSessionId must not be empty");
-        }
-        Objects.requireNonNull(route, "route must not be null");
-
-        final long token = Binder.clearCallingIdentity();
-        try {
-            synchronized (mLock) {
-                selectRouteWithManagerLocked(requestId, manager, uniqueSessionId, route);
-            }
-        } finally {
-            Binder.restoreCallingIdentity(token);
-        }
-    }
-
-    public void deselectRouteWithManager(IMediaRouter2Manager manager, int requestId,
-            String uniqueSessionId, MediaRoute2Info route) {
-        Objects.requireNonNull(manager, "manager must not be null");
-        if (TextUtils.isEmpty(uniqueSessionId)) {
-            throw new IllegalArgumentException("uniqueSessionId must not be empty");
-        }
-        Objects.requireNonNull(route, "route must not be null");
-
-        final long token = Binder.clearCallingIdentity();
-        try {
-            synchronized (mLock) {
-                deselectRouteWithManagerLocked(requestId, manager, uniqueSessionId, route);
-            }
-        } finally {
-            Binder.restoreCallingIdentity(token);
-        }
-    }
-
-    public void transferToRouteWithManager(IMediaRouter2Manager manager, int requestId,
-            String uniqueSessionId, MediaRoute2Info route) {
-        Objects.requireNonNull(manager, "manager must not be null");
-        if (TextUtils.isEmpty(uniqueSessionId)) {
-            throw new IllegalArgumentException("uniqueSessionId must not be empty");
-        }
-        Objects.requireNonNull(route, "route must not be null");
-
-        final long token = Binder.clearCallingIdentity();
-        try {
-            synchronized (mLock) {
-                transferToRouteWithManagerLocked(requestId, manager, uniqueSessionId, route);
-            }
-        } finally {
-            Binder.restoreCallingIdentity(token);
-        }
-    }
-
-    public void setSessionVolumeWithManager(IMediaRouter2Manager manager, int requestId,
-            String uniqueSessionId, int volume) {
-        Objects.requireNonNull(manager, "manager must not be null");
-        if (TextUtils.isEmpty(uniqueSessionId)) {
-            throw new IllegalArgumentException("uniqueSessionId must not be empty");
-        }
-
-        final long token = Binder.clearCallingIdentity();
-        try {
-            synchronized (mLock) {
-                setSessionVolumeWithManagerLocked(requestId, manager, uniqueSessionId, volume);
-            }
-        } finally {
-            Binder.restoreCallingIdentity(token);
-        }
-    }
-
-    public void releaseSessionWithManager(IMediaRouter2Manager manager, int requestId,
-            String uniqueSessionId) {
-        Objects.requireNonNull(manager, "manager must not be null");
-        if (TextUtils.isEmpty(uniqueSessionId)) {
-            throw new IllegalArgumentException("uniqueSessionId must not be empty");
-        }
-
-        final long token = Binder.clearCallingIdentity();
-        try {
-            synchronized (mLock) {
-                releaseSessionWithManagerLocked(requestId, manager, uniqueSessionId);
-            }
-        } finally {
-            Binder.restoreCallingIdentity(token);
-        }
-    }
-
-    //TODO(b/136703681): Review this is handling multi-user properly.
-    void switchUser() {
         synchronized (mLock) {
-            int userId = ActivityManager.getCurrentUser();
-            if (mCurrentUserId != userId) {
-                final int oldUserId = mCurrentUserId;
-                mCurrentUserId = userId; // do this first
+            pw.println(indent + "mNextRouterOrManagerId=" + mNextRouterOrManagerId.get());
+            pw.println(indent + "mCurrentActiveUserId=" + mCurrentActiveUserId);
 
-                UserRecord oldUser = mUserRecords.get(oldUserId);
-                if (oldUser != null) {
-                    oldUser.mHandler.sendMessage(
-                            obtainMessage(UserHandler::stop, oldUser.mHandler));
-                    disposeUserIfNeededLocked(oldUser); // since no longer current user
+            pw.println(indent + "UserRecords:");
+            if (mUserRecords.size() > 0) {
+                for (int i = 0; i < mUserRecords.size(); i++) {
+                    mUserRecords.valueAt(i).dump(pw, indent + "  ");
                 }
+            } else {
+                pw.println(indent + "  <no user records>");
+            }
+            mEventLogger.dump(pw, indent);
+        }
+    }
 
-                UserRecord newUser = mUserRecords.get(userId);
-                if (newUser != null) {
-                    newUser.mHandler.sendMessage(
-                            obtainMessage(UserHandler::start, newUser.mHandler));
+    /* package */ void updateRunningUserAndProfiles(int newActiveUserId) {
+        synchronized (mLock) {
+            if (mCurrentActiveUserId != newActiveUserId) {
+                mEventLogger.enqueue(
+                        EventLogger.StringEvent.from("switchUser",
+                                "userId: %d", newActiveUserId));
+
+                mCurrentActiveUserId = newActiveUserId;
+                for (int i = 0; i < mUserRecords.size(); i++) {
+                    int userId = mUserRecords.keyAt(i);
+                    UserRecord userRecord = mUserRecords.valueAt(i);
+                    if (isUserActiveLocked(userId)) {
+                        // userId corresponds to the active user, or one of its profiles. We
+                        // ensure the associated structures are initialized.
+                        userRecord.mHandler.sendMessage(
+                                obtainMessage(UserHandler::start, userRecord.mHandler));
+                    } else {
+                        userRecord.mHandler.sendMessage(
+                                obtainMessage(UserHandler::stop, userRecord.mHandler));
+                        disposeUserIfNeededLocked(userRecord);
+                    }
                 }
             }
         }
@@ -637,11 +675,18 @@ class MediaRouter2ServiceImpl {
         }
     }
 
-    ////////////////////////////////////////////////////////////////
-    ////  ***Locked methods related to MediaRouter2
-    ////   - Should have @NonNull/@Nullable on all arguments
-    ////////////////////////////////////////////////////////////////
+    /**
+     * Returns {@code true} if the given {@code userId} corresponds to the active user or a profile
+     * of the active user, returns {@code false} otherwise.
+     */
+    @GuardedBy("mLock")
+    private boolean isUserActiveLocked(int userId) {
+        return mUserManagerInternal.getProfileParentId(userId) == mCurrentActiveUserId;
+    }
 
+    // Start of locked methods that are used by MediaRouter2.
+
+    @GuardedBy("mLock")
     private void registerRouter2Locked(@NonNull IMediaRouter2 router, int uid, int pid,
             @NonNull String packageName, int userId, boolean hasConfigureWifiDisplayPermission,
             boolean hasModifyAudioRoutingPermission) {
@@ -667,14 +712,26 @@ class MediaRouter2ServiceImpl {
         userRecord.mHandler.sendMessage(
                 obtainMessage(UserHandler::notifyRouterRegistered,
                         userRecord.mHandler, routerRecord));
+
+        mEventLogger.enqueue(EventLogger.StringEvent.from("registerRouter2",
+                "package: %s, uid: %d, pid: %d, router id: %d",
+                packageName, uid, pid, routerRecord.mRouterId));
     }
 
+    @GuardedBy("mLock")
     private void unregisterRouter2Locked(@NonNull IMediaRouter2 router, boolean died) {
         RouterRecord routerRecord = mAllRouterRecords.remove(router.asBinder());
         if (routerRecord == null) {
             Slog.w(TAG, "Ignoring unregistering unknown router2");
             return;
         }
+
+        mEventLogger.enqueue(
+                EventLogger.StringEvent.from(
+                        "unregisterRouter2",
+                        "package: %s, router id: %d",
+                        routerRecord.mPackageName,
+                        routerRecord.mRouterId));
 
         UserRecord userRecord = routerRecord.mUserRecord;
         userRecord.mRouterRecords.remove(routerRecord);
@@ -694,6 +751,12 @@ class MediaRouter2ServiceImpl {
         if (routerRecord.mDiscoveryPreference.equals(discoveryRequest)) {
             return;
         }
+
+        mEventLogger.enqueue(EventLogger.StringEvent.from(
+                "setDiscoveryRequestWithRouter2",
+                "router id: %d, discovery request: %s",
+                routerRecord.mRouterId, discoveryRequest.toString()));
+
         routerRecord.mDiscoveryPreference = discoveryRequest;
         routerRecord.mUserRecord.mHandler.sendMessage(
                 obtainMessage(UserHandler::notifyDiscoveryPreferenceChangedToManagers,
@@ -711,6 +774,11 @@ class MediaRouter2ServiceImpl {
         RouterRecord routerRecord = mAllRouterRecords.get(binder);
 
         if (routerRecord != null) {
+            mEventLogger.enqueue(EventLogger.StringEvent.from(
+                    "setRouteVolumeWithRouter2",
+                    "router id: %d, volume: %d",
+                    routerRecord.mRouterId, volume));
+
             routerRecord.mUserRecord.mHandler.sendMessage(
                     obtainMessage(UserHandler::setRouteVolumeOnHandler,
                             routerRecord.mUserRecord.mHandler,
@@ -791,6 +859,11 @@ class MediaRouter2ServiceImpl {
             return;
         }
 
+        mEventLogger.enqueue(EventLogger.StringEvent.from(
+                "selectRouteWithRouter2",
+                "router id: %d, route: %s",
+                routerRecord.mRouterId, route.getId()));
+
         routerRecord.mUserRecord.mHandler.sendMessage(
                 obtainMessage(UserHandler::selectRouteOnHandler,
                         routerRecord.mUserRecord.mHandler,
@@ -806,6 +879,11 @@ class MediaRouter2ServiceImpl {
             return;
         }
 
+        mEventLogger.enqueue(EventLogger.StringEvent.from(
+                "deselectRouteWithRouter2",
+                "router id: %d, route: %s",
+                routerRecord.mRouterId, route.getId()));
+
         routerRecord.mUserRecord.mHandler.sendMessage(
                 obtainMessage(UserHandler::deselectRouteOnHandler,
                         routerRecord.mUserRecord.mHandler,
@@ -820,6 +898,11 @@ class MediaRouter2ServiceImpl {
         if (routerRecord == null) {
             return;
         }
+
+        mEventLogger.enqueue(EventLogger.StringEvent.from(
+                "transferToRouteWithRouter2",
+                "router id: %d, route: %s",
+                routerRecord.mRouterId, route.getId()));
 
         String defaultRouteId =
                 routerRecord.mUserRecord.mHandler.mSystemProvider.getDefaultRoute().getId();
@@ -846,6 +929,11 @@ class MediaRouter2ServiceImpl {
             return;
         }
 
+        mEventLogger.enqueue(EventLogger.StringEvent.from(
+                "setSessionVolumeWithRouter2",
+                "router id: %d, session: %s, volume: %d",
+                routerRecord.mRouterId,  uniqueSessionId, volume));
+
         routerRecord.mUserRecord.mHandler.sendMessage(
                 obtainMessage(UserHandler::setSessionVolumeOnHandler,
                         routerRecord.mUserRecord.mHandler,
@@ -861,16 +949,20 @@ class MediaRouter2ServiceImpl {
             return;
         }
 
+        mEventLogger.enqueue(EventLogger.StringEvent.from(
+                "releaseSessionWithRouter2",
+                "router id: %d, session: %s",
+                routerRecord.mRouterId,  uniqueSessionId));
+
         routerRecord.mUserRecord.mHandler.sendMessage(
                 obtainMessage(UserHandler::releaseSessionOnHandler,
                         routerRecord.mUserRecord.mHandler,
                         DUMMY_REQUEST_ID, routerRecord, uniqueSessionId));
     }
 
-    ////////////////////////////////////////////////////////////
-    ////  ***Locked methods related to MediaRouter2Manager
-    ////   - Should have @NonNull/@Nullable on all arguments
-    ////////////////////////////////////////////////////////////
+    // End of locked methods that are used by MediaRouter2.
+
+    // Start of locked methods that are used by MediaRouter2Manager.
 
     private List<RoutingSessionInfo> getRemoteSessionsLocked(
             @NonNull IMediaRouter2Manager manager) {
@@ -891,6 +983,7 @@ class MediaRouter2ServiceImpl {
         return sessionInfos;
     }
 
+    @GuardedBy("mLock")
     private void registerManagerLocked(@NonNull IMediaRouter2Manager manager,
             int uid, int pid, @NonNull String packageName, int userId) {
         final IBinder binder = manager.asBinder();
@@ -901,6 +994,11 @@ class MediaRouter2ServiceImpl {
                     + packageName);
             return;
         }
+
+        mEventLogger.enqueue(
+                EventLogger.StringEvent.from("registerManager",
+                        "uid: %d, pid: %d, package: %s, userId: %d",
+                        uid, pid, packageName, userId));
 
         mContext.enforcePermission(Manifest.permission.MEDIA_CONTENT_CONTROL, pid, uid,
                 "Must hold MEDIA_CONTENT_CONTROL permission.");
@@ -938,6 +1036,15 @@ class MediaRouter2ServiceImpl {
             return;
         }
         UserRecord userRecord = managerRecord.mUserRecord;
+
+        mEventLogger.enqueue(
+                EventLogger.StringEvent.from(
+                        "unregisterManager",
+                        "package: %s, userId: %d, managerId: %d",
+                        managerRecord.mPackageName,
+                        userRecord.mUserId,
+                        managerRecord.mManagerId));
+
         userRecord.mManagerRecords.remove(managerRecord);
         managerRecord.dispose();
         disposeUserIfNeededLocked(userRecord); // since manager removed from user
@@ -949,6 +1056,11 @@ class MediaRouter2ServiceImpl {
         if (managerRecord == null) {
             return;
         }
+
+        mEventLogger.enqueue(
+                EventLogger.StringEvent.from("startScan",
+                        "manager: %d", managerRecord.mManagerId));
+
         managerRecord.startScan();
     }
 
@@ -958,6 +1070,11 @@ class MediaRouter2ServiceImpl {
         if (managerRecord == null) {
             return;
         }
+
+        mEventLogger.enqueue(
+                EventLogger.StringEvent.from("stopScan",
+                        "manager: %d", managerRecord.mManagerId));
+
         managerRecord.stopScan();
     }
 
@@ -971,6 +1088,11 @@ class MediaRouter2ServiceImpl {
             return;
         }
 
+        mEventLogger.enqueue(
+                EventLogger.StringEvent.from("setRouteVolumeWithManager",
+                        "managerId: %d, routeId: %s, volume: %d",
+                        managerRecord.mManagerId, route.getId(), volume));
+
         long uniqueRequestId = toUniqueRequestId(managerRecord.mManagerId, requestId);
         managerRecord.mUserRecord.mHandler.sendMessage(
                 obtainMessage(UserHandler::setRouteVolumeOnHandler,
@@ -979,12 +1101,17 @@ class MediaRouter2ServiceImpl {
     }
 
     private void requestCreateSessionWithManagerLocked(int requestId,
-            @NonNull IMediaRouter2Manager manager,
-            @NonNull RoutingSessionInfo oldSession, @NonNull MediaRoute2Info route) {
+            @NonNull IMediaRouter2Manager manager, @NonNull RoutingSessionInfo oldSession,
+            @NonNull MediaRoute2Info route) {
         ManagerRecord managerRecord = mAllManagerRecords.get(manager.asBinder());
         if (managerRecord == null) {
             return;
         }
+
+        mEventLogger.enqueue(
+                EventLogger.StringEvent.from("requestCreateSessionWithManager",
+                        "managerId: %d, routeId: %s",
+                        managerRecord.mManagerId, route.getId()));
 
         String packageName = oldSession.getClientPackageName();
 
@@ -1031,6 +1158,11 @@ class MediaRouter2ServiceImpl {
             return;
         }
 
+        mEventLogger.enqueue(
+                EventLogger.StringEvent.from("selectRouteWithManager",
+                        "managerId: %d, session: %s, routeId: %s",
+                        managerRecord.mManagerId, uniqueSessionId, route.getId()));
+
         // Can be null if the session is system's or RCN.
         RouterRecord routerRecord = managerRecord.mUserRecord.mHandler
                 .findRouterWithSessionLocked(uniqueSessionId);
@@ -1051,6 +1183,11 @@ class MediaRouter2ServiceImpl {
         if (managerRecord == null) {
             return;
         }
+
+        mEventLogger.enqueue(
+                EventLogger.StringEvent.from("deselectRouteWithManager",
+                        "managerId: %d, session: %s, routeId: %s",
+                        managerRecord.mManagerId, uniqueSessionId, route.getId()));
 
         // Can be null if the session is system's or RCN.
         RouterRecord routerRecord = managerRecord.mUserRecord.mHandler
@@ -1073,6 +1210,11 @@ class MediaRouter2ServiceImpl {
             return;
         }
 
+        mEventLogger.enqueue(
+                EventLogger.StringEvent.from("transferToRouteWithManager",
+                        "managerId: %d, session: %s, routeId: %s",
+                        managerRecord.mManagerId, uniqueSessionId, route.getId()));
+
         // Can be null if the session is system's or RCN.
         RouterRecord routerRecord = managerRecord.mUserRecord.mHandler
                 .findRouterWithSessionLocked(uniqueSessionId);
@@ -1094,6 +1236,11 @@ class MediaRouter2ServiceImpl {
             return;
         }
 
+        mEventLogger.enqueue(
+                EventLogger.StringEvent.from("setSessionVolumeWithManager",
+                        "managerId: %d, session: %s, volume: %d",
+                        managerRecord.mManagerId, uniqueSessionId, volume));
+
         long uniqueRequestId = toUniqueRequestId(managerRecord.mManagerId, requestId);
         managerRecord.mUserRecord.mHandler.sendMessage(
                 obtainMessage(UserHandler::setSessionVolumeOnHandler,
@@ -1102,14 +1249,18 @@ class MediaRouter2ServiceImpl {
     }
 
     private void releaseSessionWithManagerLocked(int requestId,
-            @NonNull IMediaRouter2Manager manager,
-            @NonNull String uniqueSessionId) {
+            @NonNull IMediaRouter2Manager manager, @NonNull String uniqueSessionId) {
         final IBinder binder = manager.asBinder();
         ManagerRecord managerRecord = mAllManagerRecords.get(binder);
 
         if (managerRecord == null) {
             return;
         }
+
+        mEventLogger.enqueue(
+                EventLogger.StringEvent.from("releaseSessionWithManager",
+                        "managerId: %d, session: %s",
+                        managerRecord.mManagerId, uniqueSessionId));
 
         RouterRecord routerRecord = managerRecord.mUserRecord.mHandler
                 .findRouterWithSessionLocked(uniqueSessionId);
@@ -1121,18 +1272,18 @@ class MediaRouter2ServiceImpl {
                         uniqueRequestId, routerRecord, uniqueSessionId));
     }
 
-    ////////////////////////////////////////////////////////////
-    ////  ***Locked methods used by both router2 and manager
-    ////   - Should have @NonNull/@Nullable on all arguments
-    ////////////////////////////////////////////////////////////
+    // End of locked methods that are used by MediaRouter2Manager.
 
+    // Start of locked methods that are used by both MediaRouter2 and MediaRouter2Manager.
+
+    @GuardedBy("mLock")
     private UserRecord getOrCreateUserRecordLocked(int userId) {
         UserRecord userRecord = mUserRecords.get(userId);
         if (userRecord == null) {
             userRecord = new UserRecord(userId);
             mUserRecords.put(userId, userRecord);
             userRecord.init();
-            if (userId == mCurrentUserId) {
+            if (isUserActiveLocked(userId)) {
                 userRecord.mHandler.sendMessage(
                         obtainMessage(UserHandler::start, userRecord.mHandler));
             }
@@ -1140,12 +1291,13 @@ class MediaRouter2ServiceImpl {
         return userRecord;
     }
 
+    @GuardedBy("mLock")
     private void disposeUserIfNeededLocked(@NonNull UserRecord userRecord) {
         // If there are no records left and the user is no longer current then go ahead
         // and purge the user record and all of its associated state.  If the user is current
         // then leave it alone since we might be connected to a route or want to query
         // the same route information again soon.
-        if (userRecord.mUserId != mCurrentUserId
+        if (!isUserActiveLocked(userRecord.mUserId)
                 && userRecord.mRouterRecords.isEmpty()
                 && userRecord.mManagerRecords.isEmpty()) {
             if (DEBUG) {
@@ -1157,6 +1309,8 @@ class MediaRouter2ServiceImpl {
             // Note: User already stopped (by switchUser) so no need to send stop message here.
         }
     }
+
+    // End of locked methods that are used by both MediaRouter2 and MediaRouter2Manager.
 
     static long toUniqueRequestId(int requesterId, int originalRequestId) {
         return ((long) requesterId << 32) | originalRequestId;
@@ -1197,6 +1351,38 @@ class MediaRouter2ServiceImpl {
             }
             return null;
         }
+
+        public void dump(@NonNull PrintWriter pw, @NonNull String prefix) {
+            pw.println(prefix + "UserRecord");
+
+            String indent = prefix + "  ";
+
+            pw.println(indent + "mUserId=" + mUserId);
+
+            pw.println(indent + "Router Records:");
+            if (!mRouterRecords.isEmpty()) {
+                for (RouterRecord routerRecord : mRouterRecords) {
+                    routerRecord.dump(pw, indent + "  ");
+                }
+            } else {
+                pw.println(indent + "<no router records>");
+            }
+
+            pw.println(indent + "Manager Records:");
+            if (!mManagerRecords.isEmpty()) {
+                for (ManagerRecord managerRecord : mManagerRecords) {
+                    managerRecord.dump(pw, indent + "  ");
+                }
+            } else {
+                pw.println(indent + "<no manager records>");
+            }
+
+            mCompositeDiscoveryPreference.dump(pw, indent);
+
+            if (!mHandler.runWithScissors(() -> mHandler.dump(pw, indent), 1000)) {
+                pw.println(indent + "<could not dump handler state>");
+            }
+        }
     }
 
     final class RouterRecord implements IBinder.DeathRecipient {
@@ -1211,7 +1397,6 @@ class MediaRouter2ServiceImpl {
         public final int mRouterId;
 
         public RouteDiscoveryPreference mDiscoveryPreference;
-        public MediaRoute2Info mSelectedRoute;
 
         RouterRecord(UserRecord userRecord, IMediaRouter2 router, int uid, int pid,
                 String packageName, boolean hasConfigureWifiDisplayPermission,
@@ -1235,6 +1420,24 @@ class MediaRouter2ServiceImpl {
         @Override
         public void binderDied() {
             routerDied(this);
+        }
+
+        public void dump(@NonNull PrintWriter pw, @NonNull String prefix) {
+            pw.println(prefix + "RouterRecord");
+
+            String indent = prefix + "  ";
+
+            pw.println(indent + "mPackageName=" + mPackageName);
+            pw.println(indent + "mSelectRouteSequenceNumbers=" + mSelectRouteSequenceNumbers);
+            pw.println(indent + "mUid=" + mUid);
+            pw.println(indent + "mPid=" + mPid);
+            pw.println(indent + "mHasConfigureWifiDisplayPermission="
+                    + mHasConfigureWifiDisplayPermission);
+            pw.println(indent + "mHasModifyAudioRoutingPermission="
+                    + mHasModifyAudioRoutingPermission);
+            pw.println(indent + "mRouterId=" + mRouterId);
+
+            mDiscoveryPreference.dump(pw, indent);
         }
     }
 
@@ -1267,8 +1470,20 @@ class MediaRouter2ServiceImpl {
             managerDied(this);
         }
 
-        public void dump(PrintWriter pw, String prefix) {
-            pw.println(prefix + this);
+        public void dump(@NonNull PrintWriter pw, @NonNull String prefix) {
+            pw.println(prefix + "ManagerRecord");
+
+            String indent = prefix + "  ";
+
+            pw.println(indent + "mPackageName=" + mPackageName);
+            pw.println(indent + "mManagerId=" + mManagerId);
+            pw.println(indent + "mUid=" + mUid);
+            pw.println(indent + "mPid=" + mPid);
+            pw.println(indent + "mIsScanning=" + mIsScanning);
+
+            if (mLastSessionCreationRequest != null) {
+                mLastSessionCreationRequest.dump(pw, indent);
+            }
         }
 
         public void startScan() {
@@ -1455,114 +1670,82 @@ class MediaRouter2ServiceImpl {
             }
         }
 
-        private void onProviderStateChangedOnHandler(@NonNull MediaRoute2Provider provider) {
-            MediaRoute2ProviderInfo currentInfo = provider.getProviderInfo();
+        public void dump(@NonNull PrintWriter pw, @NonNull String prefix) {
+            pw.println(prefix + "UserHandler");
 
+            String indent = prefix + "  ";
+            pw.println(indent + "mRunning=" + mRunning);
+
+            mWatcher.dump(pw, prefix);
+        }
+
+        private void onProviderStateChangedOnHandler(@NonNull MediaRoute2Provider provider) {
+            MediaRoute2ProviderInfo newInfo = provider.getProviderInfo();
             int providerInfoIndex =
                     indexOfRouteProviderInfoByUniqueId(provider.getUniqueId(), mLastProviderInfos);
-
-            MediaRoute2ProviderInfo prevInfo =
+            MediaRoute2ProviderInfo oldInfo =
                     providerInfoIndex == -1 ? null : mLastProviderInfos.get(providerInfoIndex);
-
-            // Ignore if no changes
-            if (Objects.equals(prevInfo, currentInfo)) {
+            if (oldInfo == newInfo) {
+                // Nothing to do.
                 return;
             }
 
-            boolean hasAddedOrModifiedRoutes = false;
-            boolean hasRemovedRoutes = false;
-
-            boolean isSystemProvider = provider.mIsSystemRouteProvider;
-
-            if (prevInfo == null) {
-                // Provider is being added.
-                mLastProviderInfos.add(currentInfo);
-                addToRoutesMap(currentInfo.getRoutes(), isSystemProvider);
-                // Check if new provider exposes routes.
-                hasAddedOrModifiedRoutes = !currentInfo.getRoutes().isEmpty();
-            } else if (currentInfo == null) {
-                // Provider is being removed.
-                hasRemovedRoutes = true;
-                mLastProviderInfos.remove(prevInfo);
-                removeFromRoutesMap(prevInfo.getRoutes(), isSystemProvider);
-            } else {
-                // Provider is being updated.
-                mLastProviderInfos.set(providerInfoIndex, currentInfo);
-                final Collection<MediaRoute2Info> currentRoutes = currentInfo.getRoutes();
-
-                // Checking for individual routes.
-                for (MediaRoute2Info route : currentRoutes) {
-                    if (!route.isValid()) {
-                        Slog.w(
-                                TAG,
-                                "onProviderStateChangedOnHandler: Ignoring invalid route : "
-                                        + route);
-                        continue;
-                    }
-
-                    MediaRoute2Info prevRoute = prevInfo.getRoute(route.getOriginalId());
-                    if (prevRoute == null || !Objects.equals(prevRoute, route)) {
-                        hasAddedOrModifiedRoutes = true;
-                        mLastNotifiedRoutesToPrivilegedRouters.put(route.getId(), route);
-                        if (!isSystemProvider) {
-                            mLastNotifiedRoutesToNonPrivilegedRouters.put(route.getId(), route);
-                        }
-                    }
+            Collection<MediaRoute2Info> newRoutes;
+            Set<String> newRouteIds;
+            if (newInfo != null) {
+                // Adding or updating a provider.
+                newRoutes = newInfo.getRoutes();
+                newRouteIds =
+                        newRoutes.stream().map(MediaRoute2Info::getId).collect(Collectors.toSet());
+                if (providerInfoIndex >= 0) {
+                    mLastProviderInfos.set(providerInfoIndex, newInfo);
+                } else {
+                    mLastProviderInfos.add(newInfo);
                 }
+            } else /* newInfo == null */ {
+                // Removing a provider.
+                mLastProviderInfos.remove(oldInfo);
+                newRouteIds = Collections.emptySet();
+                newRoutes = Collections.emptySet();
+            }
 
-                // Checking for individual removals
-                for (MediaRoute2Info prevRoute : prevInfo.getRoutes()) {
-                    if (currentInfo.getRoute(prevRoute.getOriginalId()) == null) {
-                        hasRemovedRoutes = true;
-                        mLastNotifiedRoutesToPrivilegedRouters.remove(prevRoute.getId());
-                        if (!isSystemProvider) {
-                            mLastNotifiedRoutesToNonPrivilegedRouters.remove(prevRoute.getId());
-                        }
-                    }
+            // Add new routes to the maps.
+            boolean hasAddedOrModifiedRoutes = false;
+            for (MediaRoute2Info newRouteInfo : newRoutes) {
+                if (!newRouteInfo.isValid()) {
+                    Slog.w(TAG, "onProviderStateChangedOnHandler: Ignoring invalid route : "
+                            + newRouteInfo);
+                    continue;
+                }
+                if (!provider.mIsSystemRouteProvider) {
+                    mLastNotifiedRoutesToNonPrivilegedRouters.put(
+                            newRouteInfo.getId(), newRouteInfo);
+                }
+                MediaRoute2Info oldRouteInfo =
+                        mLastNotifiedRoutesToPrivilegedRouters.put(
+                                newRouteInfo.getId(), newRouteInfo);
+                hasAddedOrModifiedRoutes |=
+                        oldRouteInfo == null || !oldRouteInfo.equals(newRouteInfo);
+            }
+
+            // Remove stale routes from the maps.
+            Collection<MediaRoute2Info> oldRoutes =
+                    oldInfo == null ? Collections.emptyList() : oldInfo.getRoutes();
+            boolean hasRemovedRoutes = false;
+            for (MediaRoute2Info oldRoute : oldRoutes) {
+                String oldRouteId = oldRoute.getId();
+                if (!newRouteIds.contains(oldRouteId)) {
+                    hasRemovedRoutes = true;
+                    mLastNotifiedRoutesToPrivilegedRouters.remove(oldRouteId);
+                    mLastNotifiedRoutesToNonPrivilegedRouters.remove(oldRouteId);
                 }
             }
 
             dispatchUpdates(
                     hasAddedOrModifiedRoutes,
                     hasRemovedRoutes,
-                    isSystemProvider,
+                    provider.mIsSystemRouteProvider,
                     mSystemProvider.getDefaultRoute());
-        }
-
-        /**
-         * Adds provided routes to {@link #mLastNotifiedRoutesToPrivilegedRouters}. Also adds them
-         * to {@link #mLastNotifiedRoutesToNonPrivilegedRouters} if they were provided by a
-         * non-system route provider. Overwrites any route with matching id that already exists.
-         *
-         * @param routes list of routes to be added.
-         * @param isSystemRoutes indicates whether routes come from a system route provider.
-         */
-        private void addToRoutesMap(
-                @NonNull Collection<MediaRoute2Info> routes, boolean isSystemRoutes) {
-            for (MediaRoute2Info route : routes) {
-                if (!isSystemRoutes) {
-                    mLastNotifiedRoutesToNonPrivilegedRouters.put(route.getId(), route);
-                }
-                mLastNotifiedRoutesToPrivilegedRouters.put(route.getId(), route);
-            }
-        }
-
-        /**
-         * Removes provided routes from {@link #mLastNotifiedRoutesToPrivilegedRouters}. Also
-         * removes them from {@link #mLastNotifiedRoutesToNonPrivilegedRouters} if they were
-         * provided by a non-system route provider.
-         *
-         * @param routes list of routes to be removed.
-         * @param isSystemRoutes whether routes come from a system route provider.
-         */
-        private void removeFromRoutesMap(
-                @NonNull Collection<MediaRoute2Info> routes, boolean isSystemRoutes) {
-            for (MediaRoute2Info route : routes) {
-                if (!isSystemRoutes) {
-                    mLastNotifiedRoutesToNonPrivilegedRouters.remove(route.getId());
-                }
-                mLastNotifiedRoutesToPrivilegedRouters.remove(route.getId());
-            }
         }
 
         /**
@@ -2339,6 +2522,17 @@ class MediaRouter2ServiceImpl {
             mManagerRequestId = managerRequestId;
             mOldSession = oldSession;
             mRoute = route;
+        }
+
+        public void dump(@NonNull PrintWriter pw, @NonNull String prefix) {
+            pw.println(prefix + "SessionCreationRequest");
+
+            String indent = prefix + "  ";
+
+            pw.println(indent + "mUniqueRequestId=" + mUniqueRequestId);
+            pw.println(indent + "mManagerRequestId=" + mManagerRequestId);
+            mOldSession.dump(pw, indent);
+            mRoute.dump(pw, prefix);
         }
     }
 }

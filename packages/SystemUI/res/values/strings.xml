@@ -14,6 +14,11 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ *
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 -->
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
@@ -142,7 +147,7 @@
     <string name="usb_debugging_secondary_user_title">USB debugging not allowed</string>
 
     <!-- Message of notification shown when trying to enable USB debugging but a secondary user is the current foreground user. -->
-    <string name="usb_debugging_secondary_user_message">The user currently signed in to this device can\'t turn on USB debugging. To use this feature, switch to the primary user.</string>
+    <string name="usb_debugging_secondary_user_message">The user currently signed in to this device can\'t turn on USB debugging. To use this feature, switch to an admin user.</string>
 
     <!-- Title of confirmation dialog for wireless debugging [CHAR LIMIT=80] -->
     <string name="hdmi_cec_set_menu_language_title">Do you want to change the system language to <xliff:g id="language" example="German">%1$s</xliff:g>?</string>
@@ -172,7 +177,7 @@
     <string name="wifi_debugging_secondary_user_title">Wireless debugging not allowed</string>
 
     <!-- Message of notification shown when trying to enable wireless debugging but a secondary user is the current foreground user. [CHAR LIMIT=NONE] -->
-    <string name="wifi_debugging_secondary_user_message">The user currently signed in to this device can\u2019t turn on wireless debugging. To use this feature, switch to the primary user.</string>
+    <string name="wifi_debugging_secondary_user_message">The user currently signed in to this device can\u2019t turn on wireless debugging. To use this feature, switch to an admin user.</string>
 
     <!-- Title of USB contaminant presence dialog [CHAR LIMIT=NONE] -->
     <string name="usb_contaminant_title">USB port disabled</string>
@@ -235,6 +240,8 @@
     <string name="screenshot_left_boundary_pct">Left boundary <xliff:g id="percent" example="50">%1$d</xliff:g> percent</string>
     <!-- Content description for the right boundary of the screenshot being cropped, with the current position as a percentage. [CHAR LIMIT=NONE] -->
     <string name="screenshot_right_boundary_pct">Right boundary <xliff:g id="percent" example="50">%1$d</xliff:g> percent</string>
+    <!-- Notification displayed when a screenshot is saved in a work profile. [CHAR LIMIT=NONE] -->
+    <string name="screenshot_work_profile_notification" translatable="false">Work screenshots are saved in the work <xliff:g id="app" example="Files">%1$s</xliff:g> app</string>
 
     <!-- Notification title displayed for screen recording [CHAR LIMIT=50]-->
     <string name="screenrecord_name">Screen Recorder</string>
@@ -246,6 +253,16 @@
     <string name="screenrecord_start_label">Start Recording?</string>
     <!-- Message reminding the user that sensitive information may be captured during a screen recording [CHAR_LIMIT=NONE]-->
     <string name="screenrecord_description">While recording, Android System can capture any sensitive information that\u2019s visible on your screen or played on your device. This includes passwords, payment info, photos, messages, and audio.</string>
+    <!-- Dropdown option to record the entire screen [CHAR_LIMIT=30]-->
+    <string name="screenrecord_option_entire_screen">Record entire screen</string>
+    <!-- Dropdown option to record a single app [CHAR_LIMIT=30]-->
+    <string name="screenrecord_option_single_app">Record a single app</string>
+    <!-- Message reminding the user that sensitive information may be captured during a full screen recording for the updated dialog that includes partial screen sharing option [CHAR_LIMIT=350]-->
+    <string name="screenrecord_warning_entire_screen">While you\'re recording, Android has access to anything visible on your screen or played on your device. So be careful with passwords, payment details, messages, or other sensitive information.</string>
+    <!-- Message reminding the user that sensitive information may be captured during a single app screen recording for the updated dialog that includes partial screen sharing option [CHAR_LIMIT=350]-->
+    <string name="screenrecord_warning_single_app">While you\'re recording an app, Android has access to anything shown or played on that app. So be careful with passwords, payment details, messages, or other sensitive information.</string>
+    <!-- Button to start a screen recording in the updated screen record dialog that allows to select an app to record [CHAR LIMIT=50]-->
+    <string name="screenrecord_start_recording">Start recording</string>
     <!-- Label for a switch to enable recording audio [CHAR LIMIT=NONE]-->
     <string name="screenrecord_audio_label">Record audio</string>
     <!-- Label for the option to record audio from the device [CHAR LIMIT=NONE]-->
@@ -389,6 +406,12 @@
     <string name="fingerprint_dialog_use_fingerprint_instead">Can\u2019t recognize face. Use fingerprint instead.</string>
     <!-- Message shown to inform the user a face cannot be recognized and fingerprint should instead be used.[CHAR LIMIT=50] -->
     <string name="keyguard_face_failed_use_fp">@string/fingerprint_dialog_use_fingerprint_instead</string>
+    <!-- Message shown to inform the user a face cannot be recognized. [CHAR LIMIT=25] -->
+    <string name="keyguard_face_failed">Can\u2019t recognize face</string>
+    <!-- Message shown to suggest using fingerprint sensor to authenticate after another biometric failed. [CHAR LIMIT=25] -->
+    <string name="keyguard_suggest_fingerprint">Use fingerprint instead</string>
+    <!-- Message shown to inform the user that face unlock is not available. [CHAR LIMIT=65] -->
+    <string name="keyguard_face_unlock_unavailable">Face unlock unavailable.</string>
 
     <!-- Content description of the bluetooth icon when connected for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
     <string name="accessibility_bluetooth_connected">Bluetooth connected.</string>
@@ -627,7 +650,7 @@
     <!-- QuickSettings: Label for the toggle that controls whether display color correction is enabled. [CHAR LIMIT=NONE] -->
     <string name="quick_settings_color_correction_label">Color correction</string>
     <!-- QuickSettings: Control panel: Label for button that navigates to user settings. [CHAR LIMIT=NONE] -->
-    <string name="quick_settings_more_user_settings">User settings</string>
+    <string name="quick_settings_more_user_settings">Manage users</string>
     <!-- QuickSettings: Control panel: Label for button that dismisses control panel. [CHAR LIMIT=NONE] -->
     <string name="quick_settings_done">Done</string>
     <!-- QuickSettings: Control panel: Label for button that dismisses user switcher control panel. [CHAR LIMIT=NONE] -->
@@ -768,6 +791,62 @@
     <string name="sensor_privacy_mic_camera_unblocked_toast_content">
         Microphone and camera available
     </string>
+
+    <!--- Title of dialog triggered if the microphone sensor privacy changed its state to unblocked. [CHAR LIMIT=NONE] -->
+    <string name="sensor_privacy_mic_turned_on_dialog_title">
+        Microphone turned on
+    </string>
+
+    <!--- Title of dialog triggered if the microphone sensor privacy changed its state to blocked. [CHAR LIMIT=NONE] -->
+    <string name="sensor_privacy_mic_turned_off_dialog_title">
+        Microphone turned off
+    </string>
+
+    <!--- Content of dialog triggered if the microphone sensor privacy changed its state to unblocked. [CHAR LIMIT=NONE] -->
+    <string name="sensor_privacy_mic_unblocked_dialog_content">
+        Microphone is enabled for all apps and services.
+    </string>
+
+    <!--- Content of dialog triggered if the microphone sensor privacy changed its state to blocked.
+        and there are no active exceptions for explicit user interaction [CHAR LIMIT=NONE] -->
+    <string name="sensor_privacy_mic_blocked_no_exception_dialog_content">
+        Microphone access is disabled for all apps and services.
+        You can enable microphone access in Settings &gt; Privacy &gt; Microphone.
+    </string>
+
+    <!--- Content of dialog triggered if the microphone sensor privacy changed its state to blocked.
+        and there are active exceptions for explicit user interaction [CHAR LIMIT=NONE] -->
+    <string name="sensor_privacy_mic_blocked_with_exception_dialog_content">
+        Microphone access is disabled for all apps and services.
+        You can change this in Settings &gt; Privacy &gt; Microphone.
+    </string>
+
+    <!--- Title of dialog triggered if the camera sensor privacy changed its state to unblocked. [CHAR LIMIT=NONE] -->
+    <string name="sensor_privacy_camera_turned_on_dialog_title">
+        Camera turned on
+    </string>
+
+    <!--- Title of dialog triggered if the camera sensor privacy changed its state to blocked. [CHAR LIMIT=NONE] -->
+    <string name="sensor_privacy_camera_turned_off_dialog_title">
+        Camera turned off
+    </string>
+
+    <!--- Content of dialog triggered if the camera sensor privacy changed its state to unblocked. [CHAR LIMIT=NONE] -->
+    <string name="sensor_privacy_camera_unblocked_dialog_content">
+        Camera is enabled for all apps and services.
+    </string>
+
+    <!--- Content of dialog triggered if the camera sensor privacy changed its state to blocked. [CHAR LIMIT=NONE] -->
+    <string name="sensor_privacy_camera_blocked_dialog_content">
+        Camera access is disabled for all apps and services.
+    </string>
+
+    <!--- Content of dialog triggered if the microphone sensor privacy changed its state to blocked.
+        and there are active exceptions for explicit user interaction [CHAR LIMIT=NONE] -->
+    <string name="sensor_privacy_htt_blocked_dialog_content">To use the microphone button, enable microphone access in Settings.</string>
+
+    <!-- Sensor privacy dialog: Button to open system settings [CHAR LIMIT=50] -->
+    <string name="sensor_privacy_dialog_open_settings">Open settings.</string>
 
     <!-- Default name for the media device shown in the output switcher when the name is not available [CHAR LIMIT=30] -->
     <string name="media_seamless_other_device">Other device</string>
@@ -954,7 +1033,41 @@
     <!-- Media projection permission dialog warning title. [CHAR LIMIT=NONE] -->
     <string name="media_projection_dialog_title">Start recording or casting with <xliff:g id="app_seeking_permission" example="Hangouts">%s</xliff:g>?</string>
 
-    <!-- Media projection permission dialog permanent grant check box. [CHAR LIMIT=NONE] -->
+    <!-- Media projection permission dialog title. [CHAR LIMIT=NONE] -->
+    <string name="media_projection_permission_dialog_title">Allow <xliff:g id="app_seeking_permission" example="Meet">%s</xliff:g> to share or record?</string>
+
+    <!-- Media projection permission dropdown option for capturing the whole screen. [CHAR LIMIT=30] -->
+    <string name="media_projection_permission_dialog_option_entire_screen">Entire screen</string>
+
+    <!-- Media projection permission dropdown option for capturing single app. [CHAR LIMIT=30] -->
+    <string name="media_projection_permission_dialog_option_single_app">A single app</string>
+
+    <!-- Media projection permission warning for capturing the whole screen. [CHAR LIMIT=350] -->
+    <string name="media_projection_permission_dialog_warning_entire_screen">When you\'re sharing, recording, or casting, <xliff:g id="app_seeking_permission" example="Meet">%s</xliff:g> has access to anything visible on your screen or played on your device. So be careful with passwords, payment details, messages, or other sensitive information.</string>
+
+    <!-- Media projection permission warning for capturing an app. [CHAR LIMIT=350] -->
+    <string name="media_projection_permission_dialog_warning_single_app">When you\'re sharing, recording, or casting an app, <xliff:g id="app_seeking_permission" example="Meet">%s</xliff:g> has access to anything shown or played on that app. So be careful with passwords, payment details, messages, or other sensitive information.</string>
+
+    <!-- Media projection permission button to continue with app selection or recording [CHAR LIMIT=60] -->
+    <string name="media_projection_permission_dialog_continue">Continue</string>
+
+    <!-- Title of the dialog that allows to select an app to share or record [CHAR LIMIT=NONE] -->
+    <string name="media_projection_permission_app_selector_title">Share or record an app</string>
+
+    <!-- Media projection permission dialog title when there is no app name (e.g. it could be a system service when casting). [CHAR LIMIT=100] -->
+    <string name="media_projection_permission_dialog_system_service_title">Allow this app to share or record?</string>
+
+    <!-- Media projection permission warning for capturing the whole screen when a system service requests it (e.g. when casting). [CHAR LIMIT=350] -->
+    <string name="media_projection_permission_dialog_system_service_warning_entire_screen">When you\'re sharing, recording, or casting, this app has access to anything visible on your screen or played on your device. So be careful with passwords, payment details, messages, or other sensitive information.</string>
+
+    <!-- Media projection permission warning for capturing a single app when a system service requests it (e.g. when casting). [CHAR LIMIT=350] -->
+    <string name="media_projection_permission_dialog_system_service_warning_single_app">When you\'re sharing, recording, or casting an app, this app has access to anything shown or played on that app. So be careful with passwords, payment details, messages, or other sensitive information.</string>
+
+    <!-- Title for the dialog that is shown when screen capturing is disabled by enterprise policy. [CHAR LIMIT=100] -->
+    <string name="screen_capturing_disabled_by_policy_dialog_title">Blocked by your IT admin</string>
+
+    <!-- Description for the dialog that is shown when screen capturing is disabled by enterprise policy. [CHAR LIMIT=350] -->
+    <string name="screen_capturing_disabled_by_policy_dialog_description">Screen capturing is disabled by device policy</string>
 
     <!-- The text to clear all notifications. [CHAR LIMIT=60] -->
     <string name="clear_all_notifications_text">Clear all</string>
@@ -1139,6 +1252,11 @@
     <!-- Content description for accessibility: Hint if click will disable. [CHAR LIMIT=NONE] -->
     <string name="volume_odi_captions_hint_disable">disable</string>
 
+    <!-- Sound and vibration settings dialog title. [CHAR LIMIT=30] -->
+    <string name="sound_settings">Sound &amp; vibration</string>
+    <!-- Label for button to go to sound settings screen [CHAR_LIMIT=30] -->
+    <string name="volume_panel_dialog_settings_button">Settings</string>
+
     <!-- content description for audio output chooser [CHAR LIMIT=NONE]-->
 
     <!-- Screen pinning dialog title. -->
@@ -1256,7 +1374,7 @@
     <string name="wallet_lockscreen_settings_label">Lock screen settings</string>
 
     <!-- QR Code Scanner label, title [CHAR LIMIT=32] -->
-    <string name="qr_code_scanner_title">Scan QR code</string>
+    <string name="qr_code_scanner_title">QR code scanner</string>
 
     <!-- Name of the work status bar icon. -->
     <string name="status_bar_work">Work profile</string>
@@ -1635,8 +1753,9 @@
     <!-- The tile in quick settings is unavailable. [CHAR LIMIT=32] -->
     <string name="tile_unavailable">Unavailable</string>
 
-    <!-- The tile in quick settings is disabled by a device administration policy [CHAR LIMIT=32] -->
-    <string name="tile_disabled">Disabled</string>
+    <!-- Accessibility text for the click action on a tile that is disabled by policy. This will
+         be used following "Double-tap to..." [CHAR LIMIT=NONE] -->
+    <string name="accessibility_tile_disabled_by_policy_action_description">learn more</string>
 
     <!-- SysUI Tuner: Button that leads to the navigation bar customization screen [CHAR LIMIT=60] -->
     <string name="nav_bar">Navigation bar</string>
@@ -1852,10 +1971,10 @@
     <!-- URL for care instructions for overheating devices -->
     <string name="high_temp_dialog_help_url" translatable="false"></string>
 
-    <!-- Title for alarm dialog alerting user the usb adapter has reached a certain temperature that should disconnect charging cable immediately. [CHAR LIMIT=30] -->
-    <string name="high_temp_alarm_title">Unplug charger</string>
-    <!-- Text body for dialog alerting user the usb adapter has reached a certain temperature that should disconnect charging cable immediately. [CHAR LIMIT=300] -->
-    <string name="high_temp_alarm_notify_message">There\u2019s an issue charging this device. Unplug the power adapter, and take care as the cable may be warm.</string>
+    <!-- Title for alarm dialog alerting user the usb charger or accessorry has reached a certain temperature that should unplug the device immediately. [CHAR LIMIT=30] -->
+    <string name="high_temp_alarm_title">Unplug your device</string>
+    <!-- Text body for dialog alerting user the usb charger or accessorry has reached a certain temperature that should unplug the device immediately. [CHAR LIMIT=300] -->
+    <string name="high_temp_alarm_notify_message">Your device is getting warm near the charging port. If it\u2019s connected to a charger or USB accessory, unplug it, and take care as the cable may also be warm.</string>
     <!-- Text for See care steps button [CHAR LIMIT=300] -->
     <string name="high_temp_alarm_help_care_steps">See care steps</string>
     <!-- Text link directs to usb overheat help page. -->
@@ -1980,11 +2099,23 @@
     <!-- Message body of the dialog to turn off data usage [CHAR LIMIT=NONE] -->
     <string name="mobile_data_disable_message">You won\’t have access to data or the internet through <xliff:g id="carrier" example="T-Mobile">%s</xliff:g>. Internet will only be available via Wi-Fi.</string>
 
+    <!-- Message body of the dialog to turn off mobile data when IMS is registered on C_IWLAN and device is in a call [CHAR LIMIT=NONE] -->
+    <string name="mobile_data_disable_ciwlan_call_message">Disabling mobile data may cause ongoing call disconnect.</string>
+
     <!-- Internet dialog, summary of mobile network when there is an ongoing call on the non default data subscription. [CHAR LIMIT=NONE] -->
     <string name="mobile_data_summary_not_allowed_to_disable_data">Unavailable during a call on the other SIM</string>
 
     <!-- Text used to refer to the user's current carrier in mobile_data_disable_message if the users's mobile network carrier name is not available [CHAR LIMIT=NONE] -->
     <string name="mobile_data_disable_message_default_carrier">your carrier</string>
+
+    <!-- Title of the dialog to turn off data usage [CHAR LIMIT=NONE] -->
+    <string name="auto_data_switch_disable_title">Switch back to <xliff:g id="carrier" example="T-Mobile">%s</xliff:g>?</string>
+    <!-- Message body of the dialog to turn off data usage [CHAR LIMIT=NONE] -->
+    <string name="auto_data_switch_disable_message">Mobile data won\’t automatically switch based on availability</string>
+    <!-- Negative button title of the quick settings switch back to DDS dialog [CHAR LIMIT=NONE] -->
+    <string name="auto_data_switch_dialog_negative_button">No thanks</string>
+    <!-- Positive button title of the quick settings switch back to DDS dialog [CHAR LIMIT=NONE] -->
+    <string name="auto_data_switch_dialog_positive_button">Yes, switch</string>
 
     <!-- Warning shown when user input has been blocked due to another app overlaying screen
      content. Since we don't know what the app is showing on top of the input target, we
@@ -2152,6 +2283,15 @@
     <string name="accessibility_floating_button_migration_tooltip">Tap to open accessibility features. Customize or replace this button in Settings.\n\n<annotation id="link">View settings</annotation></string>
     <!-- Message for the accessibility floating button docking tooltip. It shows when the user first time drag the button. It will tell the user about docking behavior. [CHAR LIMIT=70] -->
     <string name="accessibility_floating_button_docking_tooltip">Move button to the edge to hide it temporarily</string>
+    <!-- Text for the undo action button of the message view of the accessibility floating menu to perform undo operation. [CHAR LIMIT=30]-->
+    <string name="accessibility_floating_button_undo">Undo</string>
+
+    <!-- Text for the message view with undo action of the accessibility floating menu to show how many features shortcuts were removed. [CHAR LIMIT=30]-->
+    <string name="accessibility_floating_button_undo_message_text">{count, plural,
+        =1 {{label} shortcut removed}
+        other {# shortcuts removed}
+    }</string>
+
     <!-- Action in accessibility menu to move the accessibility floating button to the top left of the screen. [CHAR LIMIT=30] -->
     <string name="accessibility_floating_button_action_move_top_left">Move top left</string>
     <!-- Action in accessibility menu to move the accessibility floating button to the top right of the screen. [CHAR LIMIT=30] -->
@@ -2164,6 +2304,8 @@
     <string name="accessibility_floating_button_action_move_to_edge_and_hide_to_half">Move to edge and hide</string>
     <!-- Action in accessibility menu to move the accessibility floating button out the edge and show. [CHAR LIMIT=36]-->
     <string name="accessibility_floating_button_action_move_out_edge_and_show">Move out edge and show</string>
+    <!-- Action in accessibility menu to remove the accessibility floating menu view on the screen. [CHAR LIMIT=36]-->
+    <string name="accessibility_floating_button_action_remove_menu">Remove</string>
     <!-- Action in accessibility menu to toggle on/off the accessibility feature. [CHAR LIMIT=30]-->
     <string name="accessibility_floating_button_action_double_tap_to_toggle">toggle</string>
 
@@ -2491,6 +2633,12 @@
          Summary indicating that a SIM has an active mobile data connection [CHAR LIMIT=50] -->
     <string name="mobile_data_connection_active">Connected</string>
     <!-- Provider Model:
+         Summary indicating that a SIM is temporarily connected to mobile data [CHAR LIMIT=50] -->
+    <string name="mobile_data_temp_connection_active">Temporarily connected</string>
+    <!-- Provider Model:
+     Summary indicating that a SIM is temporarily connected to mobile data [CHAR LIMIT=50] -->
+    <string name="mobile_data_poor_connection">Poor connection</string>
+    <!-- Provider Model:
      Summary indicating that a SIM has no mobile data connection [CHAR LIMIT=50] -->
     <string name="mobile_data_off_summary">Mobile data won\u0027t auto\u2011connect</string>
     <!-- Provider Model:
@@ -2635,4 +2783,19 @@
 
     <!-- Time format for the Dream Time Complication for 24-hour time format [CHAR LIMIT=NONE] -->
     <string name="dream_time_complication_24_hr_time_format">kk:mm</string>
+
+    <!-- Title for the log access confirmation dialog. [CHAR LIMIT=NONE] -->
+    <string name="log_access_confirmation_title">Allow <xliff:g id="log_access_app_name" example="Example App">%s</xliff:g> to access all device logs?</string>
+    <!-- Label for the allow button on the log access confirmation dialog. [CHAR LIMIT=40] -->
+    <string name="log_access_confirmation_allow">Allow one-time access</string>
+    <!-- Label for the deny button on the log access confirmation dialog. [CHAR LIMIT=20] -->
+    <string name="log_access_confirmation_deny">Don\u2019t allow</string>
+
+    <!-- Content for the log access confirmation dialog. [CHAR LIMIT=NONE]-->
+    <string name="log_access_confirmation_body">Device logs record what happens on your device. Apps can use these logs to find and fix issues.\n\nSome logs may contain sensitive info, so only allow apps you trust to access all device logs.
+        \n\nIf you don’t allow this app to access all device logs, it can still access its own logs. Your device manufacturer may still be able to access some logs or info on your device.
+    </string>
+
+    <!-- Learn more URL for the log access confirmation dialog. [DO NOT TRANSLATE]-->
+    <string name="log_access_confirmation_learn_more" translatable="false">&lt;a href="https://support.google.com/android?p=system_logs#topic=7313011"&gt;Learn more&lt;/a&gt;</string>
 </resources>

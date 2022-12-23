@@ -40,6 +40,7 @@ import androidx.lifecycle.LifecycleOwner;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.statusbar.RegisterStatusBarResult;
+import com.android.keyguard.AuthKeyguardMessageArea;
 import com.android.systemui.Dumpable;
 import com.android.systemui.animation.ActivityLaunchAnimator;
 import com.android.systemui.animation.RemoteTransitionAdapter;
@@ -195,8 +196,6 @@ public interface CentralSurfaces extends Dumpable, ActivityStarter, LifecycleOwn
 
     void collapsePanelOnMainThread();
 
-    void collapsePanelWithDuration(int duration);
-
     void togglePanel();
 
     void start();
@@ -219,15 +218,14 @@ public interface CentralSurfaces extends Dumpable, ActivityStarter, LifecycleOwn
 
     ViewGroup getBouncerContainer();
 
+    /** Get the Keyguard Message Area that displays auth messages. */
+    AuthKeyguardMessageArea getKeyguardMessageArea();
+
     int getStatusBarHeight();
 
     void updateQsExpansionEnabled();
 
     boolean isShadeDisabled();
-
-    void requestNotificationUpdate(String reason);
-
-    void requestFaceAuth(boolean userInitiatedRequest);
 
     @Override
     void startActivity(Intent intent, boolean onlyProvisioned, boolean dismissShade,
@@ -254,15 +252,11 @@ public interface CentralSurfaces extends Dumpable, ActivityStarter, LifecycleOwn
     @Override
     void startActivity(Intent intent, boolean dismissShade, Callback callback);
 
-    void setQsExpanded(boolean expanded);
-
     boolean isWakeUpComingFromTouch();
 
     boolean isFalsingThresholdNeeded();
 
     void onKeyguardViewManagerStatesUpdated();
-
-    void setPanelExpanded(boolean isExpanded);
 
     ViewGroup getNotificationScrollLayout();
 
@@ -306,9 +300,6 @@ public interface CentralSurfaces extends Dumpable, ActivityStarter, LifecycleOwn
     void showWirelessChargingAnimation(int batteryLevel);
 
     void checkBarModes();
-
-    // Called by NavigationBarFragment
-    void setQsScrimEnabled(boolean scrimEnabled);
 
     void updateBubblesVisibility();
 
@@ -381,12 +372,8 @@ public interface CentralSurfaces extends Dumpable, ActivityStarter, LifecycleOwn
 
     void showKeyguardImpl();
 
-    boolean isInLaunchTransition();
-
     void fadeKeyguardAfterLaunchTransition(Runnable beforeFading,
             Runnable endRunnable, Runnable cancelRunnable);
-
-    void fadeKeyguardWhilePulsing();
 
     void animateKeyguardUnoccluding();
 
@@ -409,6 +396,9 @@ public interface CentralSurfaces extends Dumpable, ActivityStarter, LifecycleOwn
     boolean onMenuPressed();
 
     void endAffordanceLaunch();
+
+    /** Should the keyguard be hidden immediately in response to a back press/gesture. */
+    boolean shouldKeyguardHideImmediately();
 
     boolean onBackPressed();
 
@@ -438,13 +428,14 @@ public interface CentralSurfaces extends Dumpable, ActivityStarter, LifecycleOwn
 
     void showPinningEscapeToast();
 
-    KeyguardBottomAreaView getKeyguardBottomAreaView();
-
     void setBouncerShowing(boolean bouncerShowing);
 
     void setBouncerShowingOverDream(boolean bouncerShowingOverDream);
 
     void collapseShade();
+
+    /** Collapse the shade, but conditional on a flag specific to the trigger of a bugreport. */
+    void collapseShadeForBugreport();
 
     int getWakefulnessState();
 
@@ -463,7 +454,11 @@ public interface CentralSurfaces extends Dumpable, ActivityStarter, LifecycleOwn
 
     void setTransitionToFullShadeProgress(float transitionToFullShadeProgress);
 
-    void setBouncerHiddenFraction(float expansion);
+    /**
+     * Sets the amount of progress to the bouncer being fully hidden/visible. 1 means the bouncer
+     * is fully hidden, while 0 means the bouncer is visible.
+     */
+    void setPrimaryBouncerHiddenFraction(float expansion);
 
     @VisibleForTesting
     void updateScrimController();
@@ -503,11 +498,7 @@ public interface CentralSurfaces extends Dumpable, ActivityStarter, LifecycleOwn
 
     boolean isBouncerShowingOverDream();
 
-    void onBouncerPreHideAnimation();
-
     boolean isKeyguardSecure();
-
-    NotificationPanelViewController getPanelController();
 
     NotificationGutsManager getGutsManager();
 

@@ -23,8 +23,8 @@ import com.android.internal.logging.MetricsLogger
 import com.android.internal.logging.testing.UiEventLoggerFake
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.dump.DumpManager
-import com.android.systemui.media.MediaHost
-import com.android.systemui.media.MediaHostState
+import com.android.systemui.media.controls.ui.MediaHost
+import com.android.systemui.media.controls.ui.MediaHostState
 import com.android.systemui.plugins.qs.QSTile
 import com.android.systemui.plugins.qs.QSTileView
 import com.android.systemui.qs.customize.QSCustomizerController
@@ -120,8 +120,7 @@ class QuickQSPanelControllerTest : SysuiTestCase() {
 
     @Test
     fun mediaExpansion_afterConfigChange_inLandscape_collapsedInLandscapeTrue_updatesToCollapsed() {
-        // times(2) because both controller and base controller are registering their listeners
-        verify(quickQSPanel, times(2)).addOnConfigurationChangedListener(captor.capture())
+        verify(quickQSPanel).addOnConfigurationChangedListener(captor.capture())
 
         // verify that media starts in the expanded state by default
         verify(mediaHost).expansion = MediaHostState.EXPANDED
@@ -136,8 +135,7 @@ class QuickQSPanelControllerTest : SysuiTestCase() {
 
     @Test
     fun mediaExpansion_afterConfigChange_landscape_collapsedInLandscapeFalse_remainsExpanded() {
-        // times(2) because both controller and base controller are registering their listeners
-        verify(quickQSPanel, times(2)).addOnConfigurationChangedListener(captor.capture())
+        verify(quickQSPanel).addOnConfigurationChangedListener(captor.capture())
         reset(mediaHost)
 
         usingCollapsedLandscapeMedia = false

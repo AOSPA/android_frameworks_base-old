@@ -25,18 +25,11 @@ import static android.view.KeyEvent.KEYCODE_DPAD_RIGHT;
 import static android.view.KeyEvent.KEYCODE_DPAD_UP;
 import static android.view.KeyEvent.KEYCODE_ENTER;
 
-import android.animation.ValueAnimator;
 import android.app.PendingIntent;
 import android.app.RemoteAction;
 import android.content.Context;
 import android.graphics.Rect;
-import android.graphics.drawable.Drawable;
 import android.os.Handler;
-import android.text.Annotation;
-import android.text.Spannable;
-import android.text.SpannableString;
-import android.text.SpannedString;
-import android.util.AttributeSet;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.SurfaceControl;
@@ -49,7 +42,6 @@ import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
-import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -61,7 +53,6 @@ import com.android.wm.shell.pip.PipUtils;
 import com.android.wm.shell.protolog.ShellProtoLogGroup;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -71,25 +62,19 @@ import java.util.List;
  */
 public class TvPipMenuView extends FrameLayout implements View.OnClickListener {
     private static final String TAG = "TvPipMenuView";
-    private static final boolean DEBUG = TvPipController.DEBUG;
 
     private static final int FIRST_CUSTOM_ACTION_POSITION = 3;
 
-    @Nullable
-    private Listener mListener;
+    private final Listener mListener;
 
     private final LinearLayout mActionButtonsContainer;
     private final View mMenuFrameView;
     private final List<TvWindowMenuActionButton> mAdditionalButtons = new ArrayList<>();
     private final View mPipFrameView;
     private final View mPipView;
-    private final TextView mEduTextView;
-    private final View mEduTextContainerView;
+    private final TvPipMenuEduTextDrawer mEduTextDrawer;
     private final int mPipMenuOuterSpace;
     private final int mPipMenuBorderWidth;
-    private final int mEduTextFadeExitAnimationDurationMs;
-    private final int mEduTextSlideExitAnimationDurationMs;
-    private int mEduTextHeight;
 
     private final ImageView mArrowUp;
     private final ImageView mArrowRight;
@@ -117,24 +102,16 @@ public class TvPipMenuView extends FrameLayout implements View.OnClickListener {
     private final int mResizeAnimationDuration;
 
     private final AccessibilityManager mA11yManager;
+    private final Handler mMainHandler;
 
-    public TvPipMenuView(@NonNull Context context) {
-        this(context, null);
-    }
-
-    public TvPipMenuView(@NonNull Context context, @Nullable AttributeSet attrs) {
-        this(context, attrs, 0);
-    }
-
-    public TvPipMenuView(@NonNull Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
-        this(context, attrs, defStyleAttr, 0);
-    }
-
-    public TvPipMenuView(@NonNull Context context, @Nullable AttributeSet attrs, int defStyleAttr,
-            int defStyleRes) {
-        super(context, attrs, defStyleAttr, defStyleRes);
+    public TvPipMenuView(@NonNull Context context, @NonNull Handler mainHandler,
+            @NonNull Listener listener) {
+        super(context, null, 0, 0);
 
         inflate(context, R.layout.tv_pip_menu, this);
+
+        mMainHandler = mainHandler;
+        mListener = listener;
 
         mA11yManager = context.getSystemService(AccessibilityManager.class);
 
@@ -167,9 +144,6 @@ public class TvPipMenuView extends FrameLayout implements View.OnClickListener {
         mArrowLeft = findViewById(R.id.tv_pip_menu_arrow_left);
         mA11yDoneButton = findViewById(R.id.tv_pip_menu_done_button);
 
-        mEduTextView = findViewById(R.id.tv_pip_menu_edu_text);
-        mEduTextContainerView = findViewById(R.id.tv_pip_menu_edu_text_container);
-
         mResizeAnimationDuration = context.getResources().getInteger(
                 R.integer.config_pipResizeAnimationDuration);
         mPipMenuFadeAnimationDuration = context.getResources()
@@ -179,63 +153,18 @@ public class TvPipMenuView extends FrameLayout implements View.OnClickListener {
                 .getDimensionPixelSize(R.dimen.pip_menu_outer_space);
         mPipMenuBorderWidth = context.getResources()
                 .getDimensionPixelSize(R.dimen.pip_menu_border_width);
-        mEduTextHeight = context.getResources()
-                .getDimensionPixelSize(R.dimen.pip_menu_edu_text_view_height);
-        mEduTextFadeExitAnimationDurationMs = context.getResources()
-                .getInteger(R.integer.pip_edu_text_view_exit_animation_duration_ms);
-        mEduTextSlideExitAnimationDurationMs = context.getResources()
-                .getInteger(R.integer.pip_edu_text_window_exit_animation_duration_ms);
 
-        initEduText();
+        mEduTextDrawer = new TvPipMenuEduTextDrawer(mContext, mainHandler, mListener);
+        ((FrameLayout) findViewById(R.id.tv_pip_menu_edu_text_drawer_placeholder))
+                .addView(mEduTextDrawer);
     }
 
-    void initEduText() {
-        final SpannedString eduText = (SpannedString) getResources().getText(R.string.pip_edu_text);
-        final SpannableString spannableString = new SpannableString(eduText);
-        Arrays.stream(eduText.getSpans(0, eduText.length(), Annotation.class)).findFirst()
-                .ifPresent(annotation -> {
-                    final Drawable icon =
-                            getResources().getDrawable(R.drawable.home_icon, mContext.getTheme());
-                    if (icon != null) {
-                        icon.mutate();
-                        icon.setBounds(0, 0, icon.getIntrinsicWidth(), icon.getIntrinsicHeight());
-                        spannableString.setSpan(new CenteredImageSpan(icon),
-                                eduText.getSpanStart(annotation),
-                                eduText.getSpanEnd(annotation),
-                                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-                    }
-                });
-
-        mEduTextView.setText(spannableString);
-    }
-
-    void setEduTextActive(boolean active) {
-        mEduTextView.setSelected(active);
-    }
-
-    void hideEduText() {
-        final ValueAnimator heightAnimation = ValueAnimator.ofInt(mEduTextHeight, 0);
-        heightAnimation.setDuration(mEduTextSlideExitAnimationDurationMs);
-        heightAnimation.setInterpolator(TvPipInterpolators.BROWSE);
-        heightAnimation.addUpdateListener(animator -> {
-            mEduTextHeight = (int) animator.getAnimatedValue();
-        });
-        mEduTextView.animate()
-                .alpha(0f)
-                .setInterpolator(TvPipInterpolators.EXIT)
-                .setDuration(mEduTextFadeExitAnimationDurationMs)
-                .withEndAction(() -> {
-                    mEduTextContainerView.setVisibility(GONE);
-                }).start();
-        heightAnimation.start();
-    }
-
-    void onPipTransitionStarted(Rect finishBounds) {
+    void onPipTransitionToTargetBoundsStarted(Rect targetBounds) {
         // Fade out content by fading in view on top.
-        if (mCurrentPipBounds != null && finishBounds != null) {
+        if (mCurrentPipBounds != null && targetBounds != null) {
             boolean ratioChanged = PipUtils.aspectRatioChanged(
                     mCurrentPipBounds.width() / (float) mCurrentPipBounds.height(),
-                    finishBounds.width() / (float) finishBounds.height());
+                    targetBounds.width() / (float) targetBounds.height());
             if (ratioChanged) {
                 mPipBackground.animate()
                         .alpha(1f)
@@ -246,11 +175,12 @@ public class TvPipMenuView extends FrameLayout implements View.OnClickListener {
         }
 
         // Update buttons.
-        final boolean vertical = finishBounds.height() > finishBounds.width();
+        final boolean vertical = targetBounds.height() > targetBounds.width();
         final boolean orientationChanged =
                 vertical != (mActionButtonsContainer.getOrientation() == LinearLayout.VERTICAL);
         ProtoLog.d(ShellProtoLogGroup.WM_SHELL_PICTURE_IN_PICTURE,
-                "%s: onPipTransitionStarted(), orientation changed %b", TAG, orientationChanged);
+                "%s: onPipTransitionToTargetBoundsStarted(), orientation changed %b",
+                TAG, orientationChanged);
         if (!orientationChanged) {
             return;
         }
@@ -262,18 +192,18 @@ public class TvPipMenuView extends FrameLayout implements View.OnClickListener {
                     .setInterpolator(TvPipInterpolators.EXIT)
                     .setDuration(mResizeAnimationDuration / 2)
                     .withEndAction(() -> {
-                        changeButtonScrollOrientation(finishBounds);
-                        updateButtonGravity(finishBounds);
+                        changeButtonScrollOrientation(targetBounds);
+                        updateButtonGravity(targetBounds);
                         // Only make buttons visible again in onPipTransitionFinished to keep in
                         // sync with PiP content alpha animation.
                     });
         } else {
-            changeButtonScrollOrientation(finishBounds);
-            updateButtonGravity(finishBounds);
+            changeButtonScrollOrientation(targetBounds);
+            updateButtonGravity(targetBounds);
         }
     }
 
-    void onPipTransitionFinished(boolean isTvPipExpanded) {
+    void onPipTransitionFinished(boolean enterTransition, boolean isTvPipExpanded) {
         ProtoLog.d(ShellProtoLogGroup.WM_SHELL_PICTURE_IN_PICTURE,
                 "%s: onPipTransitionFinished()", TAG);
 
@@ -283,6 +213,10 @@ public class TvPipMenuView extends FrameLayout implements View.OnClickListener {
                 .setDuration(mResizeAnimationDuration / 2)
                 .setInterpolator(TvPipInterpolators.ENTER)
                 .start();
+
+        if (enterTransition) {
+            mEduTextDrawer.init();
+        }
 
         setIsExpanded(isTvPipExpanded);
 
@@ -410,7 +344,7 @@ public class TvPipMenuView extends FrameLayout implements View.OnClickListener {
     Rect getPipMenuContainerBounds(Rect pipBounds) {
         final Rect menuUiBounds = new Rect(pipBounds);
         menuUiBounds.inset(-mPipMenuOuterSpace, -mPipMenuOuterSpace);
-        menuUiBounds.bottom += mEduTextHeight;
+        menuUiBounds.bottom += mEduTextDrawer.getHeight();
         return menuUiBounds;
     }
 
@@ -439,19 +373,13 @@ public class TvPipMenuView extends FrameLayout implements View.OnClickListener {
 
     }
 
-    void setListener(@Nullable Listener listener) {
-        mListener = listener;
-    }
-
     void setExpandedModeEnabled(boolean enabled) {
         mExpandButton.setVisibility(enabled ? VISIBLE : GONE);
     }
 
     void setIsExpanded(boolean expanded) {
-        if (DEBUG) {
-            ProtoLog.d(ShellProtoLogGroup.WM_SHELL_PICTURE_IN_PICTURE,
-                    "%s: setIsExpanded, expanded: %b", TAG, expanded);
-        }
+        ProtoLog.d(ShellProtoLogGroup.WM_SHELL_PICTURE_IN_PICTURE,
+                "%s: setIsExpanded, expanded: %b", TAG, expanded);
         mExpandButton.setImageResource(
                 expanded ? R.drawable.pip_ic_collapse : R.drawable.pip_ic_expand);
         mExpandButton.setTextAndDescription(
@@ -462,27 +390,20 @@ public class TvPipMenuView extends FrameLayout implements View.OnClickListener {
      * @param gravity for the arrow hints
      */
     void showMoveMenu(int gravity) {
-        if (DEBUG) {
-            ProtoLog.d(ShellProtoLogGroup.WM_SHELL_PICTURE_IN_PICTURE, "%s: showMoveMenu()", TAG);
-        }
-        mButtonMenuIsVisible = false;
-        mMoveMenuIsVisible = true;
+        ProtoLog.d(ShellProtoLogGroup.WM_SHELL_PICTURE_IN_PICTURE, "%s: showMoveMenu()", TAG);
         showButtonsMenu(false);
         showMovementHints(gravity);
         setFrameHighlighted(true);
 
         mHorizontalScrollView.setFocusable(false);
         mScrollView.setFocusable(false);
+
+        mEduTextDrawer.closeIfNeeded();
     }
 
     void showButtonsMenu() {
-        if (DEBUG) {
-            ProtoLog.d(ShellProtoLogGroup.WM_SHELL_PICTURE_IN_PICTURE,
-                    "%s: showButtonsMenu()", TAG);
-        }
-
-        mButtonMenuIsVisible = true;
-        mMoveMenuIsVisible = false;
+        ProtoLog.d(ShellProtoLogGroup.WM_SHELL_PICTURE_IN_PICTURE,
+                "%s: showButtonsMenu()", TAG);
         showButtonsMenu(true);
         hideMovementHints();
         setFrameHighlighted(true);
@@ -509,8 +430,6 @@ public class TvPipMenuView extends FrameLayout implements View.OnClickListener {
         ProtoLog.d(ShellProtoLogGroup.WM_SHELL_PICTURE_IN_PICTURE,
                 "%s: hideAllUserControls()", TAG);
         mFocusedButton = null;
-        mButtonMenuIsVisible = false;
-        mMoveMenuIsVisible = false;
         showButtonsMenu(false);
         hideMovementHints();
         setFrameHighlighted(false);
@@ -553,10 +472,8 @@ public class TvPipMenuView extends FrameLayout implements View.OnClickListener {
      */
     void setAdditionalActions(List<RemoteAction> actions, RemoteAction closeAction,
             Handler mainHandler) {
-        if (DEBUG) {
-            ProtoLog.d(ShellProtoLogGroup.WM_SHELL_PICTURE_IN_PICTURE,
-                    "%s: setAdditionalActions()", TAG);
-        }
+        ProtoLog.d(ShellProtoLogGroup.WM_SHELL_PICTURE_IN_PICTURE,
+                "%s: setAdditionalActions()", TAG);
 
         // Replace system close action with custom close action if available
         if (closeAction != null) {
@@ -642,8 +559,6 @@ public class TvPipMenuView extends FrameLayout implements View.OnClickListener {
 
     @Override
     public void onClick(View v) {
-        if (mListener == null) return;
-
         final int id = v.getId();
         if (id == R.id.tv_pip_menu_fullscreen_button) {
             mListener.onFullscreenButtonClick();
@@ -672,7 +587,7 @@ public class TvPipMenuView extends FrameLayout implements View.OnClickListener {
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        if (mListener != null && event.getAction() == ACTION_UP) {
+        if (event.getAction() == ACTION_UP) {
             if (!mMoveMenuIsVisible) {
                 mFocusedButton = mActionButtonsContainer.getFocusedChild();
             }
@@ -707,10 +622,13 @@ public class TvPipMenuView extends FrameLayout implements View.OnClickListener {
      * Shows user hints for moving the PiP, e.g. arrows.
      */
     public void showMovementHints(int gravity) {
-        if (DEBUG) {
-            ProtoLog.d(ShellProtoLogGroup.WM_SHELL_PICTURE_IN_PICTURE,
-                    "%s: showMovementHints(), position: %s", TAG, Gravity.toString(gravity));
+        ProtoLog.d(ShellProtoLogGroup.WM_SHELL_PICTURE_IN_PICTURE,
+                "%s: showMovementHints(), position: %s", TAG, Gravity.toString(gravity));
+
+        if (mMoveMenuIsVisible) {
+            return;
         }
+        mMoveMenuIsVisible = true;
 
         animateAlphaTo(checkGravity(gravity, Gravity.BOTTOM) ? 1f : 0f, mArrowUp);
         animateAlphaTo(checkGravity(gravity, Gravity.TOP) ? 1f : 0f, mArrowDown);
@@ -726,9 +644,7 @@ public class TvPipMenuView extends FrameLayout implements View.OnClickListener {
         animateAlphaTo(a11yEnabled ? 1f : 0f, mA11yDoneButton);
         if (a11yEnabled) {
             mA11yDoneButton.setOnClickListener(v -> {
-                if (mListener != null) {
-                    mListener.onExitMoveMode();
-                }
+                mListener.onExitMoveMode();
             });
         }
     }
@@ -737,9 +653,7 @@ public class TvPipMenuView extends FrameLayout implements View.OnClickListener {
         arrowView.setClickable(enabled);
         if (enabled) {
             arrowView.setOnClickListener(v -> {
-                if (mListener != null) {
-                    mListener.onPipMovement(keycode);
-                }
+                mListener.onPipMovement(keycode);
             });
         }
     }
@@ -752,10 +666,14 @@ public class TvPipMenuView extends FrameLayout implements View.OnClickListener {
      * Hides user hints for moving the PiP, e.g. arrows.
      */
     public void hideMovementHints() {
-        if (DEBUG) {
-            ProtoLog.d(ShellProtoLogGroup.WM_SHELL_PICTURE_IN_PICTURE,
-                    "%s: hideMovementHints()", TAG);
+        ProtoLog.d(ShellProtoLogGroup.WM_SHELL_PICTURE_IN_PICTURE,
+                "%s: hideMovementHints()", TAG);
+
+        if (!mMoveMenuIsVisible) {
+            return;
         }
+        mMoveMenuIsVisible = false;
+
         animateAlphaTo(0, mArrowUp);
         animateAlphaTo(0, mArrowRight);
         animateAlphaTo(0, mArrowDown);
@@ -767,23 +685,27 @@ public class TvPipMenuView extends FrameLayout implements View.OnClickListener {
      * Show or hide the pip buttons menu.
      */
     public void showButtonsMenu(boolean show) {
-        if (DEBUG) {
-            ProtoLog.d(ShellProtoLogGroup.WM_SHELL_PICTURE_IN_PICTURE,
-                    "%s: showUserActions: %b", TAG, show);
+        ProtoLog.d(ShellProtoLogGroup.WM_SHELL_PICTURE_IN_PICTURE,
+                "%s: showUserActions: %b", TAG, show);
+        if (mButtonMenuIsVisible == show) {
+            return;
         }
+        mButtonMenuIsVisible = show;
+
         if (show) {
             mActionButtonsContainer.setVisibility(VISIBLE);
             refocusPreviousButton();
         }
         animateAlphaTo(show ? 1 : 0, mActionButtonsContainer);
         animateAlphaTo(show ? 1 : 0, mDimLayer);
+        mEduTextDrawer.closeIfNeeded();
     }
 
     private void setFrameHighlighted(boolean highlighted) {
         mMenuFrameView.setActivated(highlighted);
     }
 
-    interface Listener {
+    interface Listener extends TvPipMenuEduTextDrawer.Listener {
 
         void onBackPress();
 

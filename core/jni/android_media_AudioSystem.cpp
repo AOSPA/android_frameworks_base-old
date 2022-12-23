@@ -2160,6 +2160,11 @@ static jint convertAudioMixToNative(JNIEnv *env,
             nCriterion.mValue.mUserId =
                     env->GetIntField(jCriterion, gAudioMixMatchCriterionFields.mIntProp);
             break;
+        case RULE_MATCH_AUDIO_SESSION_ID: {
+            jint jAudioSessionId =
+                    env->GetIntField(jCriterion, gAudioMixMatchCriterionFields.mIntProp);
+            nCriterion.mValue.mAudioSessionId = static_cast<audio_session_t>(jAudioSessionId);
+        } break;
         case RULE_MATCH_ATTRIBUTE_USAGE:
         case RULE_MATCH_ATTRIBUTE_CAPTURE_PRESET: {
             jobject jAttributes = env->GetObjectField(jCriterion, gAudioMixMatchCriterionFields.mAttr);
@@ -2179,7 +2184,7 @@ static jint convertAudioMixToNative(JNIEnv *env,
             break;
         }
 
-        nAudioMix->mCriteria.add(nCriterion);
+        nAudioMix->mCriteria.push_back(nCriterion);
         env->DeleteLocalRef(jCriterion);
     }
 
@@ -2937,13 +2942,14 @@ static jint android_media_AudioSystem_getDirectProfilesForAttributes(JNIEnv *env
 
     for (const auto &audioProfile : audioProfiles) {
         jobject jAudioProfile;
-        jStatus = convertAudioProfileFromNative(env, &jAudioProfile, &audioProfile, false);
-        if (jStatus == AUDIO_JAVA_BAD_VALUE) {
+        jint jConvertProfileStatus = convertAudioProfileFromNative(
+                                        env, &jAudioProfile, &audioProfile, false);
+        if (jConvertProfileStatus == AUDIO_JAVA_BAD_VALUE) {
             // skipping Java layer unsupported audio formats
             continue;
         }
-        if (jStatus != AUDIO_JAVA_SUCCESS) {
-            return jStatus;
+        if (jConvertProfileStatus != AUDIO_JAVA_SUCCESS) {
+            return jConvertProfileStatus;
         }
         env->CallBooleanMethod(jAudioProfilesList, gArrayListMethods.add, jAudioProfile);
         env->DeleteLocalRef(jAudioProfile);

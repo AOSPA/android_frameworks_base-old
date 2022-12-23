@@ -26,7 +26,6 @@ import android.annotation.NonNull;
 import android.annotation.UserIdInt;
 import android.app.time.Capabilities.CapabilityState;
 import android.app.time.TimeZoneCapabilities;
-import android.app.time.TimeZoneCapabilitiesAndConfig;
 import android.app.time.TimeZoneConfiguration;
 import android.os.UserHandle;
 
@@ -75,7 +74,7 @@ public final class ConfigurationInternal {
         mEnhancedMetricsCollectionEnabled = builder.mEnhancedMetricsCollectionEnabled;
         mAutoDetectionEnabledSetting = builder.mAutoDetectionEnabledSetting;
 
-        mUserId = builder.mUserId;
+        mUserId = Objects.requireNonNull(builder.mUserId, "userId must be set");
         mUserConfigAllowed = builder.mUserConfigAllowed;
         mLocationEnabledSetting = builder.mLocationEnabledSetting;
         mGeoDetectionEnabledSetting = builder.mGeoDetectionEnabledSetting;
@@ -147,7 +146,12 @@ public final class ConfigurationInternal {
         return UserHandle.of(mUserId);
     }
 
-    /** Returns true if the user allowed to modify time zone configuration. */
+    /**
+     * Returns true if the user is allowed to modify time zone configuration, e.g. can be false due
+     * to device policy (enterprise).
+     *
+     * <p>See also {@link #asCapabilities(boolean)} for situations where this value is ignored.
+     */
     public boolean isUserConfigAllowed() {
         return mUserConfigAllowed;
     }
@@ -190,17 +194,12 @@ public final class ConfigurationInternal {
                 || getGeoDetectionRunInBackgroundEnabled());
     }
 
-    /** Creates a {@link TimeZoneCapabilitiesAndConfig} object using the configuration values. */
-    public TimeZoneCapabilitiesAndConfig createCapabilitiesAndConfig() {
-        return new TimeZoneCapabilitiesAndConfig(asCapabilities(), asConfiguration());
-    }
-
     @NonNull
-    private TimeZoneCapabilities asCapabilities() {
+    public TimeZoneCapabilities asCapabilities(boolean bypassUserPolicyChecks) {
         UserHandle userHandle = UserHandle.of(mUserId);
         TimeZoneCapabilities.Builder builder = new TimeZoneCapabilities.Builder(userHandle);
 
-        boolean allowConfigDateTime = isUserConfigAllowed();
+        boolean allowConfigDateTime = isUserConfigAllowed() || bypassUserPolicyChecks;
 
         // Automatic time zone detection is only supported on devices if there is a telephony
         // network available or geolocation time zone detection is possible.
@@ -243,13 +242,13 @@ public final class ConfigurationInternal {
         } else {
             suggestManualTimeZoneCapability = CAPABILITY_POSSESSED;
         }
-        builder.setSuggestManualTimeZoneCapability(suggestManualTimeZoneCapability);
+        builder.setSetManualTimeZoneCapability(suggestManualTimeZoneCapability);
 
         return builder.build();
     }
 
     /** Returns a {@link TimeZoneConfiguration} from the configuration values. */
-    private TimeZoneConfiguration asConfiguration() {
+    public TimeZoneConfiguration asConfiguration() {
         return new TimeZoneConfiguration.Builder()
                 .setAutoDetectionEnabled(getAutoDetectionEnabledSetting())
                 .setGeoDetectionEnabled(getGeoDetectionEnabledSetting())
@@ -322,8 +321,7 @@ public final class ConfigurationInternal {
      */
     public static class Builder {
 
-        private final @UserIdInt int mUserId;
-
+        private @UserIdInt Integer mUserId;
         private boolean mUserConfigAllowed;
         private boolean mTelephonyDetectionSupported;
         private boolean mGeoDetectionSupported;
@@ -335,11 +333,9 @@ public final class ConfigurationInternal {
         private boolean mGeoDetectionEnabledSetting;
 
         /**
-         * Creates a new Builder with only the userId set.
+         * Creates a new Builder.
          */
-        public Builder(@UserIdInt int userId) {
-            mUserId = userId;
-        }
+        public Builder() {}
 
         /**
          * Creates a new Builder by copying values from an existing instance.
@@ -355,6 +351,14 @@ public final class ConfigurationInternal {
             this.mAutoDetectionEnabledSetting = toCopy.mAutoDetectionEnabledSetting;
             this.mLocationEnabledSetting = toCopy.mLocationEnabledSetting;
             this.mGeoDetectionEnabledSetting = toCopy.mGeoDetectionEnabledSetting;
+        }
+
+        /**
+         * Sets the user ID the configuration is for.
+         */
+        public Builder setUserId(@UserIdInt int userId) {
+            mUserId = userId;
+            return this;
         }
 
         /**

@@ -23,6 +23,7 @@ import static com.google.common.truth.Truth.assertWithMessage;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
@@ -62,11 +63,11 @@ import com.android.server.pm.parsing.PackageCacher;
 import com.android.server.pm.parsing.PackageInfoUtils;
 import com.android.server.pm.parsing.PackageParser2;
 import com.android.server.pm.parsing.TestPackageParser2;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.parsing.pkg.AndroidPackageUtils;
 import com.android.server.pm.parsing.pkg.PackageImpl;
 import com.android.server.pm.parsing.pkg.ParsedPackage;
 import com.android.server.pm.permission.CompatibilityPermissionInfo;
+import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.PackageUserStateInternal;
 import com.android.server.pm.pkg.component.ParsedActivity;
 import com.android.server.pm.pkg.component.ParsedActivityImpl;
@@ -127,6 +128,7 @@ public class PackageParserTest {
     private static final String TEST_APP3_APK = "PackageParserTestApp3.apk";
     private static final String TEST_APP4_APK = "PackageParserTestApp4.apk";
     private static final String TEST_APP5_APK = "PackageParserTestApp5.apk";
+    private static final String TEST_APP6_APK = "PackageParserTestApp6.apk";
     private static final String PACKAGE_NAME = "com.android.servicestests.apps.packageparserapp";
 
     @Before
@@ -329,6 +331,46 @@ public class PackageParserTest {
         } finally {
             testFile.delete();
         }
+    }
+
+    @Test
+    public void testParseActivityTargetDisplayCategoryValid() throws Exception {
+        final File testFile = extractFile(TEST_APP4_APK);
+        String actualDisplayCategory = null;
+        try {
+            final ParsedPackage pkg = new TestPackageParser2().parsePackage(testFile, 0, false);
+            final List<ParsedActivity> activities = pkg.getActivities();
+            for (ParsedActivity activity : activities) {
+                if ((PACKAGE_NAME + ".MyActivity").equals(activity.getName())) {
+                    actualDisplayCategory = activity.getTargetDisplayCategory();
+                }
+            }
+        } finally {
+            testFile.delete();
+        }
+        assertEquals("automotive", actualDisplayCategory);
+    }
+
+    @Test
+    public void testParseActivityTargetDisplayCategoryInvalid() throws Exception {
+        final File testFile = extractFile(TEST_APP6_APK);
+        String actualDisplayCategory = null;
+        try {
+            final ParsedPackage pkg = new TestPackageParser2().parsePackage(testFile, 0, false);
+            final List<ParsedActivity> activities = pkg.getActivities();
+            for (ParsedActivity activity : activities) {
+                if ((PACKAGE_NAME + ".MyActivity").equals(activity.getName())) {
+                    actualDisplayCategory = activity.getTargetDisplayCategory();
+                }
+            }
+        } catch (PackageManagerException e) {
+            assertThat(e.getMessage()).contains(
+                    "targetDisplayCategory attribute can only consists"
+                            + " of alphanumeric characters, '_', and '.'");
+        } finally {
+            testFile.delete();
+        }
+        assertNotEquals("$automotive", actualDisplayCategory);
     }
 
     private static final int PROPERTY_TYPE_BOOLEAN = 1;
@@ -634,27 +676,32 @@ public class PackageParserTest {
         final File testFile = extractFile(TEST_APP4_APK);
         try {
             final ParsedPackage pkg = new TestPackageParser2().parsePackage(testFile, 0, false);
+            var pkgSetting = mockPkgSetting(pkg);
             ApplicationInfo appInfo = PackageInfoUtils.generateApplicationInfo(pkg, 0,
-                    PackageUserStateInternal.DEFAULT, 0, null);
+                    PackageUserStateInternal.DEFAULT, 0, pkgSetting);
             for (ParsedActivity activity : pkg.getActivities()) {
                 assertNotNull(activity.getMetaData());
                 assertNull(PackageInfoUtils.generateActivityInfo(pkg, activity, 0,
-                        PackageUserStateInternal.DEFAULT, appInfo, 0, null).metaData);
+                        PackageUserStateInternal.DEFAULT, appInfo, 0, pkgSetting)
+                        .metaData);
             }
             for (ParsedProvider provider : pkg.getProviders()) {
                 assertNotNull(provider.getMetaData());
                 assertNull(PackageInfoUtils.generateProviderInfo(pkg, provider, 0,
-                        PackageUserStateInternal.DEFAULT, appInfo, 0, null).metaData);
+                        PackageUserStateInternal.DEFAULT, appInfo, 0, pkgSetting)
+                        .metaData);
             }
             for (ParsedActivity receiver : pkg.getReceivers()) {
                 assertNotNull(receiver.getMetaData());
                 assertNull(PackageInfoUtils.generateActivityInfo(pkg, receiver, 0,
-                        PackageUserStateInternal.DEFAULT, appInfo, 0, null).metaData);
+                        PackageUserStateInternal.DEFAULT, appInfo, 0, pkgSetting)
+                        .metaData);
             }
             for (ParsedService service : pkg.getServices()) {
                 assertNotNull(service.getMetaData());
                 assertNull(PackageInfoUtils.generateServiceInfo(pkg, service, 0,
-                        PackageUserStateInternal.DEFAULT, appInfo, 0, null).metaData);
+                        PackageUserStateInternal.DEFAULT, appInfo, 0, pkgSetting)
+                        .metaData);
             }
         } finally {
             testFile.delete();
@@ -1011,10 +1058,10 @@ public class PackageParserTest {
                 .addUsesPermission(new ParsedUsesPermissionImpl("foo7", 0))
                 .addImplicitPermission("foo25")
                 .addProtectedBroadcast("foo8")
-                .setSdkLibName("sdk12")
+                .setSdkLibraryName("sdk12")
                 .setSdkLibVersionMajor(42)
                 .addUsesSdkLibrary("sdk23", 200, new String[]{"digest2"})
-                .setStaticSharedLibName("foo23")
+                .setStaticSharedLibraryName("foo23")
                 .setStaticSharedLibVersion(100)
                 .addUsesStaticLibrary("foo23", 100, new String[]{"digest"})
                 .addLibraryName("foo10")

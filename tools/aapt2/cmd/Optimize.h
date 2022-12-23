@@ -26,8 +26,6 @@
 namespace aapt {
 
 struct OptimizeOptions {
-  friend class OptimizeCommand;
-
   // Path to the output APK.
   std::optional<std::string> output_path;
   // Path to the output APK directory for splits.
@@ -61,6 +59,12 @@ struct OptimizeOptions {
 
   // Path to the output map of original resource paths to shortened paths.
   std::optional<std::string> shortened_paths_map_path;
+
+  // Whether sparse encoding should be used for O+ resources.
+  bool enable_sparse_encoding = false;
+
+  // Whether sparse encoding should be used for all resources.
+  bool force_sparse_encoding = false;
 };
 
 class OptimizeCommand : public Command {
@@ -96,10 +100,18 @@ class OptimizeCommand : public Command {
         "Comma separated list of artifacts to keep. If none are specified,\n"
             "all artifacts will be kept.",
         &kept_artifacts_);
-    AddOptionalSwitch("--enable-sparse-encoding",
+    AddOptionalSwitch(
+        "--enable-sparse-encoding",
         "Enables encoding sparse entries using a binary search tree.\n"
-            "This decreases APK size at the cost of resource retrieval performance.",
-        &options_.table_flattener_options.use_sparse_entries);
+        "This decreases APK size at the cost of resource retrieval performance.\n"
+        "Only applies sparse encoding to Android O+ resources or all resources if minSdk of "
+        "the APK is O+",
+        &options_.enable_sparse_encoding);
+    AddOptionalSwitch("--force-sparse-encoding",
+                      "Enables encoding sparse entries using a binary search tree.\n"
+                      "This decreases APK size at the cost of resource retrieval performance.\n"
+                      "Applies sparse encoding to all resources regardless of minSdk.",
+                      &options_.force_sparse_encoding);
     AddOptionalSwitch("--collapse-resource-names",
         "Collapses resource names to a single value in the key string pool. Resources can \n"
             "be exempted using the \"no_collapse\" directive in a file specified by "
@@ -111,6 +123,14 @@ class OptimizeCommand : public Command {
     AddOptionalFlag("--resource-path-shortening-map",
         "Path to output the map of old resource paths to shortened paths.",
         &options_.shortened_paths_map_path);
+    AddOptionalSwitch(
+        "--deduplicate-entry-values",
+        "Whether to deduplicate pairs of resource entry and value for simple resources.\n"
+        "This is recommended to be used together with '--collapse-resource-names' flag or for\n"
+        "APKs where resource names are manually collapsed. For such APKs this flag allows to\n"
+        "store the same resource value only once in resource table which decreases APK size.\n"
+        "Has no effect on APKs where resource names are kept.",
+        &options_.table_flattener_options.deduplicate_entry_values);
     AddOptionalSwitch("-v", "Enables verbose logging", &verbose_);
   }
 

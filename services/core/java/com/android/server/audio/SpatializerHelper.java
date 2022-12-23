@@ -47,6 +47,7 @@ import android.util.Pair;
 import android.util.SparseIntArray;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.server.utils.EventLogger;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -169,9 +170,20 @@ public class SpatializerHelper {
 
     //------------------------------------------------------
     // initialization
-    SpatializerHelper(@NonNull AudioService mother, @NonNull AudioSystemAdapter asa) {
+    @SuppressWarnings("StaticAssignmentInConstructor")
+    SpatializerHelper(@NonNull AudioService mother, @NonNull AudioSystemAdapter asa,
+            boolean headTrackingEnabledByDefault) {
         mAudioService = mother;
         mASA = asa;
+        // "StaticAssignmentInConstructor" warning is suppressed as the SpatializerHelper being
+        // constructed here is the factory for SADeviceState, thus SADeviceState and its
+        // private static field sHeadTrackingEnabledDefault should never be accessed directly.
+        SADeviceState.sHeadTrackingEnabledDefault = headTrackingEnabledByDefault;
+    }
+
+    synchronized void initForTest(boolean hasBinaural, boolean hasTransaural) {
+        mBinauralSupported = hasBinaural;
+        mTransauralSupported = hasTransaural;
     }
 
     synchronized void init(boolean effectExpected, @Nullable String settings) {
@@ -1115,6 +1127,9 @@ public class SpatializerHelper {
                 && ROUTING_DEVICES[0].getAddress().equals(ada.getAddress())) {
             setDesiredHeadTrackingMode(enabled ? mDesiredHeadTrackingModeWhenEnabled
                     : Spatializer.HEAD_TRACKING_MODE_DISABLED);
+            if (enabled && !mHeadTrackerAvailable) {
+                postInitSensors();
+            }
         }
     }
 
@@ -1499,18 +1514,26 @@ public class SpatializerHelper {
     }
 
     /*package*/ static final class SADeviceState {
+        private static boolean sHeadTrackingEnabledDefault = false;
         final @AudioDeviceInfo.AudioDeviceType int mDeviceType;
         final @NonNull String mDeviceAddress;
         boolean mEnabled = true;               // by default, SA is enabled on any device
         boolean mHasHeadTracker = false;
-        boolean mHeadTrackerEnabled = true;    // by default, if head tracker is present, use it
+        boolean mHeadTrackerEnabled;
         static final String SETTING_FIELD_SEPARATOR = ",";
         static final String SETTING_DEVICE_SEPARATOR_CHAR = "|";
         static final String SETTING_DEVICE_SEPARATOR = "\\|";
 
-        SADeviceState(@AudioDeviceInfo.AudioDeviceType int deviceType, @NonNull String address) {
+        /**
+         * Constructor
+         * @param deviceType
+         * @param address must be non-null for wireless devices
+         * @throws NullPointerException if a null address is passed for a wireless device
+         */
+        SADeviceState(@AudioDeviceInfo.AudioDeviceType int deviceType, @Nullable String address) {
             mDeviceType = deviceType;
             mDeviceAddress = isWireless(deviceType) ? Objects.requireNonNull(address) : "";
+            mHeadTrackerEnabled = sHeadTrackingEnabledDefault;
         }
 
         @Override
@@ -1685,11 +1708,11 @@ public class SpatializerHelper {
 
 
     private static void loglogi(String msg) {
-        AudioService.sSpatialLogger.loglogi(msg, TAG);
+        AudioService.sSpatialLogger.enqueueAndLog(msg, EventLogger.Event.ALOGI, TAG);
     }
 
     private static String logloge(String msg) {
-        AudioService.sSpatialLogger.loglog(msg, AudioEventLogger.Event.ALOGE, TAG);
+        AudioService.sSpatialLogger.enqueueAndLog(msg, EventLogger.Event.ALOGE, TAG);
         return msg;
     }
 

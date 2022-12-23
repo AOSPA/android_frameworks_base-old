@@ -16,6 +16,7 @@
 
 package android.app;
 
+import android.annotation.IntDef;
 import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -27,11 +28,19 @@ import android.compat.annotation.ChangeId;
 import android.compat.annotation.Disabled;
 import android.compat.annotation.EnabledSince;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.BundleMerger;
 import android.os.PowerExemptionManager;
 import android.os.PowerExemptionManager.ReasonCode;
 import android.os.PowerExemptionManager.TempAllowListType;
+
+import com.android.internal.util.Preconditions;
+
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.util.Objects;
 
 /**
  * Helper class for building an options Bundle that can be used with
@@ -54,7 +63,12 @@ public class BroadcastOptions extends ComponentOptions {
     private long mRequireCompatChangeId = CHANGE_INVALID;
     private boolean mRequireCompatChangeEnabled = true;
     private boolean mIsAlarmBroadcast = false;
+    private boolean mIsInteractiveBroadcast = false;
     private long mIdForResponseEvent;
+    private @Nullable IntentFilter mRemoveMatchingFilter;
+    private @DeliveryGroupPolicy int mDeliveryGroupPolicy;
+    private @Nullable String mDeliveryGroupKey;
+    private @Nullable BundleMerger mDeliveryGroupExtrasMerger;
 
     /**
      * Change ID which is invalid.
@@ -157,6 +171,13 @@ public class BroadcastOptions extends ComponentOptions {
             "android:broadcast.is_alarm";
 
     /**
+     * Corresponds to {@link #setInteractiveBroadcast(boolean)}
+     * @hide
+     */
+    public static final String KEY_INTERACTIVE_BROADCAST =
+            "android:broadcast.is_interactive";
+
+    /**
      * @hide
      * @deprecated Use {@link android.os.PowerExemptionManager#
      * TEMPORARY_ALLOW_LIST_TYPE_FOREGROUND_SERVICE_ALLOWED} instead.
@@ -180,8 +201,79 @@ public class BroadcastOptions extends ComponentOptions {
     private static final String KEY_ID_FOR_RESPONSE_EVENT =
             "android:broadcast.idForResponseEvent";
 
+    /**
+     * Corresponds to {@link #setRemoveMatchingFilter}.
+     */
+    private static final String KEY_REMOVE_MATCHING_FILTER =
+            "android:broadcast.removeMatchingFilter";
+
+    /**
+     * Corresponds to {@link #setDeliveryGroupPolicy(int)}.
+     */
+    private static final String KEY_DELIVERY_GROUP_POLICY =
+            "android:broadcast.deliveryGroupPolicy";
+
+    /**
+     * Corresponds to {@link #setDeliveryGroupKey(String, String)}.
+     */
+    private static final String KEY_DELIVERY_GROUP_KEY =
+            "android:broadcast.deliveryGroupKey";
+
+    /**
+     * Corresponds to {@link #setDeliveryGroupExtrasMerger(BundleMerger)}.
+     */
+    private static final String KEY_DELIVERY_GROUP_EXTRAS_MERGER =
+            "android:broadcast.deliveryGroupExtrasMerger";
+
+    /**
+     * The list of delivery group policies which specify how multiple broadcasts belonging to
+     * the same delivery group has to be handled.
+     * @hide
+     */
+    @IntDef(flag = true, prefix = { "DELIVERY_GROUP_POLICY_" }, value = {
+            DELIVERY_GROUP_POLICY_ALL,
+            DELIVERY_GROUP_POLICY_MOST_RECENT,
+            DELIVERY_GROUP_POLICY_MERGED,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface DeliveryGroupPolicy {}
+
+    /**
+     * Delivery group policy that indicates that all the broadcasts in the delivery group
+     * need to be delivered as is.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int DELIVERY_GROUP_POLICY_ALL = 0;
+
+    /**
+     * Delivery group policy that indicates that only the most recent broadcast in the delivery
+     * group need to be delivered and the rest can be dropped.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int DELIVERY_GROUP_POLICY_MOST_RECENT = 1;
+
+    /**
+     * Delivery group policy that indicates that the extras data from the broadcasts in the
+     * delivery group need to be merged into a single broadcast and the rest can be dropped.
+     *
+     * @hide
+     */
+    public static final int DELIVERY_GROUP_POLICY_MERGED = 2;
+
     public static BroadcastOptions makeBasic() {
         BroadcastOptions opts = new BroadcastOptions();
+        return opts;
+    }
+
+    /** {@hide} */
+    public static @NonNull BroadcastOptions makeRemovingMatchingFilter(
+            @NonNull IntentFilter removeMatchingFilter) {
+        BroadcastOptions opts = new BroadcastOptions();
+        opts.setRemoveMatchingFilter(removeMatchingFilter);
         return opts;
     }
 
@@ -216,6 +308,14 @@ public class BroadcastOptions extends ComponentOptions {
         mRequireCompatChangeEnabled = opts.getBoolean(KEY_REQUIRE_COMPAT_CHANGE_ENABLED, true);
         mIdForResponseEvent = opts.getLong(KEY_ID_FOR_RESPONSE_EVENT);
         mIsAlarmBroadcast = opts.getBoolean(KEY_ALARM_BROADCAST, false);
+        mIsInteractiveBroadcast = opts.getBoolean(KEY_INTERACTIVE_BROADCAST, false);
+        mRemoveMatchingFilter = opts.getParcelable(KEY_REMOVE_MATCHING_FILTER,
+                IntentFilter.class);
+        mDeliveryGroupPolicy = opts.getInt(KEY_DELIVERY_GROUP_POLICY,
+                DELIVERY_GROUP_POLICY_ALL);
+        mDeliveryGroupKey = opts.getString(KEY_DELIVERY_GROUP_KEY);
+        mDeliveryGroupExtrasMerger = opts.getParcelable(KEY_DELIVERY_GROUP_EXTRAS_MERGER,
+                BundleMerger.class);
     }
 
     /**
@@ -529,6 +629,28 @@ public class BroadcastOptions extends ComponentOptions {
     }
 
     /**
+     * When set, this broadcast will be understood as having originated from
+     * some direct interaction by the user such as a notification tap or button
+     * press.  Only the OS itself may use this option.
+     * @hide
+     * @param broadcastIsInteractive
+     * @see #isInteractiveBroadcast()
+     */
+    @RequiresPermission(android.Manifest.permission.BROADCAST_OPTION_INTERACTIVE)
+    public void setInteractiveBroadcast(boolean broadcastIsInteractive) {
+        mIsInteractiveBroadcast = broadcastIsInteractive;
+    }
+
+    /**
+     * Did this broadcast originate with a direct user interaction?
+     * @return true if this broadcast is the result of an interaction, false otherwise
+     * @hide
+     */
+    public boolean isInteractiveBroadcast() {
+        return mIsInteractiveBroadcast;
+    }
+
+    /**
      * Did this broadcast originate from a push message from the server?
      *
      * @return true if this broadcast is a push message, false otherwise.
@@ -596,12 +718,112 @@ public class BroadcastOptions extends ComponentOptions {
     }
 
     /**
+     * When enqueuing this broadcast, remove all pending broadcasts previously
+     * sent by this app which match the given filter.
+     * <p>
+     * For example, sending {@link Intent#ACTION_SCREEN_ON} would typically want
+     * to remove any pending {@link Intent#ACTION_SCREEN_OFF} broadcasts.
+     *
+     * @hide
+     */
+    public void setRemoveMatchingFilter(@NonNull IntentFilter removeMatchingFilter) {
+        mRemoveMatchingFilter = Objects.requireNonNull(removeMatchingFilter);
+    }
+
+    /** @hide */
+    public void clearRemoveMatchingFilter() {
+        mRemoveMatchingFilter = null;
+    }
+
+    /** @hide */
+    public @Nullable IntentFilter getRemoveMatchingFilter() {
+        return mRemoveMatchingFilter;
+    }
+
+    /**
+     * Set delivery group policy for this broadcast to specify how multiple broadcasts belonging to
+     * the same delivery group has to be handled.
+     *
+     * @hide
+     */
+    @SystemApi
+    public void setDeliveryGroupPolicy(@DeliveryGroupPolicy int policy) {
+        mDeliveryGroupPolicy = policy;
+    }
+
+    /**
+     * Get the delivery group policy for this broadcast that specifies how multiple broadcasts
+     * belonging to the same delivery group has to be handled.
+     *
+     * @hide
+     */
+    @SystemApi
+    public @DeliveryGroupPolicy int getDeliveryGroupPolicy() {
+        return mDeliveryGroupPolicy;
+    }
+
+    /**
+     * Clears any previously set delivery group policies using
+     * {@link #setDeliveryGroupKey(String, String)} and resets the delivery group policy to
+     * the default value ({@link #DELIVERY_GROUP_POLICY_ALL}).
+     *
+     * @hide
+     */
+    @SystemApi
+    public void clearDeliveryGroupPolicy() {
+        mDeliveryGroupPolicy = DELIVERY_GROUP_POLICY_ALL;
+    }
+
+    /**
+     * Set namespace and key to identify the delivery group that this broadcast belongs to.
+     * If no namespace and key is set, then by default {@link Intent#filterEquals(Intent)} will be
+     * used to identify the delivery group.
+     *
+     * @hide
+     */
+    public void setDeliveryGroupKey(@NonNull String namespace, @NonNull String key) {
+        Preconditions.checkArgument(!namespace.contains("/"),
+                "namespace should not contain '/'");
+        Preconditions.checkArgument(!key.contains("/"),
+                "key should not contain '/'");
+        mDeliveryGroupKey = namespace + "/" + key;
+    }
+
+    /** @hide */
+    public String getDeliveryGroupKey() {
+        return mDeliveryGroupKey;
+    }
+
+    /**
+     * Set the {@link BundleMerger} that specifies how to merge the extras data from
+     * broadcasts in a delivery group.
+     *
+     * <p>Note that this value will be ignored if the delivery group policy is not set as
+     * {@link #DELIVERY_GROUP_POLICY_MERGED}.
+     *
+     * @hide
+     */
+    public void setDeliveryGroupExtrasMerger(@NonNull BundleMerger extrasMerger) {
+        Preconditions.checkNotNull(extrasMerger);
+        mDeliveryGroupExtrasMerger = extrasMerger;
+    }
+
+    /** @hide */
+    public @Nullable BundleMerger getDeliveryGroupExtrasMerger() {
+        return mDeliveryGroupExtrasMerger;
+    }
+
+    /**
      * Returns the created options as a Bundle, which can be passed to
      * {@link android.content.Context#sendBroadcast(android.content.Intent)
      * Context.sendBroadcast(Intent)} and related methods.
      * Note that the returned Bundle is still owned by the BroadcastOptions
      * object; you must not modify it, but can supply it to the sendBroadcast
      * methods that take an options Bundle.
+     *
+     * @throws IllegalStateException if the broadcast option values are inconsistent. For example,
+     *                               if the delivery group policy is specified as "MERGED" but no
+     *                               extras merger is supplied.
      */
     @Override
     public Bundle toBundle() {
@@ -614,6 +836,9 @@ public class BroadcastOptions extends ComponentOptions {
         }
         if (mIsAlarmBroadcast) {
             b.putBoolean(KEY_ALARM_BROADCAST, true);
+        }
+        if (mIsInteractiveBroadcast) {
+            b.putBoolean(KEY_INTERACTIVE_BROADCAST, true);
         }
         if (mMinManifestReceiverApiLevel != 0) {
             b.putInt(KEY_MIN_MANIFEST_RECEIVER_API_LEVEL, mMinManifestReceiverApiLevel);
@@ -639,6 +864,24 @@ public class BroadcastOptions extends ComponentOptions {
         }
         if (mIdForResponseEvent != 0) {
             b.putLong(KEY_ID_FOR_RESPONSE_EVENT, mIdForResponseEvent);
+        }
+        if (mRemoveMatchingFilter != null) {
+            b.putParcelable(KEY_REMOVE_MATCHING_FILTER, mRemoveMatchingFilter);
+        }
+        if (mDeliveryGroupPolicy != DELIVERY_GROUP_POLICY_ALL) {
+            b.putInt(KEY_DELIVERY_GROUP_POLICY, mDeliveryGroupPolicy);
+        }
+        if (mDeliveryGroupKey != null) {
+            b.putString(KEY_DELIVERY_GROUP_KEY, mDeliveryGroupKey);
+        }
+        if (mDeliveryGroupPolicy == DELIVERY_GROUP_POLICY_MERGED) {
+            if (mDeliveryGroupExtrasMerger != null) {
+                b.putParcelable(KEY_DELIVERY_GROUP_EXTRAS_MERGER,
+                        mDeliveryGroupExtrasMerger);
+            } else {
+                throw new IllegalStateException("Extras merger cannot be empty "
+                        + "when delivery group policy is 'MERGED'");
+            }
         }
         return b.isEmpty() ? null : b;
     }

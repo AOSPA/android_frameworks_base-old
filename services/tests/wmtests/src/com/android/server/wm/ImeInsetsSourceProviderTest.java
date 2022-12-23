@@ -63,6 +63,7 @@ public class ImeInsetsSourceProviderTest extends WindowTestsBase {
     public void testInputMethodInputTargetCanShowIme() {
         WindowState target = createWindow(null, TYPE_APPLICATION, "app");
         mDisplayContent.setImeLayeringTarget(target);
+        mDisplayContent.updateImeInputAndControlTarget(target);
         mImeProvider.scheduleShowImePostLayout(target);
         assertTrue(mImeProvider.isReadyToShowIme());
     }
@@ -83,5 +84,27 @@ public class ImeInsetsSourceProviderTest extends WindowTestsBase {
         assertTrue(mImeProvider.isImeShowing());
         mImeProvider.setImeShowing(false);
         assertFalse(mImeProvider.isImeShowing());
+    }
+
+    @Test
+    public void testSetFrozen() {
+        WindowState ime = createWindow(null, TYPE_INPUT_METHOD, "ime");
+        makeWindowVisibleAndDrawn(ime);
+        mImeProvider.setWindowContainer(ime, null, null);
+        mImeProvider.setServerVisible(true);
+        mImeProvider.setClientVisible(true);
+        mImeProvider.updateVisibility();
+        assertTrue(mImeProvider.getSource().isVisible());
+
+        // Freezing IME states and set the server visible as false.
+        mImeProvider.setFrozen(true);
+        mImeProvider.setServerVisible(false);
+        // Expect the IME insets visible won't be changed.
+        assertTrue(mImeProvider.getSource().isVisible());
+
+        // Unfreeze IME states and expect the IME insets became invisible due to pending IME
+        // visible state updated.
+        mImeProvider.setFrozen(false);
+        assertFalse(mImeProvider.getSource().isVisible());
     }
 }

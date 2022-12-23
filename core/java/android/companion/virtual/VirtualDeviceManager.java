@@ -37,6 +37,7 @@ import android.hardware.display.DisplayManagerGlobal;
 import android.hardware.display.IVirtualDisplayCallback;
 import android.hardware.display.VirtualDisplay;
 import android.hardware.display.VirtualDisplayConfig;
+import android.hardware.input.VirtualDpad;
 import android.hardware.input.VirtualKeyboard;
 import android.hardware.input.VirtualMouse;
 import android.hardware.input.VirtualTouchscreen;
@@ -48,21 +49,21 @@ import android.os.Looper;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.util.ArrayMap;
+import android.util.Log;
 import android.view.Surface;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.function.IntConsumer;
 
 /**
  * System level service for managing virtual devices.
- *
- * @hide
  */
-@SystemApi
 @SystemService(Context.VIRTUAL_DEVICE_SERVICE)
 public final class VirtualDeviceManager {
 
@@ -76,6 +77,16 @@ public final class VirtualDeviceManager {
                     | DisplayManager.VIRTUAL_DISPLAY_FLAG_DESTROY_CONTENT_ON_REMOVAL
                     | DisplayManager.VIRTUAL_DISPLAY_FLAG_SUPPORTS_TOUCH
                     | DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP;
+
+    /**
+     * The default device ID, which is the ID of the primary (non-virtual) device.
+     */
+    public static final int DEFAULT_DEVICE_ID = 0;
+
+    /**
+     * Invalid device ID.
+     */
+    public static final int INVALID_DEVICE_ID = -1;
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
@@ -91,19 +102,28 @@ public final class VirtualDeviceManager {
     /**
      * Status for {@link VirtualDevice#launchPendingIntent}, indicating that the launch was
      * successful.
+     *
+     * @hide
      */
+    @SystemApi
     public static final int LAUNCH_SUCCESS = 0;
 
     /**
      * Status for {@link VirtualDevice#launchPendingIntent}, indicating that the launch failed
      * because the pending intent was canceled.
+     *
+     * @hide
      */
+    @SystemApi
     public static final int LAUNCH_FAILURE_PENDING_INTENT_CANCELED = 1;
 
     /**
      * Status for {@link VirtualDevice#launchPendingIntent}, indicating that the launch failed
      * because no activity starts were detected as a result of calling the pending intent.
+     *
+     * @hide
      */
+    @SystemApi
     public static final int LAUNCH_FAILURE_NO_ACTIVITY = 2;
 
     private final IVirtualDeviceManager mService;
@@ -129,7 +149,10 @@ public final class VirtualDeviceManager {
      * @param params The parameters for creating virtual devices. See {@link VirtualDeviceParams}
      *   for the available options.
      * @return The created virtual device.
+     *
+     * @hide
      */
+    @SystemApi
     @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)
     @NonNull
     public VirtualDevice createVirtualDevice(
@@ -143,12 +166,31 @@ public final class VirtualDeviceManager {
     }
 
     /**
+     * Returns the details of all available virtual devices.
+     */
+    @NonNull
+    public List<android.companion.virtual.VirtualDevice> getVirtualDevices() {
+        if (mService == null) {
+            Log.w(TAG, "Failed to retrieve virtual devices; no virtual device manager service.");
+            return new ArrayList<>();
+        }
+        try {
+            return mService.getVirtualDevices();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * A virtual device has its own virtual display, audio output, microphone, and camera etc. The
      * creator of a virtual device can take the output from the virtual display and stream it over
      * to another device, and inject input events that are received from the remote device.
      *
      * TODO(b/204081582): Consider using a builder pattern for the input APIs.
+     *
+     * @hide
      */
+    @SystemApi
     public static class VirtualDevice implements AutoCloseable {
 
         private final Context mContext;
@@ -200,6 +242,17 @@ public final class VirtualDeviceManager {
                     associationId,
                     params,
                     mActivityListenerBinder);
+        }
+
+        /**
+         * Returns the unique ID of this virtual device.
+         */
+        public int getDeviceId() {
+            try {
+                return mVirtualDevice.getDeviceId();
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
         }
 
         /**
@@ -315,6 +368,32 @@ public final class VirtualDeviceManager {
         }
 
         /**
+         * Creates a virtual dpad.
+         *
+         * @param display the display that the events inputted through this device should target
+         * @param inputDeviceName the name to call this input device
+         * @param vendorId the PCI vendor id
+         * @param productId the product id, as defined by the vendor
+         */
+        @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)
+        @NonNull
+        public VirtualDpad createVirtualDpad(
+                @NonNull VirtualDisplay display,
+                @NonNull String inputDeviceName,
+                int vendorId,
+                int productId) {
+            try {
+                final IBinder token = new Binder(
+                        "android.hardware.input.VirtualDpad:" + inputDeviceName);
+                mVirtualDevice.createVirtualDpad(display.getDisplay().getDisplayId(),
+                        inputDeviceName, vendorId, productId, token);
+                return new VirtualDpad(mVirtualDevice, token);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        /**
          * Creates a virtual keyboard.
          *
          * @param display the display that the events inputted through this device should target
@@ -418,8 +497,8 @@ public final class VirtualDeviceManager {
                 @Nullable Executor executor,
                 @Nullable AudioConfigurationChangeCallback callback) {
             if (mVirtualAudioDevice == null) {
-                mVirtualAudioDevice = new VirtualAudioDevice(
-                        mContext, mVirtualDevice, display, executor, callback);
+                mVirtualAudioDevice = new VirtualAudioDevice(mContext, mVirtualDevice, display,
+                        executor, callback, () -> mVirtualAudioDevice = null);
             }
             return mVirtualAudioDevice;
         }
@@ -489,7 +568,10 @@ public final class VirtualDeviceManager {
 
     /**
      * Listener for activity changes in this virtual device.
+     *
+     * @hide
      */
+    @SystemApi
     public interface ActivityListener {
 
         /**

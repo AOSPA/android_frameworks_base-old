@@ -19,7 +19,11 @@ package com.android.systemui.flags
 import dagger.Binds
 import dagger.Module
 
-@Module(includes = [ServerFlagReaderModule::class])
+@Module(includes = [
+    FeatureFlagsReleaseStartableModule::class,
+    FlagsCommonModule::class,
+    ServerFlagReaderModule::class
+])
 abstract class FlagsModule {
     @Binds
     abstract fun bindsFeatureFlagRelease(impl: FeatureFlagsRelease): FeatureFlags

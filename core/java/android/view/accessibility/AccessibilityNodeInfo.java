@@ -84,7 +84,7 @@ import java.util.Objects;
  * <p>
  * Once an accessibility node info is delivered to an accessibility service it is
  * made immutable and calling a state mutation method generates an error. See
- * {@link #makeQueryableFromAppProcess(View)} if you would like to inspect the
+ * {@link #setQueryFromAppProcessEnabled} if you would like to inspect the
  * node tree from the app process for testing or debugging tools.
  * </p>
  * <p>
@@ -126,6 +126,16 @@ public class AccessibilityNodeInfo implements Parcelable {
 
     /** @hide */
     public static final long UNDEFINED_NODE_ID = makeNodeId(UNDEFINED_ITEM_ID, UNDEFINED_ITEM_ID);
+
+    /**
+     * The default value for {@link #getMinMillisBetweenContentChanges};
+     */
+    public static final int UNDEFINED_MIN_MILLIS_BETWEEN_CONTENT_CHANGES = -1;
+
+    /**
+     * The minimum value for {@link #setMinMillisBetweenContentChanges};
+     */
+    public static final int MINIMUM_MIN_MILLIS_BETWEEN_CONTENT_CHANGES = 100;
 
     /** @hide */
     public static final long ROOT_NODE_ID = makeNodeId(ROOT_ITEM_ID,
@@ -879,6 +889,9 @@ public class AccessibilityNodeInfo implements Parcelable {
     private long mTraversalBefore = UNDEFINED_NODE_ID;
     private long mTraversalAfter = UNDEFINED_NODE_ID;
 
+    private int mMinMillisBetweenContentChanges =
+            UNDEFINED_MIN_MILLIS_BETWEEN_CONTENT_CHANGES;
+
     private int mBooleanProperties;
     private final Rect mBoundsInParent = new Rect();
     private final Rect mBoundsInScreen = new Rect();
@@ -897,6 +910,7 @@ public class AccessibilityNodeInfo implements Parcelable {
     private CharSequence mTooltipText;
     private String mViewIdResourceName;
     private String mUniqueId;
+    private CharSequence mContainerTitle;
     private ArrayList<String> mExtraDataKeys;
 
     @UnsupportedAppUsage
@@ -1175,7 +1189,7 @@ public class AccessibilityNodeInfo implements Parcelable {
      * @return The child node.
      *
      * @throws IllegalStateException If called outside of an {@link AccessibilityService} and before
-     *                               calling {@link #makeQueryableFromAppProcess(View)}.
+     *                               calling {@link #setQueryFromAppProcessEnabled}.
      */
     public AccessibilityNodeInfo getChild(int index) {
         return getChild(index, FLAG_PREFETCH_DESCENDANTS_HYBRID);
@@ -1190,7 +1204,7 @@ public class AccessibilityNodeInfo implements Parcelable {
      * @return The child node.
      *
      * @throws IllegalStateException If called outside of an {@link AccessibilityService} and before
-     *                               calling {@link #makeQueryableFromAppProcess(View)}.
+     *                               calling {@link #setQueryFromAppProcessEnabled}.
      *
      * @see AccessibilityNodeInfo#getParent(int) for a description of prefetching.
      */
@@ -1781,6 +1795,42 @@ public class AccessibilityNodeInfo implements Parcelable {
     }
 
     /**
+     * Sets the minimum time duration between two content change events, which is used in throttling
+     * content change events in accessibility services.
+     *
+     * <p>
+     * <strong>Note:</strong>
+     * This value should not be smaller than {@link #MINIMUM_MIN_MILLIS_BETWEEN_CONTENT_CHANGES},
+     * otherwise it would be ignored by accessibility services.
+     * </p>
+     *
+     * <p>
+     * Example: An app can set MinMillisBetweenContentChanges as 1 min for a view which sends
+     * content change events to accessibility services one event per second.
+     * Accessibility service will throttle those content change events and only handle one event
+     * per minute for that view.
+     * </p>
+     *
+     * @see AccessibilityEvent#getContentChangeTypes for all content change types.
+     * @param minMillisBetweenContentChanges the minimum duration between content change events.
+     */
+    public void setMinMillisBetweenContentChanges(int minMillisBetweenContentChanges) {
+        enforceNotSealed();
+        mMinMillisBetweenContentChanges = minMillisBetweenContentChanges
+                >= MINIMUM_MIN_MILLIS_BETWEEN_CONTENT_CHANGES
+                ? minMillisBetweenContentChanges
+                : UNDEFINED_MIN_MILLIS_BETWEEN_CONTENT_CHANGES;
+    }
+
+    /**
+     * Gets the minimum time duration between two content change events. This method may return
+     * {@link #UNDEFINED_MIN_MILLIS_BETWEEN_CONTENT_CHANGES}
+     */
+    public int getMinMillisBetweenContentChanges() {
+        return mMinMillisBetweenContentChanges;
+    }
+
+    /**
      * Performs an action on the node.
      * <p>
      *   <strong>Note:</strong> An action can be performed only if the request is made
@@ -1914,7 +1964,7 @@ public class AccessibilityNodeInfo implements Parcelable {
      * @return The parent.
      *
      * @throws IllegalStateException If called outside of an {@link AccessibilityService} and before
-     *                               calling {@link #makeQueryableFromAppProcess(View)}.
+     *                               calling {@link #setQueryFromAppProcessEnabled}.
      */
     public AccessibilityNodeInfo getParent() {
         enforceSealed();
@@ -1943,7 +1993,7 @@ public class AccessibilityNodeInfo implements Parcelable {
      * @return The parent.
      *
      * @throws IllegalStateException If called outside of an {@link AccessibilityService} and before
-     *                               calling {@link #makeQueryableFromAppProcess(View)}.
+     *                               calling {@link #setQueryFromAppProcessEnabled}.
      *
      * @see #FLAG_PREFETCH_ANCESTORS
      * @see #FLAG_PREFETCH_DESCENDANTS_BREADTH_FIRST
@@ -3631,6 +3681,47 @@ public class AccessibilityNodeInfo implements Parcelable {
     }
 
     /**
+     * Sets the container title for app-developer-defined container which can be any type of
+     * ViewGroup or layout.
+     * Container title will be used to group together related controls, similar to HTML fieldset.
+     * Or container title may identify a large piece of the UI that is visibly grouped together,
+     * such as a toolbar or a card, etc.
+     * <p>
+     * Container title helps to assist in navigation across containers and other groups.
+     * For example, a screen reader may use this to determine where to put accessibility focus.
+     * </p>
+     * <p>
+     * Container title is different from pane title{@link #setPaneTitle} which indicates that the
+     * node represents a window or activity.
+     * </p>
+     *
+     * <p>
+     *  Example: An app can set container titles on several non-modal menus, containing TextViews
+     *  or ImageButtons that have content descriptions, text, etc. Screen readers can quickly
+     *  switch accessibility focus among menus instead of child views.  Other accessibility-services
+     *  can easily find the menu.
+     * </p>
+     *
+     * @param containerTitle The container title that is associated with a ViewGroup/Layout on the
+     *                       screen.
+     */
+    public void setContainerTitle(@Nullable CharSequence containerTitle) {
+        enforceNotSealed();
+        mContainerTitle = (containerTitle == null) ? null
+                : containerTitle.subSequence(0, containerTitle.length());
+    }
+
+    /**
+     * Returns the container title.
+     *
+     * @see #setContainerTitle for details.
+     */
+    @Nullable
+    public CharSequence getContainerTitle() {
+        return mContainerTitle;
+    }
+
+    /**
      * Sets the token and node id of the leashed parent.
      *
      * @param token The token.
@@ -3669,30 +3760,47 @@ public class AccessibilityNodeInfo implements Parcelable {
      * {@link AccessibilityNodeInfo} tree and perform accessibility actions on nodes.
      *
      * <p>
-     * This is intended for short-lived inspections from testing or debugging tools in the app
-     * process. After calling this method, all nodes linked to this node (children, ancestors, etc.)
-     * are also queryable. Operations on this node tree will only succeed as long as the associated
-     * view hierarchy remains attached to a window.
-     * </p>
-     *
-     * <p>
-     * Calling this method more than once on the same node is a no-op; if you wish to inspect a
-     * different view hierarchy then create a new node from any view in that hierarchy and call this
-     * method on that node.
-     * </p>
-     *
-     * <p>
      * Testing or debugging tools should create this {@link AccessibilityNodeInfo} node using
      * {@link View#createAccessibilityNodeInfo()} or {@link AccessibilityNodeProvider} and call this
      * method, then navigate and interact with the node tree by calling methods on the node.
+     * Calling this method more than once on the same node is a no-op. After calling this method,
+     * all nodes linked to this node (children, ancestors, etc.) are also queryable.
+     * </p>
+     *
+     * <p>
+     * Here "query" refers to the following node operations:
+     * <li>check properties of this node (example: {@link #isScrollable()})</li>
+     * <li>find and query children (example: {@link #getChild(int)})</li>
+     * <li>find and query the parent (example: {@link #getParent()})</li>
+     * <li>find focus (examples: {@link #findFocus(int)}, {@link #focusSearch(int)})</li>
+     * <li>find and query other nodes (example: {@link #findAccessibilityNodeInfosByText(String)},
+     * {@link #findAccessibilityNodeInfosByViewId(String)})</li>
+     * <li>perform actions (example: {@link #performAction(int)})</li>
+     * </p>
+     *
+     * <p>
+     * This is intended for short-lived inspections from testing or debugging tools in the app
+     * process, as operations on this node tree will only succeed as long as the associated
+     * view hierarchy remains attached to a window. {@link AccessibilityNodeInfo} objects can
+     * quickly become out of sync with their corresponding {@link View} objects; if you wish to
+     * inspect a changed or different view hierarchy then create a new node from any view in that
+     * hierarchy and call this method on that new node, instead of disabling & re-enabling the
+     * connection on the previous node.
      * </p>
      *
      * @param view The view that generated this node, or any view in the same view-root hierarchy.
+     * @param enabled Whether to enable (true) or disable (false) querying from the app process.
      * @throws IllegalStateException If called from an {@link AccessibilityService}, or if provided
      *                               a {@link View} that is not attached to a window.
      */
-    public void makeQueryableFromAppProcess(@NonNull View view) {
+    public void setQueryFromAppProcessEnabled(@NonNull View view, boolean enabled) {
         enforceNotSealed();
+
+        if (!enabled) {
+            setConnectionId(UNDEFINED_CONNECTION_ID);
+            return;
+        }
+
         if (mConnectionId != UNDEFINED_CONNECTION_ID) {
             return;
         }
@@ -3892,6 +4000,11 @@ public class AccessibilityNodeInfo implements Parcelable {
         fieldIndex++;
         if (mTraversalAfter != DEFAULT.mTraversalAfter) nonDefaultFields |= bitAt(fieldIndex);
         fieldIndex++;
+        if (mMinMillisBetweenContentChanges
+                != DEFAULT.mMinMillisBetweenContentChanges) {
+            nonDefaultFields |= bitAt(fieldIndex);
+        }
+        fieldIndex++;
         if (mConnectionId != DEFAULT.mConnectionId) nonDefaultFields |= bitAt(fieldIndex);
         fieldIndex++;
         if (!LongArray.elementsEqual(mChildNodeIds, DEFAULT.mChildNodeIds)) {
@@ -3943,6 +4056,10 @@ public class AccessibilityNodeInfo implements Parcelable {
         }
         fieldIndex++;
         if (!Objects.equals(mTooltipText, DEFAULT.mTooltipText)) {
+            nonDefaultFields |= bitAt(fieldIndex);
+        }
+        fieldIndex++;
+        if (!Objects.equals(mContainerTitle, DEFAULT.mContainerTitle)) {
             nonDefaultFields |= bitAt(fieldIndex);
         }
         fieldIndex++;
@@ -4017,6 +4134,9 @@ public class AccessibilityNodeInfo implements Parcelable {
         if (isBitSet(nonDefaultFields, fieldIndex++)) parcel.writeLong(mLabeledById);
         if (isBitSet(nonDefaultFields, fieldIndex++)) parcel.writeLong(mTraversalBefore);
         if (isBitSet(nonDefaultFields, fieldIndex++)) parcel.writeLong(mTraversalAfter);
+        if (isBitSet(nonDefaultFields, fieldIndex++)) {
+            parcel.writeInt(mMinMillisBetweenContentChanges);
+        }
 
         if (isBitSet(nonDefaultFields, fieldIndex++)) parcel.writeInt(mConnectionId);
 
@@ -4091,10 +4211,10 @@ public class AccessibilityNodeInfo implements Parcelable {
         }
         if (isBitSet(nonDefaultFields, fieldIndex++)) parcel.writeCharSequence(mPaneTitle);
         if (isBitSet(nonDefaultFields, fieldIndex++)) parcel.writeCharSequence(mTooltipText);
+        if (isBitSet(nonDefaultFields, fieldIndex++)) parcel.writeCharSequence(mContainerTitle);
 
         if (isBitSet(nonDefaultFields, fieldIndex++)) parcel.writeString(mViewIdResourceName);
         if (isBitSet(nonDefaultFields, fieldIndex++)) parcel.writeString(mUniqueId);
-
         if (isBitSet(nonDefaultFields, fieldIndex++)) parcel.writeInt(mTextSelectionStart);
         if (isBitSet(nonDefaultFields, fieldIndex++)) parcel.writeInt(mTextSelectionEnd);
         if (isBitSet(nonDefaultFields, fieldIndex++)) parcel.writeInt(mInputType);
@@ -4172,6 +4292,7 @@ public class AccessibilityNodeInfo implements Parcelable {
         mLabeledById = other.mLabeledById;
         mTraversalBefore = other.mTraversalBefore;
         mTraversalAfter = other.mTraversalAfter;
+        mMinMillisBetweenContentChanges = other.mMinMillisBetweenContentChanges;
         mWindowId = other.mWindowId;
         mConnectionId = other.mConnectionId;
         mUniqueId = other.mUniqueId;
@@ -4187,6 +4308,7 @@ public class AccessibilityNodeInfo implements Parcelable {
         mContentDescription = other.mContentDescription;
         mPaneTitle = other.mPaneTitle;
         mTooltipText = other.mTooltipText;
+        mContainerTitle = other.mContainerTitle;
         mViewIdResourceName = other.mViewIdResourceName;
 
         if (mActions != null) mActions.clear();
@@ -4274,6 +4396,9 @@ public class AccessibilityNodeInfo implements Parcelable {
         if (isBitSet(nonDefaultFields, fieldIndex++)) mLabeledById = parcel.readLong();
         if (isBitSet(nonDefaultFields, fieldIndex++)) mTraversalBefore = parcel.readLong();
         if (isBitSet(nonDefaultFields, fieldIndex++)) mTraversalAfter = parcel.readLong();
+        if (isBitSet(nonDefaultFields, fieldIndex++)) {
+            mMinMillisBetweenContentChanges = parcel.readInt();
+        }
 
         if (isBitSet(nonDefaultFields, fieldIndex++)) mConnectionId = parcel.readInt();
 
@@ -4330,6 +4455,7 @@ public class AccessibilityNodeInfo implements Parcelable {
         }
         if (isBitSet(nonDefaultFields, fieldIndex++)) mPaneTitle = parcel.readCharSequence();
         if (isBitSet(nonDefaultFields, fieldIndex++)) mTooltipText = parcel.readCharSequence();
+        if (isBitSet(nonDefaultFields, fieldIndex++)) mContainerTitle = parcel.readCharSequence();
         if (isBitSet(nonDefaultFields, fieldIndex++)) mViewIdResourceName = parcel.readString();
         if (isBitSet(nonDefaultFields, fieldIndex++)) mUniqueId = parcel.readString();
 
@@ -4621,6 +4747,8 @@ public class AccessibilityNodeInfo implements Parcelable {
             builder.append("; mParentNodeId: 0x").append(Long.toHexString(mParentNodeId));
             builder.append("; traversalBefore: 0x").append(Long.toHexString(mTraversalBefore));
             builder.append("; traversalAfter: 0x").append(Long.toHexString(mTraversalAfter));
+            builder.append("; minMillisBetweenContentChanges: ")
+                    .append(mMinMillisBetweenContentChanges);
 
             int granularities = mMovementGranularities;
             builder.append("; MovementGranularities: [");
@@ -4658,6 +4786,7 @@ public class AccessibilityNodeInfo implements Parcelable {
         builder.append("; stateDescription: ").append(mStateDescription);
         builder.append("; contentDescription: ").append(mContentDescription);
         builder.append("; tooltipText: ").append(mTooltipText);
+        builder.append("; containerTitle: ").append(mContainerTitle);
         builder.append("; viewIdResName: ").append(mViewIdResourceName);
         builder.append("; uniqueId: ").append(mUniqueId);
 
@@ -4812,6 +4941,9 @@ public class AccessibilityNodeInfo implements Parcelable {
 
         /**
          * Action that gives accessibility focus to the node.
+         * <p>
+         * This is intended to be used by screen readers. Apps changing focus can confuse screen
+         * readers, so the resulting behavior can vary by device and screen reader version.
          */
         public static final AccessibilityAction ACTION_ACCESSIBILITY_FOCUS =
                 new AccessibilityAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS);

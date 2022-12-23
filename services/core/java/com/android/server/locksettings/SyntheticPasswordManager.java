@@ -43,12 +43,14 @@ import android.util.Slog;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.ArrayUtils;
+import com.android.internal.util.Preconditions;
 import com.android.internal.widget.ICheckCredentialProgressCallback;
 import com.android.internal.widget.IWeakEscrowTokenRemovedListener;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.internal.widget.LockscreenCredential;
 import com.android.internal.widget.VerifyCredentialResponse;
 import com.android.server.locksettings.LockSettingsStorage.PersistentData;
+import com.android.server.utils.Slogf;
 
 import libcore.util.HexEncoding;
 
@@ -79,11 +81,12 @@ import java.util.Set;
  *    LockscreenCredential.  The LSKF may be empty (none).  There may be escrow token-based
  *    protectors as well, only for specific use cases such as enterprise-managed users.
  *
- *  - While the user's LSKF is nonempty, the SP protects the user's CE (credential encrypted)
- *    storage and auth-bound Keystore keys: the user's CE key is encrypted by an SP-derived secret,
- *    and the user's Keystore and Gatekeeper passwords are other SP-derived secrets.  However, while
- *    the user's LSKF is empty, these protections are cleared; this is needed to invalidate the
- *    auth-bound keys and make UserController.unlockUser() work with an empty secret.
+ *  - The user's credential-encrypted storage is always protected by the SP.
+ *
+ *  - The user's auth-bound Keystore keys are protected by the SP, but only while an LSKF is set.
+ *    This works by setting the user's Keystore and Gatekeeper passwords to SP-derived secrets, but
+ *    only while an LSKF is set.  When the LSKF is removed, these passwords are cleared,
+ *    invalidating the user's auth-bound keys.
  *
  * Files stored on disk for each user:
  *   For the SP itself, stored under NULL_PROTECTOR_ID:
@@ -95,9 +98,11 @@ import java.util.Set;
  *     For each protector, stored under the corresponding protector ID:
  *       SP_BLOB_NAME: The encrypted SP secret (the SP itself or the P0 value).  Always exists.
  *       PASSWORD_DATA_NAME: Data used for LSKF verification, such as the scrypt salt and
- *                           parameters.  Only exists for LSKF-based protectors.
+ *                           parameters.  Only exists for LSKF-based protectors.  Doesn't exist when
+ *                           the LSKF is empty, except in old protectors.
  *       PASSWORD_METRICS_NAME: Metrics about the LSKF, encrypted by a key derived from the SP.
- *                              Only exists for LSKF-based protectors.
+ *                              Only exists for LSKF-based protectors.  Doesn't exist when the LSKF
+ *                              is empty, except in old protectors.
  *       SECDISCARDABLE_NAME: A large number of random bytes that all need to be known in order to
  *                            decrypt SP_BLOB_NAME.  When the protector is deleted, this file is
  *                            overwritten and deleted as a "best-effort" attempt to support secure
@@ -331,16 +336,16 @@ public class SyntheticPasswordManager {
         byte scryptLogP;
         public int credentialType;
         byte[] salt;
-        // If Weaver is available, then this field is empty.  Otherwise, it is the Gatekeeper
-        // password handle that resulted from enrolling the hashed LSKF.
+        // When Weaver is unavailable, this is the Gatekeeper password handle that resulted from
+        // enrolling the stretched LSKF.
         public byte[] passwordHandle;
 
-        public static PasswordData create(int passwordType) {
+        public static PasswordData create(int credentialType) {
             PasswordData result = new PasswordData();
             result.scryptLogN = PASSWORD_SCRYPT_LOG_N;
             result.scryptLogR = PASSWORD_SCRYPT_LOG_R;
             result.scryptLogP = PASSWORD_SCRYPT_LOG_P;
-            result.credentialType = passwordType;
+            result.credentialType = credentialType;
             result.salt = secureRandom(PASSWORD_SALT_LENGTH);
             return result;
         }
@@ -600,7 +605,6 @@ public class SyntheticPasswordManager {
     int getCredentialType(long protectorId, int userId) {
         byte[] passwordData = loadState(PASSWORD_DATA_NAME, protectorId, userId);
         if (passwordData == null) {
-            Slog.w(TAG, "getCredentialType: encountered empty password data for user " + userId);
             return LockPatternUtils.CREDENTIAL_TYPE_NONE;
         }
         return PasswordData.fromBytes(passwordData).credentialType;
@@ -772,13 +776,15 @@ public class SyntheticPasswordManager {
     public long createLskfBasedProtector(IGateKeeperService gatekeeper,
             LockscreenCredential credential, SyntheticPassword sp, int userId) {
         long protectorId = generateProtectorId();
-        PasswordData pwd = PasswordData.create(credential.getType());
+        // There's no need to store password data about an empty LSKF.
+        PasswordData pwd = credential.isNone() ? null : PasswordData.create(credential.getType());
         byte[] stretchedLskf = stretchLskf(credential, pwd);
-        final long sid;
+        long sid = GateKeeper.INVALID_SECURE_USER_ID;
         final byte[] protectorSecret;
 
         if (isWeaverAvailable()) {
-            // Protector uses Weaver to verify the LSKF
+            // Weaver is available, so make the protector use it to verify the LSKF.  Do this even
+            // if the LSKF is empty, as that gives us support for securely deleting the protector.
             int weaverSlot = getNextAvailableWeaverSlot();
             Slog.i(TAG, "Weaver enroll password to slot " + weaverSlot + " for user " + userId);
             byte[] weaverSecret = weaverEnroll(weaverSlot, stretchedLskfToWeaverKey(stretchedLskf),
@@ -792,40 +798,43 @@ public class SyntheticPasswordManager {
             // No need to pass in quality since the credential type already encodes sufficient info
             synchronizeWeaverFrpPassword(pwd, 0, userId, weaverSlot);
 
-            pwd.passwordHandle = null;
-            sid = GateKeeper.INVALID_SECURE_USER_ID;
             protectorSecret = transformUnderWeaverSecret(stretchedLskf, weaverSecret);
         } else {
-            // Protector uses Gatekeeper to verify the LSKF
-
-            // In case GK enrollment leaves persistent state around (in RPMB), this will nuke them
-            // to prevent them from accumulating and causing problems.
-            try {
-                gatekeeper.clearSecureUserId(fakeUserId(userId));
-            } catch (RemoteException ignore) {
-                Slog.w(TAG, "Failed to clear SID from gatekeeper");
+            // Weaver is unavailable, so make the protector use Gatekeeper to verify the LSKF
+            // instead.  However, skip Gatekeeper when the LSKF is empty, since it wouldn't give any
+            // benefit in that case as Gatekeeper isn't expected to provide secure deletion.
+            if (!credential.isNone()) {
+                // In case GK enrollment leaves persistent state around (in RPMB), this will nuke
+                // them to prevent them from accumulating and causing problems.
+                try {
+                    gatekeeper.clearSecureUserId(fakeUserId(userId));
+                } catch (RemoteException ignore) {
+                    Slog.w(TAG, "Failed to clear SID from gatekeeper");
+                }
+                GateKeeperResponse response;
+                try {
+                    response = gatekeeper.enroll(fakeUserId(userId), null, null,
+                            stretchedLskfToGkPassword(stretchedLskf));
+                } catch (RemoteException e) {
+                    throw new IllegalStateException("Failed to enroll LSKF for new SP protector"
+                            + " for user " + userId, e);
+                }
+                if (response.getResponseCode() != GateKeeperResponse.RESPONSE_OK) {
+                    throw new IllegalStateException("Failed to enroll LSKF for new SP protector"
+                            + " for user " + userId);
+                }
+                pwd.passwordHandle = response.getPayload();
+                sid = sidFromPasswordHandle(pwd.passwordHandle);
             }
-            GateKeeperResponse response;
-            try {
-                response = gatekeeper.enroll(fakeUserId(userId), null, null,
-                        stretchedLskfToGkPassword(stretchedLskf));
-            } catch (RemoteException e) {
-                throw new IllegalStateException("Failed to enroll LSKF for new SP protector for "
-                        + "user " + userId, e);
-            }
-            if (response.getResponseCode() != GateKeeperResponse.RESPONSE_OK) {
-                throw new IllegalStateException("Failed to enroll LSKF for new SP protector for "
-                        + "user " + userId);
-            }
-            pwd.passwordHandle = response.getPayload();
-            sid = sidFromPasswordHandle(pwd.passwordHandle);
             protectorSecret = transformUnderSecdiscardable(stretchedLskf,
                     createSecdiscardable(protectorId, userId));
             // No need to pass in quality since the credential type already encodes sufficient info
             synchronizeFrpPassword(pwd, 0, userId);
         }
-        saveState(PASSWORD_DATA_NAME, pwd.toBytes(), protectorId, userId);
-        savePasswordMetrics(credential, sp, protectorId, userId);
+        if (!credential.isNone()) {
+            saveState(PASSWORD_DATA_NAME, pwd.toBytes(), protectorId, userId);
+            savePasswordMetrics(credential, sp, protectorId, userId);
+        }
         createSyntheticPasswordBlob(protectorId, PROTECTOR_TYPE_LSKF_BASED, sp, protectorSecret,
                 sid, userId);
         return protectorId;
@@ -870,26 +879,26 @@ public class SyntheticPasswordManager {
     public void migrateFrpPasswordLocked(long protectorId, UserInfo userInfo,
             int requestedQuality) {
         if (mStorage.getPersistentDataBlockManager() != null
-                && LockPatternUtils.userOwnsFrpCredential(mContext, userInfo)) {
+                && LockPatternUtils.userOwnsFrpCredential(mContext, userInfo)
+                && getCredentialType(protectorId, userInfo.id) !=
+                        LockPatternUtils.CREDENTIAL_TYPE_NONE) {
             PasswordData pwd = PasswordData.fromBytes(loadState(PASSWORD_DATA_NAME, protectorId,
                     userInfo.id));
-            if (pwd.credentialType != LockPatternUtils.CREDENTIAL_TYPE_NONE) {
-                int weaverSlot = loadWeaverSlot(protectorId, userInfo.id);
-                if (weaverSlot != INVALID_WEAVER_SLOT) {
-                    synchronizeWeaverFrpPassword(pwd, requestedQuality, userInfo.id, weaverSlot);
-                } else {
-                    synchronizeFrpPassword(pwd, requestedQuality, userInfo.id);
-                }
+            int weaverSlot = loadWeaverSlot(protectorId, userInfo.id);
+            if (weaverSlot != INVALID_WEAVER_SLOT) {
+                synchronizeWeaverFrpPassword(pwd, requestedQuality, userInfo.id, weaverSlot);
+            } else {
+                synchronizeFrpPassword(pwd, requestedQuality, userInfo.id);
             }
         }
     }
 
-    private void synchronizeFrpPassword(PasswordData pwd,
-            int requestedQuality, int userId) {
+    private void synchronizeFrpPassword(@Nullable PasswordData pwd, int requestedQuality,
+            int userId) {
         if (mStorage.getPersistentDataBlockManager() != null
                 && LockPatternUtils.userOwnsFrpCredential(mContext,
                 mUserManager.getUserInfo(userId))) {
-            if (pwd.credentialType != LockPatternUtils.CREDENTIAL_TYPE_NONE) {
+            if (pwd != null && pwd.credentialType != LockPatternUtils.CREDENTIAL_TYPE_NONE) {
                 mStorage.writePersistentDataBlock(PersistentData.TYPE_SP, userId, requestedQuality,
                         pwd.toBytes());
             } else {
@@ -898,12 +907,12 @@ public class SyntheticPasswordManager {
         }
     }
 
-    private void synchronizeWeaverFrpPassword(PasswordData pwd, int requestedQuality, int userId,
-            int weaverSlot) {
+    private void synchronizeWeaverFrpPassword(@Nullable PasswordData pwd, int requestedQuality,
+            int userId, int weaverSlot) {
         if (mStorage.getPersistentDataBlockManager() != null
                 && LockPatternUtils.userOwnsFrpCredential(mContext,
                 mUserManager.getUserInfo(userId))) {
-            if (pwd.credentialType != LockPatternUtils.CREDENTIAL_TYPE_NONE) {
+            if (pwd != null && pwd.credentialType != LockPatternUtils.CREDENTIAL_TYPE_NONE) {
                 mStorage.writePersistentDataBlock(PersistentData.TYPE_SP_WEAVER, weaverSlot,
                         requestedQuality, pwd.toBytes());
             } else {
@@ -1026,12 +1035,28 @@ public class SyntheticPasswordManager {
             long protectorId, @NonNull LockscreenCredential credential, int userId,
             ICheckCredentialProgressCallback progressCallback) {
         AuthenticationResult result = new AuthenticationResult();
-        PasswordData pwd = PasswordData.fromBytes(loadState(PASSWORD_DATA_NAME, protectorId,
-                    userId));
 
-        if (!credential.checkAgainstStoredType(pwd.credentialType)) {
+        if (protectorId == SyntheticPasswordManager.NULL_PROTECTOR_ID) {
+            // This should never happen, due to the migration done in LSS.bootCompleted().
+            Slogf.wtf(TAG, "Synthetic password not found for user %d", userId);
+            result.gkResponse = VerifyCredentialResponse.ERROR;
+            return result;
+        }
+
+        // Load the PasswordData file.  If it doesn't exist, then the LSKF is empty (i.e.,
+        // CREDENTIAL_TYPE_NONE), and we'll skip the scrypt and Gatekeeper steps.  If it exists,
+        // then either the LSKF is nonempty, or it's an old protector that uses scrypt and
+        // Gatekeeper even though the LSKF is empty.
+        byte[] pwdDataBytes = loadState(PASSWORD_DATA_NAME, protectorId, userId);
+        PasswordData pwd = null;
+        int storedType = LockPatternUtils.CREDENTIAL_TYPE_NONE;
+        if (pwdDataBytes != null) {
+            pwd = PasswordData.fromBytes(pwdDataBytes);
+            storedType = pwd.credentialType;
+        }
+        if (!credential.checkAgainstStoredType(storedType)) {
             Slog.e(TAG, TextUtils.formatSimple("Credential type mismatch: expected %d actual %d",
-                    pwd.credentialType, credential.getType()));
+                    storedType, credential.getType()));
             result.gkResponse = VerifyCredentialResponse.ERROR;
             return result;
         }
@@ -1039,7 +1064,7 @@ public class SyntheticPasswordManager {
         byte[] stretchedLskf = stretchLskf(credential, pwd);
 
         final byte[] protectorSecret;
-        final long sid;
+        long sid = GateKeeper.INVALID_SECURE_USER_ID;
         int weaverSlot = loadWeaverSlot(protectorId, userId);
         if (weaverSlot != INVALID_WEAVER_SLOT) {
             // Protector uses Weaver to verify the LSKF
@@ -1052,54 +1077,62 @@ public class SyntheticPasswordManager {
             if (result.gkResponse.getResponseCode() != VerifyCredentialResponse.RESPONSE_OK) {
                 return result;
             }
-            sid = GateKeeper.INVALID_SECURE_USER_ID;
             protectorSecret = transformUnderWeaverSecret(stretchedLskf,
                     result.gkResponse.getGatekeeperHAT());
         } else {
-            // Protector uses Gatekeeper to verify the LSKF
-            byte[] gkPassword = stretchedLskfToGkPassword(stretchedLskf);
-            GateKeeperResponse response;
-            try {
-                response = gatekeeper.verifyChallenge(fakeUserId(userId), 0L,
-                        pwd.passwordHandle, gkPassword);
-            } catch (RemoteException e) {
-                Slog.e(TAG, "gatekeeper verify failed", e);
-                result.gkResponse = VerifyCredentialResponse.ERROR;
-                return result;
-            }
-            int responseCode = response.getResponseCode();
-            if (responseCode == GateKeeperResponse.RESPONSE_OK) {
-                result.gkResponse = VerifyCredentialResponse.OK;
-                if (response.getShouldReEnroll()) {
-                    GateKeeperResponse reenrollResponse;
-                    try {
-                        reenrollResponse = gatekeeper.enroll(fakeUserId(userId),
-                                pwd.passwordHandle, gkPassword, gkPassword);
-                    } catch (RemoteException e) {
-                        Slog.w(TAG, "Fail to invoke gatekeeper.enroll", e);
-                        reenrollResponse = GateKeeperResponse.ERROR;
-                        // continue the flow anyway
-                    }
-                    if (reenrollResponse.getResponseCode() == GateKeeperResponse.RESPONSE_OK) {
-                        pwd.passwordHandle = reenrollResponse.getPayload();
-                        // Use the reenrollment opportunity to update credential type
-                        // (getting rid of CREDENTIAL_TYPE_PASSWORD_OR_PIN)
-                        pwd.credentialType = credential.getType();
-                        saveState(PASSWORD_DATA_NAME, pwd.toBytes(), protectorId, userId);
-                        synchronizeFrpPassword(pwd, 0, userId);
-                    } else {
-                        Slog.w(TAG, "Fail to re-enroll user password for user " + userId);
-                        // continue the flow anyway
-                    }
+            // Weaver is unavailable, so the protector uses Gatekeeper to verify the LSKF, unless
+            // the LSKF is empty in which case Gatekeeper might not have been used at all.
+            if (pwd == null || pwd.passwordHandle == null) {
+                if (!credential.isNone()) {
+                    Slog.e(TAG, "Missing Gatekeeper password handle for nonempty LSKF");
+                    result.gkResponse = VerifyCredentialResponse.ERROR;
+                    return result;
                 }
-            } else if (responseCode == GateKeeperResponse.RESPONSE_RETRY) {
-                result.gkResponse = VerifyCredentialResponse.fromTimeout(response.getTimeout());
-                return result;
-            } else  {
-                result.gkResponse = VerifyCredentialResponse.ERROR;
-                return result;
+            } else {
+                byte[] gkPassword = stretchedLskfToGkPassword(stretchedLskf);
+                GateKeeperResponse response;
+                try {
+                    response = gatekeeper.verifyChallenge(fakeUserId(userId), 0L,
+                            pwd.passwordHandle, gkPassword);
+                } catch (RemoteException e) {
+                    Slog.e(TAG, "gatekeeper verify failed", e);
+                    result.gkResponse = VerifyCredentialResponse.ERROR;
+                    return result;
+                }
+                int responseCode = response.getResponseCode();
+                if (responseCode == GateKeeperResponse.RESPONSE_OK) {
+                    result.gkResponse = VerifyCredentialResponse.OK;
+                    if (response.getShouldReEnroll()) {
+                        GateKeeperResponse reenrollResponse;
+                        try {
+                            reenrollResponse = gatekeeper.enroll(fakeUserId(userId),
+                                    pwd.passwordHandle, gkPassword, gkPassword);
+                        } catch (RemoteException e) {
+                            Slog.w(TAG, "Fail to invoke gatekeeper.enroll", e);
+                            reenrollResponse = GateKeeperResponse.ERROR;
+                            // continue the flow anyway
+                        }
+                        if (reenrollResponse.getResponseCode() == GateKeeperResponse.RESPONSE_OK) {
+                            pwd.passwordHandle = reenrollResponse.getPayload();
+                            // Use the reenrollment opportunity to update credential type
+                            // (getting rid of CREDENTIAL_TYPE_PASSWORD_OR_PIN)
+                            pwd.credentialType = credential.getType();
+                            saveState(PASSWORD_DATA_NAME, pwd.toBytes(), protectorId, userId);
+                            synchronizeFrpPassword(pwd, 0, userId);
+                        } else {
+                            Slog.w(TAG, "Fail to re-enroll user password for user " + userId);
+                            // continue the flow anyway
+                        }
+                    }
+                } else if (responseCode == GateKeeperResponse.RESPONSE_RETRY) {
+                    result.gkResponse = VerifyCredentialResponse.fromTimeout(response.getTimeout());
+                    return result;
+                } else  {
+                    result.gkResponse = VerifyCredentialResponse.ERROR;
+                    return result;
+                }
+                sid = sidFromPasswordHandle(pwd.passwordHandle);
             }
-            sid = sidFromPasswordHandle(pwd.passwordHandle);
             protectorSecret = transformUnderSecdiscardable(stretchedLskf,
                     loadSecdiscardable(protectorId, userId));
         }
@@ -1120,7 +1153,8 @@ public class SyntheticPasswordManager {
 
         // Upgrade case: store the metrics if the device did not have stored metrics before, should
         // only happen once on old protectors.
-        if (result.syntheticPassword != null && !hasPasswordMetrics(protectorId, userId)) {
+        if (result.syntheticPassword != null && !credential.isNone() &&
+                !hasPasswordMetrics(protectorId, userId)) {
             savePasswordMetrics(credential, result.syntheticPassword, protectorId, userId);
         }
         return result;
@@ -1386,6 +1420,11 @@ public class SyntheticPasswordManager {
         }
     }
 
+    @VisibleForTesting
+    boolean hasPasswordData(long protectorId, int userId) {
+        return hasState(PASSWORD_DATA_NAME, protectorId, userId);
+    }
+
     /**
      * Retrieves a user's saved password metrics from their LSKF-based SP protector.  The
      * SyntheticPassword itself is needed to decrypt the file containing the password metrics.
@@ -1393,10 +1432,16 @@ public class SyntheticPasswordManager {
     public @Nullable PasswordMetrics getPasswordMetrics(SyntheticPassword sp, long protectorId,
             int userId) {
         final byte[] encrypted = loadState(PASSWORD_METRICS_NAME, protectorId, userId);
-        if (encrypted == null) return null;
+        if (encrypted == null) {
+            Slogf.e(TAG, "Failed to read password metrics file for user %d", userId);
+            return null;
+        }
         final byte[] decrypted = SyntheticPasswordCrypto.decrypt(sp.deriveMetricsKey(),
                 /* personalization= */ new byte[0], encrypted);
-        if (decrypted == null) return null;
+        if (decrypted == null) {
+            Slogf.e(TAG, "Failed to decrypt password metrics file for user %d", userId);
+            return null;
+        }
         return VersionedPasswordMetrics.deserialize(decrypted).getMetrics();
     }
 
@@ -1408,7 +1453,8 @@ public class SyntheticPasswordManager {
         saveState(PASSWORD_METRICS_NAME, encrypted, protectorId, userId);
     }
 
-    private boolean hasPasswordMetrics(long protectorId, int userId) {
+    @VisibleForTesting
+    boolean hasPasswordMetrics(long protectorId, int userId) {
         return hasState(PASSWORD_METRICS_NAME, protectorId, userId);
     }
 
@@ -1453,7 +1499,8 @@ public class SyntheticPasswordManager {
         return result;
     }
 
-    private int fakeUserId(int userId) {
+    @VisibleForTesting
+    static int fakeUserId(int userId) {
         return 100000 + userId;
     }
 
@@ -1470,8 +1517,23 @@ public class SyntheticPasswordManager {
         return TextUtils.formatSimple("%s%x", PROTECTOR_KEY_ALIAS_PREFIX, protectorId);
     }
 
-    private byte[] stretchLskf(LockscreenCredential credential, PasswordData data) {
+    /**
+     * Stretches <code>credential</code>, if needed, using the parameters from <code>data</code>.
+     * <p>
+     * When the credential is empty, stetching provides no security benefit.  Thus, new protectors
+     * for an empty credential use <code>null</code> {@link PasswordData} and skip the stretching.
+     * <p>
+     * However, old protectors always stored {@link PasswordData} and did the stretching, regardless
+     * of whether the credential was empty or not.  For this reason, this method also continues to
+     * support stretching of empty credentials so that old protectors can still be unlocked.
+     */
+    @VisibleForTesting
+    byte[] stretchLskf(LockscreenCredential credential, @Nullable PasswordData data) {
         final byte[] password = credential.isNone() ? DEFAULT_PASSWORD : credential.getCredential();
+        if (data == null) {
+            Preconditions.checkArgument(credential.isNone());
+            return Arrays.copyOf(password, STRETCHED_LSKF_LENGTH);
+        }
         return scrypt(password, data.salt, 1 << data.scryptLogN, 1 << data.scryptLogR,
                 1 << data.scryptLogP, STRETCHED_LSKF_LENGTH);
     }

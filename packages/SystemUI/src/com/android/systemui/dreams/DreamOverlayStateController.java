@@ -50,6 +50,8 @@ public class DreamOverlayStateController implements
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
     public static final int STATE_DREAM_OVERLAY_ACTIVE = 1 << 0;
+    public static final int STATE_LOW_LIGHT_ACTIVE = 1 << 1;
+    public static final int STATE_DREAM_ENTRY_ANIMATIONS_FINISHED = 1 << 2;
 
     private static final int OP_CLEAR_STATE = 1;
     private static final int OP_SET_STATE = 2;
@@ -193,6 +195,22 @@ public class DreamOverlayStateController implements
         return containsState(STATE_DREAM_OVERLAY_ACTIVE);
     }
 
+    /**
+     * Returns whether low light mode is active.
+     * @return {@code true} if in low light mode, {@code false} otherwise.
+     */
+    public boolean isLowLightActive() {
+        return containsState(STATE_LOW_LIGHT_ACTIVE);
+    }
+
+    /**
+     * Returns whether the dream content and dream overlay entry animations are finished.
+     * @return {@code true} if animations are finished, {@code false} otherwise.
+     */
+    public boolean areEntryAnimationsFinished() {
+        return containsState(STATE_DREAM_ENTRY_ANIMATIONS_FINISHED);
+    }
+
     private boolean containsState(int state) {
         return (mState & state) != 0;
     }
@@ -209,7 +227,7 @@ public class DreamOverlayStateController implements
         }
 
         if (existingState != mState) {
-            notifyCallbacks(callback -> callback.onStateChanged());
+            notifyCallbacks(Callback::onStateChanged);
         }
     }
 
@@ -219,6 +237,23 @@ public class DreamOverlayStateController implements
      */
     public void setOverlayActive(boolean active) {
         modifyState(active ? OP_SET_STATE : OP_CLEAR_STATE, STATE_DREAM_OVERLAY_ACTIVE);
+    }
+
+    /**
+     * Sets whether low light mode is active.
+     * @param active {@code true} if low light mode is active, {@code false} otherwise.
+     */
+    public void setLowLightActive(boolean active) {
+        modifyState(active ? OP_SET_STATE : OP_CLEAR_STATE, STATE_LOW_LIGHT_ACTIVE);
+    }
+
+    /**
+     * Sets whether dream content and dream overlay entry animations are finished.
+     * @param finished {@code true} if entry animations are finished, {@code false} otherwise.
+     */
+    public void setEntryAnimationsFinished(boolean finished) {
+        modifyState(finished ? OP_SET_STATE : OP_CLEAR_STATE,
+                STATE_DREAM_ENTRY_ANIMATIONS_FINISHED);
     }
 
     /**

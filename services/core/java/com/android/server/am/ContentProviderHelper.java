@@ -81,7 +81,8 @@ import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.LocalServices;
 import com.android.server.RescueParty;
 import com.android.server.pm.UserManagerInternal;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
+import com.android.server.pm.UserManagerService;
+import com.android.server.pm.pkg.AndroidPackage;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -163,7 +164,7 @@ public class ContentProviderHelper {
     private ContentProviderHolder getContentProviderImpl(IApplicationThread caller,
             String name, IBinder token, int callingUid, String callingPackage, String callingTag,
             boolean stable, int userId) {
-        ContentProviderRecord cpr;
+        ContentProviderRecord cpr = null;
         ContentProviderConnection conn = null;
         ProviderInfo cpi = null;
         boolean providerRunning = false;
@@ -185,8 +186,21 @@ public class ContentProviderHelper {
 
             checkTime(startTime, "getContentProviderImpl: getProviderByName");
 
-            // First check if this content provider has been published...
-            cpr = mProviderMap.getProviderByName(name, userId);
+            UserManagerService userManagerService = UserManagerService.getInstance();
+
+            /*
+             For clone user profile and allowed authority, skipping finding provider and redirecting
+             it to owner profile. Ideally clone profile should not have MediaProvider instance
+             installed and mProviderMap would not have entry for clone user. This is just fallback
+             check to ensure even if MediaProvider is installed in Clone Profile, it should not be
+             used and redirect to owner user's MediaProvider.
+             */
+            //todo(b/236121588) MediaProvider should not be installed in clone profile.
+            if (!isAuthorityRedirectedForCloneProfile(name)
+                    || !userManagerService.isMediaSharedWithParent(userId)) {
+                // First check if this content provider has been published...
+                cpr = mProviderMap.getProviderByName(name, userId);
+            }
             // If that didn't work, check if it exists for user 0 and then
             // verify that it's a singleton provider before using it.
             if (cpr == null && userId != UserHandle.USER_SYSTEM) {
@@ -201,11 +215,9 @@ public class ContentProviderHelper {
                         userId = UserHandle.USER_SYSTEM;
                         checkCrossUser = false;
                     } else if (isAuthorityRedirectedForCloneProfile(name)) {
-                        UserManagerInternal umInternal = LocalServices.getService(
-                                UserManagerInternal.class);
-                        UserInfo userInfo = umInternal.getUserInfo(userId);
-
-                        if (userInfo != null && userInfo.isCloneProfile()) {
+                        if (userManagerService.isMediaSharedWithParent(userId)) {
+                            UserManagerInternal umInternal = LocalServices.getService(
+                                    UserManagerInternal.class);
                             userId = umInternal.getProfileParentId(userId);
                             checkCrossUser = false;
                         }
@@ -464,10 +476,9 @@ public class ContentProviderHelper {
                         try {
                             checkTime(startTime,
                                     "getContentProviderImpl: before set stopped state");
-                            AppGlobals.getPackageManager().setPackageStoppedState(
+                            mService.mPackageManagerInt.setPackageStoppedState(
                                     cpr.appInfo.packageName, false, userId);
                             checkTime(startTime, "getContentProviderImpl: after set stopped state");
-                        } catch (RemoteException e) {
                         } catch (IllegalArgumentException e) {
                             Slog.w(TAG, "Failed trying to unstop package "
                                     + cpr.appInfo.packageName + ": " + e);
@@ -968,7 +979,7 @@ public class ContentProviderHelper {
                 ? Binder.clearCallingIdentity() : 0;
         final ContentProviderHolder holder;
         try {
-            holder = getContentProviderExternalUnchecked(name, null, callingUid,
+            holder = getContentProviderExternalUnchecked(name, null /* token */, callingUid,
                     "*getmimetype*", safeUserId);
         } finally {
             if (ident != 0) {
@@ -995,6 +1006,13 @@ public class ContentProviderHelper {
                     return holder.provider.getType(uri);
                 } finally {
                     mService.mHandler.removeCallbacks(providerNotResponding);
+                    // We need to clear the identity to call removeContentProviderExternalUnchecked
+                    final long token = Binder.clearCallingIdentity();
+                    try {
+                        removeContentProviderExternalUnchecked(name, null /* token */, safeUserId);
+                    } finally {
+                        Binder.restoreCallingIdentity(token);
+                    }
                 }
             }
         } catch (RemoteException e) {
@@ -1003,16 +1021,6 @@ public class ContentProviderHelper {
         } catch (Exception e) {
             Log.w(TAG, "Exception while determining type of " + uri, e);
             return null;
-        } finally {
-            // We need to clear the identity to call removeContentProviderExternalUnchecked
-            final long token = Binder.clearCallingIdentity();
-            try {
-                if (holder != null) {
-                    removeContentProviderExternalUnchecked(name, null /* token */, safeUserId);
-                }
-            } finally {
-                Binder.restoreCallingIdentity(token);
-            }
         }
 
         return null;
@@ -1034,8 +1042,8 @@ public class ContentProviderHelper {
                 ? Binder.clearCallingIdentity() : 0;
         final ContentProviderHolder holder;
         try {
-            holder = getContentProviderExternalUnchecked(name, null /* token */,
-                    callingUid, "*getmimetype*", safeUserId);
+            holder = getContentProviderExternalUnchecked(name, null /* token */, callingUid,
+                    "*getmimetype*", safeUserId);
         } finally {
             if (ident != 0) {
                 Binder.restoreCallingIdentity(ident);
@@ -1080,8 +1088,27 @@ public class ContentProviderHelper {
             return false;
         }
 
-        return !mService.getPackageManagerInternal()
-                .filterAppAccess(holder.info.packageName, callingUid, userId);
+        if (isAuthorityRedirectedForCloneProfile(holder.info.authority)
+                && resolveParentUserIdForCloneProfile(userId) != userId) {
+            // Since clone profile shares certain providers with its parent and the access is
+            // re-directed as well, the holder may not actually be installed on the clone profile.
+            return !mService.getPackageManagerInternal().filterAppAccess(holder.info.packageName,
+                    callingUid, userId, false /* filterUninstalled */);
+        }
+
+        return !mService.getPackageManagerInternal().filterAppAccess(holder.info.packageName,
+                callingUid, userId);
+    }
+
+    private static @UserIdInt int resolveParentUserIdForCloneProfile(@UserIdInt int userId) {
+        final UserManagerInternal umInternal = LocalServices.getService(UserManagerInternal.class);
+        final UserInfo userInfo = umInternal.getUserInfo(userId);
+
+        if (userInfo == null || !userInfo.isCloneProfile()) {
+            return userId;
+        }
+
+        return umInternal.getProfileParentId(userId);
     }
 
     /**

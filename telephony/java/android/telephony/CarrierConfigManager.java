@@ -39,7 +39,6 @@ import android.service.carrier.CarrierService;
 import android.telecom.TelecomManager;
 import android.telephony.AccessNetworkConstants.AccessNetworkType;
 import android.telephony.data.ApnSetting;
-import android.telephony.data.DataCallResponse;
 import android.telephony.gba.TlsParams;
 import android.telephony.gba.UaSecurityProtocolIdentifier;
 import android.telephony.ims.ImsReasonInfo;
@@ -53,7 +52,9 @@ import com.android.internal.telephony.ICarrierConfigLoader;
 import com.android.telephony.Rlog;
 
 import java.util.List;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 /**
  * Provides access to telephony configuration values that are carrier-specific.
@@ -503,7 +504,10 @@ public class CarrierConfigManager {
     /**
      * Control whether users receive a simplified network settings UI and improved network
      * selection.
+     *
+     * @deprecated Never implemented. Has no behavior impact when override. DO NOT USE.
      */
+    @Deprecated
     public static final String
             KEY_SIMPLIFIED_NETWORK_SETTINGS_BOOL = "simplified_network_settings_bool";
 
@@ -592,9 +596,19 @@ public class CarrierConfigManager {
      * List of network type constants which support only a single data connection at a time.
      * Some carriers do not support multiple PDP on UMTS.
      * @see TelephonyManager NETWORK_TYPE_*
+     * @see #KEY_ONLY_SINGLE_DC_ALLOWED_INT_ARRAY
      */
     public static final String
             KEY_ONLY_SINGLE_DC_ALLOWED_INT_ARRAY = "only_single_dc_allowed_int_array";
+
+    /**
+     * Only apply if {@link #KEY_ONLY_SINGLE_DC_ALLOWED_INT_ARRAY} specifies the network types that
+     * support a single data connection at a time. This key defines a list of network capabilities
+     * which, if requested, will exempt the request from single data connection checks.
+     * @see NetworkCapabilities NET_CAPABILITY_*
+     */
+    public static final String KEY_CAPABILITIES_EXEMPT_FROM_SINGLE_DC_CHECK_INT_ARRAY =
+            "capabilities_exempt_from_single_dc_check_int_array";
 
     /**
      * Override the platform's notion of a network operator being considered roaming.
@@ -1166,27 +1180,6 @@ public class CarrierConfigManager {
     public static final String KEY_DEFAULT_MTU_INT = "default_mtu_int";
 
     /**
-     * The data call retry configuration for different types of APN.
-     * @hide
-     */
-    public static final String KEY_CARRIER_DATA_CALL_RETRY_CONFIG_STRINGS =
-            "carrier_data_call_retry_config_strings";
-
-    /**
-     * Delay in milliseconds between trying APN from the pool
-     * @hide
-     */
-    public static final String KEY_CARRIER_DATA_CALL_APN_DELAY_DEFAULT_LONG =
-            "carrier_data_call_apn_delay_default_long";
-
-    /**
-     * Faster delay in milliseconds between trying APN from the pool
-     * @hide
-     */
-    public static final String KEY_CARRIER_DATA_CALL_APN_DELAY_FASTER_LONG =
-            "carrier_data_call_apn_delay_faster_long";
-
-    /**
      * Delay in milliseconds for retrying APN after disconnect
      * @hide
      */
@@ -1194,23 +1187,12 @@ public class CarrierConfigManager {
             "carrier_data_call_apn_retry_after_disconnect_long";
 
     /**
-     * The maximum times for telephony to retry data setup on the same APN requested by
-     * network through the data setup response retry timer
-     * {@link DataCallResponse#getRetryDurationMillis()}. This is to prevent that network keeps
-     * asking device to retry data setup forever and causes power consumption issue. For infinite
-     * retring same APN, configure this as 2147483647 (i.e. {@link Integer#MAX_VALUE}).
+     * Data call setup permanent failure causes by the carrier.
      *
-     * Note if network does not suggest any retry timer, frameworks uses the retry configuration
-     * from {@link #KEY_CARRIER_DATA_CALL_RETRY_CONFIG_STRINGS}, and the maximum retry times could
-     * be configured there.
-     * @hide
+     * @deprecated This API key was added in mistake and is not used anymore by the telephony data
+     * frameworks.
      */
-    public static final String KEY_CARRIER_DATA_CALL_RETRY_NETWORK_REQUESTED_MAX_COUNT_INT =
-            "carrier_data_call_retry_network_requested_max_count_int";
-
-    /**
-     * Data call setup permanent failure causes by the carrier
-     */
+    @Deprecated
     public static final String KEY_CARRIER_DATA_CALL_PERMANENT_FAILURE_STRINGS =
             "carrier_data_call_permanent_failure_strings";
 
@@ -1268,19 +1250,6 @@ public class CarrierConfigManager {
     public static final String KEY_CARRIER_METERED_ROAMING_APN_TYPES_STRINGS =
             "carrier_metered_roaming_apn_types_strings";
 
-    /**
-     * APN types that are not allowed on cellular
-     * @hide
-     */
-    public static final String KEY_CARRIER_WWAN_DISALLOWED_APN_TYPES_STRING_ARRAY =
-            "carrier_wwan_disallowed_apn_types_string_array";
-
-    /**
-     * APN types that are not allowed on IWLAN
-     * @hide
-     */
-    public static final String KEY_CARRIER_WLAN_DISALLOWED_APN_TYPES_STRING_ARRAY =
-            "carrier_wlan_disallowed_apn_types_string_array";
     /**
      * CDMA carrier ERI (Enhanced Roaming Indicator) file name
      * @hide
@@ -2194,6 +2163,16 @@ public class CarrierConfigManager {
      * is immediately closed (disabling keep-alive).
      */
     public static final String KEY_MMS_CLOSE_CONNECTION_BOOL = "mmsCloseConnection";
+    /**
+     * Waiting time in milliseconds used before releasing an MMS data call. Not tearing down an MMS
+     * data connection immediately helps to reduce the message delivering latency if messaging
+     * continues between all parties in the conversation since the same data connection can be
+     * reused for further messages.
+     *
+     * This timer will control how long the data call will be kept alive before being torn down.
+     */
+    public static final String KEY_MMS_NETWORK_RELEASE_TIMEOUT_MILLIS_INT =
+            "mms_network_release_timeout_millis_int";
 
     /**
      * The flatten {@link android.content.ComponentName componentName} of the activity that can
@@ -3446,18 +3425,33 @@ public class CarrierConfigManager {
     public static final String KEY_CARRIER_QUALIFIED_NETWORKS_SERVICE_CLASS_OVERRIDE_STRING =
             "carrier_qualified_networks_service_class_override_string";
     /**
-     * A list of 4 LTE RSCP thresholds above which a signal level is considered POOR,
+     * A list of 4 WCDMA RSCP thresholds above which a signal level is considered POOR,
      * MODERATE, GOOD, or EXCELLENT, to be used in SignalStrength reporting.
      *
      * Note that the min and max thresholds are fixed at -120 and -24, as set in 3GPP TS 27.007
      * section 8.69.
      * <p>
-     * See SignalStrength#MAX_WCDMA_RSCP and SignalStrength#MIN_WDCMA_RSCP. Any signal level outside
-     * these boundaries is considered invalid.
+     * See CellSignalStrengthWcdma#WCDMA_RSCP_MAX and CellSignalStrengthWcdma#WCDMA_RSCP_MIN.
+     * Any signal level outside these boundaries is considered invalid.
      * @hide
      */
     public static final String KEY_WCDMA_RSCP_THRESHOLDS_INT_ARRAY =
             "wcdma_rscp_thresholds_int_array";
+
+    /**
+     * A list of 4 WCDMA ECNO thresholds above which a signal level is considered POOR,
+     * MODERATE, GOOD, or EXCELLENT, to be used in SignalStrength reporting.
+     *
+     * Note that the min and max thresholds are fixed at -24 and 1, as set in 3GPP TS 25.215
+     * section 5.1.5.
+     * Any signal level outside these boundaries is considered invalid.
+     * <p>
+     *
+     * The default value is {@code {-24, -14, -6, 1}}.
+     * @hide
+     */
+    public static final String KEY_WCDMA_ECNO_THRESHOLDS_INT_ARRAY =
+            "wcdma_ecno_thresholds_int_array";
 
     /**
      * The default measurement to use for signal strength reporting. If this is not specified, the
@@ -3466,7 +3460,7 @@ public class CarrierConfigManager {
      * e.g.) To use RSCP by default, set the value to "rscp". The signal strength level will
      * then be determined by #KEY_WCDMA_RSCP_THRESHOLDS_INT_ARRAY
      * <p>
-     * Currently this supports the value "rscp" and "rssi".
+     * Currently this supports the value "rscp","rssi" and "ecno".
      * @hide
      */
     // FIXME: this key and related keys must not be exposed without a consistent philosophy for
@@ -4923,9 +4917,30 @@ public class CarrierConfigManager {
      * The max acceptable value of this config is 24 hours.
      *
      * @hide
+     * @deprecated Use {@link #KEY_DATA_SWITCH_VALIDATION_MIN_INTERVAL_MILLIS_LONG} instead.
      */
+    @Deprecated
     public static final String KEY_DATA_SWITCH_VALIDATION_MIN_GAP_LONG =
             "data_switch_validation_min_gap_long";
+
+    /**
+     * Data switch validation minimal interval, in milliseconds.
+     *
+     * If a connection to the default (Internet) PDN for the current subscription is validated on
+     * a given operator within a given tracking area, re-validations to that matching operator will
+     * be skipped if they would occur within the specified interval. Instead, the connection will
+     * automatically considered validated.
+     *
+     * If the network was validated within the interval but the latest validation result was false,
+     * the validation will not be skipped. If not set or set to 0, validation will not be skipped.
+     *
+     * The valid range of value is between 0 millisecond and 24 hours, inclusive in both sides. The
+     * default value is 24 hours.
+     *
+     * @see android.net.NetworkCapabilities#NET_CAPABILITY_VALIDATED
+     */
+    public static final String KEY_DATA_SWITCH_VALIDATION_MIN_INTERVAL_MILLIS_LONG =
+            KEY_DATA_SWITCH_VALIDATION_MIN_GAP_LONG;
 
     /**
      * A boolean property indicating whether this subscription should be managed as an opportunistic
@@ -8498,7 +8513,8 @@ public class CarrierConfigManager {
      *
      * The syntax of the retry rule:
      * 1. Retry based on {@link NetworkCapabilities}. Note that only APN-type network capabilities
-     *    are supported.
+     *    are supported. If the capabilities are not specified, then the retry rule only applies
+     *    to the current failed APN used in setup data call request.
      * "capabilities=[netCaps1|netCaps2|...], [retry_interval=n1|n2|n3|n4...], [maximum_retries=n]"
      *
      * 2. Retry based on {@link DataFailCause}
@@ -8509,21 +8525,21 @@ public class CarrierConfigManager {
      * "capabilities=[netCaps1|netCaps2|...], fail_causes=[cause1|cause2|cause3|...],
      *     [retry_interval=n1|n2|n3|n4...], [maximum_retries=n]"
      *
+     * 4. Permanent fail causes (no timer-based retry) on the current failed APN. Retry interval
+     *    is specified for retrying the next available APN.
+     * "permanent_fail_causes=8|27|28|29|30|32|33|35|50|51|111|-5|-6|65537|65538|-3|65543|65547|
+     *     2252|2253|2254, retry_interval=2500"
+     *
      * For example,
      * "capabilities=eims, retry_interval=1000, maximum_retries=20" means if the attached
      * network request is emergency, then retry data network setup every 1 second for up to 20
      * times.
-     *
-     * "fail_causes=8|27|28|29|30|32|33|35|50|51|111|-5|-6|65537|65538|-3|2253|2254
-     * , maximum_retries=0" means for those fail causes, never retry with timers. Note that
-     * when environment changes, retry can still happen.
      *
      * "capabilities=internet|enterprise|dun|ims|fota, retry_interval=2500|3000|"
      * "5000|10000|15000|20000|40000|60000|120000|240000|600000|1200000|1800000"
      * "1800000, maximum_retries=20" means for those capabilities, retry happens in 2.5s, 3s, 5s,
      * 10s, 15s, 20s, 40s, 1m, 2m, 4m, 10m, 20m, 30m, 30m, 30m, until reaching 20 retries.
      *
-     * // TODO: remove KEY_CARRIER_DATA_CALL_RETRY_CONFIG_STRINGS
      * @hide
      */
     public static final String KEY_TELEPHONY_DATA_SETUP_RETRY_RULES_STRING_ARRAY =
@@ -8662,7 +8678,12 @@ public class CarrierConfigManager {
      *
      * Used to trade privacy/security against potentially reduced carrier coverage for some
      * carriers.
+     *
+     * @deprecated Future versions of Android will disallow carriers from hiding this toggle
+     * because disabling 2g is a security feature that users should always have access to at
+     * their discretion.
      */
+    @Deprecated
     public static final String KEY_HIDE_ENABLE_2G = "hide_enable_2g_bool";
 
     /**
@@ -8721,11 +8742,12 @@ public class CarrierConfigManager {
 
     /**
      * Boolean indicating if the VoNR setting is visible in the Call Settings menu.
-     * If true, the VoNR setting menu will be visible. If false, the menu will be gone.
+     * If this flag is set and VoNR is enabled for this carrier (see {@link #KEY_VONR_ENABLED_BOOL})
+     * the VoNR setting menu will be visible. If {@link #KEY_VONR_ENABLED_BOOL} or
+     * this setting is false, the menu will be gone.
      *
-     * Disabled by default.
+     * Enabled by default.
      *
-     * @hide
      */
     public static final String KEY_VONR_SETTING_VISIBILITY_BOOL = "vonr_setting_visibility_bool";
 
@@ -8735,7 +8757,6 @@ public class CarrierConfigManager {
      *
      * Disabled by default.
      *
-     * @hide
      */
     public static final String KEY_VONR_ENABLED_BOOL = "vonr_enabled_bool";
 
@@ -8746,6 +8767,134 @@ public class CarrierConfigManager {
      */
     public static final String KEY_UNTHROTTLE_DATA_RETRY_WHEN_TAC_CHANGES_BOOL =
             "unthrottle_data_retry_when_tac_changes_bool";
+
+    /**
+     * A list of premium capabilities the carrier supports. Applications can prompt users to
+     * purchase these premium capabilities from their carrier for a network boost.
+     * Valid values are any of {@link TelephonyManager.PremiumCapability}.
+     *
+     * This is empty by default, indicating that no premium capabilities are supported.
+     *
+     * @see TelephonyManager#isPremiumCapabilityAvailableForPurchase(int)
+     * @see TelephonyManager#purchasePremiumCapability(int, Executor, Consumer)
+     */
+    public static final String KEY_SUPPORTED_PREMIUM_CAPABILITIES_INT_ARRAY =
+            "supported_premium_capabilities_int_array";
+
+    /**
+     * The amount of time in milliseconds the notification for a network boost via
+     * premium capabilities will be visible to the user after
+     * {@link TelephonyManager#purchasePremiumCapability(int, Executor, Consumer)}
+     * requests user action to purchase the boost from the carrier. Once the timeout expires,
+     * the booster notification will be automatically dismissed and the request will fail with
+     * {@link TelephonyManager#PURCHASE_PREMIUM_CAPABILITY_RESULT_TIMEOUT}.
+     *
+     * The default value is 30 minutes.
+     */
+    public static final String KEY_PREMIUM_CAPABILITY_NOTIFICATION_DISPLAY_TIMEOUT_MILLIS_LONG =
+            "premium_capability_notification_display_timeout_millis_long";
+
+    /**
+     * The amount of time in milliseconds that the notification for a network boost via
+     * premium capabilities should be blocked when
+     * {@link TelephonyManager#purchasePremiumCapability(int, Executor, Consumer)}
+     * returns a failure due to user action or timeout.
+     * The maximum number of network boost notifications to show the user are defined in
+     * {@link #KEY_PREMIUM_CAPABILITY_MAXIMUM_DAILY_NOTIFICATION_COUNT_INT} and
+     * {@link #KEY_PREMIUM_CAPABILITY_MAXIMUM_MONTHLY_NOTIFICATION_COUNT_INT}.
+     *
+     * The default value is 30 minutes.
+     *
+     * @see TelephonyManager#PURCHASE_PREMIUM_CAPABILITY_RESULT_USER_CANCELED
+     * @see TelephonyManager#PURCHASE_PREMIUM_CAPABILITY_RESULT_TIMEOUT
+     */
+    public static final String
+            KEY_PREMIUM_CAPABILITY_NOTIFICATION_BACKOFF_HYSTERESIS_TIME_MILLIS_LONG =
+            "premium_capability_notification_backoff_hysteresis_time_millis_long";
+
+    /**
+     * The maximum number of times in a day that we display the notification for a network boost
+     * via premium capabilities when
+     * {@link TelephonyManager#purchasePremiumCapability(int, Executor, Consumer)}
+     * returns a failure due to user action or timeout.
+     *
+     * The default value is 2 times.
+     *
+     * @see TelephonyManager#PURCHASE_PREMIUM_CAPABILITY_RESULT_USER_CANCELED
+     * @see TelephonyManager#PURCHASE_PREMIUM_CAPABILITY_RESULT_TIMEOUT
+     */
+    public static final String KEY_PREMIUM_CAPABILITY_MAXIMUM_DAILY_NOTIFICATION_COUNT_INT =
+            "premium_capability_maximum_daily_notification_count_int";
+
+    /**
+     * The maximum number of times in a month that we display the notification for a network boost
+     * via premium capabilities when
+     * {@link TelephonyManager#purchasePremiumCapability(int, Executor, Consumer)}
+     * returns a failure due to user action or timeout.
+     *
+     * The default value is 10 times.
+     *
+     * @see TelephonyManager#PURCHASE_PREMIUM_CAPABILITY_RESULT_USER_CANCELED
+     * @see TelephonyManager#PURCHASE_PREMIUM_CAPABILITY_RESULT_TIMEOUT
+     */
+    public static final String KEY_PREMIUM_CAPABILITY_MAXIMUM_MONTHLY_NOTIFICATION_COUNT_INT =
+            "premium_capability_maximum_monthly_notification_count_int";
+
+    /**
+     * The amount of time in milliseconds that the purchase request should be throttled when
+     * {@link TelephonyManager#purchasePremiumCapability(int, Executor, Consumer)}
+     * returns a failure due to the carrier.
+     *
+     * The default value is 30 minutes.
+     *
+     * @see TelephonyManager#PURCHASE_PREMIUM_CAPABILITY_RESULT_CARRIER_ERROR
+     * @see TelephonyManager#PURCHASE_PREMIUM_CAPABILITY_RESULT_ENTITLEMENT_CHECK_FAILED
+     */
+    public static final String
+            KEY_PREMIUM_CAPABILITY_PURCHASE_CONDITION_BACKOFF_HYSTERESIS_TIME_MILLIS_LONG =
+            "premium_capability_purchase_condition_backoff_hysteresis_time_millis_long";
+
+    /**
+     * The amount of time in milliseconds within which the network must set up a slicing
+     * configuration for the premium capability after
+     * {@link TelephonyManager#purchasePremiumCapability(int, Executor, Consumer)}
+     * returns {@link TelephonyManager#PURCHASE_PREMIUM_CAPABILITY_RESULT_SUCCESS}.
+     * During the setup time, calls to
+     * {@link TelephonyManager#purchasePremiumCapability(int, Executor, Consumer)} will return
+     * {@link TelephonyManager#PURCHASE_PREMIUM_CAPABILITY_RESULT_PENDING_NETWORK_SETUP}.
+     * If the network fails to set up a slicing configuration for the premium capability within the
+     * setup time, subsequent purchase requests will be allowed to go through again.
+     *
+     * The default value is 5 minutes.
+     */
+    public static final String KEY_PREMIUM_CAPABILITY_NETWORK_SETUP_TIME_MILLIS_LONG =
+            "premium_capability_network_setup_time_millis_long";
+
+    /**
+     * The URL to redirect to when the user clicks on the notification for a network boost via
+     * premium capabilities after applications call
+     * {@link TelephonyManager#purchasePremiumCapability(int, Executor, Consumer)}.
+     * If the URL is empty or invalid, the purchase request will return
+     * {@link TelephonyManager#PURCHASE_PREMIUM_CAPABILITY_RESULT_FEATURE_NOT_SUPPORTED}.
+     *
+     * This is empty by default.
+     */
+    public static final String KEY_PREMIUM_CAPABILITY_PURCHASE_URL_STRING =
+            "premium_capability_purchase_url_string";
+
+    /**
+     * Whether to allow premium capabilities to be purchased when the device is connected to LTE.
+     * If this is {@code true}, applications can call
+     * {@link TelephonyManager#purchasePremiumCapability(int, Executor, Consumer)}
+     * when connected to {@link TelephonyManager#NETWORK_TYPE_LTE} to purchase and use
+     * premium capabilities.
+     * If this is {@code false}, applications can only purchase and use premium capabilities when
+     * connected to {@link TelephonyManager#NETWORK_TYPE_NR}.
+     *
+     * This is {@code false} by default.
+     */
+    public static final String KEY_PREMIUM_CAPABILITY_SUPPORTED_ON_LTE_BOOL =
+            "premium_capability_supported_on_lte_bool";
 
     /**
      * IWLAN handover rules that determine whether handover is allowed or disallowed between
@@ -8770,7 +8919,7 @@ public class CarrierConfigManager {
      *     or EIMS-->
      *     <item value="source=EUTRAN, target=IWLAN, type=disallowed, capabilities=IMS|EIMS"/>
      *     <!-- Handover is always allowed in any condition. -->
-     *     <item value="source=GERAN|UTRAN|EUTRAN|NGRAN|IWLAN,
+     *     <item value="source=GERAN|UTRAN|EUTRAN|NGRAN|IWLAN|UNKNOWN,
      *         target=GERAN|UTRAN|EUTRAN|NGRAN|IWLAN, type=allowed"/>
      * </string-array>
      *
@@ -9043,32 +9192,20 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_BROADCAST_EMERGENCY_CALL_STATE_CHANGES_BOOL, false);
         sDefaults.putBoolean(KEY_ALWAYS_SHOW_EMERGENCY_ALERT_ONOFF_BOOL, false);
         sDefaults.putInt(KEY_DEFAULT_MTU_INT, 1500);
-        sDefaults.putStringArray(KEY_CARRIER_DATA_CALL_RETRY_CONFIG_STRINGS, new String[]{
-                "default:default_randomization=2000,5000,10000,20000,40000,80000:5000,160000:5000,"
-                        + "320000:5000,640000:5000,1280000:5000,1800000:5000",
-                "mms:default_randomization=2000,5000,10000,20000,40000,80000:5000,160000:5000,"
-                        + "320000:5000,640000:5000,1280000:5000,1800000:5000",
-                "ims:max_retries=10, 5000, 5000, 5000",
-                "others:max_retries=3, 5000, 5000, 5000"});
-        sDefaults.putLong(KEY_CARRIER_DATA_CALL_APN_DELAY_DEFAULT_LONG, 20000);
-        sDefaults.putLong(KEY_CARRIER_DATA_CALL_APN_DELAY_FASTER_LONG, 3000);
         sDefaults.putLong(KEY_CARRIER_DATA_CALL_APN_RETRY_AFTER_DISCONNECT_LONG, 3000);
-        sDefaults.putInt(KEY_CARRIER_DATA_CALL_RETRY_NETWORK_REQUESTED_MAX_COUNT_INT, 3);
         sDefaults.putString(KEY_CARRIER_ERI_FILE_NAME_STRING, "eri.xml");
         sDefaults.putInt(KEY_DURATION_BLOCKING_DISABLED_AFTER_EMERGENCY_INT, 7200);
         sDefaults.putStringArray(KEY_CARRIER_METERED_APN_TYPES_STRINGS,
                 new String[]{"default", "mms", "dun", "supl"});
         sDefaults.putStringArray(KEY_CARRIER_METERED_ROAMING_APN_TYPES_STRINGS,
                 new String[]{"default", "mms", "dun", "supl"});
-        sDefaults.putStringArray(KEY_CARRIER_WWAN_DISALLOWED_APN_TYPES_STRING_ARRAY,
-                new String[]{""});
-        sDefaults.putStringArray(KEY_CARRIER_WLAN_DISALLOWED_APN_TYPES_STRING_ARRAY,
-                new String[]{""});
         sDefaults.putBoolean(KEY_CDMA_CW_CF_ENABLED_BOOL, false);
         sDefaults.putIntArray(KEY_ONLY_SINGLE_DC_ALLOWED_INT_ARRAY,
                 new int[] {TelephonyManager.NETWORK_TYPE_CDMA, TelephonyManager.NETWORK_TYPE_1xRTT,
                         TelephonyManager.NETWORK_TYPE_EVDO_0, TelephonyManager.NETWORK_TYPE_EVDO_A,
                         TelephonyManager.NETWORK_TYPE_EVDO_B});
+        sDefaults.putIntArray(KEY_CAPABILITIES_EXEMPT_FROM_SINGLE_DC_CHECK_INT_ARRAY,
+                new int[] {NetworkCapabilities.NET_CAPABILITY_IMS});
         sDefaults.putStringArray(KEY_GSM_ROAMING_NETWORKS_STRING_ARRAY, null);
         sDefaults.putStringArray(KEY_GSM_NONROAMING_NETWORKS_STRING_ARRAY, null);
         sDefaults.putString(KEY_CONFIG_IMS_PACKAGE_OVERRIDE_STRING, null);
@@ -9165,6 +9302,7 @@ public class CarrierConfigManager {
         sDefaults.putInt(KEY_MMS_SMS_TO_MMS_TEXT_LENGTH_THRESHOLD_INT, -1);
         sDefaults.putInt(KEY_MMS_SMS_TO_MMS_TEXT_THRESHOLD_INT, -1);
         sDefaults.putInt(KEY_MMS_SUBJECT_MAX_LENGTH_INT, 40);
+        sDefaults.putInt(KEY_MMS_NETWORK_RELEASE_TIMEOUT_MILLIS_INT, 5 * 1000);
         sDefaults.putString(KEY_MMS_EMAIL_GATEWAY_NUMBER_STRING, "");
         sDefaults.putString(KEY_MMS_HTTP_PARAMS_STRING, "");
         sDefaults.putString(KEY_MMS_NAI_SUFFIX_STRING, "");
@@ -9307,6 +9445,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_CHECK_PRICING_WITH_CARRIER_FOR_DATA_ROAMING_BOOL, false);
         sDefaults.putBoolean(KEY_SHOW_DATA_CONNECTED_ROAMING_NOTIFICATION_BOOL, false);
         sDefaults.putIntArray(KEY_LTE_RSRP_THRESHOLDS_INT_ARRAY,
+                // Boundaries: [-140 dBm, -44 dBm]
                 new int[] {
                         -128, /* SIGNAL_STRENGTH_POOR */
                         -118, /* SIGNAL_STRENGTH_MODERATE */
@@ -9314,6 +9453,7 @@ public class CarrierConfigManager {
                         -98,  /* SIGNAL_STRENGTH_GREAT */
                 });
         sDefaults.putIntArray(KEY_LTE_RSRQ_THRESHOLDS_INT_ARRAY,
+                // Boundaries: [-34 dB, 3 dB]
                 new int[] {
                         -20, /* SIGNAL_STRENGTH_POOR */
                         -17, /* SIGNAL_STRENGTH_MODERATE */
@@ -9321,6 +9461,7 @@ public class CarrierConfigManager {
                         -11  /* SIGNAL_STRENGTH_GREAT */
                 });
         sDefaults.putIntArray(KEY_LTE_RSSNR_THRESHOLDS_INT_ARRAY,
+                // Boundaries: [-20 dBm, 30 dBm]
                 new int[] {
                         -3, /* SIGNAL_STRENGTH_POOR */
                         1,  /* SIGNAL_STRENGTH_MODERATE */
@@ -9328,11 +9469,22 @@ public class CarrierConfigManager {
                         13  /* SIGNAL_STRENGTH_GREAT */
                 });
         sDefaults.putIntArray(KEY_WCDMA_RSCP_THRESHOLDS_INT_ARRAY,
+                // Boundaries: [-120 dBm, -25 dBm]
                 new int[] {
                         -115,  /* SIGNAL_STRENGTH_POOR */
                         -105, /* SIGNAL_STRENGTH_MODERATE */
                         -95, /* SIGNAL_STRENGTH_GOOD */
                         -85  /* SIGNAL_STRENGTH_GREAT */
+                });
+        // TODO(b/249896055): On enabling ECNO measurement part for Signal Bar level indication
+        // system functionality,below values to be rechecked.
+        sDefaults.putIntArray(KEY_WCDMA_ECNO_THRESHOLDS_INT_ARRAY,
+                // Boundaries: [-24 dBm, 1 dBm]
+                new int[] {
+                        -24, /* SIGNAL_STRENGTH_POOR */
+                        -14, /* SIGNAL_STRENGTH_MODERATE */
+                        -6, /* SIGNAL_STRENGTH_GOOD */
+                        1  /* SIGNAL_STRENGTH_GREAT */
                 });
         sDefaults.putIntArray(KEY_5G_NR_SSRSRP_THRESHOLDS_INT_ARRAY,
                 // Boundaries: [-140 dB, -44 dB]
@@ -9496,7 +9648,8 @@ public class CarrierConfigManager {
         sDefaults.putInt(KEY_GBA_UA_TLS_CIPHER_SUITE_INT, TlsParams.TLS_NULL_WITH_NULL_NULL);
 
         sDefaults.putBoolean(KEY_SHOW_FORWARDED_NUMBER_BOOL, false);
-        sDefaults.putLong(KEY_DATA_SWITCH_VALIDATION_MIN_GAP_LONG, TimeUnit.DAYS.toMillis(1));
+        sDefaults.putLong(KEY_DATA_SWITCH_VALIDATION_MIN_INTERVAL_MILLIS_LONG,
+                TimeUnit.DAYS.toMillis(1));
         sDefaults.putStringArray(KEY_MISSED_INCOMING_CALL_SMS_ORIGINATOR_STRING_ARRAY,
                 new String[0]);
         sDefaults.putStringArray(KEY_APN_PRIORITY_STRING_ARRAY, new String[] {
@@ -9523,8 +9676,13 @@ public class CarrierConfigManager {
         sDefaults.putStringArray(
                 KEY_TELEPHONY_DATA_SETUP_RETRY_RULES_STRING_ARRAY, new String[] {
                         "capabilities=eims, retry_interval=1000, maximum_retries=20",
-                        "fail_causes=8|27|28|29|30|32|33|35|50|51|111|-5|-6|65537|65538|-3|2252|"
-                                + "2253|2254, maximum_retries=0", // No retry for those causes
+                        // Permanent fail causes. When setup data call fails with the following
+                        // fail causes, telephony data frameworks will stop timer-based retry on
+                        // the failed APN until power cycle, APM, or some special events. Note that
+                        // even timer-based retry is not performed, condition-based (RAT changes,
+                        // registration state changes) retry can still happen.
+                        "permanent_fail_causes=8|27|28|29|30|32|33|35|50|51|111|-5|-6|65537|65538|"
+                                + "-3|65543|65547|2252|2253|2254, retry_interval=2500",
                         "capabilities=mms|supl|cbs, retry_interval=2000",
                         "capabilities=internet|enterprise|dun|ims|fota, retry_interval=2500|3000|"
                                 + "5000|10000|15000|20000|40000|60000|120000|240000|"
@@ -9576,6 +9734,20 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_USE_SMS_CALLBACK_MODE_BOOL, false);
         sDefaults.putBoolean(KEY_VONR_SETTING_VISIBILITY_BOOL, true);
         sDefaults.putBoolean(KEY_VONR_ENABLED_BOOL, false);
+        sDefaults.putIntArray(KEY_SUPPORTED_PREMIUM_CAPABILITIES_INT_ARRAY, new int[] {});
+        sDefaults.putLong(KEY_PREMIUM_CAPABILITY_NOTIFICATION_DISPLAY_TIMEOUT_MILLIS_LONG,
+                TimeUnit.MINUTES.toMillis(30));
+        sDefaults.putLong(KEY_PREMIUM_CAPABILITY_NOTIFICATION_BACKOFF_HYSTERESIS_TIME_MILLIS_LONG,
+                TimeUnit.MINUTES.toMillis(30));
+        sDefaults.putInt(KEY_PREMIUM_CAPABILITY_MAXIMUM_DAILY_NOTIFICATION_COUNT_INT, 2);
+        sDefaults.putInt(KEY_PREMIUM_CAPABILITY_MAXIMUM_MONTHLY_NOTIFICATION_COUNT_INT, 10);
+        sDefaults.putLong(
+                KEY_PREMIUM_CAPABILITY_PURCHASE_CONDITION_BACKOFF_HYSTERESIS_TIME_MILLIS_LONG,
+                TimeUnit.MINUTES.toMillis(30));
+        sDefaults.putLong(KEY_PREMIUM_CAPABILITY_NETWORK_SETUP_TIME_MILLIS_LONG,
+                TimeUnit.MINUTES.toMillis(5));
+        sDefaults.putString(KEY_PREMIUM_CAPABILITY_PURCHASE_URL_STRING, null);
+        sDefaults.putBoolean(KEY_PREMIUM_CAPABILITY_SUPPORTED_ON_LTE_BOOL, false);
         sDefaults.putStringArray(KEY_IWLAN_HANDOVER_POLICY_STRING_ARRAY, new String[]{
                 "source=GERAN|UTRAN|EUTRAN|NGRAN|IWLAN, "
                         + "target=GERAN|UTRAN|EUTRAN|NGRAN|IWLAN, type=allowed"});

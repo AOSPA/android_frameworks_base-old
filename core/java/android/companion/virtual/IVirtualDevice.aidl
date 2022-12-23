@@ -43,6 +43,11 @@ interface IVirtualDevice {
     int getAssociationId();
 
     /**
+     * Returns the unique device ID for this virtual device.
+     */
+    int getDeviceId();
+
+    /**
      * Closes the virtual device and frees all associated resources.
      */
     void close();
@@ -57,6 +62,12 @@ interface IVirtualDevice {
 
     void onAudioSessionEnded();
 
+    void createVirtualDpad(
+            int displayId,
+            String inputDeviceName,
+            int vendorId,
+            int productId,
+            IBinder token);
     void createVirtualKeyboard(
             int displayId,
             String inputDeviceName,
@@ -77,6 +88,8 @@ interface IVirtualDevice {
             IBinder token,
             in Point screenSize);
     void unregisterInputDevice(IBinder token);
+    int getInputDeviceId(IBinder token);
+    boolean sendDpadKeyEvent(IBinder token, in VirtualKeyEvent event);
     boolean sendKeyEvent(IBinder token, in VirtualKeyEvent event);
     boolean sendButtonEvent(IBinder token, in VirtualMouseButtonEvent event);
     boolean sendRelativeEvent(IBinder token, in VirtualMouseRelativeEvent event);

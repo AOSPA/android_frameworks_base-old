@@ -30,6 +30,7 @@ import android.hardware.fingerprint.Fingerprint;
 import android.hardware.fingerprint.FingerprintManager;
 import android.hardware.fingerprint.FingerprintSensorPropertiesInternal;
 import android.hardware.fingerprint.ISidefpsController;
+import android.hardware.fingerprint.IUdfpsOverlay;
 import android.hardware.fingerprint.IUdfpsOverlayController;
 import android.hardware.keymaster.HardwareAuthToken;
 import android.os.IBinder;
@@ -50,12 +51,14 @@ import com.android.server.biometrics.sensors.ClientMonitorCompositeCallback;
 import com.android.server.biometrics.sensors.EnrollClient;
 import com.android.server.biometrics.sensors.SensorOverlays;
 import com.android.server.biometrics.sensors.fingerprint.FingerprintUtils;
+import com.android.server.biometrics.sensors.fingerprint.PowerPressHandler;
 import com.android.server.biometrics.sensors.fingerprint.Udfps;
 import com.android.server.biometrics.sensors.fingerprint.UdfpsHelper;
 
 import java.util.function.Supplier;
 
-class FingerprintEnrollClient extends EnrollClient<AidlSession> implements Udfps {
+class FingerprintEnrollClient extends EnrollClient<AidlSession> implements Udfps,
+        PowerPressHandler {
 
     private static final String TAG = "FingerprintEnrollClient";
 
@@ -84,6 +87,7 @@ class FingerprintEnrollClient extends EnrollClient<AidlSession> implements Udfps
             @NonNull FingerprintSensorPropertiesInternal sensorProps,
             @Nullable IUdfpsOverlayController udfpsOverlayController,
             @Nullable ISidefpsController sidefpsController,
+            @Nullable IUdfpsOverlay udfpsOverlay,
             int maxTemplatesPerUser, @FingerprintManager.EnrollReason int enrollReason) {
         // UDFPS haptics occur when an image is acquired (instead of when the result is known)
         super(context, lazyDaemon, token, listener, userId, hardwareAuthToken, owner, utils,
@@ -91,10 +95,11 @@ class FingerprintEnrollClient extends EnrollClient<AidlSession> implements Udfps
                 biometricContext);
         setRequestId(requestId);
         mSensorProps = sensorProps;
-        mSensorOverlays = new SensorOverlays(udfpsOverlayController, sidefpsController);
+        mSensorOverlays = new SensorOverlays(udfpsOverlayController,
+                sidefpsController, udfpsOverlay);
         mMaxTemplatesPerUser = maxTemplatesPerUser;
 
-        mALSProbeCallback = getLogger().createALSCallback(false /* startWithClient */);
+        mALSProbeCallback = getLogger().getAmbientLightProbe(true /* startWithClient */);
 
         mEnrollReason = enrollReason;
         if (enrollReason == FingerprintManager.ENROLL_FIND_SENSOR) {
@@ -160,7 +165,8 @@ class FingerprintEnrollClient extends EnrollClient<AidlSession> implements Udfps
 
     @Override
     protected void startHalOperation() {
-        mSensorOverlays.show(getSensorId(), getOverlayReasonFromEnrollReason(mEnrollReason), this);
+        mSensorOverlays.show(getSensorId(), getOverlayReasonFromEnrollReason(mEnrollReason),
+                this);
 
         BiometricNotificationUtils.cancelBadCalibrationNotification(getContext());
         try {
@@ -216,7 +222,6 @@ class FingerprintEnrollClient extends EnrollClient<AidlSession> implements Udfps
     public void onPointerDown(int x, int y, float minor, float major) {
         try {
             mIsPointerDown = true;
-            mALSProbeCallback.getProbe().enable();
 
             final AidlSession session = getFreshDaemon();
             if (session.hasContextMethods()) {
@@ -240,7 +245,6 @@ class FingerprintEnrollClient extends EnrollClient<AidlSession> implements Udfps
     public void onPointerUp() {
         try {
             mIsPointerDown = false;
-            mALSProbeCallback.getProbe().disable();
 
             final AidlSession session = getFreshDaemon();
             if (session.hasContextMethods()) {
@@ -267,5 +271,11 @@ class FingerprintEnrollClient extends EnrollClient<AidlSession> implements Udfps
         } catch (RemoteException e) {
             Slog.e(TAG, "Unable to send UI ready", e);
         }
+    }
+
+    @Override
+    public void onPowerPressed() {
+        onAcquired(BiometricFingerprintConstants.FINGERPRINT_ACQUIRED_POWER_PRESSED,
+                0 /* vendorCode */);
     }
 }

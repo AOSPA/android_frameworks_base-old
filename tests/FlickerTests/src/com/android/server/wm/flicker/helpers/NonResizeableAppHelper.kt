@@ -23,12 +23,13 @@ import com.android.server.wm.flicker.testapp.ActivityOptions
 import com.android.server.wm.traces.common.ComponentNameMatcher
 import com.android.server.wm.traces.parser.toFlickerComponent
 
-class NonResizeableAppHelper @JvmOverloads constructor(
+class NonResizeableAppHelper
+@JvmOverloads
+constructor(
     instr: Instrumentation,
-    launcherName: String = ActivityOptions.NON_RESIZEABLE_ACTIVITY_LAUNCHER_NAME,
+    launcherName: String = ActivityOptions.NonResizeableActivity.LABEL,
     component: ComponentNameMatcher =
-        ActivityOptions.NON_RESIZEABLE_ACTIVITY_COMPONENT_NAME.toFlickerComponent(),
-    launcherStrategy: ILauncherStrategy = LauncherStrategyFactory
-        .getInstance(instr)
-        .launcherStrategy
+        ActivityOptions.NonResizeableActivity.COMPONENT.toFlickerComponent(),
+    launcherStrategy: ILauncherStrategy =
+        LauncherStrategyFactory.getInstance(instr).launcherStrategy
 ) : StandardAppHelper(instr, launcherName, component, launcherStrategy)

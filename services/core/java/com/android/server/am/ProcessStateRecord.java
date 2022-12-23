@@ -30,13 +30,11 @@ import android.annotation.ElapsedRealtimeLong;
 import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.os.SystemClock;
-import android.util.ArraySet;
 import android.util.Slog;
 import android.util.TimeUtils;
 
 import com.android.internal.annotations.CompositeRWLock;
 import com.android.internal.annotations.GuardedBy;
-import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.am.PlatformCompatCache.CachedCompatChangeId;
 
 import java.io.PrintWriter;
@@ -600,12 +598,6 @@ final class ProcessStateRecord {
     @GuardedBy({"mService", "mProcLock"})
     void setReportedProcState(int repProcState) {
         mRepProcState = repProcState;
-        mApp.getPkgList().forEachPackage((pkgName, holder) ->
-                FrameworkStatsLog.write(FrameworkStatsLog.PROCESS_STATE_CHANGED,
-                    mApp.uid, mApp.processName, pkgName,
-                    ActivityManager.processStateAmToProto(mRepProcState),
-                    holder.appVersion)
-        );
         mApp.getWindowProcessController().setReportedProcState(repProcState);
     }
 
@@ -621,12 +613,6 @@ final class ProcessStateRecord {
                 mRepProcState = newState;
                 setCurProcState(newState);
                 setCurRawProcState(newState);
-                mApp.getPkgList().forEachPackage((pkgName, holder) ->
-                        FrameworkStatsLog.write(FrameworkStatsLog.PROCESS_STATE_CHANGED,
-                            mApp.uid, mApp.processName, pkgName,
-                            ActivityManager.processStateAmToProto(mRepProcState),
-                            holder.appVersion)
-                );
             }
         }
     }
@@ -1071,14 +1057,12 @@ final class ProcessStateRecord {
     }
 
     @GuardedBy("mService")
-    boolean getCachedIsReceivingBroadcast(ArraySet<BroadcastQueue> tmpQueue) {
+    boolean getCachedIsReceivingBroadcast(int[] outSchedGroup) {
         if (mCachedIsReceivingBroadcast == VALUE_INVALID) {
-            tmpQueue.clear();
-            mCachedIsReceivingBroadcast = mService.isReceivingBroadcastLocked(mApp, tmpQueue)
+            mCachedIsReceivingBroadcast = mService.isReceivingBroadcastLocked(mApp, outSchedGroup)
                     ? VALUE_TRUE : VALUE_FALSE;
             if (mCachedIsReceivingBroadcast == VALUE_TRUE) {
-                mCachedSchedGroup = tmpQueue.contains(mService.mFgBroadcastQueue)
-                        ? ProcessList.SCHED_GROUP_DEFAULT : ProcessList.SCHED_GROUP_BACKGROUND;
+                mCachedSchedGroup = outSchedGroup[0];
                 mApp.mProfile.addHostingComponentType(HOSTING_COMPONENT_TYPE_BROADCAST_RECEIVER);
             } else {
                 mApp.mProfile.clearHostingComponentType(HOSTING_COMPONENT_TYPE_BROADCAST_RECEIVER);

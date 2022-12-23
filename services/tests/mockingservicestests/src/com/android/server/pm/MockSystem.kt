@@ -38,6 +38,7 @@ import android.os.UserManager
 import android.os.incremental.IncrementalManager
 import android.provider.DeviceConfig
 import android.util.ArrayMap
+import android.util.ArraySet
 import android.util.DisplayMetrics
 import android.util.EventLog
 import android.view.Display
@@ -62,10 +63,10 @@ import com.android.server.compat.PlatformCompat
 import com.android.server.extendedtestutils.wheneverStatic
 import com.android.server.pm.dex.DexManager
 import com.android.server.pm.parsing.PackageParser2
-import com.android.server.pm.parsing.pkg.AndroidPackage
 import com.android.server.pm.parsing.pkg.PackageImpl
 import com.android.server.pm.parsing.pkg.ParsedPackage
 import com.android.server.pm.permission.PermissionManagerServiceInternal
+import com.android.server.pm.pkg.AndroidPackage
 import com.android.server.pm.pkg.parsing.ParsingPackage
 import com.android.server.pm.pkg.parsing.ParsingPackageUtils
 import com.android.server.pm.resolution.ComponentResolver
@@ -103,6 +104,9 @@ import java.util.concurrent.FutureTask
 class MockSystem(withSession: (StaticMockitoSessionBuilder) -> Unit = {}) {
     private val random = Random()
     val mocks = Mocks()
+
+    // TODO: getBackingApexFile does not handle paths that aren't /apex
+    val apexDirectory = File("/apex")
     val packageCacheDirectory: File =
             Files.createTempDirectory("packageCache").toFile()
     val rootDirectory: File =
@@ -294,7 +298,11 @@ class MockSystem(withSession: (StaticMockitoSessionBuilder) -> Unit = {}) {
         wheneverStatic { SystemConfig.getInstance() }.thenReturn(mocks.systemConfig)
         whenever(mocks.systemConfig.availableFeatures).thenReturn(DEFAULT_AVAILABLE_FEATURES_MAP)
         whenever(mocks.systemConfig.sharedLibraries).thenReturn(DEFAULT_SHARED_LIBRARIES_LIST)
+        whenever(mocks.systemConfig.defaultVrComponents).thenReturn(ArraySet())
+        whenever(mocks.systemConfig.hiddenApiWhitelistedApps).thenReturn(ArraySet())
+        wheneverStatic { SystemProperties.set(anyString(), anyString()) }.thenDoNothing()
         wheneverStatic { SystemProperties.getBoolean("fw.free_cache_v2", true) }.thenReturn(true)
+        wheneverStatic { Environment.getApexDirectory() }.thenReturn(apexDirectory)
         wheneverStatic { Environment.getPackageCacheDirectory() }.thenReturn(packageCacheDirectory)
         wheneverStatic { SystemProperties.digestOf("ro.build.fingerprint") }.thenReturn("cacheName")
         wheneverStatic { Environment.getRootDirectory() }.thenReturn(rootDirectory)
@@ -522,7 +530,7 @@ class MockSystem(withSession: (StaticMockitoSessionBuilder) -> Unit = {}) {
         whenever(mocks.packageParser.parsePackage(
                 or(eq(path), eq(basePath)), anyInt(), anyBoolean())) { parsedPackage }
         whenever(mocks.packageParser.parsePackage(
-                or(eq(path), eq(basePath)), anyInt(), anyBoolean(), any())) { parsedPackage }
+                or(eq(path), eq(basePath)), anyInt(), anyBoolean())) { parsedPackage }
         return parsedPackage
     }
 

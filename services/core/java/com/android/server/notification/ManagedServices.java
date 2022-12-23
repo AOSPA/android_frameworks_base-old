@@ -60,14 +60,14 @@ import android.util.Log;
 import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
-import android.util.TypedXmlPullParser;
-import android.util.TypedXmlSerializer;
 import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.XmlUtils;
 import com.android.internal.util.function.TriPredicate;
+import com.android.modules.utils.TypedXmlPullParser;
+import com.android.modules.utils.TypedXmlSerializer;
 import com.android.server.notification.NotificationManagerService.DumpFilter;
 import com.android.server.utils.TimingsTraceAndSlog;
 
@@ -1786,7 +1786,7 @@ abstract public class ManagedServices {
          * from receiving events from the profile.
          */
         public boolean isPermittedForProfile(int userId) {
-            if (!mUserProfiles.isManagedProfile(userId)) {
+            if (!mUserProfiles.isProfileUser(userId)) {
                 return true;
             }
             DevicePolicyManager dpm =
@@ -1862,10 +1862,16 @@ abstract public class ManagedServices {
             }
         }
 
-        public boolean isManagedProfile(int userId) {
+        public boolean isProfileUser(int userId) {
             synchronized (mCurrentProfiles) {
                 UserInfo user = mCurrentProfiles.get(userId);
-                return user != null && user.isManagedProfile();
+                if (user == null) {
+                    return false;
+                }
+                if (user.isManagedProfile() || user.isCloneProfile()) {
+                    return true;
+                }
+                return false;
             }
         }
     }

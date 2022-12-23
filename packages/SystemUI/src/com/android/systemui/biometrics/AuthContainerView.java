@@ -26,6 +26,7 @@ import android.annotation.DurationMillisLong;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.app.AlertDialog;
 import android.content.Context;
 import android.graphics.PixelFormat;
 import android.hardware.biometrics.BiometricAuthenticator.Modality;
@@ -54,6 +55,8 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.window.OnBackInvokedCallback;
+import android.window.OnBackInvokedDispatcher;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.jank.InteractionJankMonitor;
@@ -61,6 +64,9 @@ import com.android.internal.widget.LockPatternUtils;
 import com.android.systemui.R;
 import com.android.systemui.animation.Interpolators;
 import com.android.systemui.biometrics.AuthController.ScaleFactorProvider;
+import com.android.systemui.biometrics.domain.interactor.BiometricPromptCredentialInteractor;
+import com.android.systemui.biometrics.ui.CredentialView;
+import com.android.systemui.biometrics.ui.viewmodel.CredentialViewModel;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
 import com.android.systemui.util.concurrency.DelayableExecutor;
@@ -72,11 +78,13 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import javax.inject.Provider;
+
 /**
  * Top level container/controller for the BiometricPrompt UI.
  */
 public class AuthContainerView extends LinearLayout
-        implements AuthDialog, WakefulnessLifecycle.Observer {
+        implements AuthDialog, WakefulnessLifecycle.Observer, CredentialView.Host {
 
     private static final String TAG = "AuthContainerView";
 
@@ -110,25 +118,30 @@ public class AuthContainerView extends LinearLayout
     private final IBinder mWindowToken = new Binder();
     private final WindowManager mWindowManager;
     private final Interpolator mLinearOutSlowIn;
-    private final CredentialCallback mCredentialCallback;
     private final LockPatternUtils mLockPatternUtils;
     private final WakefulnessLifecycle mWakefulnessLifecycle;
     private final InteractionJankMonitor mInteractionJankMonitor;
 
+    // TODO: these should be migrated out once ready
+    private final Provider<BiometricPromptCredentialInteractor> mBiometricPromptInteractor;
+    private final Provider<CredentialViewModel> mCredentialViewModelProvider;
+
     @VisibleForTesting final BiometricCallback mBiometricCallback;
 
     @Nullable private AuthBiometricView mBiometricView;
-    @Nullable private AuthCredentialView mCredentialView;
+    @Nullable private View mCredentialView;
     private final AuthPanelController mPanelController;
     private final FrameLayout mFrameLayout;
     private final ImageView mBackgroundView;
     private final ScrollView mBiometricScrollView;
     private final View mPanelView;
     private final float mTranslationY;
-    @ContainerState private int mContainerState = STATE_UNKNOWN;
+    @VisibleForTesting @ContainerState int mContainerState = STATE_UNKNOWN;
     private final Set<Integer> mFailedModalities = new HashSet<Integer>();
+    private final OnBackInvokedCallback mBackCallback = this::onBackInvoked;
 
     private final @Background DelayableExecutor mBackgroundExecutor;
+    private boolean mIsOrientationChanged = false;
 
     // Non-null only if the dialog is in the act of dismissing and has not sent the reason yet.
     @Nullable @AuthDialogCallback.DismissedReason private Integer mPendingCallbackReason;
@@ -224,11 +237,13 @@ public class AuthContainerView extends LinearLayout
                 @NonNull WakefulnessLifecycle wakefulnessLifecycle,
                 @NonNull UserManager userManager,
                 @NonNull LockPatternUtils lockPatternUtils,
-                @NonNull InteractionJankMonitor jankMonitor) {
+                @NonNull InteractionJankMonitor jankMonitor,
+                @NonNull Provider<BiometricPromptCredentialInteractor> biometricPromptInteractor,
+                @NonNull Provider<CredentialViewModel> credentialViewModelProvider) {
             mConfig.mSensorIds = sensorIds;
             return new AuthContainerView(mConfig, fpProps, faceProps, wakefulnessLifecycle,
-                    userManager, lockPatternUtils, jankMonitor, new Handler(Looper.getMainLooper()),
-                    bgExecutor);
+                    userManager, lockPatternUtils, jankMonitor, biometricPromptInteractor,
+                    credentialViewModelProvider, new Handler(Looper.getMainLooper()), bgExecutor);
         }
     }
 
@@ -266,12 +281,49 @@ public class AuthContainerView extends LinearLayout
         }
     }
 
-    final class CredentialCallback implements AuthCredentialView.Callback {
-        @Override
-        public void onCredentialMatched(byte[] attestation) {
-            mCredentialAttestation = attestation;
-            animateAway(AuthDialogCallback.DISMISSED_CREDENTIAL_AUTHENTICATED);
+    @Override
+    public void onCredentialMatched(@NonNull byte[] attestation) {
+        mCredentialAttestation = attestation;
+        animateAway(AuthDialogCallback.DISMISSED_CREDENTIAL_AUTHENTICATED);
+    }
+
+    @Override
+    public void onCredentialAborted() {
+        sendEarlyUserCanceled();
+        animateAway(AuthDialogCallback.DISMISSED_USER_CANCELED);
+    }
+
+    @Override
+    public void onCredentialAttemptsRemaining(int remaining, @NonNull String messageBody) {
+        // Only show dialog if <=1 attempts are left before wiping.
+        if (remaining == 1) {
+            showLastAttemptBeforeWipeDialog(messageBody);
+        } else if (remaining <= 0) {
+            showNowWipingDialog(messageBody);
         }
+    }
+
+    private void showLastAttemptBeforeWipeDialog(@NonNull String messageBody) {
+        final AlertDialog alertDialog = new AlertDialog.Builder(mContext)
+                .setTitle(R.string.biometric_dialog_last_attempt_before_wipe_dialog_title)
+                .setMessage(messageBody)
+                .setPositiveButton(android.R.string.ok, null)
+                .create();
+        alertDialog.getWindow().setType(WindowManager.LayoutParams.TYPE_STATUS_BAR_SUB_PANEL);
+        alertDialog.show();
+    }
+
+    private void showNowWipingDialog(@NonNull String messageBody) {
+        final AlertDialog alertDialog = new AlertDialog.Builder(mContext)
+                .setMessage(messageBody)
+                .setPositiveButton(
+                        com.android.settingslib.R.string.failed_attempts_now_wiping_dialog_dismiss,
+                        null /* OnClickListener */)
+                .setOnDismissListener(
+                        dialog -> animateAway(AuthDialogCallback.DISMISSED_ERROR))
+                .create();
+        alertDialog.getWindow().setType(WindowManager.LayoutParams.TYPE_STATUS_BAR_SUB_PANEL);
+        alertDialog.show();
     }
 
     @VisibleForTesting
@@ -282,6 +334,8 @@ public class AuthContainerView extends LinearLayout
             @NonNull UserManager userManager,
             @NonNull LockPatternUtils lockPatternUtils,
             @NonNull InteractionJankMonitor jankMonitor,
+            @NonNull Provider<BiometricPromptCredentialInteractor> biometricPromptInteractor,
+            @NonNull Provider<CredentialViewModel> credentialViewModelProvider,
             @NonNull Handler mainHandler,
             @NonNull @Background DelayableExecutor bgExecutor) {
         super(config.mContext);
@@ -297,7 +351,6 @@ public class AuthContainerView extends LinearLayout
                 .getDimension(R.dimen.biometric_dialog_animation_translation_offset);
         mLinearOutSlowIn = Interpolators.LINEAR_OUT_SLOW_IN;
         mBiometricCallback = new BiometricCallback();
-        mCredentialCallback = new CredentialCallback();
 
         final LayoutInflater layoutInflater = LayoutInflater.from(mContext);
         mFrameLayout = (FrameLayout) layoutInflater.inflate(
@@ -309,6 +362,8 @@ public class AuthContainerView extends LinearLayout
         mPanelController = new AuthPanelController(mContext, mPanelView);
         mBackgroundExecutor = bgExecutor;
         mInteractionJankMonitor = jankMonitor;
+        mBiometricPromptInteractor = biometricPromptInteractor;
+        mCredentialViewModelProvider = credentialViewModelProvider;
 
         // Inflate biometric view only if necessary.
         if (Utils.isBiometricAllowed(mConfig.mPromptInfo)) {
@@ -360,8 +415,7 @@ public class AuthContainerView extends LinearLayout
                 return false;
             }
             if (event.getAction() == KeyEvent.ACTION_UP) {
-                sendEarlyUserCanceled();
-                animateAway(AuthDialogCallback.DISMISSED_USER_CANCELED);
+                onBackInvoked();
             }
             return true;
         });
@@ -369,6 +423,11 @@ public class AuthContainerView extends LinearLayout
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         setFocusableInTouchMode(true);
         requestFocus();
+    }
+
+    private void onBackInvoked() {
+        sendEarlyUserCanceled();
+        animateAway(AuthDialogCallback.DISMISSED_USER_CANCELED);
     }
 
     void sendEarlyUserCanceled() {
@@ -395,12 +454,12 @@ public class AuthContainerView extends LinearLayout
 
         switch (credentialType) {
             case Utils.CREDENTIAL_PATTERN:
-                mCredentialView = (AuthCredentialView) factory.inflate(
+                mCredentialView = factory.inflate(
                         R.layout.auth_credential_pattern_view, null, false);
                 break;
             case Utils.CREDENTIAL_PIN:
             case Utils.CREDENTIAL_PASSWORD:
-                mCredentialView = (AuthCredentialView) factory.inflate(
+                mCredentialView = factory.inflate(
                         R.layout.auth_credential_password_view, null, false);
                 break;
             default:
@@ -413,16 +472,12 @@ public class AuthContainerView extends LinearLayout
         mBackgroundView.setOnClickListener(null);
         mBackgroundView.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
 
-        mCredentialView.setContainerView(this);
-        mCredentialView.setUserId(mConfig.mUserId);
-        mCredentialView.setOperationId(mConfig.mOperationId);
-        mCredentialView.setEffectiveUserId(mEffectiveUserId);
-        mCredentialView.setCredentialType(credentialType);
-        mCredentialView.setCallback(mCredentialCallback);
-        mCredentialView.setPromptInfo(mConfig.mPromptInfo);
-        mCredentialView.setPanelController(mPanelController, animatePanel);
-        mCredentialView.setShouldAnimateContents(animateContents);
-        mCredentialView.setBackgroundExecutor(mBackgroundExecutor);
+        mBiometricPromptInteractor.get().useCredentialsForAuthentication(
+                mConfig.mPromptInfo, credentialType, mConfig.mUserId, mConfig.mOperationId);
+        final CredentialViewModel vm = mCredentialViewModelProvider.get();
+        vm.setAnimateContents(animateContents);
+        ((CredentialView) mCredentialView).init(vm, this, mPanelController, animatePanel);
+
         mFrameLayout.addView(mCredentialView);
     }
 
@@ -435,12 +490,19 @@ public class AuthContainerView extends LinearLayout
     @Override
     public void onOrientationChanged() {
         maybeUpdatePositionForUdfps(true /* invalidate */);
+        mIsOrientationChanged = true;
     }
 
     @Override
     public void onWindowFocusChanged(boolean hasWindowFocus) {
         super.onWindowFocusChanged(hasWindowFocus);
         if (!hasWindowFocus) {
+            //it's a workaround to avoid closing BP incorrectly
+            //BP gets a onWindowFocusChanged(false) and then gets a onWindowFocusChanged(true)
+            if (mIsOrientationChanged) {
+                mIsOrientationChanged = false;
+                return;
+            }
             Log.v(TAG, "Lost window focus, dismissing the dialog");
             animateAway(AuthDialogCallback.DISMISSED_USER_CANCELED);
         }
@@ -467,47 +529,25 @@ public class AuthContainerView extends LinearLayout
             mContainerState = STATE_SHOWING;
         } else {
             mContainerState = STATE_ANIMATING_IN;
-            // The background panel and content are different views since we need to be able to
-            // animate them separately in other places.
-            mPanelView.setY(mTranslationY);
-            mBiometricScrollView.setY(mTranslationY);
-
+            setY(mTranslationY);
             setAlpha(0f);
             final long animateDuration = mConfig.mSkipAnimation ? 0 : ANIMATION_DURATION_SHOW_MS;
             postOnAnimation(() -> {
-                mPanelView.animate()
-                        .translationY(0)
-                        .setDuration(animateDuration)
-                        .setInterpolator(mLinearOutSlowIn)
-                        .setListener(getJankListener(mPanelView, SHOW, animateDuration))
-                        .withLayer()
-                        .withEndAction(this::onDialogAnimatedIn)
-                        .start();
-                mBiometricScrollView.animate()
-                        .translationY(0)
-                        .setDuration(animateDuration)
-                        .setInterpolator(mLinearOutSlowIn)
-                        .setListener(getJankListener(mBiometricScrollView, SHOW, animateDuration))
-                        .withLayer()
-                        .start();
-                if (mCredentialView != null && mCredentialView.isAttachedToWindow()) {
-                    mCredentialView.setY(mTranslationY);
-                    mCredentialView.animate()
-                            .translationY(0)
-                            .setDuration(animateDuration)
-                            .setInterpolator(mLinearOutSlowIn)
-                            .setListener(getJankListener(mCredentialView, SHOW, animateDuration))
-                            .withLayer()
-                            .start();
-                }
                 animate()
                         .alpha(1f)
+                        .translationY(0)
                         .setDuration(animateDuration)
                         .setInterpolator(mLinearOutSlowIn)
                         .withLayer()
                         .setListener(getJankListener(this, SHOW, animateDuration))
+                        .withEndAction(this::onDialogAnimatedIn)
                         .start();
             });
+        }
+        OnBackInvokedDispatcher dispatcher = findOnBackInvokedDispatcher();
+        if (dispatcher != null) {
+            dispatcher.registerOnBackInvokedCallback(
+                    OnBackInvokedDispatcher.PRIORITY_DEFAULT, mBackCallback);
         }
     }
 
@@ -607,6 +647,10 @@ public class AuthContainerView extends LinearLayout
 
     @Override
     public void onDetachedFromWindow() {
+        OnBackInvokedDispatcher dispatcher = findOnBackInvokedDispatcher();
+        if (dispatcher != null) {
+            findOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(mBackCallback);
+        }
         super.onDetachedFromWindow();
         mWakefulnessLifecycle.removeObserver(this);
     }
@@ -621,7 +665,26 @@ public class AuthContainerView extends LinearLayout
         if (mBiometricView != null) {
             mBiometricView.restoreState(savedState);
         }
+
+        if (savedState != null) {
+            mIsOrientationChanged = savedState.getBoolean(
+                    AuthDialog.KEY_BIOMETRIC_ORIENTATION_CHANGED);
+        }
+
         wm.addView(this, getLayoutParams(mWindowToken, mConfig.mPromptInfo.getTitle()));
+    }
+
+    private void forceExecuteAnimatedIn() {
+        if (mContainerState == STATE_ANIMATING_IN) {
+            //clear all animators
+            if (mCredentialView != null && mCredentialView.isAttachedToWindow()) {
+                mCredentialView.animate().cancel();
+            }
+            mPanelView.animate().cancel();
+            mBiometricView.animate().cancel();
+            animate().cancel();
+            onDialogAnimatedIn();
+        }
     }
 
     @Override
@@ -629,6 +692,7 @@ public class AuthContainerView extends LinearLayout
         if (animate) {
             animateAway(false /* sendReason */, 0 /* reason */);
         } else {
+            forceExecuteAnimatedIn();
             removeWindowIfAttached();
         }
     }
@@ -640,30 +704,50 @@ public class AuthContainerView extends LinearLayout
 
     @Override
     public void onAuthenticationSucceeded(@Modality int modality) {
-        mBiometricView.onAuthenticationSucceeded(modality);
+        if (mBiometricView != null) {
+            mBiometricView.onAuthenticationSucceeded(modality);
+        } else {
+            Log.e(TAG, "onAuthenticationSucceeded(): mBiometricView is null");
+        }
     }
 
     @Override
     public void onAuthenticationFailed(@Modality int modality, String failureReason) {
-        mFailedModalities.add(modality);
-        mBiometricView.onAuthenticationFailed(modality, failureReason);
+        if (mBiometricView != null) {
+            mFailedModalities.add(modality);
+            mBiometricView.onAuthenticationFailed(modality, failureReason);
+        } else {
+            Log.e(TAG, "onAuthenticationFailed(): mBiometricView is null");
+        }
     }
 
     @Override
     public void onHelp(@Modality int modality, String help) {
-        mBiometricView.onHelp(modality, help);
+        if (mBiometricView != null) {
+            mBiometricView.onHelp(modality, help);
+        } else {
+            Log.e(TAG, "onHelp(): mBiometricView is null");
+        }
     }
 
     @Override
     public void onError(@Modality int modality, String error) {
-        mBiometricView.onError(modality, error);
+        if (mBiometricView != null) {
+            mBiometricView.onError(modality, error);
+        } else {
+            Log.e(TAG, "onError(): mBiometricView is null");
+        }
     }
 
     @Override
     public void onPointerDown() {
-        if (mBiometricView.onPointerDown(mFailedModalities)) {
-            Log.d(TAG, "retrying failed modalities (pointer down)");
-            mBiometricCallback.onAction(AuthBiometricView.Callback.ACTION_BUTTON_TRY_AGAIN);
+        if (mBiometricView != null) {
+            if (mBiometricView.onPointerDown(mFailedModalities)) {
+                Log.d(TAG, "retrying failed modalities (pointer down)");
+                mBiometricCallback.onAction(AuthBiometricView.Callback.ACTION_BUTTON_TRY_AGAIN);
+            }
+        } else {
+            Log.e(TAG, "onPointerDown(): mBiometricView is null");
         }
     }
 
@@ -676,6 +760,8 @@ public class AuthContainerView extends LinearLayout
         outState.putBoolean(AuthDialog.KEY_BIOMETRIC_SHOWING,
                 mBiometricView != null && mCredentialView == null);
         outState.putBoolean(AuthDialog.KEY_CREDENTIAL_SHOWING, mCredentialView != null);
+
+        outState.putBoolean(AuthDialog.KEY_BIOMETRIC_ORIENTATION_CHANGED, mIsOrientationChanged);
 
         if (mBiometricView != null) {
             mBiometricView.onSaveState(outState);
@@ -694,7 +780,11 @@ public class AuthContainerView extends LinearLayout
 
     @Override
     public void animateToCredentialUI() {
-        mBiometricView.startTransitionToCredentialUI();
+        if (mBiometricView != null) {
+            mBiometricView.startTransitionToCredentialUI();
+        } else {
+            Log.e(TAG, "animateToCredentialUI(): mBiometricView is null");
+        }
     }
 
     void animateAway(@AuthDialogCallback.DismissedReason int reason) {
@@ -714,6 +804,12 @@ public class AuthContainerView extends LinearLayout
         }
         mContainerState = STATE_ANIMATING_OUT;
 
+        // Request hiding soft-keyboard before animating away credential UI, in case IME insets
+        // animation get delayed by dismissing animation.
+        if (isAttachedToWindow() && getRootWindowInsets().isVisible(WindowInsets.Type.ime())) {
+            getWindowInsetsController().hide(WindowInsets.Type.ime());
+        }
+
         if (sendReason) {
             mPendingCallbackReason = reason;
         } else {
@@ -727,32 +823,9 @@ public class AuthContainerView extends LinearLayout
 
         final long animateDuration = mConfig.mSkipAnimation ? 0 : ANIMATION_DURATION_AWAY_MS;
         postOnAnimation(() -> {
-            mPanelView.animate()
-                    .translationY(mTranslationY)
-                    .setDuration(animateDuration)
-                    .setInterpolator(mLinearOutSlowIn)
-                    .setListener(getJankListener(mPanelView, DISMISS, animateDuration))
-                    .withLayer()
-                    .withEndAction(endActionRunnable)
-                    .start();
-            mBiometricScrollView.animate()
-                    .translationY(mTranslationY)
-                    .setDuration(animateDuration)
-                    .setInterpolator(mLinearOutSlowIn)
-                    .setListener(getJankListener(mBiometricScrollView, DISMISS, animateDuration))
-                    .withLayer()
-                    .start();
-            if (mCredentialView != null && mCredentialView.isAttachedToWindow()) {
-                mCredentialView.animate()
-                        .translationY(mTranslationY)
-                        .setDuration(animateDuration)
-                        .setInterpolator(mLinearOutSlowIn)
-                        .setListener(getJankListener(mCredentialView, DISMISS, animateDuration))
-                        .withLayer()
-                        .start();
-            }
             animate()
                     .alpha(0f)
+                    .translationY(mTranslationY)
                     .setDuration(animateDuration)
                     .setInterpolator(mLinearOutSlowIn)
                     .setListener(getJankListener(this, DISMISS, animateDuration))
@@ -767,6 +840,7 @@ public class AuthContainerView extends LinearLayout
                         mWindowManager.updateViewLayout(this, lp);
                     })
                     .withLayer()
+                    .withEndAction(endActionRunnable)
                     .start();
         });
     }
@@ -788,7 +862,7 @@ public class AuthContainerView extends LinearLayout
         }
         mContainerState = STATE_GONE;
         if (isAttachedToWindow()) {
-            mWindowManager.removeView(this);
+            mWindowManager.removeViewImmediate(this);
         }
     }
 
@@ -814,6 +888,7 @@ public class AuthContainerView extends LinearLayout
     static WindowManager.LayoutParams getLayoutParams(IBinder windowToken, CharSequence title) {
         final int windowFlags = WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
                 | WindowManager.LayoutParams.FLAG_SECURE
+                | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
                 | WindowManager.LayoutParams.FLAG_DIM_BEHIND;
         final WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,

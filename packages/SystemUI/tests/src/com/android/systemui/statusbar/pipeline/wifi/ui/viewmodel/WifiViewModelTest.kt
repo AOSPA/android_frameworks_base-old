@@ -18,26 +18,37 @@ package com.android.systemui.statusbar.pipeline.wifi.ui.viewmodel
 
 import androidx.test.filters.SmallTest
 import com.android.systemui.SysuiTestCase
+import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.statusbar.pipeline.StatusBarPipelineFlags
+import com.android.systemui.statusbar.pipeline.airplane.data.repository.FakeAirplaneModeRepository
+import com.android.systemui.statusbar.pipeline.airplane.domain.interactor.AirplaneModeInteractor
+import com.android.systemui.statusbar.pipeline.airplane.ui.viewmodel.AirplaneModeViewModel
+import com.android.systemui.statusbar.pipeline.shared.ConnectivityConstants
 import com.android.systemui.statusbar.pipeline.shared.ConnectivityPipelineLogger
-import com.android.systemui.statusbar.pipeline.wifi.data.model.WifiActivityModel
+import com.android.systemui.statusbar.pipeline.shared.data.model.ConnectivitySlot
+import com.android.systemui.statusbar.pipeline.shared.data.repository.FakeConnectivityRepository
 import com.android.systemui.statusbar.pipeline.wifi.data.model.WifiNetworkModel
 import com.android.systemui.statusbar.pipeline.wifi.data.repository.FakeWifiRepository
 import com.android.systemui.statusbar.pipeline.wifi.domain.interactor.WifiInteractor
 import com.android.systemui.statusbar.pipeline.wifi.shared.WifiConstants
+import com.android.systemui.statusbar.pipeline.wifi.shared.model.WifiActivityModel
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.mockito.Mock
 import org.mockito.Mockito.`when` as whenever
 import org.mockito.MockitoAnnotations
 
+@Suppress("EXPERIMENTAL_IS_NOT_ENABLED")
 @OptIn(ExperimentalCoroutinesApi::class)
 @SmallTest
 class WifiViewModelTest : SysuiTestCase() {
@@ -46,81 +57,498 @@ class WifiViewModelTest : SysuiTestCase() {
 
     @Mock private lateinit var statusBarPipelineFlags: StatusBarPipelineFlags
     @Mock private lateinit var logger: ConnectivityPipelineLogger
-    @Mock private lateinit var constants: WifiConstants
-    private lateinit var repository: FakeWifiRepository
+    @Mock private lateinit var connectivityConstants: ConnectivityConstants
+    @Mock private lateinit var wifiConstants: WifiConstants
+    private lateinit var airplaneModeRepository: FakeAirplaneModeRepository
+    private lateinit var connectivityRepository: FakeConnectivityRepository
+    private lateinit var wifiRepository: FakeWifiRepository
     private lateinit var interactor: WifiInteractor
+    private lateinit var airplaneModeViewModel: AirplaneModeViewModel
+    private lateinit var scope: CoroutineScope
 
     @Before
     fun setUp() {
         MockitoAnnotations.initMocks(this)
-        repository = FakeWifiRepository()
-        interactor = WifiInteractor(repository)
-
-        underTest = WifiViewModel(
-            statusBarPipelineFlags,
-            constants,
+        airplaneModeRepository = FakeAirplaneModeRepository()
+        connectivityRepository = FakeConnectivityRepository()
+        wifiRepository = FakeWifiRepository()
+        wifiRepository.setIsWifiEnabled(true)
+        interactor = WifiInteractor(connectivityRepository, wifiRepository)
+        scope = CoroutineScope(IMMEDIATE)
+        airplaneModeViewModel = AirplaneModeViewModel(
+            AirplaneModeInteractor(
+                airplaneModeRepository,
+                connectivityRepository,
+            ),
             logger,
-            interactor
+            scope,
         )
 
-        // Set up with a valid SSID
-        repository.setWifiNetwork(WifiNetworkModel.Active(networkId = 1, ssid = "AB"))
+        createAndSetViewModel()
     }
 
-    @Test
-    fun activityInVisible_showActivityConfigFalse_receivesFalse() = runBlocking(IMMEDIATE) {
-        whenever(constants.shouldShowActivityConfig).thenReturn(false)
-
-        var latest: Boolean? = null
-        val job = underTest
-                .isActivityInVisible
-                .onEach { latest = it }
-                .launchIn(this)
-
-        // Verify that on launch, we receive a false.
-        assertThat(latest).isFalse()
-
-        job.cancel()
+    @After
+    fun tearDown() {
+        scope.cancel()
     }
 
+    // See [WifiViewModelIconParameterizedTest] for additional view model tests.
+
+    // Note on testing: [WifiViewModel] exposes 3 different instances of
+    // [LocationBasedWifiViewModel]. In practice, these 3 different instances will get the exact
+    // same data for icon, activity, etc. flows. So, most of these tests will test just one of the
+    // instances. There are also some tests that verify all 3 instances received the same data.
+
     @Test
-    fun activityInVisible_showActivityConfigFalse_noUpdatesReceived() = runBlocking(IMMEDIATE) {
-        whenever(constants.shouldShowActivityConfig).thenReturn(false)
+    fun wifiIcon_allLocationViewModelsReceiveSameData() = runBlocking(IMMEDIATE) {
+        var latestHome: Icon? = null
+        val jobHome = underTest
+            .home
+            .wifiIcon
+            .onEach { latestHome = it }
+            .launchIn(this)
 
-        var latest: Boolean? = null
-        val job = underTest
-                .isActivityInVisible
-                .onEach { latest = it }
-                .launchIn(this)
+        var latestKeyguard: Icon? = null
+        val jobKeyguard = underTest
+            .keyguard
+            .wifiIcon
+            .onEach { latestKeyguard = it }
+            .launchIn(this)
 
-        // Update the repo to have activityIn
-        repository.setWifiActivity(WifiActivityModel(hasActivityIn = true, hasActivityOut = false))
+        var latestQs: Icon? = null
+        val jobQs = underTest
+            .qs
+            .wifiIcon
+            .onEach { latestQs = it }
+            .launchIn(this)
+
+        wifiRepository.setWifiNetwork(
+            WifiNetworkModel.Active(
+                NETWORK_ID,
+                isValidated = true,
+                level = 1
+            )
+        )
         yield()
 
-        // Verify that we didn't update to activityIn=true (because our config is false)
-        assertThat(latest).isFalse()
+        assertThat(latestHome).isInstanceOf(Icon.Resource::class.java)
+        assertThat(latestHome).isEqualTo(latestKeyguard)
+        assertThat(latestKeyguard).isEqualTo(latestQs)
 
-        job.cancel()
+        jobHome.cancel()
+        jobKeyguard.cancel()
+        jobQs.cancel()
     }
 
     @Test
-    fun activityInVisible_showActivityConfigTrue_receivesUpdate() = runBlocking(IMMEDIATE) {
-        whenever(constants.shouldShowActivityConfig).thenReturn(true)
+    fun activity_showActivityConfigFalse_outputsFalse() = runBlocking(IMMEDIATE) {
+        whenever(wifiConstants.shouldShowActivityConfig).thenReturn(false)
+        createAndSetViewModel()
+        wifiRepository.setWifiNetwork(ACTIVE_VALID_WIFI_NETWORK)
+
+        var activityIn: Boolean? = null
+        val activityInJob = underTest
+            .home
+            .isActivityInViewVisible
+            .onEach { activityIn = it }
+            .launchIn(this)
+
+        var activityOut: Boolean? = null
+        val activityOutJob = underTest
+            .home
+            .isActivityOutViewVisible
+            .onEach { activityOut = it }
+            .launchIn(this)
+
+        var activityContainer: Boolean? = null
+        val activityContainerJob = underTest
+            .home
+            .isActivityContainerVisible
+            .onEach { activityContainer = it }
+            .launchIn(this)
+
+        // Verify that on launch, we receive false.
+        assertThat(activityIn).isFalse()
+        assertThat(activityOut).isFalse()
+        assertThat(activityContainer).isFalse()
+
+        activityInJob.cancel()
+        activityOutJob.cancel()
+        activityContainerJob.cancel()
+    }
+
+    @Test
+    fun activity_showActivityConfigFalse_noUpdatesReceived() = runBlocking(IMMEDIATE) {
+        whenever(wifiConstants.shouldShowActivityConfig).thenReturn(false)
+        createAndSetViewModel()
+        wifiRepository.setWifiNetwork(ACTIVE_VALID_WIFI_NETWORK)
+
+        var activityIn: Boolean? = null
+        val activityInJob = underTest
+            .home
+            .isActivityInViewVisible
+            .onEach { activityIn = it }
+            .launchIn(this)
+
+        var activityOut: Boolean? = null
+        val activityOutJob = underTest
+            .home
+            .isActivityOutViewVisible
+            .onEach { activityOut = it }
+            .launchIn(this)
+
+        var activityContainer: Boolean? = null
+        val activityContainerJob = underTest
+            .home
+            .isActivityContainerVisible
+            .onEach { activityContainer = it }
+            .launchIn(this)
+
+        // WHEN we update the repo to have activity
+        val activity = WifiActivityModel(hasActivityIn = true, hasActivityOut = true)
+        wifiRepository.setWifiActivity(activity)
+        yield()
+
+        // THEN we didn't update to the new activity (because our config is false)
+        assertThat(activityIn).isFalse()
+        assertThat(activityOut).isFalse()
+        assertThat(activityContainer).isFalse()
+
+        activityInJob.cancel()
+        activityOutJob.cancel()
+        activityContainerJob.cancel()
+    }
+
+    @Test
+    fun activity_nullSsid_outputsFalse() = runBlocking(IMMEDIATE) {
+        whenever(wifiConstants.shouldShowActivityConfig).thenReturn(true)
+        createAndSetViewModel()
+
+        wifiRepository.setWifiNetwork(WifiNetworkModel.Active(NETWORK_ID, ssid = null))
+
+        var activityIn: Boolean? = null
+        val activityInJob = underTest
+            .home
+            .isActivityInViewVisible
+            .onEach { activityIn = it }
+            .launchIn(this)
+
+        var activityOut: Boolean? = null
+        val activityOutJob = underTest
+            .home
+            .isActivityOutViewVisible
+            .onEach { activityOut = it }
+            .launchIn(this)
+
+        var activityContainer: Boolean? = null
+        val activityContainerJob = underTest
+            .home
+            .isActivityContainerVisible
+            .onEach { activityContainer = it }
+            .launchIn(this)
+
+        // WHEN we update the repo to have activity
+        val activity = WifiActivityModel(hasActivityIn = true, hasActivityOut = true)
+        wifiRepository.setWifiActivity(activity)
+        yield()
+
+        // THEN we still output false because our network's SSID is null
+        assertThat(activityIn).isFalse()
+        assertThat(activityOut).isFalse()
+        assertThat(activityContainer).isFalse()
+
+        activityInJob.cancel()
+        activityOutJob.cancel()
+        activityContainerJob.cancel()
+    }
+
+    @Test
+    fun activity_allLocationViewModelsReceiveSameData() = runBlocking(IMMEDIATE) {
+        whenever(wifiConstants.shouldShowActivityConfig).thenReturn(true)
+        createAndSetViewModel()
+        wifiRepository.setWifiNetwork(ACTIVE_VALID_WIFI_NETWORK)
+
+        var latestHome: Boolean? = null
+        val jobHome = underTest
+            .home
+            .isActivityInViewVisible
+            .onEach { latestHome = it }
+            .launchIn(this)
+
+        var latestKeyguard: Boolean? = null
+        val jobKeyguard = underTest
+            .keyguard
+            .isActivityInViewVisible
+            .onEach { latestKeyguard = it }
+            .launchIn(this)
+
+        var latestQs: Boolean? = null
+        val jobQs = underTest
+            .qs
+            .isActivityInViewVisible
+            .onEach { latestQs = it }
+            .launchIn(this)
+
+        val activity = WifiActivityModel(hasActivityIn = true, hasActivityOut = true)
+        wifiRepository.setWifiActivity(activity)
+        yield()
+
+        assertThat(latestHome).isTrue()
+        assertThat(latestKeyguard).isTrue()
+        assertThat(latestQs).isTrue()
+
+        jobHome.cancel()
+        jobKeyguard.cancel()
+        jobQs.cancel()
+    }
+
+    @Test
+    fun activityIn_hasActivityInTrue_outputsTrue() = runBlocking(IMMEDIATE) {
+        whenever(wifiConstants.shouldShowActivityConfig).thenReturn(true)
+        createAndSetViewModel()
+        wifiRepository.setWifiNetwork(ACTIVE_VALID_WIFI_NETWORK)
 
         var latest: Boolean? = null
         val job = underTest
-                .isActivityInVisible
-                .onEach { latest = it }
-                .launchIn(this)
+            .home
+            .isActivityInViewVisible
+            .onEach { latest = it }
+            .launchIn(this)
 
-        // Update the repo to have activityIn
-        repository.setWifiActivity(WifiActivityModel(hasActivityIn = true, hasActivityOut = false))
+        val activity = WifiActivityModel(hasActivityIn = true, hasActivityOut = false)
+        wifiRepository.setWifiActivity(activity)
         yield()
 
-        // Verify that we updated to activityIn=true
         assertThat(latest).isTrue()
 
         job.cancel()
+    }
+
+    @Test
+    fun activityIn_hasActivityInFalse_outputsFalse() = runBlocking(IMMEDIATE) {
+        whenever(wifiConstants.shouldShowActivityConfig).thenReturn(true)
+        createAndSetViewModel()
+        wifiRepository.setWifiNetwork(ACTIVE_VALID_WIFI_NETWORK)
+
+        var latest: Boolean? = null
+        val job = underTest
+            .home
+            .isActivityInViewVisible
+            .onEach { latest = it }
+            .launchIn(this)
+
+        val activity = WifiActivityModel(hasActivityIn = false, hasActivityOut = true)
+        wifiRepository.setWifiActivity(activity)
+        yield()
+
+        assertThat(latest).isFalse()
+
+        job.cancel()
+    }
+
+    @Test
+    fun activityOut_hasActivityOutTrue_outputsTrue() = runBlocking(IMMEDIATE) {
+        whenever(wifiConstants.shouldShowActivityConfig).thenReturn(true)
+        createAndSetViewModel()
+        wifiRepository.setWifiNetwork(ACTIVE_VALID_WIFI_NETWORK)
+
+        var latest: Boolean? = null
+        val job = underTest
+            .home
+            .isActivityOutViewVisible
+            .onEach { latest = it }
+            .launchIn(this)
+
+        val activity = WifiActivityModel(hasActivityIn = false, hasActivityOut = true)
+        wifiRepository.setWifiActivity(activity)
+        yield()
+
+        assertThat(latest).isTrue()
+
+        job.cancel()
+    }
+
+    @Test
+    fun activityOut_hasActivityOutFalse_outputsFalse() = runBlocking(IMMEDIATE) {
+        whenever(wifiConstants.shouldShowActivityConfig).thenReturn(true)
+        createAndSetViewModel()
+        wifiRepository.setWifiNetwork(ACTIVE_VALID_WIFI_NETWORK)
+
+        var latest: Boolean? = null
+        val job = underTest
+            .home
+            .isActivityOutViewVisible
+            .onEach { latest = it }
+            .launchIn(this)
+
+        val activity = WifiActivityModel(hasActivityIn = true, hasActivityOut = false)
+        wifiRepository.setWifiActivity(activity)
+        yield()
+
+        assertThat(latest).isFalse()
+
+        job.cancel()
+    }
+
+    @Test
+    fun activityContainer_hasActivityInTrue_outputsTrue() = runBlocking(IMMEDIATE) {
+        whenever(wifiConstants.shouldShowActivityConfig).thenReturn(true)
+        createAndSetViewModel()
+        wifiRepository.setWifiNetwork(ACTIVE_VALID_WIFI_NETWORK)
+
+        var latest: Boolean? = null
+        val job = underTest
+            .home
+            .isActivityContainerVisible
+            .onEach { latest = it }
+            .launchIn(this)
+
+        val activity = WifiActivityModel(hasActivityIn = true, hasActivityOut = false)
+        wifiRepository.setWifiActivity(activity)
+        yield()
+
+        assertThat(latest).isTrue()
+
+        job.cancel()
+    }
+
+    @Test
+    fun activityContainer_hasActivityOutTrue_outputsTrue() = runBlocking(IMMEDIATE) {
+        whenever(wifiConstants.shouldShowActivityConfig).thenReturn(true)
+        createAndSetViewModel()
+        wifiRepository.setWifiNetwork(ACTIVE_VALID_WIFI_NETWORK)
+
+        var latest: Boolean? = null
+        val job = underTest
+            .home
+            .isActivityContainerVisible
+            .onEach { latest = it }
+            .launchIn(this)
+
+        val activity = WifiActivityModel(hasActivityIn = false, hasActivityOut = true)
+        wifiRepository.setWifiActivity(activity)
+        yield()
+
+        assertThat(latest).isTrue()
+
+        job.cancel()
+    }
+
+    @Test
+    fun activityContainer_inAndOutTrue_outputsTrue() = runBlocking(IMMEDIATE) {
+        whenever(wifiConstants.shouldShowActivityConfig).thenReturn(true)
+        createAndSetViewModel()
+        wifiRepository.setWifiNetwork(ACTIVE_VALID_WIFI_NETWORK)
+
+        var latest: Boolean? = null
+        val job = underTest
+            .home
+            .isActivityContainerVisible
+            .onEach { latest = it }
+            .launchIn(this)
+
+        val activity = WifiActivityModel(hasActivityIn = true, hasActivityOut = true)
+        wifiRepository.setWifiActivity(activity)
+        yield()
+
+        assertThat(latest).isTrue()
+
+        job.cancel()
+    }
+
+    @Test
+    fun activityContainer_inAndOutFalse_outputsFalse() = runBlocking(IMMEDIATE) {
+        whenever(wifiConstants.shouldShowActivityConfig).thenReturn(true)
+        createAndSetViewModel()
+        wifiRepository.setWifiNetwork(ACTIVE_VALID_WIFI_NETWORK)
+
+        var latest: Boolean? = null
+        val job = underTest
+            .home
+            .isActivityContainerVisible
+            .onEach { latest = it }
+            .launchIn(this)
+
+        val activity = WifiActivityModel(hasActivityIn = false, hasActivityOut = false)
+        wifiRepository.setWifiActivity(activity)
+        yield()
+
+        assertThat(latest).isFalse()
+
+        job.cancel()
+    }
+
+    @Test
+    fun airplaneSpacer_notAirplaneMode_outputsFalse() = runBlocking(IMMEDIATE) {
+        var latest: Boolean? = null
+        val job = underTest
+            .qs
+            .isAirplaneSpacerVisible
+            .onEach { latest = it }
+            .launchIn(this)
+
+        airplaneModeRepository.setIsAirplaneMode(false)
+        yield()
+
+        assertThat(latest).isFalse()
+
+        job.cancel()
+    }
+
+    @Test
+    fun airplaneSpacer_airplaneForceHidden_outputsFalse() = runBlocking(IMMEDIATE) {
+        var latest: Boolean? = null
+        val job = underTest
+            .qs
+            .isAirplaneSpacerVisible
+            .onEach { latest = it }
+            .launchIn(this)
+
+        airplaneModeRepository.setIsAirplaneMode(true)
+        connectivityRepository.setForceHiddenIcons(setOf(ConnectivitySlot.AIRPLANE))
+        yield()
+
+        assertThat(latest).isFalse()
+
+        job.cancel()
+    }
+
+    @Test
+    fun airplaneSpacer_airplaneIconVisible_outputsTrue() = runBlocking(IMMEDIATE) {
+        var latest: Boolean? = null
+        val job = underTest
+            .qs
+            .isAirplaneSpacerVisible
+            .onEach { latest = it }
+            .launchIn(this)
+
+        airplaneModeRepository.setIsAirplaneMode(true)
+        yield()
+
+        assertThat(latest).isTrue()
+
+        job.cancel()
+    }
+
+    private fun createAndSetViewModel() {
+        // [WifiViewModel] creates its flows as soon as it's instantiated, and some of those flow
+        // creations rely on certain config values that we mock out in individual tests. This method
+        // allows tests to create the view model only after those configs are correctly set up.
+        underTest = WifiViewModel(
+            airplaneModeViewModel,
+            connectivityConstants,
+            context,
+            logger,
+            interactor,
+            scope,
+            statusBarPipelineFlags,
+            wifiConstants,
+        )
+    }
+
+    companion object {
+        private const val NETWORK_ID = 2
+        private val ACTIVE_VALID_WIFI_NETWORK = WifiNetworkModel.Active(NETWORK_ID, ssid = "AB")
     }
 }
 

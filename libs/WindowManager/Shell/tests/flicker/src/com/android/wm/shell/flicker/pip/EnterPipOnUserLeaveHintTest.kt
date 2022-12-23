@@ -16,15 +16,15 @@
 
 package com.android.wm.shell.flicker.pip
 
-import android.platform.test.annotations.FlakyTest
-import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
+import android.view.Surface
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
-import com.android.server.wm.flicker.annotation.Group3
 import com.android.server.wm.flicker.dsl.FlickerBuilder
-import com.android.server.wm.flicker.helpers.isShellTransitionsEnabled
+import com.android.server.wm.flicker.helpers.setRotation
+import com.android.server.wm.flicker.helpers.wakeUpAndGoToHomeScreen
+import com.android.server.wm.flicker.rules.RemoveAllTasksButHomeRule
 import org.junit.Assume
 import org.junit.FixMethodOrder
 import org.junit.Test
@@ -38,59 +38,56 @@ import org.junit.runners.Parameterized
  * To run this test: `atest WMShellFlickerTests:EnterPipOnUserLeaveHintTest`
  *
  * Actions:
+ * ```
  *     Launch an app in full screen
  *     Select "Via code behind" radio button
  *     Press Home button or swipe up to go Home and put [pipApp] in pip mode
- *
+ * ```
  * Notes:
+ * ```
  *     1. All assertions are inherited from [EnterPipTest]
  *     2. Part of the test setup occurs automatically via
  *        [com.android.server.wm.flicker.TransitionRunnerWithRules],
  *        including configuring navigation mode, initial orientation and ensuring no
  *        apps are running before setup
+ * ```
  */
 @RequiresDevice
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-@Group3
 class EnterPipOnUserLeaveHintTest(testSpec: FlickerTestParameter) : EnterPipTest(testSpec) {
-    /**
-     * Defines the transition used to run the test
-     */
+    /** Defines the transition used to run the test */
     override val transition: FlickerBuilder.() -> Unit
         get() = {
-            setupAndTeardown(this)
             setup {
-                eachRun {
-                    pipApp.launchViaIntent(wmHelper)
-                    pipApp.enableEnterPipOnUserLeaveHint()
-                }
+                RemoveAllTasksButHomeRule.removeAllTasksButHome()
+                device.wakeUpAndGoToHomeScreen()
+                device.wakeUpAndGoToHomeScreen()
+                pipApp.launchViaIntent(wmHelper)
+                pipApp.enableEnterPipOnUserLeaveHint()
             }
             teardown {
-                eachRun {
-                    pipApp.exit(wmHelper)
-                }
+                setRotation(Surface.ROTATION_0)
+                RemoveAllTasksButHomeRule.removeAllTasksButHome()
+                pipApp.exit(wmHelper)
             }
-            transitions {
-                tapl.goHome()
-            }
+            transitions { tapl.goHome() }
         }
 
-    @Postsubmit
+    @Presubmit
     @Test
     override fun pipAppLayerAlwaysVisible() {
-        if (!testSpec.isGesturalNavigation) super.pipAppLayerAlwaysVisible() else {
+        if (!testSpec.isGesturalNavigation) super.pipAppLayerAlwaysVisible()
+        else {
             // pip layer in gesture nav will disappear during transition
             testSpec.assertLayers {
-                this.isVisible(pipApp)
-                    .then().isInvisible(pipApp)
-                    .then().isVisible(pipApp)
+                this.isVisible(pipApp).then().isInvisible(pipApp).then().isVisible(pipApp)
             }
         }
     }
 
-    @Postsubmit
+    @Presubmit
     @Test
     override fun pipLayerReduces() {
         // in gestural nav the pip enters through alpha animation
@@ -98,7 +95,7 @@ class EnterPipOnUserLeaveHintTest(testSpec: FlickerTestParameter) : EnterPipTest
         super.pipLayerReduces()
     }
 
-    @Postsubmit
+    @Presubmit
     @Test
     override fun focusChanges() {
         // in gestural nav the focus goes to different activity on swipe up
@@ -106,36 +103,20 @@ class EnterPipOnUserLeaveHintTest(testSpec: FlickerTestParameter) : EnterPipTest
         super.focusChanges()
     }
 
-    /** {@inheritDoc}  */
-    @Postsubmit
-    @Test
-    override fun pipAppWindowAlwaysVisible() = super.pipAppWindowAlwaysVisible()
-
     @Presubmit
     @Test
     override fun entireScreenCovered() {
-        Assume.assumeFalse(isShellTransitionsEnabled)
         super.entireScreenCovered()
     }
 
-    @FlakyTest(bugId = 227313015)
-    @Test
-    fun entireScreenCovered_ShellTransit() {
-        Assume.assumeTrue(isShellTransitionsEnabled)
-        super.entireScreenCovered()
-    }
-
-    @Postsubmit
+    @Presubmit
     @Test
     override fun pipLayerRemainInsideVisibleBounds() {
-        if (!testSpec.isGesturalNavigation) super.pipLayerRemainInsideVisibleBounds() else {
+        if (!testSpec.isGesturalNavigation) super.pipLayerRemainInsideVisibleBounds()
+        else {
             // pip layer in gesture nav will disappear during transition
-            testSpec.assertLayersStart {
-                this.visibleRegion(pipApp).coversAtMost(displayBounds)
-            }
-            testSpec.assertLayersEnd {
-                this.visibleRegion(pipApp).coversAtMost(displayBounds)
-            }
+            testSpec.assertLayersStart { this.visibleRegion(pipApp).coversAtMost(displayBounds) }
+            testSpec.assertLayersEnd { this.visibleRegion(pipApp).coversAtMost(displayBounds) }
         }
     }
 }

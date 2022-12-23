@@ -47,9 +47,9 @@ import android.util.SparseArray;
 import androidx.annotation.NonNull;
 
 import com.android.server.om.OverlayReferenceMapper;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.parsing.pkg.PackageImpl;
 import com.android.server.pm.parsing.pkg.ParsedPackage;
+import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.component.ParsedActivity;
 import com.android.server.pm.pkg.component.ParsedActivityImpl;
 import com.android.server.pm.pkg.component.ParsedComponentImpl;
@@ -387,7 +387,7 @@ public class AppsFilterImplTest {
 
         // delete user
         when(mSnapshot.getUserInfos()).thenReturn(USER_INFO_LIST);
-        appsFilter.onUserDeleted(ADDED_USER);
+        appsFilter.onUserDeleted(mSnapshot, ADDED_USER);
 
         for (int subjectUserId : USER_ARRAY) {
             for (int otherUserId : USER_ARRAY) {
@@ -925,7 +925,7 @@ public class AppsFilterImplTest {
         assertTrue(appsFilter.shouldFilterApplication(mSnapshot, DUMMY_OVERLAY_APPID,
                 overlaySetting, actorSetting, SYSTEM_USER));
 
-        appsFilter.removePackage(mSnapshot, targetSetting, false /* isReplace */);
+        appsFilter.removePackage(mSnapshot, targetSetting);
 
         // Actor loses visibility to the overlay via removal of the target
         assertTrue(appsFilter.shouldFilterApplication(mSnapshot, DUMMY_ACTOR_APPID, actorSetting,
@@ -1267,7 +1267,7 @@ public class AppsFilterImplTest {
         watcher.verifyNoChangeReported("get");
 
         // remove a package
-        appsFilter.removePackage(mSnapshot, seesNothing, false /* isReplace */);
+        appsFilter.removePackage(mSnapshot, seesNothing);
         watcher.verifyChangeReported("removePackage");
     }
 
@@ -1337,7 +1337,7 @@ public class AppsFilterImplTest {
                 target.getPackageName()));
 
         // New changes don't affect the snapshot
-        appsFilter.removePackage(mSnapshot, target, false);
+        appsFilter.removePackage(mSnapshot, target);
         assertTrue(
                 appsFilter.shouldFilterApplication(mSnapshot, DUMMY_CALLING_APPID, instrumentation,
                         target,

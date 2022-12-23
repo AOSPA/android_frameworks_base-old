@@ -30,7 +30,6 @@ import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
-import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 
@@ -39,11 +38,15 @@ import com.android.settingslib.graph.SignalDrawable;
 import com.android.systemui.DualToneHandler;
 import com.android.systemui.R;
 import com.android.systemui.plugins.DarkIconDispatcher.DarkReceiver;
+import com.android.systemui.statusbar.phone.StatusBarIconController;
 import com.android.systemui.statusbar.phone.StatusBarSignalPolicy.MobileIconState;
 
 import java.util.ArrayList;
 
-public class StatusBarMobileView extends FrameLayout implements DarkReceiver,
+/**
+ * View group for the mobile icon in the status bar
+ */
+public class StatusBarMobileView extends BaseStatusBarFrameLayout implements DarkReceiver,
         StatusIconDisplayable {
     private static final String TAG = "StatusBarMobileView";
 
@@ -59,13 +62,23 @@ public class StatusBarMobileView extends FrameLayout implements DarkReceiver,
     private ImageView mOut;
     private ImageView mMobile, mMobileType, mMobileRoaming;
     private View mMobileRoamingSpace;
-    private int mVisibleState = -1;
+    @StatusBarIconView.VisibleState
+    private int mVisibleState = STATE_HIDDEN;
     private DualToneHandler mDualToneHandler;
     private boolean mForceHidden;
     private ImageView mVolte;
 
     /**
      * Designated constructor
+     *
+     * This view is special, in that it is the only view in SystemUI that allows for a configuration
+     * override on a MCC/MNC-basis. This means that for every mobile view inflated, we have to
+     * construct a context with that override, since the resource system doesn't have a way to
+     * handle this for us.
+     *
+     * @param context A context with resources configured by MCC/MNC
+     * @param slot The string key defining which slot this icon refers to. Always "mobile" for the
+     *             mobile icon
      */
     public static StatusBarMobileView fromContext(
             Context context,
@@ -90,11 +103,6 @@ public class StatusBarMobileView extends FrameLayout implements DarkReceiver,
 
     public StatusBarMobileView(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
-    }
-
-    public StatusBarMobileView(Context context, AttributeSet attrs, int defStyleAttr,
-            int defStyleRes) {
-        super(context, attrs, defStyleAttr, defStyleRes);
     }
 
     @Override
@@ -289,7 +297,7 @@ public class StatusBarMobileView extends FrameLayout implements DarkReceiver,
     }
 
     @Override
-    public void setVisibleState(int state, boolean animate) {
+    public void setVisibleState(@StatusBarIconView.VisibleState int state, boolean animate) {
         if (state == mVisibleState) {
             return;
         }
@@ -330,6 +338,7 @@ public class StatusBarMobileView extends FrameLayout implements DarkReceiver,
     }
 
     @Override
+    @StatusBarIconView.VisibleState
     public int getVisibleState() {
         return mVisibleState;
     }

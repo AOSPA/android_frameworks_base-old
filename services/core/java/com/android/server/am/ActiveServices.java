@@ -194,6 +194,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 
 import vendor.qti.hardware.servicetracker.V1_0.IServicetracker;
@@ -227,6 +228,11 @@ public final class ActiveServices {
                     | ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
                     | ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
                     | ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION;
+
+    // Keep track of number of foreground services and number of apps that have foreground
+    // services in the device. This field is made to be directly accessed without holding AMS lock.
+    static final AtomicReference<Pair<Integer, Integer>> sNumForegroundServices =
+            new AtomicReference(new Pair<>(0, 0));
 
     // Foreground service is stopped for unknown reason.
     static final int FGS_STOP_REASON_UNKNOWN = 0;
@@ -338,6 +344,9 @@ public final class ActiveServices {
     static final int LAST_ANR_LIFETIME_DURATION_MSECS = 2 * 60 * 60 * 1000; // Two hours
 
     private IServicetracker mServicetracker;
+
+    private final boolean isLowRamDevice =
+            SystemProperties.getBoolean("ro.config.low_ram", false);
 
     String mLastAnrDump;
 
@@ -470,6 +479,7 @@ public final class ActiveServices {
         final ArrayList<ServiceRecord> mStartingBackground = new ArrayList<>();
 
         final ArrayMap<String, ActiveForegroundApp> mActiveForegroundApps = new ArrayMap<>();
+
         boolean mActiveForegroundAppsChanged;
 
         static final int MSG_BG_START_TIMEOUT = 1;
@@ -1225,7 +1235,7 @@ public final class ActiveServices {
         }
 
         FrameworkStatsLog.write(SERVICE_REQUEST_EVENT_REPORTED, uid, callingUid,
-                ActivityManagerService.getShortAction(service.getAction()),
+                service.getAction(),
                 SERVICE_REQUEST_EVENT_REPORTED__REQUEST_TYPE__START, false,
                 r.app == null || r.app.getThread() == null
                 ? SERVICE_REQUEST_EVENT_REPORTED__PROC_START_TYPE__PROCESS_START_TYPE_COLD
@@ -1255,31 +1265,39 @@ public final class ActiveServices {
     }
 
     private void stopServiceLocked(ServiceRecord service, boolean enqueueOomAdj) {
-        if (service.delayed) {
-            // If service isn't actually running, but is being held in the
-            // delayed list, then we need to keep it started but note that it
-            // should be stopped once no longer delayed.
-            if (DEBUG_DELAYED_STARTS) Slog.v(TAG_SERVICE, "Delaying stop of pending: " + service);
-            service.delayedStop = true;
-            return;
-        }
-
-        final int uid = service.appInfo.uid;
-        final String packageName = service.name.getPackageName();
-        final String serviceName = service.name.getClassName();
-        FrameworkStatsLog.write(FrameworkStatsLog.SERVICE_STATE_CHANGED, uid, packageName,
-                serviceName, FrameworkStatsLog.SERVICE_STATE_CHANGED__STATE__STOP);
-        mAm.mBatteryStatsService.noteServiceStopRunning(uid, packageName, serviceName);
-        service.startRequested = false;
-        if (service.tracker != null) {
-            synchronized (mAm.mProcessStats.mLock) {
-                service.tracker.setStarted(false, mAm.mProcessStats.getMemFactorLocked(),
-                        SystemClock.uptimeMillis());
+        try {
+            Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "stopServiceLocked()");
+            if (service.delayed) {
+                // If service isn't actually running, but is being held in the
+                // delayed list, then we need to keep it started but note that it
+                // should be stopped once no longer delayed.
+                if (DEBUG_DELAYED_STARTS) {
+                    Slog.v(TAG_SERVICE, "Delaying stop of pending: " + service);
+                }
+                service.delayedStop = true;
+                return;
             }
-        }
-        service.callStart = false;
 
-        bringDownServiceIfNeededLocked(service, false, false, enqueueOomAdj);
+            final int uid = service.appInfo.uid;
+            final String packageName = service.name.getPackageName();
+            final String serviceName = service.name.getClassName();
+            FrameworkStatsLog.write(FrameworkStatsLog.SERVICE_STATE_CHANGED, uid, packageName,
+                    serviceName, FrameworkStatsLog.SERVICE_STATE_CHANGED__STATE__STOP);
+            mAm.mBatteryStatsService.noteServiceStopRunning(uid, packageName, serviceName);
+            service.startRequested = false;
+            if (service.tracker != null) {
+                synchronized (mAm.mProcessStats.mLock) {
+                    service.tracker.setStarted(false, mAm.mProcessStats.getMemFactorLocked(),
+                            SystemClock.uptimeMillis());
+                }
+            }
+            service.callStart = false;
+
+            bringDownServiceIfNeededLocked(service, false, false, enqueueOomAdj);
+        } finally {
+            Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
+        }
+
     }
 
     int stopServiceLocked(IApplicationThread caller, Intent service,
@@ -2062,6 +2080,7 @@ public final class ActiveServices {
                         logFGSStateChangeLocked(r,
                                 FrameworkStatsLog.FOREGROUND_SERVICE_STATE_CHANGED__STATE__ENTER,
                                 0, FGS_STOP_REASON_UNKNOWN);
+                        updateNumForegroundServicesLocked();
                     }
                     // Even if the service is already a FGS, we need to update the notification,
                     // so we need to call it again.
@@ -2153,6 +2172,7 @@ public final class ActiveServices {
                     mAm.updateLruProcessLocked(r.app, false, null);
                     updateServiceForegroundLocked(r.app.mServices, true);
                 }
+                updateNumForegroundServicesLocked();
             }
         }
     }
@@ -2992,28 +3012,30 @@ public final class ActiveServices {
             }
             clist.add(c);
 
-            ServiceData sData = new ServiceData();
-            sData.packageName = s.packageName;
-            sData.processName = s.shortInstanceName;
-            sData.lastActivity = s.lastActivity;
-            if (s.app != null) {
-                sData.pid = s.app.getPid();
-                sData.serviceB = s.app.mState.isServiceB();
-            } else {
-                 sData.pid = -1;
-                 sData.serviceB = false;
-            }
-
-            ClientData cData = new ClientData();
-            cData.processName = callerApp.processName;
-            cData.pid = callerApp.getPid();
-            try {
-                if (getServicetrackerInstance()) {
-                   mServicetracker.bindService(sData, cData);
+            if (!isLowRamDevice) {
+                ServiceData sData = new ServiceData();
+                sData.packageName = s.packageName;
+                sData.processName = s.shortInstanceName;
+                sData.lastActivity = s.lastActivity;
+                if (s.app != null) {
+                    sData.pid = s.app.getPid();
+                    sData.serviceB = s.app.mState.isServiceB();
+                } else {
+                    sData.pid = -1;
+                    sData.serviceB = false;
                 }
-            } catch (RemoteException e) {
-                Slog.e(TAG, "Failed to send bind details to servicetracker HAL", e);
-                mServicetracker = null;
+
+                ClientData cData = new ClientData();
+                cData.processName = callerApp.processName;
+                cData.pid = callerApp.getPid();
+                try {
+                    if (getServicetrackerInstance()) {
+                        mServicetracker.bindService(sData, cData);
+                    }
+                } catch (RemoteException e) {
+                    Slog.e(TAG, "Failed to send bind details to servicetracker HAL", e);
+                    mServicetracker = null;
+                }
             }
 
             boolean needOomAdj = false;
@@ -3240,28 +3262,30 @@ public final class ActiveServices {
 
             while (clist.size() > 0) {
                 ConnectionRecord r = clist.get(0);
-                ServiceData sData = new ServiceData();
-                sData.packageName = r.binding.service.packageName;
-                sData.processName = r.binding.service.shortInstanceName;
-                sData.lastActivity = r.binding.service.lastActivity;
-                if(r.binding.service.app != null) {
-                    sData.pid = r.binding.service.app.getPid();
-                    sData.serviceB = r.binding.service.app.mState.isServiceB();
-                } else {
-                    sData.pid = -1;
-                    sData.serviceB = false;
-                }
-
-                ClientData cData = new ClientData();
-                cData.processName = r.binding.client.processName;
-                cData.pid = r.binding.client.getPid();
-                try {
-                    if (getServicetrackerInstance()) {
-                        mServicetracker.unbindService(sData, cData);
+                if (!isLowRamDevice) {
+                    ServiceData sData = new ServiceData();
+                    sData.packageName = r.binding.service.packageName;
+                    sData.processName = r.binding.service.shortInstanceName;
+                    sData.lastActivity = r.binding.service.lastActivity;
+                    if(r.binding.service.app != null) {
+                        sData.pid = r.binding.service.app.getPid();
+                        sData.serviceB = r.binding.service.app.mState.isServiceB();
+                    } else {
+                        sData.pid = -1;
+                        sData.serviceB = false;
                     }
-                } catch (RemoteException e) {
-                    Slog.e(TAG, "Failed to send unbind details to servicetracker HAL", e);
-                    mServicetracker = null;
+
+                    ClientData cData = new ClientData();
+                    cData.processName = r.binding.client.processName;
+                    cData.pid = r.binding.client.getPid();
+                    try {
+                        if (getServicetrackerInstance()) {
+                            mServicetracker.unbindService(sData, cData);
+                        }
+                    } catch (RemoteException e) {
+                        Slog.e(TAG, "Failed to send unbind details to servicetracker HAL", e);
+                        mServicetracker = null;
+                    }
                 }
                 removeConnectionLocked(r, null, null, true);
                 if (clist.size() > 0 && clist.get(0) == r) {
@@ -3376,7 +3400,7 @@ public final class ActiveServices {
         }
 
         public void run() {
-            synchronized(mAm) {
+            synchronized (mAm) {
                 performServiceRestartLocked(mService);
             }
         }
@@ -4373,9 +4397,8 @@ public final class ActiveServices {
 
         // Service is now being launched, its package can't be stopped.
         try {
-            AppGlobals.getPackageManager().setPackageStoppedState(
+            mAm.mPackageManagerInt.setPackageStoppedState(
                     r.packageName, false, r.userId);
-        } catch (RemoteException e) {
         } catch (IllegalArgumentException e) {
             Slog.w(TAG, "Failed trying to unstop package "
                     + r.packageName + ": " + e);
@@ -4385,7 +4408,8 @@ public final class ActiveServices {
         final String procName = r.processName;
         HostingRecord hostingRecord = new HostingRecord(
                 HostingRecord.HOSTING_TYPE_SERVICE, r.instanceName,
-                r.definingPackageName, r.definingUid, r.serviceInfo.processName);
+                r.definingPackageName, r.definingUid, r.serviceInfo.processName,
+                getHostingRecordTriggerType(r));
         ProcessRecord app;
 
         if (!isolated) {
@@ -4495,6 +4519,14 @@ public final class ActiveServices {
         return null;
     }
 
+    private String getHostingRecordTriggerType(ServiceRecord r) {
+        if (Manifest.permission.BIND_JOB_SERVICE.equals(r.permission)
+                && r.mRecentCallingUid == SYSTEM_UID) {
+            return HostingRecord.TRIGGER_TYPE_JOB;
+        }
+        return HostingRecord.TRIGGER_TYPE_UNKNOWN;
+    }
+
     private final void requestServiceBindingsLocked(ServiceRecord r, boolean execInFg)
             throws TransactionTooLargeException {
         for (int i=r.bindings.size()-1; i>=0; i--) {
@@ -4557,20 +4589,22 @@ public final class ActiveServices {
             r.postNotification();
             created = true;
 
-            ServiceData sData = new ServiceData();
-            sData.packageName = r.packageName;
-            sData.processName = r.shortInstanceName;
-            sData.pid = r.app.getPid();
-            sData.lastActivity = r.lastActivity;
-            sData.serviceB = r.app.mState.isServiceB();
+            if (!isLowRamDevice) {
+                ServiceData sData = new ServiceData();
+                sData.packageName = r.packageName;
+                sData.processName = r.shortInstanceName;
+                sData.pid = r.app.getPid();
+                sData.lastActivity = r.lastActivity;
+                sData.serviceB = r.app.mState.isServiceB();
 
-            try {
-                if (getServicetrackerInstance()) {
-                    mServicetracker.startService(sData);
+                try {
+                    if (getServicetrackerInstance()) {
+                        mServicetracker.startService(sData);
+                    }
+                } catch (RemoteException e) {
+                    Slog.e(TAG, "Failed to send start details to servicetracker HAL", e);
+                    mServicetracker = null;
                 }
-            } catch (RemoteException e) {
-                Slog.e(TAG, "Failed to send start details to servicetracker HAL", e);
-                mServicetracker = null;
             }
         } catch (DeadObjectException e) {
             Slog.w(TAG, "Application dead when creating service " + r);
@@ -4771,24 +4805,26 @@ public final class ActiveServices {
     private void bringDownServiceLocked(ServiceRecord r, boolean enqueueOomAdj) {
         //Slog.i(TAG, "Bring down service:");
         //r.dump("  ");
-        ServiceData sData = new ServiceData();
-        sData.packageName = r.packageName;
-        sData.processName = r.shortInstanceName;
-        sData.lastActivity = r.lastActivity;
-        if (r.app != null) {
-            sData.pid = r.app.getPid();
-        } else {
-            sData.pid = -1;
-            sData.serviceB = false;
-        }
-
-        try {
-            if (getServicetrackerInstance()) {
-                mServicetracker.destroyService(sData);
+        if (!isLowRamDevice) {
+            ServiceData sData = new ServiceData();
+            sData.packageName = r.packageName;
+            sData.processName = r.shortInstanceName;
+            sData.lastActivity = r.lastActivity;
+            if (r.app != null) {
+                sData.pid = r.app.getPid();
+            } else {
+                sData.pid = -1;
+                sData.serviceB = false;
             }
-        } catch (RemoteException e) {
-            Slog.e(TAG, "Failed to send destroy details to servicetracker HAL", e);
-            mServicetracker = null;
+
+            try {
+                if (getServicetrackerInstance()) {
+                    mServicetracker.destroyService(sData);
+                }
+            } catch (RemoteException e) {
+                Slog.e(TAG, "Failed to send destroy details to servicetracker HAL", e);
+                mServicetracker = null;
+            }
         }
         // Report to all of the connections that the service is no longer
         // available.
@@ -5004,6 +5040,7 @@ public final class ActiveServices {
         }
 
         smap.ensureNotStartingBackgroundLocked(r);
+        updateNumForegroundServicesLocked();
     }
 
     private void dropFgsNotificationStateLocked(ServiceRecord r) {
@@ -5640,7 +5677,7 @@ public final class ActiveServices {
         }
 
         try {
-            if (getServicetrackerInstance()) {
+            if (!isLowRamDevice && getServicetrackerInstance()) {
                 mServicetracker.killProcess(app.getPid());
             }
         } catch (RemoteException e) {
@@ -5947,92 +5984,108 @@ public final class ActiveServices {
     }
 
     void serviceTimeout(ProcessRecord proc) {
-        TimeoutRecord timeoutRecord = null;
-        synchronized(mAm) {
-            if (proc.isDebugging()) {
-                // The app's being debugged, ignore timeout.
-                return;
-            }
-            final ProcessServiceRecord psr = proc.mServices;
-            if (psr.numberOfExecutingServices() == 0 || proc.getThread() == null) {
-                return;
-            }
-            final long now = SystemClock.uptimeMillis();
-            final long maxTime =  now -
-                    (psr.shouldExecServicesFg() ? SERVICE_TIMEOUT : SERVICE_BACKGROUND_TIMEOUT);
-            ServiceRecord timeout = null;
-            long nextTime = 0;
-            for (int i = psr.numberOfExecutingServices() - 1; i >= 0; i--) {
-                ServiceRecord sr = psr.getExecutingServiceAt(i);
-                if (sr.executingStart < maxTime) {
-                    timeout = sr;
-                    break;
+        try {
+            Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "serviceTimeout()");
+            TimeoutRecord timeoutRecord = null;
+            synchronized (mAm) {
+                if (proc.isDebugging()) {
+                    // The app's being debugged, ignore timeout.
+                    return;
                 }
-                if (sr.executingStart > nextTime) {
-                    nextTime = sr.executingStart;
+                final ProcessServiceRecord psr = proc.mServices;
+                if (psr.numberOfExecutingServices() == 0 || proc.getThread() == null) {
+                    return;
+                }
+                final long now = SystemClock.uptimeMillis();
+                final long maxTime =  now
+                        - (psr.shouldExecServicesFg()
+                        ? SERVICE_TIMEOUT : SERVICE_BACKGROUND_TIMEOUT);
+                ServiceRecord timeout = null;
+                long nextTime = 0;
+                for (int i = psr.numberOfExecutingServices() - 1; i >= 0; i--) {
+                    ServiceRecord sr = psr.getExecutingServiceAt(i);
+                    if (sr.executingStart < maxTime) {
+                        timeout = sr;
+                        break;
+                    }
+                    if (sr.executingStart > nextTime) {
+                        nextTime = sr.executingStart;
+                    }
+                }
+                if (timeout != null && mAm.mProcessList.isInLruListLOSP(proc)) {
+                    Slog.w(TAG, "Timeout executing service: " + timeout);
+                    StringWriter sw = new StringWriter();
+                    PrintWriter pw = new FastPrintWriter(sw, false, 1024);
+                    pw.println(timeout);
+                    timeout.dump(pw, "    ");
+                    pw.close();
+                    mLastAnrDump = sw.toString();
+                    mAm.mHandler.removeCallbacks(mLastAnrDumpClearer);
+                    mAm.mHandler.postDelayed(mLastAnrDumpClearer,
+                            LAST_ANR_LIFETIME_DURATION_MSECS);
+                    String anrMessage = "executing service " + timeout.shortInstanceName;
+                    timeoutRecord = TimeoutRecord.forServiceExec(anrMessage);
+                } else {
+                    Message msg = mAm.mHandler.obtainMessage(
+                            ActivityManagerService.SERVICE_TIMEOUT_MSG);
+                    msg.obj = proc;
+                    mAm.mHandler.sendMessageAtTime(msg, psr.shouldExecServicesFg()
+                            ? (nextTime + SERVICE_TIMEOUT) :
+                            (nextTime + SERVICE_BACKGROUND_TIMEOUT));
                 }
             }
-            if (timeout != null && mAm.mProcessList.isInLruListLOSP(proc)) {
-                Slog.w(TAG, "Timeout executing service: " + timeout);
-                StringWriter sw = new StringWriter();
-                PrintWriter pw = new FastPrintWriter(sw, false, 1024);
-                pw.println(timeout);
-                timeout.dump(pw, "    ");
-                pw.close();
-                mLastAnrDump = sw.toString();
-                mAm.mHandler.removeCallbacks(mLastAnrDumpClearer);
-                mAm.mHandler.postDelayed(mLastAnrDumpClearer, LAST_ANR_LIFETIME_DURATION_MSECS);
-                String anrMessage = "executing service " + timeout.shortInstanceName;
-                timeoutRecord = TimeoutRecord.forServiceExec(anrMessage);
-            } else {
-                Message msg = mAm.mHandler.obtainMessage(
-                        ActivityManagerService.SERVICE_TIMEOUT_MSG);
-                msg.obj = proc;
-                mAm.mHandler.sendMessageAtTime(msg, psr.shouldExecServicesFg()
-                        ? (nextTime+SERVICE_TIMEOUT) : (nextTime + SERVICE_BACKGROUND_TIMEOUT));
-            }
-        }
 
-        if (timeoutRecord != null) {
-            mAm.mAnrHelper.appNotResponding(proc, timeoutRecord);
+            if (timeoutRecord != null) {
+                mAm.mAnrHelper.appNotResponding(proc, timeoutRecord);
+            }
+        } finally {
+            Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
         }
     }
 
     void serviceForegroundTimeout(ServiceRecord r) {
-        ProcessRecord app;
-        // Grab a timestamp before lock is taken.
-        long timeoutEndMs = SystemClock.uptimeMillis();
-        synchronized (mAm) {
-            if (!r.fgRequired || !r.fgWaiting || r.destroying) {
-                return;
-            }
-
-            app = r.app;
-            if (app != null && app.isDebugging()) {
-                // The app's being debugged; let it ride
-                return;
-            }
-
-            if (DEBUG_BACKGROUND_CHECK) {
-                Slog.i(TAG, "Service foreground-required timeout for " + r);
-            }
-            r.fgWaiting = false;
-            stopServiceLocked(r, false);
-        }
-
-        if (app != null) {
+        try {
+            Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "serviceForegroundTimeout()");
+            ProcessRecord app;
+            // Create a TimeoutRecord .
             final String annotation = "Context.startForegroundService() did not then call "
                     + "Service.startForeground(): " + r;
-            Message msg = mAm.mHandler.obtainMessage(
-                    ActivityManagerService.SERVICE_FOREGROUND_TIMEOUT_ANR_MSG);
             TimeoutRecord timeoutRecord = TimeoutRecord.forServiceStartWithEndTime(annotation,
-                    timeoutEndMs);
-            SomeArgs args = SomeArgs.obtain();
-            args.arg1 = app;
-            args.arg2 = timeoutRecord;
-            msg.obj = args;
-            mAm.mHandler.sendMessageDelayed(msg,
-                    mAm.mConstants.mServiceStartForegroundAnrDelayMs);
+                    SystemClock.uptimeMillis());
+
+            timeoutRecord.mLatencyTracker.waitingOnAMSLockEnded();
+            synchronized (mAm) {
+                timeoutRecord.mLatencyTracker.waitingOnAMSLockEnded();
+                if (!r.fgRequired || !r.fgWaiting || r.destroying) {
+                    return;
+                }
+
+                app = r.app;
+                if (app != null && app.isDebugging()) {
+                    // The app's being debugged; let it ride
+                    return;
+                }
+
+                if (DEBUG_BACKGROUND_CHECK) {
+                    Slog.i(TAG, "Service foreground-required timeout for " + r);
+                }
+                r.fgWaiting = false;
+                stopServiceLocked(r, false);
+            }
+
+            if (app != null) {
+
+                Message msg = mAm.mHandler.obtainMessage(
+                        ActivityManagerService.SERVICE_FOREGROUND_TIMEOUT_ANR_MSG);
+                SomeArgs args = SomeArgs.obtain();
+                args.arg1 = app;
+                args.arg2 = timeoutRecord;
+                msg.obj = args;
+                mAm.mHandler.sendMessageDelayed(msg,
+                        mAm.mConstants.mServiceStartForegroundAnrDelayMs);
+            }
+        } finally {
+            Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
         }
     }
 
@@ -7215,6 +7268,10 @@ public final class ActiveServices {
                 durationMs,
                 r.mStartForegroundCount,
                 fgsStopReasonToString(fgsStopReason));
+    }
+
+    private void updateNumForegroundServicesLocked() {
+        sNumForegroundServices.set(mAm.mProcessList.getNumForegroundServices());
     }
 
     boolean canAllowWhileInUsePermissionInFgsLocked(int callingPid, int callingUid,

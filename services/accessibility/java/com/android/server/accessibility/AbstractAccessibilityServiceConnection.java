@@ -75,7 +75,6 @@ import android.util.SparseArray;
 import android.view.Display;
 import android.view.KeyEvent;
 import android.view.MagnificationSpec;
-import android.view.SurfaceControl.ScreenshotHardwareBuffer;
 import android.view.View;
 import android.view.WindowInfo;
 import android.view.accessibility.AccessibilityCache;
@@ -84,6 +83,7 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 import android.view.accessibility.IAccessibilityInteractionConnectionCallback;
 import android.view.inputmethod.EditorInfo;
+import android.window.ScreenCapture.ScreenshotHardwareBuffer;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.compat.IPlatformCompat;
@@ -176,6 +176,7 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
 
     private boolean mSendMotionEvents;
 
+    private SparseArray<Boolean> mServiceDetectsGestures = new SparseArray<>(0);
     boolean mRequestFilterKeyEvents;
 
     boolean mRetrieveInteractiveWindows;
@@ -461,6 +462,16 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
+    }
+
+    @Override
+    public void setInstalledAndEnabledServices(List<AccessibilityServiceInfo> infos) {
+        return;
+    }
+
+    @Override
+    public List<AccessibilityServiceInfo> getInstalledAndEnabledServices() {
+        return null;
     }
 
     @Override
@@ -2359,7 +2370,15 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
     }
 
     public void setServiceDetectsGesturesEnabled(int displayId, boolean mode) {
+        mServiceDetectsGestures.put(displayId, mode);
         mSystemSupport.setServiceDetectsGesturesEnabled(displayId, mode);
+    }
+
+    public boolean isServiceDetectsGesturesEnabled(int displayId) {
+        if (mServiceDetectsGestures.contains(displayId)) {
+            return mServiceDetectsGestures.get(displayId);
+        }
+        return false;
     }
 
     public void requestTouchExploration(int displayId) {

@@ -52,7 +52,11 @@ android_library {
         "SystemUIUnfoldLib",
         "androidx.dynamicanimation_dynamicanimation",
         "androidx.concurrent_concurrent-futures",
-        "gson-prebuilt-jar",
+        "androidx.lifecycle_lifecycle-runtime-ktx",
+        "androidx.lifecycle_lifecycle-viewmodel-ktx",
+        "androidx.recyclerview_recyclerview",
+        "kotlinx_coroutines_android",
+        "kotlinx_coroutines",
         "dagger2",
         "jsr330",
     ],
@@ -62,9 +66,9 @@ android_library {
     optimize: {
         proguard_flags_files: ["proguard.flags"],
     },
-    java_version: "1.8",
     min_sdk_version: "current",
     plugins: ["dagger2-compiler"],
+    kotlincflags: ["-Xjvm-default=enable"],
 }
 
 java_library {

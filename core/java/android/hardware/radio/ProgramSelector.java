@@ -279,7 +279,6 @@ public final class ProgramSelector implements Parcelable {
         mPrimaryId = Objects.requireNonNull(primaryId);
         mSecondaryIds = secondaryIds;
         mVendorIds = vendorIds;
-        Arrays.sort(mSecondaryIds);
     }
 
     /**
@@ -491,8 +490,12 @@ public final class ProgramSelector implements Parcelable {
     public String toString() {
         StringBuilder sb = new StringBuilder("ProgramSelector(type=").append(mProgramType)
                 .append(", primary=").append(mPrimaryId);
-        if (mSecondaryIds.length > 0) sb.append(", secondary=").append(mSecondaryIds);
-        if (mVendorIds.length > 0) sb.append(", vendor=").append(mVendorIds);
+        if (mSecondaryIds.length > 0) {
+            sb.append(", secondary=").append(Arrays.toString(mSecondaryIds));
+        }
+        if (mVendorIds.length > 0) {
+            sb.append(", vendor=").append(Arrays.toString(mVendorIds));
+        }
         sb.append(")");
         return sb.toString();
     }
@@ -521,14 +524,15 @@ public final class ProgramSelector implements Parcelable {
         // vendorIds are ignored for equality
         // programType can be inferred from primaryId, thus not checked
         return mPrimaryId.equals(other.getPrimaryId())
-                && Arrays.equals(mSecondaryIds, other.mSecondaryIds);
+                && mSecondaryIds.length == other.mSecondaryIds.length
+                && Arrays.asList(mSecondaryIds).containsAll(
+                        Arrays.asList(other.mSecondaryIds));
     }
 
     private ProgramSelector(Parcel in) {
         mProgramType = in.readInt();
         mPrimaryId = in.readTypedObject(Identifier.CREATOR);
         mSecondaryIds = in.createTypedArray(Identifier.CREATOR);
-        Arrays.sort(mSecondaryIds);
         if (Stream.of(mSecondaryIds).anyMatch(id -> id == null)) {
             throw new IllegalArgumentException("secondaryIds list must not contain nulls");
         }

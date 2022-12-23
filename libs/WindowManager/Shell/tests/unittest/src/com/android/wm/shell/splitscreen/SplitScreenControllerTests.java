@@ -39,6 +39,7 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 
+import androidx.test.annotation.UiThreadTest;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.filters.SmallTest;
 
@@ -58,6 +59,7 @@ import com.android.wm.shell.recents.RecentTasksController;
 import com.android.wm.shell.sysui.ShellCommandHandler;
 import com.android.wm.shell.sysui.ShellController;
 import com.android.wm.shell.sysui.ShellInit;
+import com.android.wm.shell.sysui.ShellSharedConstants;
 import com.android.wm.shell.transition.Transitions;
 
 import org.junit.Before;
@@ -109,6 +111,7 @@ public class SplitScreenControllerTests extends ShellTestCase {
     }
 
     @Test
+    @UiThreadTest
     public void instantiateController_registerDumpCallback() {
         doReturn(mMainExecutor).when(mTaskOrganizer).getExecutor();
         when(mDisplayController.getDisplayLayout(anyInt())).thenReturn(new DisplayLayout());
@@ -117,6 +120,7 @@ public class SplitScreenControllerTests extends ShellTestCase {
     }
 
     @Test
+    @UiThreadTest
     public void instantiateController_registerCommandCallback() {
         doReturn(mMainExecutor).when(mTaskOrganizer).getExecutor();
         when(mDisplayController.getDisplayLayout(anyInt())).thenReturn(new DisplayLayout());
@@ -125,11 +129,22 @@ public class SplitScreenControllerTests extends ShellTestCase {
     }
 
     @Test
+    @UiThreadTest
     public void testControllerRegistersKeyguardChangeListener() {
         doReturn(mMainExecutor).when(mTaskOrganizer).getExecutor();
         when(mDisplayController.getDisplayLayout(anyInt())).thenReturn(new DisplayLayout());
         mSplitScreenController.onInit();
         verify(mShellController, times(1)).addKeyguardChangeListener(any());
+    }
+
+    @Test
+    @UiThreadTest
+    public void instantiateController_addExternalInterface() {
+        doReturn(mMainExecutor).when(mTaskOrganizer).getExecutor();
+        when(mDisplayController.getDisplayLayout(anyInt())).thenReturn(new DisplayLayout());
+        mSplitScreenController.onInit();
+        verify(mShellController, times(1)).addExternalInterface(
+                eq(ShellSharedConstants.KEY_EXTRA_SHELL_SPLIT_SCREEN), any(), any());
     }
 
     @Test

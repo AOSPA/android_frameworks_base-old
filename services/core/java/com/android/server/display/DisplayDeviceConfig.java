@@ -27,6 +27,7 @@ import android.os.Environment;
 import android.os.PowerManager;
 import android.text.TextUtils;
 import android.util.MathUtils;
+import android.util.Pair;
 import android.util.Slog;
 import android.util.Spline;
 import android.view.DisplayAddress;
@@ -51,7 +52,7 @@ import com.android.server.display.config.SdrHdrRatioPoint;
 import com.android.server.display.config.SensorDetails;
 import com.android.server.display.config.ThermalStatus;
 import com.android.server.display.config.ThermalThrottling;
-import com.android.server.display.config.Thresholds;
+import com.android.server.display.config.ThresholdPoint;
 import com.android.server.display.config.XmlParser;
 
 import org.xmlpull.v1.XmlPullParserException;
@@ -149,7 +150,7 @@ import javax.xml.datatype.DatatypeConfigurationException;
  *       <quirk>canSetBrightnessViaHwc</quirk>
  *      </quirks>
  *
- *      <autoBrightness>
+ *      <autoBrightness enable="true">
  *          <brighteningLightDebounceMillis>
  *              2000
  *          </brighteningLightDebounceMillis>
@@ -159,11 +160,11 @@ import javax.xml.datatype.DatatypeConfigurationException;
  *          <displayBrightnessMapping>
  *              <displayBrightnessPoint>
  *                  <lux>50</lux>
- *                  <nits>45</nits>
+ *                  <nits>45.32</nits>
  *              </displayBrightnessPoint>
  *              <displayBrightnessPoint>
  *                  <lux>80</lux>
- *                  <nits>75</nits>
+ *                  <nits>75.43</nits>
  *              </displayBrightnessPoint>
  *          </displayBrightnessMapping>
  *      </autoBrightness>
@@ -188,24 +189,153 @@ import javax.xml.datatype.DatatypeConfigurationException;
  *      <ambientLightHorizonLong>10001</ambientLightHorizonLong>
  *      <ambientLightHorizonShort>2001</ambientLightHorizonShort>
  *
- *      <displayBrightnessChangeThresholds>
- *        <brighteningThresholds>
- *          <minimum>0.001</minimum>  // Minimum change needed in screen brightness to brighten.
- *        </brighteningThresholds>
- *        <darkeningThresholds>
- *          <minimum>0.002</minimum>  // Minimum change needed in screen brightness to darken.
- *        </darkeningThresholds>
- *      </displayBrightnessChangeThresholds>
- *
- *      <ambientBrightnessChangeThresholds>
- *        <brighteningThresholds>
- *          <minimum>0.003</minimum>  // Minimum change needed in ambient brightness to brighten.
- *        </brighteningThresholds>
- *        <darkeningThresholds>
- *          <minimum>0.004</minimum>  // Minimum change needed in ambient brightness to darken.
- *        </darkeningThresholds>
- *      </ambientBrightnessChangeThresholds>
- *
+ *     <ambientBrightnessChangeThresholds>  // Thresholds for lux changes
+ *         <brighteningThresholds>
+ *             // Minimum change needed in ambient brightness to brighten screen.
+ *             <minimum>10</minimum>
+ *             // Percentage increase of lux needed to increase the screen brightness at a lux range
+ *             // above the specified threshold.
+ *             <brightnessThresholdPoints>
+ *                 <brightnessThresholdPoint>
+ *                     <threshold>0</threshold><percentage>13</percentage>
+ *                 </brightnessThresholdPoint>
+ *                 <brightnessThresholdPoint>
+ *                     <threshold>100</threshold><percentage>14</percentage>
+ *                 </brightnessThresholdPoint>
+ *                 <brightnessThresholdPoint>
+ *                     <threshold>200</threshold><percentage>15</percentage>
+ *                 </brightnessThresholdPoint>
+ *             </brightnessThresholdPoints>
+ *         </brighteningThresholds>
+ *         <darkeningThresholds>
+ *             // Minimum change needed in ambient brightness to darken screen.
+ *             <minimum>30</minimum>
+ *             // Percentage increase of lux needed to decrease the screen brightness at a lux range
+ *             // above the specified threshold.
+ *             <brightnessThresholdPoints>
+ *                 <brightnessThresholdPoint>
+ *                     <threshold>0</threshold><percentage>15</percentage>
+ *                 </brightnessThresholdPoint>
+ *                 <brightnessThresholdPoint>
+ *                     <threshold>300</threshold><percentage>16</percentage>
+ *                 </brightnessThresholdPoint>
+ *                 <brightnessThresholdPoint>
+ *                     <threshold>400</threshold><percentage>17</percentage>
+ *                 </brightnessThresholdPoint>
+ *             </brightnessThresholdPoints>
+ *         </darkeningThresholds>
+ *     </ambientBrightnessChangeThresholds>
+ *     <displayBrightnessChangeThresholds>   // Thresholds for screen brightness changes
+ *         <brighteningThresholds>
+ *             // Minimum change needed in screen brightness to brighten screen.
+ *             <minimum>0.1</minimum>
+ *             // Percentage increase of screen brightness needed to increase the screen brightness
+ *             // at a lux range above the specified threshold.
+ *             <brightnessThresholdPoints>
+ *                 <brightnessThresholdPoint>
+ *                     <threshold>0</threshold>
+ *                     <percentage>9</percentage>
+ *                 </brightnessThresholdPoint>
+ *                 <brightnessThresholdPoint>
+ *                     <threshold>0.10</threshold>
+ *                     <percentage>10</percentage>
+ *                 </brightnessThresholdPoint>
+ *                 <brightnessThresholdPoint>
+ *                     <threshold>0.20</threshold>
+ *                     <percentage>11</percentage>
+ *                 </brightnessThresholdPoint>
+ *             </brightnessThresholdPoints>
+ *         </brighteningThresholds>
+ *         <darkeningThresholds>
+ *             // Minimum change needed in screen brightness to darken screen.
+ *             <minimum>0.3</minimum>
+ *             // Percentage increase of screen brightness needed to decrease the screen brightness
+ *             // at a lux range above the specified threshold.
+ *             <brightnessThresholdPoints>
+ *                 <brightnessThresholdPoint>
+ *                     <threshold>0</threshold><percentage>11</percentage>
+ *                 </brightnessThresholdPoint>
+ *                 <brightnessThresholdPoint>
+ *                     <threshold>0.11</threshold><percentage>12</percentage>
+ *                 </brightnessThresholdPoint>
+ *                 <brightnessThresholdPoint>
+ *                     <threshold>0.21</threshold><percentage>13</percentage>
+ *                 </brightnessThresholdPoint>
+ *             </brightnessThresholdPoints>
+ *         </darkeningThresholds>
+ *     </displayBrightnessChangeThresholds>
+ *     <ambientBrightnessChangeThresholdsIdle>   // Thresholds for lux changes in idle mode
+ *         <brighteningThresholds>
+ *             // Minimum change needed in ambient brightness to brighten screen in idle mode
+ *             <minimum>20</minimum>
+ *             // Percentage increase of lux needed to increase the screen brightness at a lux range
+ *             // above the specified threshold whilst in idle mode.
+ *             <brightnessThresholdPoints>
+ *                 <brightnessThresholdPoint>
+ *                     <threshold>0</threshold><percentage>21</percentage>
+ *                 </brightnessThresholdPoint>
+ *                 <brightnessThresholdPoint>
+ *                     <threshold>500</threshold><percentage>22</percentage>
+ *                 </brightnessThresholdPoint>
+ *                 <brightnessThresholdPoint>
+ *                     <threshold>600</threshold><percentage>23</percentage>
+ *                 </brightnessThresholdPoint>
+ *             </brightnessThresholdPoints>
+ *         </brighteningThresholds>
+ *         <darkeningThresholds>
+ *             // Minimum change needed in ambient brightness to darken screen in idle mode
+ *             <minimum>40</minimum>
+ *             // Percentage increase of lux needed to decrease the screen brightness at a lux range
+ *             // above the specified threshold whilst in idle mode.
+ *             <brightnessThresholdPoints>
+ *                 <brightnessThresholdPoint>
+ *                     <threshold>0</threshold><percentage>23</percentage>
+ *                 </brightnessThresholdPoint>
+ *                 <brightnessThresholdPoint>
+ *                     <threshold>700</threshold><percentage>24</percentage>
+ *                 </brightnessThresholdPoint>
+ *                 <brightnessThresholdPoint>
+ *                     <threshold>800</threshold><percentage>25</percentage>
+ *                 </brightnessThresholdPoint>
+ *             </brightnessThresholdPoints>
+ *         </darkeningThresholds>
+ *     </ambientBrightnessChangeThresholdsIdle>
+ *     <displayBrightnessChangeThresholdsIdle>    // Thresholds for idle screen brightness changes
+ *         <brighteningThresholds>
+ *             // Minimum change needed in screen brightness to brighten screen in idle mode
+ *             <minimum>0.2</minimum>
+ *             // Percentage increase of screen brightness needed to increase the screen brightness
+ *             // at a lux range above the specified threshold whilst in idle mode
+ *             <brightnessThresholdPoints>
+ *                 <brightnessThresholdPoint>
+ *                     <threshold>0</threshold><percentage>17</percentage>
+ *                 </brightnessThresholdPoint>
+ *                 <brightnessThresholdPoint>
+ *                     <threshold>0.12</threshold><percentage>18</percentage>
+ *                 </brightnessThresholdPoint>
+ *                 <brightnessThresholdPoint>
+ *                     <threshold>0.22</threshold><percentage>19</percentage>
+ *                 </brightnessThresholdPoint>
+ *             </brightnessThresholdPoints>
+ *         </brighteningThresholds>
+ *         <darkeningThresholds>
+ *             // Minimum change needed in screen brightness to darken screen in idle mode
+ *             <minimum>0.4</minimum>
+ *             // Percentage increase of screen brightness needed to decrease the screen brightness
+ *             // at a lux range above the specified threshold whilst in idle mode
+ *             <brightnessThresholdPoints>
+ *                 <brightnessThresholdPoint>
+ *                     <threshold>0</threshold><percentage>19</percentage>
+ *                 </brightnessThresholdPoint>
+ *                 <brightnessThresholdPoint>
+ *                     <threshold>0.13</threshold><percentage>20</percentage>
+ *                 </brightnessThresholdPoint>
+ *                 <brightnessThresholdPoint>
+ *                     <threshold>0.23</threshold><percentage>21</percentage>
+ *                 </brightnessThresholdPoint>
+ *             </brightnessThresholdPoints>
+ *         </darkeningThresholds>
+ *     </displayBrightnessChangeThresholdsIdle>
  *    </displayConfiguration>
  *  }
  *  </pre>
@@ -228,6 +358,13 @@ public class DisplayDeviceConfig {
     private static final String STABLE_ID_SUFFIX_FORMAT = "id_%d";
     private static final String NO_SUFFIX_FORMAT = "%d";
     private static final long STABLE_FLAG = 1L << 62;
+
+    private static final float[] DEFAULT_AMBIENT_THRESHOLD_LEVELS = new float[]{0f};
+    private static final float[] DEFAULT_AMBIENT_BRIGHTENING_THRESHOLDS = new float[]{100f};
+    private static final float[] DEFAULT_AMBIENT_DARKENING_THRESHOLDS = new float[]{200f};
+    private static final float[] DEFAULT_SCREEN_THRESHOLD_LEVELS = new float[]{0f};
+    private static final float[] DEFAULT_SCREEN_BRIGHTENING_THRESHOLDS = new float[]{100f};
+    private static final float[] DEFAULT_SCREEN_DARKENING_THRESHOLDS = new float[]{200f};
 
     private static final int INTERPOLATION_DEFAULT = 0;
     private static final int INTERPOLATION_LINEAR = 1;
@@ -291,19 +428,14 @@ public class DisplayDeviceConfig {
     /**
      * Array of light sensor lux values to define our levels for auto backlight
      * brightness support.
-     * The N entries of this array define N + 1 control points as follows:
-     * (1-based arrays)
-     *
-     * Point 1:            (0, value[1]):             lux <= 0
-     * Point 2:     (level[1], value[2]):  0        < lux <= level[1]
-     * Point 3:     (level[2], value[3]):  level[2] < lux <= level[3]
-     * ...
-     * Point N+1: (level[N], value[N+1]):  level[N] < lux
-     *
+
+     * The N + 1 entries of this array define N control points defined in mBrightnessLevelsNits,
+     * with first value always being 0 lux
+
      * The control points must be strictly increasing.  Each control point
      * corresponds to an entry in the brightness backlight values arrays.
-     * For example, if lux == level[1] (first element of the levels array)
-     * then the brightness will be determined by value[2] (second element
+     * For example, if lux == level[1] (second element of the levels array)
+     * then the brightness will be determined by value[0] (first element
      * of the brightness values array).
      *
      * Spline interpolation is used to determine the auto-brightness
@@ -324,9 +456,38 @@ public class DisplayDeviceConfig {
     private int mAmbientHorizonLong = AMBIENT_LIGHT_LONG_HORIZON_MILLIS;
     private int mAmbientHorizonShort = AMBIENT_LIGHT_SHORT_HORIZON_MILLIS;
     private float mScreenBrighteningMinThreshold = 0.0f;     // Retain behaviour as though there is
-    private float mScreenDarkeningMinThreshold = 0.0f;       // no minimum threshold for change in
-    private float mAmbientLuxBrighteningMinThreshold = 0.0f; // screen brightness or ambient
-    private float mAmbientLuxDarkeningMinThreshold = 0.0f;   // brightness.
+    private float mScreenBrighteningMinThresholdIdle = 0.0f; // no minimum threshold for change in
+    private float mScreenDarkeningMinThreshold = 0.0f;       // screen brightness or ambient
+    private float mScreenDarkeningMinThresholdIdle = 0.0f;   // brightness.
+    private float mAmbientLuxBrighteningMinThreshold = 0.0f;
+    private float mAmbientLuxBrighteningMinThresholdIdle = 0.0f;
+    private float mAmbientLuxDarkeningMinThreshold = 0.0f;
+    private float mAmbientLuxDarkeningMinThresholdIdle = 0.0f;
+
+    // Screen brightness thresholds levels & percentages
+    private float[] mScreenBrighteningLevels = DEFAULT_SCREEN_THRESHOLD_LEVELS;
+    private float[] mScreenBrighteningPercentages = DEFAULT_SCREEN_BRIGHTENING_THRESHOLDS;
+    private float[] mScreenDarkeningLevels = DEFAULT_SCREEN_THRESHOLD_LEVELS;
+    private float[] mScreenDarkeningPercentages = DEFAULT_SCREEN_DARKENING_THRESHOLDS;
+
+    // Screen brightness thresholds levels & percentages for idle mode
+    private float[] mScreenBrighteningLevelsIdle = DEFAULT_SCREEN_THRESHOLD_LEVELS;
+    private float[] mScreenBrighteningPercentagesIdle = DEFAULT_SCREEN_BRIGHTENING_THRESHOLDS;
+    private float[] mScreenDarkeningLevelsIdle = DEFAULT_SCREEN_THRESHOLD_LEVELS;
+    private float[] mScreenDarkeningPercentagesIdle = DEFAULT_SCREEN_DARKENING_THRESHOLDS;
+
+    // Ambient brightness thresholds levels & percentages
+    private float[] mAmbientBrighteningLevels = DEFAULT_AMBIENT_THRESHOLD_LEVELS;
+    private float[] mAmbientBrighteningPercentages = DEFAULT_AMBIENT_BRIGHTENING_THRESHOLDS;
+    private float[] mAmbientDarkeningLevels = DEFAULT_AMBIENT_THRESHOLD_LEVELS;
+    private float[] mAmbientDarkeningPercentages = DEFAULT_AMBIENT_DARKENING_THRESHOLDS;
+
+    // Ambient brightness thresholds levels & percentages for idle mode
+    private float[] mAmbientBrighteningLevelsIdle = DEFAULT_AMBIENT_THRESHOLD_LEVELS;
+    private float[] mAmbientBrighteningPercentagesIdle = DEFAULT_AMBIENT_BRIGHTENING_THRESHOLDS;
+    private float[] mAmbientDarkeningLevelsIdle = DEFAULT_AMBIENT_THRESHOLD_LEVELS;
+    private float[] mAmbientDarkeningPercentagesIdle = DEFAULT_AMBIENT_DARKENING_THRESHOLDS;
+
     private Spline mBrightnessToBacklightSpline;
     private Spline mBacklightToBrightnessSpline;
     private Spline mBacklightToNitsSpline;
@@ -345,6 +506,11 @@ public class DisplayDeviceConfig {
     // Represents the auto-brightness darkening light debounce.
     private long mAutoBrightnessDarkeningLightDebounce =
             INVALID_AUTO_BRIGHTNESS_LIGHT_DEBOUNCE;
+
+    // This setting allows non-default displays to have autobrightness enabled.
+    private boolean mAutoBrightnessAvailable = false;
+    // This stores the raw value loaded from the config file - true if not written.
+    private boolean mDdcAutoBrightnessAvailable = true;
 
     // Brightness Throttling data may be updated via the DeviceConfig. Here we store the original
     // data, which comes from the ddc, and the current one, which may be the DeviceConfig
@@ -533,7 +699,6 @@ public class DisplayDeviceConfig {
      */
     public float getNitsFromBacklight(float backlight) {
         if (mBacklightToNitsSpline == null) {
-            Slog.wtf(TAG, "requesting nits when no mapping exists.");
             return NITS_INVALID;
         }
         backlight = Math.max(backlight, mBacklightMinimum);
@@ -630,20 +795,324 @@ public class DisplayDeviceConfig {
         return mAmbientHorizonShort;
     }
 
+    /**
+     * The minimum value for the screen brightness increase to actually occur.
+     * @return float value in brightness scale of 0 - 1.
+     */
     public float getScreenBrighteningMinThreshold() {
         return mScreenBrighteningMinThreshold;
     }
 
+    /**
+     * The minimum value for the screen brightness decrease to actually occur.
+     * @return float value in brightness scale of 0 - 1.
+     */
     public float getScreenDarkeningMinThreshold() {
         return mScreenDarkeningMinThreshold;
     }
 
+    /**
+     * The minimum value for the screen brightness increase to actually occur while in idle screen
+     * brightness mode.
+     * @return float value in brightness scale of 0 - 1.
+     */
+    public float getScreenBrighteningMinThresholdIdle() {
+        return mScreenBrighteningMinThresholdIdle;
+    }
+
+    /**
+     * The minimum value for the screen brightness decrease to actually occur while in idle screen
+     * brightness mode.
+     * @return float value in brightness scale of 0 - 1.
+     */
+    public float getScreenDarkeningMinThresholdIdle() {
+        return mScreenDarkeningMinThresholdIdle;
+    }
+
+    /**
+     * The minimum value for the ambient lux increase for a screen brightness change to actually
+     * occur.
+     * @return float value in lux.
+     */
     public float getAmbientLuxBrighteningMinThreshold() {
         return mAmbientLuxBrighteningMinThreshold;
     }
 
+    /**
+     * The minimum value for the ambient lux decrease for a screen brightness change to actually
+     * occur.
+     * @return float value in lux.
+     */
     public float getAmbientLuxDarkeningMinThreshold() {
         return mAmbientLuxDarkeningMinThreshold;
+    }
+
+    /**
+     * The minimum value for the ambient lux increase for a screen brightness change to actually
+     * occur while in idle screen brightness mode.
+     * @return float value in lux.
+     */
+    public float getAmbientLuxBrighteningMinThresholdIdle() {
+        return mAmbientLuxBrighteningMinThresholdIdle;
+    }
+
+    /**
+     * The minimum value for the ambient lux decrease for a screen brightness change to actually
+     * occur while in idle screen brightness mode.
+     * @return float value in lux.
+     */
+    public float getAmbientLuxDarkeningMinThresholdIdle() {
+        return mAmbientLuxDarkeningMinThresholdIdle;
+    }
+
+    /**
+     * The array that describes the range of screen brightness that each threshold percentage
+     * applies within.
+     *
+     * The (zero-based) index is calculated as follows
+     * value = current screen brightness value
+     * level = mScreenBrighteningLevels
+     *
+     * condition                       return
+     * value < level[0]                = 0.0f
+     * level[n] <= value < level[n+1]  = mScreenBrighteningPercentages[n]
+     * level[MAX] <= value             = mScreenBrighteningPercentages[MAX]
+     *
+     * @return the screen brightness levels between 0.0 and 1.0 for which each
+     * mScreenBrighteningPercentages applies
+     */
+    public float[] getScreenBrighteningLevels() {
+        return mScreenBrighteningLevels;
+    }
+
+    /**
+     * The array that describes the screen brightening threshold percentage change at each screen
+     * brightness level described in mScreenBrighteningLevels.
+     *
+     * @return the percentages between 0 and 100 of brightness increase required in order for the
+     * screen brightness to change
+     */
+    public float[] getScreenBrighteningPercentages() {
+        return mScreenBrighteningPercentages;
+    }
+
+    /**
+     * The array that describes the range of screen brightness that each threshold percentage
+     * applies within.
+     *
+     * The (zero-based) index is calculated as follows
+     * value = current screen brightness value
+     * level = mScreenDarkeningLevels
+     *
+     * condition                       return
+     * value < level[0]                = 0.0f
+     * level[n] <= value < level[n+1]  = mScreenDarkeningPercentages[n]
+     * level[MAX] <= value             = mScreenDarkeningPercentages[MAX]
+     *
+     * @return the screen brightness levels between 0.0 and 1.0 for which each
+     * mScreenDarkeningPercentages applies
+     */
+    public float[] getScreenDarkeningLevels() {
+        return mScreenDarkeningLevels;
+    }
+
+    /**
+     * The array that describes the screen darkening threshold percentage change at each screen
+     * brightness level described in mScreenDarkeningLevels.
+     *
+     * @return the percentages between 0 and 100 of brightness decrease required in order for the
+     * screen brightness to change
+     */
+    public float[] getScreenDarkeningPercentages() {
+        return mScreenDarkeningPercentages;
+    }
+
+    /**
+     * The array that describes the range of ambient brightness that each threshold
+     * percentage applies within.
+     *
+     * The (zero-based) index is calculated as follows
+     * value = current ambient brightness value
+     * level = mAmbientBrighteningLevels
+     *
+     * condition                       return
+     * value < level[0]                = 0.0f
+     * level[n] <= value < level[n+1]  = mAmbientBrighteningPercentages[n]
+     * level[MAX] <= value             = mAmbientBrighteningPercentages[MAX]
+     *
+     * @return the ambient brightness levels from 0 lux upwards for which each
+     * mAmbientBrighteningPercentages applies
+     */
+    public float[] getAmbientBrighteningLevels() {
+        return mAmbientBrighteningLevels;
+    }
+
+    /**
+     * The array that describes the ambient brightening threshold percentage change at each ambient
+     * brightness level described in mAmbientBrighteningLevels.
+     *
+     * @return the percentages between 0 and 100 of brightness increase required in order for the
+     * screen brightness to change
+     */
+    public float[] getAmbientBrighteningPercentages() {
+        return mAmbientBrighteningPercentages;
+    }
+
+    /**
+     * The array that describes the range of ambient brightness that each threshold percentage
+     * applies within.
+     *
+     * The (zero-based) index is calculated as follows
+     * value = current ambient brightness value
+     * level = mAmbientDarkeningLevels
+     *
+     * condition                       return
+     * value < level[0]                = 0.0f
+     * level[n] <= value < level[n+1]  = mAmbientDarkeningPercentages[n]
+     * level[MAX] <= value             = mAmbientDarkeningPercentages[MAX]
+     *
+     * @return the ambient brightness levels from 0 lux upwards for which each
+     * mAmbientDarkeningPercentages applies
+     */
+    public float[] getAmbientDarkeningLevels() {
+        return mAmbientDarkeningLevels;
+    }
+
+    /**
+     * The array that describes the ambient darkening threshold percentage change at each ambient
+     * brightness level described in mAmbientDarkeningLevels.
+     *
+     * @return the percentages between 0 and 100 of brightness decrease required in order for the
+     * screen brightness to change
+     */
+    public float[] getAmbientDarkeningPercentages() {
+        return mAmbientDarkeningPercentages;
+    }
+
+    /**
+     * The array that describes the range of screen brightness that each threshold percentage
+     * applies within whilst in idle screen brightness mode.
+     *
+     * The (zero-based) index is calculated as follows
+     * value = current screen brightness value
+     * level = mScreenBrighteningLevelsIdle
+     *
+     * condition                       return
+     * value < level[0]                = 0.0f
+     * level[n] <= value < level[n+1]  = mScreenBrighteningPercentagesIdle[n]
+     * level[MAX] <= value             = mScreenBrighteningPercentagesIdle[MAX]
+     *
+     * @return the screen brightness levels between 0.0 and 1.0 for which each
+     * mScreenBrighteningPercentagesIdle applies
+     */
+    public float[] getScreenBrighteningLevelsIdle() {
+        return mScreenBrighteningLevelsIdle;
+    }
+
+    /**
+     * The array that describes the screen brightening threshold percentage change at each screen
+     * brightness level described in mScreenBrighteningLevelsIdle.
+     *
+     * @return the percentages between 0 and 100 of brightness increase required in order for the
+     * screen brightness to change while in idle mode.
+     */
+    public float[] getScreenBrighteningPercentagesIdle() {
+        return mScreenBrighteningPercentagesIdle;
+    }
+
+    /**
+     * The array that describes the range of screen brightness that each threshold percentage
+     * applies within whilst in idle screen brightness mode.
+     *
+     * The (zero-based) index is calculated as follows
+     * value = current screen brightness value
+     * level = mScreenDarkeningLevelsIdle
+     *
+     * condition                       return
+     * value < level[0]                = 0.0f
+     * level[n] <= value < level[n+1]  = mScreenDarkeningPercentagesIdle[n]
+     * level[MAX] <= value             = mScreenDarkeningPercentagesIdle[MAX]
+     *
+     * @return the screen brightness levels between 0.0 and 1.0 for which each
+     * mScreenDarkeningPercentagesIdle applies
+     */
+    public float[] getScreenDarkeningLevelsIdle() {
+        return mScreenDarkeningLevelsIdle;
+    }
+
+    /**
+     * The array that describes the screen darkening threshold percentage change at each screen
+     * brightness level described in mScreenDarkeningLevelsIdle.
+     *
+     * @return the percentages between 0 and 100 of brightness decrease required in order for the
+     * screen brightness to change while in idle mode.
+     */
+    public float[] getScreenDarkeningPercentagesIdle() {
+        return mScreenDarkeningPercentagesIdle;
+    }
+
+    /**
+     * The array that describes the range of ambient brightness that each threshold percentage
+     * applies within whilst in idle screen brightness mode.
+     *
+     * The (zero-based) index is calculated as follows
+     * value = current ambient brightness value
+     * level = mAmbientBrighteningLevelsIdle
+     *
+     * condition                       return
+     * value < level[0]                = 0.0f
+     * level[n] <= value < level[n+1]  = mAmbientBrighteningPercentagesIdle[n]
+     * level[MAX] <= value             = mAmbientBrighteningPercentagesIdle[MAX]
+     *
+     * @return the ambient brightness levels from 0 lux upwards for which each
+     * mAmbientBrighteningPercentagesIdle applies
+     */
+    public float[] getAmbientBrighteningLevelsIdle() {
+        return mAmbientBrighteningLevelsIdle;
+    }
+
+    /**
+     * The array that describes the ambient brightness threshold percentage change whilst in
+     * idle screen brightness mode at each ambient brightness level described in
+     * mAmbientBrighteningLevelsIdle.
+     *
+     * @return the percentages between 0 and 100 of ambient brightness increase required in order
+     * for the screen brightness to change
+     */
+    public float[] getAmbientBrighteningPercentagesIdle() {
+        return mAmbientBrighteningPercentagesIdle;
+    }
+
+    /**
+     * The array that describes the range of ambient brightness that each threshold percentage
+     * applies within whilst in idle screen brightness mode.
+     *
+     * The (zero-based) index is calculated as follows
+     * value = current ambient brightness value
+     * level = mAmbientDarkeningLevelsIdle
+     *
+     * condition                       return
+     * value < level[0]                = 0.0f
+     * level[n] <= value < level[n+1]  = mAmbientDarkeningPercentagesIdle[n]
+     * level[MAX] <= value             = mAmbientDarkeningPercentagesIdle[MAX]
+     *
+     * @return the ambient brightness levels from 0 lux upwards for which each
+     * mAmbientDarkeningPercentagesIdle applies
+     */
+    public float[] getAmbientDarkeningLevelsIdle() {
+        return mAmbientDarkeningLevelsIdle;
+    }
+
+    /**
+     * The array that describes the ambient brightness threshold percentage change whilst in
+     * idle screen brightness mode at each ambient brightness level described in
+     * mAmbientDarkeningLevelsIdle.
+     *
+     * @return the percentages between 0 and 100 of ambient brightness decrease required in order
+     * for the screen brightness to change
+     */
+    public float[] getAmbientDarkeningPercentagesIdle() {
+        return mAmbientDarkeningPercentagesIdle;
     }
 
     SensorData getAmbientLightSensor() {
@@ -652,6 +1121,10 @@ public class DisplayDeviceConfig {
 
     SensorData getProximitySensor() {
         return mProximitySensor;
+    }
+
+    boolean isAutoBrightnessAvailable() {
+        return mAutoBrightnessAvailable;
     }
 
     /**
@@ -719,6 +1192,60 @@ public class DisplayDeviceConfig {
         return mBrightnessLevelsNits;
     }
 
+    /**
+     * @return Default peak refresh rate of the associated display
+     */
+    public int getDefaultPeakRefreshRate() {
+        return mContext.getResources().getInteger(R.integer.config_defaultPeakRefreshRate);
+    }
+
+    /**
+     * @return Default refresh rate of the associated display
+     */
+    public int getDefaultRefreshRate() {
+        return mContext.getResources().getInteger(R.integer.config_defaultRefreshRate);
+    }
+
+    /**
+     * @return An array of lower display brightness thresholds. This, in combination with lower
+     * ambient brightness thresholds help define buckets in which the refresh rate switching is not
+     * allowed
+     */
+    public int[] getLowDisplayBrightnessThresholds() {
+        return mContext.getResources().getIntArray(
+                R.array.config_brightnessThresholdsOfPeakRefreshRate);
+    }
+
+    /**
+     * @return An array of lower ambient brightness thresholds. This, in combination with lower
+     * display brightness thresholds help define buckets in which the refresh rate switching is not
+     * allowed
+     */
+    public int[] getLowAmbientBrightnessThresholds() {
+        return mContext.getResources().getIntArray(
+                R.array.config_ambientThresholdsOfPeakRefreshRate);
+    }
+
+    /**
+     * @return An array of high display brightness thresholds. This, in combination with high
+     * ambient brightness thresholds help define buckets in which the refresh rate switching is not
+     * allowed
+     */
+    public int[] getHighDisplayBrightnessThresholds() {
+        return mContext.getResources().getIntArray(
+                R.array.config_highDisplayBrightnessThresholdsOfFixedRefreshRate);
+    }
+
+    /**
+     * @return An array of high ambient brightness thresholds. This, in combination with high
+     * display brightness thresholds help define buckets in which the refresh rate switching is not
+     * allowed
+     */
+    public int[] getHighAmbientBrightnessThresholds() {
+        return mContext.getResources().getIntArray(
+                R.array.config_highAmbientBrightnessThresholdsOfFixedRefreshRate);
+    }
+
     @Override
     public String toString() {
         return "DisplayDeviceConfig{"
@@ -741,18 +1268,61 @@ public class DisplayDeviceConfig {
                 + ", mSdrToHdrRatioSpline=" + mSdrToHdrRatioSpline
                 + ", mBrightnessThrottlingData=" + mBrightnessThrottlingData
                 + ", mOriginalBrightnessThrottlingData=" + mOriginalBrightnessThrottlingData
+                + "\n"
                 + ", mBrightnessRampFastDecrease=" + mBrightnessRampFastDecrease
                 + ", mBrightnessRampFastIncrease=" + mBrightnessRampFastIncrease
                 + ", mBrightnessRampSlowDecrease=" + mBrightnessRampSlowDecrease
                 + ", mBrightnessRampSlowIncrease=" + mBrightnessRampSlowIncrease
                 + ", mBrightnessRampDecreaseMaxMillis=" + mBrightnessRampDecreaseMaxMillis
                 + ", mBrightnessRampIncreaseMaxMillis=" + mBrightnessRampIncreaseMaxMillis
+                + "\n"
                 + ", mAmbientHorizonLong=" + mAmbientHorizonLong
                 + ", mAmbientHorizonShort=" + mAmbientHorizonShort
+                + "\n"
                 + ", mScreenDarkeningMinThreshold=" + mScreenDarkeningMinThreshold
+                + ", mScreenDarkeningMinThresholdIdle=" + mScreenDarkeningMinThresholdIdle
                 + ", mScreenBrighteningMinThreshold=" + mScreenBrighteningMinThreshold
+                + ", mScreenBrighteningMinThresholdIdle=" + mScreenBrighteningMinThresholdIdle
                 + ", mAmbientLuxDarkeningMinThreshold=" + mAmbientLuxDarkeningMinThreshold
+                + ", mAmbientLuxDarkeningMinThresholdIdle=" + mAmbientLuxDarkeningMinThresholdIdle
                 + ", mAmbientLuxBrighteningMinThreshold=" + mAmbientLuxBrighteningMinThreshold
+                + ", mAmbientLuxBrighteningMinThresholdIdle="
+                + mAmbientLuxBrighteningMinThresholdIdle
+                + "\n"
+                + ", mScreenBrighteningLevels=" + Arrays.toString(
+                mScreenBrighteningLevels)
+                + ", mScreenBrighteningPercentages=" + Arrays.toString(
+                mScreenBrighteningPercentages)
+                + ", mScreenDarkeningLevels=" + Arrays.toString(
+                mScreenDarkeningLevels)
+                + ", mScreenDarkeningPercentages=" + Arrays.toString(
+                mScreenDarkeningPercentages)
+                + ", mAmbientBrighteningLevels=" + Arrays.toString(
+                mAmbientBrighteningLevels)
+                + ", mAmbientBrighteningPercentages=" + Arrays.toString(
+                mAmbientBrighteningPercentages)
+                + ", mAmbientDarkeningLevels=" + Arrays.toString(
+                mAmbientDarkeningLevels)
+                + ", mAmbientDarkeningPercentages=" + Arrays.toString(
+                mAmbientDarkeningPercentages)
+                + "\n"
+                + ", mAmbientBrighteningLevelsIdle=" + Arrays.toString(
+                mAmbientBrighteningLevelsIdle)
+                + ", mAmbientBrighteningPercentagesIdle=" + Arrays.toString(
+                mAmbientBrighteningPercentagesIdle)
+                + ", mAmbientDarkeningLevelsIdle=" + Arrays.toString(
+                mAmbientDarkeningLevelsIdle)
+                + ", mAmbientDarkeningPercentagesIdle=" + Arrays.toString(
+                mAmbientDarkeningPercentagesIdle)
+                + ", mScreenBrighteningLevelsIdle=" + Arrays.toString(
+                mScreenBrighteningLevelsIdle)
+                + ", mScreenBrighteningPercentagesIdle=" + Arrays.toString(
+                mScreenBrighteningPercentagesIdle)
+                + ", mScreenDarkeningLevelsIdle=" + Arrays.toString(
+                mScreenDarkeningLevelsIdle)
+                + ", mScreenDarkeningPercentagesIdle=" + Arrays.toString(
+                mScreenDarkeningPercentagesIdle)
+                + "\n"
                 + ", mAmbientLightSensor=" + mAmbientLightSensor
                 + ", mProximitySensor=" + mProximitySensor
                 + ", mRefreshRateLimitations= " + Arrays.toString(mRefreshRateLimitations.toArray())
@@ -763,6 +1333,8 @@ public class DisplayDeviceConfig {
                 + mAutoBrightnessDarkeningLightDebounce
                 + ", mBrightnessLevelsLux= " + Arrays.toString(mBrightnessLevelsLux)
                 + ", mBrightnessLevelsNits= " + Arrays.toString(mBrightnessLevelsNits)
+                + ", mDdcAutoBrightnessAvailable= " + mDdcAutoBrightnessAvailable
+                + ", mAutoBrightnessAvailable= " + mAutoBrightnessAvailable
                 + "}";
     }
 
@@ -838,8 +1410,10 @@ public class DisplayDeviceConfig {
         loadBrightnessMapFromConfigXml();
         loadBrightnessRampsFromConfigXml();
         loadAmbientLightSensorFromConfigXml();
+        loadBrightnessChangeThresholdsFromXml();
         setProxSensorUnspecified();
         loadAutoBrightnessConfigsFromConfigXml();
+        loadAutoBrightnessAvailableFromConfigXml();
         mLoadedFrom = "<config.xml>";
     }
 
@@ -858,6 +1432,7 @@ public class DisplayDeviceConfig {
         setSimpleMappingStrategyValues();
         loadAmbientLightSensorFromConfigXml();
         setProxSensorUnspecified();
+        loadAutoBrightnessAvailableFromConfigXml();
     }
 
     private void copyUninitializedValuesFromSecondaryConfig(DisplayConfiguration defaultConfig) {
@@ -1050,9 +1625,11 @@ public class DisplayDeviceConfig {
     }
 
     private void loadAutoBrightnessConfigValues(DisplayConfiguration config) {
-        loadAutoBrightnessBrighteningLightDebounce(config.getAutoBrightness());
-        loadAutoBrightnessDarkeningLightDebounce(config.getAutoBrightness());
-        loadAutoBrightnessDisplayBrightnessMapping(config.getAutoBrightness());
+        final AutoBrightness autoBrightness = config.getAutoBrightness();
+        loadAutoBrightnessBrighteningLightDebounce(autoBrightness);
+        loadAutoBrightnessDarkeningLightDebounce(autoBrightness);
+        loadAutoBrightnessDisplayBrightnessMapping(autoBrightness);
+        loadEnableAutoBrightness(autoBrightness);
     }
 
     /**
@@ -1094,22 +1671,29 @@ public class DisplayDeviceConfig {
                 || autoBrightnessConfig.getDisplayBrightnessMapping() == null) {
             mBrightnessLevelsNits = getFloatArray(mContext.getResources()
                     .obtainTypedArray(com.android.internal.R.array
-                            .config_autoBrightnessDisplayValuesNits));
-            mBrightnessLevelsLux = getFloatArray(mContext.getResources()
-                    .obtainTypedArray(com.android.internal.R.array
+                            .config_autoBrightnessDisplayValuesNits), PowerManager
+                    .BRIGHTNESS_OFF_FLOAT);
+            mBrightnessLevelsLux = getLuxLevels(mContext.getResources()
+                    .getIntArray(com.android.internal.R.array
                             .config_autoBrightnessLevels));
         } else {
             final int size = autoBrightnessConfig.getDisplayBrightnessMapping()
                     .getDisplayBrightnessPoint().size();
             mBrightnessLevelsNits = new float[size];
-            mBrightnessLevelsLux = new float[size];
+            // The first control point is implicit and always at 0 lux.
+            mBrightnessLevelsLux = new float[size + 1];
             for (int i = 0; i < size; i++) {
                 mBrightnessLevelsNits[i] = autoBrightnessConfig.getDisplayBrightnessMapping()
                         .getDisplayBrightnessPoint().get(i).getNits().floatValue();
-                mBrightnessLevelsLux[i] = autoBrightnessConfig.getDisplayBrightnessMapping()
+                mBrightnessLevelsLux[i + 1] = autoBrightnessConfig.getDisplayBrightnessMapping()
                         .getDisplayBrightnessPoint().get(i).getLux().floatValue();
             }
         }
+    }
+
+    private void loadAutoBrightnessAvailableFromConfigXml() {
+        mAutoBrightnessAvailable = mContext.getResources().getBoolean(
+                R.bool.config_automatic_brightness_available);
     }
 
     private void loadBrightnessMapFromConfigXml() {
@@ -1376,43 +1960,286 @@ public class DisplayDeviceConfig {
         }
     }
 
+    private void loadBrightnessChangeThresholdsFromXml() {
+        loadBrightnessChangeThresholds(/* config= */ null);
+    }
+
     private void loadBrightnessChangeThresholds(DisplayConfiguration config) {
-        Thresholds displayBrightnessThresholds = config.getDisplayBrightnessChangeThresholds();
-        Thresholds ambientBrightnessThresholds = config.getAmbientBrightnessChangeThresholds();
+        loadDisplayBrightnessThresholds(config);
+        loadAmbientBrightnessThresholds(config);
+        loadDisplayBrightnessThresholdsIdle(config);
+        loadAmbientBrightnessThresholdsIdle(config);
+    }
 
-        if (displayBrightnessThresholds != null) {
-            BrightnessThresholds brighteningScreen =
-                    displayBrightnessThresholds.getBrighteningThresholds();
-            BrightnessThresholds darkeningScreen =
-                    displayBrightnessThresholds.getDarkeningThresholds();
+    private void loadDisplayBrightnessThresholds(DisplayConfiguration config) {
+        BrightnessThresholds brighteningScreen = null;
+        BrightnessThresholds darkeningScreen = null;
+        if (config != null && config.getDisplayBrightnessChangeThresholds() != null) {
+            brighteningScreen =
+                    config.getDisplayBrightnessChangeThresholds().getBrighteningThresholds();
+            darkeningScreen =
+                    config.getDisplayBrightnessChangeThresholds().getDarkeningThresholds();
 
-            final BigDecimal screenBrighteningThreshold = brighteningScreen.getMinimum();
-            final BigDecimal screenDarkeningThreshold = darkeningScreen.getMinimum();
-
-            if (screenBrighteningThreshold != null) {
-                mScreenBrighteningMinThreshold = screenBrighteningThreshold.floatValue();
-            }
-            if (screenDarkeningThreshold != null) {
-                mScreenDarkeningMinThreshold = screenDarkeningThreshold.floatValue();
-            }
         }
 
-        if (ambientBrightnessThresholds != null) {
-            BrightnessThresholds brighteningAmbientLux =
-                    ambientBrightnessThresholds.getBrighteningThresholds();
-            BrightnessThresholds darkeningAmbientLux =
-                    ambientBrightnessThresholds.getDarkeningThresholds();
+        // Screen bright/darkening threshold levels for active mode
+        Pair<float[], float[]> screenBrighteningPair = getBrightnessLevelAndPercentage(
+                brighteningScreen,
+                com.android.internal.R.array.config_screenThresholdLevels,
+                com.android.internal.R.array.config_screenBrighteningThresholds,
+                DEFAULT_SCREEN_THRESHOLD_LEVELS, DEFAULT_SCREEN_BRIGHTENING_THRESHOLDS,
+                /* potentialOldBrightnessScale= */ true);
 
-            final BigDecimal ambientBrighteningThreshold = brighteningAmbientLux.getMinimum();
-            final BigDecimal ambientDarkeningThreshold = darkeningAmbientLux.getMinimum();
+        mScreenBrighteningLevels = screenBrighteningPair.first;
+        mScreenBrighteningPercentages = screenBrighteningPair.second;
 
-            if (ambientBrighteningThreshold != null) {
-                mAmbientLuxBrighteningMinThreshold = ambientBrighteningThreshold.floatValue();
+        Pair<float[], float[]> screenDarkeningPair = getBrightnessLevelAndPercentage(
+                darkeningScreen,
+                com.android.internal.R.array.config_screenThresholdLevels,
+                com.android.internal.R.array.config_screenDarkeningThresholds,
+                DEFAULT_SCREEN_THRESHOLD_LEVELS, DEFAULT_SCREEN_DARKENING_THRESHOLDS,
+                /* potentialOldBrightnessScale= */ true);
+        mScreenDarkeningLevels = screenDarkeningPair.first;
+        mScreenDarkeningPercentages = screenDarkeningPair.second;
+
+        // Screen bright/darkening threshold minimums for active mode
+        if (brighteningScreen != null && brighteningScreen.getMinimum() != null) {
+            mScreenBrighteningMinThreshold = brighteningScreen.getMinimum().floatValue();
+        }
+        if (darkeningScreen != null && darkeningScreen.getMinimum() != null) {
+            mScreenDarkeningMinThreshold = darkeningScreen.getMinimum().floatValue();
+        }
+    }
+
+    private void loadAmbientBrightnessThresholds(DisplayConfiguration config) {
+        // Ambient Brightness Threshold Levels
+        BrightnessThresholds brighteningAmbientLux = null;
+        BrightnessThresholds darkeningAmbientLux = null;
+        if (config != null && config.getAmbientBrightnessChangeThresholds() != null) {
+            brighteningAmbientLux =
+                    config.getAmbientBrightnessChangeThresholds().getBrighteningThresholds();
+            darkeningAmbientLux =
+                    config.getAmbientBrightnessChangeThresholds().getDarkeningThresholds();
+        }
+
+        // Ambient bright/darkening threshold levels for active mode
+        Pair<float[], float[]> ambientBrighteningPair = getBrightnessLevelAndPercentage(
+                brighteningAmbientLux,
+                com.android.internal.R.array.config_ambientThresholdLevels,
+                com.android.internal.R.array.config_ambientBrighteningThresholds,
+                DEFAULT_AMBIENT_THRESHOLD_LEVELS, DEFAULT_AMBIENT_BRIGHTENING_THRESHOLDS);
+        mAmbientBrighteningLevels = ambientBrighteningPair.first;
+        mAmbientBrighteningPercentages = ambientBrighteningPair.second;
+
+        Pair<float[], float[]> ambientDarkeningPair = getBrightnessLevelAndPercentage(
+                darkeningAmbientLux,
+                com.android.internal.R.array.config_ambientThresholdLevels,
+                com.android.internal.R.array.config_ambientDarkeningThresholds,
+                DEFAULT_AMBIENT_THRESHOLD_LEVELS, DEFAULT_AMBIENT_DARKENING_THRESHOLDS);
+        mAmbientDarkeningLevels = ambientDarkeningPair.first;
+        mAmbientDarkeningPercentages = ambientDarkeningPair.second;
+
+        // Ambient bright/darkening threshold minimums for active/idle mode
+        if (brighteningAmbientLux != null && brighteningAmbientLux.getMinimum() != null) {
+            mAmbientLuxBrighteningMinThreshold =
+                    brighteningAmbientLux.getMinimum().floatValue();
+        }
+
+        if (darkeningAmbientLux != null && darkeningAmbientLux.getMinimum() != null) {
+            mAmbientLuxDarkeningMinThreshold = darkeningAmbientLux.getMinimum().floatValue();
+        }
+    }
+
+    private void loadDisplayBrightnessThresholdsIdle(DisplayConfiguration config) {
+        BrightnessThresholds brighteningScreenIdle = null;
+        BrightnessThresholds darkeningScreenIdle = null;
+        if (config != null && config.getDisplayBrightnessChangeThresholdsIdle() != null) {
+            brighteningScreenIdle =
+                    config.getDisplayBrightnessChangeThresholdsIdle().getBrighteningThresholds();
+            darkeningScreenIdle =
+                    config.getDisplayBrightnessChangeThresholdsIdle().getDarkeningThresholds();
+        }
+
+        Pair<float[], float[]> screenBrighteningPair = getBrightnessLevelAndPercentage(
+                brighteningScreenIdle,
+                com.android.internal.R.array.config_screenThresholdLevels,
+                com.android.internal.R.array.config_screenBrighteningThresholds,
+                DEFAULT_SCREEN_THRESHOLD_LEVELS, DEFAULT_SCREEN_BRIGHTENING_THRESHOLDS,
+                /* potentialOldBrightnessScale= */ true);
+        mScreenBrighteningLevelsIdle = screenBrighteningPair.first;
+        mScreenBrighteningPercentagesIdle = screenBrighteningPair.second;
+
+        Pair<float[], float[]> screenDarkeningPair = getBrightnessLevelAndPercentage(
+                darkeningScreenIdle,
+                com.android.internal.R.array.config_screenThresholdLevels,
+                com.android.internal.R.array.config_screenDarkeningThresholds,
+                DEFAULT_SCREEN_THRESHOLD_LEVELS, DEFAULT_SCREEN_DARKENING_THRESHOLDS,
+                /* potentialOldBrightnessScale= */ true);
+        mScreenDarkeningLevelsIdle = screenDarkeningPair.first;
+        mScreenDarkeningPercentagesIdle = screenDarkeningPair.second;
+
+        if (brighteningScreenIdle != null
+                && brighteningScreenIdle.getMinimum() != null) {
+            mScreenBrighteningMinThresholdIdle =
+                    brighteningScreenIdle.getMinimum().floatValue();
+        }
+        if (darkeningScreenIdle != null && darkeningScreenIdle.getMinimum() != null) {
+            mScreenDarkeningMinThresholdIdle =
+                    darkeningScreenIdle.getMinimum().floatValue();
+        }
+    }
+
+    private void loadAmbientBrightnessThresholdsIdle(DisplayConfiguration config) {
+        BrightnessThresholds brighteningAmbientLuxIdle = null;
+        BrightnessThresholds darkeningAmbientLuxIdle = null;
+        if (config != null && config.getAmbientBrightnessChangeThresholdsIdle() != null) {
+            brighteningAmbientLuxIdle =
+                    config.getAmbientBrightnessChangeThresholdsIdle().getBrighteningThresholds();
+            darkeningAmbientLuxIdle =
+                    config.getAmbientBrightnessChangeThresholdsIdle().getDarkeningThresholds();
+        }
+
+        Pair<float[], float[]> ambientBrighteningPair = getBrightnessLevelAndPercentage(
+                brighteningAmbientLuxIdle,
+                com.android.internal.R.array.config_ambientThresholdLevels,
+                com.android.internal.R.array.config_ambientBrighteningThresholds,
+                DEFAULT_AMBIENT_THRESHOLD_LEVELS, DEFAULT_AMBIENT_BRIGHTENING_THRESHOLDS);
+        mAmbientBrighteningLevelsIdle = ambientBrighteningPair.first;
+        mAmbientBrighteningPercentagesIdle = ambientBrighteningPair.second;
+
+        Pair<float[], float[]> ambientDarkeningPair = getBrightnessLevelAndPercentage(
+                darkeningAmbientLuxIdle,
+                com.android.internal.R.array.config_ambientThresholdLevels,
+                com.android.internal.R.array.config_ambientDarkeningThresholds,
+                DEFAULT_AMBIENT_THRESHOLD_LEVELS, DEFAULT_AMBIENT_DARKENING_THRESHOLDS);
+        mAmbientDarkeningLevelsIdle = ambientDarkeningPair.first;
+        mAmbientDarkeningPercentagesIdle = ambientDarkeningPair.second;
+
+        if (brighteningAmbientLuxIdle != null
+                && brighteningAmbientLuxIdle.getMinimum() != null) {
+            mAmbientLuxBrighteningMinThresholdIdle =
+                    brighteningAmbientLuxIdle.getMinimum().floatValue();
+        }
+
+        if (darkeningAmbientLuxIdle != null && darkeningAmbientLuxIdle.getMinimum() != null) {
+            mAmbientLuxDarkeningMinThresholdIdle =
+                    darkeningAmbientLuxIdle.getMinimum().floatValue();
+        }
+    }
+
+    private Pair<float[], float[]> getBrightnessLevelAndPercentage(BrightnessThresholds thresholds,
+            int configFallbackThreshold, int configFallbackPercentage, float[] defaultLevels,
+            float[] defaultPercentage) {
+        return getBrightnessLevelAndPercentage(thresholds, configFallbackThreshold,
+                configFallbackPercentage, defaultLevels, defaultPercentage, false);
+    }
+
+    // Returns two float arrays, one of the brightness levels and one of the corresponding threshold
+    // percentages for brightness levels at or above the lux value.
+    // Historically, config.xml would have an array for brightness levels that was 1 shorter than
+    // the levels array. Now we prepend a 0 to this array so they can be treated the same in the
+    // rest of the framework. Values were also defined in different units (permille vs percent).
+    private Pair<float[], float[]> getBrightnessLevelAndPercentage(BrightnessThresholds thresholds,
+            int configFallbackThreshold, int configFallbackPermille,
+            float[] defaultLevels, float[] defaultPercentage,
+            boolean potentialOldBrightnessScale) {
+        if (thresholds != null
+                && thresholds.getBrightnessThresholdPoints() != null
+                && thresholds.getBrightnessThresholdPoints()
+                        .getBrightnessThresholdPoint().size() != 0) {
+
+            // The level and percentages arrays are equal length in the ddc (new system)
+            List<ThresholdPoint> points =
+                    thresholds.getBrightnessThresholdPoints().getBrightnessThresholdPoint();
+            final int size = points.size();
+
+            float[] thresholdLevels = new float[size];
+            float[] thresholdPercentages = new float[size];
+
+            int i = 0;
+            for (ThresholdPoint point : points) {
+                thresholdLevels[i] = point.getThreshold().floatValue();
+                thresholdPercentages[i] = point.getPercentage().floatValue();
+                i++;
             }
-            if (ambientDarkeningThreshold != null) {
-                mAmbientLuxDarkeningMinThreshold = ambientDarkeningThreshold.floatValue();
+            return new Pair<>(thresholdLevels, thresholdPercentages);
+        } else {
+            // The level and percentages arrays are unequal length in config.xml (old system)
+            // We prefix the array with a 0 value to ensure they can be handled consistently
+            // with the new system.
+
+            // Load levels array
+            int[] configThresholdArray = mContext.getResources().getIntArray(
+                    configFallbackThreshold);
+            int configThresholdsSize;
+            if (configThresholdArray == null || configThresholdArray.length == 0) {
+                configThresholdsSize = 1;
+            } else {
+                configThresholdsSize = configThresholdArray.length + 1;
+            }
+
+
+            // Load percentage array
+            int[] configPermille = mContext.getResources().getIntArray(
+                    configFallbackPermille);
+
+            // Ensure lengths match up
+            boolean emptyArray = configPermille == null || configPermille.length == 0;
+            if (emptyArray && configThresholdsSize == 1) {
+                return new Pair<>(defaultLevels, defaultPercentage);
+            }
+            if (emptyArray || configPermille.length != configThresholdsSize) {
+                throw new IllegalArgumentException(
+                        "Brightness threshold arrays do not align in length");
+            }
+
+            // Calculate levels array
+            float[] configThresholdWithZeroPrefixed = new float[configThresholdsSize];
+            // Start at 1, so that 0 index value is 0.0f (default)
+            for (int i = 1; i < configThresholdsSize; i++) {
+                configThresholdWithZeroPrefixed[i] = (float) configThresholdArray[i - 1];
+            }
+            if (potentialOldBrightnessScale) {
+                configThresholdWithZeroPrefixed =
+                        constraintInRangeIfNeeded(configThresholdWithZeroPrefixed);
+            }
+
+            // Calculate percentages array
+            float[] configPercentage = new float[configThresholdsSize];
+            for (int i = 0; i < configPermille.length; i++) {
+                configPercentage[i] = configPermille[i] / 10.0f;
+            }            return new Pair<>(configThresholdWithZeroPrefixed, configPercentage);
+        }
+    }
+
+    /**
+     * This check is due to historical reasons, where screen thresholdLevels used to be
+     * integer values in the range of [0-255], but then was changed to be float values from [0,1].
+     * To accommodate both the possibilities, we first check if all the thresholdLevels are in
+     * [0,1], and if not, we divide all the levels with 255 to bring them down to the same scale.
+     */
+    private float[] constraintInRangeIfNeeded(float[] thresholdLevels) {
+        if (isAllInRange(thresholdLevels, /* minValueInclusive= */ 0.0f,
+                /* maxValueInclusive= */ 1.0f)) {
+            return thresholdLevels;
+        }
+
+        Slog.w(TAG, "Detected screen thresholdLevels on a deprecated brightness scale");
+        float[] thresholdLevelsScaled = new float[thresholdLevels.length];
+        for (int index = 0; thresholdLevels.length > index; ++index) {
+            thresholdLevelsScaled[index] = thresholdLevels[index] / 255.0f;
+        }
+        return thresholdLevelsScaled;
+    }
+
+    private boolean isAllInRange(float[] configArray, float minValueInclusive,
+            float maxValueInclusive) {
+        for (float v : configArray) {
+            if (v < minValueInclusive || v > maxValueInclusive) {
+                return false;
             }
         }
+        return true;
     }
 
     private boolean thermalStatusIsValid(ThermalStatus value) {
@@ -1489,14 +2316,37 @@ public class DisplayDeviceConfig {
      * @param array The array to convert.
      * @return the given array as a float array.
      */
-    public static float[] getFloatArray(TypedArray array) {
+    public static float[] getFloatArray(TypedArray array, float defaultValue) {
         final int n = array.length();
         float[] vals = new float[n];
         for (int i = 0; i < n; i++) {
-            vals[i] = array.getFloat(i, PowerManager.BRIGHTNESS_OFF_FLOAT);
+            vals[i] = array.getFloat(i, defaultValue);
         }
         array.recycle();
         return vals;
+    }
+
+    private static float[] getLuxLevels(int[] lux) {
+        // The first control point is implicit and always at 0 lux.
+        float[] levels = new float[lux.length + 1];
+        for (int i = 0; i < lux.length; i++) {
+            levels[i + 1] = (float) lux[i];
+        }
+        return levels;
+    }
+
+    private void loadEnableAutoBrightness(AutoBrightness autobrightness) {
+        // mDdcAutoBrightnessAvailable is initialised to true, so that we fallback to using the
+        // config.xml values if the autobrightness tag is not defined in the ddc file.
+        // Autobrightness can still be turned off globally via config_automatic_brightness_available
+        mDdcAutoBrightnessAvailable = true;
+        if (autobrightness != null) {
+            mDdcAutoBrightnessAvailable = autobrightness.getEnabled();
+        }
+
+        mAutoBrightnessAvailable = mContext.getResources().getBoolean(
+                com.android.internal.R.bool.config_automatic_brightness_available)
+                && mDdcAutoBrightnessAvailable;
     }
 
     static class SensorData {

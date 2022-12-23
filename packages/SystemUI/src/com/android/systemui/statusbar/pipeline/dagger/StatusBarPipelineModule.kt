@@ -16,23 +16,45 @@
 
 package com.android.systemui.statusbar.pipeline.dagger
 
-import com.android.systemui.CoreStartable
-import com.android.systemui.statusbar.pipeline.ConnectivityInfoProcessor
+import com.android.systemui.statusbar.pipeline.airplane.data.repository.AirplaneModeRepository
+import com.android.systemui.statusbar.pipeline.airplane.data.repository.AirplaneModeRepositoryImpl
+import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConnectionsRepository
+import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConnectionsRepositoryImpl
+import com.android.systemui.statusbar.pipeline.mobile.data.repository.UserSetupRepository
+import com.android.systemui.statusbar.pipeline.mobile.data.repository.UserSetupRepositoryImpl
+import com.android.systemui.statusbar.pipeline.mobile.domain.interactor.MobileIconsInteractor
+import com.android.systemui.statusbar.pipeline.mobile.domain.interactor.MobileIconsInteractorImpl
+import com.android.systemui.statusbar.pipeline.mobile.util.MobileMappingsProxy
+import com.android.systemui.statusbar.pipeline.mobile.util.MobileMappingsProxyImpl
+import com.android.systemui.statusbar.pipeline.shared.data.repository.ConnectivityRepository
+import com.android.systemui.statusbar.pipeline.shared.data.repository.ConnectivityRepositoryImpl
 import com.android.systemui.statusbar.pipeline.wifi.data.repository.WifiRepository
 import com.android.systemui.statusbar.pipeline.wifi.data.repository.WifiRepositoryImpl
 import dagger.Binds
 import dagger.Module
-import dagger.multibindings.ClassKey
-import dagger.multibindings.IntoMap
 
 @Module
 abstract class StatusBarPipelineModule {
-    /** Inject into ConnectivityInfoProcessor. */
     @Binds
-    @IntoMap
-    @ClassKey(ConnectivityInfoProcessor::class)
-    abstract fun bindConnectivityInfoProcessor(cip: ConnectivityInfoProcessor): CoreStartable
+    abstract fun airplaneModeRepository(impl: AirplaneModeRepositoryImpl): AirplaneModeRepository
+
+    @Binds
+    abstract fun connectivityRepository(impl: ConnectivityRepositoryImpl): ConnectivityRepository
 
     @Binds
     abstract fun wifiRepository(impl: WifiRepositoryImpl): WifiRepository
+
+    @Binds
+    abstract fun mobileConnectionsRepository(
+        impl: MobileConnectionsRepositoryImpl
+    ): MobileConnectionsRepository
+
+    @Binds
+    abstract fun userSetupRepository(impl: UserSetupRepositoryImpl): UserSetupRepository
+
+    @Binds
+    abstract fun mobileMappingsProxy(impl: MobileMappingsProxyImpl): MobileMappingsProxy
+
+    @Binds
+    abstract fun mobileIconsInteractor(impl: MobileIconsInteractorImpl): MobileIconsInteractor
 }

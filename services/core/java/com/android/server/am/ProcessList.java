@@ -27,10 +27,12 @@ import static android.os.MessageQueue.OnFileDescriptorEventListener.EVENT_INPUT;
 import static android.os.Process.SYSTEM_UID;
 import static android.os.Process.THREAD_PRIORITY_BACKGROUND;
 import static android.os.Process.ZYGOTE_POLICY_FLAG_EMPTY;
+import static android.os.Process.getAdvertisedMem;
 import static android.os.Process.getFreeMemory;
 import static android.os.Process.getTotalMemory;
 import static android.os.Process.killProcessQuiet;
 import static android.os.Process.startWebView;
+import static android.system.OsConstants.*;
 
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_LRU;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_NETWORK;
@@ -134,8 +136,7 @@ import com.android.server.SystemConfig;
 import com.android.server.Watchdog;
 import com.android.server.am.ActivityManagerService.ProcessChangeItem;
 import com.android.server.compat.PlatformCompat;
-import com.android.server.pm.dex.DexManager;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
+import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.PackageStateInternal;
 import com.android.server.wm.ActivityServiceConnectionsHolder;
 import com.android.server.wm.WindowManagerService;
@@ -278,6 +279,8 @@ public final class ProcessList {
     // Memory pages are 4K.
     static final int PAGE_SIZE = 4 * 1024;
 
+    // Activity manager's version of an undefined schedule group
+    static final int SCHED_GROUP_UNDEFINED = Integer.MIN_VALUE;
     // Activity manager's version of Process.THREAD_GROUP_BACKGROUND
     static final int SCHED_GROUP_BACKGROUND = 0;
       // Activity manager's version of Process.THREAD_GROUP_RESTRICTED
@@ -820,12 +823,14 @@ public final class ProcessList {
                                                 < LmkdStatsReporter.KILL_OCCURRED_MSG_SIZE) {
                                             return false;
                                         }
-                                        Pair<Integer, Integer> temp = getNumForegroundServices();
-                                        final int totalForegroundServices = temp.first;
-                                        final int procsWithForegroundServices = temp.second;
+                                        // Note: directly access
+                                        // ActiveServices.sNumForegroundServices, do not try to
+                                        // hold AMS lock here, otherwise it is a potential deadlock.
+                                        Pair<Integer, Integer> foregroundServices =
+                                                ActiveServices.sNumForegroundServices.get();
                                         LmkdStatsReporter.logKillOccurred(inputData,
-                                                totalForegroundServices,
-                                                procsWithForegroundServices);
+                                                foregroundServices.first,
+                                                foregroundServices.second);
                                         return true;
                                     case LMK_STATE_CHANGED:
                                         if (receivedLen
@@ -1535,6 +1540,7 @@ public final class ProcessList {
     void getMemoryInfo(ActivityManager.MemoryInfo outInfo) {
         final long homeAppMem = getMemLevel(HOME_APP_ADJ);
         final long cachedAppMem = getMemLevel(CACHED_APP_MIN_ADJ);
+        outInfo.advertisedMem = getAdvertisedMem();
         outInfo.availMem = getFreeMemory();
         outInfo.totalMem = getTotalMemory();
         outInfo.threshold = homeAppMem;
@@ -1693,7 +1699,8 @@ public final class ProcessList {
                             app.info.packageName);
                     externalStorageAccess = storageManagerInternal.hasExternalStorageAccess(uid,
                             app.info.packageName);
-                    if (pm.checkPermission(Manifest.permission.INSTALL_PACKAGES,
+                    if (mService.isAppFreezerExemptInstPkg()
+                            && pm.checkPermission(Manifest.permission.INSTALL_PACKAGES,
                             app.info.packageName, userId)
                             == PackageManager.PERMISSION_GRANTED) {
                         Slog.i(TAG, app.info.packageName + " is exempt from freezer");
@@ -1796,14 +1803,6 @@ public final class ProcessList {
 
             if (app.info.isEmbeddedDexUsed()) {
                 runtimeFlags |= Zygote.ONLY_USE_SYSTEM_OAT_FILES;
-            } else if (app.info.isPrivilegedApp()) {
-                final PackageList pkgList = app.getPkgList();
-                synchronized (pkgList) {
-                    if (DexManager.isPackageSelectedToRunOob(
-                            pkgList.getPackageListLocked().keySet())) {
-                        runtimeFlags |= Zygote.ONLY_USE_SYSTEM_OAT_FILES;
-                    }
-                }
             }
 
             if (!disableHiddenApiChecks && !mService.mHiddenApiBlacklist.isDisabled()) {
@@ -2211,16 +2210,25 @@ public final class ProcessList {
             Map<String, Pair<String, Long>> allowlistedAppDataInfoMap;
             boolean bindMountAppStorageDirs = false;
             boolean bindMountAppsData = mAppDataIsolationEnabled
-                    && (UserHandle.isApp(app.uid) || UserHandle.isIsolated(app.uid))
+                    && (UserHandle.isApp(app.uid) || UserHandle.isIsolated(app.uid)
+                        || app.isSdkSandbox)
                     && mPlatformCompat.isChangeEnabled(APP_DATA_DIRECTORY_ISOLATION, app.info);
 
             // Get all packages belongs to the same shared uid. sharedPackages is empty array
             // if it doesn't have shared uid.
             final PackageManagerInternal pmInt = mService.getPackageManagerInternal();
-            final String[] sharedPackages = pmInt.getSharedUserPackagesForPackage(
-                    app.info.packageName, app.userId);
-            final String[] targetPackagesList = sharedPackages.length == 0
-                    ? new String[]{app.info.packageName} : sharedPackages;
+
+            // In the case of sdk sandbox, the pkgDataInfoMap of only the client app associated with
+            // the sandbox is required to handle app visibility restrictions for the sandbox.
+            final String[] targetPackagesList;
+            if (app.isSdkSandbox) {
+                targetPackagesList = new String[]{app.sdkSandboxClientAppPackage};
+            } else {
+                final String[] sharedPackages = pmInt.getSharedUserPackagesForPackage(
+                        app.info.packageName, app.userId);
+                targetPackagesList = sharedPackages.length == 0
+                        ? new String[]{app.info.packageName} : sharedPackages;
+            }
 
             final boolean hasAppStorage = hasAppStorage(pmInt, app.info.packageName);
 
@@ -2246,7 +2254,7 @@ public final class ProcessList {
                 bindMountAppsData = false;
             }
 
-            if (!hasAppStorage) {
+            if (!hasAppStorage && !app.isSdkSandbox) {
                 bindMountAppsData = false;
                 pkgDataInfoMap = null;
                 allowlistedAppDataInfoMap = null;
@@ -2336,8 +2344,8 @@ public final class ProcessList {
             }
             if (mPerfServiceStartHint != null) {
                 if ((hostingRecord.getType() != null)
-                       && (hostingRecord.getType().equals("activity")
-                               || hostingRecord.getType().equals("pre-top-activity"))) {
+                       && (hostingRecord.getType().equals(HostingRecord.HOSTING_TYPE_NEXT_ACTIVITY)
+                               || hostingRecord.getType().equals(HostingRecord.HOSTING_TYPE_NEXT_TOP_ACTIVITY))) {
                                    //TODO: not acting on pre-activity
                     if (startResult != null) {
                         mPerfServiceStartHint.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, app.processName, startResult.pid, BoostFramework.Launch.TYPE_START_PROC);
@@ -2721,6 +2729,50 @@ public final class ProcessList {
         }
     }
 
+    private static boolean freezePackageCgroup(int packageUID, boolean freeze) {
+        try {
+            Process.freezeCgroupUid(packageUID, freeze);
+        } catch (RuntimeException e) {
+            final String logtxt = freeze ? "freeze" : "unfreeze";
+            Slog.e(TAG, "Unable to " + logtxt + " cgroup uid: " + packageUID + ": " + e);
+            return false;
+        }
+        return true;
+    }
+
+    private static void freezeBinderAndPackageCgroup(ArrayList<Pair<ProcessRecord, Boolean>> procs,
+                                                     int packageUID) {
+        // Freeze all binder processes under the target UID (whose cgroup is about to be frozen).
+        // Since we're going to kill these, we don't need to unfreze them later.
+        // The procs list may not include all processes under the UID cgroup, but unincluded
+        // processes (forks) should not be Binder users.
+        int N = procs.size();
+        for (int i = 0; i < N; i++) {
+            final int uid = procs.get(i).first.uid;
+            final int pid = procs.get(i).first.getPid();
+            int nRetries = 0;
+            // We only freeze the cgroup of the target package, so we do not need to freeze the
+            // Binder interfaces of dependant processes in other UIDs.
+            if (pid > 0 && uid == packageUID) {
+                try {
+                    int rc;
+                    do {
+                        rc = CachedAppOptimizer.freezeBinder(pid, true, 10 /* timeout_ms */);
+                    } while (rc == -EAGAIN && nRetries++ < 1);
+                    if (rc != 0) Slog.e(TAG, "Unable to freeze binder for " + pid + ": " + rc);
+                } catch (RuntimeException e) {
+                    Slog.e(TAG, "Unable to freeze binder for " + pid + ": " + e);
+                }
+            }
+        }
+
+        // We freeze the entire UID (parent) cgroup so that newly-specialized processes also freeze
+        // despite being added to a new child cgroup. The cgroups of package dependant processes are
+        // not frozen, since it's possible this would freeze processes with no dependency on the
+        // package being killed here.
+        freezePackageCgroup(packageUID, true);
+    }
+
     @GuardedBy({"mService", "mProcLock"})
     boolean killPackageProcessesLSP(String packageName, int appId,
             int userId, int minOomAdj, boolean callerWillRestart, boolean allowRestart,
@@ -2773,7 +2825,7 @@ public final class ProcessList {
                 boolean shouldAllowRestart = false;
 
                 // If no package is specified, we call all processes under the
-                // give user id.
+                // given user id.
                 if (packageName == null) {
                     if (userId != UserHandle.USER_ALL && app.userId != userId) {
                         continue;
@@ -2816,14 +2868,24 @@ public final class ProcessList {
             }
         }
 
+        final int packageUID = UserHandle.getUid(userId, appId);
+        final boolean doFreeze = appId >= Process.FIRST_APPLICATION_UID
+                              && appId <= Process.LAST_APPLICATION_UID;
+        if (doFreeze) {
+            freezeBinderAndPackageCgroup(procs, packageUID);
+        }
+
         int N = procs.size();
         for (int i=0; i<N; i++) {
             final Pair<ProcessRecord, Boolean> proc = procs.get(i);
             removeProcessLocked(proc.first, callerWillRestart, allowRestart || proc.second,
-                    reasonCode, subReason, reason);
+                    reasonCode, subReason, reason, !doFreeze /* async */);
         }
         killAppZygotesLocked(packageName, appId, userId, false /* force */);
         mService.updateOomAdjLocked(OomAdjuster.OOM_ADJ_REASON_PROCESS_END);
+        if (doFreeze) {
+            freezePackageCgroup(packageUID, false);
+        }
         return N > 0;
     }
 
@@ -2831,12 +2893,19 @@ public final class ProcessList {
     boolean removeProcessLocked(ProcessRecord app,
             boolean callerWillRestart, boolean allowRestart, int reasonCode, String reason) {
         return removeProcessLocked(app, callerWillRestart, allowRestart, reasonCode,
-                ApplicationExitInfo.SUBREASON_UNKNOWN, reason);
+                ApplicationExitInfo.SUBREASON_UNKNOWN, reason, true);
     }
 
     @GuardedBy("mService")
     boolean removeProcessLocked(ProcessRecord app, boolean callerWillRestart,
             boolean allowRestart, int reasonCode, int subReason, String reason) {
+        return removeProcessLocked(app, callerWillRestart, allowRestart, reasonCode, subReason,
+                reason, true);
+    }
+
+    @GuardedBy("mService")
+    boolean removeProcessLocked(ProcessRecord app, boolean callerWillRestart,
+            boolean allowRestart, int reasonCode, int subReason, String reason, boolean async) {
         final String name = app.processName;
         final int uid = app.uid;
         if (DEBUG_PROCESSES) Slog.d(TAG_PROCESSES,
@@ -2873,7 +2942,7 @@ public final class ProcessList {
                     needRestart = true;
                 }
             }
-            app.killLocked(reason, reasonCode, subReason, true);
+            app.killLocked(reason, reasonCode, subReason, true, async);
             mService.handleAppDiedLocked(app, pid, willRestart, allowRestart,
                     false /* fromBinderDied */);
             if (willRestart) {
@@ -3665,7 +3734,14 @@ public final class ProcessList {
         if (thread == null) {
             return null;
         }
-        final IBinder threadBinder = thread.asBinder();
+        return getLRURecordForAppLOSP(thread.asBinder());
+    }
+
+    @GuardedBy(anyOf = {"mService", "mProcLock"})
+    ProcessRecord getLRURecordForAppLOSP(IBinder threadBinder) {
+        if (threadBinder == null) {
+            return null;
+        }
         // Find the application record.
         for (int i = mLruProcesses.size() - 1; i >= 0; i--) {
             final ProcessRecord rec = mLruProcesses.get(i);
@@ -3749,6 +3825,10 @@ public final class ProcessList {
                 ActivityManager.RunningAppProcessInfo currApp =
                         new ActivityManager.RunningAppProcessInfo(app.processName,
                                 app.getPid(), app.getPackageList());
+                if (app.getPkgDeps() != null) {
+                    final int size = app.getPkgDeps().size();
+                    currApp.pkgDeps = app.getPkgDeps().toArray(new String[size]);
+                }
                 fillInProcMemInfoLOSP(app, currApp, clientTargetSdk);
                 if (state.getAdjSource() instanceof ProcessRecord) {
                     currApp.importanceReasonPid = ((ProcessRecord) state.getAdjSource()).getPid();

@@ -18,11 +18,14 @@ package com.android.systemui.statusbar.pipeline.wifi.domain.interactor
 
 import android.net.wifi.WifiManager
 import com.android.systemui.dagger.SysUISingleton
+import com.android.systemui.statusbar.pipeline.shared.data.model.ConnectivitySlot
+import com.android.systemui.statusbar.pipeline.shared.data.repository.ConnectivityRepository
 import com.android.systemui.statusbar.pipeline.wifi.data.model.WifiNetworkModel
 import com.android.systemui.statusbar.pipeline.wifi.data.repository.WifiRepository
+import com.android.systemui.statusbar.pipeline.wifi.shared.model.WifiActivityModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 
 /**
@@ -33,11 +36,17 @@ import kotlinx.coroutines.flow.map
  */
 @SysUISingleton
 class WifiInteractor @Inject constructor(
-        repository: WifiRepository,
+    connectivityRepository: ConnectivityRepository,
+    wifiRepository: WifiRepository,
 ) {
-    private val ssid: Flow<String?> = repository.wifiNetwork.map { info ->
+    /**
+     * The SSID (service set identifier) of the wifi network. Null if we don't have a network, or
+     * have a network but no valid SSID.
+     */
+    val ssid: Flow<String?> = wifiRepository.wifiNetwork.map { info ->
         when (info) {
             is WifiNetworkModel.Inactive -> null
+            is WifiNetworkModel.CarrierMerged -> null
             is WifiNetworkModel.Active -> when {
                 info.isPasspointAccessPoint || info.isOnlineSignUpForPasspointAccessPoint ->
                     info.passpointProviderFriendlyName
@@ -47,7 +56,20 @@ class WifiInteractor @Inject constructor(
         }
     }
 
-    val hasActivityIn: Flow<Boolean> = combine(repository.wifiActivity, ssid) { activity, ssid ->
-            activity.hasActivityIn && ssid != null
-        }
+    /** Our current enabled status. */
+    val isEnabled: Flow<Boolean> = wifiRepository.isWifiEnabled
+
+    /** Our current default status. */
+    val isDefault: Flow<Boolean> = wifiRepository.isWifiDefault
+
+    /** Our current wifi network. See [WifiNetworkModel]. */
+    val wifiNetwork: Flow<WifiNetworkModel> = wifiRepository.wifiNetwork
+
+    /** Our current wifi activity. See [WifiActivityModel]. */
+    val activity: StateFlow<WifiActivityModel> = wifiRepository.wifiActivity
+
+    /** True if we're configured to force-hide the wifi icon and false otherwise. */
+    val isForceHidden: Flow<Boolean> = connectivityRepository.forceHiddenSlots.map {
+        it.contains(ConnectivitySlot.WIFI)
+    }
 }

@@ -16,6 +16,7 @@
 
 package android.app.admin;
 
+import static android.content.Intent.LOCAL_FLAG_FROM_SYSTEM;
 import static android.net.NetworkCapabilities.NET_ENTERPRISE_ID_1;
 
 import static com.android.internal.util.function.pooled.PooledLambda.obtainMessage;
@@ -3863,6 +3864,56 @@ public class DevicePolicyManager {
     public static final String EXTRA_RESOURCE_IDS =
             "android.app.extra.RESOURCE_IDS";
 
+    /** Allow the user to choose whether to enable MTE on the device. */
+    public static final int MTE_NOT_CONTROLLED_BY_POLICY = 0;
+
+    /**
+     * Require that MTE be enabled on the device, if supported. Can be set by a device owner or a
+     * profile owner of an organization-owned managed profile.
+     */
+    public static final int MTE_ENABLED = 1;
+
+    /** Require that MTE be disabled on the device. Can be set by a device owner. */
+    public static final int MTE_DISABLED = 2;
+
+    /** @hide */
+    @IntDef(
+            prefix = {"MTE_"},
+            value = {MTE_ENABLED, MTE_DISABLED, MTE_NOT_CONTROLLED_BY_POLICY})
+    @Retention(RetentionPolicy.SOURCE)
+    public static @interface MtePolicy {}
+
+    /**
+     * Set MTE policy for device. MTE_ENABLED does not necessarily enable MTE if set on a device
+     * that does not support MTE.
+     *
+     * The default policy is MTE_NOT_CONTROLLED_BY_POLICY.
+     *
+     * Memory Tagging Extension (MTE) is a CPU extension that allows to protect against certain
+     * classes of security problems at a small runtime performance cost overhead.
+     *
+     * @param policy the policy to be set
+     */
+    public void setMtePolicy(@MtePolicy int policy) {
+        // TODO(b/244290023): implement
+        // This is SecurityException to temporarily make ParentProfileTest happy.
+        // This is not used.
+        throw new SecurityException("not implemented");
+    }
+
+    /**
+     * Get currently set MTE policy. This is not necessarily the same as the state of MTE on the
+     * device, as the device might not support MTE.
+     *
+     * @return the currently set policy
+     */
+    public @MtePolicy int getMtePolicy() {
+        // TODO(b/244290023): implement
+        // This is SecurityException to temporarily make ParentProfileTest happy.
+        // This is not used.
+        throw new SecurityException("not implemented");
+    }
+
     /**
      * This object is a single place to tack on invalidation and disable calls.  All
      * binder caches in this class derive from this Config, so all can be invalidated or
@@ -7393,6 +7444,9 @@ public class DevicePolicyManager {
      * The grantee app will receive the {@link android.security.KeyChain#ACTION_KEY_ACCESS_CHANGED}
      * broadcast when access to a key is granted.
      *
+     * Starting from {@link android.os.Build.VERSION_CODES#UPSIDE_DOWN_CAKE} throws an
+     * {@link IllegalArgumentException} if {@code alias} doesn't correspond to an existing key.
+     *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with, or
      *        {@code null} if calling from a delegated certificate chooser.
      * @param alias The alias of the key to grant access to.
@@ -7459,6 +7513,9 @@ public class DevicePolicyManager {
      * The grantee app will receive the {@link android.security.KeyChain#ACTION_KEY_ACCESS_CHANGED}
      * broadcast when access to a key is revoked.
      *
+     * Starting from {@link android.os.Build.VERSION_CODES#UPSIDE_DOWN_CAKE} throws an
+     * {@link IllegalArgumentException} if {@code alias} doesn't correspond to an existing key.
+     *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with, or
      *        {@code null} if calling from a delegated certificate chooser.
      * @param alias The alias of the key to revoke access from.
@@ -7489,6 +7546,9 @@ public class DevicePolicyManager {
      * pair for authentication to Wifi networks. The key can then be used in configurations passed
      * to {@link android.net.wifi.WifiManager#addNetwork}.
      *
+     * Starting from {@link android.os.Build.VERSION_CODES#UPSIDE_DOWN_CAKE} throws an
+     * {@link IllegalArgumentException} if {@code alias} doesn't correspond to an existing key.
+     *
      * @param alias The alias of the key pair.
      * @return {@code true} if the operation was set successfully, {@code false} otherwise.
      *
@@ -7511,6 +7571,9 @@ public class DevicePolicyManager {
      * delegated the {@link #DELEGATION_CERT_SELECTION} privilege), to deny using a KeyChain key
      * pair for authentication to Wifi networks. Configured networks using this key won't be able to
      * authenticate.
+     *
+     * Starting from {@link android.os.Build.VERSION_CODES#UPSIDE_DOWN_CAKE} throws an
+     * {@link IllegalArgumentException} if {@code alias} doesn't correspond to an existing key.
      *
      * @param alias The alias of the key pair.
      * @return {@code true} if the operation was set successfully, {@code false} otherwise.
@@ -8676,7 +8739,6 @@ public class DevicePolicyManager {
      * and no accounts.
      *
      * @param who the component name to be registered as device owner.
-     * @param ownerName the human readable name of the institution that owns this device.
      * @param userId ID of the user on which the device owner runs.
      *
      * @return whether the package was successfully registered as the device owner.
@@ -8688,11 +8750,10 @@ public class DevicePolicyManager {
      */
     @TestApi
     @RequiresPermission(android.Manifest.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS)
-    public boolean setDeviceOwner(@NonNull ComponentName who, @Nullable String ownerName,
-            @UserIdInt int userId) {
+    public boolean setDeviceOwner(@NonNull ComponentName who, @UserIdInt int userId) {
         if (mService != null) {
             try {
-                return mService.setDeviceOwner(who, ownerName, userId,
+                return mService.setDeviceOwner(who, userId,
                         /* setProfileOwnerOnCurrentUserIfNecessary= */ true);
             } catch (RemoteException re) {
                 throw re.rethrowFromSystemServer();
@@ -8702,7 +8763,7 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Same as {@link #setDeviceOwner(ComponentName, String, int)}, but without setting the profile
+     * Same as {@link #setDeviceOwner(ComponentName, int)}, but without setting the profile
      * owner on current user when running on headless system user mode - should be used only by
      * testing infra.
      *
@@ -8711,10 +8772,10 @@ public class DevicePolicyManager {
     @TestApi
     @RequiresPermission(android.Manifest.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS)
     public boolean setDeviceOwnerOnly(
-            @NonNull ComponentName who, @Nullable String ownerName, @UserIdInt int userId) {
+            @NonNull ComponentName who, @UserIdInt int userId) {
         if (mService != null) {
             try {
-                return mService.setDeviceOwner(who, ownerName, userId,
+                return mService.setDeviceOwner(who, userId,
                         /* setProfileOwnerOnCurrentUserIfNecessary= */ false);
             } catch (RemoteException re) {
                 throw re.rethrowFromSystemServer();
@@ -8958,7 +9019,7 @@ public class DevicePolicyManager {
             try {
                 final int myUserId = myUserId();
                 mService.setActiveAdmin(admin, false, myUserId);
-                return mService.setProfileOwner(admin, ownerName, myUserId);
+                return mService.setProfileOwner(admin, myUserId);
             } catch (RemoteException re) {
                 throw re.rethrowFromSystemServer();
             }
@@ -9020,20 +9081,16 @@ public class DevicePolicyManager {
      * - the caller is SYSTEM_UID.
      * - or the caller is the shell uid, and there are no accounts on the specified user.
      * @param admin the component name to be registered as profile owner.
-     * @param ownerName the human readable name of the organisation associated with this DPM.
      * @param userHandle the userId to set the profile owner for.
      * @return whether the component was successfully registered as the profile owner.
      * @throws IllegalArgumentException if admin is null, the package isn't installed, or the
      * preconditions mentioned are not met.
      */
-    public boolean setProfileOwner(@NonNull ComponentName admin, @Deprecated String ownerName,
-            int userHandle) throws IllegalArgumentException {
+    public boolean setProfileOwner(@NonNull ComponentName admin, int userHandle)
+            throws IllegalArgumentException {
         if (mService != null) {
             try {
-                if (ownerName == null) {
-                    ownerName = "";
-                }
-                return mService.setProfileOwner(admin, ownerName, userHandle);
+                return mService.setProfileOwner(admin, userHandle);
             } catch (RemoteException re) {
                 throw re.rethrowFromSystemServer();
             }
@@ -10802,14 +10859,19 @@ public class DevicePolicyManager {
      */
     public Intent createAdminSupportIntent(@NonNull String restriction) {
         throwIfParentInstance("createAdminSupportIntent");
+        Intent result = null;
         if (mService != null) {
             try {
-                return mService.createAdminSupportIntent(restriction);
+                result = mService.createAdminSupportIntent(restriction);
+                if (result != null) {
+                    result.prepareToEnterProcess(LOCAL_FLAG_FROM_SYSTEM,
+                            mContext.getAttributionSource());
+                }
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
         }
-        return null;
+        return result;
     }
 
     /**
@@ -12168,6 +12230,15 @@ public class DevicePolicyManager {
      * <p>
      * Attempts by the admin to grant these permissions, when the admin is restricted from doing
      * so, will be silently ignored (no exception will be thrown).
+     *
+     * Control over the following permissions are restricted for managed profile owners:
+     * <ul>
+     *  <li>Manifest.permission.READ_SMS</li>
+     * </ul>
+     * <p>
+     * A managed profile owner may not grant these permissions (i.e. call this method with any of
+     * the permissions listed above and {@code grantState} of
+     * {@code #PERMISSION_GRANT_STATE_GRANTED}), but may deny them.
      *
      * @param admin Which profile or device owner this request is associated with.
      * @param packageName The application to grant or revoke a permission to.
@@ -15411,7 +15482,7 @@ public class DevicePolicyManager {
      *
      * @see #setWifiSsidPolicy(WifiSsidPolicy)
      * @throws SecurityException if the caller is not a device owner or a profile owner on
-     * an organization-owned managed profile or a system app.
+     * an organization-owned managed profile.
      */
     @Nullable
     public WifiSsidPolicy getWifiSsidPolicy() {

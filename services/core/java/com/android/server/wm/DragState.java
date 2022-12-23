@@ -112,6 +112,7 @@ class DragState {
     int mTouchSource;
     boolean mDragResult;
     boolean mRelinquishDragSurfaceToDropTarget;
+    float mAnimatedScale = 1.0f;
     float mOriginalAlpha;
     float mOriginalX, mOriginalY;
     float mCurrentX, mCurrentY;
@@ -227,8 +228,8 @@ class DragState {
                 SurfaceControl dragSurface = null;
                 if (!mDragResult && (ws.mSession.mPid == mPid)) {
                     // Report unconsumed drop location back to the app that started the drag.
-                    x = mCurrentX;
-                    y = mCurrentY;
+                    x = ws.translateToWindowX(mCurrentX);
+                    y = ws.translateToWindowY(mCurrentY);
                     if (relinquishDragSurfaceToDragSource()) {
                         // If requested (and allowed), report the drag surface back to the app
                         // starting the drag to handle the return animation
@@ -650,7 +651,8 @@ class DragState {
                 PropertyValuesHolder.ofFloat(
                         ANIMATED_PROPERTY_Y, mCurrentY - mThumbOffsetY,
                         mOriginalY - mThumbOffsetY),
-                PropertyValuesHolder.ofFloat(ANIMATED_PROPERTY_SCALE, 1, 1),
+                PropertyValuesHolder.ofFloat(ANIMATED_PROPERTY_SCALE, mAnimatedScale,
+                        mAnimatedScale),
                 PropertyValuesHolder.ofFloat(
                         ANIMATED_PROPERTY_ALPHA, mOriginalAlpha, mOriginalAlpha / 2));
 
@@ -678,7 +680,7 @@ class DragState {
                         ANIMATED_PROPERTY_X, mCurrentX - mThumbOffsetX, mCurrentX),
                 PropertyValuesHolder.ofFloat(
                         ANIMATED_PROPERTY_Y, mCurrentY - mThumbOffsetY, mCurrentY),
-                PropertyValuesHolder.ofFloat(ANIMATED_PROPERTY_SCALE, 1, 0),
+                PropertyValuesHolder.ofFloat(ANIMATED_PROPERTY_SCALE, mAnimatedScale, 0),
                 PropertyValuesHolder.ofFloat(ANIMATED_PROPERTY_ALPHA, mOriginalAlpha, 0));
         final AnimationListener listener = new AnimationListener();
         animator.setDuration(MIN_ANIMATION_DURATION_MS);

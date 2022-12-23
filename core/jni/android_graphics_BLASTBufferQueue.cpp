@@ -71,10 +71,12 @@ public:
         }
     }
 
-    void onTransactionHang(bool isGpuHang) {
+    void onTransactionHang(const std::string& reason) {
         if (mTransactionHangObject) {
+            JNIEnv* env = getenv(mVm);
+            ScopedLocalRef<jstring> jReason(env, env->NewStringUTF(reason.c_str()));
             getenv(mVm)->CallVoidMethod(mTransactionHangObject,
-                                        gTransactionHangCallback.onTransactionHang, isGpuHang);
+                                        gTransactionHangCallback.onTransactionHang, jReason.get());
         }
     }
 
@@ -102,7 +104,7 @@ static jobject nativeGetSurface(JNIEnv* env, jclass clazz, jlong ptr,
     return android_view_Surface_createFromSurface(env,
                                                   queue->getSurface(includeSurfaceControlHandle));
 }
-
+#ifdef QTI_PERF_PRERENDERING_BLASTBUFFERQUEUE
 static void nativeSetUndequeuedBufferCount(JNIEnv* env, jclass clazz, jlong ptr, jint count) {
     sp<BLASTBufferQueue> queue = reinterpret_cast<BLASTBufferQueue*>(ptr);
     if (queue == nullptr) return;
@@ -114,6 +116,7 @@ static jint nativeGetUndequeuedBufferCount(JNIEnv* env, jclass clazz, jlong ptr)
     if (queue == nullptr) return -1;
     return queue->getUndequeuedBufferCount();
 }
+#endif
 
 class JGlobalRefHolder {
 public:
@@ -189,7 +192,7 @@ static bool nativeIsSameSurfaceControl(JNIEnv* env, jclass clazz, jlong ptr, jlo
     sp<BLASTBufferQueue> queue = reinterpret_cast<BLASTBufferQueue*>(ptr);
     return queue->isSameSurfaceControl(reinterpret_cast<SurfaceControl*>(surfaceControl));
 }
-  
+
 static void nativeSetTransactionHangCallback(JNIEnv* env, jclass clazz, jlong ptr,
                                              jobject transactionHangCallback) {
     sp<BLASTBufferQueue> queue = reinterpret_cast<BLASTBufferQueue*>(ptr);
@@ -198,9 +201,8 @@ static void nativeSetTransactionHangCallback(JNIEnv* env, jclass clazz, jlong pt
     } else {
         sp<TransactionHangCallbackWrapper> wrapper =
                 new TransactionHangCallbackWrapper{env, transactionHangCallback};
-        queue->setTransactionHangCallback([wrapper](bool isGpuHang) {
-            wrapper->onTransactionHang(isGpuHang);
-        });
+        queue->setTransactionHangCallback(
+                [wrapper](const std::string& reason) { wrapper->onTransactionHang(reason); });
     }
 }
 
@@ -217,8 +219,10 @@ static const JNINativeMethod gMethods[] = {
         // clang-format off
         {"nativeCreate", "(Ljava/lang/String;Z)J", (void*)nativeCreate},
         {"nativeGetSurface", "(JZ)Landroid/view/Surface;", (void*)nativeGetSurface},
+#ifdef QTI_PERF_PRERENDERING_BLASTBUFFERQUEUE
         {"nativeSetUndequeuedBufferCount", "(JI)V", (void*)nativeSetUndequeuedBufferCount},
         {"nativeGetUndequeuedBufferCount", "(J)I", (void*)nativeGetUndequeuedBufferCount},
+#endif
         {"nativeDestroy", "(J)V", (void*)nativeDestroy},
         {"nativeSyncNextTransaction", "(JLjava/util/function/Consumer;Z)V", (void*)nativeSyncNextTransaction},
         {"nativeStopContinuousSyncTransaction", "(J)V", (void*)nativeStopContinuousSyncTransaction},
@@ -250,7 +254,8 @@ int register_android_graphics_BLASTBufferQueue(JNIEnv* env) {
     jclass transactionHangClass =
             FindClassOrDie(env, "android/graphics/BLASTBufferQueue$TransactionHangCallback");
     gTransactionHangCallback.onTransactionHang =
-            GetMethodIDOrDie(env, transactionHangClass, "onTransactionHang", "(Z)V");
+            GetMethodIDOrDie(env, transactionHangClass, "onTransactionHang",
+                             "(Ljava/lang/String;)V");
 
     return 0;
 }

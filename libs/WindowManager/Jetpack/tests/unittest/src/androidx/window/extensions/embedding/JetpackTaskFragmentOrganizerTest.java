@@ -19,14 +19,15 @@ package androidx.window.extensions.embedding;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 
 import static androidx.window.extensions.embedding.EmbeddingTestUtils.TASK_ID;
+import static androidx.window.extensions.embedding.EmbeddingTestUtils.createTestTaskContainer;
 
-import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
 
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 
@@ -36,6 +37,7 @@ import android.graphics.Point;
 import android.os.Handler;
 import android.platform.test.annotations.Presubmit;
 import android.window.TaskFragmentInfo;
+import android.window.TaskFragmentTransaction;
 import android.window.WindowContainerToken;
 import android.window.WindowContainerTransaction;
 
@@ -116,7 +118,7 @@ public class JetpackTaskFragmentOrganizerTest {
 
     @Test
     public void testExpandTaskFragment() {
-        final TaskContainer taskContainer = new TaskContainer(TASK_ID);
+        final TaskContainer taskContainer = createTestTaskContainer();
         final TaskFragmentContainer container = new TaskFragmentContainer(null /* activity */,
                 new Intent(), taskContainer, mSplitController);
         final TaskFragmentInfo info = createMockInfo(container);
@@ -127,6 +129,14 @@ public class JetpackTaskFragmentOrganizerTest {
 
         verify(mTransaction).setWindowingMode(container.getInfo().getToken(),
                 WINDOWING_MODE_UNDEFINED);
+    }
+
+    @Test
+    public void testOnTransactionReady() {
+        final TaskFragmentTransaction transaction = new TaskFragmentTransaction();
+        mOrganizer.onTransactionReady(transaction);
+
+        verify(mCallback).onTransactionReady(transaction);
     }
 
     private TaskFragmentInfo createMockInfo(TaskFragmentContainer container) {

@@ -30,7 +30,6 @@ import androidx.annotation.GuardedBy
 import androidx.annotation.WorkerThread
 import com.android.systemui.Dumpable
 import com.android.systemui.dump.DumpManager
-import com.android.systemui.people.widget.PeopleSpaceWidgetProvider.EXTRA_USER_HANDLE
 import com.android.systemui.util.Assert
 import java.io.PrintWriter
 import java.lang.ref.WeakReference
@@ -53,7 +52,7 @@ import kotlin.reflect.KProperty
  *
  * Class constructed and initialized in [SettingsModule].
  */
-class UserTrackerImpl internal constructor(
+open class UserTrackerImpl internal constructor(
     private val context: Context,
     private val userManager: UserManager,
     private val dumpManager: DumpManager,
@@ -70,13 +69,13 @@ class UserTrackerImpl internal constructor(
     private val mutex = Any()
 
     override var userId: Int by SynchronizedDelegate(context.userId)
-        private set
+        protected set
 
     override var userHandle: UserHandle by SynchronizedDelegate(context.user)
-        private set
+        protected set
 
     override var userContext: Context by SynchronizedDelegate(context)
-        private set
+        protected set
 
     override val userContentResolver: ContentResolver
         get() = userContext.contentResolver
@@ -94,7 +93,7 @@ class UserTrackerImpl internal constructor(
      * modified.
      */
     override var userProfiles: List<UserInfo> by SynchronizedDelegate(emptyList())
-        private set
+        protected set
 
     @GuardedBy("callbacks")
     private val callbacks: MutableList<DataItem> = ArrayList()
@@ -108,6 +107,7 @@ class UserTrackerImpl internal constructor(
 
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_USER_SWITCHED)
+            addAction(Intent.ACTION_USER_INFO_CHANGED)
             // These get called when a managed profile goes in or out of quiet mode.
             addAction(Intent.ACTION_MANAGED_PROFILE_AVAILABLE)
             addAction(Intent.ACTION_MANAGED_PROFILE_UNAVAILABLE)
@@ -125,6 +125,7 @@ class UserTrackerImpl internal constructor(
             Intent.ACTION_USER_SWITCHED -> {
                 handleSwitchUser(intent.getIntExtra(Intent.EXTRA_USER_HANDLE, UserHandle.USER_NULL))
             }
+            Intent.ACTION_USER_INFO_CHANGED,
             Intent.ACTION_MANAGED_PROFILE_AVAILABLE,
             Intent.ACTION_MANAGED_PROFILE_UNAVAILABLE,
             Intent.ACTION_MANAGED_PROFILE_REMOVED,
@@ -155,7 +156,7 @@ class UserTrackerImpl internal constructor(
     }
 
     @WorkerThread
-    private fun handleSwitchUser(newUser: Int) {
+    protected open fun handleSwitchUser(newUser: Int) {
         Assert.isNotMainThread()
         if (newUser == UserHandle.USER_NULL) {
             Log.w(TAG, "handleSwitchUser - Couldn't get new id from intent")
@@ -174,7 +175,7 @@ class UserTrackerImpl internal constructor(
     }
 
     @WorkerThread
-    private fun handleProfilesChanged() {
+    protected open fun handleProfilesChanged() {
         Assert.isNotMainThread()
 
         val profiles = userManager.getProfiles(userId)

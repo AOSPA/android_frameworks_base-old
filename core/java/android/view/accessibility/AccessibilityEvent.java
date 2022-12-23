@@ -685,6 +685,42 @@ public final class AccessibilityEvent extends AccessibilityRecord implements Par
      */
     public static final int CONTENT_CHANGE_TYPE_DRAG_CANCELLED = 0x0000200;
 
+    /**
+     * Change type for {@link #TYPE_WINDOW_CONTENT_CHANGED} event:
+     * The source node changed its content validity returned by
+     * {@link AccessibilityNodeInfo#isContentInvalid}.
+     * The view changing content validity should call
+     * {@link AccessibilityNodeInfo#setContentInvalid} and then send this event.
+     *
+     * @see AccessibilityNodeInfo#isContentInvalid
+     * @see AccessibilityNodeInfo#setContentInvalid
+     */
+    public static final int CONTENT_CHANGE_TYPE_CONTENT_INVALID = 0x0000400;
+
+    /**
+     * Change type for {@link #TYPE_WINDOW_CONTENT_CHANGED} event:
+     * The source node changed its erroneous content's error message returned by
+     * {@link AccessibilityNodeInfo#getError}.
+     * The view changing erroneous content's error message should call
+     * {@link AccessibilityNodeInfo#setError} and then send this event.
+     *
+     * @see AccessibilityNodeInfo#getError
+     * @see AccessibilityNodeInfo#setError
+     */
+    public static final int CONTENT_CHANGE_TYPE_ERROR = 0x0000800;
+
+    /**
+     * Change type for {@link #TYPE_WINDOW_CONTENT_CHANGED} event:
+     * The source node changed its ability to interact returned by
+     * {@link AccessibilityNodeInfo#isEnabled}.
+     * The view changing content's ability to interact should call
+     * {@link AccessibilityNodeInfo#setEnabled} and then send this event.
+     *
+     * @see AccessibilityNodeInfo#isEnabled
+     * @see AccessibilityNodeInfo#setEnabled
+     */
+    public static final int CONTENT_CHANGE_TYPE_ENABLED = 1 << 12;
+
     /** Change type for {@link #TYPE_SPEECH_STATE_CHANGE} event: another service is speaking. */
     public static final int SPEECH_STATE_SPEAKING_START = 0x00000001;
 
@@ -810,6 +846,9 @@ public final class AccessibilityEvent extends AccessibilityRecord implements Par
                 CONTENT_CHANGE_TYPE_DRAG_STARTED,
                 CONTENT_CHANGE_TYPE_DRAG_DROPPED,
                 CONTENT_CHANGE_TYPE_DRAG_CANCELLED,
+                CONTENT_CHANGE_TYPE_CONTENT_INVALID,
+                CONTENT_CHANGE_TYPE_ERROR,
+                CONTENT_CHANGE_TYPE_ENABLED,
             })
     public @interface ContentChangeTypes {}
 
@@ -1076,6 +1115,10 @@ public final class AccessibilityEvent extends AccessibilityRecord implements Par
             case CONTENT_CHANGE_TYPE_DRAG_STARTED: return "CONTENT_CHANGE_TYPE_DRAG_STARTED";
             case CONTENT_CHANGE_TYPE_DRAG_DROPPED: return "CONTENT_CHANGE_TYPE_DRAG_DROPPED";
             case CONTENT_CHANGE_TYPE_DRAG_CANCELLED: return "CONTENT_CHANGE_TYPE_DRAG_CANCELLED";
+            case CONTENT_CHANGE_TYPE_CONTENT_INVALID:
+                return "CONTENT_CHANGE_TYPE_CONTENT_INVALID";
+            case CONTENT_CHANGE_TYPE_ERROR: return "CONTENT_CHANGE_TYPE_ERROR";
+            case CONTENT_CHANGE_TYPE_ENABLED: return "CONTENT_CHANGE_TYPE_ENABLED";
             default: return Integer.toHexString(type);
         }
     }
@@ -1332,6 +1375,7 @@ public final class AccessibilityEvent extends AccessibilityRecord implements Par
      * Convenience method to obtain a {@link #TYPE_WINDOWS_CHANGED} event for a specific window and
      * change set.
      *
+     * @param displayId The ID of the display from which the event comes from
      * @param windowId The ID of the window that changed
      * @param windowChangeTypes The changes to populate
      * @return An instance of a TYPE_WINDOWS_CHANGED, populated with the requested fields and with
@@ -1340,8 +1384,9 @@ public final class AccessibilityEvent extends AccessibilityRecord implements Par
      * @hide
      */
     public static AccessibilityEvent obtainWindowsChangedEvent(
-            int windowId, int windowChangeTypes) {
+            int displayId, int windowId, int windowChangeTypes) {
         final AccessibilityEvent event = new AccessibilityEvent(TYPE_WINDOWS_CHANGED);
+        event.setDisplayId(displayId);
         event.setWindowId(windowId);
         event.setWindowChanges(windowChangeTypes);
         event.setImportantForAccessibility(true);

@@ -16,13 +16,17 @@
 
 package android.view.inputmethod;
 
+import static android.view.inputmethod.TextBoundsInfoResult.CODE_UNSUPPORTED;
+
 import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
 import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.graphics.RectF;
 import android.inputmethodservice.InputMethodService;
 import android.os.Bundle;
+import android.os.CancellationSignal;
 import android.os.Handler;
 import android.text.TextUtils;
 import android.view.KeyCharacterMap;
@@ -32,7 +36,9 @@ import com.android.internal.util.Preconditions;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.Objects;
 import java.util.concurrent.Executor;
+import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 
 /**
@@ -1026,6 +1032,8 @@ public interface InputConnection {
     /**
      * Perform a handwriting gesture on text.
      *
+     * <p>Note: A supported gesture {@link EditorInfo#getSupportedHandwritingGestures()} may not
+     * have preview supported {@link EditorInfo#getSupportedHandwritingGesturePreviews()}.</p>
      * @param gesture the gesture to perform
      * @param executor The executor to run the callback on.
      * @param consumer if the caller passes a non-null consumer, the editor must invoke this
@@ -1036,6 +1044,7 @@ public interface InputConnection {
      * completed. Will be invoked on the given {@link Executor}.
      * Default implementation provides a callback to {@link IntConsumer} with
      * {@link #HANDWRITING_GESTURE_RESULT_UNSUPPORTED}.
+     * @see #previewHandwritingGesture(PreviewableHandwritingGesture, CancellationSignal)
      */
     default void performHandwritingGesture(
             @NonNull HandwritingGesture gesture, @Nullable @CallbackExecutor Executor executor,
@@ -1046,14 +1055,41 @@ public interface InputConnection {
     }
 
     /**
+     * Preview a handwriting gesture on text.
+     * Provides a real-time preview for a gesture to user for an ongoing gesture. e.g. as user
+     * begins to draw a circle around text, resulting selection {@link SelectGesture} is previewed
+     * while stylus is moving over applicable text.
+     *
+     * <p>Note: A supported gesture {@link EditorInfo#getSupportedHandwritingGestures()} might not
+     * have preview supported {@link EditorInfo#getSupportedHandwritingGesturePreviews()}.</p>
+     * @param gesture the gesture to preview. Preview support for a gesture (regardless of whether
+     *  implemented by editor) can be determined if gesture subclasses
+     *  {@link PreviewableHandwritingGesture}. Supported previewable gestures include
+     *  {@link SelectGesture}, {@link SelectRangeGesture}, {@link DeleteGesture} and
+     *  {@link DeleteRangeGesture}.
+     * @param cancellationSignal signal to cancel an ongoing preview.
+     * @return true on successfully sending command to Editor, false if not implemented by editor or
+     * the input connection is no longer valid or preview was cancelled with
+     * {@link CancellationSignal}.
+     * @see #performHandwritingGesture(HandwritingGesture, Executor, IntConsumer)
+     */
+    default boolean previewHandwritingGesture(
+            @NonNull PreviewableHandwritingGesture gesture,
+            @Nullable CancellationSignal cancellationSignal) {
+        return false;
+    }
+
+    /**
      * The editor is requested to call
      * {@link InputMethodManager#updateCursorAnchorInfo(android.view.View, CursorAnchorInfo)} at
      * once, as soon as possible, regardless of cursor/anchor position changes. This flag can be
      * used together with {@link #CURSOR_UPDATE_MONITOR}.
      * <p>
      * Note by default all of {@link #CURSOR_UPDATE_FILTER_EDITOR_BOUNDS},
-     * {@link #CURSOR_UPDATE_FILTER_CHARACTER_BOUNDS} and
-     * {@link #CURSOR_UPDATE_FILTER_INSERTION_MARKER} are included but specifying them can
+     * {@link #CURSOR_UPDATE_FILTER_CHARACTER_BOUNDS},
+     * {@link #CURSOR_UPDATE_FILTER_VISIBLE_LINE_BOUNDS},
+     * {@link #CURSOR_UPDATE_FILTER_TEXT_APPEARANCE}, and
+     * {@link #CURSOR_UPDATE_FILTER_INSERTION_MARKER}, are included but specifying them can
      * filter-out others.
      * It can be CPU intensive to include all, filtering specific info is recommended.
      * </p>
@@ -1070,8 +1106,10 @@ public interface InputConnection {
      * </p>
      * <p>
      * Note by default all of {@link #CURSOR_UPDATE_FILTER_EDITOR_BOUNDS},
-     * {@link #CURSOR_UPDATE_FILTER_CHARACTER_BOUNDS} and
-     * {@link #CURSOR_UPDATE_FILTER_INSERTION_MARKER} are included but specifying them can
+     * {@link #CURSOR_UPDATE_FILTER_CHARACTER_BOUNDS},
+     * {@link #CURSOR_UPDATE_FILTER_VISIBLE_LINE_BOUNDS},
+     * {@link #CURSOR_UPDATE_FILTER_TEXT_APPEARANCE}, and
+     * {@link #CURSOR_UPDATE_FILTER_INSERTION_MARKER}, are included but specifying them can
      * filter-out others.
      * It can be CPU intensive to include all, filtering specific info is recommended.
      * </p>
@@ -1085,6 +1123,8 @@ public interface InputConnection {
      * monitoring, call {@link InputConnection#requestCursorUpdates(int)} again with this flag off.
      * <p>
      * This flag can be used together with filters: {@link #CURSOR_UPDATE_FILTER_CHARACTER_BOUNDS},
+     * {@link #CURSOR_UPDATE_FILTER_VISIBLE_LINE_BOUNDS},
+     * {@link #CURSOR_UPDATE_FILTER_TEXT_APPEARANCE},
      * {@link #CURSOR_UPDATE_FILTER_INSERTION_MARKER} and update flags
      * {@link #CURSOR_UPDATE_IMMEDIATE} and {@link #CURSOR_UPDATE_MONITOR}.
      * </p>
@@ -1099,8 +1139,9 @@ public interface InputConnection {
      * monitoring, call {@link InputConnection#requestCursorUpdates(int)} again with this flag off.
      * <p>
      * This flag can be combined with other filters: {@link #CURSOR_UPDATE_FILTER_EDITOR_BOUNDS},
-     * {@link #CURSOR_UPDATE_FILTER_INSERTION_MARKER} and update flags
-     * {@link #CURSOR_UPDATE_IMMEDIATE} and {@link #CURSOR_UPDATE_MONITOR}.
+     * {@link #CURSOR_UPDATE_FILTER_VISIBLE_LINE_BOUNDS},
+     * {@link #CURSOR_UPDATE_FILTER_TEXT_APPEARANCE}, {@link #CURSOR_UPDATE_FILTER_INSERTION_MARKER}
+     * and update flags {@link #CURSOR_UPDATE_IMMEDIATE} and {@link #CURSOR_UPDATE_MONITOR}.
      * </p>
      */
     int CURSOR_UPDATE_FILTER_CHARACTER_BOUNDS = 1 << 3;
@@ -1114,11 +1155,43 @@ public interface InputConnection {
      * with this flag off.
      * <p>
      * This flag can be combined with other filters: {@link #CURSOR_UPDATE_FILTER_CHARACTER_BOUNDS},
-     * {@link #CURSOR_UPDATE_FILTER_EDITOR_BOUNDS} and update flags {@link #CURSOR_UPDATE_IMMEDIATE}
-     * and {@link #CURSOR_UPDATE_MONITOR}.
+     * {@link #CURSOR_UPDATE_FILTER_VISIBLE_LINE_BOUNDS},
+     * {@link #CURSOR_UPDATE_FILTER_TEXT_APPEARANCE}, {@link #CURSOR_UPDATE_FILTER_EDITOR_BOUNDS}
+     * and update flags {@link #CURSOR_UPDATE_IMMEDIATE} and {@link #CURSOR_UPDATE_MONITOR}.
      * </p>
      */
     int CURSOR_UPDATE_FILTER_INSERTION_MARKER = 1 << 4;
+
+    /**
+     * The editor is requested to call
+     * {@link InputMethodManager#updateCursorAnchorInfo(android.view.View, CursorAnchorInfo)}
+     * with new visible line bounds {@link CursorAnchorInfo#getVisibleLineBounds()} whenever
+     * cursor/anchor position is changed, the editor or its parent is scrolled or the line bounds
+     * changed due to text updates. To disable monitoring, call
+     * {@link InputConnection#requestCursorUpdates(int)} again with this flag off.
+     * <p>
+     * This flag can be combined with other filters: {@link #CURSOR_UPDATE_FILTER_CHARACTER_BOUNDS},
+     * {@link #CURSOR_UPDATE_FILTER_EDITOR_BOUNDS}, {@link #CURSOR_UPDATE_FILTER_INSERTION_MARKER},
+     * {@link #CURSOR_UPDATE_FILTER_TEXT_APPEARANCE} and update flags
+     * {@link #CURSOR_UPDATE_IMMEDIATE} and {@link #CURSOR_UPDATE_MONITOR}.
+     * </p>
+     */
+    int CURSOR_UPDATE_FILTER_VISIBLE_LINE_BOUNDS = 1 << 5;
+
+    /**
+     * The editor is requested to call
+     * {@link InputMethodManager#updateCursorAnchorInfo(android.view.View, CursorAnchorInfo)}
+     * with new text appearance info {@link CursorAnchorInfo#getTextAppearanceInfo()}}
+     * whenever cursor/anchor position is changed. To disable monitoring, call
+     * {@link InputConnection#requestCursorUpdates(int)} again with this flag off.
+     * <p>
+     * This flag can be combined with other filters: {@link #CURSOR_UPDATE_FILTER_CHARACTER_BOUNDS},
+     * {@link #CURSOR_UPDATE_FILTER_EDITOR_BOUNDS}, {@link #CURSOR_UPDATE_FILTER_INSERTION_MARKER},
+     * {@link #CURSOR_UPDATE_FILTER_VISIBLE_LINE_BOUNDS} and update flags
+     * {@link #CURSOR_UPDATE_IMMEDIATE} and {@link #CURSOR_UPDATE_MONITOR}.
+     * </p>
+     */
+    int CURSOR_UPDATE_FILTER_TEXT_APPEARANCE = 1 << 6;
 
     /**
      * @hide
@@ -1133,8 +1206,9 @@ public interface InputConnection {
      */
     @Retention(RetentionPolicy.SOURCE)
     @IntDef(value = {CURSOR_UPDATE_FILTER_EDITOR_BOUNDS, CURSOR_UPDATE_FILTER_CHARACTER_BOUNDS,
-            CURSOR_UPDATE_FILTER_INSERTION_MARKER}, flag = true,
-            prefix = { "CURSOR_UPDATE_FILTER_" })
+            CURSOR_UPDATE_FILTER_INSERTION_MARKER, CURSOR_UPDATE_FILTER_VISIBLE_LINE_BOUNDS,
+            CURSOR_UPDATE_FILTER_TEXT_APPEARANCE},
+            flag = true, prefix = { "CURSOR_UPDATE_FILTER_" })
     @interface CursorUpdateFilter{}
 
     /**
@@ -1183,6 +1257,40 @@ public interface InputConnection {
             return requestCursorUpdates(cursorUpdateMode);
         }
         return false;
+    }
+
+
+    /**
+     * Called by input method to request the {@link TextBoundsInfo} for a range of text which is
+     * covered by or in vicinity of the given {@code RectF}. It can be used as a supplementary
+     * method to implement the handwriting gesture API -
+     * {@link #performHandwritingGesture(HandwritingGesture, Executor, IntConsumer)}.
+     *
+     * <p><strong>Editor authors</strong>: It's preferred that the editor returns a
+     * {@link TextBoundsInfo} of all the text lines whose bounds intersect with the given
+     * {@code rectF}.
+     * </p>
+     *
+     * <p><strong>IME authors</strong>: This method is expensive when the text is long. Please
+     * consider that both the text bounds computation and IPC round-trip to send the data are time
+     * consuming. It's preferable to only request text bounds in smaller areas.
+     * </p>
+     *
+     * @param rectF the interested area where the text bounds are requested, in the screen
+     *              coordinates.
+     * @param executor the executor to run the callback.
+     * @param consumer the callback invoked by editor to return the result. It must return a
+     *                 non-null object.
+     *
+     * @see TextBoundsInfo
+     * @see android.view.inputmethod.TextBoundsInfoResult
+     */
+    default void requestTextBoundsInfo(
+            @NonNull RectF rectF, @NonNull @CallbackExecutor Executor executor,
+            @NonNull Consumer<TextBoundsInfoResult> consumer) {
+        Objects.requireNonNull(executor);
+        Objects.requireNonNull(consumer);
+        executor.execute(() -> consumer.accept(new TextBoundsInfoResult(CODE_UNSUPPORTED)));
     }
 
     /**
@@ -1308,5 +1416,47 @@ public interface InputConnection {
         // Returning null by default because the composing text range cannot be retrieved from
         // existing APIs.
         return null;
+    }
+
+    /**
+     * Replace the specific range in the editor with suggested text.
+     *
+     * <p>This method finishes whatever composing text is currently active and leaves the text
+     * as-it, replaces the specific range of text with the passed CharSequence, and then moves the
+     * cursor according to {@code newCursorPosition}. This behaves like calling {@link
+     * #finishComposingText()}, {@link #setSelection(int, int) setSelection(start, end)}, and then
+     * {@link #commitText(CharSequence, int, TextAttribute) commitText(text, newCursorPosition,
+     * textAttribute)}.
+     *
+     * <p>Similar to {@link #setSelection(int, int)}, the order of start and end is not important.
+     * In effect, the region from start to end and the region from end to start is the same. Editor
+     * authors, be ready to accept a start that is greater than end.
+     *
+     * @param start the character index where the replacement should start.
+     * @param end the character index where the replacement should end.
+     * @param newCursorPosition the new cursor position around the text. If > 0, this is relative to
+     *     the end of the text - 1; if <= 0, this is relative to the start of the text. So a value
+     *     of 1 will always advance you to the position after the full text being inserted. Note
+     *     that this means you can't position the cursor within the text.
+     * @param text the text to replace. This may include styles.
+     * @param textAttribute The extra information about the text. This value may be null.
+     * @return {@code true} if the replace command was sent to the associated editor (regardless of
+     *     whether the replacement is success or not), {@code false} otherwise.
+     */
+    default boolean replaceText(
+            @IntRange(from = 0) int start,
+            @IntRange(from = 0) int end,
+            @NonNull CharSequence text,
+            int newCursorPosition,
+            @Nullable TextAttribute textAttribute) {
+        Preconditions.checkArgumentNonnegative(start);
+        Preconditions.checkArgumentNonnegative(end);
+
+        beginBatchEdit();
+        finishComposingText();
+        setSelection(start, end);
+        commitText(text, newCursorPosition, textAttribute);
+        endBatchEdit();
+        return true;
     }
 }

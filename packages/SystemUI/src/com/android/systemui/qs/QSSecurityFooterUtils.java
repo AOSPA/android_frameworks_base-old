@@ -75,6 +75,8 @@ import com.android.internal.jank.InteractionJankMonitor;
 import com.android.systemui.R;
 import com.android.systemui.animation.DialogCuj;
 import com.android.systemui.animation.DialogLaunchAnimator;
+import com.android.systemui.animation.Expandable;
+import com.android.systemui.common.shared.model.ContentDescription;
 import com.android.systemui.common.shared.model.Icon;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Application;
@@ -189,8 +191,9 @@ public class QSSecurityFooterUtils implements DialogInterface.OnClickListener {
     }
 
     /** Show the device monitoring dialog. */
-    public void showDeviceMonitoringDialog(Context quickSettingsContext, @Nullable View view) {
-        createDialog(quickSettingsContext, view);
+    public void showDeviceMonitoringDialog(Context quickSettingsContext,
+            @Nullable Expandable expandable) {
+        createDialog(quickSettingsContext, expandable);
     }
 
     /**
@@ -243,16 +246,17 @@ public class QSSecurityFooterUtils implements DialogInterface.OnClickListener {
                 isWorkProfileOn).toString();
 
         Icon icon;
+        ContentDescription contentDescription = null;
         if (isParentalControlsEnabled) {
-            icon = new Icon.Loaded(securityModel.getDeviceAdminIcon());
+            icon = new Icon.Loaded(securityModel.getDeviceAdminIcon(), contentDescription);
         } else if (vpnName != null || vpnNameWorkProfile != null) {
             if (securityModel.isVpnBranded()) {
-                icon = new Icon.Resource(R.drawable.stat_sys_branded_vpn);
+                icon = new Icon.Resource(R.drawable.stat_sys_branded_vpn, contentDescription);
             } else {
-                icon = new Icon.Resource(R.drawable.stat_sys_vpn_ic);
+                icon = new Icon.Resource(R.drawable.stat_sys_vpn_ic, contentDescription);
             }
         } else {
-            icon = new Icon.Resource(R.drawable.ic_info_outline);
+            icon = new Icon.Resource(R.drawable.ic_info_outline, contentDescription);
         }
 
         return new SecurityButtonConfig(icon, text, isClickable);
@@ -438,11 +442,11 @@ public class QSSecurityFooterUtils implements DialogInterface.OnClickListener {
         }
     }
 
-    private void createDialog(Context quickSettingsContext, @Nullable View view) {
+    private void createDialog(Context quickSettingsContext, @Nullable Expandable expandable) {
         mShouldUseSettingsButton.set(false);
         mBgHandler.post(() -> {
             String settingsButtonText = getSettingsButton();
-            final View dialogView = createDialogView();
+            final View dialogView = createDialogView(quickSettingsContext);
             mMainHandler.post(() -> {
                 mDialog = new SystemUIDialog(quickSettingsContext, 0);
                 mDialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
@@ -451,9 +455,12 @@ public class QSSecurityFooterUtils implements DialogInterface.OnClickListener {
                         ? settingsButtonText : getNegativeButton(), this);
 
                 mDialog.setView(dialogView);
-                if (view != null && view.isAggregatedVisible()) {
-                    mDialogLaunchAnimator.showFromView(mDialog, view, new DialogCuj(
-                            InteractionJankMonitor.CUJ_SHADE_DIALOG_OPEN, INTERACTION_JANK_TAG));
+                DialogLaunchAnimator.Controller controller =
+                        expandable != null ? expandable.dialogLaunchController(new DialogCuj(
+                                InteractionJankMonitor.CUJ_SHADE_DIALOG_OPEN, INTERACTION_JANK_TAG))
+                                : null;
+                if (controller != null) {
+                    mDialogLaunchAnimator.show(mDialog, controller);
                 } else {
                     mDialog.show();
                 }
@@ -467,14 +474,14 @@ public class QSSecurityFooterUtils implements DialogInterface.OnClickListener {
     }
 
     @VisibleForTesting
-    View createDialogView() {
+    View createDialogView(Context quickSettingsContext) {
         if (mSecurityController.isParentalControlsEnabled()) {
             return createParentalControlsDialogView();
         }
-        return createOrganizationDialogView();
+        return createOrganizationDialogView(quickSettingsContext);
     }
 
-    private View createOrganizationDialogView() {
+    private View createOrganizationDialogView(Context quickSettingsContext) {
         final boolean isDeviceManaged = mSecurityController.isDeviceManaged();
         final boolean hasWorkProfile = mSecurityController.hasWorkProfile();
         final CharSequence deviceOwnerOrganization =
@@ -485,7 +492,7 @@ public class QSSecurityFooterUtils implements DialogInterface.OnClickListener {
         final String vpnName = mSecurityController.getPrimaryVpnName();
         final String vpnNameWorkProfile = mSecurityController.getWorkProfileVpnName();
 
-        View dialogView = LayoutInflater.from(mContext)
+        View dialogView = LayoutInflater.from(quickSettingsContext)
                 .inflate(R.layout.quick_settings_footer_dialog, null, false);
 
         // device management section

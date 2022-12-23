@@ -38,8 +38,8 @@ import com.android.internal.logging.MetricsLogger;
 import com.android.server.LocalServices;
 import com.android.server.pm.Installer.InstallerException;
 import com.android.server.pm.dex.DexoptOptions;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.parsing.pkg.AndroidPackageUtils;
+import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.PackageStateInternal;
 
 import java.io.File;
@@ -409,8 +409,8 @@ public class OtaDexoptService extends IOtaDexopt.Stub {
             }
 
             final String[] instructionSets = getAppDexInstructionSets(
-                    AndroidPackageUtils.getPrimaryCpuAbi(pkg, packageState),
-                    AndroidPackageUtils.getSecondaryCpuAbi(pkg, packageState));
+                    packageState.getPrimaryCpuAbi(),
+                    packageState.getSecondaryCpuAbi());
             final List<String> paths =
                     AndroidPackageUtils.getAllCodePathsExcludingResourceOnly(pkg);
             final String[] dexCodeInstructionSets = getDexCodeInstructionSets(instructionSets);

@@ -82,8 +82,7 @@ public class VirtualDisplayAdapter extends DisplayAdapter {
     // Called with SyncRoot lock held.
     public VirtualDisplayAdapter(DisplayManagerService.SyncRoot syncRoot,
             Context context, Handler handler, Listener listener) {
-        this(syncRoot, context, handler, listener,
-                (String name, boolean secure) -> SurfaceControl.createDisplay(name, secure));
+        this(syncRoot, context, handler, listener, DisplayControl::createDisplay);
     }
 
     @VisibleForTesting
@@ -159,6 +158,13 @@ public class VirtualDisplayAdapter extends DisplayAdapter {
         VirtualDisplayDevice device = mVirtualDisplayDevices.get(appToken);
         if (device != null) {
             device.setSurfaceLocked(surface);
+        }
+    }
+
+    void setDisplayIdToMirror(IBinder appToken, int displayId) {
+        VirtualDisplayDevice device = mVirtualDisplayDevices.get(appToken);
+        if (device != null) {
+            device.setDisplayIdToMirror(displayId);
         }
     }
 
@@ -296,7 +302,7 @@ public class VirtualDisplayAdapter extends DisplayAdapter {
                 mSurface.release();
                 mSurface = null;
             }
-            SurfaceControl.destroyDisplay(getDisplayTokenLocked());
+            DisplayControl.destroyDisplay(getDisplayTokenLocked());
             if (mProjection != null && mMediaProjectionCallback != null) {
                 try {
                     mProjection.unregisterCallback(mMediaProjectionCallback);
@@ -312,6 +318,15 @@ public class VirtualDisplayAdapter extends DisplayAdapter {
         @Override
         public int getDisplayIdToMirrorLocked() {
             return mDisplayIdToMirror;
+        }
+
+        void setDisplayIdToMirror(int displayIdToMirror) {
+            if (mDisplayIdToMirror != displayIdToMirror) {
+                mDisplayIdToMirror = displayIdToMirror;
+                mInfo = null;
+                sendDisplayDeviceEventLocked(this, DISPLAY_DEVICE_EVENT_CHANGED);
+                sendTraversalRequestLocked();
+            }
         }
 
         @Override

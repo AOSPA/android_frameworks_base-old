@@ -49,7 +49,7 @@ import android.os.storage.DiskInfo;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.policy.AttributeCache;
 import com.android.internal.util.IndentingPrintWriter;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
+import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.PackageStateInternal;
 import com.android.server.pm.pkg.parsing.ParsingPackageUtils;
 
@@ -159,7 +159,7 @@ public final class StorageEventHelper extends StorageEventListener {
                 final AndroidPackage pkg;
                 try {
                     pkg = installPackageHelper.scanSystemPackageTracedLI(
-                            ps.getPath(), parseFlags, SCAN_INITIAL, null);
+                            ps.getPath(), parseFlags, SCAN_INITIAL);
                     loaded.add(pkg);
 
                 } catch (PackageManagerException e) {
@@ -200,8 +200,11 @@ public final class StorageEventHelper extends StorageEventListener {
                     appDataHelper.reconcileAppsDataLI(volumeUuid, user.id, flags,
                             true /* migrateAppData */);
                 }
-            } catch (IllegalStateException e) {
-                // Device was probably ejected, and we'll process that event momentarily
+            } catch (RuntimeException e) {
+                // The volume was probably already unmounted.  We'll probably process the unmount
+                // event momentarily.  TODO(b/256909937): ignoring errors from prepareUserStorage()
+                // is very dangerous.  Instead, we should fix the race condition that allows this
+                // code to run on an unmounted volume in the first place.
                 Slog.w(TAG, "Failed to prepare storage: " + e);
             }
         }

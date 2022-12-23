@@ -391,6 +391,15 @@ public abstract class NotificationListenerService extends Service {
      */
     public static final int NOTIFICATION_CHANNEL_OR_GROUP_DELETED = 3;
 
+    /**
+     * An optional activity intent action that shows additional settings for what notifications
+     * should be processed by this notification listener service. If defined, the OS may link to
+     * this activity from the system notification listener service filter settings page.
+     */
+    @SdkConstant(SdkConstant.SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_SETTINGS_HOME =
+            "android.service.notification.action.SETTINGS_HOME";
+
     private final Object mLock = new Object();
 
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)

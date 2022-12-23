@@ -33,7 +33,8 @@ import com.android.internal.content.NativeLibraryHelper;
 import com.android.internal.util.ArrayUtils;
 import com.android.server.SystemConfig;
 import com.android.server.pm.PackageManagerException;
-import com.android.server.pm.pkg.AndroidPackageApi;
+import com.android.server.pm.pkg.AndroidPackage;
+import com.android.server.pm.pkg.PackageState;
 import com.android.server.pm.pkg.PackageStateInternal;
 import com.android.server.pm.pkg.component.ParsedActivity;
 import com.android.server.pm.pkg.component.ParsedInstrumentation;
@@ -91,7 +92,7 @@ public class AndroidPackageUtils {
     public static SharedLibraryInfo createSharedLibraryForSdk(AndroidPackage pkg) {
         return new SharedLibraryInfo(null, pkg.getPackageName(),
                 AndroidPackageUtils.getAllCodePaths(pkg),
-                pkg.getSdkLibName(),
+                pkg.getSdkLibraryName(),
                 pkg.getSdkLibVersionMajor(),
                 SharedLibraryInfo.TYPE_SDK_PACKAGE,
                 new VersionedPackage(pkg.getManifestPackageName(),
@@ -102,7 +103,7 @@ public class AndroidPackageUtils {
     public static SharedLibraryInfo createSharedLibraryForStatic(AndroidPackage pkg) {
         return new SharedLibraryInfo(null, pkg.getPackageName(),
                 AndroidPackageUtils.getAllCodePaths(pkg),
-                pkg.getStaticSharedLibName(),
+                pkg.getStaticSharedLibraryName(),
                 pkg.getStaticSharedLibVersion(),
                 SharedLibraryInfo.TYPE_STATIC,
                 new VersionedPackage(pkg.getManifestPackageName(),
@@ -230,7 +231,7 @@ public class AndroidPackageUtils {
 
     public static boolean isLibrary(AndroidPackage pkg) {
         // TODO(b/135203078): Can parsing just enforce these always match?
-        return pkg.getSdkLibName() != null || pkg.getStaticSharedLibName() != null
+        return pkg.getSdkLibraryName() != null || pkg.getStaticSharedLibraryName() != null
                 || !pkg.getLibraryNames().isEmpty();
     }
 
@@ -271,27 +272,9 @@ public class AndroidPackageUtils {
         return true;
     }
 
-    public static String getPrimaryCpuAbi(AndroidPackage pkg,
-            @Nullable PackageStateInternal pkgSetting) {
-        if (pkgSetting == null || TextUtils.isEmpty(pkgSetting.getPrimaryCpuAbi())) {
-            return getRawPrimaryCpuAbi(pkg);
-        }
-
-        return pkgSetting.getPrimaryCpuAbi();
-    }
-
-    public static String getSecondaryCpuAbi(AndroidPackage pkg,
-            @Nullable PackageStateInternal pkgSetting) {
-        if (pkgSetting == null || TextUtils.isEmpty(pkgSetting.getSecondaryCpuAbi())) {
-            return getRawSecondaryCpuAbi(pkg);
-        }
-
-        return pkgSetting.getSecondaryCpuAbi();
-    }
-
     /**
      * Returns the primary ABI as parsed from the package. Used only during parsing and derivation.
-     * Otherwise prefer {@link #getPrimaryCpuAbi(AndroidPackage, PackageStateInternal)}.
+     * Otherwise prefer {@link PackageState#getPrimaryCpuAbi()}.
      */
     public static String getRawPrimaryCpuAbi(AndroidPackage pkg) {
         return ((AndroidPackageHidden) pkg).getPrimaryCpuAbi();
@@ -299,10 +282,9 @@ public class AndroidPackageUtils {
 
     /**
      * Returns the secondary ABI as parsed from the package. Used only during parsing and
-     * derivation. Otherwise prefer
-     * {@link #getSecondaryCpuAbi(AndroidPackage, PackageStateInternal)}.
+     * derivation. Otherwise prefer {@link PackageState#getSecondaryCpuAbi()}.
      */
-    public static String getRawSecondaryCpuAbi(AndroidPackage pkg) {
+    public static String getRawSecondaryCpuAbi(@NonNull AndroidPackage pkg) {
         return ((AndroidPackageHidden) pkg).getSecondaryCpuAbi();
     }
 
@@ -338,9 +320,5 @@ public class AndroidPackageUtils {
     public static void fillVersionCodes(@NonNull AndroidPackage pkg, @NonNull PackageInfo info) {
         info.versionCode = ((ParsingPackageHidden) pkg).getVersionCode();
         info.versionCodeMajor = ((ParsingPackageHidden) pkg).getVersionCodeMajor();
-    }
-
-    public static ApplicationInfo toAppInfoWithoutState(AndroidPackageApi pkg) {
-        return ((ParsingPackageHidden) pkg).toAppInfoWithoutState();
     }
 }

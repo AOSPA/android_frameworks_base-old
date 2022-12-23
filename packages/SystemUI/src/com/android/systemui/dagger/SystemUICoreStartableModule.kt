@@ -17,6 +17,7 @@
 package com.android.systemui.dagger
 
 import com.android.keyguard.KeyguardBiometricLockoutLogger
+import com.android.systemui.ChooserSelector
 import com.android.systemui.CoreStartable
 import com.android.systemui.LatencyTester
 import com.android.systemui.ScreenDecorations
@@ -24,6 +25,7 @@ import com.android.systemui.SliceBroadcastRelayHandler
 import com.android.systemui.accessibility.SystemActions
 import com.android.systemui.accessibility.WindowMagnification
 import com.android.systemui.biometrics.AuthController
+import com.android.systemui.biometrics.UdfpsOverlay
 import com.android.systemui.clipboardoverlay.ClipboardListener
 import com.android.systemui.dagger.qualifiers.PerUser
 import com.android.systemui.globalactions.GlobalActionsComponent
@@ -31,12 +33,16 @@ import com.android.systemui.keyboard.KeyboardUI
 import com.android.systemui.keyguard.KeyguardViewMediator
 import com.android.systemui.log.SessionTracker
 import com.android.systemui.media.RingtonePlayer
+import com.android.systemui.media.taptotransfer.MediaTttCommandLineHelper
+import com.android.systemui.media.taptotransfer.receiver.MediaTttChipControllerReceiver
+import com.android.systemui.media.taptotransfer.sender.MediaTttSenderCoordinator
 import com.android.systemui.power.PowerUI
 import com.android.systemui.recents.Recents
 import com.android.systemui.settings.dagger.MultiUserUtilsModule
 import com.android.systemui.shortcut.ShortcutKeyDispatcher
 import com.android.systemui.statusbar.notification.InstantAppNotifier
 import com.android.systemui.statusbar.phone.KeyguardLiftController
+import com.android.systemui.temporarydisplay.chipbar.ChipbarCoordinator
 import com.android.systemui.theme.ThemeOverlayController
 import com.android.systemui.toast.ToastUI
 import com.android.systemui.usb.StorageNotification
@@ -59,6 +65,12 @@ abstract class SystemUICoreStartableModule {
     @IntoMap
     @ClassKey(AuthController::class)
     abstract fun bindAuthController(service: AuthController): CoreStartable
+
+    /** Inject into ChooserCoreStartable. */
+    @Binds
+    @IntoMap
+    @ClassKey(ChooserSelector::class)
+    abstract fun bindChooserSelector(sysui: ChooserSelector): CoreStartable
 
     /** Inject into ClipboardListener.  */
     @Binds
@@ -206,4 +218,36 @@ abstract class SystemUICoreStartableModule {
     @IntoMap
     @ClassKey(KeyguardLiftController::class)
     abstract fun bindKeyguardLiftController(sysui: KeyguardLiftController): CoreStartable
+
+    /** Inject into UdfpsOverlay.  */
+    @Binds
+    @IntoMap
+    @ClassKey(UdfpsOverlay::class)
+    abstract fun bindUdfpsOverlay(sysui: UdfpsOverlay): CoreStartable
+
+    /** Inject into MediaTttSenderCoordinator. */
+    @Binds
+    @IntoMap
+    @ClassKey(MediaTttSenderCoordinator::class)
+    abstract fun bindMediaTttSenderCoordinator(sysui: MediaTttSenderCoordinator): CoreStartable
+
+    /** Inject into MediaTttChipControllerReceiver. */
+    @Binds
+    @IntoMap
+    @ClassKey(MediaTttChipControllerReceiver::class)
+    abstract fun bindMediaTttChipControllerReceiver(
+            sysui: MediaTttChipControllerReceiver
+    ): CoreStartable
+
+    /** Inject into MediaTttCommandLineHelper. */
+    @Binds
+    @IntoMap
+    @ClassKey(MediaTttCommandLineHelper::class)
+    abstract fun bindMediaTttCommandLineHelper(sysui: MediaTttCommandLineHelper): CoreStartable
+
+    /** Inject into ChipbarCoordinator. */
+    @Binds
+    @IntoMap
+    @ClassKey(ChipbarCoordinator::class)
+    abstract fun bindChipbarController(sysui: ChipbarCoordinator): CoreStartable
 }

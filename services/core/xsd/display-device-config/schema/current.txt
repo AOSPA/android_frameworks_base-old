@@ -6,14 +6,18 @@ package com.android.server.display.config {
     method public final java.math.BigInteger getBrighteningLightDebounceMillis();
     method public final java.math.BigInteger getDarkeningLightDebounceMillis();
     method public final com.android.server.display.config.DisplayBrightnessMapping getDisplayBrightnessMapping();
+    method public boolean getEnabled();
     method public final void setBrighteningLightDebounceMillis(java.math.BigInteger);
     method public final void setDarkeningLightDebounceMillis(java.math.BigInteger);
     method public final void setDisplayBrightnessMapping(com.android.server.display.config.DisplayBrightnessMapping);
+    method public void setEnabled(boolean);
   }
 
   public class BrightnessThresholds {
     ctor public BrightnessThresholds();
+    method public final com.android.server.display.config.ThresholdPoints getBrightnessThresholdPoints();
     method @NonNull public final java.math.BigDecimal getMinimum();
+    method public final void setBrightnessThresholdPoints(com.android.server.display.config.ThresholdPoints);
     method public final void setMinimum(@NonNull java.math.BigDecimal);
   }
 
@@ -53,19 +57,21 @@ package com.android.server.display.config {
   public class DisplayBrightnessPoint {
     ctor public DisplayBrightnessPoint();
     method public final java.math.BigInteger getLux();
-    method public final java.math.BigInteger getNits();
+    method public final java.math.BigDecimal getNits();
     method public final void setLux(java.math.BigInteger);
-    method public final void setNits(java.math.BigInteger);
+    method public final void setNits(java.math.BigDecimal);
   }
 
   public class DisplayConfiguration {
     ctor public DisplayConfiguration();
     method @NonNull public final com.android.server.display.config.Thresholds getAmbientBrightnessChangeThresholds();
+    method public final com.android.server.display.config.Thresholds getAmbientBrightnessChangeThresholdsIdle();
     method public final java.math.BigInteger getAmbientLightHorizonLong();
     method public final java.math.BigInteger getAmbientLightHorizonShort();
     method public com.android.server.display.config.AutoBrightness getAutoBrightness();
     method @Nullable public final com.android.server.display.config.DensityMapping getDensityMapping();
     method @NonNull public final com.android.server.display.config.Thresholds getDisplayBrightnessChangeThresholds();
+    method public final com.android.server.display.config.Thresholds getDisplayBrightnessChangeThresholdsIdle();
     method public com.android.server.display.config.HighBrightnessMode getHighBrightnessMode();
     method public final com.android.server.display.config.SensorDetails getLightSensor();
     method public final com.android.server.display.config.SensorDetails getProxSensor();
@@ -80,11 +86,13 @@ package com.android.server.display.config {
     method public final java.math.BigDecimal getScreenBrightnessRampSlowIncrease();
     method @NonNull public final com.android.server.display.config.ThermalThrottling getThermalThrottling();
     method public final void setAmbientBrightnessChangeThresholds(@NonNull com.android.server.display.config.Thresholds);
+    method public final void setAmbientBrightnessChangeThresholdsIdle(com.android.server.display.config.Thresholds);
     method public final void setAmbientLightHorizonLong(java.math.BigInteger);
     method public final void setAmbientLightHorizonShort(java.math.BigInteger);
     method public void setAutoBrightness(com.android.server.display.config.AutoBrightness);
     method public final void setDensityMapping(@Nullable com.android.server.display.config.DensityMapping);
     method public final void setDisplayBrightnessChangeThresholds(@NonNull com.android.server.display.config.Thresholds);
+    method public final void setDisplayBrightnessChangeThresholdsIdle(com.android.server.display.config.Thresholds);
     method public void setHighBrightnessMode(com.android.server.display.config.HighBrightnessMode);
     method public final void setLightSensor(com.android.server.display.config.SensorDetails);
     method public final void setProxSensor(com.android.server.display.config.SensorDetails);
@@ -198,6 +206,19 @@ package com.android.server.display.config {
     ctor public ThermalThrottling();
     method @NonNull public final com.android.server.display.config.BrightnessThrottlingMap getBrightnessThrottlingMap();
     method public final void setBrightnessThrottlingMap(@NonNull com.android.server.display.config.BrightnessThrottlingMap);
+  }
+
+  public class ThresholdPoint {
+    ctor public ThresholdPoint();
+    method @NonNull public final java.math.BigDecimal getPercentage();
+    method @NonNull public final java.math.BigDecimal getThreshold();
+    method public final void setPercentage(@NonNull java.math.BigDecimal);
+    method public final void setThreshold(@NonNull java.math.BigDecimal);
+  }
+
+  public class ThresholdPoints {
+    ctor public ThresholdPoints();
+    method @NonNull public final java.util.List<com.android.server.display.config.ThresholdPoint> getBrightnessThresholdPoint();
   }
 
   public class Thresholds {

@@ -33,6 +33,10 @@ public class BatteryStatsHistoryIterator {
     private final BatteryStats.HistoryStepDetails mReadHistoryStepDetails =
             new BatteryStats.HistoryStepDetails();
     private final SparseArray<BatteryStats.HistoryTag> mHistoryTags = new SparseArray<>();
+    private BatteryStats.MeasuredEnergyDetails mMeasuredEnergyDetails;
+    private BatteryStats.CpuUsageDetails mCpuUsageDetails;
+    private final BatteryStatsHistory.VarintParceler mVarintParceler =
+            new BatteryStatsHistory.VarintParceler();
 
     public BatteryStatsHistoryIterator(@NonNull BatteryStatsHistory history) {
         mBatteryStatsHistory = history;
@@ -59,7 +63,7 @@ public class BatteryStatsHistoryIterator {
         return true;
     }
 
-    void readHistoryDelta(Parcel src, BatteryStats.HistoryItem cur) {
+    private void readHistoryDelta(Parcel src, BatteryStats.HistoryItem cur) {
         int firstToken = src.readInt();
         int deltaTimeToken = firstToken & BatteryStatsHistory.DELTA_TIME_MASK;
         cur.cmd = BatteryStats.HistoryItem.CMD_UPDATE;
@@ -198,6 +202,62 @@ public class BatteryStatsHistoryIterator {
         }
         cur.modemRailChargeMah = src.readDouble();
         cur.wifiRailChargeMah = src.readDouble();
+        if ((cur.states2 & BatteryStats.HistoryItem.STATE2_EXTENSIONS_FLAG) != 0) {
+            final int extensionFlags = src.readInt();
+            if ((extensionFlags & BatteryStatsHistory.EXTENSION_MEASURED_ENERGY_HEADER_FLAG) != 0) {
+                if (mMeasuredEnergyDetails == null) {
+                    mMeasuredEnergyDetails = new BatteryStats.MeasuredEnergyDetails();
+                }
+
+                final int consumerCount = src.readInt();
+                mMeasuredEnergyDetails.consumers =
+                        new BatteryStats.MeasuredEnergyDetails.EnergyConsumer[consumerCount];
+                mMeasuredEnergyDetails.chargeUC = new long[consumerCount];
+                for (int i = 0; i < consumerCount; i++) {
+                    BatteryStats.MeasuredEnergyDetails.EnergyConsumer consumer =
+                            new BatteryStats.MeasuredEnergyDetails.EnergyConsumer();
+                    consumer.type = src.readInt();
+                    consumer.ordinal = src.readInt();
+                    consumer.name = src.readString();
+                    mMeasuredEnergyDetails.consumers[i] = consumer;
+                }
+            }
+
+            if ((extensionFlags & BatteryStatsHistory.EXTENSION_MEASURED_ENERGY_FLAG) != 0) {
+                if (mMeasuredEnergyDetails == null) {
+                    throw new IllegalStateException("MeasuredEnergyDetails without a header");
+                }
+
+                mVarintParceler.readLongArray(src, mMeasuredEnergyDetails.chargeUC);
+                cur.measuredEnergyDetails = mMeasuredEnergyDetails;
+            } else {
+                cur.measuredEnergyDetails = null;
+            }
+
+            if ((extensionFlags & BatteryStatsHistory.EXTENSION_CPU_USAGE_HEADER_FLAG) != 0) {
+                mCpuUsageDetails = new BatteryStats.CpuUsageDetails();
+                mCpuUsageDetails.cpuBracketDescriptions = src.readStringArray();
+                mCpuUsageDetails.cpuUsageMs =
+                        new long[mCpuUsageDetails.cpuBracketDescriptions.length];
+            } else if (mCpuUsageDetails != null) {
+                mCpuUsageDetails.cpuBracketDescriptions = null;
+            }
+
+            if ((extensionFlags & BatteryStatsHistory.EXTENSION_CPU_USAGE_FLAG) != 0) {
+                if (mCpuUsageDetails == null) {
+                    throw new IllegalStateException("CpuUsageDetails without a header");
+                }
+
+                mCpuUsageDetails.uid = src.readInt();
+                mVarintParceler.readLongArray(src, mCpuUsageDetails.cpuUsageMs);
+                cur.cpuUsageDetails = mCpuUsageDetails;
+            } else {
+                cur.cpuUsageDetails = null;
+            }
+        } else {
+            cur.measuredEnergyDetails = null;
+            cur.cpuUsageDetails = null;
+        }
     }
 
     private boolean readHistoryTag(Parcel src, int index, BatteryStats.HistoryTag outTag) {

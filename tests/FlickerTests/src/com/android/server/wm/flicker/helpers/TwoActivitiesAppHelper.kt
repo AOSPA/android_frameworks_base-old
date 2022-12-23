@@ -27,18 +27,19 @@ import com.android.server.wm.traces.common.ComponentNameMatcher
 import com.android.server.wm.traces.parser.toFlickerComponent
 import com.android.server.wm.traces.parser.windowmanager.WindowManagerStateHelper
 
-class TwoActivitiesAppHelper @JvmOverloads constructor(
+class TwoActivitiesAppHelper
+@JvmOverloads
+constructor(
     instr: Instrumentation,
-    launcherName: String = ActivityOptions.BUTTON_ACTIVITY_LAUNCHER_NAME,
+    launcherName: String = ActivityOptions.LaunchNewActivity.LABEL,
     component: ComponentNameMatcher =
-        ActivityOptions.BUTTON_ACTIVITY_COMPONENT_NAME.toFlickerComponent(),
-    launcherStrategy: ILauncherStrategy = LauncherStrategyFactory
-        .getInstance(instr)
-        .launcherStrategy
+        ActivityOptions.LaunchNewActivity.COMPONENT.toFlickerComponent(),
+    launcherStrategy: ILauncherStrategy =
+        LauncherStrategyFactory.getInstance(instr).launcherStrategy
 ) : StandardAppHelper(instr, launcherName, component, launcherStrategy) {
 
     private val secondActivityComponent =
-        ActivityOptions.SIMPLE_ACTIVITY_AUTO_FOCUS_COMPONENT_NAME.toFlickerComponent()
+        ActivityOptions.SimpleActivity.COMPONENT.toFlickerComponent()
 
     fun openSecondActivity(device: UiDevice, wmHelper: WindowManagerStateHelper) {
         val launchActivityButton = By.res(getPackage(), LAUNCH_SECOND_ACTIVITY)
@@ -46,14 +47,12 @@ class TwoActivitiesAppHelper @JvmOverloads constructor(
 
         requireNotNull(button) {
             "Button not found, this usually happens when the device " +
-                    "was left in an unknown state (e.g. in split screen)"
+                "was left in an unknown state (e.g. in split screen)"
         }
         button.click()
 
         device.wait(Until.gone(launchActivityButton), FIND_TIMEOUT)
-        wmHelper.StateSyncBuilder()
-            .withFullScreenApp(secondActivityComponent)
-            .waitForAndVerify()
+        wmHelper.StateSyncBuilder().withFullScreenApp(secondActivityComponent).waitForAndVerify()
     }
 
     companion object {

@@ -48,8 +48,7 @@ import com.android.server.pm.KnownPackages;
 import com.android.server.pm.PackageList;
 import com.android.server.pm.PackageSetting;
 import com.android.server.pm.dex.DynamicCodeLogger;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
-import com.android.server.pm.pkg.AndroidPackageApi;
+import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.PackageStateInternal;
 import com.android.server.pm.pkg.SharedUserApi;
 import com.android.server.pm.pkg.component.ParsedMainComponent;
@@ -578,6 +577,14 @@ public abstract class PackageManagerInternal {
             int filterCallingUid);
 
     /**
+     * Resolves an exported activity intent, allowing instant apps to be resolved.
+     */
+    public abstract ResolveInfo resolveIntentExported(Intent intent, String resolvedType,
+            @PackageManager.ResolveInfoFlagsBits long flags,
+            @PrivateResolveFlags long privateResolveFlags, int userId, boolean resolveForStart,
+            int filterCallingUid);
+
+    /**
     * Resolves a service intent, allowing instant apps to be resolved.
     */
     public abstract ResolveInfo resolveService(Intent intent, String resolvedType,
@@ -644,7 +651,7 @@ public abstract class PackageManagerInternal {
      * Returns the {@link SystemApi} variant of a package for use with mainline.
      */
     @Nullable
-    public abstract AndroidPackageApi getAndroidPackage(@NonNull String packageName);
+    public abstract AndroidPackage getAndroidPackage(@NonNull String packageName);
 
     @Nullable
     public abstract PackageStateInternal getPackageStateInternal(@NonNull String packageName);
@@ -1305,4 +1312,7 @@ public abstract class PackageManagerInternal {
      * {@link android.Manifest.permission#INTERACT_ACROSS_USERS}.
      */
     public abstract @SignatureResult int checkUidSignaturesForAllUsers(int uid1, int uid2);
+
+    public abstract void setPackageStoppedState(@NonNull String packageName, boolean stopped,
+            @UserIdInt int userId);
 }

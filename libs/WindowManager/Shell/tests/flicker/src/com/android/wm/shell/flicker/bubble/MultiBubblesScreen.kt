@@ -17,7 +17,6 @@
 package com.android.wm.shell.flicker.bubble
 
 import android.os.SystemClock
-import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
 import androidx.test.filters.RequiresDevice
 import androidx.test.uiautomator.By
@@ -25,7 +24,6 @@ import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
-import com.android.server.wm.flicker.annotation.Group4
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.isShellTransitionsEnabled
 import org.junit.Assume
@@ -40,12 +38,13 @@ import org.junit.runners.Parameterized
  * To run this test: `atest WMShellFlickerTests:MultiBubblesScreen`
  *
  * Actions:
+ * ```
  *     Switch in different bubble notifications
+ * ```
  */
 @RequiresDevice
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
-@Group4
 open class MultiBubblesScreen(testSpec: FlickerTestParameter) : BaseBubbleScreen(testSpec) {
 
     @Before
@@ -57,27 +56,27 @@ open class MultiBubblesScreen(testSpec: FlickerTestParameter) : BaseBubbleScreen
     override val transition: FlickerBuilder.() -> Unit
         get() = buildTransition {
             setup {
-                test {
-                    for (i in 1..3) {
-                        val addBubbleBtn = waitAndGetAddBubbleBtn() ?: error("Add Bubble not found")
-                        addBubbleBtn.click()
-                        SystemClock.sleep(1000)
-                    }
-                    val showBubble = device.wait(
-                        Until.findObject(
-                            By.res(SYSTEM_UI_PACKAGE, BUBBLE_RES_NAME)
-                        ), FIND_OBJECT_TIMEOUT
-                    ) ?: error("Show bubble not found")
-                    showBubble.click()
+                for (i in 1..3) {
+                    val addBubbleBtn = waitAndGetAddBubbleBtn() ?: error("Add Bubble not found")
+                    addBubbleBtn.click()
                     SystemClock.sleep(1000)
                 }
+                val showBubble =
+                    device.wait(
+                        Until.findObject(By.res(SYSTEM_UI_PACKAGE, BUBBLE_RES_NAME)),
+                        FIND_OBJECT_TIMEOUT
+                    )
+                        ?: error("Show bubble not found")
+                showBubble.click()
+                SystemClock.sleep(1000)
             }
             transitions {
-                val bubbles: List<UiObject2> = device.wait(
-                    Until.findObjects(
-                        By.res(SYSTEM_UI_PACKAGE, BUBBLE_RES_NAME)
-                    ), FIND_OBJECT_TIMEOUT
-                ) ?: error("No bubbles found")
+                val bubbles: List<UiObject2> =
+                    device.wait(
+                        Until.findObjects(By.res(SYSTEM_UI_PACKAGE, BUBBLE_RES_NAME)),
+                        FIND_OBJECT_TIMEOUT
+                    )
+                        ?: error("No bubbles found")
                 for (entry in bubbles) {
                     entry.click()
                     SystemClock.sleep(1000)
@@ -88,74 +87,6 @@ open class MultiBubblesScreen(testSpec: FlickerTestParameter) : BaseBubbleScreen
     @Presubmit
     @Test
     open fun testAppIsAlwaysVisible() {
-        testSpec.assertLayers {
-            this.isVisible(testApp)
-        }
+        testSpec.assertLayers { this.isVisible(testApp) }
     }
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun entireScreenCovered() =
-        super.entireScreenCovered()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun navBarLayerIsVisibleAtStartAndEnd() =
-        super.navBarLayerIsVisibleAtStartAndEnd()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun navBarLayerPositionAtStartAndEnd() =
-        super.navBarLayerPositionAtStartAndEnd()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun navBarWindowIsAlwaysVisible() =
-        super.navBarWindowIsAlwaysVisible()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun statusBarLayerIsVisibleAtStartAndEnd() =
-        super.statusBarLayerIsVisibleAtStartAndEnd()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun statusBarLayerPositionAtStartAndEnd() =
-        super.statusBarLayerPositionAtStartAndEnd()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun statusBarWindowIsAlwaysVisible() =
-        super.statusBarWindowIsAlwaysVisible()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun taskBarLayerIsVisibleAtStartAndEnd() =
-        super.taskBarLayerIsVisibleAtStartAndEnd()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun taskBarWindowIsAlwaysVisible() =
-        super.taskBarWindowIsAlwaysVisible()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
-        super.visibleLayersShownMoreThanOneConsecutiveEntry()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun visibleWindowsShownMoreThanOneConsecutiveEntry() =
-        super.visibleWindowsShownMoreThanOneConsecutiveEntry()
 }

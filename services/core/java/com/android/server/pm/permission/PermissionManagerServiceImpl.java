@@ -131,9 +131,8 @@ import com.android.server.pm.KnownPackages;
 import com.android.server.pm.UserManagerInternal;
 import com.android.server.pm.UserManagerService;
 import com.android.server.pm.parsing.PackageInfoUtils;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.parsing.pkg.AndroidPackageUtils;
-import com.android.server.pm.pkg.AndroidPackageApi;
+import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.PackageStateInternal;
 import com.android.server.pm.pkg.component.ComponentMutateUtils;
 import com.android.server.pm.pkg.component.ParsedPermission;
@@ -168,7 +167,7 @@ import java.util.concurrent.TimeoutException;
  */
 public class PermissionManagerServiceImpl implements PermissionManagerServiceInterface {
 
-    private static final String TAG = "PackageManager";
+    private static final String TAG = "PermissionManager";
     private static final String LOG_TAG = PermissionManagerServiceImpl.class.getSimpleName();
 
     private static final String SKIP_KILL_APP_REASON_NOTIFICATION_TEST = "skip permission revoke "
@@ -650,8 +649,8 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
             Permission bp = mRegistry.getPermission(info.name);
             added = bp == null;
             int fixedLevel = PermissionInfo.fixProtectionLevel(info.protectionLevel);
+            enforcePermissionCapLocked(info, tree);
             if (added) {
-                enforcePermissionCapLocked(info, tree);
                 bp = new Permission(info.name, tree.getPackageName(), Permission.TYPE_DYNAMIC);
             } else if (!bp.isDynamic()) {
                 throw new SecurityException("Not allowed to modify non-dynamic permission "
@@ -739,26 +738,21 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
         boolean overridePolicy = false;
 
         if (callingUid != Process.SYSTEM_UID && callingUid != Process.ROOT_UID) {
-            final long callingIdentity = Binder.clearCallingIdentity();
-            try {
-                if ((flagMask & FLAG_PERMISSION_POLICY_FIXED) != 0) {
-                    if (checkAdjustPolicyFlagPermission) {
-                        mContext.enforceCallingOrSelfPermission(
-                                Manifest.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY,
-                                "Need " + Manifest.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY
-                                        + " to change policy flags");
-                    } else if (mPackageManagerInt.getUidTargetSdkVersion(callingUid)
-                            >= Build.VERSION_CODES.Q) {
-                        throw new IllegalArgumentException(
-                                Manifest.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY + " needs "
-                                        + " to be checked for packages targeting "
-                                        + Build.VERSION_CODES.Q + " or later when changing policy "
-                                        + "flags");
-                    }
-                    overridePolicy = true;
+            if ((flagMask & FLAG_PERMISSION_POLICY_FIXED) != 0) {
+                if (checkAdjustPolicyFlagPermission) {
+                    mContext.enforceCallingOrSelfPermission(
+                            Manifest.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY,
+                            "Need " + Manifest.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY
+                                    + " to change policy flags");
+                } else if (mPackageManagerInt.getUidTargetSdkVersion(callingUid)
+                        >= Build.VERSION_CODES.Q) {
+                    throw new IllegalArgumentException(
+                            Manifest.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY + " needs "
+                                    + " to be checked for packages targeting "
+                                    + Build.VERSION_CODES.Q + " or later when changing policy "
+                                    + "flags");
                 }
-            } finally {
-                Binder.restoreCallingIdentity(callingIdentity);
+                overridePolicy = true;
             }
         }
 
@@ -2162,6 +2156,46 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
     }
 
     /**
+     * If the package was below api 23, got the SYSTEM_ALERT_WINDOW permission automatically, and
+     * then updated past api 23, and the app does not satisfy any of the other SAW permission flags,
+     * the permission should be revoked.
+     *
+     * @param newPackage The new package that was installed
+     * @param oldPackage The old package that was updated
+     */
+    private void revokeSystemAlertWindowIfUpgradedPast23(
+            @NonNull AndroidPackage newPackage,
+            @NonNull AndroidPackage oldPackage) {
+        if (oldPackage.getTargetSdkVersion() >= Build.VERSION_CODES.M
+                || newPackage.getTargetSdkVersion() < Build.VERSION_CODES.M
+                || !newPackage.getRequestedPermissions()
+                .contains(Manifest.permission.SYSTEM_ALERT_WINDOW)) {
+            return;
+        }
+
+        Permission saw;
+        synchronized (mLock) {
+            saw = mRegistry.getPermission(Manifest.permission.SYSTEM_ALERT_WINDOW);
+        }
+        final PackageStateInternal ps =
+                mPackageManagerInt.getPackageStateInternal(newPackage.getPackageName());
+        if (shouldGrantPermissionByProtectionFlags(newPackage, ps, saw, new ArraySet<>())
+                || shouldGrantPermissionBySignature(newPackage, saw)) {
+            return;
+        }
+        for (int userId : getAllUserIds()) {
+            try {
+                revokePermissionFromPackageForUser(newPackage.getPackageName(),
+                        Manifest.permission.SYSTEM_ALERT_WINDOW, false, userId,
+                        mDefaultPermissionCallback);
+            } catch (IllegalStateException | SecurityException e) {
+                Log.e(TAG, "unable to revoke SYSTEM_ALERT_WINDOW for "
+                        + newPackage.getPackageName() + " user " + userId, e);
+            }
+        }
+    }
+
+    /**
      * We might auto-grant permissions if any permission of the group is already granted. Hence if
      * the group of a granted permission changes we need to revoke it to avoid having permissions of
      * the new group auto-granted.
@@ -2612,7 +2646,7 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
                     mPackageManagerInt.getSharedUserPackages(ps.getSharedUserAppId());
             int packagesSize = packages.size();
             for (int i = 0; i < packagesSize; i++) {
-                AndroidPackageApi sharedUserPackage =
+                AndroidPackage sharedUserPackage =
                         packages.valueAt(i).getAndroidPackage();
                 if (sharedUserPackage == null) {
                     continue;
@@ -2692,7 +2726,6 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
                     final Permission bp = mRegistry.getPermission(permName);
                     final boolean appSupportsRuntimePermissions =
                             pkg.getTargetSdkVersion() >= Build.VERSION_CODES.M;
-                    String legacyActivityRecognitionPermission = null;
 
                     if (DEBUG_INSTALL && bp != null) {
                         Log.i(TAG, "Package " + friendlyName
@@ -2716,47 +2749,12 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
                     // Cache newImplicitPermissions before modifing permissionsState as for the
                     // shared uids the original and new state are the same object
                     if (!origState.hasPermissionState(permName)
-                            && (pkg.getImplicitPermissions().contains(permName)
-                            || (permName.equals(Manifest.permission.ACTIVITY_RECOGNITION)))) {
-                        if (pkg.getImplicitPermissions().contains(permName)) {
+                            && (pkg.getImplicitPermissions().contains(permName))) {
                             // If permName is an implicit permission, try to auto-grant
                             newImplicitPermissions.add(permName);
-
                             if (DEBUG_PERMISSIONS) {
                                 Slog.i(TAG, permName + " is newly added for " + friendlyName);
                             }
-                        } else {
-                            // Special case for Activity Recognition permission. Even if AR
-                            // permission is not an implicit permission we want to add it to the
-                            // list (try to auto-grant it) if the app was installed on a device
-                            // before AR permission was split, regardless of if the app now requests
-                            // the new AR permission or has updated its target SDK and AR is no
-                            // longer implicit to it. This is a compatibility workaround for apps
-                            // when AR permission was split in Q.
-                            // TODO(zhanghai): This calls into SystemConfig, which generally
-                            //  shouldn't  cause deadlock, but maybe we should keep a cache of the
-                            //  split permission  list and just eliminate the possibility.
-                            final List<PermissionManager.SplitPermissionInfo> permissionList =
-                                    getSplitPermissionInfos();
-                            int numSplitPerms = permissionList.size();
-                            for (int splitPermNum = 0; splitPermNum < numSplitPerms;
-                                    splitPermNum++) {
-                                PermissionManager.SplitPermissionInfo sp = permissionList.get(
-                                        splitPermNum);
-                                String splitPermName = sp.getSplitPermission();
-                                if (sp.getNewPermissions().contains(permName)
-                                        && origState.isPermissionGranted(splitPermName)) {
-                                    legacyActivityRecognitionPermission = splitPermName;
-                                    newImplicitPermissions.add(permName);
-
-                                    if (DEBUG_PERMISSIONS) {
-                                        Slog.i(TAG, permName + " is newly added for "
-                                                + friendlyName);
-                                    }
-                                    break;
-                                }
-                            }
-                        }
                     }
 
                     // TODO(b/140256621): The package instant app method has been removed
@@ -2890,8 +2888,7 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
                             // Hard restricted permissions cannot be held.
                             } else if (!permissionPolicyInitialized
                                     || (!hardRestricted || restrictionExempt)) {
-                                if ((origPermState != null && origPermState.isGranted())
-                                        || legacyActivityRecognitionPermission != null) {
+                                if ((origPermState != null && origPermState.isGranted())) {
                                     if (!uidState.grantPermission(bp)) {
                                         wasChanged = true;
                                     }
@@ -4248,7 +4245,6 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
         }
         boolean changed = false;
 
-        Set<Permission> needsUpdate = null;
         synchronized (mLock) {
             final Iterator<Permission> it = mRegistry.getPermissionTrees().iterator();
             while (it.hasNext()) {
@@ -4266,26 +4262,6 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
                     Slog.i(TAG, "Removing permission tree " + bp.getName()
                             + " that used to be declared by " + bp.getPackageName());
                     it.remove();
-                }
-                if (needsUpdate == null) {
-                    needsUpdate = new ArraySet<>();
-                }
-                needsUpdate.add(bp);
-            }
-        }
-        if (needsUpdate != null) {
-            for (final Permission bp : needsUpdate) {
-                final AndroidPackage sourcePkg =
-                        mPackageManagerInt.getPackage(bp.getPackageName());
-                final PackageStateInternal sourcePs =
-                        mPackageManagerInt.getPackageStateInternal(bp.getPackageName());
-                synchronized (mLock) {
-                    if (sourcePkg != null && sourcePs != null) {
-                        continue;
-                    }
-                    Slog.w(TAG, "Removing dangling permission tree: " + bp.getName()
-                            + " from package " + bp.getPackageName());
-                    mRegistry.removePermission(bp.getName());
                 }
             }
         }
@@ -4734,6 +4710,7 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
                 if (hasOldPkg) {
                     revokeRuntimePermissionsIfGroupChangedInternal(pkg, oldPkg);
                     revokeStoragePermissionsIfScopeExpandedInternal(pkg, oldPkg);
+                    revokeSystemAlertWindowIfUpgradedPast23(pkg, oldPkg);
                 }
                 if (hasPermissionDefinitionChanges) {
                     revokeRuntimePermissionsIfPermissionDefinitionChangedInternal(

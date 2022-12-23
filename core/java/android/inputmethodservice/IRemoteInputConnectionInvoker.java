@@ -16,26 +16,30 @@
 
 package android.inputmethodservice;
 
+import static android.view.inputmethod.TextBoundsInfoResult.CODE_CANCELLED;
+
 import android.annotation.AnyThread;
 import android.annotation.CallbackExecutor;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.graphics.RectF;
 import android.os.Bundle;
+import android.os.CancellationSignal;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.view.KeyEvent;
 import android.view.inputmethod.CompletionInfo;
 import android.view.inputmethod.CorrectionInfo;
-import android.view.inputmethod.DeleteGesture;
 import android.view.inputmethod.ExtractedText;
 import android.view.inputmethod.ExtractedTextRequest;
 import android.view.inputmethod.HandwritingGesture;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputContentInfo;
-import android.view.inputmethod.InsertGesture;
-import android.view.inputmethod.SelectGesture;
+import android.view.inputmethod.ParcelableHandwritingGesture;
 import android.view.inputmethod.SurroundingText;
 import android.view.inputmethod.TextAttribute;
+import android.view.inputmethod.TextBoundsInfo;
+import android.view.inputmethod.TextBoundsInfoResult;
 
 import com.android.internal.infra.AndroidFuture;
 import com.android.internal.inputmethod.IRemoteInputConnection;
@@ -43,6 +47,7 @@ import com.android.internal.inputmethod.InputConnectionCommandHeader;
 
 import java.util.Objects;
 import java.util.concurrent.Executor;
+import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 
 /**
@@ -92,6 +97,44 @@ final class IRemoteInputConnectionInvoker {
             mConsumer = null;
         }
     };
+
+    /**
+     * Subclass of {@link ResultReceiver} used by
+     * {@link #requestTextBoundsInfo(RectF, Executor, Consumer)} for providing
+     * callback.
+     */
+    private static final class TextBoundsInfoResultReceiver extends ResultReceiver {
+        @Nullable
+        private Consumer<TextBoundsInfoResult> mConsumer;
+        @Nullable
+        private Executor mExecutor;
+
+        TextBoundsInfoResultReceiver(@NonNull Executor executor,
+                @NonNull Consumer<TextBoundsInfoResult> consumer) {
+            super(null);
+            mExecutor = executor;
+            mConsumer = consumer;
+        }
+
+        @Override
+        protected void onReceiveResult(@TextBoundsInfoResult.ResultCode int resultCode,
+                @Nullable Bundle resultData) {
+            synchronized (this) {
+                if (mExecutor != null && mConsumer != null) {
+                    final TextBoundsInfoResult textBoundsInfoResult = new TextBoundsInfoResult(
+                            resultCode, TextBoundsInfo.createFromBundle(resultData));
+                    mExecutor.execute(() -> mConsumer.accept(textBoundsInfoResult));
+                    // provide callback only once.
+                    clear();
+                }
+            }
+        }
+
+        private void clear() {
+            mExecutor = null;
+            mConsumer = null;
+        }
+    }
 
     /**
      * Creates a new instance of {@link IRemoteInputConnectionInvoker} for the given
@@ -633,46 +676,45 @@ final class IRemoteInputConnectionInvoker {
     }
 
     /**
-     * Invokes one of {@link IRemoteInputConnection#performHandwritingSelectGesture(
-     * InputConnectionCommandHeader, SelectGesture, AndroidFuture)},
-     * {@link IRemoteInputConnection#performHandwritingDeleteGesture(InputConnectionCommandHeader,
-     * DeleteGesture, AndroidFuture)},
-     * {@link IRemoteInputConnection#performHandwritingInsertGesture(InputConnectionCommandHeader,
-     * InsertGesture, AndroidFuture)}
-     *
-     * @param {@code gesture} parameter {@link HandwritingGesture}.
-     * @return {@link AndroidFuture<Integer>} that can be used to retrieve the invocation
-     *         result. {@link RemoteException} will be treated as an error.
+     * Invokes {@link IRemoteInputConnection#performHandwritingGesture(
+     * InputConnectionCommandHeader, ParcelableHandwritingGesture, ResultReceiver)}.
      */
     @AnyThread
-    public void performHandwritingGesture(
-            @NonNull HandwritingGesture gesture, @Nullable @CallbackExecutor Executor executor,
-            @Nullable IntConsumer consumer) {
-
+    public void performHandwritingGesture(@NonNull ParcelableHandwritingGesture gesture,
+            @Nullable @CallbackExecutor Executor executor, @Nullable IntConsumer consumer) {
         ResultReceiver resultReceiver = null;
         if (consumer != null) {
             Objects.requireNonNull(executor);
             resultReceiver = new IntResultReceiver(executor, consumer);
         }
         try {
-            if (gesture instanceof SelectGesture) {
-                mConnection.performHandwritingSelectGesture(
-                        createHeader(), (SelectGesture) gesture, resultReceiver);
-            } else if (gesture instanceof InsertGesture) {
-                mConnection.performHandwritingInsertGesture(
-                        createHeader(), (InsertGesture) gesture, resultReceiver);
-            } else if (gesture instanceof DeleteGesture) {
-                mConnection.performHandwritingDeleteGesture(
-                        createHeader(), (DeleteGesture) gesture, resultReceiver);
-            } else if (consumer != null && executor != null) {
-                executor.execute(()
-                        -> consumer.accept(InputConnection.HANDWRITING_GESTURE_RESULT_UNSUPPORTED));
-            }
+            mConnection.performHandwritingGesture(createHeader(), gesture, resultReceiver);
         } catch (RemoteException e) {
             if (consumer != null && executor != null) {
                 executor.execute(() -> consumer.accept(
                         InputConnection.HANDWRITING_GESTURE_RESULT_CANCELLED));
             }
+        }
+    }
+
+    /**
+     * Invokes one of {@link IRemoteInputConnection#previewHandwritingGesture(
+     * InputConnectionCommandHeader, ParcelableHandwritingGesture, CancellationSignal)}
+     */
+    @AnyThread
+    public boolean previewHandwritingGesture(
+            @NonNull ParcelableHandwritingGesture gesture,
+            @Nullable CancellationSignal cancellationSignal) {
+        if (cancellationSignal != null && cancellationSignal.isCanceled()) {
+            return false; // cancelled.
+        }
+
+        // TODO(b/254727073): Implement CancellationSignal
+        try {
+            mConnection.previewHandwritingGesture(createHeader(), gesture, null);
+            return true;
+        } catch (RemoteException e) {
+            return false;
         }
     }
 
@@ -723,6 +765,28 @@ final class IRemoteInputConnectionInvoker {
     }
 
     /**
+     * Invokes {@link IRemoteInputConnection#requestTextBoundsInfo(InputConnectionCommandHeader,
+     * RectF, ResultReceiver)}
+     * @param rectF {@code rectF} parameter to be passed.
+     * @param executor {@code Executor} parameter to be passed.
+     * @param consumer {@code Consumer} parameter to be passed.
+     */
+    @AnyThread
+    public void requestTextBoundsInfo(
+            @NonNull RectF rectF, @NonNull @CallbackExecutor Executor executor,
+            @NonNull Consumer<TextBoundsInfoResult> consumer) {
+        Objects.requireNonNull(executor);
+        Objects.requireNonNull(consumer);
+
+        final ResultReceiver resultReceiver = new TextBoundsInfoResultReceiver(executor, consumer);
+        try {
+            mConnection.requestTextBoundsInfo(createHeader(), rectF, resultReceiver);
+        } catch (RemoteException e) {
+            executor.execute(() -> consumer.accept(new TextBoundsInfoResult(CODE_CANCELLED)));
+        }
+    }
+
+    /**
      * Invokes {@link IRemoteInputConnection#commitContent(InputConnectionCommandHeader,
      * InputContentInfo, int, Bundle, AndroidFuture)}.
      *
@@ -757,6 +821,37 @@ final class IRemoteInputConnectionInvoker {
     public boolean setImeConsumesInput(boolean imeConsumesInput) {
         try {
             mConnection.setImeConsumesInput(createHeader(), imeConsumesInput);
+            return true;
+        } catch (RemoteException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Replaces the specific range in the current input field with suggested text.
+     *
+     * @param start the character index where the replacement should start.
+     * @param end the character index where the replacement should end.
+     * @param newCursorPosition the new cursor position around the text. If > 0, this is relative to
+     *     the end of the text - 1; if <= 0, this is relative to the start of the text. So a value
+     *     of 1 will always advance you to the position after the full text being inserted. Note
+     *     that this means you can't position the cursor within the text.
+     * @param text the text to replace. This may include styles.
+     * @param textAttribute The extra information about the text. This value may be null.
+     * @return {@code true} if the specific range is replaced successfully, {@code false} otherwise.
+     * @see android.view.inputmethod.InputConnection#replaceText(int, int, CharSequence, int,
+     *     TextAttribute)
+     */
+    @AnyThread
+    public boolean replaceText(
+            int start,
+            int end,
+            @NonNull CharSequence text,
+            int newCursorPosition,
+            @Nullable TextAttribute textAttribute) {
+        try {
+            mConnection.replaceText(
+                    createHeader(), start, end, text, newCursorPosition, textAttribute);
             return true;
         } catch (RemoteException e) {
             return false;

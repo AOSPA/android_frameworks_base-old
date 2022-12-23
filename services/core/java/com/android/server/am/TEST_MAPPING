@@ -60,6 +60,15 @@
         { "include-filter": "com.android.server.am.BatteryStatsServiceTest" },
         { "include-filter": "com.android.server.power.stats.BatteryStatsTests" }
       ]
+    },
+    {
+      "file_patterns": ["Broadcast"],
+      "name": "FrameworksMockingServicesTests",
+      "options": [
+        { "include-filter": "com.android.server.am.BroadcastRecordTest" },
+        { "include-filter": "com.android.server.am.BroadcastQueueTest" },
+        { "include-filter": "com.android.server.am.BroadcastQueueModernImplTest" }
+      ]
     }
   ],
   "presubmit-large": [

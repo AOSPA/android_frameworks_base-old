@@ -71,7 +71,7 @@ public class LocaleManager {
      */
     @UserHandleAware
     public void setApplicationLocales(@NonNull LocaleList locales) {
-        setApplicationLocales(mContext.getPackageName(), locales);
+        setApplicationLocales(mContext.getPackageName(), locales, false);
     }
 
     /**
@@ -100,9 +100,14 @@ public class LocaleManager {
     @RequiresPermission(Manifest.permission.CHANGE_CONFIGURATION)
     @UserHandleAware
     public void setApplicationLocales(@NonNull String appPackageName, @NonNull LocaleList locales) {
+        setApplicationLocales(appPackageName, locales, true);
+    }
+
+    private void setApplicationLocales(@NonNull String appPackageName, @NonNull LocaleList locales,
+            boolean fromDelegate) {
         try {
             mService.setApplicationLocales(appPackageName, mContext.getUser().getIdentifier(),
-                    locales);
+                    locales, fromDelegate);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -127,6 +132,7 @@ public class LocaleManager {
      * <p>This API can be used by an app's installer
      * (per {@link android.content.pm.InstallSourceInfo#getInstallingPackageName}) to retrieve
      * the app's locales.
+     * <p>This API can be used by the current input method to retrieve locales of another packages.
      * All other cases require {@code android.Manifest.permission#READ_APP_SPECIFIC_LOCALES}.
      * Apps should generally retrieve their own locales via their in-process LocaleLists,
      * or by calling {@link #getApplicationLocales()}.
@@ -173,7 +179,7 @@ public class LocaleManager {
     @TestApi
     public void setSystemLocales(@NonNull LocaleList locales) {
         try {
-            Configuration conf = ActivityManager.getService().getConfiguration();
+            Configuration conf = new Configuration();
             conf.setLocales(locales);
             ActivityManager.getService().updatePersistentConfiguration(conf);
         } catch (RemoteException e) {

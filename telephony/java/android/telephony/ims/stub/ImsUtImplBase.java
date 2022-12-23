@@ -153,7 +153,8 @@ public class ImsUtImplBase {
         @Override
         public int queryCFForServiceClass(int condition, String number, int serviceClass) throws
                 RemoteException {
-             return ImsUtImplBase.this.queryCFForServiceClass(condition, number, serviceClass);
+             return executeMethodAsyncForResult(() -> ImsUtImplBase.this.queryCFForServiceClass(
+                    condition, number, serviceClass), "queryCFForServiceClass");
         }
 
         @Override

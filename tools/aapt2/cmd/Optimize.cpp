@@ -16,7 +16,11 @@
 
 #include "Optimize.h"
 
+#include <map>
 #include <memory>
+#include <set>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "Diagnostics.h"
@@ -38,9 +42,9 @@
 #include "io/BigBufferStream.h"
 #include "io/Util.h"
 #include "optimize/MultiApkGenerator.h"
+#include "optimize/Obfuscator.h"
 #include "optimize/ResourceDeduper.h"
 #include "optimize/ResourceFilter.h"
-#include "optimize/ResourcePathShortener.h"
 #include "optimize/VersionCollapser.h"
 #include "split/TableSplitter.h"
 #include "util/Files.h"
@@ -114,11 +118,11 @@ class OptimizeContext : public IAaptContext {
   }
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(OptimizeContext);
-
   StdErrDiagnostics diagnostics_;
   bool verbose_ = false;
   int sdk_version_ = 0;
+
+  DISALLOW_COPY_AND_ASSIGN(OptimizeContext);
 };
 
 class Optimizer {
@@ -151,8 +155,8 @@ class Optimizer {
     }
 
     if (options_.shorten_resource_paths) {
-      ResourcePathShortener shortener(options_.table_flattener_options.shortened_path_map);
-      if (!shortener.Consume(context_, apk->GetResourceTable())) {
+      Obfuscator obfuscator(options_.table_flattener_options.shortened_path_map);
+      if (!obfuscator.Consume(context_, apk->GetResourceTable())) {
         context_->GetDiagnostics()->Error(android::DiagMessage()
                                           << "failed shortening resource paths");
         return 1;
@@ -301,51 +305,14 @@ class Optimizer {
   OptimizeContext* context_;
 };
 
-bool ParseConfig(const std::string& content, IAaptContext* context, OptimizeOptions* options) {
-  size_t line_no = 0;
-  for (StringPiece line : util::Tokenize(content, '\n')) {
-    line_no++;
-    line = util::TrimWhitespace(line);
-    if (line.empty()) {
-      continue;
-    }
-
-    auto split_line = util::Split(line, '#');
-    if (split_line.size() < 2) {
-      context->GetDiagnostics()->Error(android::DiagMessage(line) << "No # found in line");
-      return false;
-    }
-    StringPiece resource_string = split_line[0];
-    StringPiece directives = split_line[1];
-    ResourceNameRef resource_name;
-    if (!ResourceUtils::ParseResourceName(resource_string, &resource_name)) {
-      context->GetDiagnostics()->Error(android::DiagMessage(line) << "Malformed resource name");
-      return false;
-    }
-    if (!resource_name.package.empty()) {
-      context->GetDiagnostics()->Error(android::DiagMessage(line)
-                                       << "Package set for resource. Only use type/name");
-      return false;
-    }
-    for (StringPiece directive : util::Tokenize(directives, ',')) {
-      if (directive == "remove") {
-        options->resources_exclude_list.insert(resource_name.ToResourceName());
-      } else if (directive == "no_collapse" || directive == "no_obfuscate") {
-        options->table_flattener_options.name_collapse_exemptions.insert(
-            resource_name.ToResourceName());
-      }
-    }
-  }
-  return true;
-}
-
 bool ExtractConfig(const std::string& path, IAaptContext* context, OptimizeOptions* options) {
   std::string content;
   if (!android::base::ReadFileToString(path, &content, true /*follow_symlinks*/)) {
     context->GetDiagnostics()->Error(android::DiagMessage(path) << "failed reading config file");
     return false;
   }
-  return ParseConfig(content, context, options);
+  return ParseResourceConfig(content, context, options->resources_exclude_list,
+                             options->table_flattener_options.name_collapse_exemptions);
 }
 
 bool ExtractAppDataFromManifest(OptimizeContext* context, const LoadedApk* apk,
@@ -425,6 +392,13 @@ int OptimizeCommand::Action(const std::vector<std::string>& args) {
   std::unique_ptr<LoadedApk> apk = LoadedApk::LoadApkFromPath(apk_path, context.GetDiagnostics());
   if (!apk) {
     return 1;
+  }
+
+  if (options_.enable_sparse_encoding) {
+    options_.table_flattener_options.sparse_entries = SparseEntriesMode::Enabled;
+  }
+  if (options_.force_sparse_encoding) {
+    options_.table_flattener_options.sparse_entries = SparseEntriesMode::Forced;
   }
 
   if (target_densities_) {

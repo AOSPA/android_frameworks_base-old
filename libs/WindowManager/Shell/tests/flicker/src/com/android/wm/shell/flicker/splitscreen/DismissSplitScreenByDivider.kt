@@ -16,25 +16,24 @@
 
 package com.android.wm.shell.flicker.splitscreen
 
+import android.platform.test.annotations.FlakyTest
+import android.platform.test.annotations.IwTest
 import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
-import android.view.WindowManagerPolicyConstants
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
-import com.android.server.wm.flicker.annotation.Group1
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.WindowUtils
+import com.android.wm.shell.flicker.SPLIT_SCREEN_DIVIDER_COMPONENT
 import com.android.wm.shell.flicker.appWindowBecomesInvisible
 import com.android.wm.shell.flicker.appWindowIsVisibleAtEnd
-import com.android.wm.shell.flicker.helpers.SplitScreenHelper
 import com.android.wm.shell.flicker.layerBecomesInvisible
 import com.android.wm.shell.flicker.layerIsVisibleAtEnd
 import com.android.wm.shell.flicker.splitAppLayerBoundsBecomesInvisible
+import com.android.wm.shell.flicker.splitScreenDismissed
 import com.android.wm.shell.flicker.splitScreenDividerBecomesInvisible
-import org.junit.Assume
-import org.junit.Before
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -50,38 +49,32 @@ import org.junit.runners.Parameterized
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-@Group1
 class DismissSplitScreenByDivider (testSpec: FlickerTestParameter) : SplitScreenBase(testSpec) {
-
-    // TODO(b/231399940): Remove this once we can use recent shortcut to enter split.
-    @Before
-    open fun before() {
-        Assume.assumeTrue(tapl.isTablet)
-    }
 
     override val transition: FlickerBuilder.() -> Unit
         get() = {
             super.transition(this)
             setup {
-                eachRun {
-                    tapl.goHome()
-                    primaryApp.launchViaIntent(wmHelper)
-                    // TODO(b/231399940): Use recent shortcut to enter split.
-                    tapl.launchedAppState.taskbar
-                        .openAllApps()
-                        .getAppIcon(secondaryApp.appName)
-                        .dragToSplitscreen(secondaryApp.`package`, primaryApp.`package`)
-                    SplitScreenHelper.waitForSplitComplete(wmHelper, primaryApp, secondaryApp)
-                }
+                SplitScreenUtils.enterSplit(wmHelper, tapl, device, primaryApp, secondaryApp)
             }
             transitions {
-                SplitScreenHelper.dragDividerToDismissSplit(device, wmHelper)
+                if (tapl.isTablet) {
+                    SplitScreenUtils.dragDividerToDismissSplit(device, wmHelper,
+                        dragToRight = false, dragToBottom = true)
+                } else {
+                    SplitScreenUtils.dragDividerToDismissSplit(device, wmHelper,
+                        dragToRight = true, dragToBottom = true)
+                }
                 wmHelper.StateSyncBuilder()
-                    .withAppTransitionIdle()
                     .withFullScreenApp(secondaryApp)
                     .waitForAndVerify()
             }
         }
+
+    @IwTest(focusArea = "sysui")
+    @Presubmit
+    @Test
+    fun cujCompleted() = testSpec.splitScreenDismissed(primaryApp, secondaryApp, toHome = false)
 
     @Presubmit
     @Test
@@ -98,17 +91,23 @@ class DismissSplitScreenByDivider (testSpec: FlickerTestParameter) : SplitScreen
     @Presubmit
     @Test
     fun primaryAppBoundsBecomesInvisible() = testSpec.splitAppLayerBoundsBecomesInvisible(
-        primaryApp, landscapePosLeft = false, portraitPosTop = false)
+        primaryApp, landscapePosLeft = tapl.isTablet, portraitPosTop = false)
 
     @Presubmit
     @Test
     fun secondaryAppBoundsIsFullscreenAtEnd() {
         testSpec.assertLayers {
             this.isVisible(secondaryApp)
+                .isVisible(SPLIT_SCREEN_DIVIDER_COMPONENT)
                 .then()
                 .isInvisible(secondaryApp)
+                .isVisible(SPLIT_SCREEN_DIVIDER_COMPONENT)
                 .then()
-                .isVisible(secondaryApp)
+                .isVisible(secondaryApp, isOptional = true)
+                .isVisible(SPLIT_SCREEN_DIVIDER_COMPONENT, isOptional = true)
+                .then()
+                .contains(SPLIT_SCREEN_DIVIDER_COMPONENT)
+                .then()
                 .invoke("secondaryAppBoundsIsFullscreenAtEnd") {
                     val displayBounds = WindowUtils.getDisplayBounds(testSpec.endRotation)
                     it.visibleRegion(secondaryApp).coversExactly(displayBounds)
@@ -137,7 +136,7 @@ class DismissSplitScreenByDivider (testSpec: FlickerTestParameter) : SplitScreen
         super.navBarLayerIsVisibleAtStartAndEnd()
 
     /** {@inheritDoc} */
-    @Postsubmit
+    @FlakyTest(bugId = 206753786)
     @Test
     override fun navBarLayerPositionAtStartAndEnd() =
         super.navBarLayerPositionAtStartAndEnd()
@@ -194,11 +193,7 @@ class DismissSplitScreenByDivider (testSpec: FlickerTestParameter) : SplitScreen
         @Parameterized.Parameters(name = "{0}")
         @JvmStatic
         fun getParams(): List<FlickerTestParameter> {
-            return FlickerTestParameterFactory.getInstance().getConfigNonRotationTests(
-                repetitions = SplitScreenHelper.TEST_REPETITIONS,
-                // TODO(b/176061063):The 3 buttons of nav bar do not exist in the hierarchy.
-                supportedNavigationModes =
-                    listOf(WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL_OVERLAY))
+            return FlickerTestParameterFactory.getInstance().getConfigNonRotationTests()
         }
     }
 }

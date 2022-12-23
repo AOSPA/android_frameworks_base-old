@@ -33,9 +33,10 @@ import android.graphics.Rect;
 import android.hardware.biometrics.BiometricManager;
 import android.hardware.biometrics.IBiometricSysuiReceiver;
 import android.hardware.biometrics.PromptInfo;
-import android.hardware.fingerprint.IUdfpsHbmListener;
+import android.hardware.fingerprint.IUdfpsRefreshRateRequestCallback;
 import android.os.Bundle;
-import android.view.InsetsVisibilities;
+import android.view.WindowInsets;
+import android.view.WindowInsets.Type.InsetsType;
 import android.view.WindowInsetsController.Appearance;
 import android.view.WindowInsetsController.Behavior;
 
@@ -135,27 +136,29 @@ public class CommandQueueTest extends SysuiTestCase {
     public void testOnSystemBarAttributesChanged() {
         doTestOnSystemBarAttributesChanged(DEFAULT_DISPLAY, 1,
                 new AppearanceRegion[]{new AppearanceRegion(2, new Rect())}, false,
-                BEHAVIOR_DEFAULT, new InsetsVisibilities(), "test", TEST_LETTERBOX_DETAILS);
+                BEHAVIOR_DEFAULT, WindowInsets.Type.defaultVisible(), "test",
+                TEST_LETTERBOX_DETAILS);
     }
 
     @Test
     public void testOnSystemBarAttributesChangedForSecondaryDisplay() {
         doTestOnSystemBarAttributesChanged(SECONDARY_DISPLAY, 1,
                 new AppearanceRegion[]{new AppearanceRegion(2, new Rect())}, false,
-                BEHAVIOR_DEFAULT, new InsetsVisibilities(), "test", TEST_LETTERBOX_DETAILS);
+                BEHAVIOR_DEFAULT, WindowInsets.Type.defaultVisible(), "test",
+                TEST_LETTERBOX_DETAILS);
     }
 
     private void doTestOnSystemBarAttributesChanged(int displayId, @Appearance int appearance,
             AppearanceRegion[] appearanceRegions, boolean navbarColorManagedByIme,
-            @Behavior int behavior, InsetsVisibilities requestedVisibilities, String packageName,
+            @Behavior int behavior, @InsetsType int requestedVisibleTypes, String packageName,
             LetterboxDetails[] letterboxDetails) {
         mCommandQueue.onSystemBarAttributesChanged(displayId, appearance, appearanceRegions,
-                navbarColorManagedByIme, behavior, requestedVisibilities, packageName,
+                navbarColorManagedByIme, behavior, requestedVisibleTypes, packageName,
                 letterboxDetails);
         waitForIdleSync();
         verify(mCallbacks).onSystemBarAttributesChanged(eq(displayId), eq(appearance),
                 eq(appearanceRegions), eq(navbarColorManagedByIme), eq(behavior),
-                eq(requestedVisibilities), eq(packageName), eq(letterboxDetails));
+                eq(requestedVisibleTypes), eq(packageName), eq(letterboxDetails));
     }
 
     @Test
@@ -492,11 +495,12 @@ public class CommandQueueTest extends SysuiTestCase {
     }
 
     @Test
-    public void testSetUdfpsHbmListener() {
-        final IUdfpsHbmListener listener = mock(IUdfpsHbmListener.class);
-        mCommandQueue.setUdfpsHbmListener(listener);
+    public void testSetUdfpsRefreshRateCallback() {
+        final IUdfpsRefreshRateRequestCallback callback =
+                mock(IUdfpsRefreshRateRequestCallback.class);
+        mCommandQueue.setUdfpsRefreshRateCallback(callback);
         waitForIdleSync();
-        verify(mCallbacks).setUdfpsHbmListener(eq(listener));
+        verify(mCallbacks).setUdfpsRefreshRateCallback(eq(callback));
     }
 
     @Test

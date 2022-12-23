@@ -17,9 +17,14 @@
 package com.android.settingslib.spa.gallery.page
 
 import android.os.Bundle
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
-import com.android.settingslib.spa.framework.api.SettingsPageProvider
+import com.android.settingslib.spa.framework.common.SettingsEntryBuilder
+import com.android.settingslib.spa.framework.common.SettingsPage
+import com.android.settingslib.spa.framework.common.SettingsPageProvider
 import com.android.settingslib.spa.framework.compose.navigator
 import com.android.settingslib.spa.framework.theme.SettingsTheme
 import com.android.settingslib.spa.widget.preference.Preference
@@ -33,25 +38,29 @@ private const val TITLE = "Sample SettingsPager"
 object SettingsPagerPageProvider : SettingsPageProvider {
     override val name = "SettingsPager"
 
+    fun buildInjectEntry(): SettingsEntryBuilder {
+        return SettingsEntryBuilder.createInject(owner = SettingsPage.create(name))
+            .setIsAllowSearch(true)
+            .setUiLayoutFn {
+                Preference(object : PreferenceModel {
+                    override val title = TITLE
+                    override val onClick = navigator(name)
+                })
+            }
+    }
+
+    override fun getTitle(arguments: Bundle?): String {
+        return TITLE
+    }
+
     @Composable
     override fun Page(arguments: Bundle?) {
-        SettingsPagerPage()
-    }
-
-    @Composable
-    fun EntryItem() {
-        Preference(object : PreferenceModel {
-            override val title = TITLE
-            override val onClick = navigator(name)
-        })
-    }
-}
-
-@Composable
-private fun SettingsPagerPage() {
-    SettingsScaffold(title = TITLE) {
-        SettingsPager(listOf("Personal", "Work")) {
-            PlaceholderTitle("Page $it")
+        SettingsScaffold(title = getTitle(arguments)) { paddingValues ->
+            Box(Modifier.padding(paddingValues)) {
+                SettingsPager(listOf("Personal", "Work")) {
+                    PlaceholderTitle("Page $it")
+                }
+            }
         }
     }
 }
@@ -60,6 +69,6 @@ private fun SettingsPagerPage() {
 @Composable
 private fun SettingsPagerPagePreview() {
     SettingsTheme {
-        SettingsPagerPage()
+        SettingsPagerPageProvider.Page(null)
     }
 }

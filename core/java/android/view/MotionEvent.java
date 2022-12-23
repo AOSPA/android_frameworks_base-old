@@ -1272,9 +1272,30 @@ public final class MotionEvent extends InputEvent implements Parcelable {
      */
     public static final int AXIS_GENERIC_16 = 47;
 
+    /**
+     * Axis constant: X gesture offset axis of a motion event.
+     * <p>
+     * <ul>
+     * <li>For a touch pad, reports the distance that a swipe gesture has moved in the X axis, as a
+     * proportion of the touch pad's size. For example, if a touch pad is 1000 units wide, and a
+     * swipe gesture starts at X = 500 then moves to X = 400, this axis would have a value of
+     * -0.1.
+     * </ul>
+     */
+    public static final int AXIS_GESTURE_X_OFFSET = 48;
+
+    /**
+     * Axis constant: Y gesture offset axis of a motion event.
+     *
+     * The same as {@link #AXIS_GESTURE_X_OFFSET}, but for the Y axis.
+     */
+    public static final int AXIS_GESTURE_Y_OFFSET = 49;
+
     // NOTE: If you add a new axis here you must also add it to:
-    //  native/include/android/input.h
-    //  frameworks/base/include/ui/KeycodeLabels.h
+    //  frameworks/native/include/android/input.h
+    //  frameworks/native/libs/input/InputEventLabels.cpp
+    //  platform/cts/tests/tests/view/src/android/view/cts/MotionEventTest.java
+    //    (testAxisFromToString)
 
     // Symbolic names of all axes.
     private static final SparseArray<String> AXIS_SYMBOLIC_NAMES = new SparseArray<String>();
@@ -1325,6 +1346,8 @@ public final class MotionEvent extends InputEvent implements Parcelable {
         names.append(AXIS_GENERIC_14, "AXIS_GENERIC_14");
         names.append(AXIS_GENERIC_15, "AXIS_GENERIC_15");
         names.append(AXIS_GENERIC_16, "AXIS_GENERIC_16");
+        names.append(AXIS_GESTURE_X_OFFSET, "AXIS_GESTURE_X_OFFSET");
+        names.append(AXIS_GESTURE_Y_OFFSET, "AXIS_GESTURE_Y_OFFSET");
     }
 
     /**
@@ -1457,10 +1480,20 @@ public final class MotionEvent extends InputEvent implements Parcelable {
      */
     public static final int CLASSIFICATION_DEEP_PRESS = 2;
 
+    /**
+     * Classification constant: touchpad scroll.
+     *
+     * The current event stream represents the user scrolling with two fingers on a touchpad.
+     *
+     * @see #getClassification
+     */
+    public static final int CLASSIFICATION_TWO_FINGER_SWIPE = 3;
+
     /** @hide */
     @Retention(SOURCE)
     @IntDef(prefix = { "CLASSIFICATION" }, value = {
-            CLASSIFICATION_NONE, CLASSIFICATION_AMBIGUOUS_GESTURE, CLASSIFICATION_DEEP_PRESS})
+            CLASSIFICATION_NONE, CLASSIFICATION_AMBIGUOUS_GESTURE, CLASSIFICATION_DEEP_PRESS,
+            CLASSIFICATION_TWO_FINGER_SWIPE})
     public @interface Classification {};
 
     /**
@@ -1508,6 +1541,13 @@ public final class MotionEvent extends InputEvent implements Parcelable {
      * @hide
      */
     public static final int TOOL_TYPE_PALM = 5;
+
+    /** @hide */
+    @Retention(SOURCE)
+    @IntDef(prefix = { "TOOL_TYPE_" }, value = {
+            TOOL_TYPE_UNKNOWN, TOOL_TYPE_FINGER, TOOL_TYPE_STYLUS, TOOL_TYPE_MOUSE,
+            TOOL_TYPE_ERASER, TOOL_TYPE_PALM})
+    public @interface ToolType {};
 
     // NOTE: If you add a new tool type here you must also add it to:
     //  native/include/android/input.h
@@ -1717,7 +1757,7 @@ public final class MotionEvent extends InputEvent implements Parcelable {
      *
      * @param downTime The time (in ms) when the user originally pressed down to start
      * a stream of position events.  This must be obtained from {@link SystemClock#uptimeMillis()}.
-     * @param eventTime The the time (in ms) when this specific event was generated.  This
+     * @param eventTime The time (in ms) when this specific event was generated.  This
      * must be obtained from {@link SystemClock#uptimeMillis()}.
      * @param action The kind of action being performed, such as {@link #ACTION_DOWN}.
      * @param pointerCount The number of pointers that will be in this event.
@@ -1731,7 +1771,7 @@ public final class MotionEvent extends InputEvent implements Parcelable {
      * @param buttonState The state of buttons that are pressed.
      * @param xPrecision The precision of the X coordinate being reported.
      * @param yPrecision The precision of the Y coordinate being reported.
-     * @param deviceId The id for the device that this event came from.  An id of
+     * @param deviceId The ID for the device that this event came from.  An ID of
      * zero indicates that the event didn't come from a physical device; other
      * numbers are arbitrary and you shouldn't depend on the values.
      * @param edgeFlags A bitfield indicating which edges, if any, were touched by this
@@ -1739,16 +1779,18 @@ public final class MotionEvent extends InputEvent implements Parcelable {
      * @param source The source of this event.
      * @param displayId The display ID associated with this event.
      * @param flags The motion event flags.
+     * @param classification The classification to give this event.
      * @hide
      */
-    static public MotionEvent obtain(long downTime, long eventTime,
+    public static MotionEvent obtain(long downTime, long eventTime,
             int action, int pointerCount, PointerProperties[] pointerProperties,
             PointerCoords[] pointerCoords, int metaState, int buttonState,
             float xPrecision, float yPrecision, int deviceId,
-            int edgeFlags, int source, int displayId, int flags) {
+            int edgeFlags, int source, int displayId, int flags,
+            @Classification int classification) {
         MotionEvent ev = obtain();
         final boolean success = ev.initialize(deviceId, source, displayId, action, flags, edgeFlags,
-                metaState, buttonState, CLASSIFICATION_NONE, 0, 0, xPrecision, yPrecision,
+                metaState, buttonState, classification, 0, 0, xPrecision, yPrecision,
                 downTime * NS_PER_MS, eventTime * NS_PER_MS,
                 pointerCount, pointerProperties, pointerCoords);
         if (!success) {
@@ -1765,7 +1807,7 @@ public final class MotionEvent extends InputEvent implements Parcelable {
      *
      * @param downTime The time (in ms) when the user originally pressed down to start
      * a stream of position events.  This must be obtained from {@link SystemClock#uptimeMillis()}.
-     * @param eventTime The the time (in ms) when this specific event was generated.  This
+     * @param eventTime The time (in ms) when this specific event was generated.  This
      * must be obtained from {@link SystemClock#uptimeMillis()}.
      * @param action The kind of action being performed, such as {@link #ACTION_DOWN}.
      * @param pointerCount The number of pointers that will be in this event.
@@ -1779,7 +1821,47 @@ public final class MotionEvent extends InputEvent implements Parcelable {
      * @param buttonState The state of buttons that are pressed.
      * @param xPrecision The precision of the X coordinate being reported.
      * @param yPrecision The precision of the Y coordinate being reported.
-     * @param deviceId The id for the device that this event came from.  An id of
+     * @param deviceId The ID for the device that this event came from.  An ID of
+     * zero indicates that the event didn't come from a physical device; other
+     * numbers are arbitrary and you shouldn't depend on the values.
+     * @param edgeFlags A bitfield indicating which edges, if any, were touched by this
+     * MotionEvent.
+     * @param source The source of this event.
+     * @param displayId The display ID associated with this event.
+     * @param flags The motion event flags.
+     * @hide
+     */
+    public static MotionEvent obtain(long downTime, long eventTime,
+            int action, int pointerCount, PointerProperties[] pointerProperties,
+            PointerCoords[] pointerCoords, int metaState, int buttonState,
+            float xPrecision, float yPrecision, int deviceId,
+            int edgeFlags, int source, int displayId, int flags) {
+        return obtain(downTime, eventTime, action, pointerCount, pointerProperties, pointerCoords,
+                metaState, buttonState, xPrecision, yPrecision, deviceId, edgeFlags, source,
+                displayId, flags, CLASSIFICATION_NONE);
+    }
+
+    /**
+     * Create a new MotionEvent, filling in all of the basic values that
+     * define the motion.
+     *
+     * @param downTime The time (in ms) when the user originally pressed down to start
+     * a stream of position events.  This must be obtained from {@link SystemClock#uptimeMillis()}.
+     * @param eventTime The time (in ms) when this specific event was generated.  This
+     * must be obtained from {@link SystemClock#uptimeMillis()}.
+     * @param action The kind of action being performed, such as {@link #ACTION_DOWN}.
+     * @param pointerCount The number of pointers that will be in this event.
+     * @param pointerProperties An array of <em>pointerCount</em> values providing
+     * a {@link PointerProperties} property object for each pointer, which must
+     * include the pointer identifier.
+     * @param pointerCoords An array of <em>pointerCount</em> values providing
+     * a {@link PointerCoords} coordinate object for each pointer.
+     * @param metaState The state of any meta / modifier keys that were in effect when
+     * the event was generated.
+     * @param buttonState The state of buttons that are pressed.
+     * @param xPrecision The precision of the X coordinate being reported.
+     * @param yPrecision The precision of the Y coordinate being reported.
+     * @param deviceId The ID for the device that this event came from.  An ID of
      * zero indicates that the event didn't come from a physical device; other
      * numbers are arbitrary and you shouldn't depend on the values.
      * @param edgeFlags A bitfield indicating which edges, if any, were touched by this
@@ -1803,7 +1885,7 @@ public final class MotionEvent extends InputEvent implements Parcelable {
      *
      * @param downTime The time (in ms) when the user originally pressed down to start
      * a stream of position events.  This must be obtained from {@link SystemClock#uptimeMillis()}.
-     * @param eventTime The the time (in ms) when this specific event was generated.  This
+     * @param eventTime The time (in ms) when this specific event was generated.  This
      * must be obtained from {@link SystemClock#uptimeMillis()}.
      * @param action The kind of action being performed, such as {@link #ACTION_DOWN}.
      * @param pointerCount The number of pointers that will be in this event.
@@ -1815,7 +1897,7 @@ public final class MotionEvent extends InputEvent implements Parcelable {
      * the event was generated.
      * @param xPrecision The precision of the X coordinate being reported.
      * @param yPrecision The precision of the Y coordinate being reported.
-     * @param deviceId The id for the device that this event came from.  An id of
+     * @param deviceId The ID for the device that this event came from.  An ID of
      * zero indicates that the event didn't come from a physical device; other
      * numbers are arbitrary and you shouldn't depend on the values.
      * @param edgeFlags A bitfield indicating which edges, if any, were touched by this
@@ -1850,7 +1932,7 @@ public final class MotionEvent extends InputEvent implements Parcelable {
      *
      * @param downTime The time (in ms) when the user originally pressed down to start
      * a stream of position events.  This must be obtained from {@link SystemClock#uptimeMillis()}.
-     * @param eventTime  The the time (in ms) when this specific event was generated.  This
+     * @param eventTime The time (in ms) when this specific event was generated.  This
      * must be obtained from {@link SystemClock#uptimeMillis()}.
      * @param action The kind of action being performed, such as {@link #ACTION_DOWN}.
      * @param x The X coordinate of this event.
@@ -1867,7 +1949,7 @@ public final class MotionEvent extends InputEvent implements Parcelable {
      * the event was generated.
      * @param xPrecision The precision of the X coordinate being reported.
      * @param yPrecision The precision of the Y coordinate being reported.
-     * @param deviceId The id for the device that this event came from.  An id of
+     * @param deviceId The ID for the device that this event came from.  An ID of
      * zero indicates that the event didn't come from a physical device; other
      * numbers are arbitrary and you shouldn't depend on the values.
      * @param edgeFlags A bitfield indicating which edges, if any, were touched by this
@@ -1887,7 +1969,7 @@ public final class MotionEvent extends InputEvent implements Parcelable {
      *
      * @param downTime The time (in ms) when the user originally pressed down to start
      * a stream of position events.  This must be obtained from {@link SystemClock#uptimeMillis()}.
-     * @param eventTime  The the time (in ms) when this specific event was generated.  This
+     * @param eventTime The time (in ms) when this specific event was generated.  This
      * must be obtained from {@link SystemClock#uptimeMillis()}.
      * @param action The kind of action being performed, such as {@link #ACTION_DOWN}.
      * @param x The X coordinate of this event.
@@ -1904,7 +1986,7 @@ public final class MotionEvent extends InputEvent implements Parcelable {
      * the event was generated.
      * @param xPrecision The precision of the X coordinate being reported.
      * @param yPrecision The precision of the Y coordinate being reported.
-     * @param deviceId The id for the device that this event came from.  An id of
+     * @param deviceId The ID for the device that this event came from.  An ID of
      * zero indicates that the event didn't come from a physical device; other
      * numbers are arbitrary and you shouldn't depend on the values.
      * @param source The source of this event.
@@ -1946,7 +2028,7 @@ public final class MotionEvent extends InputEvent implements Parcelable {
      *
      * @param downTime The time (in ms) when the user originally pressed down to start
      * a stream of position events.  This must be obtained from {@link SystemClock#uptimeMillis()}.
-     * @param eventTime  The the time (in ms) when this specific event was generated.  This
+     * @param eventTime The time (in ms) when this specific event was generated.  This
      * must be obtained from {@link SystemClock#uptimeMillis()}.
      * @param action The kind of action being performed, such as {@link #ACTION_DOWN}.
      * @param pointerCount The number of pointers that are active in this event.
@@ -1964,7 +2046,7 @@ public final class MotionEvent extends InputEvent implements Parcelable {
      * the event was generated.
      * @param xPrecision The precision of the X coordinate being reported.
      * @param yPrecision The precision of the Y coordinate being reported.
-     * @param deviceId The id for the device that this event came from.  An id of
+     * @param deviceId The ID for the device that this event came from.  An ID of
      * zero indicates that the event didn't come from a physical device; other
      * numbers are arbitrary and you shouldn't depend on the values.
      * @param edgeFlags A bitfield indicating which edges, if any, were touched by this
@@ -1988,7 +2070,7 @@ public final class MotionEvent extends InputEvent implements Parcelable {
      *
      * @param downTime The time (in ms) when the user originally pressed down to start
      * a stream of position events.  This must be obtained from {@link SystemClock#uptimeMillis()}.
-     * @param eventTime  The the time (in ms) when this specific event was generated.  This
+     * @param eventTime The time (in ms) when this specific event was generated.  This
      * must be obtained from {@link SystemClock#uptimeMillis()}.
      * @param action The kind of action being performed, such as {@link #ACTION_DOWN}.
      * @param x The X coordinate of this event.
@@ -2422,7 +2504,7 @@ public final class MotionEvent extends InputEvent implements Parcelable {
      * @see #TOOL_TYPE_STYLUS
      * @see #TOOL_TYPE_MOUSE
      */
-    public final int getToolType(int pointerIndex) {
+    public @ToolType int getToolType(int pointerIndex) {
         return nativeGetToolType(mNativePtr, pointerIndex);
     }
 
@@ -3855,9 +3937,11 @@ public final class MotionEvent extends InputEvent implements Parcelable {
                 return "AMBIGUOUS_GESTURE";
             case CLASSIFICATION_DEEP_PRESS:
                 return "DEEP_PRESS";
+            case CLASSIFICATION_TWO_FINGER_SWIPE:
+                return "TWO_FINGER_SWIPE";
 
         }
-        return "NONE";
+        return "UNKNOWN";
     }
 
     /**
@@ -3868,7 +3952,7 @@ public final class MotionEvent extends InputEvent implements Parcelable {
      * @return The symbolic name of the specified tool type.
      * @hide
      */
-    public static String toolTypeToString(int toolType) {
+    public static String toolTypeToString(@ToolType int toolType) {
         String symbolicName = TOOL_TYPE_SYMBOLIC_NAMES.get(toolType);
         return symbolicName != null ? symbolicName : Integer.toString(toolType);
     }
@@ -4361,7 +4445,7 @@ public final class MotionEvent extends InputEvent implements Parcelable {
          *
          * @see MotionEvent#getToolType(int)
          */
-        public int toolType;
+        public @ToolType int toolType;
 
         /**
          * Resets the pointer properties to their initial values.

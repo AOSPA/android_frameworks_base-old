@@ -22,7 +22,8 @@ import com.android.systemui.keyguard.domain.interactor.KeyguardBottomAreaInterac
 import com.android.systemui.keyguard.domain.interactor.KeyguardInteractor
 import com.android.systemui.keyguard.domain.interactor.KeyguardQuickAffordanceInteractor
 import com.android.systemui.keyguard.domain.model.KeyguardQuickAffordanceModel
-import com.android.systemui.keyguard.domain.model.KeyguardQuickAffordancePosition
+import com.android.systemui.keyguard.shared.quickaffordance.ActivationState
+import com.android.systemui.keyguard.shared.quickaffordance.KeyguardQuickAffordancePosition
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -89,6 +90,12 @@ constructor(
             .distinctUntilChanged()
     }
 
+    /**
+     * Returns whether the keyguard bottom area should be constrained to the top of the lock icon
+     */
+    fun shouldConstrainToTopOfLockIcon(): Boolean =
+            bottomAreaInteractor.shouldConstrainToTopOfLockIcon()
+
     private fun button(
         position: KeyguardQuickAffordancePosition
     ): Flow<KeyguardQuickAffordanceViewModel> {
@@ -116,14 +123,14 @@ constructor(
                     isVisible = true,
                     animateReveal = animateReveal,
                     icon = icon,
-                    contentDescriptionResourceId = contentDescriptionResourceId,
                     onClicked = { parameters ->
-                        quickAffordanceInteractor.onQuickAffordanceClicked(
+                        quickAffordanceInteractor.onQuickAffordanceTriggered(
                             configKey = parameters.configKey,
-                            animationController = parameters.animationController,
+                            expandable = parameters.expandable,
                         )
                     },
                     isClickable = isClickable,
+                    isActivated = activationState is ActivationState.Active,
                 )
             is KeyguardQuickAffordanceModel.Hidden -> KeyguardQuickAffordanceViewModel()
         }

@@ -27,10 +27,17 @@ interface ControlsUiController {
     companion object {
         public const val TAG = "ControlsUiController"
         public const val EXTRA_ANIMATE = "extra_animate"
+        public const val EXIT_TO_DREAM = "extra_exit_to_dream"
     }
 
     fun show(parent: ViewGroup, onDismiss: Runnable, activityContext: Context)
     fun hide()
+
+    /**
+     * Returns the preferred activity to start, depending on if the user has favorited any
+     * controls.
+     */
+    fun resolveActivity(): Class<*>
 
     /**
      * Request all open dialogs be closed. Set [immediately] to true to dismiss without

@@ -17,6 +17,8 @@
 #include <android/hardware/configstore/1.0/ISurfaceFlingerConfigs.h>
 #include <android/native_window.h>
 #include <android/surface_control.h>
+#include <android/surface_control_jni.h>
+#include <android_runtime/android_view_SurfaceControl.h>
 #include <configstore/Utils.h>
 #include <gui/HdrMetadata.h>
 #include <gui/ISurfaceComposer.h>
@@ -27,6 +29,8 @@
 #include <surface_control_private.h>
 #include <ui/DynamicDisplayInfo.h>
 #include <utils/Timers.h>
+
+#include <utility>
 
 using namespace android::hardware::configstore;
 using namespace android::hardware::configstore::V1_0;
@@ -134,6 +138,21 @@ void ASurfaceControl_release(ASurfaceControl* aSurfaceControl) {
     SurfaceControl_release(surfaceControl);
 }
 
+ASurfaceControl* ASurfaceControl_fromSurfaceControl(JNIEnv* env, jobject surfaceControlObj) {
+    LOG_ALWAYS_FATAL_IF(!env,
+                        "nullptr passed to ASurfaceControl_fromSurfaceControl as env argument");
+    LOG_ALWAYS_FATAL_IF(!surfaceControlObj,
+                        "nullptr passed to ASurfaceControl_fromSurfaceControl as surfaceControlObj "
+                        "argument");
+    SurfaceControl* surfaceControl =
+            android_view_SurfaceControl_getNativeSurfaceControl(env, surfaceControlObj);
+    LOG_ALWAYS_FATAL_IF(!surfaceControl,
+                        "surfaceControlObj passed to ASurfaceControl_fromSurfaceControl is not "
+                        "valid");
+    SurfaceControl_acquire(surfaceControl);
+    return reinterpret_cast<ASurfaceControl*>(surfaceControl);
+}
+
 struct ASurfaceControlStats {
     std::variant<int64_t, sp<Fence>> acquireTimeOrFence;
     sp<Fence> previousReleaseFence;
@@ -188,6 +207,20 @@ ASurfaceTransaction* ASurfaceTransaction_create() {
 void ASurfaceTransaction_delete(ASurfaceTransaction* aSurfaceTransaction) {
     Transaction* transaction = ASurfaceTransaction_to_Transaction(aSurfaceTransaction);
     delete transaction;
+}
+
+ASurfaceTransaction* ASurfaceTransaction_fromTransaction(JNIEnv* env, jobject transactionObj) {
+    LOG_ALWAYS_FATAL_IF(!env,
+                        "nullptr passed to ASurfaceTransaction_fromTransaction as env argument");
+    LOG_ALWAYS_FATAL_IF(!transactionObj,
+                        "nullptr passed to ASurfaceTransaction_fromTransaction as transactionObj "
+                        "argument");
+    Transaction* transaction =
+            android_view_SurfaceTransaction_getNativeSurfaceTransaction(env, transactionObj);
+    LOG_ALWAYS_FATAL_IF(!transaction,
+                        "surfaceControlObj passed to ASurfaceTransaction_fromTransaction is not "
+                        "valid");
+    return reinterpret_cast<ASurfaceTransaction*>(transaction);
 }
 
 void ASurfaceTransaction_apply(ASurfaceTransaction* aSurfaceTransaction) {
@@ -297,7 +330,7 @@ void ASurfaceTransaction_setOnComplete(ASurfaceTransaction* aSurfaceTransaction,
         auto& aSurfaceControlStats = aSurfaceTransactionStats.aSurfaceControlStats;
 
         for (const auto& [surfaceControl, latchTime, acquireTimeOrFence, presentFence,
-                          previousReleaseFence, transformHint, frameEvents] : surfaceControlStats) {
+                  previousReleaseFence, transformHint, frameEvents, ignore] : surfaceControlStats) {
             ASurfaceControl* aSurfaceControl = reinterpret_cast<ASurfaceControl*>(surfaceControl.get());
             aSurfaceControlStats[aSurfaceControl].acquireTimeOrFence = acquireTimeOrFence;
             aSurfaceControlStats[aSurfaceControl].previousReleaseFence = previousReleaseFence;
@@ -619,6 +652,16 @@ void ASurfaceTransaction_setFrameRateWithChangeStrategy(ASurfaceTransaction* aSu
     transaction->setFrameRate(surfaceControl, frameRate, compatibility, changeFrameRateStrategy);
 }
 
+void ASurfaceTransaction_clearFrameRate(ASurfaceTransaction* aSurfaceTransaction,
+                                        ASurfaceControl* aSurfaceControl) {
+    CHECK_NOT_NULL(aSurfaceTransaction);
+    CHECK_NOT_NULL(aSurfaceControl);
+    Transaction* transaction = ASurfaceTransaction_to_Transaction(aSurfaceTransaction);
+    sp<SurfaceControl> surfaceControl = ASurfaceControl_to_SurfaceControl(aSurfaceControl);
+    transaction->setFrameRate(surfaceControl, 0, ANATIVEWINDOW_FRAME_RATE_COMPATIBILITY_DEFAULT,
+                              ANATIVEWINDOW_CHANGE_FRAME_RATE_ONLY_IF_SEAMLESS);
+}
+
 void ASurfaceTransaction_setEnableBackPressure(ASurfaceTransaction* aSurfaceTransaction,
                                                ASurfaceControl* aSurfaceControl,
                                                bool enableBackpressure) {
@@ -647,7 +690,7 @@ void ASurfaceTransaction_setOnCommit(ASurfaceTransaction* aSurfaceTransaction, v
 
                 auto& aSurfaceControlStats = aSurfaceTransactionStats.aSurfaceControlStats;
                 for (const auto& [surfaceControl, latchTime, acquireTimeOrFence, presentFence,
-                                  previousReleaseFence, transformHint, frameEvents] :
+                              previousReleaseFence, transformHint, frameEvents, ignore] :
                      surfaceControlStats) {
                     ASurfaceControl* aSurfaceControl =
                             reinterpret_cast<ASurfaceControl*>(surfaceControl.get());

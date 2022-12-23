@@ -34,7 +34,6 @@ import android.content.res.Resources.NotFoundException;
 import android.graphics.Color;
 import android.graphics.Point;
 import android.graphics.Rect;
-import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 import android.os.ShellCommand;
 import android.os.UserHandle;
@@ -47,8 +46,6 @@ import android.view.ViewDebug;
 
 import com.android.internal.os.ByteTransferPipe;
 import com.android.internal.protolog.ProtoLogImpl;
-import com.android.server.LocalServices;
-import com.android.server.statusbar.StatusBarManagerInternal;
 import com.android.server.wm.LetterboxConfiguration.LetterboxBackgroundType;
 import com.android.server.wm.LetterboxConfiguration.LetterboxHorizontalReachabilityPosition;
 import com.android.server.wm.LetterboxConfiguration.LetterboxVerticalReachabilityPosition;
@@ -56,7 +53,6 @@ import com.android.server.wm.LetterboxConfiguration.LetterboxVerticalReachabilit
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
@@ -106,19 +102,11 @@ public class WindowManagerShellCommand extends ShellCommand {
                     // trace files can be written.
                     return mInternal.mWindowTracing.onShellCommand(this);
                 case "logging":
-                    String[] args = peekRemainingArgs();
                     int result = ProtoLogImpl.getSingleInstance().onShellCommand(this);
                     if (result != 0) {
-                        // Let the shell try and handle this
-                        try (ParcelFileDescriptor pfd
-                                     = ParcelFileDescriptor.dup(getOutFileDescriptor())){
-                            pw.println("Not handled, calling status bar with args: "
-                                    + Arrays.toString(args));
-                            LocalServices.getService(StatusBarManagerInternal.class)
-                                    .handleWindowManagerLoggingCommand(args, pfd);
-                        } catch (IOException e) {
-                            pw.println("Failed to handle logging command: " + e.getMessage());
-                        }
+                        pw.println("Not handled, please use "
+                                + "`adb shell dumpsys activity service SystemUIService WMShell` "
+                                + "if you are looking for ProtoLog in WMShell");
                     }
                     return result;
                 case "user-rotation":
@@ -276,8 +264,23 @@ public class WindowManagerShellCommand extends ShellCommand {
 
     private int runDisplayDensity(PrintWriter pw) throws RemoteException {
         String densityStr = getNextArg();
+        String option = getNextOption();
+        String arg = getNextArg();
         int density;
-        final int displayId = getDisplayId(densityStr);
+        int displayId = Display.DEFAULT_DISPLAY;
+        if ("-d".equals(option) && arg != null) {
+            try {
+                displayId = Integer.parseInt(arg);
+            } catch (NumberFormatException e) {
+                getErrPrintWriter().println("Error: bad number " + e);
+            }
+        } else if ("-u".equals(option) && arg != null) {
+            displayId = mInterface.getDisplayIdByUniqueId(arg);
+            if (displayId == Display.INVALID_DISPLAY) {
+                getErrPrintWriter().println("Error: the uniqueId is invalid ");
+                return -1;
+            }
+        }
 
         if (densityStr == null) {
             printInitialDisplayDensity(pw, displayId);
@@ -1324,7 +1327,7 @@ public class WindowManagerShellCommand extends ShellCommand {
         pw.println("  size [reset|WxH|WdpxHdp] [-d DISPLAY_ID]");
         pw.println("    Return or override display size.");
         pw.println("    width and height in pixels unless suffixed with 'dp'.");
-        pw.println("  density [reset|DENSITY] [-d DISPLAY_ID]");
+        pw.println("  density [reset|DENSITY] [-d DISPLAY_ID] [-u UNIQUE_ID]");
         pw.println("    Return or override display density.");
         pw.println("  folded-area [reset|LEFT,TOP,RIGHT,BOTTOM]");
         pw.println("    Return or override folded area.");

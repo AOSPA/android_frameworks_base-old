@@ -18,6 +18,7 @@ package com.android.server.display;
 
 import static android.Manifest.permission.ADD_TRUSTED_DISPLAY;
 import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY;
+import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP;
 
 import static com.android.server.display.VirtualDisplayAdapter.UNIQUE_ID_PREFIX;
 
@@ -27,6 +28,7 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
@@ -53,12 +55,10 @@ import android.hardware.display.DisplayedContentSamplingAttributes;
 import android.hardware.display.IDisplayManagerCallback;
 import android.hardware.display.IVirtualDisplayCallback;
 import android.hardware.display.VirtualDisplayConfig;
-import android.hardware.input.InputManagerInternal;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.MessageQueue;
 import android.os.Process;
-import android.platform.test.annotations.Presubmit;
 import android.view.Display;
 import android.view.DisplayCutout;
 import android.view.DisplayEventReceiver;
@@ -78,6 +78,7 @@ import com.android.server.LocalServices;
 import com.android.server.SystemService;
 import com.android.server.companion.virtual.VirtualDeviceManagerInternal;
 import com.android.server.display.DisplayManagerService.SyncRoot;
+import com.android.server.input.InputManagerInternal;
 import com.android.server.lights.LightsManager;
 import com.android.server.sensors.SensorManagerInternal;
 import com.android.server.wm.WindowManagerInternal;
@@ -106,7 +107,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.LongStream;
 
 @SmallTest
-@Presubmit
 @RunWith(AndroidJUnit4.class)
 public class DisplayManagerServiceTest {
     private static final int MSG_REGISTER_DEFAULT_DISPLAY_ADAPTERS = 1;
@@ -131,19 +131,43 @@ public class DisplayManagerServiceTest {
                 }
 
                 @Override
+                LocalDisplayAdapter getLocalDisplayAdapter(SyncRoot syncRoot, Context context,
+                        Handler handler, DisplayAdapter.Listener displayAdapterListener) {
+                    return new LocalDisplayAdapter(syncRoot, context, handler,
+                            displayAdapterListener, new LocalDisplayAdapter.Injector() {
+                        @Override
+                        public LocalDisplayAdapter.SurfaceControlProxy getSurfaceControlProxy() {
+                            return mSurfaceControlProxy;
+                        }
+                    });
+                }
+
+                @Override
                 long getDefaultDisplayDelayTimeout() {
                     return SHORT_DEFAULT_DISPLAY_TIMEOUT_MILLIS;
                 }
             };
 
-    class BasicInjector extends DisplayManagerService.Injector {
-        @Override
-        VirtualDisplayAdapter getVirtualDisplayAdapter(SyncRoot syncRoot, Context context,
-                Handler handler, DisplayAdapter.Listener displayAdapterListener) {
-            return new VirtualDisplayAdapter(syncRoot, context, handler, displayAdapterListener,
-                    (String name, boolean secure) -> mMockDisplayToken);
-        }
-    }
+   class BasicInjector extends DisplayManagerService.Injector {
+       @Override
+       VirtualDisplayAdapter getVirtualDisplayAdapter(SyncRoot syncRoot, Context context,
+               Handler handler, DisplayAdapter.Listener displayAdapterListener) {
+           return new VirtualDisplayAdapter(syncRoot, context, handler, displayAdapterListener,
+                   (String name, boolean secure) -> mMockDisplayToken);
+       }
+
+       @Override
+       LocalDisplayAdapter getLocalDisplayAdapter(SyncRoot syncRoot, Context context,
+               Handler handler, DisplayAdapter.Listener displayAdapterListener) {
+           return new LocalDisplayAdapter(syncRoot, context, handler,
+                   displayAdapterListener, new LocalDisplayAdapter.Injector() {
+               @Override
+               public LocalDisplayAdapter.SurfaceControlProxy getSurfaceControlProxy() {
+                   return mSurfaceControlProxy;
+               }
+           });
+       }
+   }
 
     private final DisplayManagerService.Injector mBasicInjector = new BasicInjector();
 
@@ -170,6 +194,7 @@ public class DisplayManagerServiceTest {
     @Mock WindowManagerInternal mMockWindowManagerInternal;
     @Mock LightsManager mMockLightsManager;
     @Mock VirtualDisplayAdapter mMockVirtualDisplayAdapter;
+    @Mock LocalDisplayAdapter.SurfaceControlProxy mSurfaceControlProxy;
     @Mock IBinder mMockDisplayToken;
     @Mock SensorManagerInternal mMockSensorManagerInternal;
 
@@ -193,6 +218,28 @@ public class DisplayManagerServiceTest {
 
         // Disable binder caches in this process.
         PropertyInvalidatedCache.disableForTestMode();
+        setUpDisplay();
+    }
+
+    private void setUpDisplay() {
+        long[] ids = new long[] {100};
+        when(mSurfaceControlProxy.getPhysicalDisplayIds()).thenReturn(ids);
+        when(mSurfaceControlProxy.getPhysicalDisplayToken(anyLong()))
+                .thenReturn(mMockDisplayToken);
+        SurfaceControl.StaticDisplayInfo staticDisplayInfo = new SurfaceControl.StaticDisplayInfo();
+        staticDisplayInfo.isInternal = true;
+        when(mSurfaceControlProxy.getStaticDisplayInfo(mMockDisplayToken))
+                .thenReturn(staticDisplayInfo);
+        SurfaceControl.DynamicDisplayInfo dynamicDisplayMode =
+                new SurfaceControl.DynamicDisplayInfo();
+        SurfaceControl.DisplayMode displayMode = new SurfaceControl.DisplayMode();
+        displayMode.width = 100;
+        displayMode.height = 200;
+        dynamicDisplayMode.supportedDisplayModes = new SurfaceControl.DisplayMode[] {displayMode};
+        when(mSurfaceControlProxy.getDynamicDisplayInfo(mMockDisplayToken))
+                .thenReturn(dynamicDisplayMode);
+        when(mSurfaceControlProxy.getDesiredDisplayModeSpecs(mMockDisplayToken))
+                .thenReturn(new SurfaceControl.DesiredDisplayModeSpecs());
     }
 
     @Test
@@ -612,6 +659,117 @@ public class DisplayManagerServiceTest {
                 Display.DEFAULT_DISPLAY);
         assertEquals(localDisplayManager.getDisplayIdToMirror(secondDisplayId),
                 firstDisplayId);
+    }
+
+    /** Tests that the virtual device is created in a device display group. */
+    @Test
+    public void createVirtualDisplay_addsDisplaysToDeviceDisplayGroups() throws Exception {
+        DisplayManagerService displayManager = new DisplayManagerService(mContext, mBasicInjector);
+        DisplayManagerInternal localService = displayManager.new LocalService();
+
+        registerDefaultDisplays(displayManager);
+        when(mMockAppToken.asBinder()).thenReturn(mMockAppToken);
+
+        when(mContext.checkCallingPermission(ADD_TRUSTED_DISPLAY))
+                .thenReturn(PackageManager.PERMISSION_DENIED);
+
+        IVirtualDevice virtualDevice = mock(IVirtualDevice.class);
+        when(mMockVirtualDeviceManagerInternal.isValidVirtualDevice(virtualDevice))
+                .thenReturn(true);
+        when(virtualDevice.getDeviceId()).thenReturn(1);
+
+        // Create a first virtual display. A display group should be created for this display on the
+        // virtual device.
+        final VirtualDisplayConfig.Builder builder1 =
+                new VirtualDisplayConfig.Builder(VIRTUAL_DISPLAY_NAME, 600, 800, 320)
+                        .setUniqueId("uniqueId --- device display group 1");
+
+        int displayId1 =
+                localService.createVirtualDisplay(
+                        builder1.build(),
+                        mMockAppToken /* callback */,
+                        virtualDevice /* virtualDeviceToken */,
+                        mock(DisplayWindowPolicyController.class),
+                        PACKAGE_NAME);
+        int displayGroupId1 = localService.getDisplayInfo(displayId1).displayGroupId;
+
+        // Create a second virtual display. This should be added to the previously created display
+        // group.
+        final VirtualDisplayConfig.Builder builder2 =
+                new VirtualDisplayConfig.Builder(VIRTUAL_DISPLAY_NAME, 600, 800, 320)
+                        .setUniqueId("uniqueId --- device display group 1");
+
+        int displayId2 =
+                localService.createVirtualDisplay(
+                        builder2.build(),
+                        mMockAppToken /* callback */,
+                        virtualDevice /* virtualDeviceToken */,
+                        mock(DisplayWindowPolicyController.class),
+                        PACKAGE_NAME);
+        int displayGroupId2 = localService.getDisplayInfo(displayId2).displayGroupId;
+
+        assertEquals(
+                "Both displays should be added to the same displayGroup.",
+                displayGroupId1,
+                displayGroupId2);
+    }
+
+    /**
+     * Tests that the virtual display is not added to the device display group when
+     * VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP is set.
+     */
+    @Test
+    public void createVirtualDisplay_addsDisplaysToOwnDisplayGroups() throws Exception {
+        DisplayManagerService displayManager = new DisplayManagerService(mContext, mBasicInjector);
+        DisplayManagerInternal localService = displayManager.new LocalService();
+
+        registerDefaultDisplays(displayManager);
+        when(mMockAppToken.asBinder()).thenReturn(mMockAppToken);
+
+        when(mContext.checkCallingPermission(ADD_TRUSTED_DISPLAY))
+                .thenReturn(PackageManager.PERMISSION_DENIED);
+
+        IVirtualDevice virtualDevice = mock(IVirtualDevice.class);
+        when(mMockVirtualDeviceManagerInternal.isValidVirtualDevice(virtualDevice))
+                .thenReturn(true);
+        when(virtualDevice.getDeviceId()).thenReturn(1);
+
+        // Create a first virtual display. A display group should be created for this display on the
+        // virtual device.
+        final VirtualDisplayConfig.Builder builder1 =
+                new VirtualDisplayConfig.Builder(VIRTUAL_DISPLAY_NAME, 600, 800, 320)
+                        .setUniqueId("uniqueId --- device display group 1");
+
+        int displayId1 =
+                localService.createVirtualDisplay(
+                        builder1.build(),
+                        mMockAppToken /* callback */,
+                        virtualDevice /* virtualDeviceToken */,
+                        mock(DisplayWindowPolicyController.class),
+                        PACKAGE_NAME);
+        int displayGroupId1 = localService.getDisplayInfo(displayId1).displayGroupId;
+
+        // Create a second virtual display. With the flag VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP,
+        // the display should not be added to the previously created display group.
+        final VirtualDisplayConfig.Builder builder2 =
+                new VirtualDisplayConfig.Builder(VIRTUAL_DISPLAY_NAME, 600, 800, 320)
+                        .setFlags(VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP)
+                        .setUniqueId("uniqueId --- device display group 1");
+
+        int displayId2 =
+                localService.createVirtualDisplay(
+                        builder2.build(),
+                        mMockAppToken /* callback */,
+                        virtualDevice /* virtualDeviceToken */,
+                        mock(DisplayWindowPolicyController.class),
+                        PACKAGE_NAME);
+        int displayGroupId2 = localService.getDisplayInfo(displayId2).displayGroupId;
+
+        assertNotEquals(
+                "Display 1 should be in the device display group and display 2 in its own display"
+                        + " group.",
+                displayGroupId1,
+                displayGroupId2);
     }
 
     @Test

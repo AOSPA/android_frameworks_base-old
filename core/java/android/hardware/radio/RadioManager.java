@@ -36,6 +36,7 @@ import android.os.ServiceManager.ServiceNotFoundException;
 import android.text.TextUtils;
 import android.util.Log;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.Preconditions;
 
 import java.lang.annotation.Retention;
@@ -250,7 +251,8 @@ public class RadioManager {
                     Objects.requireNonNull(entry.getValue());
                 }
             }
-            mDabFrequencyTable = dabFrequencyTable;
+            mDabFrequencyTable = (dabFrequencyTable == null || dabFrequencyTable.isEmpty())
+                    ? null : dabFrequencyTable;
             mVendorInfo = (vendorInfo == null) ? new HashMap<>() : vendorInfo;
         }
 
@@ -445,7 +447,8 @@ public class RadioManager {
             mIsBgScanSupported = in.readInt() == 1;
             mSupportedProgramTypes = arrayToSet(in.createIntArray());
             mSupportedIdentifierTypes = arrayToSet(in.createIntArray());
-            mDabFrequencyTable = Utils.readStringIntMap(in);
+            Map<String, Integer> dabFrequencyTableIn = Utils.readStringIntMap(in);
+            mDabFrequencyTable = (dabFrequencyTableIn.isEmpty()) ? null : dabFrequencyTableIn;
             mVendorInfo = Utils.readStringMap(in);
         }
 
@@ -505,7 +508,8 @@ public class RadioManager {
         public int hashCode() {
             return Objects.hash(mId, mServiceName, mClassId, mImplementor, mProduct, mVersion,
                 mSerial, mNumTuners, mNumAudioSources, mIsInitializationRequired,
-                mIsCaptureSupported, mBands, mIsBgScanSupported, mDabFrequencyTable, mVendorInfo);
+                mIsCaptureSupported, Arrays.hashCode(mBands), mIsBgScanSupported,
+                mDabFrequencyTable, mVendorInfo);
         }
 
         @Override
@@ -525,7 +529,7 @@ public class RadioManager {
             if (mNumAudioSources != other.mNumAudioSources) return false;
             if (mIsInitializationRequired != other.mIsInitializationRequired) return false;
             if (mIsCaptureSupported != other.mIsCaptureSupported) return false;
-            if (!Objects.equals(mBands, other.mBands)) return false;
+            if (!Arrays.equals(mBands, other.mBands)) return false;
             if (mIsBgScanSupported != other.mIsBgScanSupported) return false;
             if (!Objects.equals(mDabFrequencyTable, other.mDabFrequencyTable)) return false;
             if (!Objects.equals(mVendorInfo, other.mVendorInfo)) return false;
@@ -1850,9 +1854,17 @@ public class RadioManager {
     /**
      * @hide
      */
-    public RadioManager(@NonNull Context context) throws ServiceNotFoundException {
+    public RadioManager(Context context) throws ServiceNotFoundException {
+        this(context, IRadioService.Stub.asInterface(ServiceManager.getServiceOrThrow(
+                Context.RADIO_SERVICE)));
+    }
+
+    /**
+     * @hide
+     */
+    @VisibleForTesting
+    public RadioManager(Context context, IRadioService service) {
         mContext = context;
-        mService = IRadioService.Stub.asInterface(
-                ServiceManager.getServiceOrThrow(Context.RADIO_SERVICE));
+        mService = service;
     }
 }

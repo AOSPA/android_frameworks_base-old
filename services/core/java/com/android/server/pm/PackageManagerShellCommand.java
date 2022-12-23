@@ -316,8 +316,12 @@ class PackageManagerShellCommand extends ShellCommand {
                     return runCreateUser();
                 case "remove-user":
                     return runRemoveUser();
+                case "rename-user":
+                    return runRenameUser();
                 case "set-user-restriction":
                     return runSetUserRestriction();
+                case "supports-multiple-users":
+                    return runSupportsMultipleUsers();
                 case "get-max-users":
                     return runGetMaxUsers();
                 case "get-max-running-users":
@@ -3022,6 +3026,28 @@ class PackageManagerShellCommand extends ShellCommand {
         }
     }
 
+    private int runRenameUser() throws RemoteException {
+        String arg = getNextArg();
+        if (arg == null) {
+            getErrPrintWriter().println("Error: no user id specified.");
+            return 1;
+        }
+        int userId = resolveUserId(UserHandle.parseUserArg(arg));
+
+        String name = getNextArg();
+        if (name == null) {
+            Slog.i(TAG, "Resetting name of user " + userId);
+        } else {
+            Slog.i(TAG, "Renaming user " + userId + " to '" + name + "'");
+        }
+
+        IUserManager um = IUserManager.Stub.asInterface(
+                ServiceManager.getService(Context.USER_SERVICE));
+        um.setUserName(userId, name);
+
+        return 0;
+    }
+
     public int runSetUserRestriction() throws RemoteException {
         int userId = UserHandle.USER_SYSTEM;
         String opt = getNextOption();
@@ -3044,7 +3070,18 @@ class PackageManagerShellCommand extends ShellCommand {
                 translateUserId(userId, UserHandle.USER_NULL, "runSetUserRestriction");
         final IUserManager um = IUserManager.Stub.asInterface(
                 ServiceManager.getService(Context.USER_SERVICE));
-        um.setUserRestriction(restriction, value, translatedUserId);
+        try {
+            um.setUserRestriction(restriction, value, translatedUserId);
+        } catch (IllegalArgumentException e) {
+            getErrPrintWriter().println(e.getMessage());
+            return 1;
+        }
+        return 0;
+    }
+
+    public int runSupportsMultipleUsers() {
+        getOutPrintWriter().println("Is multiuser supported: "
+                + UserManager.supportsMultipleUsers());
         return 0;
     }
 
@@ -3670,7 +3707,7 @@ class PackageManagerShellCommand extends ShellCommand {
                 fd = ParcelFileDescriptor.dup(getInFileDescriptor());
             }
             if (sizeBytes <= 0) {
-                getErrPrintWriter().println("Error: must specify a APK size");
+                getErrPrintWriter().println("Error: must specify an APK size");
                 return 1;
             }
 
@@ -3922,6 +3959,11 @@ class PackageManagerShellCommand extends ShellCommand {
         res = new Resources(am, null, null);
         mResourceCache.put(pii.packageName, res);
         return res;
+    }
+
+    // Resolves the userId; supports UserHandle.USER_CURRENT, but not other special values
+    private @UserIdInt int resolveUserId(@UserIdInt int userId) {
+        return userId == UserHandle.USER_CURRENT ? ActivityManager.getCurrentUser() : userId;
     }
 
     @Override
@@ -4194,6 +4236,9 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("        so that it will be automatically removed when possible (after user");
         pw.println("        switch or reboot)");
         pw.println("      --wait: Wait until user is removed. Ignored if set-ephemeral-if-in-use");
+        pw.println("");
+        pw.println("  rename-user USER_ID [USER_NAME]");
+        pw.println("    Rename USER_ID with USER_NAME (or null when [USER_NAME] is not set)");
         pw.println("");
         pw.println("  set-user-restriction [--user USER_ID] RESTRICTION VALUE");
         pw.println("");

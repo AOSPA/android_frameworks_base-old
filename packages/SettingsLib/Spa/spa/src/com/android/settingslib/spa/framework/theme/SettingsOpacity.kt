@@ -19,4 +19,7 @@ package com.android.settingslib.spa.framework.theme
 object SettingsOpacity {
     const val Full = 1f
     const val Disabled = 0.38f
+    const val Divider = 0.2f
+    const val SurfaceTone = 0.14f
+    const val Hint = 0.9f
 }

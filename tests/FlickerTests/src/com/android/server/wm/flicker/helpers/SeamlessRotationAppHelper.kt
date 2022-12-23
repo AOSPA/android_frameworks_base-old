@@ -23,12 +23,13 @@ import com.android.server.wm.flicker.testapp.ActivityOptions
 import com.android.server.wm.traces.common.ComponentNameMatcher
 import com.android.server.wm.traces.parser.toFlickerComponent
 
-class SeamlessRotationAppHelper @JvmOverloads constructor(
+class SeamlessRotationAppHelper
+@JvmOverloads
+constructor(
     instr: Instrumentation,
-    launcherName: String = ActivityOptions.SEAMLESS_ACTIVITY_LAUNCHER_NAME,
+    launcherName: String = ActivityOptions.SeamlessRotation.LABEL,
     component: ComponentNameMatcher =
-        ActivityOptions.SEAMLESS_ACTIVITY_COMPONENT_NAME.toFlickerComponent(),
-    launcherStrategy: ILauncherStrategy = LauncherStrategyFactory
-        .getInstance(instr)
-        .launcherStrategy
+        ActivityOptions.SeamlessRotation.COMPONENT.toFlickerComponent(),
+    launcherStrategy: ILauncherStrategy =
+        LauncherStrategyFactory.getInstance(instr).launcherStrategy
 ) : StandardAppHelper(instr, launcherName, component, launcherStrategy)

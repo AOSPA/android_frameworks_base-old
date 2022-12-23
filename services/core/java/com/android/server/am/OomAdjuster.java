@@ -308,7 +308,7 @@ public class OomAdjuster {
      */
     private final Handler mProcessGroupHandler;
 
-    private final ArraySet<BroadcastQueue> mTmpBroadcastQueue = new ArraySet();
+    private final int[] mTmpSchedGroup = new int[1];
 
     private final ActivityManagerService mService;
     private final ProcessList mProcessList;
@@ -1719,11 +1719,10 @@ public class OomAdjuster {
 
         boolean foregroundActivities = false;
         boolean hasVisibleActivities = false;
-        if (app == topApp && (PROCESS_STATE_CUR_TOP == PROCESS_STATE_TOP
-                || PROCESS_STATE_CUR_TOP == PROCESS_STATE_IMPORTANT_FOREGROUND)) {
+        if (app == topApp && PROCESS_STATE_CUR_TOP == PROCESS_STATE_TOP) {
             // The last app on the list is the foreground app.
             adj = ProcessList.FOREGROUND_APP_ADJ;
-            if (PROCESS_STATE_CUR_TOP == PROCESS_STATE_TOP) {
+            if (mService.mAtmInternal.useTopSchedGroupForTopProcess()) {
                 schedGroup = ProcessList.SCHED_GROUP_TOP_APP;
                 state.setAdjType("top-activity");
             } else {
@@ -1774,14 +1773,13 @@ public class OomAdjuster {
             if (DEBUG_OOM_ADJ_REASON || logUid == appUid) {
                 reportOomAdjMessageLocked(TAG_OOM_ADJ, "Making instrumentation: " + app);
             }
-        } else if (state.getCachedIsReceivingBroadcast(mTmpBroadcastQueue)) {
+        } else if (state.getCachedIsReceivingBroadcast(mTmpSchedGroup)) {
             // An app that is currently receiving a broadcast also
             // counts as being in the foreground for OOM killer purposes.
             // It's placed in a sched group based on the nature of the
             // broadcast as reflected by which queue it's active in.
             adj = ProcessList.FOREGROUND_APP_ADJ;
-            schedGroup = (mTmpBroadcastQueue.contains(mService.mFgBroadcastQueue))
-                    ? ProcessList.SCHED_GROUP_DEFAULT : ProcessList.SCHED_GROUP_BACKGROUND;
+            schedGroup = mTmpSchedGroup[0];
             state.setAdjType("broadcast");
             procState = ActivityManager.PROCESS_STATE_RECEIVER;
             if (DEBUG_OOM_ADJ_REASON || logUid == appUid) {
@@ -2632,7 +2630,7 @@ public class OomAdjuster {
             capability |= capabilityFromFGS;
         }
 
-        capability |= getDefaultCapability(psr, procState);
+        capability |= getDefaultCapability(app, procState);
 
         // Do final modification to adj.  Everything we do between here and applying
         // the final setAdj must be done in this function, because we will also use
@@ -2654,7 +2652,7 @@ public class OomAdjuster {
                 || state.getCurCapability() != prevCapability;
     }
 
-    private int getDefaultCapability(ProcessServiceRecord psr, int procState) {
+    private int getDefaultCapability(ProcessRecord app, int procState) {
         switch (procState) {
             case PROCESS_STATE_PERSISTENT:
             case PROCESS_STATE_PERSISTENT_UI:
@@ -2663,15 +2661,13 @@ public class OomAdjuster {
             case PROCESS_STATE_BOUND_TOP:
                 return PROCESS_CAPABILITY_NETWORK;
             case PROCESS_STATE_FOREGROUND_SERVICE:
-                if (psr.hasForegroundServices()) {
-                    // Capability from FGS are conditional depending on foreground service type in
-                    // manifest file and the mAllowWhileInUsePermissionInFgs flag.
-                    return PROCESS_CAPABILITY_NETWORK;
+                if (app.getActiveInstrumentation() != null) {
+                    return PROCESS_CAPABILITY_ALL_IMPLICIT | PROCESS_CAPABILITY_NETWORK ;
                 } else {
-                    // process has no FGS, the PROCESS_STATE_FOREGROUND_SERVICE is from client.
-                    // the implicit capability could be removed in the future, client should use
-                    // BIND_INCLUDE_CAPABILITY flag.
-                    return PROCESS_CAPABILITY_ALL_IMPLICIT | PROCESS_CAPABILITY_NETWORK;
+                    // Capability from foreground service is conditional depending on
+                    // foregroundServiceType in the manifest file and the
+                    // mAllowWhileInUsePermissionInFgs flag.
+                    return PROCESS_CAPABILITY_NETWORK;
                 }
             case PROCESS_STATE_BOUND_FOREGROUND_SERVICE:
                 return PROCESS_CAPABILITY_NETWORK;

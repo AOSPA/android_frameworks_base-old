@@ -17,11 +17,19 @@
 package com.android.systemui.dump
 
 import androidx.test.filters.SmallTest
+import com.android.systemui.CoreStartable
 import com.android.systemui.Dumpable
+import com.android.systemui.ProtoDumpable
 import com.android.systemui.SysuiTestCase
-import com.android.systemui.log.LogBuffer
+import com.android.systemui.plugins.log.LogBuffer
 import com.android.systemui.shared.system.UncaughtExceptionPreHandlerManager
 import com.android.systemui.util.mockito.any
+import com.android.systemui.util.mockito.eq
+import com.google.common.truth.Truth.assertThat
+import java.io.FileDescriptor
+import java.io.PrintWriter
+import java.io.StringWriter
+import javax.inject.Provider
 import org.junit.Before
 import org.junit.Test
 import org.mockito.Mock
@@ -29,7 +37,6 @@ import org.mockito.Mockito.anyInt
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.MockitoAnnotations
-import java.io.PrintWriter
 
 @SmallTest
 class DumpHandlerTest : SysuiTestCase() {
@@ -43,6 +50,8 @@ class DumpHandlerTest : SysuiTestCase() {
 
     @Mock
     private lateinit var pw: PrintWriter
+    @Mock
+    private lateinit var fd: FileDescriptor
 
     @Mock
     private lateinit var dumpable1: Dumpable
@@ -50,6 +59,11 @@ class DumpHandlerTest : SysuiTestCase() {
     private lateinit var dumpable2: Dumpable
     @Mock
     private lateinit var dumpable3: Dumpable
+
+    @Mock
+    private lateinit var protoDumpable1: ProtoDumpable
+    @Mock
+    private lateinit var protoDumpable2: ProtoDumpable
 
     @Mock
     private lateinit var buffer1: LogBuffer
@@ -66,7 +80,9 @@ class DumpHandlerTest : SysuiTestCase() {
             mContext,
             dumpManager,
             logBufferEulogizer,
-            mutableMapOf(),
+            mutableMapOf(
+                EmptyCoreStartable::class.java to Provider { EmptyCoreStartable() }
+            ),
             exceptionHandlerManager
         )
     }
@@ -82,7 +98,7 @@ class DumpHandlerTest : SysuiTestCase() {
 
         // WHEN some of them are dumped explicitly
         val args = arrayOf("dumpable1", "dumpable3", "buffer2")
-        dumpHandler.dump(pw, args)
+        dumpHandler.dump(fd, pw, args)
 
         // THEN only the requested ones have their dump() method called
         verify(dumpable1).dump(pw, args)
@@ -101,7 +117,7 @@ class DumpHandlerTest : SysuiTestCase() {
 
         // WHEN that module is dumped
         val args = arrayOf("dumpable1")
-        dumpHandler.dump(pw, args)
+        dumpHandler.dump(fd, pw, args)
 
         // THEN its dump() method is called
         verify(dumpable1).dump(pw, args)
@@ -118,7 +134,7 @@ class DumpHandlerTest : SysuiTestCase() {
 
         // WHEN a critical dump is requested
         val args = arrayOf("--dump-priority", "CRITICAL")
-        dumpHandler.dump(pw, args)
+        dumpHandler.dump(fd, pw, args)
 
         // THEN all modules are dumped (but no buffers)
         verify(dumpable1).dump(pw, args)
@@ -139,7 +155,7 @@ class DumpHandlerTest : SysuiTestCase() {
 
         // WHEN a normal dump is requested
         val args = arrayOf("--dump-priority", "NORMAL")
-        dumpHandler.dump(pw, args)
+        dumpHandler.dump(fd, pw, args)
 
         // THEN all buffers are dumped (but no modules)
         verify(dumpable1, never()).dump(
@@ -153,5 +169,45 @@ class DumpHandlerTest : SysuiTestCase() {
                 any(Array<String>::class.java))
         verify(buffer1).dump(pw, 0)
         verify(buffer2).dump(pw, 0)
+    }
+
+    @Test
+    fun testConfigDump() {
+        // GIVEN a StringPrintWriter
+        val stringWriter = StringWriter()
+        val spw = PrintWriter(stringWriter)
+
+        // When a config dump is requested
+        dumpHandler.dump(fd, spw, arrayOf("config"))
+
+        assertThat(stringWriter.toString()).contains(EmptyCoreStartable::class.java.simpleName)
+    }
+
+    @Test
+    fun testDumpAllProtoDumpables() {
+        dumpManager.registerDumpable("protoDumpable1", protoDumpable1)
+        dumpManager.registerDumpable("protoDumpable2", protoDumpable2)
+
+        val args = arrayOf(DumpHandler.PROTO)
+        dumpHandler.dump(fd, pw, args)
+
+        verify(protoDumpable1).dumpProto(any(), eq(args))
+        verify(protoDumpable2).dumpProto(any(), eq(args))
+    }
+
+    @Test
+    fun testDumpSingleProtoDumpable() {
+        dumpManager.registerDumpable("protoDumpable1", protoDumpable1)
+        dumpManager.registerDumpable("protoDumpable2", protoDumpable2)
+
+        val args = arrayOf(DumpHandler.PROTO, "protoDumpable1")
+        dumpHandler.dump(fd, pw, args)
+
+        verify(protoDumpable1).dumpProto(any(), eq(args))
+        verify(protoDumpable2, never()).dumpProto(any(), any())
+    }
+
+    private class EmptyCoreStartable : CoreStartable {
+        override fun start() {}
     }
 }

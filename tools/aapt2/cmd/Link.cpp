@@ -1085,6 +1085,10 @@ class Linker {
       const auto localeconfig_entry =
           ResolveTableEntry(context_, &final_table_, localeconfig_reference);
       if (!localeconfig_entry) {
+        // If locale config is resolved from external symbols - skip validation.
+        if (context_->GetExternalSymbols()->FindByReference(*localeconfig_reference)) {
+          return true;
+        }
         context_->GetDiagnostics()->Error(
             android::DiagMessage(localeConfig->compiled_value->GetSource())
             << "no localeConfig entry");
@@ -2418,6 +2422,9 @@ int LinkCommand::Action(const std::vector<std::string>& args) {
         ->Error(android::DiagMessage()
                 << "the --merge-only flag can be only used when building a static library");
     return 1;
+  }
+  if (options_.use_sparse_encoding) {
+    options_.table_flattener_options.sparse_entries = SparseEntriesMode::Enabled;
   }
 
   // The default build type.

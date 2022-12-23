@@ -24,18 +24,18 @@ import android.hardware.SensorManager;
 import android.os.Handler;
 import android.os.PowerManager;
 import android.util.IntArray;
-import android.util.Slog;
 import android.util.SparseArray;
 import android.view.Display;
 import android.view.DisplayInfo;
 import android.view.SurfaceControl;
+import android.view.SurfaceControl.RefreshRateRange;
 import android.view.SurfaceControl.Transaction;
 import android.window.DisplayWindowPolicyController;
+import android.window.ScreenCapture;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -118,7 +118,7 @@ public abstract class DisplayManagerInternal {
      * @param displayId The display id to take the screenshot of.
      * @return The buffer or null if we have failed.
      */
-    public abstract SurfaceControl.ScreenshotHardwareBuffer systemScreenshot(int displayId);
+    public abstract ScreenCapture.ScreenshotHardwareBuffer systemScreenshot(int displayId);
 
     /**
      * General screenshot functionality that excludes secure layers and applies appropriate
@@ -127,7 +127,7 @@ public abstract class DisplayManagerInternal {
      * @param displayId The display id to take the screenshot of.
      * @return The buffer or null if we have failed.
      */
-    public abstract SurfaceControl.ScreenshotHardwareBuffer userScreenshot(int displayId);
+    public abstract ScreenCapture.ScreenshotHardwareBuffer userScreenshot(int displayId);
 
     /**
      * Returns information about the specified logical display.
@@ -398,6 +398,11 @@ public abstract class DisplayManagerInternal {
     public abstract DisplayWindowPolicyController getDisplayWindowPolicyController(int displayId);
 
     /**
+     * Get DisplayPrimaries from SF for a particular display.
+     */
+    public abstract SurfaceControl.DisplayPrimaries getDisplayNativePrimaries(int displayId);
+
+    /**
      * Describes the requested power state of the display.
      *
      * This object is intended to describe the general characteristics of the
@@ -642,72 +647,6 @@ public abstract class DisplayManagerInternal {
          * </ol>
          */
         void onDisplayGroupChanged(int groupId);
-    }
-
-    /**
-     * Information about the min and max refresh rate DM would like to set the display to.
-     */
-    public static final class RefreshRateRange {
-        public static final String TAG = "RefreshRateRange";
-
-        // The tolerance within which we consider something approximately equals.
-        public static final float FLOAT_TOLERANCE = 0.01f;
-
-        /**
-         * The lowest desired refresh rate.
-         */
-        public float min;
-
-        /**
-         * The highest desired refresh rate.
-         */
-        public float max;
-
-        public RefreshRateRange() {}
-
-        public RefreshRateRange(float min, float max) {
-            if (min < 0 || max < 0 || min > max + FLOAT_TOLERANCE) {
-                Slog.e(TAG, "Wrong values for min and max when initializing RefreshRateRange : "
-                        + min + " " + max);
-                this.min = this.max = 0;
-                return;
-            }
-            if (min > max) {
-                // Min and max are within epsilon of each other, but in the wrong order.
-                float t = min;
-                min = max;
-                max = t;
-            }
-            this.min = min;
-            this.max = max;
-        }
-
-        /**
-         * Checks whether the two objects have the same values.
-         */
-        @Override
-        public boolean equals(Object other) {
-            if (other == this) {
-                return true;
-            }
-
-            if (!(other instanceof RefreshRateRange)) {
-                return false;
-            }
-
-            RefreshRateRange refreshRateRange = (RefreshRateRange) other;
-            return (min == refreshRateRange.min && max == refreshRateRange.max);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(min, max);
-        }
-
-        @Override
-        public String toString() {
-            return "(" + min + " " + max + ")";
-        }
     }
 
     /**

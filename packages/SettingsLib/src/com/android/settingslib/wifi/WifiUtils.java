@@ -366,7 +366,7 @@ public class WifiUtils {
      * @param noInternet True if a connected Wi-Fi network cannot access the Internet
      */
     public static int getInternetIconResource(int level, boolean noInternet) {
-        return getInternetIconResource(level, noInternet, 0 /* standard */, false /* isReady */);
+        return getInternetIconResource(level, noInternet, 0 /* standard */);
     }
 
     /**
@@ -376,7 +376,7 @@ public class WifiUtils {
      * @param noInternet True if a connected Wi-Fi network cannot access the Internet
      * @throws IllegalArgumentException if an invalid RSSI level is given.
      */
-    public static int getInternetIconResource(int level, boolean noInternet, int standard, boolean isReady) {
+    public static int getInternetIconResource(int level, boolean noInternet, int standard) {
         int wifiLevel = level;
         if (wifiLevel < 0) {
             Log.e(TAG, "Wi-Fi level is out of range! level:" + level);
@@ -390,11 +390,7 @@ public class WifiUtils {
             case 4:
                 return WIFI_4_PIE[wifiLevel];
             case 5:
-                if (isReady) {
-                    return WIFI_6_PIE[wifiLevel];
-                } else {
-                    return WIFI_5_PIE[wifiLevel];
-                }
+                return WIFI_5_PIE[wifiLevel];
             case 6:
                 return WIFI_6_PIE[wifiLevel];
             default:

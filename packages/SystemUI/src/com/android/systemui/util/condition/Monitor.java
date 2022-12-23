@@ -57,12 +57,16 @@ public class Monitor {
         }
 
         public void update() {
+            // Only consider set conditions.
+            final Collection<Condition> setConditions = mSubscription.mConditions.stream()
+                    .filter(Condition::isConditionSet).collect(Collectors.toSet());
+
             // Overriding conditions do not override each other
-            final Collection<Condition> overridingConditions = mSubscription.mConditions.stream()
+            final Collection<Condition> overridingConditions = setConditions.stream()
                     .filter(Condition::isOverridingCondition).collect(Collectors.toSet());
 
             final Collection<Condition> targetCollection = overridingConditions.isEmpty()
-                    ? mSubscription.mConditions : overridingConditions;
+                    ? setConditions : overridingConditions;
 
             final boolean newAllConditionsMet = targetCollection.isEmpty() ? true : targetCollection
                     .stream()
@@ -113,6 +117,7 @@ public class Monitor {
         final SubscriptionState state = new SubscriptionState(subscription);
 
         mExecutor.execute(() -> {
+            if (shouldLog()) Log.d(mTag, "adding subscription");
             mSubscriptions.put(token, state);
 
             // Add and associate conditions.
@@ -139,7 +144,7 @@ public class Monitor {
      */
     public void removeSubscription(@NotNull Subscription.Token token) {
         mExecutor.execute(() -> {
-            if (shouldLog()) Log.d(mTag, "removing callback");
+            if (shouldLog()) Log.d(mTag, "removing subscription");
             if (!mSubscriptions.containsKey(token)) {
                 Log.e(mTag, "subscription not present:" + token);
                 return;

@@ -20,6 +20,7 @@ import android.graphics.Rect;
 import android.util.Slog;
 
 import com.android.keyguard.KeyguardClockSwitch.ClockSize;
+import com.android.systemui.plugins.ClockAnimations;
 import com.android.systemui.statusbar.notification.AnimatableProperty;
 import com.android.systemui.statusbar.notification.PropertyAnimator;
 import com.android.systemui.statusbar.notification.stack.AnimationProperties;
@@ -212,9 +213,9 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
         }
 
         @Override
-        public void onKeyguardVisibilityChanged(boolean showing) {
-            if (showing) {
-                if (DEBUG) Slog.v(TAG, "refresh statusview showing:" + showing);
+        public void onKeyguardVisibilityChanged(boolean visible) {
+            if (visible) {
+                if (DEBUG) Slog.v(TAG, "refresh statusview visible:true");
                 refreshTime();
             }
         }
@@ -231,5 +232,10 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
         } else {
             mView.setClipBounds(null);
         }
+    }
+
+    /** Gets the animations for the current clock. */
+    public ClockAnimations getClockAnimations() {
+        return mKeyguardClockSwitchController.getClockAnimations();
     }
 }

@@ -13,13 +13,15 @@
         <option name="run-command" value="cmd window tracing level all" />
         <!-- set WM tracing to frame (avoid incomplete states) -->
         <option name="run-command" value="cmd window tracing frame" />
+        <!-- ensure lock screen mode is swipe -->
+        <option name="run-command" value="locksettings set-disabled false" />
         <!-- restart launcher to activate TAPL -->
         <option name="run-command" value="setprop ro.test_harness 1 ; am force-stop com.google.android.apps.nexuslauncher" />
     </target_preparer>
     <target_preparer class="com.android.tradefed.targetprep.suite.SuiteApkInstaller">
         <option name="cleanup-apks" value="true"/>
         <option name="test-file-name" value="WMShellFlickerTests.apk"/>
-        <option name="test-file-name" value="WMShellFlickerTestApp.apk" />
+        <option name="test-file-name" value="FlickerTestApp.apk" />
     </target_preparer>
     <test class="com.android.tradefed.testtype.AndroidJUnitTest">
         <option name="package" value="com.android.wm.shell.flicker"/>

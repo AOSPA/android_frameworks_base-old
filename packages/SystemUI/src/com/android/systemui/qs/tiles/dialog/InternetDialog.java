@@ -12,8 +12,16 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ *
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 package com.android.systemui.qs.tiles.dialog;
+
+import static android.telephony.ims.feature.ImsFeature.FEATURE_MMTEL;
+import static android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_CROSS_SIM;
 
 import static com.android.systemui.Prefs.Key.QS_HAS_TURNED_OFF_MOBILE_DATA;
 import static com.android.systemui.qs.tiles.dialog.InternetDialogController.MAX_WIFI_ENTRY_COUNT;
@@ -26,6 +34,8 @@ import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.RemoteException;
+import android.telephony.ims.aidl.IImsRegistration;
 import android.telephony.ServiceState;
 import android.telephony.SignalStrength;
 import android.telephony.SubscriptionManager;
@@ -39,6 +49,7 @@ import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewStub;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
@@ -62,6 +73,7 @@ import com.android.settingslib.wifi.WifiEnterpriseRestrictionUtils;
 import com.android.systemui.Prefs;
 import com.android.systemui.R;
 import com.android.systemui.accessibility.floatingmenu.AnnotationLinkSpan;
+import com.android.systemui.animation.DialogLaunchAnimator;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
@@ -71,6 +83,8 @@ import com.android.wifitrackerlib.WifiEntry;
 
 import java.util.List;
 import java.util.concurrent.Executor;
+
+import javax.inject.Inject;
 
 /**
  * Dialog for showing mobile network, connected Wi-Fi network and Wi-Fi networks.
@@ -86,6 +100,7 @@ public class InternetDialog extends SystemUIDialog implements
 
     private final Handler mHandler;
     private final Executor mBackgroundExecutor;
+    private final DialogLaunchAnimator mDialogLaunchAnimator;
 
     @VisibleForTesting
     protected InternetAdapter mAdapter;
@@ -109,6 +124,7 @@ public class InternetDialog extends SystemUIDialog implements
     private LinearLayout mInternetDialogLayout;
     private LinearLayout mConnectedWifListLayout;
     private LinearLayout mMobileNetworkLayout;
+    private LinearLayout mSecondaryMobileNetworkLayout;
     private LinearLayout mTurnWifiOnLayout;
     private LinearLayout mEthernetLayout;
     private TextView mWifiToggleTitleText;
@@ -123,6 +139,8 @@ public class InternetDialog extends SystemUIDialog implements
     private ImageView mSignalIcon;
     private TextView mMobileTitleText;
     private TextView mMobileSummaryText;
+    private TextView mSecondaryMobileTitleText;
+    private TextView  mSecondaryMobileSummaryText;
     private TextView mAirplaneModeSummaryText;
     private Switch mMobileDataToggle;
     private View mMobileToggleDivider;
@@ -158,9 +176,11 @@ public class InternetDialog extends SystemUIDialog implements
         mInternetDialogSubTitle.setText(getSubtitleText());
     };
 
+    @Inject
     public InternetDialog(Context context, InternetDialogFactory internetDialogFactory,
             InternetDialogController internetDialogController, boolean canConfigMobileData,
             boolean canConfigWifi, boolean aboveStatusBar, UiEventLogger uiEventLogger,
+            DialogLaunchAnimator dialogLaunchAnimator,
             @Main Handler handler, @Background Executor executor,
             KeyguardStateController keyguardStateController) {
         super(context);
@@ -183,6 +203,7 @@ public class InternetDialog extends SystemUIDialog implements
         mKeyguard = keyguardStateController;
 
         mUiEventLogger = uiEventLogger;
+        mDialogLaunchAnimator = dialogLaunchAnimator;
         mAdapter = new InternetAdapter(mInternetDialogController);
         if (!aboveStatusBar) {
             getWindow().setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY);
@@ -198,6 +219,8 @@ public class InternetDialog extends SystemUIDialog implements
         mUiEventLogger.log(InternetDialogEvent.INTERNET_DIALOG_SHOW);
         mDialogView = LayoutInflater.from(mContext).inflate(R.layout.internet_connectivity_dialog,
                 null);
+        mDialogView.setAccessibilityPaneTitle(
+                mContext.getText(R.string.accessibility_desc_quick_settings));
         final Window window = getWindow();
         window.setContentView(mDialogView);
 
@@ -285,6 +308,9 @@ public class InternetDialog extends SystemUIDialog implements
         mMobileNetworkLayout.setOnClickListener(null);
         mMobileDataToggle.setOnCheckedChangeListener(null);
         mConnectedWifListLayout.setOnClickListener(null);
+        if (mSecondaryMobileNetworkLayout != null) {
+            mSecondaryMobileNetworkLayout.setOnClickListener(null);
+        }
         mSeeAllLayout.setOnClickListener(null);
         mWiFiToggle.setOnCheckedChangeListener(null);
         mDoneButton.setOnClickListener(null);
@@ -339,6 +365,10 @@ public class InternetDialog extends SystemUIDialog implements
 
     private void setOnClickListener() {
         mMobileNetworkLayout.setOnClickListener(v -> {
+            int autoSwitchNonDdsSubId = mInternetDialogController.getActiveAutoSwitchNonDdsSubId();
+            if (autoSwitchNonDdsSubId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+                showTurnOffAutoDataSwitchDialog(autoSwitchNonDdsSubId);
+            }
             mInternetDialogController.connectCarrierNetwork();
         });
         mMobileDataToggle.setOnCheckedChangeListener(
@@ -372,10 +402,13 @@ public class InternetDialog extends SystemUIDialog implements
     /**
      * Do not allow the user to disable mobile data of DDS while there is an active
      * call on the nDDS.
+     * Whether device works under DSDA or DSDS mode, if temp DDS switch has happened,
+     * disabling mobile data won't be allowed.
      */
     private boolean shouldDisallowUserToDisableMobileData() {
         return mInternetDialogController.isMobileDataEnabled()
-                && !mInternetDialogController.isNonDdsCallStateIdle();
+                && !mInternetDialogController.isNonDdsCallStateIdle()
+                && mInternetDialogController.isTempDdsHappened();
     }
 
     private void setMobileDataLayout(boolean activeNetworkIsCellular,
@@ -392,6 +425,9 @@ public class InternetDialog extends SystemUIDialog implements
         if (!mInternetDialogController.hasActiveSubId()
                 && (!isWifiEnabled || !isCarrierNetworkActive)) {
             mMobileNetworkLayout.setVisibility(View.GONE);
+            if (mSecondaryMobileNetworkLayout != null) {
+                mSecondaryMobileNetworkLayout.setVisibility(View.GONE);
+            }
         } else {
             if (shouldDisallowUserToDisableMobileData()) {
                 Log.d(TAG, "Do not allow mobile data switch to be turned off");
@@ -401,8 +437,8 @@ public class InternetDialog extends SystemUIDialog implements
             }
             mMobileNetworkLayout.setVisibility(View.VISIBLE);
             mMobileDataToggle.setChecked(mInternetDialogController.isMobileDataEnabled());
-            mMobileTitleText.setText(getMobileNetworkTitle());
-            String summary = getMobileNetworkSummary();
+            mMobileTitleText.setText(getMobileNetworkTitle(mDefaultDataSubId));
+            String summary = getMobileNetworkSummary(mDefaultDataSubId);
             if (!TextUtils.isEmpty(summary)) {
                 mMobileSummaryText.setText(
                         Html.fromHtml(summary, Html.FROM_HTML_MODE_LEGACY));
@@ -412,28 +448,11 @@ public class InternetDialog extends SystemUIDialog implements
                 mMobileSummaryText.setVisibility(View.GONE);
             }
             mBackgroundExecutor.execute(() -> {
-                Drawable drawable = getSignalStrengthDrawable();
+                Drawable drawable = getSignalStrengthDrawable(mDefaultDataSubId);
                 mHandler.post(() -> {
                     mSignalIcon.setImageDrawable(drawable);
                 });
             });
-            mMobileTitleText.setTextAppearance(isNetworkConnected
-                    ? R.style.TextAppearance_InternetDialog_Active
-                    : R.style.TextAppearance_InternetDialog);
-            int secondaryRes = isNetworkConnected
-                    ? R.style.TextAppearance_InternetDialog_Secondary_Active
-                    : R.style.TextAppearance_InternetDialog_Secondary;
-            mMobileSummaryText.setTextAppearance(secondaryRes);
-            // Set airplane mode to the summary for carrier network
-            if (mInternetDialogController.isAirplaneModeEnabled()) {
-                mAirplaneModeSummaryText.setVisibility(View.VISIBLE);
-                mAirplaneModeSummaryText.setText(mContext.getText(R.string.airplane_mode));
-                mAirplaneModeSummaryText.setTextAppearance(secondaryRes);
-            } else {
-                mAirplaneModeSummaryText.setVisibility(View.GONE);
-            }
-            mMobileNetworkLayout.setBackground(
-                    isNetworkConnected ? mBackgroundOn : mBackgroundOff);
 
             TypedArray array = mContext.obtainStyledAttributes(
                     R.style.InternetDialog_Divider_Active, new int[]{android.R.attr.background});
@@ -446,6 +465,86 @@ public class InternetDialog extends SystemUIDialog implements
             mMobileDataToggle.setVisibility(mCanConfigMobileData ? View.VISIBLE : View.INVISIBLE);
             mMobileToggleDivider.setVisibility(
                     mCanConfigMobileData ? View.VISIBLE : View.INVISIBLE);
+
+            // Display the info for the non-DDS if it's actively being used
+            int autoSwitchNonDdsSubId = mInternetDialogController.getActiveAutoSwitchNonDdsSubId();
+            int nonDdsVisibility = autoSwitchNonDdsSubId
+                    != SubscriptionManager.INVALID_SUBSCRIPTION_ID ? View.VISIBLE : View.GONE;
+
+            int secondaryRes = isNetworkConnected
+                    ? R.style.TextAppearance_InternetDialog_Secondary_Active
+                    : R.style.TextAppearance_InternetDialog_Secondary;
+            if (nonDdsVisibility == View.VISIBLE) {
+                // non DDS is the currently active sub, set primary visual for it
+                ViewStub stub = mDialogView.findViewById(R.id.secondary_mobile_network_stub);
+                if (stub != null) {
+                    stub.inflate();
+                }
+                mSecondaryMobileNetworkLayout = findViewById(R.id.secondary_mobile_network_layout);
+                mSecondaryMobileNetworkLayout.setOnClickListener(
+                        this::onClickConnectedSecondarySub);
+                mSecondaryMobileNetworkLayout.setBackground(mBackgroundOn);
+
+                mSecondaryMobileTitleText = mDialogView.requireViewById(
+                        R.id.secondary_mobile_title);
+                mSecondaryMobileTitleText.setText(getMobileNetworkTitle(autoSwitchNonDdsSubId));
+                mSecondaryMobileTitleText.setTextAppearance(
+                        R.style.TextAppearance_InternetDialog_Active);
+
+                mSecondaryMobileSummaryText =
+                        mDialogView.requireViewById(R.id.secondary_mobile_summary);
+                summary = getMobileNetworkSummary(autoSwitchNonDdsSubId);
+                if (!TextUtils.isEmpty(summary)) {
+                    mSecondaryMobileSummaryText.setText(
+                            Html.fromHtml(summary, Html.FROM_HTML_MODE_LEGACY));
+                    mSecondaryMobileSummaryText.setBreakStrategy(Layout.BREAK_STRATEGY_SIMPLE);
+                    mSecondaryMobileSummaryText.setTextAppearance(
+                            R.style.TextAppearance_InternetDialog_Active);
+                }
+
+                ImageView mSecondarySignalIcon =
+                        mDialogView.requireViewById(R.id.secondary_signal_icon);
+                mBackgroundExecutor.execute(() -> {
+                    Drawable drawable = getSignalStrengthDrawable(autoSwitchNonDdsSubId);
+                    mHandler.post(() -> {
+                        mSecondarySignalIcon.setImageDrawable(drawable);
+                    });
+                });
+
+                ImageView mSecondaryMobileSettingsIcon =
+                        mDialogView.requireViewById(R.id.secondary_settings_icon);
+                mSecondaryMobileSettingsIcon.setColorFilter(
+                        mContext.getColor(R.color.connected_network_primary_color));
+
+                // set secondary visual for default data sub
+                mMobileNetworkLayout.setBackground(mBackgroundOff);
+                mMobileTitleText.setTextAppearance(R.style.TextAppearance_InternetDialog);
+                mMobileSummaryText.setTextAppearance(
+                        R.style.TextAppearance_InternetDialog_Secondary);
+                mSignalIcon.setColorFilter(
+                        mContext.getColor(R.color.connected_network_secondary_color));
+            } else {
+                mMobileNetworkLayout.setBackground(
+                        isNetworkConnected ? mBackgroundOn : mBackgroundOff);
+                mMobileTitleText.setTextAppearance(isNetworkConnected
+                        ?
+                        R.style.TextAppearance_InternetDialog_Active
+                        : R.style.TextAppearance_InternetDialog);
+                mMobileSummaryText.setTextAppearance(secondaryRes);
+            }
+
+            if (mSecondaryMobileNetworkLayout != null) {
+                mSecondaryMobileNetworkLayout.setVisibility(nonDdsVisibility);
+            }
+
+            // Set airplane mode to the summary for carrier network
+            if (mInternetDialogController.isAirplaneModeEnabled()) {
+                mAirplaneModeSummaryText.setVisibility(View.VISIBLE);
+                mAirplaneModeSummaryText.setText(mContext.getText(R.string.airplane_mode));
+                mAirplaneModeSummaryText.setTextAppearance(secondaryRes);
+            } else {
+                mAirplaneModeSummaryText.setVisibility(View.GONE);
+            }
         }
     }
 
@@ -484,6 +583,10 @@ public class InternetDialog extends SystemUIDialog implements
                 mInternetDialogController.getInternetWifiDrawable(mConnectedWifiEntry));
         mWifiSettingsIcon.setColorFilter(
                 mContext.getColor(R.color.connected_network_primary_color));
+
+        if (mSecondaryMobileNetworkLayout != null) {
+            mSecondaryMobileNetworkLayout.setVisibility(View.GONE);
+        }
     }
 
     @MainThread
@@ -554,6 +657,11 @@ public class InternetDialog extends SystemUIDialog implements
         mInternetDialogController.launchWifiDetailsSetting(mConnectedWifiEntry.getKey(), view);
     }
 
+    /** For DSDS auto data switch **/
+    void onClickConnectedSecondarySub(View view) {
+        mInternetDialogController.launchMobileNetworkSettings(view);
+    }
+
     void onClickSeeMoreButton(View view) {
         mInternetDialogController.launchNetworkSetting(view);
     }
@@ -568,19 +676,19 @@ public class InternetDialog extends SystemUIDialog implements
                 mIsProgressBarVisible && !mIsSearchingHidden);
     }
 
-    private Drawable getSignalStrengthDrawable() {
-        return mInternetDialogController.getSignalStrengthDrawable();
+    private Drawable getSignalStrengthDrawable(int subId) {
+        return mInternetDialogController.getSignalStrengthDrawable(subId);
     }
 
-    CharSequence getMobileNetworkTitle() {
-        return mInternetDialogController.getMobileNetworkTitle();
+    CharSequence getMobileNetworkTitle(int subId) {
+        return mInternetDialogController.getMobileNetworkTitle(subId);
     }
 
-    String getMobileNetworkSummary() {
+    String getMobileNetworkSummary(int subId) {
         if (shouldDisallowUserToDisableMobileData()) {
             return mContext.getString(R.string.mobile_data_summary_not_allowed_to_disable_data);
         }
-        return mInternetDialogController.getMobileNetworkSummary();
+        return mInternetDialogController.getMobileNetworkSummary(subId);
     }
 
     protected void showProgressBar() {
@@ -618,14 +726,31 @@ public class InternetDialog extends SystemUIDialog implements
     }
 
     private void showTurnOffMobileDialog() {
-        CharSequence carrierName = getMobileNetworkTitle();
-        boolean isInService = mInternetDialogController.isVoiceStateInService();
+        CharSequence carrierName = getMobileNetworkTitle(mDefaultDataSubId);
+        boolean isInService = mInternetDialogController.isVoiceStateInService(mDefaultDataSubId);
         if (TextUtils.isEmpty(carrierName) || !isInService) {
             carrierName = mContext.getString(R.string.mobile_data_disable_message_default_carrier);
         }
+        // Check if call is ongoing and IMS is registered on C_IWLAN type and adjust the dialog
+        // message
+        boolean isCallIdle = mTelephonyManager.getCallState() == TelephonyManager.CALL_STATE_IDLE;
+        IImsRegistration imsRegistrationImpl = mTelephonyManager.getImsRegistration(
+                mSubscriptionManager.getSlotIndex(mDefaultDataSubId), FEATURE_MMTEL);
+        boolean isImsRegisteredOverCiwlan = false;
+        try {
+            isImsRegisteredOverCiwlan = imsRegistrationImpl.getRegistrationTechnology() ==
+                    REGISTRATION_TECH_CROSS_SIM;
+        } catch (RemoteException ex) {
+            Log.e(TAG, "getRegistrationTechnology failed", ex);
+        }
+        Log.d(TAG, "isCallIdle=" + isCallIdle + ", isImsRegisteredOverCiwlan=" +
+                isImsRegisteredOverCiwlan);
+        String mobileDataDisableDialogMessage = (!isCallIdle && isImsRegisteredOverCiwlan) ?
+                mContext.getString(R.string.mobile_data_disable_ciwlan_call_message) :
+                mContext.getString(R.string.mobile_data_disable_message, carrierName);
         mAlertDialog = new Builder(mContext)
                 .setTitle(R.string.mobile_data_disable_title)
-                .setMessage(mContext.getString(R.string.mobile_data_disable_message, carrierName))
+                .setMessage(mobileDataDisableDialogMessage)
                 .setNegativeButton(android.R.string.cancel, (d, w) -> {
                     mMobileDataToggle.setChecked(true);
                 })
@@ -643,7 +768,33 @@ public class InternetDialog extends SystemUIDialog implements
         SystemUIDialog.setShowForAllUsers(mAlertDialog, true);
         SystemUIDialog.registerDismissListener(mAlertDialog);
         SystemUIDialog.setWindowOnTop(mAlertDialog, mKeyguard.isShowing());
-        mAlertDialog.show();
+        mDialogLaunchAnimator.showFromDialog(mAlertDialog, this, null, false);
+    }
+
+    private void showTurnOffAutoDataSwitchDialog(int subId) {
+        CharSequence carrierName = getMobileNetworkTitle(mDefaultDataSubId);
+        if (TextUtils.isEmpty(carrierName)) {
+            carrierName = mContext.getString(R.string.mobile_data_disable_message_default_carrier);
+        }
+        mAlertDialog = new Builder(mContext)
+                .setTitle(mContext.getString(R.string.auto_data_switch_disable_title, carrierName))
+                .setMessage(R.string.auto_data_switch_disable_message)
+                .setNegativeButton(R.string.auto_data_switch_dialog_negative_button,
+                        (d, w) -> {})
+                .setPositiveButton(R.string.auto_data_switch_dialog_positive_button,
+                        (d, w) -> {
+                            mInternetDialogController
+                                    .setAutoDataSwitchMobileDataPolicy(subId, false);
+                            if (mSecondaryMobileNetworkLayout != null) {
+                                mSecondaryMobileNetworkLayout.setVisibility(View.GONE);
+                            }
+                        })
+                .create();
+        mAlertDialog.getWindow().setType(WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG);
+        SystemUIDialog.setShowForAllUsers(mAlertDialog, true);
+        SystemUIDialog.registerDismissListener(mAlertDialog);
+        SystemUIDialog.setWindowOnTop(mAlertDialog, mKeyguard.isShowing());
+        mDialogLaunchAnimator.showFromDialog(mAlertDialog, this, null, false);
     }
 
     @Override
@@ -703,6 +854,11 @@ public class InternetDialog extends SystemUIDialog implements
 
     @Override
     public void onNonDdsCallStateChanged(int callState) {
+        mHandler.post(() -> updateDialog(true /* shouldUpdateMobileNetwork */));
+    }
+
+    @Override
+    public void onTempDdsSwitchHappened() {
         mHandler.post(() -> updateDialog(true /* shouldUpdateMobileNetwork */));
     }
 

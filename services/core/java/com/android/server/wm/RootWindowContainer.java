@@ -28,7 +28,6 @@ import static android.content.res.Configuration.EMPTY;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
-import static android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_SUSTAINED_PERFORMANCE_MODE;
 import static android.view.WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG;
 import static android.view.WindowManager.LayoutParams.TYPE_NOTIFICATION_SHADE;
@@ -144,7 +143,6 @@ import android.window.WindowContainerToken;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.ResolverActivity;
 import com.android.internal.protolog.common.ProtoLog;
-import com.android.internal.util.function.pooled.PooledConsumer;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.internal.util.function.pooled.PooledPredicate;
 import com.android.server.LocalServices;
@@ -178,15 +176,9 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     private static final String TAG_RECENTS = TAG + POSTFIX_RECENTS;
 
     private Object mLastWindowFreezeSource = null;
-    private Session mHoldScreen = null;
     private float mScreenBrightnessOverride = PowerManager.BRIGHTNESS_INVALID_FLOAT;
     private long mUserActivityTimeout = -1;
     private boolean mUpdateRotation = false;
-    // Following variables are for debugging screen wakelock only.
-    // Last window that requires screen wakelock
-    WindowState mHoldScreenWindow = null;
-    // Last window that obscures all windows below
-    WindowState mObscuringWindow = null;
     // Only set while traversing the default display based on its content.
     // Affects the behavior of mirroring on secondary displays.
     private boolean mObscureApplicationContentOnSecondaryDisplays = false;
@@ -284,12 +276,16 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             synchronized (mService.mGlobalLock) {
                 try {
                     mTaskSupervisor.beginDeferResume();
-
-                    final PooledConsumer c = PooledLambda.obtainConsumer(
-                            RootWindowContainer::destroyActivity, RootWindowContainer.this,
-                            PooledLambda.__(ActivityRecord.class));
-                    forAllActivities(c);
-                    c.recycle();
+                    forAllActivities(r -> {
+                        if (r.finishing || !r.isDestroyable()) return;
+                        if (DEBUG_SWITCH) {
+                            Slog.v(TAG_SWITCH, "Destroying " + r + " in state " + r.getState()
+                                    + " resumed=" + r.getTask().getTopResumedActivity()
+                                    + " pausing=" + r.getTask().getTopPausingActivity()
+                                    + " for reason " + mDestroyAllActivitiesReason);
+                        }
+                        r.destroyImmediately(mDestroyAllActivitiesReason);
+                    });
                 } finally {
                     mTaskSupervisor.endDeferResume();
                     resumeFocusedTasksTopActivities();
@@ -809,7 +805,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                     UPDATE_FOCUS_WILL_PLACE_SURFACES, false /*updateInputWindows*/);
         }
 
-        mHoldScreen = null;
         mScreenBrightnessOverride = PowerManager.BRIGHTNESS_INVALID_FLOAT;
         mUserActivityTimeout = -1;
         mObscureApplicationContentOnSecondaryDisplays = false;
@@ -853,6 +848,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         if (recentsAnimationController != null) {
             recentsAnimationController.checkAnimationReady(defaultDisplay.mWallpaperController);
         }
+        mWmService.mAtmService.mBackNavigationController
+                .checkAnimationReady(defaultDisplay.mWallpaperController);
 
         for (int displayNdx = 0; displayNdx < mChildren.size(); ++displayNdx) {
             final DisplayContent displayContent = mChildren.get(displayNdx);
@@ -922,7 +919,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             }
         }
 
-        mWmService.setHoldScreenLocked(mHoldScreen);
         if (!mWmService.mDisplayFrozen) {
             final float brightnessOverride = mScreenBrightnessOverride < PowerManager.BRIGHTNESS_MIN
                     || mScreenBrightnessOverride > PowerManager.BRIGHTNESS_MAX
@@ -1002,9 +998,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     private void applySurfaceChangesTransaction() {
-        mHoldScreenWindow = null;
-        mObscuringWindow = null;
-
         // TODO(multi-display): Support these features on secondary screens.
         final DisplayContent defaultDc = mDefaultDisplay;
         final DisplayInfo defaultInfo = defaultDc.getDisplayInfo();
@@ -1079,15 +1072,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             }
         }
         if (w.mHasSurface && canBeSeen) {
-            if ((attrFlags & FLAG_KEEP_SCREEN_ON) != 0) {
-                mHoldScreen = w.mSession;
-                mHoldScreenWindow = w;
-            } else if (w == mWmService.mLastWakeLockHoldingWindow) {
-                ProtoLog.d(WM_DEBUG_KEEP_SCREEN_ON,
-                        "handleNotObscuredLocked: %s was holding screen wakelock but no longer "
-                                + "has FLAG_KEEP_SCREEN_ON!!! called by%s",
-                        w, Debug.getCallers(10));
-            }
             if (!syswin && w.mAttrs.screenBrightness >= 0
                     && Float.isNaN(mScreenBrightnessOverride)) {
                 mScreenBrightnessOverride = w.mAttrs.screenBrightness;
@@ -1516,8 +1500,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             } else {
                 final String resolvedType =
                         homeIntent.resolveTypeIfNeeded(mService.mContext.getContentResolver());
-                final ResolveInfo info = AppGlobals.getPackageManager()
-                        .resolveIntent(homeIntent, resolvedType, flags, userId);
+                final ResolveInfo info = mTaskSupervisor.resolveIntent(homeIntent, resolvedType,
+                        userId, flags, Binder.getCallingUid());
                 if (info != null) {
                     aInfo = info.activityInfo;
                 }
@@ -1828,10 +1812,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         return getItemFromTaskDisplayAreas(TaskDisplayArea::getFocusedActivity);
     }
 
-    boolean hasResumedActivity(int uid) {
-        return forAllActivities(ar -> ar.isState(RESUMED) && ar.getUid() == uid);
-    }
-
     boolean isTopDisplayFocusedRootTask(Task task) {
         return task != null && task == getTopDisplayFocusedRootTask();
     }
@@ -2048,7 +2028,12 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 // non-fullscreen bounds. Then when this new PIP task exits PIP, it can restore
                 // to its previous freeform bounds.
                 rootTask.setLastNonFullscreenBounds(task.mLastNonFullscreenBounds);
-                rootTask.setBounds(task.getBounds());
+                // When creating a new Task for PiP, set its initial bounds as the TaskFragment in
+                // case the activity is embedded, so that it can be animated to PiP window from the
+                // current bounds.
+                // Use Task#setBoundsUnchecked to skip checking windowing mode as the windowing mode
+                // will be updated later after this is collected in transition.
+                rootTask.setBoundsUnchecked(r.getTaskFragment().getBounds());
 
                 // Move the last recents animation transaction from original task to the new one.
                 if (task.mLastRecentsAnimationTransaction != null) {
@@ -2266,19 +2251,15 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             // Start IOP
             if(r.info.applicationInfo != null &&
                 r.info.applicationInfo.sourceDir != null) {
-                mPerfBoost.perfIOPrefetchStart(-1,r.packageName,
-                    r.info.applicationInfo.sourceDir.substring(
+                  if (mPerfBoost.board_first_api_lvl < BoostFramework.VENDOR_T_API_LEVEL &&
+                    mPerfBoost.board_api_lvl < BoostFramework.VENDOR_T_API_LEVEL) {
+                      mPerfBoost.perfIOPrefetchStart(-1,r.packageName,
+                      r.info.applicationInfo.sourceDir.substring(
                         0, r.info.applicationInfo.sourceDir.lastIndexOf('/')));
+                  }
             }
         }
     }
-
-    void acquireUxPerfLock(int opcode, String packageName) {
-         mUxPerf = new BoostFramework();
-         if (mUxPerf != null) {
-             mUxPerf.perfUXEngine_events(opcode, 0, packageName, 0);
-         }
-     }
 
     @Nullable
     ActivityRecord findTask(ActivityRecord r, TaskDisplayArea preferredTaskDisplayArea) {
@@ -2306,8 +2287,15 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
                 if(mTmpFindTaskResult.mIdealRecord.getState() == STOPPED) {
                      /*Warm launch */
-                     acquireUxPerfLock(BoostFramework.UXE_EVENT_SUB_LAUNCH,
-                         r.packageName);
+                     mUxPerf = new BoostFramework();
+                     if (mUxPerf != null) {
+                         if (mUxPerf.board_first_api_lvl < BoostFramework.VENDOR_T_API_LEVEL &&
+                             mUxPerf.board_api_lvl < BoostFramework.VENDOR_T_API_LEVEL) {
+                             mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_SUB_LAUNCH, 0, r.packageName, 0);
+                         } else {
+                             mUxPerf.perfEvent(BoostFramework.VENDOR_HINT_WARM_LAUNCH, r.packageName, 2, 0, 0);
+                         }
+                     }
                 }
                 return mTmpFindTaskResult.mIdealRecord;
             } else if (mTmpFindTaskResult.mCandidateRecord != null) {
@@ -2545,28 +2533,21 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         info.childTaskUserIds = new int[numTasks];
         final int[] currentIndex = {0};
 
-        final PooledConsumer c = PooledLambda.obtainConsumer(
-                RootWindowContainer::processTaskForTaskInfo, PooledLambda.__(Task.class), info,
-                currentIndex);
-        task.forAllLeafTasks(c, false /* traverseTopToBottom */);
-        c.recycle();
+        task.forAllLeafTasks(t -> {
+            int i = currentIndex[0];
+            info.childTaskIds[i] = t.mTaskId;
+            info.childTaskNames[i] = t.origActivity != null ? t.origActivity.flattenToString()
+                    : t.realActivity != null ? t.realActivity.flattenToString()
+                    : t.getTopNonFinishingActivity() != null
+                    ? t.getTopNonFinishingActivity().packageName : "unknown";
+            info.childTaskBounds[i] = t.mAtmService.getTaskBounds(t.mTaskId);
+            info.childTaskUserIds[i] = t.mUserId;
+            currentIndex[0] = ++i;
+        }, false /* traverseTopToBottom */);
 
         final ActivityRecord top = task.topRunningActivity();
         info.topActivity = top != null ? top.intent.getComponent() : null;
         return info;
-    }
-
-    private static void processTaskForTaskInfo(
-            Task task, RootTaskInfo info, int[] currentIndex) {
-        int i = currentIndex[0];
-        info.childTaskIds[i] = task.mTaskId;
-        info.childTaskNames[i] = task.origActivity != null ? task.origActivity.flattenToString()
-                : task.realActivity != null ? task.realActivity.flattenToString()
-                        : task.getTopNonFinishingActivity() != null
-                                ? task.getTopNonFinishingActivity().packageName : "unknown";
-        info.childTaskBounds[i] = task.mAtmService.getTaskBounds(task.mTaskId);
-        info.childTaskUserIds[i] = task.mUserId;
-        currentIndex[0] = ++i;
     }
 
     RootTaskInfo getRootTaskInfo(int taskId) {
@@ -2793,35 +2774,16 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     void clearOtherAppTimeTrackers(AppTimeTracker except) {
-        final PooledConsumer c = PooledLambda.obtainConsumer(
-                RootWindowContainer::clearOtherAppTimeTrackers,
-                PooledLambda.__(ActivityRecord.class), except);
-        forAllActivities(c);
-        c.recycle();
-    }
-
-    private static void clearOtherAppTimeTrackers(ActivityRecord r, AppTimeTracker except) {
-        if (r.appTimeTracker != except) {
-            r.appTimeTracker = null;
-        }
+        forAllActivities(r -> {
+            if (r.appTimeTracker != except) {
+                r.appTimeTracker = null;
+            }
+        });
     }
 
     void scheduleDestroyAllActivities(String reason) {
         mDestroyAllActivitiesReason = reason;
         mService.mH.post(mDestroyAllActivitiesRunnable);
-    }
-
-    private void destroyActivity(ActivityRecord r) {
-        if (r.finishing || !r.isDestroyable()) return;
-
-        if (DEBUG_SWITCH) {
-            Slog.v(TAG_SWITCH, "Destroying " + r + " in state " + r.getState()
-                    + " resumed=" + r.getTask().getTopResumedActivity() + " pausing="
-                    + r.getTask().getTopPausingActivity() + " for reason "
-                    + mDestroyAllActivitiesReason);
-        }
-
-        r.destroyImmediately(mDestroyAllActivitiesReason);
     }
 
     // Tries to put all activity tasks to sleep. Returns true if all tasks were
@@ -3220,24 +3182,16 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     void updateActivityApplicationInfo(ApplicationInfo aInfo) {
         final String packageName = aInfo.packageName;
         final int userId = UserHandle.getUserId(aInfo.uid);
-        final PooledConsumer c = PooledLambda.obtainConsumer(
-                RootWindowContainer::updateActivityApplicationInfo,
-                PooledLambda.__(ActivityRecord.class), aInfo, userId, packageName);
-        forAllActivities(c);
-        c.recycle();
-    }
-
-    private static void updateActivityApplicationInfo(
-            ActivityRecord r, ApplicationInfo aInfo, int userId, String packageName) {
-        if (r.mUserId == userId && packageName.equals(r.packageName)) {
-            r.updateApplicationInfo(aInfo);
-        }
+        forAllActivities(r -> {
+            if (r.mUserId == userId && packageName.equals(r.packageName)) {
+                r.updateApplicationInfo(aInfo);
+            }
+        });
     }
 
     void finishVoiceTask(IVoiceInteractionSession session) {
-        forAllRootTasks(rootTask -> {
-            rootTask.finishVoiceTask(session);
-        });
+        final IBinder binder = session.asBinder();
+        forAllLeafTasks(t -> t.finishIfVoiceTask(binder), true /* traverseTopToBottom */);
     }
 
     /**

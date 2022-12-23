@@ -59,12 +59,9 @@ public class KeyguardPatternViewController
     private final LatencyTracker mLatencyTracker;
     private final FalsingCollector mFalsingCollector;
     private final EmergencyButtonController mEmergencyButtonController;
-    private final KeyguardMessageAreaController.Factory mMessageAreaControllerFactory;
     private final DevicePostureController mPostureController;
     private final DevicePostureController.Callback mPostureCallback =
             posture -> mView.onDevicePostureChanged(posture);
-
-    private KeyguardMessageAreaController mMessageAreaController;
     private LockPatternView mLockPatternView;
     private CountDownTimer mCountdownTimer;
     private AsyncTask<?, ?, ?> mPendingLockCheck;
@@ -202,15 +199,13 @@ public class KeyguardPatternViewController
             EmergencyButtonController emergencyButtonController,
             KeyguardMessageAreaController.Factory messageAreaControllerFactory,
             DevicePostureController postureController) {
-        super(view, securityMode, keyguardSecurityCallback, emergencyButtonController);
+        super(view, securityMode, keyguardSecurityCallback, emergencyButtonController,
+                messageAreaControllerFactory);
         mKeyguardUpdateMonitor = keyguardUpdateMonitor;
         mLockPatternUtils = lockPatternUtils;
         mLatencyTracker = latencyTracker;
         mFalsingCollector = falsingCollector;
         mEmergencyButtonController = emergencyButtonController;
-        mMessageAreaControllerFactory = messageAreaControllerFactory;
-        KeyguardMessageArea kma = KeyguardMessageArea.findSecurityMessageDisplay(mView);
-        mMessageAreaController = mMessageAreaControllerFactory.create(kma);
         mLockPatternView = mView.findViewById(R.id.lockPatternView);
         mPostureController = postureController;
     }
@@ -218,7 +213,6 @@ public class KeyguardPatternViewController
     @Override
     public void onInit() {
         super.onInit();
-        mMessageAreaController.init();
     }
 
     @Override
@@ -305,12 +299,6 @@ public class KeyguardPatternViewController
     }
 
     @Override
-    public void onResume(int reason) {
-        super.onResume(reason);
-        mMessageAreaController.setMessageIfEmpty(R.string.keyguard_enter_your_pattern);
-    }
-
-    @Override
     public boolean needsInput() {
         return false;
     }
@@ -347,6 +335,9 @@ public class KeyguardPatternViewController
 
     @Override
     public void showMessage(CharSequence message, ColorStateList colorState) {
+        if (mMessageAreaController == null) {
+            return;
+        }
         if (colorState != null) {
             mMessageAreaController.setNextMessageColor(colorState);
         }
@@ -365,7 +356,7 @@ public class KeyguardPatternViewController
     }
 
     private void displayDefaultSecurityMessage() {
-        mMessageAreaController.setMessage("");
+        mMessageAreaController.setMessage(getInitialMessageResId());
     }
 
     private void handleAttemptLockout(long elapsedRealtimeDeadline) {
@@ -395,5 +386,10 @@ public class KeyguardPatternViewController
             }
 
         }.start();
+    }
+
+    @Override
+    protected int getInitialMessageResId() {
+        return R.string.keyguard_enter_your_pattern;
     }
 }
