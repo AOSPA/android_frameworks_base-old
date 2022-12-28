@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "f32957e4_3c414dfe",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000498
+      },
+      "writtenOn": "2022-12-28T10:21:42Z",
+      "side": 1,
+      "message": "Fix brightness slider curve for bitra and bladerunner, need to be tested on other devices to be sure it doesn\u0027t break anything",
+      "revId": "caaca86f5e3fe2c4d7f8e843b8c252246d681f79",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
