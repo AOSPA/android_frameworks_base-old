@@ -1,0 +1,89 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "8bbd21dc_7523b479",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 13
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000090
+      },
+      "writtenOn": "2022-12-29T11:03:53Z",
+      "side": 1,
+      "message": "It says \"Say something nice...\" so Hey everyone i left some cute comments around regarding some errors popping in testing.\n\nCheers",
+      "revId": "1737ac0f02febfb127007eedb2e75106bd296958",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "7cdce6a0_58393387",
+        "filename": "core/java/com/sysaac/haptic/base/Util.java",
+        "patchSetId": 13
+      },
+      "lineNbr": 790,
+      "author": {
+        "id": 1000090
+      },
+      "writtenOn": "2022-12-29T11:03:53Z",
+      "side": 1,
+      "message": "This returns false upon failure but in RichtapPlayer the condition is inverted, basically this is called and error it thrown when we ACTUALLY have a valid .he file. I am posting a comment with the suggested \"fix\".",
+      "revId": "1737ac0f02febfb127007eedb2e75106bd296958",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "5fedec25_e934b52c",
+        "filename": "core/java/com/sysaac/haptic/player/RichtapPlayer.java",
+        "patchSetId": 13
+      },
+      "lineNbr": 238,
+      "author": {
+        "id": 1000090
+      },
+      "writtenOn": "2022-12-29T11:03:53Z",
+      "side": 1,
+      "message": "Condition with empty body, something needs to happen here (?).",
+      "revId": "1737ac0f02febfb127007eedb2e75106bd296958",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "23ff537f_c88409dc",
+        "filename": "core/java/com/sysaac/haptic/player/RichtapPlayer.java",
+        "patchSetId": 13
+      },
+      "lineNbr": 264,
+      "author": {
+        "id": 1000090
+      },
+      "writtenOn": "2022-12-29T11:03:53Z",
+      "side": 1,
+      "message": "We need to invert the condition, should be:\nif (!Util.m99b(file.getPath(), \".he\")) { // note the starting ! before Util\n\nThis should fix the false exception while reading .he file",
+      "revId": "1737ac0f02febfb127007eedb2e75106bd296958",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "465b49e8_88f3cbcc",
+        "filename": "core/java/com/sysaac/haptic/player/RichtapPlayer.java",
+        "patchSetId": 13
+      },
+      "lineNbr": 293,
+      "author": {
+        "id": 1000090
+      },
+      "writtenOn": "2022-12-29T11:03:53Z",
+      "side": 1,
+      "message": "If this is true it means we have support (checkIfRichTapSupport returned value is set as the returned value for Util.m96c(), so not sure if the condition should or should not be inverted here. Looks like we should procede here instead of returning if we have support but i might need someone to check it.",
+      "revId": "1737ac0f02febfb127007eedb2e75106bd296958",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
