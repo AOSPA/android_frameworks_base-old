@@ -905,4 +905,9 @@ public abstract class ActivityManagerInternal {
      */
     public abstract void registerNetworkPolicyUidObserver(@NonNull IUidObserver observer,
             int which, int cutpoint, @NonNull String callingPackage);
+
+    /**
+     * Return all client package names of a service.
+     */
+    public abstract ArraySet<String> getClientPackages(String servicePackageName);
 }

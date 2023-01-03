@@ -128,6 +128,7 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
     boolean delayedStop;    // service has been stopped but is in a delayed start?
     boolean stopIfKilled;   // last onStart() said to stop if service killed?
     boolean callStart;      // last onStart() has asked to always be called on restart.
+    int startCommandResult; // last result from onStartCommand(), only for dumpsys.
     int executeNesting;     // number of outstanding operations keeping foreground.
     boolean executeFg;      // should we be executing in the foreground?
     long executingStart;    // start time of last execute request.
@@ -364,9 +365,6 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
          * Note, we do _not_ check the "start id" here, because the start id increments if the
          * app calls startService() or startForegroundService() on the same service,
          * but that will _not_ update the ShortFgsInfo, and will not extend the timeout.
-         *
-         * TODO(short-service): Make sure, calling startService will not extend or remove the
-         * timeout, in CTS.
          */
         boolean isCurrent() {
             return this.mStartForegroundCount == ServiceRecord.this.mStartForegroundCount;
@@ -481,6 +479,7 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
             proto.write(ServiceRecordProto.Start.DELAYED_STOP, delayedStop);
             proto.write(ServiceRecordProto.Start.STOP_IF_KILLED, stopIfKilled);
             proto.write(ServiceRecordProto.Start.LAST_START_ID, lastStartId);
+            proto.write(ServiceRecordProto.Start.START_COMMAND_RESULT, startCommandResult);
             proto.end(startToken);
         }
 
@@ -536,9 +535,22 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
                 }
             }
         }
-        proto.end(token);
+        if (mShortFgsInfo != null && mShortFgsInfo.isCurrent()) {
+            final long shortFgsToken = proto.start(ServiceRecordProto.SHORT_FGS_INFO);
+            proto.write(ServiceRecordProto.ShortFgsInfo.START_TIME,
+                    mShortFgsInfo.getStartTime());
+            proto.write(ServiceRecordProto.ShortFgsInfo.START_ID,
+                    mShortFgsInfo.getStartId());
+            proto.write(ServiceRecordProto.ShortFgsInfo.TIMEOUT_TIME,
+                    mShortFgsInfo.getTimeoutTime());
+            proto.write(ServiceRecordProto.ShortFgsInfo.PROC_STATE_DEMOTE_TIME,
+                    mShortFgsInfo.getProcStateDemoteTime());
+            proto.write(ServiceRecordProto.ShortFgsInfo.ANR_TIME,
+                    mShortFgsInfo.getAnrTime());
+            proto.end(shortFgsToken);
+        }
 
-        // TODO(short-service) Add FGS info
+        proto.end(token);
     }
 
     void dump(PrintWriter pw, String prefix) {
@@ -635,6 +647,7 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
                     pw.print(" stopIfKilled="); pw.print(stopIfKilled);
                     pw.print(" callStart="); pw.print(callStart);
                     pw.print(" lastStartId="); pw.println(lastStartId);
+                    pw.print(" startCommandResult="); pw.println(startCommandResult);
         }
         if (executeNesting != 0) {
             pw.print(prefix); pw.print("executeNesting="); pw.print(executeNesting);
@@ -897,7 +910,9 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
      *         has no reason to start again. Note this condition doesn't consider the bindings.
      */
     boolean canStopIfKilled(boolean isStartCanceled) {
-        // TODO(short-service): If it's a "short FGS", we should stop it if killed.
+        if (isShortFgs()) { // Short-FGS should always stop if killed.
+            return true;
+        }
         return startRequested && (stopIfKilled || isStartCanceled) && pendingStarts.isEmpty();
     }
 
@@ -1361,7 +1376,9 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
         // Note if the type contains FOREGROUND_SERVICE_TYPE_SHORT_SERVICE but also other bits
         // set, it's _not_ considered be a short service. (because we shouldn't apply
         // the short-service restrictions)
-        return isForeground
+        // (But we should be preventing mixture of FOREGROUND_SERVICE_TYPE_SHORT_SERVICE
+        // and other types in Service.startForeground().)
+        return startRequested && isForeground
                 && (foregroundServiceType == ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE);
     }
 
@@ -1399,7 +1416,7 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
                 || !mShortFgsInfo.isCurrent()) {
             return false;
         }
-        return mShortFgsInfo.getTimeoutTime() < SystemClock.uptimeMillis();
+        return mShortFgsInfo.getTimeoutTime() <= SystemClock.uptimeMillis();
     }
 
     /**
@@ -1414,7 +1431,7 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
                 || !mShortFgsInfo.isCurrent()) {
             return false;
         }
-        return mShortFgsInfo.getAnrTime() < SystemClock.uptimeMillis();
+        return mShortFgsInfo.getAnrTime() <= SystemClock.uptimeMillis();
     }
 
     private boolean isAppAlive() {

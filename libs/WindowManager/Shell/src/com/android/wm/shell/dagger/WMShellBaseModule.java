@@ -38,6 +38,7 @@ import com.android.wm.shell.TaskViewTransitions;
 import com.android.wm.shell.WindowManagerShellWrapper;
 import com.android.wm.shell.activityembedding.ActivityEmbeddingController;
 import com.android.wm.shell.back.BackAnimation;
+import com.android.wm.shell.back.BackAnimationBackground;
 import com.android.wm.shell.back.BackAnimationController;
 import com.android.wm.shell.bubbles.BubbleController;
 import com.android.wm.shell.bubbles.Bubbles;
@@ -93,12 +94,12 @@ import com.android.wm.shell.unfold.UnfoldAnimationController;
 import com.android.wm.shell.unfold.UnfoldTransitionHandler;
 import com.android.wm.shell.windowdecor.WindowDecorViewModel;
 
-import java.util.Optional;
-
 import dagger.BindsOptionalOf;
 import dagger.Lazy;
 import dagger.Module;
 import dagger.Provides;
+
+import java.util.Optional;
 
 /**
  * Provides basic dependencies from {@link com.android.wm.shell}, these dependencies are only
@@ -255,20 +256,29 @@ public abstract class WMShellBaseModule {
 
     @WMSingleton
     @Provides
+    static BackAnimationBackground provideBackAnimationBackground(
+            RootTaskDisplayAreaOrganizer rootTaskDisplayAreaOrganizer) {
+        return new BackAnimationBackground(rootTaskDisplayAreaOrganizer);
+    }
+
+    @WMSingleton
+    @Provides
     static Optional<BackAnimationController> provideBackAnimationController(
             Context context,
             ShellInit shellInit,
             ShellController shellController,
             @ShellMainThread ShellExecutor shellExecutor,
-            @ShellBackgroundThread Handler backgroundHandler
+            @ShellBackgroundThread Handler backgroundHandler,
+            BackAnimationBackground backAnimationBackground
     ) {
         if (BackAnimationController.IS_ENABLED) {
             return Optional.of(
                     new BackAnimationController(shellInit, shellController, shellExecutor,
-                            backgroundHandler, context));
+                            backgroundHandler, context, backAnimationBackground));
         }
         return Optional.empty();
     }
+
 
     //
     // Bubbles (optional feature)
@@ -687,10 +697,13 @@ public abstract class WMShellBaseModule {
 
     @WMSingleton
     @Provides
-    static Optional<DesktopModeController> providesDesktopModeController(
-            @DynamicOverride Optional<DesktopModeController> desktopModeController) {
-        if (DesktopModeStatus.IS_SUPPORTED) {
-            return desktopModeController;
+    static Optional<DesktopModeController> provideDesktopModeController(
+            @DynamicOverride Optional<Lazy<DesktopModeController>> desktopModeController) {
+        // Use optional-of-lazy for the dependency that this provider relies on.
+        // Lazy ensures that this provider will not be the cause the dependency is created
+        // when it will not be returned due to the condition below.
+        if (DesktopModeStatus.isProto1Enabled()) {
+            return desktopModeController.map(Lazy::get);
         }
         return Optional.empty();
     }
@@ -701,10 +714,13 @@ public abstract class WMShellBaseModule {
 
     @WMSingleton
     @Provides
-    static Optional<DesktopModeTaskRepository> providesDesktopTaskRepository(
-            @DynamicOverride Optional<DesktopModeTaskRepository> desktopModeTaskRepository) {
-        if (DesktopModeStatus.IS_SUPPORTED) {
-            return desktopModeTaskRepository;
+    static Optional<DesktopModeTaskRepository> provideDesktopTaskRepository(
+            @DynamicOverride Optional<Lazy<DesktopModeTaskRepository>> desktopModeTaskRepository) {
+        // Use optional-of-lazy for the dependency that this provider relies on.
+        // Lazy ensures that this provider will not be the cause the dependency is created
+        // when it will not be returned due to the condition below.
+        if (DesktopModeStatus.isAnyEnabled()) {
+            return desktopModeTaskRepository.map(Lazy::get);
         }
         return Optional.empty();
     }

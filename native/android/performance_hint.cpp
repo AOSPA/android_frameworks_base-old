@@ -16,6 +16,7 @@
 
 #define LOG_TAG "perf_hint"
 
+#include <aidl/android/hardware/power/SessionHint.h>
 #include <android/os/IHintManager.h>
 #include <android/os/IHintSession.h>
 #include <android/performance_hint.h>
@@ -25,13 +26,20 @@
 #include <performance_hint_private.h>
 #include <utils/SystemClock.h>
 
+#include <chrono>
 #include <utility>
 #include <vector>
 
 using namespace android;
 using namespace android::os;
 
+using namespace std::chrono_literals;
+
+using AidlSessionHint = aidl::android::hardware::power::SessionHint;
+
 struct APerformanceHintSession;
+
+constexpr int64_t SEND_HINT_TIMEOUT = std::chrono::nanoseconds(100ms).count();
 
 struct APerformanceHintManager {
 public:
@@ -71,8 +79,12 @@ private:
     const int64_t mPreferredRateNanos;
     // Target duration for choosing update rate
     int64_t mTargetDurationNanos;
-    // Last update timestamp
-    int64_t mLastUpdateTimestamp;
+    // First target hit timestamp
+    int64_t mFirstTargetMetTimestamp;
+    // Last target hit timestamp
+    int64_t mLastTargetMetTimestamp;
+    // Last hint reported from sendHint indexed by hint value
+    std::vector<int64_t> mLastHintSentTimestamp;
     // Cached samples
     std::vector<int64_t> mActualDurationsNanos;
     std::vector<int64_t> mTimestampsNanos;
@@ -144,7 +156,13 @@ APerformanceHintSession::APerformanceHintSession(sp<IHintSession> session,
       : mHintSession(std::move(session)),
         mPreferredRateNanos(preferredRateNanos),
         mTargetDurationNanos(targetDurationNanos),
-        mLastUpdateTimestamp(elapsedRealtimeNano()) {}
+        mFirstTargetMetTimestamp(0),
+        mLastTargetMetTimestamp(0) {
+    const std::vector<AidlSessionHint> sessionHintRange{ndk::enum_range<AidlSessionHint>().begin(),
+                                                        ndk::enum_range<AidlSessionHint>().end()};
+
+    mLastHintSentTimestamp = std::vector<int64_t>(sessionHintRange.size(), 0);
+}
 
 APerformanceHintSession::~APerformanceHintSession() {
     binder::Status ret = mHintSession->close();
@@ -171,7 +189,8 @@ int APerformanceHintSession::updateTargetWorkDuration(int64_t targetDurationNano
      */
     mActualDurationsNanos.clear();
     mTimestampsNanos.clear();
-    mLastUpdateTimestamp = elapsedRealtimeNano();
+    mFirstTargetMetTimestamp = 0;
+    mLastTargetMetTimestamp = 0;
     return 0;
 }
 
@@ -184,32 +203,51 @@ int APerformanceHintSession::reportActualWorkDuration(int64_t actualDurationNano
     mActualDurationsNanos.push_back(actualDurationNanos);
     mTimestampsNanos.push_back(now);
 
-    /**
-     * Cache the hint if the hint is not overtime and the mLastUpdateTimestamp is
-     * still in the mPreferredRateNanos duration.
-     */
-    if (actualDurationNanos < mTargetDurationNanos &&
-        now - mLastUpdateTimestamp <= mPreferredRateNanos) {
-        return 0;
+    if (actualDurationNanos >= mTargetDurationNanos) {
+        // Reset timestamps if we are equal or over the target.
+        mFirstTargetMetTimestamp = 0;
+    } else {
+        // Set mFirstTargetMetTimestamp for first time meeting target.
+        if (!mFirstTargetMetTimestamp || !mLastTargetMetTimestamp ||
+            (now - mLastTargetMetTimestamp > 2 * mPreferredRateNanos)) {
+            mFirstTargetMetTimestamp = now;
+        }
+        /**
+         * Rate limit the change if the update is over mPreferredRateNanos since first
+         * meeting target and less than mPreferredRateNanos since last meeting target.
+         */
+        if (now - mFirstTargetMetTimestamp > mPreferredRateNanos &&
+            now - mLastTargetMetTimestamp <= mPreferredRateNanos) {
+            return 0;
+        }
+        mLastTargetMetTimestamp = now;
     }
 
     binder::Status ret =
             mHintSession->reportActualWorkDuration(mActualDurationsNanos, mTimestampsNanos);
-    mActualDurationsNanos.clear();
-    mTimestampsNanos.clear();
     if (!ret.isOk()) {
         ALOGE("%s: HintSession reportActualWorkDuration failed: %s", __FUNCTION__,
               ret.exceptionMessage().c_str());
+        mFirstTargetMetTimestamp = 0;
+        mLastTargetMetTimestamp = 0;
         return EPIPE;
     }
-    mLastUpdateTimestamp = now;
+    mActualDurationsNanos.clear();
+    mTimestampsNanos.clear();
+
     return 0;
 }
 
 int APerformanceHintSession::sendHint(int32_t hint) {
-    if (hint < 0) {
-        ALOGE("%s: session hint value must be greater than zero", __FUNCTION__);
+    if (hint < 0 || hint >= static_cast<int32_t>(mLastHintSentTimestamp.size())) {
+        ALOGE("%s: invalid session hint %d", __FUNCTION__, hint);
         return EINVAL;
+    }
+    int64_t now = elapsedRealtimeNano();
+
+    // Limit sendHint to a pre-detemined rate for safety
+    if (now < (mLastHintSentTimestamp[hint] + SEND_HINT_TIMEOUT)) {
+        return 0;
     }
 
     binder::Status ret = mHintSession->sendHint(hint);
@@ -218,6 +256,7 @@ int APerformanceHintSession::sendHint(int32_t hint) {
         ALOGE("%s: HintSession sendHint failed: %s", __FUNCTION__, ret.exceptionMessage().c_str());
         return EPIPE;
     }
+    mLastHintSentTimestamp[hint] = now;
     return 0;
 }
 

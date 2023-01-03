@@ -20,6 +20,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.core.os.bundleOf
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.android.settingslib.spa.tests.testutils.getUniqueEntryId
+import com.android.settingslib.spa.tests.testutils.getUniquePageId
 import com.google.common.truth.Truth.assertThat
 import org.junit.Rule
 import org.junit.Test
@@ -64,6 +66,7 @@ class SettingsEntryTest {
         assertThat(entry.isAllowSearch).isFalse()
         assertThat(entry.isSearchDataDynamic).isFalse()
         assertThat(entry.hasMutableStatus).isFalse()
+        assertThat(entry.hasSliceSupport).isFalse()
     }
 
     @Test
@@ -121,12 +124,13 @@ class SettingsEntryTest {
     @Test
     fun testSetAttributes() {
         val owner = SettingsPage.create("mySpp")
-        val entry = SettingsEntryBuilder.create(owner, "myEntry")
+        val entryBuilder = SettingsEntryBuilder.create(owner, "myEntry")
             .setDisplayName("myEntryDisplay")
-            .setIsAllowSearch(true)
             .setIsSearchDataDynamic(false)
             .setHasMutableStatus(true)
-            .build()
+            .setSearchDataFn { null }
+            .setSliceDataFn { _, _ -> null }
+        val entry = entryBuilder.build()
         assertThat(entry.id).isEqualTo(getUniqueEntryId("myEntry", owner))
         assertThat(entry.displayName).isEqualTo("myEntryDisplay")
         assertThat(entry.fromPage).isNull()
@@ -134,6 +138,10 @@ class SettingsEntryTest {
         assertThat(entry.isAllowSearch).isTrue()
         assertThat(entry.isSearchDataDynamic).isFalse()
         assertThat(entry.hasMutableStatus).isTrue()
+        assertThat(entry.hasSliceSupport).isTrue()
+
+        val entry2 = entryBuilder.clearSearchDataFn().build()
+        assertThat(entry2.isAllowSearch).isFalse()
     }
 
     @Test
@@ -150,6 +158,10 @@ class SettingsEntryTest {
 
         val rtArguments = bundleOf("rtParam" to "v2")
         composeTestRule.setContent { entry.UiLayout(rtArguments) }
+        assertThat(entry.isAllowSearch).isTrue()
+        assertThat(entry.isSearchDataDynamic).isFalse()
+        assertThat(entry.hasMutableStatus).isFalse()
+        assertThat(entry.hasSliceSupport).isFalse()
         val searchData = entry.getSearchData(rtArguments)
         val statusData = entry.getStatusData(rtArguments)
         assertThat(searchData?.title).isEqualTo("myTitle")

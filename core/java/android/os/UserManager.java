@@ -59,7 +59,6 @@ import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.location.LocationManager;
 import android.provider.Settings;
-import android.telephony.TelephonyManager;
 import android.util.AndroidException;
 import android.util.ArraySet;
 import android.util.Log;
@@ -1748,7 +1747,7 @@ public class UserManager {
     public static final int SWITCHABILITY_STATUS_SYSTEM_USER_LOCKED = 1 << 2;
 
     /**
-     * Result returned in {@link #getUserSwitchability()} indicating user swichability.
+     * Result returned in {@link #getUserSwitchability()} indicating user switchability.
      * @hide
      */
     @Retention(RetentionPolicy.SOURCE)
@@ -2128,25 +2127,16 @@ public class UserManager {
      * @hide
      */
     @Deprecated
-    @RequiresPermission(allOf = {
-            Manifest.permission.READ_PHONE_STATE,
-            Manifest.permission.MANAGE_USERS}, // Can be INTERACT_ACROSS_USERS instead.
-            conditional = true)
+    @RequiresPermission(anyOf = {android.Manifest.permission.MANAGE_USERS,
+            android.Manifest.permission.INTERACT_ACROSS_USERS})
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     @UserHandleAware
     public boolean canSwitchUsers() {
-        boolean allowUserSwitchingWhenSystemUserLocked = Settings.Global.getInt(
-                mContext.getContentResolver(),
-                Settings.Global.ALLOW_USER_SWITCHING_WHEN_SYSTEM_USER_LOCKED, 0) != 0;
-        boolean isSystemUserUnlocked = isUserUnlocked(UserHandle.SYSTEM);
-        boolean inCall = false;
-        TelephonyManager telephonyManager = mContext.getSystemService(TelephonyManager.class);
-        if (telephonyManager != null) {
-            inCall = telephonyManager.getCallState() != TelephonyManager.CALL_STATE_IDLE;
+        try {
+            return mService.getUserSwitchability(mUserId) == SWITCHABILITY_STATUS_OK;
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
         }
-        boolean isUserSwitchDisallowed = hasUserRestrictionForUser(DISALLOW_USER_SWITCH, mUserId);
-        return (allowUserSwitchingWhenSystemUserLocked || isSystemUserUnlocked) && !inCall
-                && !isUserSwitchDisallowed;
     }
 
     /**
@@ -2161,9 +2151,8 @@ public class UserManager {
      * @hide
      */
     @SystemApi
-    @RequiresPermission(allOf = {Manifest.permission.READ_PHONE_STATE,
-            android.Manifest.permission.MANAGE_USERS,
-            android.Manifest.permission.INTERACT_ACROSS_USERS}, conditional = true)
+    @RequiresPermission(anyOf = {android.Manifest.permission.MANAGE_USERS,
+            android.Manifest.permission.INTERACT_ACROSS_USERS})
     @UserHandleAware(enabledSinceTargetSdkVersion = Build.VERSION_CODES.TIRAMISU)
     public @UserSwitchabilityResult int getUserSwitchability() {
         return getUserSwitchability(UserHandle.of(getContextUserIfAppropriate()));
@@ -2180,34 +2169,14 @@ public class UserManager {
      * @return A {@link UserSwitchabilityResult} flag indicating if the user is switchable.
      * @hide
      */
-    @RequiresPermission(allOf = {Manifest.permission.READ_PHONE_STATE,
-            android.Manifest.permission.MANAGE_USERS,
-            android.Manifest.permission.INTERACT_ACROSS_USERS}, conditional = true)
+    @RequiresPermission(anyOf = {android.Manifest.permission.MANAGE_USERS,
+            android.Manifest.permission.INTERACT_ACROSS_USERS})
     public @UserSwitchabilityResult int getUserSwitchability(UserHandle userHandle) {
-        final TelephonyManager tm =
-                (TelephonyManager) mContext.getSystemService(Context.TELEPHONY_SERVICE);
-
-        int flags = SWITCHABILITY_STATUS_OK;
-        if (tm.getCallState() != TelephonyManager.CALL_STATE_IDLE) {
-            flags |= SWITCHABILITY_STATUS_USER_IN_CALL;
+        try {
+            return mService.getUserSwitchability(userHandle.getIdentifier());
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
         }
-        if (hasUserRestrictionForUser(DISALLOW_USER_SWITCH, userHandle)) {
-            flags |= SWITCHABILITY_STATUS_USER_SWITCH_DISALLOWED;
-        }
-
-        // System User is always unlocked in Headless System User Mode, so ignore this flag
-        if (!isHeadlessSystemUserMode()) {
-            final boolean allowUserSwitchingWhenSystemUserLocked = Settings.Global.getInt(
-                    mContext.getContentResolver(),
-                    Settings.Global.ALLOW_USER_SWITCHING_WHEN_SYSTEM_USER_LOCKED, 0) != 0;
-            final boolean systemUserUnlocked = isUserUnlocked(UserHandle.SYSTEM);
-
-            if (!allowUserSwitchingWhenSystemUserLocked && !systemUserUnlocked) {
-                flags |= SWITCHABILITY_STATUS_SYSTEM_USER_LOCKED;
-            }
-        }
-
-        return flags;
     }
 
     /**
@@ -2377,14 +2346,16 @@ public class UserManager {
     }
 
     /**
-     * Returns true if the context user is the designated "main user" of the device. This user may
-     * have access to certain features which are limited to at most one user.
+     * Returns {@code true} if the context user is the designated "main user" of the device. This
+     * user may have access to certain features which are limited to at most one user. There will
+     * never be more than one main user on a device.
      *
-     * <p>Currently, the first human user on the device will be the main user; in the future, the
-     * concept may be transferable, so a different user (or even no user at all) may be designated
-     * the main user instead.
+     * <p>Currently, on most form factors the first human user on the device will be the main user;
+     * in the future, the concept may be transferable, so a different user (or even no user at all)
+     * may be designated the main user instead. On other form factors there might not be a main
+     * user.
      *
-     * <p>Note that this will be the not be the system user on devices for which
+     * <p>Note that this will not be the system user on devices for which
      * {@link #isHeadlessSystemUserMode()} returns true.
      * @hide
      */
@@ -2397,6 +2368,29 @@ public class UserManager {
     public boolean isMainUser() {
         final UserInfo user = getUserInfo(mUserId);
         return user != null && user.isMain();
+    }
+
+    /**
+     * Returns the designated "main user" of the device, or {@code null} if there is no main user.
+     *
+     * @see #isMainUser()
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(anyOf = {
+            Manifest.permission.MANAGE_USERS,
+            Manifest.permission.CREATE_USERS,
+            Manifest.permission.QUERY_USERS})
+    public @Nullable UserHandle getMainUser() {
+        try {
+            final int mainUserId = mService.getMainUserId();
+            if (mainUserId == UserHandle.USER_NULL) {
+                return null;
+            }
+            return UserHandle.of(mainUserId);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
     }
 
     /**
@@ -2951,8 +2945,15 @@ public class UserManager {
      * </ol>
      *
      * @return whether the user is visible at the moment, as defined above.
+     *
+     * @hide
      */
+    @SystemApi
     @UserHandleAware
+    @RequiresPermission(anyOf = {
+            "android.permission.INTERACT_ACROSS_USERS",
+            "android.permission.MANAGE_USERS"
+    })
     public boolean isUserVisible() {
         try {
             return mService.isUserVisible(mUserId);
@@ -2965,9 +2966,14 @@ public class UserManager {
      * Gets the visible users (as defined by {@link #isUserVisible()}.
      *
      * @return visible users at the moment.
+     *
+     * @hide
      */
-    @RequiresPermission(anyOf = {Manifest.permission.MANAGE_USERS,
-            Manifest.permission.INTERACT_ACROSS_USERS})
+    @SystemApi
+    @RequiresPermission(anyOf = {
+            "android.permission.INTERACT_ACROSS_USERS",
+            "android.permission.MANAGE_USERS"
+    })
     public @NonNull Set<UserHandle> getVisibleUsers() {
         ArraySet<UserHandle> result = new ArraySet<>();
         try {
@@ -4269,6 +4275,43 @@ public class UserManager {
     public @Nullable UserInfo getPrimaryUser() {
         try {
             return mService.getPrimaryUser();
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns the user who was last in the foreground, not including the current user and not
+     * including profiles.
+     *
+     * <p>Returns {@code null} if there is no previous user, for example if there
+     * is only one full user (i.e. only one user which is not a profile) on the device.
+     *
+     * <p>This method may be used for example to find the user to switch back to if the
+     * current user is removed, or if creating a new user is aborted.
+     *
+     * <p>Note that reboots do not interrupt this calculation; the previous user need not have
+     * used the device since it rebooted.
+     *
+     * <p>Note also that on devices that support multiple users on multiple displays, it is possible
+     * that the returned user will be visible on a secondary display, as the foreground user is the
+     * one associated with the main display.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.MANAGE_USERS,
+            android.Manifest.permission.CREATE_USERS,
+            android.Manifest.permission.QUERY_USERS
+    })
+    public @Nullable UserHandle getPreviousForegroundUser() {
+        try {
+            final int previousUser = mService.getPreviousFullUserToEnterForeground();
+            if (previousUser == UserHandle.USER_NULL) {
+                return null;
+            }
+            return UserHandle.of(previousUser);
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }

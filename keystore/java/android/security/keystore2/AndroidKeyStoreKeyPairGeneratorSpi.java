@@ -52,6 +52,7 @@ import android.system.keystore2.KeyEntryResponse;
 import android.system.keystore2.KeyMetadata;
 import android.system.keystore2.ResponseCode;
 import android.telephony.TelephonyManager;
+import android.text.TextUtils;
 import android.util.ArraySet;
 import android.util.Log;
 
@@ -647,6 +648,7 @@ public abstract class AndroidKeyStoreKeyPairGeneratorSpi extends KeyPairGenerato
         // {@link android.security.KeyStoreException#RKP_TEMPORARILY_UNAVAILABLE},
         // {@link android.security.KeyStoreException#RKP_SERVER_REFUSED_ISSUANCE},
         // {@link android.security.KeyStoreException#RKP_FETCHING_PENDING_CONNECTIVITY}
+        // {@link android.security.KeyStoreException#RKP_FETCHING_PENDING_SOFTWARE_REBOOT}
         public final int rkpStatus;
         @Nullable
         public final KeyPair keyPair;
@@ -856,6 +858,13 @@ public abstract class AndroidKeyStoreKeyPairGeneratorSpi extends KeyPairGenerato
                                 KeymasterDefs.KM_TAG_ATTESTATION_ID_IMEI,
                                 imei.getBytes(StandardCharsets.UTF_8)
                         ));
+                        final String secondImei = telephonyService.getImei(1);
+                        if (!TextUtils.isEmpty(secondImei)) {
+                            params.add(KeyStore2ParameterUtils.makeBytes(
+                                    KeymasterDefs.KM_TAG_ATTESTATION_ID_SECOND_IMEI,
+                                    secondImei.getBytes(StandardCharsets.UTF_8)
+                            ));
+                        }
                         break;
                     }
                     case AttestationUtils.ID_TYPE_MEID: {

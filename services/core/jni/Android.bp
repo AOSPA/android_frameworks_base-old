@@ -31,6 +31,9 @@ cc_library_static {
         "BroadcastRadio/convert.cpp",
         "BroadcastRadio/regions.cpp",
         "stats/SurfaceFlingerPuller.cpp",
+        "tvinput/BufferProducerThread.cpp",
+        "tvinput/JTvInputHal.cpp",
+        "tvinput/TvInputHal_hidl.cpp",
         "com_android_server_adb_AdbDebuggingManager.cpp",
         "com_android_server_am_BatteryStatsService.cpp",
         "com_android_server_biometrics_SurfaceToNativeHandleConverter.cpp",
@@ -68,6 +71,7 @@ cc_library_static {
         "com_android_server_PersistentDataBlockService.cpp",
         "com_android_server_am_LowMemDetector.cpp",
         "com_android_server_pm_PackageManagerShellCommandDataLoader.cpp",
+        "com_android_server_pm_Settings.cpp",
         "com_android_server_sensor_SensorService.cpp",
         "com_android_server_wm_TaskFpsCallbackController.cpp",
         "com_android_server_activityTriggerService.cpp",
@@ -150,7 +154,9 @@ cc_defaults {
         "libpsi",
         "libdataloader",
         "libincfs",
+        "liblz4",
         "android.hardware.audio.common@2.0",
+        "android.media.audio.common.types-V1-ndk",
         "android.hardware.broadcastradio@1.0",
         "android.hardware.broadcastradio@1.1",
         "android.hardware.contexthub@1.0",
@@ -177,6 +183,7 @@ cc_defaults {
         "android.hardware.power.stats-V1-ndk",
         "android.hardware.thermal@1.0",
         "android.hardware.tv.input@1.0",
+        "android.hardware.tv.input-V1-ndk",
         "android.hardware.vibrator-V2-cpp",
         "android.hardware.vibrator@1.0",
         "android.hardware.vibrator@1.1",
@@ -198,6 +205,7 @@ cc_defaults {
 
     static_libs: [
         "android.hardware.broadcastradio@common-utils-1x-lib",
+        "libaidlcommonsupport",
     ],
 
     product_variables: {
@@ -225,5 +233,28 @@ filegroup {
     name: "lib_gameManagerService_native",
     srcs: [
         "com_android_server_app_GameManagerService.cpp",
+    ],
+}
+
+// Settings JNI library for unit tests.
+cc_library_shared {
+    name: "libservices.core.settings.testonly",
+    defaults: ["libservices.core-libs"],
+
+    cpp_std: "c++2a",
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wno-unused-parameter",
+        "-Wthread-safety",
+    ],
+
+    srcs: [
+        "com_android_server_pm_Settings.cpp",
+        "onload_settings.cpp",
+    ],
+
+    header_libs: [
+        "bionic_libc_platform_headers",
     ],
 }

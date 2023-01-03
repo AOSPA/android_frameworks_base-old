@@ -452,7 +452,7 @@ public class PackageInfoUtils {
             info.category = pkgSetting.getCategoryOverride();
         }
 
-        info.seInfo = AndroidPackageUtils.getSeInfo(pkg, pkgSetting);
+        info.seInfo = pkgSetting.getSeInfo();
         info.primaryCpuAbi = pkgSetting.getPrimaryCpuAbi();
         info.secondaryCpuAbi = pkgSetting.getSecondaryCpuAbi();
 
@@ -533,7 +533,7 @@ public class PackageInfoUtils {
             ai.metaData = null;
         }
         ai.applicationInfo = applicationInfo;
-        ai.targetDisplayCategory = a.getTargetDisplayCategory();
+        ai.requiredDisplayCategory = a.getRequiredDisplayCategory();
         ai.setKnownActivityEmbeddingCerts(a.getKnownActivityEmbeddingCerts());
         assignFieldsComponentInfoParsedMainComponent(ai, a, pkgSetting, userId);
         return ai;

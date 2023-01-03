@@ -310,7 +310,7 @@ public:
             const InputDeviceIdentifier& identifier) override;
     std::string getDeviceAlias(const InputDeviceIdentifier& identifier) override;
     TouchAffineTransformation getTouchAffineTransformation(const std::string& inputDeviceDescriptor,
-                                                           int32_t surfaceRotation) override;
+                                                           ui::Rotation surfaceRotation) override;
 
     TouchAffineTransformation getTouchAffineTransformation(JNIEnv* env, jfloatArray matrixArr);
     void notifyStylusGestureStarted(int32_t deviceId, nsecs_t eventTime) override;
@@ -1153,7 +1153,7 @@ TouchAffineTransformation NativeInputManager::getTouchAffineTransformation(
 }
 
 TouchAffineTransformation NativeInputManager::getTouchAffineTransformation(
-        const std::string& inputDeviceDescriptor, int32_t surfaceRotation) {
+        const std::string& inputDeviceDescriptor, ui::Rotation surfaceRotation) {
     JNIEnv* env = jniEnv();
 
     ScopedLocalRef<jstring> descriptorObj(env, env->NewStringUTF(inputDeviceDescriptor.c_str()));
@@ -1576,6 +1576,12 @@ static std::vector<int32_t> getIntArray(JNIEnv* env, jintArray arr) {
     std::vector<int32_t> vec(a, a + size);
     env->ReleaseIntArrayElements(arr, a, 0);
     return vec;
+}
+
+static void nativeAddKeyRemapping(JNIEnv* env, jobject nativeImplObj, jint deviceId,
+                                  jint fromKeyCode, jint toKeyCode) {
+    NativeInputManager* im = getNativeInputManager(env, nativeImplObj);
+    im->getInputManager()->getReader().addKeyRemapping(deviceId, fromKeyCode, toKeyCode);
 }
 
 static jboolean nativeHasKeys(JNIEnv* env, jobject nativeImplObj, jint deviceId, jint sourceMask,
@@ -2360,6 +2366,7 @@ static const JNINativeMethod gInputManagerMethods[] = {
         {"getScanCodeState", "(III)I", (void*)nativeGetScanCodeState},
         {"getKeyCodeState", "(III)I", (void*)nativeGetKeyCodeState},
         {"getSwitchState", "(III)I", (void*)nativeGetSwitchState},
+        {"addKeyRemapping", "(III)V", (void*)nativeAddKeyRemapping},
         {"hasKeys", "(II[I[Z)Z", (void*)nativeHasKeys},
         {"getKeyCodeForKeyLocation", "(II)I", (void*)nativeGetKeyCodeForKeyLocation},
         {"createInputChannel", "(Ljava/lang/String;)Landroid/view/InputChannel;",
