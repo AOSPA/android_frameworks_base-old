@@ -174,13 +174,6 @@ class TaskFragment extends WindowContainer<WindowContainer> {
      * indicate that an Activity can't be embedded because the Activity is started on a new task.
      */
     static final int EMBEDDING_DISALLOWED_NEW_TASK = 3;
-    /**
-     * An embedding check result of
-     * {@link ActivityStarter#canEmbedActivity(TaskFragment, ActivityRecord, Task)}:
-     * indicate that an Activity can't be embedded because the Activity is started on a new
-     * TaskFragment, e.g. start an Activity on a new TaskFragment for result.
-     */
-    static final int EMBEDDING_DISALLOWED_NEW_TASK_FRAGMENT = 4;
 
     /**
      * Embedding check results of {@link #isAllowedToEmbedActivity(ActivityRecord)} or
@@ -191,7 +184,6 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             EMBEDDING_DISALLOWED_UNTRUSTED_HOST,
             EMBEDDING_DISALLOWED_MIN_DIMENSION_VIOLATION,
             EMBEDDING_DISALLOWED_NEW_TASK,
-            EMBEDDING_DISALLOWED_NEW_TASK_FRAGMENT,
     })
     @interface EmbeddingCheckResult {}
 
@@ -316,6 +308,14 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     private final IBinder mFragmentToken;
 
     /**
+     * The bounds of the embedded TaskFragment relative to the parent Task.
+     * {@code null} if it is not {@link #mIsEmbedded}
+     * TODO(b/261785978) cleanup with legacy app transition
+     */
+    @Nullable
+    private final Rect mRelativeEmbeddedBounds;
+
+    /**
      * Whether to delay the call to {@link #updateOrganizedTaskFragmentSurface()} when there is a
      * configuration change.
      */
@@ -360,7 +360,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         }
 
         void process(ActivityRecord start, boolean preserveWindow) {
-            if (start == null || !start.mVisibleRequested) {
+            if (start == null || !start.isVisibleRequested()) {
                 return;
             }
             reset(preserveWindow);
@@ -397,6 +397,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         mRootWindowContainer = mAtmService.mRootWindowContainer;
         mCreatedByOrganizer = createdByOrganizer;
         mIsEmbedded = isEmbedded;
+        mRelativeEmbeddedBounds = isEmbedded ? new Rect() : null;
         mTaskFragmentOrganizerController =
                 mAtmService.mWindowOrganizerController.mTaskFragmentOrganizerController;
         mFragmentToken = fragmentToken;
@@ -620,14 +621,6 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
         if (smallerThanMinDimension(a)) {
             return EMBEDDING_DISALLOWED_MIN_DIMENSION_VIOLATION;
-        }
-
-        // Cannot embed activity across TaskFragments for activity result.
-        // If the activity that started for result is finishing, it's likely that this start mode
-        // is used to place an activity in the same task. Since the finishing activity won't be
-        // able to get the results, so it's OK to embed in a different TaskFragment.
-        if (a.resultTo != null && !a.resultTo.finishing && a.resultTo.getTaskFragment() != this) {
-            return EMBEDDING_DISALLOWED_NEW_TASK_FRAGMENT;
         }
 
         return EMBEDDING_ALLOWED;
@@ -1173,8 +1166,16 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         }
 
         next.delayedResume = false;
-        final TaskDisplayArea taskDisplayArea = getDisplayArea();
 
+        // If we are currently pausing an activity, then don't do anything until that is done.
+        final boolean allPausedComplete = mRootWindowContainer.allPausedActivitiesComplete();
+        if (!allPausedComplete) {
+            ProtoLog.v(WM_DEBUG_STATES,
+                    "resumeTopActivity: Skip resume: some activity pausing.");
+            return false;
+        }
+
+        final TaskDisplayArea taskDisplayArea = getDisplayArea();
         // If the top activity is the resumed one, nothing to do.
         if (mResumedActivity == next && next.isState(RESUMED)
                 && taskDisplayArea.allResumedActivitiesComplete()) {
@@ -1194,14 +1195,6 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             }
             ProtoLog.d(WM_DEBUG_STATES, "resumeTopActivity: Top activity "
                     + "resumed %s", next);
-            return false;
-        }
-
-        // If we are currently pausing an activity, then don't do anything until that is done.
-        final boolean allPausedComplete = mRootWindowContainer.allPausedActivitiesComplete();
-        if (!allPausedComplete) {
-            ProtoLog.v(WM_DEBUG_STATES,
-                    "resumeTopActivity: Skip resume: some activity pausing.");
             return false;
         }
 
@@ -1398,7 +1391,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         if (next.attachedToProcess()) {
             if (DEBUG_SWITCH) {
                 Slog.v(TAG_SWITCH, "Resume running: " + next + " stopped=" + next.stopped
-                        + " visibleRequested=" + next.mVisibleRequested);
+                        + " visibleRequested=" + next.isVisibleRequested());
             }
 
             // If the previous activity is translucent, force a visibility update of
@@ -1412,7 +1405,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                     || mLastPausedActivity != null && !mLastPausedActivity.occludesParent();
 
             // This activity is now becoming visible.
-            if (!next.mVisibleRequested || next.stopped || lastActivityTranslucent) {
+            if (!next.isVisibleRequested() || next.stopped || lastActivityTranslucent) {
                 next.app.addToPendingTop();
                 next.setVisibility(true);
             }
@@ -1463,7 +1456,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                     // Do over!
                     mTaskSupervisor.scheduleResumeTopActivities();
                 }
-                if (!next.mVisibleRequested || next.stopped) {
+                if (!next.isVisibleRequested() || next.stopped) {
                     next.setVisibility(true);
                 }
                 next.completeResumeLocked();
@@ -1780,7 +1773,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             } else if (prev.attachedToProcess()) {
                 ProtoLog.v(WM_DEBUG_STATES, "Enqueue pending stop if needed: %s "
                                 + "wasStopping=%b visibleRequested=%b",  prev,  wasStopping,
-                        prev.mVisibleRequested);
+                        prev.isVisibleRequested());
                 if (prev.deferRelaunchUntilPaused) {
                     // Complete the deferred relaunch that was waiting for pause to complete.
                     ProtoLog.v(WM_DEBUG_STATES, "Re-launching after pause: %s", prev);
@@ -1790,7 +1783,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                     // We can't clobber it, because the stop confirmation will not be handled.
                     // We don't need to schedule another stop, we only need to let it happen.
                     prev.setState(STOPPING, "completePausedLocked");
-                } else if (!prev.mVisibleRequested || shouldSleepOrShutDownActivities()) {
+                } else if (!prev.isVisibleRequested() || shouldSleepOrShutDownActivities()) {
                     // Clear out any deferred client hide we might currently have.
                     prev.setDeferHidingClient(false);
                     // If we were visible then resumeTopActivities will release resources before
@@ -2368,11 +2361,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     @Override
     public void onConfigurationChanged(Configuration newParentConfig) {
         super.onConfigurationChanged(newParentConfig);
-
-        if (mTaskFragmentOrganizer != null) {
-            updateOrganizedTaskFragmentSurface();
-        }
-
+        updateOrganizedTaskFragmentSurface();
         sendTaskFragmentInfoChanged();
     }
 
@@ -2385,8 +2374,13 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         updateOrganizedTaskFragmentSurface();
     }
 
-    private void updateOrganizedTaskFragmentSurface() {
-        if (mDelayOrganizedTaskFragmentSurfaceUpdate) {
+    /**
+     * TaskFragmentOrganizer doesn't have access to the surface for security reasons, so we need to
+     * update its surface on the server side if it is not collected for Shell or in pending
+     * animation.
+     */
+    void updateOrganizedTaskFragmentSurface() {
+        if (mDelayOrganizedTaskFragmentSurfaceUpdate || mTaskFragmentOrganizer == null) {
             return;
         }
         if (mTransitionController.isShellTransitionsEnabled()
@@ -2418,7 +2412,10 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             return;
         }
 
-        final Rect bounds = getBounds();
+        // If this TaskFragment is closing while resizing, crop to the starting bounds instead.
+        final Rect bounds = isClosingWhenResizing()
+                ? mDisplayContent.mClosingChangingContainers.get(this)
+                : getBounds();
         final int width = bounds.width();
         final int height = bounds.height();
         if (!forceUpdate && width == mLastSurfaceSize.x && height == mLastSurfaceSize.y) {
@@ -2454,16 +2451,62 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         }
     }
 
-    /** Whether we should prepare a transition for this {@link TaskFragment} bounds change. */
-    boolean shouldStartChangeTransition(Rect startBounds) {
+    /**
+     * Gets the relative bounds of this embedded TaskFragment. This should only be called on
+     * embedded TaskFragment.
+     */
+    @NonNull
+    Rect getRelativeEmbeddedBounds() {
+        if (mRelativeEmbeddedBounds == null) {
+            throw new IllegalStateException("The TaskFragment is not embedded");
+        }
+        return mRelativeEmbeddedBounds;
+    }
+
+    /**
+     * Updates the record of the relative bounds of this embedded TaskFragment. This should only be
+     * called when the embedded TaskFragment's override bounds are changed.
+     * Returns {@code true} if the bounds is changed.
+     */
+    void updateRelativeEmbeddedBounds() {
+        // We only record the override bounds, which means it will not be changed when it is filling
+        // Task, and resize with the parent.
+        getRequestedOverrideBounds(mTmpBounds);
+        getRelativePosition(mTmpPoint);
+        mTmpBounds.offsetTo(mTmpPoint.x, mTmpPoint.y);
+        mRelativeEmbeddedBounds.set(mTmpBounds);
+    }
+
+    /**
+     * Updates the record of relative bounds of this embedded TaskFragment, and checks whether we
+     * should prepare a transition for the bounds change.
+     */
+    boolean shouldStartChangeTransition(@NonNull Rect absStartBounds,
+            @NonNull Rect relStartBounds) {
         if (mTaskFragmentOrganizer == null || !canStartChangeTransition()) {
             return false;
         }
 
-        // Only take snapshot if the bounds are resized.
-        final Rect endBounds = getConfiguration().windowConfiguration.getBounds();
-        return endBounds.width() != startBounds.width()
-                || endBounds.height() != startBounds.height();
+        if (mTransitionController.isShellTransitionsEnabled()) {
+            // For Shell transition, the change will be collected anyway, so only take snapshot when
+            // the bounds are resized.
+            final Rect endBounds = getConfiguration().windowConfiguration.getBounds();
+            return endBounds.width() != absStartBounds.width()
+                    || endBounds.height() != absStartBounds.height();
+        } else {
+            // For legacy transition, we need to trigger a change transition as long as the bounds
+            // is changed, even if it is not resized.
+            return !relStartBounds.equals(mRelativeEmbeddedBounds);
+        }
+    }
+
+    /** Records the starting bounds of the closing organized TaskFragment. */
+    void setClosingChangingStartBoundsIfNeeded() {
+        if (isOrganizedTaskFragment() && mDisplayContent != null
+                && mDisplayContent.mChangingContainers.remove(this)) {
+            mDisplayContent.mClosingChangingContainers.put(
+                    this, new Rect(mSurfaceFreezer.mFreezeBounds));
+        }
     }
 
     @Override
@@ -2626,6 +2669,14 @@ class TaskFragment extends WindowContainer<WindowContainer> {
             return true;
         }
         return false;
+    }
+
+    @Override
+    boolean canCustomizeAppTransition() {
+        // This is only called when the app transition is going to be played by system server. In
+        // this case, we should allow custom app transition for fullscreen embedded TaskFragment
+        // just like Activity.
+        return isEmbedded() && matchParentBounds();
     }
 
     /** Clear {@link #mLastPausedActivity} for all {@link TaskFragment} children */

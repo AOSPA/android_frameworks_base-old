@@ -19,12 +19,17 @@ package android.app.job;
 import static android.app.job.JobScheduler.THROW_ON_INVALID_DATA_TRANSFER_IMPLEMENTATION;
 
 import android.annotation.BytesLong;
+import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.app.Notification;
 import android.app.Service;
 import android.compat.Compatibility;
 import android.content.Intent;
 import android.os.IBinder;
+
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 
 /**
  * <p>Entry point for the callback from the {@link android.app.job.JobScheduler}.</p>
@@ -63,6 +68,32 @@ public abstract class JobService extends Service {
     public static final String PERMISSION_BIND =
             "android.permission.BIND_JOB_SERVICE";
 
+    /**
+     * Detach the notification supplied to
+     * {@link #setNotification(JobParameters, int, Notification, int)} when the job ends.
+     * The notification will remain shown even after JobScheduler stops the job.
+     *
+     * @hide
+     */
+    public static final int JOB_END_NOTIFICATION_POLICY_DETACH = 0;
+    /**
+     * Cancel and remove the notification supplied to
+     * {@link #setNotification(JobParameters, int, Notification, int)} when the job ends.
+     * The notification will be removed from the notification shade.
+     *
+     * @hide
+     */
+    public static final int JOB_END_NOTIFICATION_POLICY_REMOVE = 1;
+
+    /** @hide */
+    @IntDef(prefix = {"JOB_END_NOTIFICATION_POLICY_"}, value = {
+            JOB_END_NOTIFICATION_POLICY_DETACH,
+            JOB_END_NOTIFICATION_POLICY_REMOVE,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface JobEndNotificationPolicy {
+    }
+
     private JobServiceEngine mEngine;
 
     /** @hide */
@@ -84,9 +115,9 @@ public abstract class JobService extends Service {
                 public long getTransferredDownloadBytes(@NonNull JobParameters params,
                         @Nullable JobWorkItem item) {
                     if (item == null) {
-                        return JobService.this.getTransferredDownloadBytes();
+                        return JobService.this.getTransferredDownloadBytes(params);
                     } else {
-                        return JobService.this.getTransferredDownloadBytes(item);
+                        return JobService.this.getTransferredDownloadBytes(params, item);
                     }
                 }
 
@@ -95,9 +126,9 @@ public abstract class JobService extends Service {
                 public long getTransferredUploadBytes(@NonNull JobParameters params,
                         @Nullable JobWorkItem item) {
                     if (item == null) {
-                        return JobService.this.getTransferredUploadBytes();
+                        return JobService.this.getTransferredUploadBytes(params);
                     } else {
-                        return JobService.this.getTransferredUploadBytes(item);
+                        return JobService.this.getTransferredUploadBytes(params, item);
                     }
                 }
             };
@@ -274,7 +305,7 @@ public abstract class JobService extends Service {
      */
     // TODO(255371817): specify the actual time JS will wait for progress before requesting
     @BytesLong
-    public long getTransferredDownloadBytes() {
+    public long getTransferredDownloadBytes(@NonNull JobParameters params) {
         if (Compatibility.isChangeEnabled(THROW_ON_INVALID_DATA_TRANSFER_IMPLEMENTATION)) {
             // Regular jobs don't have to implement this and JobScheduler won't call this API for
             // non-data transfer jobs.
@@ -298,7 +329,7 @@ public abstract class JobService extends Service {
      */
     // TODO(255371817): specify the actual time JS will wait for progress before requesting
     @BytesLong
-    public long getTransferredUploadBytes() {
+    public long getTransferredUploadBytes(@NonNull JobParameters params) {
         if (Compatibility.isChangeEnabled(THROW_ON_INVALID_DATA_TRANSFER_IMPLEMENTATION)) {
             // Regular jobs don't have to implement this and JobScheduler won't call this API for
             // non-data transfer jobs.
@@ -324,9 +355,10 @@ public abstract class JobService extends Service {
      */
     // TODO(255371817): specify the actual time JS will wait for progress before requesting
     @BytesLong
-    public long getTransferredDownloadBytes(@NonNull JobWorkItem item) {
+    public long getTransferredDownloadBytes(@NonNull JobParameters params,
+            @NonNull JobWorkItem item) {
         if (item == null) {
-            return getTransferredDownloadBytes();
+            return getTransferredDownloadBytes(params);
         }
         if (Compatibility.isChangeEnabled(THROW_ON_INVALID_DATA_TRANSFER_IMPLEMENTATION)) {
             // Regular jobs don't have to implement this and JobScheduler won't call this API for
@@ -353,9 +385,10 @@ public abstract class JobService extends Service {
      */
     // TODO(255371817): specify the actual time JS will wait for progress before requesting
     @BytesLong
-    public long getTransferredUploadBytes(@NonNull JobWorkItem item) {
+    public long getTransferredUploadBytes(@NonNull JobParameters params,
+            @NonNull JobWorkItem item) {
         if (item == null) {
-            return getTransferredUploadBytes();
+            return getTransferredUploadBytes(params);
         }
         if (Compatibility.isChangeEnabled(THROW_ON_INVALID_DATA_TRANSFER_IMPLEMENTATION)) {
             // Regular jobs don't have to implement this and JobScheduler won't call this API for
@@ -363,5 +396,38 @@ public abstract class JobService extends Service {
             throw new RuntimeException("Not implemented. Must override in a subclass.");
         }
         return 0;
+    }
+
+    /**
+     * Provide JobScheduler with a notification to post and tie to this job's lifecycle.
+     * This is required for all user-initiated jobs
+     * (scheduled via {link JobInfo.Builder#setUserInitiated(boolean)}) and optional for
+     * other jobs. If the app does not call this method for a required notification within
+     * 10 seconds after {@link #onStartJob(JobParameters)} is called,
+     * the system will trigger an ANR and stop this job.
+     *
+     * <p>
+     * Note that certain types of jobs
+     * (e.g. {@link JobInfo.Builder#setDataTransfer data transfer jobs}) may require the
+     * notification to have certain characteristics and their documentation will state
+     * any such requirements.
+     *
+     * <p>
+     * JobScheduler will not remember this notification after the job has finished running,
+     * so apps must call this every time the job is started (if required or desired).
+     *
+     * @param params                   The parameters identifying this job, as supplied to
+     *                                 the job in the {@link #onStartJob(JobParameters)} callback.
+     * @param notificationId           The ID for this notification, as per
+     *                                 {@link android.app.NotificationManager#notify(int,
+     *                                 Notification)}.
+     * @param notification             The notification to be displayed.
+     * @param jobEndNotificationPolicy The policy to apply to the notification when the job stops.
+     * @hide
+     */
+    public final void setNotification(@NonNull JobParameters params, int notificationId,
+            @NonNull Notification notification,
+            @JobEndNotificationPolicy int jobEndNotificationPolicy) {
+        mEngine.setNotification(params, notificationId, notification, jobEndNotificationPolicy);
     }
 }

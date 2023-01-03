@@ -17,7 +17,12 @@
 package com.android.server.pm.test.parsing.parcelling
 
 import android.content.Intent
-import android.content.pm.*
+import android.content.pm.ApplicationInfo
+import android.content.pm.ConfigurationInfo
+import android.content.pm.FeatureGroupInfo
+import android.content.pm.FeatureInfo
+import android.content.pm.PackageManager
+import android.content.pm.SigningDetails
 import android.net.Uri
 import android.os.Bundle
 import android.os.Parcelable
@@ -27,15 +32,31 @@ import android.util.SparseIntArray
 import com.android.internal.R
 import com.android.server.pm.parsing.pkg.PackageImpl
 import com.android.server.pm.pkg.AndroidPackage
-import com.android.server.pm.pkg.component.*
+import com.android.server.pm.pkg.component.ParsedActivityImpl
+import com.android.server.pm.pkg.component.ParsedApexSystemServiceImpl
+import com.android.server.pm.pkg.component.ParsedAttributionImpl
+import com.android.server.pm.pkg.component.ParsedComponentImpl
+import com.android.server.pm.pkg.component.ParsedInstrumentationImpl
+import com.android.server.pm.pkg.component.ParsedIntentInfoImpl
+import com.android.server.pm.pkg.component.ParsedPermissionGroupImpl
+import com.android.server.pm.pkg.component.ParsedPermissionImpl
+import com.android.server.pm.pkg.component.ParsedProcessImpl
+import com.android.server.pm.pkg.component.ParsedProviderImpl
+import com.android.server.pm.pkg.component.ParsedServiceImpl
+import com.android.server.pm.pkg.component.ParsedUsesPermissionImpl
 import com.android.server.testutils.mockThrowOnUnmocked
 import com.android.server.testutils.whenever
 import java.security.KeyPairGenerator
 import java.security.PublicKey
+import java.util.UUID
 import kotlin.contracts.ExperimentalContracts
 
 @ExperimentalContracts
 class AndroidPackageTest : ParcelableComponentTest(AndroidPackage::class, PackageImpl::class) {
+
+    companion object {
+        private val TEST_UUID = UUID.fromString("57554103-df3e-4475-ae7a-8feba49353ac")
+    }
 
     override val defaultImpl = PackageImpl.forTesting("com.example.test")
     override val creator = PackageImpl.CREATOR
@@ -72,8 +93,6 @@ class AndroidPackageTest : ParcelableComponentTest(AndroidPackage::class, Packag
         "getLongVersionCode",
         // Tested through constructor
         "getManifestPackageName",
-        // Utility methods
-        "getStorageUuid",
         // Removal not tested, irrelevant for parcelling concerns
         "removeUsesOptionalLibrary",
         "clearAdoptPermissions",
@@ -85,6 +104,7 @@ class AndroidPackageTest : ParcelableComponentTest(AndroidPackage::class, Packag
         // Tested manually
         "getMimeGroups",
         "getRequestedPermissions",
+        "getStorageUuid",
         // Tested through asSplit
         "asSplit",
         "getSplits",
@@ -155,7 +175,6 @@ class AndroidPackageTest : ParcelableComponentTest(AndroidPackage::class, Packag
         AndroidPackage::getResizeableActivity,
         AndroidPackage::getRestrictedAccountType,
         AndroidPackage::getRoundIconRes,
-        PackageImpl::getSeInfo,
         PackageImpl::getSecondaryCpuAbi,
         AndroidPackage::getSecondaryNativeLibraryDir,
         AndroidPackage::getSharedUserId,
@@ -241,7 +260,7 @@ class AndroidPackageTest : ParcelableComponentTest(AndroidPackage::class, Packag
     )
 
     override fun extraParams() = listOf(
-        getter(AndroidPackage::getVolumeUuid, "57554103-df3e-4475-ae7a-8feba49353ac"),
+        getter(AndroidPackage::getVolumeUuid, TEST_UUID.toString()),
         getter(AndroidPackage::isProfileable, true),
         getter(PackageImpl::getVersionCode, 3),
         getter(PackageImpl::getVersionCodeMajor, 9),
@@ -602,6 +621,8 @@ class AndroidPackageTest : ParcelableComponentTest(AndroidPackage::class, Packag
         expect.that(after.usesStaticLibrariesCertDigests!!.size).isEqualTo(1)
         expect.that(after.usesStaticLibrariesCertDigests!![0]).asList()
                 .containsExactly("testCertDigest2")
+
+        expect.that(after.storageUuid).isEqualTo(TEST_UUID)
     }
 
     private fun testKey() = KeyPairGenerator.getInstance("RSA")

@@ -70,8 +70,13 @@ import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.animation.ActivityLaunchAnimator;
+import com.android.systemui.biometrics.udfps.InteractionEvent;
+import com.android.systemui.biometrics.udfps.NormalizedTouchData;
+import com.android.systemui.biometrics.udfps.SinglePointerTouchProcessor;
+import com.android.systemui.biometrics.udfps.TouchProcessorResult;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.flags.FeatureFlags;
+import com.android.systemui.flags.Flags;
 import com.android.systemui.keyguard.ScreenLifecycle;
 import com.android.systemui.keyguard.domain.interactor.PrimaryBouncerInteractor;
 import com.android.systemui.plugins.FalsingManager;
@@ -104,6 +109,8 @@ import org.mockito.junit.MockitoRule;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+
+import javax.inject.Provider;
 
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
@@ -190,6 +197,8 @@ public class UdfpsControllerTest extends SysuiTestCase {
     private AlternateUdfpsTouchProvider mAlternateTouchProvider;
     @Mock
     private PrimaryBouncerInteractor mPrimaryBouncerInteractor;
+    @Mock
+    private SinglePointerTouchProcessor mSinglePointerTouchProcessor;
 
     // Capture listeners so that they can be used to send events
     @Captor
@@ -254,6 +263,7 @@ public class UdfpsControllerTest extends SysuiTestCase {
         initUdfpsController(true /* hasAlternateTouchProvider */);
     }
 
+
     private void initUdfpsController(boolean hasAlternateTouchProvider) {
         initUdfpsController(mOpticalProps, hasAlternateTouchProvider);
     }
@@ -263,8 +273,10 @@ public class UdfpsControllerTest extends SysuiTestCase {
         reset(mFingerprintManager);
         reset(mScreenLifecycle);
 
-        final Optional<AlternateUdfpsTouchProvider> alternateTouchProvider =
-                hasAlternateTouchProvider ? Optional.of(mAlternateTouchProvider) : Optional.empty();
+        final Optional<Provider<AlternateUdfpsTouchProvider>> alternateTouchProvider =
+                hasAlternateTouchProvider ? Optional.of(
+                        (Provider<AlternateUdfpsTouchProvider>) () -> mAlternateTouchProvider)
+                        : Optional.empty();
 
         mUdfpsController = new UdfpsController(mContext, new FakeExecution(), mLayoutInflater,
                 mFingerprintManager, mWindowManager, mStatusBarStateController, mFgExecutor,
@@ -275,7 +287,7 @@ public class UdfpsControllerTest extends SysuiTestCase {
                 mDisplayManager, mHandler, mConfigurationController, mSystemClock,
                 mUnlockedScreenOffAnimationController, mSystemUIDialogManager, mLatencyTracker,
                 mActivityLaunchAnimator, alternateTouchProvider, mBiometricsExecutor,
-                mPrimaryBouncerInteractor);
+                mPrimaryBouncerInteractor, mSinglePointerTouchProcessor);
         verify(mFingerprintManager).setUdfpsOverlayController(mOverlayCaptor.capture());
         mOverlayController = mOverlayCaptor.getValue();
         verify(mScreenLifecycle).addObserver(mScreenObserverCaptor.capture());
@@ -1085,5 +1097,101 @@ public class UdfpsControllerTest extends SysuiTestCase {
                 any(),
                 anyString(),
                 any());
+    }
+
+    @Test
+    public void onTouch_withoutNewTouchDetection_shouldCallOldFingerprintManagerPath()
+            throws RemoteException {
+        // Disable new touch detection.
+        when(mFeatureFlags.isEnabled(Flags.UDFPS_NEW_TOUCH_DETECTION)).thenReturn(false);
+
+        // Configure UdfpsController to use FingerprintManager as opposed to AlternateTouchProvider.
+        initUdfpsController(mOpticalProps, false /* hasAlternateTouchProvider */);
+
+        // Configure UdfpsView to accept the ACTION_DOWN event
+        when(mUdfpsView.isDisplayConfigured()).thenReturn(false);
+        when(mUdfpsView.isWithinSensorArea(anyFloat(), anyFloat())).thenReturn(true);
+
+        // GIVEN that the overlay is showing and a11y touch exploration NOT enabled
+        when(mAccessibilityManager.isTouchExplorationEnabled()).thenReturn(false);
+        mOverlayController.showUdfpsOverlay(TEST_REQUEST_ID, mOpticalProps.sensorId,
+                BiometricOverlayConstants.REASON_AUTH_KEYGUARD, mUdfpsOverlayControllerCallback);
+        mFgExecutor.runAllReady();
+
+        verify(mUdfpsView).setOnTouchListener(mTouchListenerCaptor.capture());
+
+        // WHEN ACTION_DOWN is received
+        MotionEvent downEvent = MotionEvent.obtain(0, 0, ACTION_DOWN, 0, 0, 0);
+        mTouchListenerCaptor.getValue().onTouch(mUdfpsView, downEvent);
+        mBiometricsExecutor.runAllReady();
+        downEvent.recycle();
+
+        // AND ACTION_MOVE is received
+        MotionEvent moveEvent = MotionEvent.obtain(0, 0, MotionEvent.ACTION_MOVE, 0, 0, 0);
+        mTouchListenerCaptor.getValue().onTouch(mUdfpsView, moveEvent);
+        mBiometricsExecutor.runAllReady();
+        moveEvent.recycle();
+
+        // AND ACTION_UP is received
+        MotionEvent upEvent = MotionEvent.obtain(0, 0, MotionEvent.ACTION_UP, 0, 0, 0);
+        mTouchListenerCaptor.getValue().onTouch(mUdfpsView, upEvent);
+        mBiometricsExecutor.runAllReady();
+        upEvent.recycle();
+
+        // THEN the old FingerprintManager path is invoked.
+        verify(mFingerprintManager).onPointerDown(anyLong(), anyInt(), anyInt(), anyInt(),
+                anyFloat(), anyFloat());
+        verify(mFingerprintManager).onPointerUp(anyLong(), anyInt());
+    }
+
+    @Test
+    public void onTouch_withNewTouchDetection_shouldCallNewFingerprintManagerPath()
+            throws RemoteException {
+        final NormalizedTouchData touchData = new NormalizedTouchData(0, 0f, 0f, 0f, 0f, 0f, 0L,
+                0L);
+        final TouchProcessorResult processorResultDown = new TouchProcessorResult.ProcessedTouch(
+                InteractionEvent.DOWN, 1 /* pointerId */, touchData);
+        final TouchProcessorResult processorResultUp = new TouchProcessorResult.ProcessedTouch(
+                InteractionEvent.UP, 1 /* pointerId */, touchData);
+
+        // Enable new touch detection.
+        when(mFeatureFlags.isEnabled(Flags.UDFPS_NEW_TOUCH_DETECTION)).thenReturn(true);
+
+        // Configure UdfpsController to use FingerprintManager as opposed to AlternateTouchProvider.
+        initUdfpsController(mOpticalProps, false /* hasAlternateTouchProvider */);
+
+        // Configure UdfpsView to accept the ACTION_DOWN event
+        when(mUdfpsView.isDisplayConfigured()).thenReturn(false);
+        when(mUdfpsView.isWithinSensorArea(anyFloat(), anyFloat())).thenReturn(true);
+
+        // GIVEN that the overlay is showing and a11y touch exploration NOT enabled
+        when(mAccessibilityManager.isTouchExplorationEnabled()).thenReturn(false);
+        mOverlayController.showUdfpsOverlay(TEST_REQUEST_ID, mOpticalProps.sensorId,
+                BiometricOverlayConstants.REASON_AUTH_KEYGUARD, mUdfpsOverlayControllerCallback);
+        mFgExecutor.runAllReady();
+
+        verify(mUdfpsView).setOnTouchListener(mTouchListenerCaptor.capture());
+
+        // WHEN ACTION_DOWN is received
+        when(mSinglePointerTouchProcessor.processTouch(any(), anyInt(), any())).thenReturn(
+                processorResultDown);
+        MotionEvent downEvent = MotionEvent.obtain(0, 0, ACTION_DOWN, 0, 0, 0);
+        mTouchListenerCaptor.getValue().onTouch(mUdfpsView, downEvent);
+        mBiometricsExecutor.runAllReady();
+        downEvent.recycle();
+
+        // AND ACTION_UP is received
+        when(mSinglePointerTouchProcessor.processTouch(any(), anyInt(), any())).thenReturn(
+                processorResultUp);
+        MotionEvent upEvent = MotionEvent.obtain(0, 0, MotionEvent.ACTION_UP, 0, 0, 0);
+        mTouchListenerCaptor.getValue().onTouch(mUdfpsView, upEvent);
+        mBiometricsExecutor.runAllReady();
+        upEvent.recycle();
+
+        // THEN the new FingerprintManager path is invoked.
+        verify(mFingerprintManager).onPointerDown(anyLong(), anyInt(), anyInt(), anyFloat(),
+                anyFloat(), anyFloat(), anyFloat(), anyFloat(), anyLong(), anyLong(), anyBoolean());
+        verify(mFingerprintManager).onPointerUp(anyLong(), anyInt(), anyInt(), anyFloat(),
+                anyFloat(), anyFloat(), anyFloat(), anyFloat(), anyLong(), anyLong(), anyBoolean());
     }
 }

@@ -26,10 +26,7 @@ import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_M
 import android.annotation.IdRes;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.content.res.Resources;
@@ -45,7 +42,6 @@ import android.hardware.graphics.common.DisplayDecorationSupport;
 import android.os.Handler;
 import android.os.SystemProperties;
 import android.os.Trace;
-import android.os.UserHandle;
 import android.provider.Settings.Secure;
 import android.util.DisplayUtils;
 import android.util.Log;
@@ -68,7 +64,6 @@ import androidx.annotation.VisibleForTesting;
 
 import com.android.internal.util.Preconditions;
 import com.android.settingslib.Utils;
-import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.decor.CutoutDecorProviderFactory;
@@ -132,7 +127,6 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
     private DisplayManager mDisplayManager;
     @VisibleForTesting
     protected boolean mIsRegistered;
-    private final BroadcastDispatcher mBroadcastDispatcher;
     private final Context mContext;
     private final Executor mMainExecutor;
     private final TunerService mTunerService;
@@ -220,8 +214,10 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
                 (FaceScanningOverlay) getOverlayView(mFaceScanningViewId);
         if (faceScanningOverlay != null) {
             faceScanningOverlay.setHideOverlayRunnable(() -> {
+                Trace.beginSection("ScreenDecorations#hideOverlayRunnable");
                 updateOverlayWindowVisibilityIfViewExists(
                         faceScanningOverlay.findViewById(mFaceScanningViewId));
+                Trace.endSection();
             });
             faceScanningOverlay.enableShowProtection(false);
         }
@@ -283,16 +279,18 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
             if (mOverlays == null || !shouldOptimizeVisibility()) {
                 return;
             }
-
+            Trace.beginSection("ScreenDecorations#updateOverlayWindowVisibilityIfViewExists");
             for (final OverlayWindow overlay : mOverlays) {
                 if (overlay == null) {
                     continue;
                 }
                 if (overlay.getView(view.getId()) != null) {
                     overlay.getRootView().setVisibility(getWindowVisibility(overlay, true));
+                    Trace.endSection();
                     return;
                 }
             }
+            Trace.endSection();
         });
     }
 
@@ -306,7 +304,6 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
     public ScreenDecorations(Context context,
             @Main Executor mainExecutor,
             SecureSettings secureSettings,
-            BroadcastDispatcher broadcastDispatcher,
             TunerService tunerService,
             UserTracker userTracker,
             PrivacyDotViewController dotViewController,
@@ -316,7 +313,6 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
         mContext = context;
         mMainExecutor = mainExecutor;
         mSecureSettings = secureSettings;
-        mBroadcastDispatcher = broadcastDispatcher;
         mTunerService = tunerService;
         mUserTracker = userTracker;
         mDotViewController = dotViewController;
@@ -382,6 +378,7 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
     }
 
     private void startOnScreenDecorationsThread() {
+        Trace.beginSection("ScreenDecorations#startOnScreenDecorationsThread");
         mWindowManager = mContext.getSystemService(WindowManager.class);
         mDisplayManager = mContext.getSystemService(DisplayManager.class);
         mContext.getDisplay().getDisplayInfo(mDisplayInfo);
@@ -484,6 +481,7 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
 
         mDisplayManager.registerDisplayListener(mDisplayListener, mHandler);
         updateConfiguration();
+        Trace.endSection();
     }
 
     @VisibleForTesting
@@ -533,6 +531,12 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
     }
 
     private void setupDecorations() {
+        Trace.beginSection("ScreenDecorations#setupDecorations");
+        setupDecorationsInner();
+        Trace.endSection();
+    }
+
+    private void setupDecorationsInner() {
         if (hasRoundedCorners() || shouldDrawCutout() || isPrivacyDotEnabled()
                 || mFaceScanningFactory.getHasProviders()) {
 
@@ -585,7 +589,11 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
                 return;
             }
 
-            mMainExecutor.execute(() -> mTunerService.addTunable(this, SIZE));
+            mMainExecutor.execute(() -> {
+                Trace.beginSection("ScreenDecorations#addTunable");
+                mTunerService.addTunable(this, SIZE);
+                Trace.endSection();
+            });
 
             // Watch color inversion and invert the overlay as needed.
             if (mColorInversionSetting == null) {
@@ -602,19 +610,20 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
             mColorInversionSetting.onChange(false);
             updateColorInversion(mColorInversionSetting.getValue());
 
-            IntentFilter filter = new IntentFilter();
-            filter.addAction(Intent.ACTION_USER_SWITCHED);
-            mBroadcastDispatcher.registerReceiver(mUserSwitchIntentReceiver, filter,
-                    mExecutor, UserHandle.ALL);
+            mUserTracker.addCallback(mUserChangedCallback, mExecutor);
             mIsRegistered = true;
         } else {
-            mMainExecutor.execute(() -> mTunerService.removeTunable(this));
+            mMainExecutor.execute(() -> {
+                Trace.beginSection("ScreenDecorations#removeTunable");
+                mTunerService.removeTunable(this);
+                Trace.endSection();
+            });
 
             if (mColorInversionSetting != null) {
                 mColorInversionSetting.setListening(false);
             }
 
-            mBroadcastDispatcher.unregisterReceiver(mUserSwitchIntentReceiver);
+            mUserTracker.removeCallback(mUserChangedCallback);
             mIsRegistered = false;
         }
     }
@@ -901,18 +910,18 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
         }
     }
 
-    private final BroadcastReceiver mUserSwitchIntentReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            int newUserId = mUserTracker.getUserId();
-            if (DEBUG) {
-                Log.d(TAG, "UserSwitched newUserId=" + newUserId);
-            }
-            // update color inversion setting to the new user
-            mColorInversionSetting.setUserId(newUserId);
-            updateColorInversion(mColorInversionSetting.getValue());
-        }
-    };
+    private final UserTracker.Callback mUserChangedCallback =
+            new UserTracker.Callback() {
+                @Override
+                public void onUserChanged(int newUser, @NonNull Context userContext) {
+                    if (DEBUG) {
+                        Log.d(TAG, "UserSwitched newUserId=" + newUser);
+                    }
+                    // update color inversion setting to the new user
+                    mColorInversionSetting.setUserId(newUser);
+                    updateColorInversion(mColorInversionSetting.getValue());
+                }
+            };
 
     private void updateColorInversion(int colorsInvertedValue) {
         mTintColor = colorsInvertedValue != 0 ? Color.WHITE : Color.BLACK;
@@ -954,6 +963,7 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
         }
 
         mExecutor.execute(() -> {
+            Trace.beginSection("ScreenDecorations#onConfigurationChanged");
             int oldRotation = mRotation;
             mPendingConfigChange = false;
             updateConfiguration();
@@ -966,6 +976,7 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
                 // the updated rotation).
                 updateLayoutParams();
             }
+            Trace.endSection();
         });
     }
 
@@ -1138,6 +1149,7 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
             if (mOverlays == null || !SIZE.equals(key)) {
                 return;
             }
+            Trace.beginSection("ScreenDecorations#onTuningChanged");
             try {
                 final int sizeFactor = Integer.parseInt(newValue);
                 mRoundedCornerResDelegate.setTuningSizeFactor(sizeFactor);
@@ -1151,6 +1163,7 @@ public class ScreenDecorations implements CoreStartable, Tunable , Dumpable {
                     R.id.rounded_corner_bottom_right
             });
             updateHwLayerRoundedCornerExistAndSize();
+            Trace.endSection();
         });
     }
 

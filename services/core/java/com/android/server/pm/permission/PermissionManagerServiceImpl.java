@@ -238,6 +238,8 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
         NOTIFICATION_PERMISSIONS.add(Manifest.permission.POST_NOTIFICATIONS);
     }
 
+    @NonNull private final ApexManager mApexManager;
+
     /** Set of source package names for Privileged Permission Allowlist */
     private final ArraySet<String> mPrivilegedPermissionAllowlistSourcePackageNames =
             new ArraySet<>();
@@ -421,6 +423,7 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
         mPackageManagerInt = LocalServices.getService(PackageManagerInternal.class);
         mUserManagerInt = LocalServices.getService(UserManagerInternal.class);
         mIsLeanback = availableFeatures.containsKey(PackageManager.FEATURE_LEANBACK);
+        mApexManager = ApexManager.getInstance();
 
         mPrivilegedPermissionAllowlistSourcePackageNames.add(PLATFORM_PACKAGE_NAME);
         // PackageManager.hasSystemFeature() is not used here because PackageManagerService
@@ -559,8 +562,8 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
 
     @Override
     @Nullable
-    public PermissionInfo getPermissionInfo(@NonNull String permName, @NonNull String opPackageName,
-            @PackageManager.PermissionInfoFlags int flags) {
+    public PermissionInfo getPermissionInfo(@NonNull String permName,
+            @PackageManager.PermissionInfoFlags int flags, @NonNull String opPackageName) {
         final int callingUid = Binder.getCallingUid();
         if (mPackageManagerInt.getInstantAppPackageName(callingUid) != null) {
             return null;
@@ -2127,7 +2130,7 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
             for (int i = 0; i < numRequestedPermissions; i++) {
                 PermissionInfo permInfo = getPermissionInfo(
                         newPackage.getRequestedPermissions().get(i),
-                        newPackage.getPackageName(), 0);
+                        0, newPackage.getPackageName());
                 if (permInfo == null) {
                     continue;
                 }
@@ -3309,9 +3312,8 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
             return true;
         }
         final String permissionName = permission.getName();
-        final ApexManager apexManager = ApexManager.getInstance();
         final String containingApexPackageName =
-                apexManager.getActiveApexPackageNameContainingPackage(packageName);
+                mApexManager.getActiveApexPackageNameContainingPackage(packageName);
         if (isInSystemConfigPrivAppPermissions(pkg, permissionName,
                 containingApexPackageName)) {
             return true;
@@ -3365,8 +3367,7 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
         } else if (pkg.isSystemExt()) {
             permissions = systemConfig.getSystemExtPrivAppPermissions(pkg.getPackageName());
         } else if (containingApexPackageName != null) {
-            final ApexManager apexManager = ApexManager.getInstance();
-            final String apexName = apexManager.getApexModuleNameForPackageName(
+            final String apexName = mApexManager.getApexModuleNameForPackageName(
                     containingApexPackageName);
             final Set<String> privAppPermissions = systemConfig.getPrivAppPermissions(
                     pkg.getPackageName());
@@ -3580,6 +3581,11 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
                         KnownPackages.PACKAGE_RECENTS, UserHandle.USER_SYSTEM),
                 pkg.getPackageName())) {
             // Special permission for the recents app.
+            allowed = true;
+        }
+        if (!allowed && bp.isModule() && mApexManager.getActiveApexPackageNameContainingPackage(
+                pkg.getPackageName()) != null) {
+            // Special permission granted for APKs inside APEX modules.
             allowed = true;
         }
         return allowed;
@@ -5204,9 +5210,9 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
 
     @NonNull
     @Override
-    public ArrayList<PermissionInfo> getAllPermissionsWithProtection(
+    public List<PermissionInfo> getAllPermissionsWithProtection(
             @PermissionInfo.Protection int protection) {
-        ArrayList<PermissionInfo> matchingPermissions = new ArrayList<>();
+        List<PermissionInfo> matchingPermissions = new ArrayList<>();
 
         synchronized (mLock) {
             for (final Permission permission : mRegistry.getPermissions()) {
@@ -5221,9 +5227,9 @@ public class PermissionManagerServiceImpl implements PermissionManagerServiceInt
 
     @NonNull
     @Override
-    public ArrayList<PermissionInfo> getAllPermissionsWithProtectionFlags(
+    public List<PermissionInfo> getAllPermissionsWithProtectionFlags(
             @PermissionInfo.ProtectionFlags int protectionFlags) {
-        ArrayList<PermissionInfo> matchingPermissions = new ArrayList<>();
+        List<PermissionInfo> matchingPermissions = new ArrayList<>();
 
         synchronized (mLock) {
             for (final Permission permission : mRegistry.getPermissions()) {

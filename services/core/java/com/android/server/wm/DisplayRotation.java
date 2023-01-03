@@ -1610,6 +1610,7 @@ public class DisplayRotation {
         private int mHalfFoldSavedRotation = -1; // No saved rotation
         private DeviceStateController.FoldState mFoldState =
                 DeviceStateController.FoldState.UNKNOWN;
+        private boolean mInHalfFoldTransition = false;
 
         boolean overrideFrozenRotation() {
             return mFoldState == DeviceStateController.FoldState.HALF_FOLDED;
@@ -1617,6 +1618,7 @@ public class DisplayRotation {
 
         boolean shouldRevertOverriddenRotation() {
             return mFoldState == DeviceStateController.FoldState.OPEN // When transitioning to open.
+                    && mInHalfFoldTransition
                     && mHalfFoldSavedRotation != -1 // Ignore if we've already reverted.
                     && mUserRotationMode
                     == WindowManagerPolicy.USER_ROTATION_LOCKED; // Ignore if we're unlocked.
@@ -1625,6 +1627,7 @@ public class DisplayRotation {
         int revertOverriddenRotation() {
             int savedRotation = mHalfFoldSavedRotation;
             mHalfFoldSavedRotation = -1;
+            mInHalfFoldTransition = false;
             return savedRotation;
         }
 
@@ -1650,16 +1653,11 @@ public class DisplayRotation {
                 mService.updateRotation(false /* alwaysSendConfiguration */,
                         false /* forceRelayout */);
             } else {
-                // Revert the rotation to our saved value if we transition from HALF_FOLDED.
-                if (mHalfFoldSavedRotation != -1) {
-                    mRotation = mHalfFoldSavedRotation;
-                }
-                // Tell the device to update its orientation (mFoldState is still HALF_FOLDED here
-                // so we will override USER_ROTATION_LOCKED and allow a rotation).
+                mInHalfFoldTransition = true;
+                mFoldState = newState;
+                // Tell the device to update its orientation.
                 mService.updateRotation(false /* alwaysSendConfiguration */,
                         false /* forceRelayout */);
-                // Once we are rotated, set mFoldstate, effectively removing the lock override.
-                mFoldState = newState;
             }
         }
     }
@@ -1756,6 +1754,7 @@ public class DisplayRotation {
 
     private static class RotationHistory {
         private static final int MAX_SIZE = 8;
+        private static final int NO_FOLD_CONTROLLER = -2;
         private static class Record {
             final @Surface.Rotation int mFromRotation;
             final @Surface.Rotation int mToRotation;
@@ -1767,6 +1766,9 @@ public class DisplayRotation {
             final String mLastOrientationSource;
             final @ActivityInfo.ScreenOrientation int mSourceOrientation;
             final long mTimestamp = System.currentTimeMillis();
+            final int mHalfFoldSavedRotation;
+            final boolean mInHalfFoldTransition;
+            final DeviceStateController.FoldState mFoldState;
 
             Record(DisplayRotation dr, int fromRotation, int toRotation) {
                 mFromRotation = fromRotation;
@@ -1792,6 +1794,15 @@ public class DisplayRotation {
                     mLastOrientationSource = null;
                     mSourceOrientation = SCREEN_ORIENTATION_UNSET;
                 }
+                if (dr.mFoldController != null) {
+                    mHalfFoldSavedRotation = dr.mFoldController.mHalfFoldSavedRotation;
+                    mInHalfFoldTransition = dr.mFoldController.mInHalfFoldTransition;
+                    mFoldState = dr.mFoldController.mFoldState;
+                } else {
+                    mHalfFoldSavedRotation = NO_FOLD_CONTROLLER;
+                    mInHalfFoldTransition = false;
+                    mFoldState = DeviceStateController.FoldState.UNKNOWN;
+                }
             }
 
             void dump(String prefix, PrintWriter pw) {
@@ -1807,6 +1818,12 @@ public class DisplayRotation {
                 if (mIgnoreOrientationRequest) pw.println(prefix + "  ignoreRequest=true");
                 if (mNonDefaultRequestingTaskDisplayArea != null) {
                     pw.println(prefix + "  requestingTda=" + mNonDefaultRequestingTaskDisplayArea);
+                }
+                if (mHalfFoldSavedRotation != NO_FOLD_CONTROLLER) {
+                    pw.println(prefix + " halfFoldSavedRotation="
+                            + mHalfFoldSavedRotation
+                            + " mInHalfFoldTransition=" + mInHalfFoldTransition
+                            + " mFoldState=" + mFoldState);
                 }
             }
         }

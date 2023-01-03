@@ -57,8 +57,8 @@ package com.android.server.pm {
 
   public static interface PackageManagerLocal.FilteredSnapshot extends java.lang.AutoCloseable {
     method public void close();
-    method public void forAllPackageStates(@NonNull java.util.function.Consumer<com.android.server.pm.pkg.PackageState>);
     method @Nullable public com.android.server.pm.pkg.PackageState getPackageState(@NonNull String);
+    method @NonNull public java.util.Map<java.lang.String,com.android.server.pm.pkg.PackageState> getPackageStates();
   }
 
   public static interface PackageManagerLocal.UnfilteredSnapshot extends java.lang.AutoCloseable {
@@ -76,6 +76,7 @@ package com.android.server.pm.pkg {
     method @Nullable public String getSdkLibraryName();
     method @NonNull public java.util.List<com.android.server.pm.pkg.AndroidPackageSplit> getSplits();
     method @Nullable public String getStaticSharedLibraryName();
+    method @NonNull public java.util.UUID getStorageUuid();
     method public int getTargetSdkVersion();
     method public boolean isDebuggable();
     method public boolean isIsolatedSplitLoading();
@@ -97,8 +98,10 @@ package com.android.server.pm.pkg {
   public interface PackageState {
     method @Nullable public com.android.server.pm.pkg.AndroidPackage getAndroidPackage();
     method public int getAppId();
+    method public int getHiddenApiEnforcementPolicy();
     method @NonNull public String getPackageName();
     method @Nullable public String getPrimaryCpuAbi();
+    method @Nullable public String getSeInfo();
     method @Nullable public String getSecondaryCpuAbi();
     method @NonNull public com.android.server.pm.pkg.PackageUserState getStateForUser(@NonNull android.os.UserHandle);
     method @NonNull public java.util.List<com.android.server.pm.pkg.SharedLibrary> getUsesLibraries();
@@ -122,13 +125,6 @@ package com.android.server.pm.pkg {
     method public int getType();
     method public long getVersion();
     method public boolean isNative();
-  }
-
-}
-
-package com.android.server.pm.snapshot {
-
-  public interface PackageDataSnapshot {
   }
 
 }

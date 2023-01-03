@@ -43,6 +43,7 @@ import com.android.settingslib.mobile.TelephonyIcons;
 import com.android.settingslib.net.DataUsageController;
 import com.android.systemui.R;
 import com.android.systemui.plugins.log.LogBuffer;
+import com.android.systemui.statusbar.pipeline.StatusBarPipelineFlags;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.util.CarrierConfigTracker;
 
@@ -77,6 +78,7 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
                 mFakeExecutor,
                 mCallbackHandler,
                 mock(AccessPointControllerImpl.class),
+                mock(StatusBarPipelineFlags.class),
                 mock(DataUsageController.class),
                 mMockSubDefaults,
                 mMockProvisionController,
@@ -113,6 +115,7 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
                 mFakeExecutor,
                 mCallbackHandler,
                 mock(AccessPointControllerImpl.class),
+                mock(StatusBarPipelineFlags.class),
                 mock(DataUsageController.class),
                 mMockSubDefaults,
                 mMockProvisionController,
@@ -147,6 +150,7 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
                 mFakeExecutor,
                 mCallbackHandler,
                 mock(AccessPointControllerImpl.class),
+                mock(StatusBarPipelineFlags.class),
                 mock(DataUsageController.class),
                 mMockSubDefaults,
                 mock(DeviceProvisionedController.class),
@@ -184,6 +188,7 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
                 mFakeExecutor,
                 mCallbackHandler,
                 mock(AccessPointControllerImpl.class),
+                mock(StatusBarPipelineFlags.class),
                 mock(DataUsageController.class),
                 mMockSubDefaults,
                 mock(DeviceProvisionedController.class),
@@ -269,6 +274,7 @@ public class NetworkControllerSignalTest extends NetworkControllerBaseTest {
                 mFakeExecutor,
                 mCallbackHandler,
                 mock(AccessPointControllerImpl.class),
+                mock(StatusBarPipelineFlags.class),
                 mock(DataUsageController.class),
                 mMockSubDefaults,
                 mock(DeviceProvisionedController.class),

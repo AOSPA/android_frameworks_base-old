@@ -168,6 +168,12 @@ class BackNavigationController {
                             + "recents. Overriding back callback to recents controller callback.");
                     return null;
                 }
+
+                if (!window.isDrawn()) {
+                    ProtoLog.d(WM_DEBUG_BACK_PREVIEW,
+                            "Focused window didn't have a valid surface drawn.");
+                    return null;
+                }
             }
 
             if (window == null) {
@@ -229,6 +235,7 @@ class BackNavigationController {
             // We don't have an application callback, let's find the destination of the back gesture
             // The search logic should align with ActivityClientController#finishActivity
             prevActivity = currentTask.topRunningActivity(currentActivity.token, INVALID_TASK_ID);
+            final boolean isOccluded = isKeyguardOccluded(window);
             // TODO Dialog window does not need to attach on activity, check
             // window.mAttrs.type != TYPE_BASE_APPLICATION
             if ((window.getParent().getChildCount() > 1
@@ -238,15 +245,24 @@ class BackNavigationController {
                 backType = BackNavigationInfo.TYPE_DIALOG_CLOSE;
                 removedWindowContainer = window;
             } else if (prevActivity != null) {
-                // We have another Activity in the same currentTask to go to
-                backType = BackNavigationInfo.TYPE_CROSS_ACTIVITY;
-                removedWindowContainer = currentActivity;
+                if (!isOccluded || prevActivity.canShowWhenLocked()) {
+                    // We have another Activity in the same currentTask to go to
+                    backType = BackNavigationInfo.TYPE_CROSS_ACTIVITY;
+                    removedWindowContainer = currentActivity;
+                    prevTask = prevActivity.getTask();
+                } else {
+                    backType = BackNavigationInfo.TYPE_CALLBACK;
+                }
             } else if (currentTask.returnsToHomeRootTask()) {
-                // Our Task should bring back to home
-                removedWindowContainer = currentTask;
-                prevTask = currentTask.getDisplayArea().getRootHomeTask();
-                backType = BackNavigationInfo.TYPE_RETURN_TO_HOME;
-                mShowWallpaper = true;
+                if (isOccluded) {
+                    backType = BackNavigationInfo.TYPE_CALLBACK;
+                } else {
+                    // Our Task should bring back to home
+                    removedWindowContainer = currentTask;
+                    prevTask = currentTask.getDisplayArea().getRootHomeTask();
+                    backType = BackNavigationInfo.TYPE_RETURN_TO_HOME;
+                    mShowWallpaper = true;
+                }
             } else if (currentActivity.isRootOfTask()) {
                 // TODO(208789724): Create single source of truth for this, maybe in
                 //  RootWindowContainer
@@ -260,7 +276,9 @@ class BackNavigationController {
                     backType = BackNavigationInfo.TYPE_CALLBACK;
                 } else {
                     prevActivity = prevTask.getTopNonFinishingActivity();
-                    if (prevTask.isActivityTypeHome()) {
+                    if (prevActivity == null || (isOccluded && !prevActivity.canShowWhenLocked())) {
+                        backType = BackNavigationInfo.TYPE_CALLBACK;
+                    } else if (prevTask.isActivityTypeHome()) {
                         backType = BackNavigationInfo.TYPE_RETURN_TO_HOME;
                         mShowWallpaper = true;
                     } else {
@@ -314,6 +332,12 @@ class BackNavigationController {
 
     boolean isWaitBackTransition() {
         return mAnimationTargets.mComposed && mAnimationTargets.mWaitTransition;
+    }
+
+    boolean isKeyguardOccluded(WindowState focusWindow) {
+        final KeyguardController kc = mWindowManagerService.mAtmService.mKeyguardController;
+        final int displayId = focusWindow.getDisplayId();
+        return kc.isKeyguardLocked(displayId) && kc.isDisplayOccluded(displayId);
     }
 
     // For legacy transition.
@@ -608,26 +632,23 @@ class BackNavigationController {
                 // reset leash after animation finished.
                 leashes.add(screenshotSurface);
             }
-        } else if (prevTask != null) {
-            prevActivity = prevTask.getTopNonFinishingActivity();
-            if (prevActivity != null) {
-                // Make previous task show from behind by marking its top activity as visible
-                // and launch-behind to bump its visibility for the duration of the back gesture.
-                setLaunchBehind(prevActivity);
+        } else if (prevTask != null && prevActivity != null) {
+            // Make previous task show from behind by marking its top activity as visible
+            // and launch-behind to bump its visibility for the duration of the back gesture.
+            setLaunchBehind(prevActivity);
 
-                final SurfaceControl leash = prevActivity.makeAnimationLeash()
-                        .setName("BackPreview Leash for " + prevActivity)
-                        .setHidden(false)
-                        .build();
-                prevActivity.reparentSurfaceControl(startedTransaction, leash);
-                behindAppTarget = createRemoteAnimationTargetLocked(
-                        prevTask, leash, MODE_OPENING);
+            final SurfaceControl leash = prevActivity.makeAnimationLeash()
+                    .setName("BackPreview Leash for " + prevActivity)
+                    .setHidden(false)
+                    .build();
+            prevActivity.reparentSurfaceControl(startedTransaction, leash);
+            behindAppTarget = createRemoteAnimationTargetLocked(
+                    prevTask, leash, MODE_OPENING);
 
-                // reset leash after animation finished.
-                leashes.add(leash);
-                prevActivity.reparentSurfaceControl(finishedTransaction,
-                        prevActivity.getParentSurfaceControl());
-            }
+            // reset leash after animation finished.
+            leashes.add(leash);
+            prevActivity.reparentSurfaceControl(finishedTransaction,
+                    prevActivity.getParentSurfaceControl());
         }
 
         if (mShowWallpaper) {
@@ -806,7 +827,7 @@ class BackNavigationController {
         if (activity == null) {
             return;
         }
-        if (!activity.mVisibleRequested) {
+        if (!activity.isVisibleRequested()) {
             activity.setVisibility(true);
         }
         activity.mLaunchTaskBehind = true;

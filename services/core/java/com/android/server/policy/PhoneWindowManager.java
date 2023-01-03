@@ -151,6 +151,7 @@ import android.os.Vibrator;
 import android.provider.DeviceConfig;
 import android.provider.MediaStore;
 import android.provider.Settings;
+import android.provider.Settings.Secure;
 import android.service.dreams.DreamManagerInternal;
 import android.service.dreams.DreamService;
 import android.service.dreams.IDreamManager;
@@ -516,6 +517,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     int mDoublePressOnStemPrimaryBehavior;
     int mTriplePressOnStemPrimaryBehavior;
     int mLongPressOnStemPrimaryBehavior;
+    boolean mStylusButtonsDisabled = false;
     boolean mHasSoftInput = false;
     boolean mHapticTextHandleEnabled;
     boolean mUseTvRouting;
@@ -786,6 +788,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.Global.getUriFor(
                     Settings.Global.POWER_BUTTON_SUPPRESSION_DELAY_AFTER_GESTURE_WAKE), false, this,
+                    UserHandle.USER_ALL);
+            resolver.registerContentObserver(Settings.Secure.getUriFor(
+                    Settings.Secure.STYLUS_BUTTONS_DISABLED), false, this,
                     UserHandle.USER_ALL);
             updateSettings();
         }
@@ -1725,6 +1730,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
     }
 
+    private void showSystemSettings() {
+        startActivityAsUser(new Intent(android.provider.Settings.ACTION_SETTINGS),
+                UserHandle.CURRENT_OR_SELF);
+    }
+
     private void showPictureInPictureMenu(KeyEvent event) {
         if (DEBUG_INPUT) Log.d(TAG, "showPictureInPictureMenu event=" + event);
         mHandler.removeMessages(MSG_SHOW_PICTURE_IN_PICTURE_MENU);
@@ -2576,6 +2586,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     Settings.Global.KEY_CHORD_POWER_VOLUME_UP,
                     mContext.getResources().getInteger(
                             com.android.internal.R.integer.config_keyChordPowerVolumeUp));
+
+            mStylusButtonsDisabled = Settings.Secure.getIntForUser(resolver,
+                    Secure.STYLUS_BUTTONS_DISABLED, 0, UserHandle.USER_CURRENT) == 1;
         }
         if (updateRotation) {
             updateRotation(true);
@@ -2908,6 +2921,20 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     }
                 }
                 return key_consumed;
+            case KeyEvent.KEYCODE_A:
+                if (down && event.isMetaPressed()) {
+                    launchAssistAction(Intent.EXTRA_ASSIST_INPUT_HINT_KEYBOARD,
+                            event.getDeviceId(),
+                            event.getEventTime(), AssistUtils.INVOCATION_TYPE_UNKNOWN);
+                    return key_consumed;
+                }
+                break;
+            case KeyEvent.KEYCODE_I:
+                if (down && event.isMetaPressed()) {
+                    showSystemSettings();
+                    return key_consumed;
+                }
+                break;
             case KeyEvent.KEYCODE_N:
                 if (down && event.isMetaPressed()) {
                     IStatusBarService service = getStatusBarService();
@@ -2925,6 +2952,27 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 if (down && event.isMetaPressed() && event.isCtrlPressed() && repeatCount == 0) {
                     interceptScreenshotChord(
                             TAKE_SCREENSHOT_FULLSCREEN, SCREENSHOT_KEY_OTHER, 0 /*pressDelay*/);
+                    return key_consumed;
+                }
+                break;
+            case KeyEvent.KEYCODE_DPAD_UP:
+                if (down && event.isMetaPressed() && event.isCtrlPressed() && repeatCount == 0) {
+                    StatusBarManagerInternal statusbar = getStatusBarManagerInternal();
+                    if (statusbar != null) {
+                        statusbar.goToFullscreenFromSplit();
+                    }
+                    return key_consumed;
+                }
+                break;
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+                if (down && event.isMetaPressed() && event.isCtrlPressed() && repeatCount == 0) {
+                    enterStageSplitFromRunningApp(true /* leftOrTop */);
+                    return key_consumed;
+                }
+                break;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+                if (down && event.isMetaPressed() && event.isCtrlPressed() && repeatCount == 0) {
+                    enterStageSplitFromRunningApp(false /* leftOrTop */);
                     return key_consumed;
                 }
                 break;
@@ -3027,12 +3075,13 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 }
                 break;
             case KeyEvent.KEYCODE_TAB:
-                if (event.isMetaPressed()) {
-                    // Pass through keyboard navigation keys.
-                    return key_not_consumed;
-                }
-                // Display task switcher for ALT-TAB.
-                if (down && repeatCount == 0) {
+                if (down && event.isMetaPressed()) {
+                    if (!keyguardOn && isUserSetupComplete()) {
+                        showRecentApps(false);
+                        return key_consumed;
+                    }
+                } else if (down && repeatCount == 0) {
+                    // Display task switcher for ALT-TAB.
                     if (mRecentAppsHeldModifiers == 0 && !keyguardOn && isUserSetupComplete()) {
                         final int shiftlessModifiers =
                                 event.getModifiers() & ~KeyEvent.META_SHIFT_MASK;
@@ -3087,9 +3136,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                         mPendingCapsLockToggle = false;
                     } else if (mPendingMetaAction) {
                         if (!canceled) {
-                            launchAssistAction(Intent.EXTRA_ASSIST_INPUT_HINT_KEYBOARD,
-                                    event.getDeviceId(),
-                                    event.getEventTime(), AssistUtils.INVOCATION_TYPE_UNKNOWN);
+                            // TODO: launch all apps here.
                         }
                         mPendingMetaAction = false;
                     }
@@ -3579,6 +3626,13 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         StatusBarManagerInternal statusbar = getStatusBarManagerInternal();
         if (statusbar != null) {
             statusbar.hideRecentApps(triggeredFromAltTab, triggeredFromHome);
+        }
+    }
+
+    private void enterStageSplitFromRunningApp(boolean leftOrTop) {
+        StatusBarManagerInternal statusbar = getStatusBarManagerInternal();
+        if (statusbar != null) {
+            statusbar.enterStageSplitFromRunningApp(leftOrTop);
         }
     }
 
@@ -4201,7 +4255,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             case KeyEvent.KEYCODE_DEMO_APP_3:
             case KeyEvent.KEYCODE_DEMO_APP_4: {
                 // TODO(b/254604589): Dispatch KeyEvent to System UI.
-                sendSystemKeyToStatusBarAsync(keyCode);
+                if (!mStylusButtonsDisabled) {
+                    sendSystemKeyToStatusBarAsync(keyCode);
+                }
 
                 // Just drop if keys are not intercepted for direct key.
                 result &= ~ACTION_PASS_TO_USER;
@@ -4226,11 +4282,13 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             wakeUpFromWakeKey(event);
         }
 
-        if ((result & ACTION_PASS_TO_USER) != 0) {
+        if ((result & ACTION_PASS_TO_USER) != 0 && !mPerDisplayFocusEnabled
+                && displayId != INVALID_DISPLAY && displayId != mTopFocusedDisplayId) {
             // If the key event is targeted to a specific display, then the user is interacting with
-            // that display. Therefore, give focus to the display that the user is interacting with.
-            if (!mPerDisplayFocusEnabled
-                    && displayId != INVALID_DISPLAY && displayId != mTopFocusedDisplayId) {
+            // that display. Therefore, give focus to the display that the user is interacting with,
+            // unless that display maintains its own focus.
+            Display display = mDisplayManager.getDisplay(displayId);
+            if ((display.getFlags() & Display.FLAG_OWN_FOCUS) == 0) {
                 // An event is targeting a non-focused display. Move the display to top so that
                 // it can become the focused display to interact with the user.
                 // This should be done asynchronously, once the focus logic is fully moved to input

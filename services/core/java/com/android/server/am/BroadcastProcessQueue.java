@@ -147,6 +147,18 @@ class BroadcastProcessQueue {
     private boolean mActiveViaColdStart;
 
     /**
+     * Number of consecutive urgent broadcasts that have been dispatched
+     * since the last non-urgent dispatch.
+     */
+    private int mActiveCountConsecutiveUrgent;
+
+    /**
+     * Number of consecutive normal broadcasts that have been dispatched
+     * since the last offload dispatch.
+     */
+    private int mActiveCountConsecutiveNormal;
+
+    /**
      * Count of pending broadcasts of these various flavors.
      */
     private int mCountForeground;
@@ -157,6 +169,8 @@ class BroadcastProcessQueue {
     private int mCountResultTo;
     private int mCountInstrumented;
     private int mCountManifest;
+
+    private boolean mPrioritizeEarliest;
 
     private @UptimeMillisLong long mRunnableAt = Long.MAX_VALUE;
     private @Reason int mRunnableAtReason = REASON_EMPTY;
@@ -545,20 +559,75 @@ class BroadcastProcessQueue {
      * Will thrown an exception if there are no pending broadcasts; relies on
      * {@link #isEmpty()} being false.
      */
-    SomeArgs removeNextBroadcast() {
-        ArrayDeque<SomeArgs> queue = queueForNextBroadcast();
-        return queue.removeFirst();
+    private @Nullable SomeArgs removeNextBroadcast() {
+        final ArrayDeque<SomeArgs> queue = queueForNextBroadcast();
+        if (queue == mPendingUrgent) {
+            mActiveCountConsecutiveUrgent++;
+        } else if (queue == mPending) {
+            mActiveCountConsecutiveUrgent = 0;
+            mActiveCountConsecutiveNormal++;
+        } else if (queue == mPendingOffload) {
+            mActiveCountConsecutiveUrgent = 0;
+            mActiveCountConsecutiveNormal = 0;
+        }
+        return !isQueueEmpty(queue) ? queue.removeFirst() : null;
     }
 
     @Nullable ArrayDeque<SomeArgs> queueForNextBroadcast() {
-        if (!mPendingUrgent.isEmpty()) {
-            return mPendingUrgent;
-        } else if (!mPending.isEmpty()) {
-            return mPending;
-        } else if (!mPendingOffload.isEmpty()) {
-            return mPendingOffload;
+        final ArrayDeque<SomeArgs> nextNormal = queueForNextBroadcast(
+                mPending, mPendingOffload,
+                mActiveCountConsecutiveNormal, constants.MAX_CONSECUTIVE_NORMAL_DISPATCHES);
+        final ArrayDeque<SomeArgs> nextBroadcastQueue = queueForNextBroadcast(
+                mPendingUrgent, nextNormal,
+                mActiveCountConsecutiveUrgent, constants.MAX_CONSECUTIVE_URGENT_DISPATCHES);
+        return nextBroadcastQueue;
+    }
+
+    private @Nullable ArrayDeque<SomeArgs> queueForNextBroadcast(
+            @Nullable ArrayDeque<SomeArgs> highPriorityQueue,
+            @Nullable ArrayDeque<SomeArgs> lowPriorityQueue,
+            int consecutiveHighPriorityCount,
+            int maxHighPriorityDispatchLimit) {
+        // nothing high priority pending, no further decisionmaking
+        if (isQueueEmpty(highPriorityQueue)) {
+            return lowPriorityQueue;
         }
-        return null;
+        // nothing but high priority pending, also no further decisionmaking
+        if (isQueueEmpty(lowPriorityQueue)) {
+            return highPriorityQueue;
+        }
+
+        // Starvation mitigation: although we prioritize high priority queues by default,
+        // we allow low priority queues to make steady progress even if broadcasts in
+        // high priority queue are arriving faster than they can be dispatched.
+        //
+        // We do not try to defer to the next broadcast in low priority queues if that broadcast
+        // is ordered and still blocked on delivery to other recipients.
+        final SomeArgs nextLPArgs = lowPriorityQueue.peekFirst();
+        final BroadcastRecord nextLPRecord = (BroadcastRecord) nextLPArgs.arg1;
+        final int nextLPRecordIndex = nextLPArgs.argi1;
+        final BroadcastRecord nextHPRecord = (BroadcastRecord) highPriorityQueue.peekFirst().arg1;
+        final boolean shouldConsiderLPQueue = (mPrioritizeEarliest
+                || consecutiveHighPriorityCount >= maxHighPriorityDispatchLimit);
+        final boolean isLPQueueEligible = shouldConsiderLPQueue
+                && nextLPRecord.enqueueTime <= nextHPRecord.enqueueTime
+                && !blockedOnOrderedDispatch(nextLPRecord, nextLPRecordIndex);
+        return isLPQueueEligible ? lowPriorityQueue : highPriorityQueue;
+    }
+
+    private static boolean isQueueEmpty(@Nullable ArrayDeque<SomeArgs> queue) {
+        return (queue == null || queue.isEmpty());
+    }
+
+    /**
+     * When {@code prioritizeEarliest} is set to {@code true}, then earliest enqueued
+     * broadcasts would be prioritized for dispatching, even if there are urgent broadcasts
+     * waiting. This is typically used in case there are callers waiting for "barrier" to be
+     * reached.
+     */
+    @VisibleForTesting
+    void setPrioritizeEarliest(boolean prioritizeEarliest) {
+        mPrioritizeEarliest = prioritizeEarliest;
     }
 
     /**
@@ -566,13 +635,13 @@ class BroadcastProcessQueue {
      */
     @Nullable SomeArgs peekNextBroadcast() {
         ArrayDeque<SomeArgs> queue = queueForNextBroadcast();
-        return (queue != null) ? queue.peekFirst() : null;
+        return !isQueueEmpty(queue) ? queue.peekFirst() : null;
     }
 
     @VisibleForTesting
     @Nullable BroadcastRecord peekNextBroadcastRecord() {
         ArrayDeque<SomeArgs> queue = queueForNextBroadcast();
-        return (queue != null) ? (BroadcastRecord) queue.peekFirst().arg1 : null;
+        return !isQueueEmpty(queue) ? (BroadcastRecord) queue.peekFirst().arg1 : null;
     }
 
     /**
@@ -710,6 +779,18 @@ class BroadcastProcessQueue {
         }
     }
 
+    private boolean blockedOnOrderedDispatch(BroadcastRecord r, int index) {
+        final int blockedUntilTerminalCount = r.blockedUntilTerminalCount[index];
+
+        // We might be blocked waiting for other receivers to finish,
+        // typically for an ordered broadcast or priority traunches
+        if (r.terminalCount < blockedUntilTerminalCount
+                && !isDeliveryStateTerminal(r.getDeliveryState(index))) {
+            return true;
+        }
+        return false;
+    }
+
     /**
      * Update {@link #getRunnableAt()} if it's currently invalidated.
      */
@@ -718,13 +799,11 @@ class BroadcastProcessQueue {
         if (next != null) {
             final BroadcastRecord r = (BroadcastRecord) next.arg1;
             final int index = next.argi1;
-            final int blockedUntilTerminalCount = r.blockedUntilTerminalCount[index];
             final long runnableAt = r.enqueueTime;
 
-            // We might be blocked waiting for other receivers to finish,
-            // typically for an ordered broadcast or priority traunches
-            if (r.terminalCount < blockedUntilTerminalCount
-                    && !isDeliveryStateTerminal(r.getDeliveryState(index))) {
+            // If we're specifically queued behind other ordered dispatch activity,
+            // we aren't runnable yet
+            if (blockedOnOrderedDispatch(r, index)) {
                 mRunnableAt = Long.MAX_VALUE;
                 mRunnableAtReason = REASON_BLOCKED;
                 return;
