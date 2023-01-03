@@ -205,4 +205,16 @@ public interface StatusBarManagerInternal {
      * @see com.android.internal.statusbar.IStatusBar#showRearDisplayDialog
      */
     void showRearDisplayDialog(int currentBaseState);
+
+    /**
+     * Called when requested to go to fullscreen from the active split app.
+     */
+    void goToFullscreenFromSplit();
+
+    /**
+     * Enters stage split from a current running app.
+     *
+     * @see com.android.internal.statusbar.IStatusBar#enterStageSplitFromRunningApp
+     */
+    void enterStageSplitFromRunningApp(boolean leftOrTop);
 }

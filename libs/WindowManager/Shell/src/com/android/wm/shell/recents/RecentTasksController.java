@@ -342,6 +342,16 @@ public class RecentTasksController implements TaskStackListenerCallback,
     }
 
     /**
+     * Returns the top running leaf task.
+     */
+    @Nullable
+    public ActivityManager.RunningTaskInfo getTopRunningTask() {
+        List<ActivityManager.RunningTaskInfo> tasks = mActivityTaskManager.getTasks(1,
+                false /* filterOnlyVisibleRecents */);
+        return tasks.isEmpty() ? null : tasks.get(0);
+    }
+
+    /**
      * Find the background task that match the given component.
      */
     @Nullable
@@ -367,6 +377,8 @@ public class RecentTasksController implements TaskStackListenerCallback,
     public void dump(@NonNull PrintWriter pw, String prefix) {
         final String innerPrefix = prefix + "  ";
         pw.println(prefix + TAG);
+        pw.println(prefix + " mListener=" + mListener);
+        pw.println(prefix + "Tasks:");
         ArrayList<GroupedRecentTaskInfo> recentTasks = getRecentTasks(Integer.MAX_VALUE,
                 ActivityManager.RECENT_IGNORE_UNAVAILABLE, ActivityManager.getCurrentUser());
         for (int i = 0; i < recentTasks.size(); i++) {

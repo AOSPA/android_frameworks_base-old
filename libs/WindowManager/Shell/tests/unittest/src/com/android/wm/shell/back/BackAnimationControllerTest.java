@@ -53,6 +53,7 @@ import android.view.MotionEvent;
 import android.view.RemoteAnimationTarget;
 import android.view.SurfaceControl;
 import android.window.BackEvent;
+import android.window.BackMotionEvent;
 import android.window.BackNavigationInfo;
 import android.window.IBackAnimationFinishedCallback;
 import android.window.IOnBackInvokedCallback;
@@ -110,6 +111,9 @@ public class BackAnimationControllerTest extends ShellTestCase {
     @Mock
     private ShellController mShellController;
 
+    @Mock
+    private BackAnimationBackground mAnimationBackground;
+
     private BackAnimationController mController;
     private TestableContentResolver mContentResolver;
     private TestableLooper mTestableLooper;
@@ -127,7 +131,7 @@ public class BackAnimationControllerTest extends ShellTestCase {
         mController = new BackAnimationController(mShellInit, mShellController,
                 mShellExecutor, new Handler(mTestableLooper.getLooper()),
                 mActivityTaskManager, mContext,
-                mContentResolver);
+                mContentResolver, mAnimationBackground);
         mController.setEnableUAnimation(true);
         mShellInit.init();
         mShellExecutor.flushAll();
@@ -220,9 +224,10 @@ public class BackAnimationControllerTest extends ShellTestCase {
 
         simulateRemoteAnimationStart(BackNavigationInfo.TYPE_RETURN_TO_HOME);
 
-        verify(mAnimatorCallback).onBackStarted(any(BackEvent.class));
+        verify(mAnimatorCallback).onBackStarted(any(BackMotionEvent.class));
         verify(mBackAnimationRunner).onAnimationStart(anyInt(), any(), any(), any(), any());
-        ArgumentCaptor<BackEvent> backEventCaptor = ArgumentCaptor.forClass(BackEvent.class);
+        ArgumentCaptor<BackMotionEvent> backEventCaptor =
+                ArgumentCaptor.forClass(BackMotionEvent.class);
         verify(mAnimatorCallback, atLeastOnce()).onBackProgressed(backEventCaptor.capture());
 
         // Check that back invocation is dispatched.
@@ -239,11 +244,12 @@ public class BackAnimationControllerTest extends ShellTestCase {
         mController = new BackAnimationController(shellInit, mShellController,
                 mShellExecutor, new Handler(mTestableLooper.getLooper()),
                 mActivityTaskManager, mContext,
-                mContentResolver);
+                mContentResolver, mAnimationBackground);
         shellInit.init();
         registerAnimation(BackNavigationInfo.TYPE_RETURN_TO_HOME);
 
-        ArgumentCaptor<BackEvent> backEventCaptor = ArgumentCaptor.forClass(BackEvent.class);
+        ArgumentCaptor<BackMotionEvent> backEventCaptor =
+                ArgumentCaptor.forClass(BackMotionEvent.class);
 
         createNavigationInfo(BackNavigationInfo.TYPE_RETURN_TO_HOME, false);
 
@@ -354,6 +360,10 @@ public class BackAnimationControllerTest extends ShellTestCase {
                 BackNavigationInfo.TYPE_DIALOG_CLOSE};
 
         for (int type: testTypes) {
+            unregisterAnimation(type);
+        }
+
+        for (int type: testTypes) {
             final ResultListener result = new ResultListener();
             createNavigationInfo(new BackNavigationInfo.Builder()
                     .setType(type)
@@ -429,6 +439,10 @@ public class BackAnimationControllerTest extends ShellTestCase {
     private void registerAnimation(int type) {
         mController.registerAnimation(type,
                 new BackAnimationRunner(mAnimatorCallback, mBackAnimationRunner));
+    }
+
+    private void unregisterAnimation(int type) {
+        mController.unregisterAnimation(type);
     }
 
     private static class ResultListener implements RemoteCallback.OnResultListener {

@@ -816,7 +816,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     // it will sometimes be true a little earlier: when the activity record has
     // been shown, but is still waiting for its app transition to execute
     // before making its windows shown.
-    boolean mVisibleRequested;
+    private boolean mVisibleRequested;
 
     // Last visibility state we reported to the app token.
     boolean reportedVisible;
@@ -3340,9 +3340,17 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 mAtmService.mUgmInternal.grantUriPermissionUncheckedFromIntent(resultGrants,
                         resultTo.getUriPermissionsLocked());
             }
-            if (mForceSendResultForMediaProjection) {
-                resultTo.sendResult(this.getUid(), resultWho, requestCode, resultCode,
-                        resultData, resultGrants, true /* forceSendForMediaProjection */);
+            if (mForceSendResultForMediaProjection || resultTo.isState(RESUMED)) {
+                // Sending the result to the resultTo activity asynchronously to prevent the
+                // resultTo activity getting results before this Activity paused.
+                final ActivityRecord resultToActivity = resultTo;
+                mAtmService.mH.post(() -> {
+                    synchronized (mAtmService.mGlobalLock) {
+                        resultToActivity.sendResult(this.getUid(), resultWho, requestCode,
+                                resultCode, resultData, resultGrants,
+                                mForceSendResultForMediaProjection);
+                    }
+                });
             } else {
                 resultTo.addResultLocked(this, resultWho, requestCode, resultCode, resultData);
             }
@@ -3637,7 +3645,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // implied that the current finishing activity should be added into stopping list rather
         // than destroy immediately.
         final boolean isNextNotYetVisible = next != null
-                && (!next.nowVisible || !next.mVisibleRequested);
+                && (!next.nowVisible || !next.isVisibleRequested());
 
         // Clear last paused activity to ensure top activity can be resumed during sleeping.
         if (isNextNotYetVisible && mDisplayContent.isSleeping()
@@ -4464,7 +4472,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     void transferStartingWindowFromHiddenAboveTokenIfNeeded() {
         task.forAllActivities(fromActivity -> {
             if (fromActivity == this) return true;
-            return !fromActivity.mVisibleRequested && transferStartingWindow(fromActivity);
+            return !fromActivity.isVisibleRequested() && transferStartingWindow(fromActivity);
         });
     }
 
@@ -4662,7 +4670,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 false /* forceSendForMediaProjection */);
     }
 
-    private void sendResult(int callingUid, String resultWho, int requestCode, int resultCode,
+    void sendResult(int callingUid, String resultWho, int requestCode, int resultCode,
             Intent data, NeededUriGrants dataGrants, boolean forceSendForMediaProjection) {
         if (callingUid > 0) {
             mAtmService.mUgmInternal.grantUriPermissionUncheckedFromIntent(dataGrants,
@@ -5129,7 +5137,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      * This is the only place that writes {@link #mVisibleRequested} (except unit test). The caller
      * outside of this class should use {@link #setVisibility}.
      */
-    private void setVisibleRequested(boolean visible) {
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PRIVATE)
+    void setVisibleRequested(boolean visible) {
         if (visible == mVisibleRequested) {
             return;
         }
@@ -5457,25 +5466,20 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      */
     private void postApplyAnimation(boolean visible, boolean fromTransition) {
         final boolean usingShellTransitions = mTransitionController.isShellTransitionsEnabled();
-        final boolean delayed = isAnimating(PARENTS | CHILDREN,
+        final boolean delayed = !usingShellTransitions && isAnimating(PARENTS | CHILDREN,
                 ANIMATION_TYPE_APP_TRANSITION | ANIMATION_TYPE_WINDOW_ANIMATION
                         | ANIMATION_TYPE_RECENTS);
-        if (!delayed) {
+        if (!delayed && !usingShellTransitions) {
             // We aren't delayed anything, but exiting windows rely on the animation finished
             // callback being called in case the ActivityRecord was pretending to be delayed,
             // which we might have done because we were in closing/opening apps list.
-            if (!usingShellTransitions) {
-                onAnimationFinished(ANIMATION_TYPE_APP_TRANSITION, null /* AnimationAdapter */);
-                if (visible) {
-                    // The token was made immediately visible, there will be no entrance animation.
-                    // We need to inform the client the enter animation was finished.
-                    mEnteringAnimation = true;
-                    mWmService.mActivityManagerAppTransitionNotifier.onAppTransitionFinishedLocked(
-                            token);
-                }
-            } else {
-                // update wallpaper target
-                setAppLayoutChanges(FINISH_LAYOUT_REDO_WALLPAPER, "ActivityRecord");
+            onAnimationFinished(ANIMATION_TYPE_APP_TRANSITION, null /* AnimationAdapter */);
+            if (visible) {
+                // The token was made immediately visible, there will be no entrance animation.
+                // We need to inform the client the enter animation was finished.
+                mEnteringAnimation = true;
+                mWmService.mActivityManagerAppTransitionNotifier.onAppTransitionFinishedLocked(
+                        token);
             }
         }
 
@@ -5484,8 +5488,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // updated.
         // If we're becoming invisible, update the client visibility if we are not running an
         // animation. Otherwise, we'll update client visibility in onAnimationFinished.
-        if (visible || !isAnimating(PARENTS, ANIMATION_TYPE_APP_TRANSITION | ANIMATION_TYPE_RECENTS)
-                || usingShellTransitions) {
+        if (visible || usingShellTransitions
+                || !isAnimating(PARENTS, ANIMATION_TYPE_APP_TRANSITION | ANIMATION_TYPE_RECENTS)) {
             setClientVisible(visible);
         }
 
@@ -6661,7 +6665,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         if (associatedTask == null) {
             removeStartingWindow();
         } else if (associatedTask.getActivity(
-                r -> r.mVisibleRequested && !r.firstWindowDrawn) == null) {
+                r -> r.isVisibleRequested() && !r.firstWindowDrawn) == null) {
             // The last drawn activity may not be the one that owns the starting window.
             final ActivityRecord r = associatedTask.topActivityContainsStartingWindow();
             if (r != null) {
@@ -7571,8 +7575,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             } else if (!show && mLastSurfaceShowing) {
                 getSyncTransaction().hide(mSurfaceControl);
             }
-            if (show) {
-                mActivityRecordInputSink.applyChangesToSurfaceIfChanged(getSyncTransaction());
+            // Input sink surface is not a part of animation, so just apply in a steady state
+            // (non-sync) with pending transaction.
+            if (show && mSyncState == SYNC_STATE_NONE) {
+                mActivityRecordInputSink.applyChangesToSurfaceIfChanged(getPendingTransaction());
             }
         }
         if (mThumbnail != null) {
@@ -9047,9 +9053,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
 
         if (info.isChangeEnabled(OVERRIDE_MIN_ASPECT_RATIO_EXCLUDE_PORTRAIT_FULLSCREEN)
-                && getParent().getConfiguration().orientation == ORIENTATION_PORTRAIT
-                && getParent().getWindowConfiguration().getWindowingMode()
-                        == WINDOWING_MODE_FULLSCREEN) {
+                && isParentFullscreenPortrait()) {
             // We are using the parent configuration here as this is the most recent one that gets
             // passed to onConfigurationChanged when a relevant change takes place
             return info.getMinAspectRatio();
@@ -9070,6 +9074,13 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                     info.getMinAspectRatio());
         }
         return info.getMinAspectRatio();
+    }
+
+    private boolean isParentFullscreenPortrait() {
+        final WindowContainer parent = getParent();
+        return parent != null
+                && parent.getConfiguration().orientation == ORIENTATION_PORTRAIT
+                && parent.getWindowConfiguration().getWindowingMode() == WINDOWING_MODE_FULLSCREEN;
     }
 
     /**

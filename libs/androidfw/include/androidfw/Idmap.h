@@ -93,8 +93,8 @@ class IdmapResMap {
    public:
     Result() = default;
     explicit Result(uint32_t value) : data_(value) {};
-    explicit Result(const std::map<ConfigDescription, Res_value> &value)
-        : data_(value) { };
+    explicit Result(std::map<ConfigDescription, Res_value> value) : data_(std::move(value)) {
+    }
 
     // Returns `true` if the resource is overlaid.
     explicit operator bool() const {
@@ -157,8 +157,7 @@ class IdmapResMap {
 class LoadedIdmap {
  public:
   // Loads an IDMAP from a chunk of memory. Returns nullptr if the IDMAP data was malformed.
-  static std::unique_ptr<LoadedIdmap> Load(const StringPiece& idmap_path,
-                                           const StringPiece& idmap_data);
+  static std::unique_ptr<LoadedIdmap> Load(StringPiece idmap_path, StringPiece idmap_data);
 
   // Returns the path to the IDMAP.
   std::string_view IdmapPath() const {

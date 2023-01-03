@@ -264,7 +264,7 @@ public class WindowStateTests extends WindowTestsBase {
 
         // Verify that app window can still be IME target as long as it is visible (even if
         // it is going to become invisible).
-        appWindow.mActivityRecord.mVisibleRequested = false;
+        appWindow.mActivityRecord.setVisibleRequested(false);
         assertTrue(appWindow.canBeImeTarget());
 
         // Make windows invisible
@@ -410,6 +410,16 @@ public class WindowStateTests extends WindowTestsBase {
         app.mActivityRecord.setVisible(true);
         app.mAttrs.alpha = 0.0f;
         assertFalse(app.canAffectSystemUiFlags());
+    }
+
+    @Test
+    public void testCanAffectSystemUiFlags_starting() {
+        final WindowState app = createWindow(null, TYPE_APPLICATION_STARTING, "app");
+        app.mActivityRecord.setVisible(true);
+        app.mStartingData = new SnapshotStartingData(mWm, null, 0);
+        assertFalse(app.canAffectSystemUiFlags());
+        app.mStartingData = new SplashScreenStartingData(mWm, 0, 0);
+        assertTrue(app.canAffectSystemUiFlags());
     }
 
     @Test
@@ -720,7 +730,7 @@ public class WindowStateTests extends WindowTestsBase {
 
         // No need to wait for a window of invisible activity even if the window has surface.
         final WindowState invisibleApp = mAppWindow;
-        invisibleApp.mActivityRecord.mVisibleRequested = false;
+        invisibleApp.mActivityRecord.setVisibleRequested(false);
         invisibleApp.mActivityRecord.allDrawn = false;
         outWaitingForDrawn.clear();
         invisibleApp.requestDrawIfNeeded(outWaitingForDrawn);
@@ -738,7 +748,7 @@ public class WindowStateTests extends WindowTestsBase {
         assertFalse(startingApp.getOrientationChanging());
 
         // Even if the display is frozen, invisible requested window should not be affected.
-        startingApp.mActivityRecord.mVisibleRequested = false;
+        startingApp.mActivityRecord.setVisibleRequested(false);
         mWm.startFreezingDisplay(0, 0, mDisplayContent);
         doReturn(true).when(mWm.mPolicy).isScreenOn();
         startingApp.getWindowFrames().setInsetsChanged(true);
@@ -813,7 +823,7 @@ public class WindowStateTests extends WindowTestsBase {
         final WindowState win = createWindow(null /* parent */, TYPE_APPLICATION, embeddedActivity,
                 "App window");
         doReturn(true).when(embeddedActivity).isVisible();
-        embeddedActivity.mVisibleRequested = true;
+        embeddedActivity.setVisibleRequested(true);
         makeWindowVisible(win);
         win.mLayoutSeq = win.getDisplayContent().mLayoutSeq;
         // Set the bounds twice:
@@ -838,7 +848,7 @@ public class WindowStateTests extends WindowTestsBase {
     @Test
     public void testCantReceiveTouchWhenAppTokenHiddenRequested() {
         final WindowState win0 = createWindow(null, TYPE_APPLICATION, "win0");
-        win0.mActivityRecord.mVisibleRequested = false;
+        win0.mActivityRecord.setVisibleRequested(false);
         assertFalse(win0.canReceiveTouchInput());
     }
 

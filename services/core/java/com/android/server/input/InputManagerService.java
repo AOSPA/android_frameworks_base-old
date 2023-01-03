@@ -98,6 +98,7 @@ import android.view.Surface;
 import android.view.SurfaceControl;
 import android.view.VerifiedInputEvent;
 import android.view.ViewConfiguration;
+import android.view.inputmethod.InputMethodInfo;
 import android.view.inputmethod.InputMethodSubtype;
 
 import com.android.internal.R;
@@ -293,6 +294,9 @@ public class InputManagerService extends IInputManager.Stub
     // Manages Keyboard backlight
     private final KeyboardBacklightController mKeyboardBacklightController;
 
+    // Manages Keyboard modifier keys remapping
+    private final KeyRemapper mKeyRemapper;
+
     // Maximum number of milliseconds to wait for input event injection.
     private static final int INJECTION_TIMEOUT_MILLIS = 30 * 1000;
 
@@ -407,6 +411,7 @@ public class InputManagerService extends IInputManager.Stub
         mBatteryController = new BatteryController(mContext, mNative, injector.getLooper());
         mKeyboardBacklightController = new KeyboardBacklightController(mContext, mNative,
                 mDataStore, injector.getLooper());
+        mKeyRemapper = new KeyRemapper(mContext, mNative, mDataStore, injector.getLooper());
 
         mUseDevInputEventForAudioJack =
                 mContext.getResources().getBoolean(R.bool.config_useDevInputEventForAudioJack);
@@ -535,6 +540,7 @@ public class InputManagerService extends IInputManager.Stub
         mKeyboardLayoutManager.systemRunning();
         mBatteryController.systemRunning();
         mKeyboardBacklightController.systemRunning();
+        mKeyRemapper.systemRunning();
     }
 
     private void reloadDeviceAliases() {
@@ -1183,6 +1189,33 @@ public class InputManagerService extends IInputManager.Stub
         mKeyboardLayoutManager.removeKeyboardLayoutForInputDevice(identifier,
                 keyboardLayoutDescriptor);
     }
+
+    @Override // Binder call
+    public String getKeyboardLayoutForInputDevice(InputDeviceIdentifier identifier,
+            @UserIdInt int userId, @NonNull InputMethodInfo imeInfo,
+            @NonNull InputMethodSubtype imeSubtype) {
+        return mKeyboardLayoutManager.getKeyboardLayoutForInputDevice(identifier, userId,
+                imeInfo, imeSubtype);
+    }
+
+    @EnforcePermission(Manifest.permission.SET_KEYBOARD_LAYOUT)
+    @Override // Binder call
+    public void setKeyboardLayoutForInputDevice(InputDeviceIdentifier identifier,
+            @UserIdInt int userId, @NonNull InputMethodInfo imeInfo,
+            @NonNull InputMethodSubtype imeSubtype, String keyboardLayoutDescriptor) {
+        super.setKeyboardLayoutForInputDevice_enforcePermission();
+        mKeyboardLayoutManager.setKeyboardLayoutForInputDevice(identifier, userId, imeInfo,
+                imeSubtype, keyboardLayoutDescriptor);
+    }
+
+    @Override // Binder call
+    public String[] getKeyboardLayoutListForInputDevice(InputDeviceIdentifier identifier,
+            @UserIdInt int userId, @NonNull InputMethodInfo imeInfo,
+            @NonNull InputMethodSubtype imeSubtype) {
+        return mKeyboardLayoutManager.getKeyboardLayoutListForInputDevice(identifier, userId,
+                imeInfo, imeSubtype);
+    }
+
 
     public void switchKeyboardLayout(int deviceId, int direction) {
         mKeyboardLayoutManager.switchKeyboardLayout(deviceId, direction);
@@ -2708,6 +2741,27 @@ public class InputManagerService extends IInputManager.Stub
             return null;
         }
         return mKeyboardLayoutManager.getKeyboardLayoutOverlay(identifier);
+    }
+
+    @EnforcePermission(Manifest.permission.REMAP_MODIFIER_KEYS)
+    @Override // Binder call
+    public void remapModifierKey(int fromKey, int toKey) {
+        super.remapModifierKey_enforcePermission();
+        mKeyRemapper.remapKey(fromKey, toKey);
+    }
+
+    @EnforcePermission(Manifest.permission.REMAP_MODIFIER_KEYS)
+    @Override // Binder call
+    public void clearAllModifierKeyRemappings() {
+        super.clearAllModifierKeyRemappings_enforcePermission();
+        mKeyRemapper.clearAllKeyRemappings();
+    }
+
+    @EnforcePermission(Manifest.permission.REMAP_MODIFIER_KEYS)
+    @Override // Binder call
+    public Map<Integer, Integer> getModifierKeyRemapping() {
+        super.getModifierKeyRemapping_enforcePermission();
+        return mKeyRemapper.getKeyRemapping();
     }
 
     // Native callback.

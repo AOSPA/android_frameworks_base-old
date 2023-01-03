@@ -16,6 +16,7 @@
 
 package com.android.credentialmanager.createflow
 
+import android.app.Activity
 import android.util.Log
 import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.activity.result.ActivityResult
@@ -26,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
+import com.android.credentialmanager.CreateFlowUtils
 import com.android.credentialmanager.CredentialManagerRepo
 import com.android.credentialmanager.common.DialogResult
 import com.android.credentialmanager.common.ProviderActivityResult
@@ -39,6 +41,8 @@ data class CreateCredentialUiState(
   val showActiveEntryOnly: Boolean,
   val activeEntry: ActiveEntry? = null,
   val selectedEntry: EntryInfo? = null,
+  val hidden: Boolean = false,
+  val providerActivityPending: Boolean = false,
 )
 
 class CreateCredentialViewModel(
@@ -58,24 +62,26 @@ class CreateCredentialViewModel(
 
   fun onConfirmIntro() {
     var createOptionSize = 0
+    var lastSeenProviderWithNonEmptyCreateOptions: EnabledProviderInfo? = null
+    var remoteEntry: RemoteInfo? = null
     uiState.enabledProviders.forEach {
-      enabledProvider -> createOptionSize += enabledProvider.createOptions.size}
-    uiState = if (createOptionSize > 1) {
-      uiState.copy(
-        currentScreenState = CreateScreenState.PROVIDER_SELECTION,
-        showActiveEntryOnly = true
-      )
-    } else if (createOptionSize == 1){
-      uiState.copy(
-        currentScreenState = CreateScreenState.CREATION_OPTION_SELECTION,
-        showActiveEntryOnly = false,
-        activeEntry = ActiveEntry(uiState.enabledProviders.first(),
-          uiState.enabledProviders.first().createOptions.first()
-        )
-      )
-    } else {
-      throw java.lang.IllegalStateException("Empty provider list.")
+      enabledProvider ->
+      if (enabledProvider.createOptions.isNotEmpty()) {
+        createOptionSize += enabledProvider.createOptions.size
+        lastSeenProviderWithNonEmptyCreateOptions = enabledProvider
+      }
+      if (enabledProvider.remoteEntry != null) {
+        remoteEntry = enabledProvider.remoteEntry!!
+      }
     }
+    uiState = uiState.copy(
+      currentScreenState = CreateFlowUtils.toCreateScreenState(
+        createOptionSize, true,
+        uiState.requestDisplayInfo, null, remoteEntry),
+      showActiveEntryOnly = createOptionSize > 1,
+      activeEntry = CreateFlowUtils.toActiveEntry(
+        null, createOptionSize, lastSeenProviderWithNonEmptyCreateOptions, remoteEntry),
+    )
   }
 
   fun getProviderInfoByName(providerName: String): EnabledProviderInfo {
@@ -128,10 +134,7 @@ class CreateCredentialViewModel(
     // TODO: implement the if choose as default or not logic later
   }
 
-  fun onEntrySelected(
-    selectedEntry: EntryInfo,
-    launcher: ManagedActivityResultLauncher<IntentSenderRequest, ActivityResult>
-  ) {
+  fun onEntrySelected(selectedEntry: EntryInfo) {
     val providerId = selectedEntry.providerId
     val entryKey = selectedEntry.entryKey
     val entrySubkey = selectedEntry.entrySubkey
@@ -139,10 +142,10 @@ class CreateCredentialViewModel(
       "Account Selector", "Option selected for entry: " +
               " {provider=$providerId, key=$entryKey, subkey=$entrySubkey")
     if (selectedEntry.pendingIntent != null) {
-      uiState = uiState.copy(selectedEntry = selectedEntry)
-      val intentSenderRequest = IntentSenderRequest.Builder(selectedEntry.pendingIntent)
-        .setFillInIntent(selectedEntry.fillInIntent).build()
-      launcher.launch(intentSenderRequest)
+      uiState = uiState.copy(
+        selectedEntry = selectedEntry,
+        hidden = true,
+      )
     } else {
       CredentialManagerRepo.getInstance().onOptionSelected(
         providerId,
@@ -155,12 +158,26 @@ class CreateCredentialViewModel(
     }
   }
 
-  fun onConfirmCreationSelected(
+  fun launchProviderUi(
     launcher: ManagedActivityResultLauncher<IntentSenderRequest, ActivityResult>
   ) {
+    val entry = uiState.selectedEntry
+    if (entry != null && entry.pendingIntent != null) {
+      uiState = uiState.copy(
+        providerActivityPending = true,
+      )
+      val intentSenderRequest = IntentSenderRequest.Builder(entry.pendingIntent)
+        .setFillInIntent(entry.fillInIntent).build()
+      launcher.launch(intentSenderRequest)
+    } else {
+      Log.w("Account Selector", "No provider UI to launch")
+    }
+  }
+
+  fun onConfirmEntrySelected() {
     val selectedEntry = uiState.activeEntry?.activeEntryInfo
     if (selectedEntry != null) {
-      onEntrySelected(selectedEntry, launcher)
+      onEntrySelected(selectedEntry)
     } else {
       Log.w("Account Selector",
         "Illegal state: confirm is pressed but activeEntry isn't set.")
@@ -174,21 +191,30 @@ class CreateCredentialViewModel(
     val entry = uiState.selectedEntry
     val resultCode = providerActivityResult.resultCode
     val resultData = providerActivityResult.data
-    if (entry != null) {
-      val providerId = entry.providerId
-      Log.d("Account Selector", "Got provider activity result: {provider=" +
-              "$providerId, key=${entry.entryKey}, subkey=${entry.entrySubkey}, " +
-              "resultCode=$resultCode, resultData=$resultData}"
-      )
-      CredentialManagerRepo.getInstance().onOptionSelected(
-        providerId, entry.entryKey, entry.entrySubkey, resultCode, resultData,
+    if (resultCode == Activity.RESULT_CANCELED) {
+      // Re-display the CredMan UI if the user canceled from the provider UI.
+      uiState = uiState.copy(
+        selectedEntry = null,
+        hidden = false,
+        providerActivityPending = false,
       )
     } else {
-      Log.w("Account Selector",
-        "Illegal state: received a provider result but found no matching entry.")
+      if (entry != null) {
+        val providerId = entry.providerId
+        Log.d("Account Selector", "Got provider activity result: {provider=" +
+                "$providerId, key=${entry.entryKey}, subkey=${entry.entrySubkey}, " +
+                "resultCode=$resultCode, resultData=$resultData}"
+        )
+        CredentialManagerRepo.getInstance().onOptionSelected(
+          providerId, entry.entryKey, entry.entrySubkey, resultCode, resultData,
+        )
+      } else {
+        Log.w("Account Selector",
+          "Illegal state: received a provider result but found no matching entry.")
+      }
+      dialogResult.value = DialogResult(
+        ResultState.COMPLETE,
+      )
     }
-    dialogResult.value = DialogResult(
-      ResultState.COMPLETE,
-    )
   }
 }

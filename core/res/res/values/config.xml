@@ -1828,6 +1828,14 @@
          config_enableFusedLocationOverlay is false. -->
     <string name="config_fusedLocationProviderPackageName" translatable="false">com.android.location.fused</string>
 
+    <!-- If true will use the GNSS hardware implementation to service the GPS_PROVIDER. If false
+         will allow the GPS_PROVIDER to be replaced by an app at run-time (restricted to the package
+         specified by config_gnssLocationProviderPackageName). -->
+    <bool name="config_useGnssHardwareProvider" translatable="false">true</bool>
+    <!-- Package name providing GNSS location support. Used only when
+         config_useGnssHardwareProvider is false. -->
+    <string name="config_gnssLocationProviderPackageName" translatable="false">@null</string>
+
     <!-- Default value for the ADAS GNSS Location Enabled setting if this setting has never been
          set before. -->
     <bool name="config_defaultAdasGnssLocationEnabled" translatable="false">false</bool>
@@ -2072,6 +2080,13 @@
 
     <!-- Flag indicating whether the current device supports "Ask every time" for sms-->
     <bool name="config_sms_ask_every_time_support">true</bool>
+
+    <!-- Flag indicating whether the current device allows acknowledgement of SIM operation like
+         SM-PP or saving SMS to SIM can be done via the IMS interfaces.
+         If true,this means that the device supports sending of sim operation response via the
+         IMS interface APIs. This can be overridden to false for devices which can't send
+         sim operation acknowledgements via IMS interface APIs. -->
+    <bool name="config_smppsim_response_via_ims">false</bool>
 
     <!-- Flag indicating whether the current device allows data.
          If true, this means that the device supports data connectivity through
@@ -2494,6 +2509,10 @@
          devices where the display has been tuned to be power efficient in DOZE and/or DOZE_SUSPEND
          states. -->
     <bool name="config_dozeAlwaysOnDisplayAvailable">false</bool>
+
+    <!-- Control whether the pickup gesture is enabled by default. This value will be used
+     during initialization when the setting is still null. -->
+    <bool name="config_dozePickupGestureEnabled">true</bool>
 
     <!-- Control whether the always on display mode is enabled by default. This value will be used
          during initialization when the setting is still null. -->
@@ -5996,6 +6015,37 @@
     <string-array translatable="false" name="config_fontManagerServiceCerts">
     </string-array>
 
+    <!-- A string config in svg path format for the main display shape.
+         (@see https://www.w3.org/TR/SVG/paths.html#PathData).
+
+         This config must be set unless:
+         1. {@link Configuration#isScreenRound} is true which means the display shape is circular
+            and the system will auto-generate a circular shape.
+         2. The display has no rounded corner and the system will auto-generate a rectangular shape.
+         (@see DisplayShape#createDefaultDisplayShape)
+
+         Note: If the display supports multiple resolutions, please define the path config based on
+         the highest resolution so that it can be scaled correctly in each resolution. -->
+    <string name="config_mainDisplayShape" translatable="false"></string>
+
+    <!-- A string config in svg path format for the secondary display shape.
+         (@see https://www.w3.org/TR/SVG/paths.html#PathData).
+
+         This config must be set unless:
+         1. {@link Configuration#isScreenRound} is true which means the display shape is circular
+            and the system will auto-generate a circular shape.
+         2. The display has no rounded corner and the system will auto-generate a rectangular shape.
+         (@see DisplayShape#createDefaultDisplayShape)
+
+         Note: If the display supports multiple resolutions, please define the path config based on
+         the highest resolution so that it can be scaled correctly in each resolution. -->
+    <string name="config_secondaryDisplayShape" translatable="false"></string>
+
+    <!-- The display shape config for each display in a multi-display device. -->
+    <string-array name="config_displayShapeArray" translatable="false">
+        <item>@string/config_mainDisplayShape</item>
+        <item>@string/config_secondaryDisplayShape</item>
+    </string-array>
 
     <!-- Maximum time in millisecs for telephony should wait to deactivate data call
          when user turned off mobile data or data roaming during CIWLAN -->

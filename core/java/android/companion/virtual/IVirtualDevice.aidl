@@ -19,13 +19,20 @@ package android.companion.virtual;
 import android.app.PendingIntent;
 import android.companion.virtual.audio.IAudioConfigChangedCallback;
 import android.companion.virtual.audio.IAudioRoutingCallback;
+import android.companion.virtual.sensor.IVirtualSensorStateChangeCallback;
+import android.companion.virtual.sensor.VirtualSensorConfig;
+import android.companion.virtual.sensor.VirtualSensorEvent;
 import android.graphics.Point;
 import android.graphics.PointF;
+import android.hardware.input.VirtualDpadConfig;
+import android.hardware.input.VirtualKeyboardConfig;
 import android.hardware.input.VirtualKeyEvent;
 import android.hardware.input.VirtualMouseButtonEvent;
+import android.hardware.input.VirtualMouseConfig;
 import android.hardware.input.VirtualMouseRelativeEvent;
 import android.hardware.input.VirtualMouseScrollEvent;
 import android.hardware.input.VirtualTouchEvent;
+import android.hardware.input.VirtualTouchscreenConfig;
 import android.os.ResultReceiver;
 
 /**
@@ -61,32 +68,22 @@ interface IVirtualDevice {
             IAudioConfigChangedCallback configChangedCallback);
 
     void onAudioSessionEnded();
-
+    @JavaPassthrough(annotation="@android.annotation.RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)")
     void createVirtualDpad(
-            int displayId,
-            String inputDeviceName,
-            int vendorId,
-            int productId,
+            in VirtualDpadConfig config,
             IBinder token);
+    @JavaPassthrough(annotation="@android.annotation.RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)")
     void createVirtualKeyboard(
-            int displayId,
-            String inputDeviceName,
-            int vendorId,
-            int productId,
+            in VirtualKeyboardConfig config,
             IBinder token);
+    @JavaPassthrough(annotation="@android.annotation.RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)")
     void createVirtualMouse(
-            int displayId,
-            String inputDeviceName,
-            int vendorId,
-            int productId,
+            in VirtualMouseConfig config,
             IBinder token);
+    @JavaPassthrough(annotation="@android.annotation.RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)")
     void createVirtualTouchscreen(
-            int displayId,
-            String inputDeviceName,
-            int vendorId,
-            int productId,
-            IBinder token,
-            in Point screenSize);
+            in VirtualTouchscreenConfig config,
+            IBinder token);
     void unregisterInputDevice(IBinder token);
     int getInputDeviceId(IBinder token);
     boolean sendDpadKeyEvent(IBinder token, in VirtualKeyEvent event);
@@ -95,6 +92,24 @@ interface IVirtualDevice {
     boolean sendRelativeEvent(IBinder token, in VirtualMouseRelativeEvent event);
     boolean sendScrollEvent(IBinder token, in VirtualMouseScrollEvent event);
     boolean sendTouchEvent(IBinder token, in VirtualTouchEvent event);
+
+    /**
+     * Creates a virtual sensor, capable of injecting sensor events into the system.
+     */
+    @JavaPassthrough(annotation="@android.annotation.RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)")
+    void createVirtualSensor(IBinder tokenm, in VirtualSensorConfig config);
+
+    /**
+     * Removes the sensor corresponding to the given token from the system.
+     */
+    @JavaPassthrough(annotation="@android.annotation.RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)")
+    void unregisterSensor(IBinder token);
+
+    /**
+     * Sends an event to the virtual sensor corresponding to the given token.
+     */
+    @JavaPassthrough(annotation="@android.annotation.RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)")
+    boolean sendSensorEvent(IBinder token, in VirtualSensorEvent event);
 
     /**
      * Launches a pending intent on the given display that is owned by this virtual device.

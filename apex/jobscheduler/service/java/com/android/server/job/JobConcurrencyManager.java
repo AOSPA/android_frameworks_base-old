@@ -1175,10 +1175,26 @@ class JobConcurrencyManager {
 
             if (jobStatus != null && !jsc.isWithinExecutionGuaranteeTime()
                     && restriction.isJobRestricted(jobStatus)) {
-                jsc.cancelExecutingJobLocked(restriction.getReason(),
+                jsc.cancelExecutingJobLocked(restriction.getStopReason(),
                         restriction.getInternalReason(),
                         JobParameters.getInternalReasonCodeDescription(
                                 restriction.getInternalReason()));
+            }
+        }
+    }
+
+    @GuardedBy("mLock")
+    void stopUserVisibleJobsLocked(int userId, @NonNull String packageName,
+            @JobParameters.StopReason int reason, int internalReasonCode) {
+        for (int i = mActiveServices.size() - 1; i >= 0; --i) {
+            final JobServiceContext jsc = mActiveServices.get(i);
+            final JobStatus jobStatus = jsc.getRunningJobLocked();
+
+            if (jobStatus != null && userId == jobStatus.getSourceUserId()
+                    && jobStatus.getSourcePackageName().equals(packageName)
+                    && jobStatus.isUserVisibleJob()) {
+                jsc.cancelExecutingJobLocked(reason, internalReasonCode,
+                        JobParameters.getInternalReasonCodeDescription(internalReasonCode));
             }
         }
     }
@@ -1208,7 +1224,7 @@ class JobConcurrencyManager {
                 final JobRestriction restriction = mService.checkIfRestricted(running);
                 if (restriction != null) {
                     final int internalReasonCode = restriction.getInternalReason();
-                    serviceContext.cancelExecutingJobLocked(restriction.getReason(),
+                    serviceContext.cancelExecutingJobLocked(restriction.getStopReason(),
                             internalReasonCode,
                             "restricted due to "
                                     + JobParameters.getInternalReasonCodeDescription(
@@ -1324,6 +1340,7 @@ class JobConcurrencyManager {
                 mActivePkgStats.add(
                         jobStatus.getSourceUserId(), jobStatus.getSourcePackageName(),
                         packageStats);
+                mService.resetPendingJobReasonCache(jobStatus);
             }
             if (mService.getPendingJobQueue().remove(jobStatus)) {
                 mService.mJobPackageTracker.noteNonpending(jobStatus);

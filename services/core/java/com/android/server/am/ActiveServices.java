@@ -132,6 +132,7 @@ import android.app.compat.CompatChanges;
 import android.app.usage.UsageEvents;
 import android.appwidget.AppWidgetManagerInternal;
 import android.compat.annotation.ChangeId;
+import android.compat.annotation.EnabledAfter;
 import android.compat.annotation.EnabledSince;
 import android.compat.annotation.Overridable;
 import android.content.ComponentName;
@@ -150,6 +151,7 @@ import android.content.pm.ServiceInfo;
 import android.content.pm.ServiceInfo.ForegroundServiceType;
 import android.os.Binder;
 import android.os.Build;
+import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
 import android.os.DeadObjectException;
 import android.os.Handler;
@@ -406,6 +408,14 @@ public final class ActiveServices {
     @ChangeId
     @EnabledSince(targetSdkVersion = android.os.Build.VERSION_CODES.S)
     static final long FGS_START_EXCEPTION_CHANGE_ID = 174041399L;
+
+    /**
+     * If enabled, the FGS type check against the manifest FSG type will be enabled for
+     * instant apps too. Before U, this check was only done for non-instant apps.
+     */
+    @ChangeId
+    @EnabledAfter(targetSdkVersion = VERSION_CODES.TIRAMISU)
+    static final long FGS_TYPE_CHECK_FOR_INSTANT_APPS = 261055255L;
 
     final Runnable mLastAnrDumpClearer = new Runnable() {
         @Override public void run() {
@@ -1856,38 +1866,43 @@ public final class ActiveServices {
                             android.Manifest.permission.FOREGROUND_SERVICE,
                             r.app.getPid(), r.appInfo.uid, "startForeground");
                 }
+            }
+            final int manifestType = r.serviceInfo.getForegroundServiceType();
+            // If passed in foreground service type is FOREGROUND_SERVICE_TYPE_MANIFEST,
+            // consider it is the same as manifest foreground service type.
+            if (foregroundServiceType == FOREGROUND_SERVICE_TYPE_MANIFEST) {
+                foregroundServiceType = manifestType;
+            }
 
-                // TODO(short-service): This part really should be above the if block,
-                // so we'll apply the same check for instant apps too.
-                int manifestType = r.serviceInfo.getForegroundServiceType();
-                // If passed in foreground service type is FOREGROUND_SERVICE_TYPE_MANIFEST,
-                // consider it is the same as manifest foreground service type.
-                if (foregroundServiceType == FOREGROUND_SERVICE_TYPE_MANIFEST) {
-                    foregroundServiceType = manifestType;
-                }
-
-                // Check the passed in foreground service type flags is a subset of manifest
-                // foreground service type flags.
-                final String prop = "debug.skip_fgs_manifest_type_check";
-                if (((foregroundServiceType & manifestType) != foregroundServiceType)
-                        // When building a test app on Studio, the SDK may not have all the
-                        // FGS types yet. This debug flag will allow using FGS types that are
-                        // not set in the manifest.
-                        && !SystemProperties.getBoolean(prop, false)) {
-                    throw new IllegalArgumentException("foregroundServiceType "
+            // Check the passed in foreground service type flags is a subset of manifest
+            // foreground service type flags.
+            final String prop = "debug.skip_fgs_manifest_type_check";
+            if (((foregroundServiceType & manifestType) != foregroundServiceType)
+                    // When building a test app on Studio, the SDK may not have all the
+                    // FGS types yet. This debug flag will allow using FGS types that are
+                    // not set in the manifest.
+                    && !SystemProperties.getBoolean(prop, false)) {
+                final String message = "foregroundServiceType "
                         + String.format("0x%08X", foregroundServiceType)
                         + " is not a subset of foregroundServiceType attribute "
-                        +  String.format("0x%08X", manifestType)
-                        + " in service element of manifest file");
+                        + String.format("0x%08X", manifestType)
+                        + " in service element of manifest file";
+                if (!r.appInfo.isInstantApp()
+                        || CompatChanges.isChangeEnabled(FGS_TYPE_CHECK_FOR_INSTANT_APPS,
+                        r.appInfo.uid)) {
+                    throw new IllegalArgumentException(message);
+                } else {
+                    Slog.w(TAG, message + "\n"
+                            + "This will be an exception once the target SDK level is UDC");
                 }
-                if ((foregroundServiceType & FOREGROUND_SERVICE_TYPE_SHORT_SERVICE) != 0
-                        && foregroundServiceType != FOREGROUND_SERVICE_TYPE_SHORT_SERVICE) {
-                    Slog.w(TAG_SERVICE, "startForeground(): FOREGROUND_SERVICE_TYPE_SHORT_SERVICE"
-                            + " is combined with other types. SHORT_SERVICE will be ignored.");
-                    // In this case, the service will be handled as a non-short, regular FGS
-                    // anyway, so we just remove the SHORT_SERVICE type.
-                    foregroundServiceType &= ~FOREGROUND_SERVICE_TYPE_SHORT_SERVICE;
-                }
+            }
+            if ((foregroundServiceType & FOREGROUND_SERVICE_TYPE_SHORT_SERVICE) != 0
+                    && foregroundServiceType != FOREGROUND_SERVICE_TYPE_SHORT_SERVICE) {
+                Slog.w(TAG_SERVICE, "startForeground(): FOREGROUND_SERVICE_TYPE_SHORT_SERVICE"
+                        + " is combined with other types. SHORT_SERVICE will be ignored.");
+                // In this case, the service will be handled as a non-short, regular FGS
+                // anyway, so we just remove the SHORT_SERVICE type.
+                foregroundServiceType &= ~FOREGROUND_SERVICE_TYPE_SHORT_SERVICE;
             }
 
             boolean alreadyStartedOp = false;
@@ -3004,6 +3019,9 @@ public final class ActiveServices {
     void onShortFgsTimeout(ServiceRecord sr) {
         synchronized (mAm) {
             if (!sr.shouldTriggerShortFgsTimeout()) {
+                if (DEBUG_SHORT_SERVICE) {
+                    Slog.d(TAG_SERVICE, "[STALE] Short FGS timed out: " + sr);
+                }
                 return;
             }
             Slog.e(TAG_SERVICE, "Short FGS timed out: " + sr);
@@ -3019,18 +3037,34 @@ public final class ActiveServices {
         }
     }
 
+    boolean shouldServiceTimeOutLocked(ComponentName className, IBinder token) {
+        final int userId = UserHandle.getCallingUserId();
+        final long ident = Binder.clearCallingIdentity();
+        try {
+            ServiceRecord sr = findServiceLocked(className, token, userId);
+            if (sr == null) {
+                return false;
+            }
+            return sr.shouldTriggerShortFgsTimeout();
+        } finally {
+            Binder.restoreCallingIdentity(ident);
+        }
+    }
+
     void onShortFgsAnrTimeout(ServiceRecord sr) {
         final String reason = "A foreground service of FOREGROUND_SERVICE_TYPE_SHORT_SERVICE"
                 + " did not stop within a timeout: " + sr.getComponentName();
 
         final TimeoutRecord tr = TimeoutRecord.forShortFgsTimeout(reason);
 
-        // TODO(short-service): TODO Add SHORT_FGS_TIMEOUT to AnrLatencyTracker
         tr.mLatencyTracker.waitingOnAMSLockStarted();
         synchronized (mAm) {
             tr.mLatencyTracker.waitingOnAMSLockEnded();
 
             if (!sr.shouldTriggerShortFgsAnr()) {
+                if (DEBUG_SHORT_SERVICE) {
+                    Slog.d(TAG_SERVICE, "[STALE] Short FGS ANR'ed: " + sr);
+                }
                 return;
             }
 
@@ -3897,6 +3931,11 @@ public final class ActiveServices {
                         if ((sInfo.flags & ServiceInfo.FLAG_ISOLATED_PROCESS) == 0) {
                             throw new SecurityException("BIND_EXTERNAL_SERVICE failed, "
                                     + className + " is not an isolatedProcess");
+                        }
+                        if (AppGlobals.getPackageManager().getPackageUid(callingPackage,
+                                0, userId) != callingUid) {
+                            throw new SecurityException("BIND_EXTERNAL_SERVICE failed, "
+                                    + "calling package not owned by calling UID ");
                         }
                         // Run the service under the calling package's application.
                         ApplicationInfo aInfo = AppGlobals.getPackageManager().getApplicationInfo(
@@ -5579,6 +5618,13 @@ public final class ActiveServices {
                 // This is a call from a service start...  take care of
                 // book-keeping.
                 r.callStart = true;
+
+                // Set the result to startCommandResult.
+                // START_TASK_REMOVED_COMPLETE is _not_ a result from onStartCommand(), so
+                // let's ignore.
+                if (res != Service.START_TASK_REMOVED_COMPLETE) {
+                    r.startCommandResult = res;
+                }
                 switch (res) {
                     case Service.START_STICKY_COMPATIBILITY:
                     case Service.START_STICKY: {
@@ -7868,5 +7914,36 @@ public final class ActiveServices {
         } else {
             Slog.e(TAG, "stopForegroundServiceDelegateLocked delegate does not exist");
         }
+    }
+
+    private static void getClientPackages(ServiceRecord sr, ArraySet<String> output) {
+        var connections = sr.getConnections();
+        for (int conni = connections.size() - 1; conni >= 0; conni--) {
+            var connl = connections.valueAt(conni);
+            for (int i = 0, size = connl.size(); i < size; i++) {
+                var conn = connl.get(i);
+                if (conn.binding.client != null) {
+                    output.add(conn.binding.client.info.packageName);
+                }
+            }
+        }
+    }
+
+    /**
+     * Return all client package names of a service.
+     */
+    ArraySet<String> getClientPackagesLocked(@NonNull String servicePackageName) {
+        var results = new ArraySet<String>();
+        int[] users = mAm.mUserController.getUsers();
+        for (int ui = 0; ui < users.length; ui++) {
+            ArrayMap<ComponentName, ServiceRecord> alls = getServicesLocked(users[ui]);
+            for (int i = 0, size = alls.size(); i < size; i++) {
+                ServiceRecord sr = alls.valueAt(i);
+                if (sr.name.getPackageName().equals(servicePackageName)) {
+                    getClientPackages(sr, results);
+                }
+            }
+        }
+        return results;
     }
 }

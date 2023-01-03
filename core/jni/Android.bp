@@ -40,6 +40,8 @@ cc_library_shared {
 
     cppflags: ["-Wno-conversion-null"],
 
+    cpp_std: "gnu++20",
+
     srcs: [
         "android_animation_PropertyValuesHolder.cpp",
         "android_os_SystemClock.cpp",
@@ -338,6 +340,9 @@ cc_library_shared {
                 "bionic_libc_platform_headers",
                 "dnsproxyd_protocol_headers",
                 "libtextclassifier_hash_headers",
+            ],
+            runtime_libs: [
+                "libidmap2",
             ],
         },
         host: {

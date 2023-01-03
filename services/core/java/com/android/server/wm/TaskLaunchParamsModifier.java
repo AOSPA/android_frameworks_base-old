@@ -165,9 +165,11 @@ class TaskLaunchParamsModifier implements LaunchParamsModifier {
         }
         // If the launch windowing mode is still undefined, inherit from the target task if the
         // task is already on the right display area (otherwise, the task may be on a different
-        // display area that has incompatible windowing mode).
+        // display area that has incompatible windowing mode or the task organizer request to
+        // disassociate the leaf task if relaunched and reparented it to TDA as root task).
         if (launchMode == WINDOWING_MODE_UNDEFINED
-                && task != null && task.getTaskDisplayArea() == suggestedDisplayArea) {
+                && task != null && task.getTaskDisplayArea() == suggestedDisplayArea
+                && !task.getRootTask().mReparentLeafTaskIfRelaunch) {
             launchMode = task.getWindowingMode();
             if (DEBUG) {
                 appendLog("inherit-from-task="
@@ -278,31 +280,29 @@ class TaskLaunchParamsModifier implements LaunchParamsModifier {
         // is set with the suggestedDisplayArea. If it is set, but the eventual TaskDisplayArea is
         // different, we should recalcuating the bounds.
         boolean hasInitialBoundsForSuggestedDisplayAreaInFreeformMode = false;
-        // shouldSetAsOverrideWindowingMode is set if the task needs to retain the launchMode
-        // regardless of the windowing mode of the parent.
-        boolean shouldSetAsOverrideWindowingMode = false;
-        if (launchMode == WINDOWING_MODE_PINNED) {
-            if (DEBUG) appendLog("picture-in-picture");
-        } else if (!root.isResizeable()) {
-            if (shouldLaunchUnresizableAppInFreeformInFreeformMode(root, suggestedDisplayArea,
-                    options)) {
-                launchMode = WINDOWING_MODE_UNDEFINED;
-                if (outParams.mBounds.isEmpty()) {
-                    getTaskBounds(root, suggestedDisplayArea, layout, launchMode, hasInitialBounds,
-                            outParams.mBounds);
-                    hasInitialBoundsForSuggestedDisplayAreaInFreeformMode = true;
+        if (suggestedDisplayArea.inFreeformWindowingMode()) {
+            if (launchMode == WINDOWING_MODE_PINNED) {
+                if (DEBUG) appendLog("picture-in-picture");
+            } else if (!root.isResizeable()) {
+                if (shouldLaunchUnresizableAppInFreeform(root, suggestedDisplayArea, options)) {
+                    launchMode = WINDOWING_MODE_FREEFORM;
+                    if (outParams.mBounds.isEmpty()) {
+                        getTaskBounds(root, suggestedDisplayArea, layout, launchMode,
+                                hasInitialBounds, outParams.mBounds);
+                        hasInitialBoundsForSuggestedDisplayAreaInFreeformMode = true;
+                    }
+                    if (DEBUG) appendLog("unresizable-freeform");
+                } else {
+                    launchMode = WINDOWING_MODE_FULLSCREEN;
+                    outParams.mBounds.setEmpty();
+                    if (DEBUG) appendLog("unresizable-forced-maximize");
                 }
-                if (DEBUG) appendLog("unresizable-freeform");
-            } else {
-                launchMode = WINDOWING_MODE_FULLSCREEN;
-                outParams.mBounds.setEmpty();
-                shouldSetAsOverrideWindowingMode = true;
-                if (DEBUG) appendLog("unresizable-forced-maximize");
             }
+        } else {
+            if (DEBUG) appendLog("non-freeform-task-display-area");
         }
         // If launch mode matches display windowing mode, let it inherit from display.
         outParams.mWindowingMode = launchMode == suggestedDisplayArea.getWindowingMode()
-                && !shouldSetAsOverrideWindowingMode
                 ? WINDOWING_MODE_UNDEFINED : launchMode;
 
         if (phase == PHASE_WINDOWING_MODE) {
@@ -669,7 +669,7 @@ class TaskLaunchParamsModifier implements LaunchParamsModifier {
         inOutBounds.offset(xOffset, yOffset);
     }
 
-    private boolean shouldLaunchUnresizableAppInFreeformInFreeformMode(ActivityRecord activity,
+    private boolean shouldLaunchUnresizableAppInFreeform(ActivityRecord activity,
             TaskDisplayArea displayArea, @Nullable ActivityOptions options) {
         if (options != null && options.getLaunchWindowingMode() == WINDOWING_MODE_FULLSCREEN) {
             // Do not launch the activity in freeform if it explicitly requested fullscreen mode.
@@ -682,7 +682,8 @@ class TaskLaunchParamsModifier implements LaunchParamsModifier {
         final int displayOrientation = orientationFromBounds(displayArea.getBounds());
         final int activityOrientation = resolveOrientation(activity, displayArea,
                 displayArea.getBounds());
-        if (displayOrientation != activityOrientation) {
+        if (displayArea.getWindowingMode() == WINDOWING_MODE_FREEFORM
+                && displayOrientation != activityOrientation) {
             return true;
         }
 
