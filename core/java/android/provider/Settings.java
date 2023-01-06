@@ -11695,6 +11695,13 @@ public final class Settings {
                 "extra_automatic_power_save_mode";
 
         /**
+         * Whether to trigger doze for new notifications
+         *
+         * @hide
+         */
+        public static final String DOZE_FOR_NOTIFICATIONS = "doze_for_notifications";
+
+        /**
          * Whether lockscreen weather is enabled.
          *
          * @hide
