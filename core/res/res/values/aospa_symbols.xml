@@ -105,4 +105,7 @@
     <!-- Display color inversion availability -->
     <java-symbol type="bool" name="config_displayInversionAvailable" />
 
+    <!-- Enforce DisplayModeDirector to select user preferred resolution -->
+    <java-symbol type="bool" name="config_forceToUseSelectedResolution" />
+
 </resources>
