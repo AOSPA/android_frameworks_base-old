@@ -65,6 +65,8 @@ public class AudioSystem
 
     private static final String TAG = "AudioSystem";
 
+    private static final int SOURCE_CODEC_TYPE_OPUS = 6; // TODO remove in U
+
     // private constructor to prevent instantiating AudioSystem
     private AudioSystem() {
         throw new UnsupportedOperationException("Trying to instantiate AudioSystem");
@@ -243,6 +245,8 @@ public class AudioSystem
     public static final int AUDIO_FORMAT_LDAC           = 0x23000000;
     /** @hide */
     public static final int AUDIO_FORMAT_LC3            = 0x2B000000;
+    /** @hide */
+    public static final int AUDIO_FORMAT_OPUS           = 0x08000000;
 
     /** @hide */
     public static final int AUDIO_FORMAT_CELT           = 0x26000000;
@@ -262,7 +266,9 @@ public class AudioSystem
             AUDIO_FORMAT_APTX,
             AUDIO_FORMAT_APTX_HD,
             AUDIO_FORMAT_LDAC,
-            AUDIO_FORMAT_LC3}
+            AUDIO_FORMAT_LC3,
+            AUDIO_FORMAT_OPUS
+           }
     )
     @Retention(RetentionPolicy.SOURCE)
     public @interface AudioFormatNativeEnumForBtCodec {}
@@ -300,6 +306,7 @@ public class AudioSystem
             case AUDIO_FORMAT_APTX_TWSP:
                      return BluetoothCodecConfig.SOURCE_CODEC_TYPE_APTX_TWSP;
             case AUDIO_FORMAT_LC3: return BluetoothCodecConfig.SOURCE_CODEC_TYPE_LC3;
+            case AUDIO_FORMAT_OPUS: return SOURCE_CODEC_TYPE_OPUS; // TODO update in U
             case VX_AUDIO_FORMAT_APTX_ADAPTIVE_QLEA:
                  return BluetoothLeAudioCodecConfig.SOURCE_CODEC_TYPE_APTX_ADAPTIVE_LE;
             default:
@@ -352,6 +359,8 @@ public class AudioSystem
                 return AudioSystem.AUDIO_FORMAT_APTX_TWSP;
             case BluetoothCodecConfig.SOURCE_CODEC_TYPE_LC3:
                 return AudioSystem.AUDIO_FORMAT_LC3;
+            case SOURCE_CODEC_TYPE_OPUS: // TODO update in U
+                return AudioSystem.AUDIO_FORMAT_OPUS;
             default:
                 Log.e(TAG, "Unknown BT codec 0x" + Integer.toHexString(btCodec)
                         + " for conversion to audio format");
@@ -1315,8 +1324,8 @@ public class AudioSystem
     /** @hide */ public static final String DEVICE_OUT_REMOTE_SUBMIX_NAME = "remote_submix";
     /** @hide */ public static final String DEVICE_OUT_TELEPHONY_TX_NAME = "telephony_tx";
     /** @hide */ public static final String DEVICE_OUT_LINE_NAME = "line";
-    /** @hide */ public static final String DEVICE_OUT_HDMI_ARC_NAME = "hmdi_arc";
-    /** @hide */ public static final String DEVICE_OUT_HDMI_EARC_NAME = "hmdi_earc";
+    /** @hide */ public static final String DEVICE_OUT_HDMI_ARC_NAME = "hdmi_arc";
+    /** @hide */ public static final String DEVICE_OUT_HDMI_EARC_NAME = "hdmi_earc";
     /** @hide */ public static final String DEVICE_OUT_SPDIF_NAME = "spdif";
     /** @hide */ public static final String DEVICE_OUT_FM_NAME = "fm_transmitter";
     /** @hide */ public static final String DEVICE_OUT_AUX_LINE_NAME = "aux_line";
@@ -2310,10 +2319,10 @@ public class AudioSystem
     public static int[] DEFAULT_STREAM_VOLUME = new int[] {
         4,  // STREAM_VOICE_CALL
         7,  // STREAM_SYSTEM
-        5,  // STREAM_RING
+        5,  // STREAM_RING           // configured in AudioService by config_audio_notif_vol_default
         5, // STREAM_MUSIC
         6,  // STREAM_ALARM
-        5,  // STREAM_NOTIFICATION
+        5,  // STREAM_NOTIFICATION   // configured in AudioService by config_audio_ring_vol_default
         7,  // STREAM_BLUETOOTH_SCO
         7,  // STREAM_SYSTEM_ENFORCED
         5, // STREAM_DTMF
@@ -2399,6 +2408,14 @@ public class AudioSystem
      */
     public static boolean isSingleAudioDeviceType(@NonNull Set<Integer> types, int type) {
         return types.size() == 1 && types.contains(type);
+    }
+
+    /**
+     * @hide
+     * Return true if the audio device type is a Bluetooth LE Audio device.
+     */
+    public static boolean isLeAudioDeviceType(int type) {
+        return DEVICE_OUT_ALL_BLE_SET.contains(type);
     }
 
     /** @hide */

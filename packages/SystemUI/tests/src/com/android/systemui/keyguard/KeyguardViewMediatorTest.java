@@ -26,6 +26,7 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -180,6 +181,31 @@ public class KeyguardViewMediatorTest extends SysuiTestCase {
     }
 
     @Test
+    @TestableLooper.RunWithLooper(setAsMainLooper = true)
+    public void restoreBouncerWhenSimLockedAndKeyguardIsGoingAway_initiallyNotShowing() {
+        // When showing and provisioned
+        mViewMediator.onSystemReady();
+        when(mUpdateMonitor.isDeviceProvisioned()).thenReturn(true);
+        mViewMediator.setShowingLocked(false);
+
+        // and a SIM becomes locked and requires a PIN
+        mViewMediator.mUpdateCallback.onSimStateChanged(
+                1 /* subId */,
+                0 /* slotId */,
+                TelephonyManager.SIM_STATE_PIN_REQUIRED);
+
+        // and the keyguard goes away
+        mViewMediator.setShowingLocked(false);
+        when(mStatusBarKeyguardViewManager.isShowing()).thenReturn(false);
+        mViewMediator.mUpdateCallback.onKeyguardVisibilityChanged(false);
+
+        TestableLooper.get(this).processAllMessages();
+
+        // then make sure it comes back
+        verify(mStatusBarKeyguardViewManager, atLeast(1)).show(null);
+    }
+
+    @Test
     public void testBouncerPrompt_deviceLockedByAdmin() {
         // GIVEN no trust agents enabled and biometrics aren't enrolled
         when(mUpdateMonitor.isTrustUsuallyManaged(anyInt())).thenReturn(false);
@@ -195,6 +221,13 @@ public class KeyguardViewMediatorTest extends SysuiTestCase {
         // THEN the bouncer prompt reason should return PROMPT_REASON_DEVICE_ADMIN
         assertEquals(KeyguardSecurityView.PROMPT_REASON_DEVICE_ADMIN,
                 mViewMediator.mViewMediatorCallback.getBouncerPromptReason());
+    }
+
+    @Test
+    public void testHideSurfaceBehindKeyguardMarksKeyguardNotGoingAway() {
+        mViewMediator.hideSurfaceBehindKeyguard();
+
+        verify(mKeyguardStateController).notifyKeyguardGoingAway(false);
     }
 
     private void createAndStartViewMediator() {

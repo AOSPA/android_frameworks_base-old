@@ -60,7 +60,6 @@ import com.android.systemui.statusbar.connectivity.NetworkController;
 import com.android.systemui.statusbar.connectivity.SignalCallback;
 import com.android.systemui.statusbar.connectivity.WifiIcons;
 import com.android.systemui.statusbar.connectivity.WifiIndicators;
-import com.android.systemui.util.CarrierNameCustomization;
 
 import java.io.PrintWriter;
 
@@ -79,7 +78,6 @@ public class InternetTile extends QSTileImpl<SignalState> {
     protected final InternetSignalCallback mSignalCallback = new InternetSignalCallback();
     private final InternetDialogFactory mInternetDialogFactory;
     final Handler mHandler;
-    private CarrierNameCustomization mCarrierNameCustomization;
 
     @Inject
     public InternetTile(
@@ -93,8 +91,7 @@ public class InternetTile extends QSTileImpl<SignalState> {
             QSLogger qsLogger,
             NetworkController networkController,
             AccessPointController accessPointController,
-            InternetDialogFactory internetDialogFactory,
-            CarrierNameCustomization carrierNameCustomization
+            InternetDialogFactory internetDialogFactory
     ) {
         super(host, backgroundLooper, mainHandler, falsingManager, metricsLogger,
                 statusBarStateController, activityStarter, qsLogger);
@@ -104,7 +101,6 @@ public class InternetTile extends QSTileImpl<SignalState> {
         mAccessPointController = accessPointController;
         mDataController = mController.getMobileDataController();
         mController.observe(getLifecycle(), mSignalCallback);
-        mCarrierNameCustomization = carrierNameCustomization;
     }
 
     @Override
@@ -291,14 +287,8 @@ public class InternetTile extends QSTileImpl<SignalState> {
                 // Not data sim, don't display.
                 return;
             }
-            if (mCarrierNameCustomization.isRoamingCustomizationEnabled()
-                    && mCarrierNameCustomization.isRoaming(indicators.subId)) {
-                mCellularInfo.mDataSubscriptionName =
-                        mCarrierNameCustomization.getRoamingCarrierName(indicators.subId);
-            } else {
-                mCellularInfo.mDataSubscriptionName = indicators.qsDescription == null
-                        ? mController.getMobileDataNetworkName() : indicators.qsDescription;
-            }
+            mCellularInfo.mDataSubscriptionName = indicators.qsDescription == null
+                    ? mController.getMobileDataNetworkName() : indicators.qsDescription;
             mCellularInfo.mDataContentDescription = indicators.qsDescription != null
                     ? indicators.typeContentDescriptionHtml : null;
             mCellularInfo.mMobileSignalIconId = indicators.qsIcon.icon;
@@ -375,6 +365,9 @@ public class InternetTile extends QSTileImpl<SignalState> {
             mWifiInfo.mNoDefaultNetwork = noDefaultNetwork;
             mWifiInfo.mNoValidatedNetwork = noValidatedNetwork;
             mWifiInfo.mNoNetworksAvailable = noNetworksAvailable;
+            if (!noDefaultNetwork) {
+                return;
+            }
             refreshState(mWifiInfo);
         }
 
@@ -390,6 +383,7 @@ public class InternetTile extends QSTileImpl<SignalState> {
 
     @Override
     protected void handleUpdateState(SignalState state, Object arg) {
+        mQSLogger.logInternetTileUpdate(mLastTileState, arg == null ? "null" : arg.toString());
         if (arg instanceof CellularCallbackInfo) {
             mLastTileState = 0;
             handleUpdateCellularState(state, arg);
@@ -606,5 +600,10 @@ public class InternetTile extends QSTileImpl<SignalState> {
         pw.print("    "); pw.println(getState().toString());
         pw.print("    "); pw.println("mLastTileState=" + mLastTileState);
         pw.print("    "); pw.println("mSignalCallback=" + mSignalCallback.toString());
+    }
+
+    // For testing usage only.
+    protected int getLastTileState() {
+        return mLastTileState;
     }
 }

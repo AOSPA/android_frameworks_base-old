@@ -39,7 +39,7 @@ import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.keyguard.dagger.KeyguardBouncerScope;
 import com.android.systemui.R;
-import com.android.systemui.statusbar.phone.ShadeController;
+import com.android.systemui.shade.ShadeController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.ConfigurationController.ConfigurationListener;
 import com.android.systemui.util.EmergencyDialerConstants;

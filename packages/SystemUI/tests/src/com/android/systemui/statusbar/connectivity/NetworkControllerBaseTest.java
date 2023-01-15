@@ -72,6 +72,7 @@ import com.android.systemui.demomode.DemoModeController;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.flags.Flags;
+import com.android.systemui.log.LogBuffer;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController.DeviceProvisionedListener;
 import com.android.systemui.telephony.TelephonyListenerManager;
@@ -128,6 +129,7 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
     protected Handler mMainHandler;
     protected FeatureFlags mFeatureFlags;
     protected WifiStatusTrackerFactory mWifiStatusTrackerFactory;
+    protected MobileSignalControllerFactory mMobileFactory;
 
     protected int mSubId;
 
@@ -223,6 +225,12 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
 
         mWifiStatusTrackerFactory = new WifiStatusTrackerFactory(
                 mContext, mMockWm, mMockNsm, mMockCm, mMainHandler);
+        mMobileFactory = new MobileSignalControllerFactory(
+                mContext,
+                mCallbackHandler,
+                mCarrierConfigTracker,
+                mFeatureFlags
+        );
 
         mNetworkController = new NetworkControllerImpl(mContext,
                 mMockCm,
@@ -242,9 +250,10 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
                 mDemoModeController,
                 mCarrierConfigTracker,
                 mWifiStatusTrackerFactory,
+                mMobileFactory,
                 mMainHandler,
-                mFeatureFlags,
-                mock(DumpManager.class)
+                mock(DumpManager.class),
+                mock(LogBuffer.class)
         );
         setupNetworkController();
 
@@ -434,10 +443,6 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
     public void setLevel(int level) {
         when(mSignalStrength.getLevel()).thenReturn(level);
         updateSignalStrength();
-    }
-
-    public void setImsType(int imsType) {
-        mMobileSignalController.setImsType(imsType);
     }
 
     public void setIsGsm(boolean gsm) {
@@ -635,5 +640,4 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
     protected void assertDataNetworkNameEquals(String expected) {
         assertEquals("Data network name", expected, mNetworkController.getMobileDataNetworkName());
     }
-
 }

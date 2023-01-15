@@ -21,7 +21,6 @@ import android.animation.AnimatorSet
 import android.app.PendingIntent
 import android.app.smartspace.SmartspaceAction
 import android.content.Context
-import org.mockito.Mockito.`when` as whenever
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
@@ -69,8 +68,8 @@ import com.android.systemui.statusbar.policy.KeyguardStateController
 import com.android.systemui.util.animation.TransitionLayout
 import com.android.systemui.util.concurrency.FakeExecutor
 import com.android.systemui.util.mockito.KotlinArgumentCaptor
-import com.android.systemui.util.mockito.argumentCaptor
 import com.android.systemui.util.mockito.any
+import com.android.systemui.util.mockito.argumentCaptor
 import com.android.systemui.util.mockito.eq
 import com.android.systemui.util.mockito.nullable
 import com.android.systemui.util.mockito.withArgCaptor
@@ -93,6 +92,7 @@ import org.mockito.Mockito.never
 import org.mockito.Mockito.reset
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
+import org.mockito.Mockito.`when` as whenever
 import org.mockito.junit.MockitoJUnit
 
 private const val KEY = "TEST_KEY"
@@ -355,6 +355,7 @@ public class MediaControlPanelTest : SysuiTestCase() {
         whenever(viewHolder.player).thenReturn(view)
         whenever(viewHolder.appIcon).thenReturn(appIcon)
         whenever(viewHolder.albumView).thenReturn(albumView)
+        whenever(albumView.foreground).thenReturn(mock(Drawable::class.java))
         whenever(viewHolder.titleText).thenReturn(titleText)
         whenever(viewHolder.artistText).thenReturn(artistText)
         whenever(seamlessBackground.getDrawable(0)).thenReturn(mock(GradientDrawable::class.java))
@@ -590,14 +591,20 @@ public class MediaControlPanelTest : SysuiTestCase() {
 
     @Test
     fun bindAlbumView_bitmapInLaterStates_setAfterExecutors() {
-        val bmp = Bitmap.createBitmap(10, 10, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bmp)
-        canvas.drawColor(Color.RED)
-        val albumArt = Icon.createWithBitmap(bmp)
+        val redBmp = Bitmap.createBitmap(10, 10, Bitmap.Config.ARGB_8888)
+        val redCanvas = Canvas(redBmp)
+        redCanvas.drawColor(Color.RED)
+        val redArt = Icon.createWithBitmap(redBmp)
+
+        val greenBmp = Bitmap.createBitmap(10, 10, Bitmap.Config.ARGB_8888)
+        val greenCanvas = Canvas(greenBmp)
+        greenCanvas.drawColor(Color.GREEN)
+        val greenArt = Icon.createWithBitmap(greenBmp)
 
         val state0 = mediaData.copy(artwork = null)
-        val state1 = mediaData.copy(artwork = albumArt)
-        val state2 = mediaData.copy(artwork = albumArt)
+        val state1 = mediaData.copy(artwork = redArt)
+        val state2 = mediaData.copy(artwork = redArt)
+        val state3 = mediaData.copy(artwork = greenArt)
         player.attachPlayer(viewHolder)
 
         // First binding sets (empty) drawable
@@ -626,6 +633,12 @@ public class MediaControlPanelTest : SysuiTestCase() {
         bgExecutor.runAllReady()
         mainExecutor.runAllReady()
         verify(albumView, times(2)).setImageDrawable(any(Drawable::class.java))
+
+        // Fourth binding to new image runs transition due to color scheme change
+        player.bindPlayer(state3, PACKAGE)
+        bgExecutor.runAllReady()
+        mainExecutor.runAllReady()
+        verify(albumView, times(3)).setImageDrawable(any(Drawable::class.java))
     }
 
     @Test
@@ -1043,6 +1056,17 @@ public class MediaControlPanelTest : SysuiTestCase() {
         val fallbackString = context.getResources().getString(R.string.media_seamless_other_device)
         player.attachPlayer(viewHolder)
         val state = mediaData.copy(device = null)
+        player.bindPlayer(state, PACKAGE)
+        assertThat(seamless.isEnabled()).isTrue()
+        assertThat(seamlessText.getText()).isEqualTo(fallbackString)
+        assertThat(seamless.contentDescription).isEqualTo(fallbackString)
+    }
+
+    @Test
+    fun bindDeviceWithNullName() {
+        val fallbackString = context.getResources().getString(R.string.media_seamless_other_device)
+        player.attachPlayer(viewHolder)
+        val state = mediaData.copy(device = device.copy(name = null))
         player.bindPlayer(state, PACKAGE)
         assertThat(seamless.isEnabled()).isTrue()
         assertThat(seamlessText.getText()).isEqualTo(fallbackString)
