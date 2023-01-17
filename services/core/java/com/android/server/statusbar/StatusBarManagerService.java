@@ -1929,6 +1929,18 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
         }
     }
 
+    @Override
+    public void updateAmbientDisplayState() {
+        enforceStatusBarService();
+        IStatusBar bar = mBar;
+        if (bar != null) {
+            try {
+                bar.updateAmbientDisplayState();
+            } catch (RemoteException ex) {
+            }
+        }
+    }
+
     private void checkCallingUidPackage(String packageName, int callingUid, int userId) {
         int packageUid = mPackageManagerInternal.getPackageUid(packageName, 0, userId);
         if (UserHandle.getAppId(callingUid) != UserHandle.getAppId(packageUid)) {

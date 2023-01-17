@@ -9725,6 +9725,13 @@ public final class Settings {
         public static final String DOZE_QUICK_PICKUP_GESTURE = "doze_quick_pickup_gesture";
 
         /**
+         * hidden stting of the current atate of DOZE only when charging
+         * @hide
+         */
+        @Readable
+        public static final String DOZE_ON_CHARGE_NOW = "doze_on_charge_now";
+
+        /**
          * Whether the device should suppress the current doze configuration and disable dozing.
          * @hide
          */
