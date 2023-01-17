@@ -178,6 +178,7 @@ public class CommandQueue extends IStatusBar.Stub implements
     private static final int MSG_CONFIRM_IMMERSIVE_PROMPT = 77 << MSG_SHIFT;
     private static final int MSG_IMMERSIVE_CHANGED = 78 << MSG_SHIFT;
     private static final int MSG_TOGGLE_CAMERA_FLASH = 79 << MSG_SHIFT;
+    private static final int MSG_UPDATE_AMBIENT_DISPLAY = 80 << MSG_SHIFT;
 
     public static final int FLAG_EXCLUDE_NONE = 0;
     public static final int FLAG_EXCLUDE_SEARCH_PANEL = 1 << 0;
@@ -411,6 +412,9 @@ public class CommandQueue extends IStatusBar.Stub implements
 
         /** Called to suppress ambient display. */
         default void suppressAmbientDisplay(boolean suppress) { }
+
+        /** Called to update ambient display state */
+        default void updateAmbientDisplayState() { }
 
         /**
          * @see IStatusBar#showToast(int, String, IBinder, CharSequence, IBinder, int,
@@ -1223,6 +1227,12 @@ public class CommandQueue extends IStatusBar.Stub implements
         }
     }
 
+    public void updateAmbientDisplayState() {
+        synchronized (mLock) {
+            mHandler.obtainMessage(MSG_UPDATE_AMBIENT_DISPLAY).sendToTarget();
+        }
+    }
+
     @Override
     public void setNavigationBarLumaSamplingEnabled(int displayId, boolean enable) {
         synchronized (mLock) {
@@ -1772,6 +1782,11 @@ public class CommandQueue extends IStatusBar.Stub implements
                 case MSG_SUPPRESS_AMBIENT_DISPLAY:
                     for (Callbacks callbacks: mCallbacks) {
                         callbacks.suppressAmbientDisplay((boolean) msg.obj);
+                    }
+                    break;
+                 case MSG_UPDATE_AMBIENT_DISPLAY:
+                    for (Callbacks callbacks: mCallbacks) {
+                        callbacks.updateAmbientDisplayState();
                     }
                     break;
                 case MSG_REQUEST_WINDOW_MAGNIFICATION_CONNECTION:

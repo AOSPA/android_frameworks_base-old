@@ -21,6 +21,7 @@ import static android.app.StatusBarManager.WINDOW_STATE_HIDDEN;
 import static android.app.StatusBarManager.WINDOW_STATE_SHOWING;
 import static android.app.StatusBarManager.WindowVisibleState;
 import static android.app.StatusBarManager.windowStateToString;
+import static android.hardware.display.AmbientDisplayConfiguration.REFRESHING_DOZE_SETTINGS;
 import static android.view.WindowInsetsController.APPEARANCE_LOW_PROFILE_BARS;
 import static android.view.WindowInsetsController.APPEARANCE_OPAQUE_STATUS_BARS;
 import static android.view.WindowInsetsController.APPEARANCE_SEMI_TRANSPARENT_STATUS_BARS;
@@ -55,12 +56,14 @@ import android.app.WallpaperManager;
 import android.app.admin.DevicePolicyManager;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.res.Configuration;
+import android.database.ContentObserver;
 import android.graphics.Point;
 import android.hardware.devicestate.DeviceStateManager;
 import android.hardware.fingerprint.FingerprintManager;
@@ -250,6 +253,7 @@ import com.android.systemui.util.DumpUtilsKt;
 import com.android.systemui.util.WallpaperController;
 import com.android.systemui.util.concurrency.DelayableExecutor;
 import com.android.systemui.util.concurrency.MessageRouter;
+import com.android.systemui.util.settings.SecureSettings;
 import com.android.systemui.volume.VolumeComponent;
 import com.android.wm.shell.bubbles.Bubbles;
 import com.android.wm.shell.startingsurface.SplashscreenContentDrawer;
@@ -315,6 +319,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
     private final NotificationListContainer mNotifListContainer;
     private final NotificationExpansionRepository mNotificationExpansionRepository;
     private boolean mIsShortcutListSearchEnabled;
+    private Handler mMainHandler;
 
     private final KeyguardStateController.Callback mKeyguardStateControllerCallback =
             new KeyguardStateController.Callback() {
@@ -649,6 +654,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
     private final InteractionJankMonitor mJankMonitor;
 
     private final BurnInProtectionController mBurnInProtectionController;
+    private final SecureSettings mSecureSettings;
 
     /** Existing callback that handles back gesture invoked for the Shade. */
     private final OnBackInvokedCallback mOnBackInvokedCallback;
@@ -790,7 +796,8 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
             UserTracker userTracker,
             Provider<FingerprintManager> fingerprintManager,
             ActivityStarter activityStarter,
-            BurnInProtectionController burnInProtectionController
+            BurnInProtectionController burnInProtectionController,
+            SecureSettings secureSettings
     ) {
         mContext = context;
         mNotificationsController = notificationsController;
@@ -905,6 +912,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
 
         mShadeExpansionStateManager.addFullExpansionListener(this::onShadeExpansionFullyChanged);
 
+        mSecureSettings = secureSettings;
         mActivityIntentHelper = new ActivityIntentHelper(mContext);
         mActivityLaunchAnimator = activityLaunchAnimator;
 
@@ -3294,6 +3302,35 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
     @Override
     public boolean isDeviceInteractive() {
         return mDeviceInteractive;
+    }
+
+    private final SbSettingsObserver mSbSettingsObserver = new SbSettingsObserver();
+
+    private class SbSettingsObserver extends ContentObserver {
+        SbSettingsObserver() {
+            super(mMainHandler);
+        }
+        void observe() {
+            for (String setting : REFRESHING_DOZE_SETTINGS)
+                mSecureSettings.registerContentObserver(setting, this);
+        }
+
+        @Override
+        public void onChange(boolean selfChange, Uri uri) {
+            switch (uri.getLastPathSegment()) {
+                default: // REFRESHING_DOZE_SETTINGS
+                    updateAmbientDisplayState();
+                    break;
+            }
+        }
+
+        private void updateAmbientDisplayState() {
+            try {
+                mBarService.updateAmbientDisplayState();
+            } catch (RemoteException e) {
+                // Won't fail unless the squere root of -1 is a real number
+            }
+        }
     }
 
     private final BroadcastReceiver mBannerActionBroadcastReceiver = new BroadcastReceiver() {
