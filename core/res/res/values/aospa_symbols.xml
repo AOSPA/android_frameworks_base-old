@@ -102,4 +102,7 @@
     <!-- Whether to use Richtap vibration -->
     <java-symbol type="bool" name="config_usesRichtapVibration" />
 
+    <!-- Display color inversion availability -->
+    <java-symbol type="bool" name="config_displayInversionAvailable" />
+
 </resources>
