@@ -157,6 +157,45 @@ public final class BluetoothDevice implements Parcelable, Attributable {
             "android.bluetooth.device.action.FOUND";
 
     /**
+     * Broadcast Action: Indicates the Bluetooth current AFH map
+     * <p>Always contains the extra fields {@link #EXTRA_AFH_MAP},
+     * {@link #EXTRA_TRANSPORT}.
+     * <p>Requires {@link android.Manifest.permission#BLUETOOTH} to receive.
+     * @hide
+     **/
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_AFH_MAP = "android.bluetooth.action.AFH_MAP";
+
+    /**
+     * Broadcast Action: Indicates the Bluetooth current AFH map status
+     * <p>Always contains the extra fields {@link #EXTRA_STATUS},
+     * {@link #EXTRA_TRANSPORT}.
+     * <p>Requires {@link android.Manifest.permission#BLUETOOTH} to receive.
+     * @hide
+     **/
+    @RequiresLegacyBluetoothPermission
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String  ACTION_AFH_MAP_STATUS = "android.bluetooth.action.AFH_MAP_STATUS";
+
+    /**
+    * Used as an int extra field in {@link #ACTION_GET_AFH_MAP}
+    *@hide
+    **/
+    public static final String EXTRA_TRANSPORT = "android.bluetooth.extra.TRANSPORT";
+
+    /**
+    * Used as an byte array extra field for Afh map in {@link #ACTION_GET_AFH_MAP}
+    *@hide
+    **/
+    public static final String EXTRA_AFH_MAP = "android.bluetooth.extra.AFH_MAP";
+
+    /**
+    * Used as an int extra field for Afh mode in {@link #ACTION_GET_AFH_MAP}
+    *@hide
+    **/
+    public static final String EXTRA_AFH_MODE = "android.bluetooth.extra.AFH_MODE";
+
+    /**
      * Broadcast Action: Bluetooth class of a remote device has changed.
      * <p>Always contains the extra fields {@link #EXTRA_DEVICE} and {@link
      * #EXTRA_CLASS}.
