@@ -430,17 +430,7 @@ public class KeyguardStatusBarViewController extends ViewController<KeyguardStat
 
     /** Animate the keyguard status bar in. */
     public void animateKeyguardStatusBarIn() {
-        if (mDisableStateTracker.isDisabled()) {
-            // If our view is disabled, don't allow us to animate in.
             return;
-        }
-        mView.setVisibility(View.VISIBLE);
-        mView.setAlpha(0f);
-        ValueAnimator anim = ValueAnimator.ofFloat(0f, 1f);
-        anim.addUpdateListener(mAnimatorUpdateListener);
-        anim.setDuration(StackStateAnimator.ANIMATION_DURATION_STANDARD);
-        anim.setInterpolator(Interpolators.LINEAR_OUT_SLOW_IN);
-        anim.start();
     }
 
     /** Animate the keyguard status bar out. */

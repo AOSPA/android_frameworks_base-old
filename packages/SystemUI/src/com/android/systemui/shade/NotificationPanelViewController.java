@@ -1239,8 +1239,7 @@ public final class NotificationPanelViewController extends PanelViewController {
         mKeyguardStatusBar = (KeyguardStatusBarView) mLayoutInflater.inflate(
                 R.layout.keyguard_status_bar, mView, false);
         mView.addView(mKeyguardStatusBar);
-        mKeyguardStatusBar.setVisibility(isOnKeyguard() ? View.VISIBLE : View.INVISIBLE);
-
+            mKeyguardStatusBar.setVisibility(View.INVISIBLE);
         // When it's reinflated, this is centered by default. If it shouldn't be, this will update
         // below when resources are updated.
         mStatusViewCentered = true;
@@ -4723,7 +4722,7 @@ public final class NotificationPanelViewController extends PanelViewController {
                     // we only want to be showing the clock/notifications during the animation.
                     mKeyguardStatusBarViewController.updateViewState(
                             /* alpha= */ 1f,
-                            keyguardShowing ? View.VISIBLE : View.INVISIBLE);
+                            View.INVISIBLE);
                 }
                 if (keyguardShowing && oldState != mBarState) {
                     if (mQs != null) {
