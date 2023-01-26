@@ -139,6 +139,11 @@ class SplitPresenter extends JetpackTaskFragmentOrganizer {
         super(executor, controller);
         mController = controller;
         registerOrganizer();
+        if (!SplitController.ENABLE_SHELL_TRANSITIONS) {
+            // TODO(b/207070762): cleanup with legacy app transition
+            // Animation will be handled by WM Shell when Shell transition is enabled.
+            overrideSplitAnimation();
+        }
     }
 
     /**
@@ -371,13 +376,16 @@ class SplitPresenter extends JetpackTaskFragmentOrganizer {
             @NonNull SplitAttributes splitAttributes) {
         // Clear adjacent TaskFragments if the container is shown in fullscreen, or the
         // secondaryContainer could not be finished.
-        if (!shouldShowSplit(splitAttributes)) {
+        boolean isStacked = !shouldShowSplit(splitAttributes);
+        if (isStacked) {
             setAdjacentTaskFragments(wct, primaryContainer.getTaskFragmentToken(),
                     null /* secondary */, null /* splitRule */);
         } else {
             setAdjacentTaskFragments(wct, primaryContainer.getTaskFragmentToken(),
                     secondaryContainer.getTaskFragmentToken(), splitRule);
         }
+        setCompanionTaskFragment(wct, primaryContainer.getTaskFragmentToken(),
+                secondaryContainer.getTaskFragmentToken(), splitRule, isStacked);
     }
 
     /**
@@ -489,8 +497,15 @@ class SplitPresenter extends JetpackTaskFragmentOrganizer {
                     || splitContainer.getSecondaryContainer().getInfo() == null) {
                 return RESULT_EXPAND_FAILED_NO_TF_INFO;
             }
-            expandTaskFragment(wct, splitContainer.getPrimaryContainer().getTaskFragmentToken());
-            expandTaskFragment(wct, splitContainer.getSecondaryContainer().getTaskFragmentToken());
+            final IBinder primaryToken =
+                    splitContainer.getPrimaryContainer().getTaskFragmentToken();
+            final IBinder secondaryToken =
+                    splitContainer.getSecondaryContainer().getTaskFragmentToken();
+            expandTaskFragment(wct, primaryToken);
+            expandTaskFragment(wct, secondaryToken);
+            // Set the companion TaskFragment when the two containers stacked.
+            setCompanionTaskFragment(wct, primaryToken, secondaryToken,
+                    splitContainer.getSplitRule(), true /* isStacked */);
             return RESULT_EXPANDED;
         }
         return RESULT_NOT_EXPANDED;
@@ -917,11 +932,7 @@ class SplitPresenter extends JetpackTaskFragmentOrganizer {
         if (taskContainer != null) {
             return taskContainer.getTaskProperties();
         }
-        // Use a copy of configuration because activity's configuration may be updated later,
-        // or we may get unexpected TaskContainer's configuration if Activity's configuration is
-        // updated. An example is Activity is going to be in split.
-        return new TaskProperties(activity.getDisplayId(),
-                new Configuration(activity.getResources().getConfiguration()));
+        return TaskProperties.getTaskPropertiesFromActivity(activity);
     }
 
     @NonNull
@@ -934,17 +945,5 @@ class SplitPresenter extends JetpackTaskFragmentOrganizer {
         final Rect taskBounds = taskConfiguration.windowConfiguration.getBounds();
         // TODO(b/190433398): Supply correct insets.
         return new WindowMetrics(taskBounds, WindowInsets.CONSUMED);
-    }
-
-    /** Obtains the bounds from a non-embedded Activity. */
-    @NonNull
-    static Rect getNonEmbeddedActivityBounds(@NonNull Activity activity) {
-        final WindowConfiguration windowConfiguration =
-                activity.getResources().getConfiguration().windowConfiguration;
-        if (!activity.isInMultiWindowMode()) {
-            // In fullscreen mode the max bounds should correspond to the task bounds.
-            return windowConfiguration.getMaxBounds();
-        }
-        return windowConfiguration.getBounds();
     }
 }

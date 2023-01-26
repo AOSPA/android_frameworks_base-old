@@ -22,6 +22,7 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDeviceGroup;
 import android.bluetooth.BluetoothCsipSetCoordinator;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothHapClient;
 import android.bluetooth.BluetoothHeadset;
 import android.bluetooth.BluetoothHeadsetClient;
 import android.bluetooth.BluetoothHearingAid;
@@ -115,6 +116,7 @@ public class LocalBluetoothProfileManager {
     private PbapServerProfile mPbapProfile;
     private DunServerProfile mDunProfile;
     private HearingAidProfile mHearingAidProfile;
+    private HapClientProfile mHapClientProfile;
     private CsipSetCoordinatorProfile mCsipSetCoordinatorProfile;
     private LeAudioProfile mLeAudioProfile;
     private LocalBluetoothLeBroadcast mLeAudioBroadcast;
@@ -204,6 +206,12 @@ public class LocalBluetoothProfileManager {
                     this);
             addProfile(mHearingAidProfile, HearingAidProfile.NAME,
                     BluetoothHearingAid.ACTION_CONNECTION_STATE_CHANGED);
+        }
+        if (mHapClientProfile == null && supportedList.contains(BluetoothProfile.HAP_CLIENT)) {
+            if (DEBUG) Log.d(TAG, "Adding local HAP_CLIENT profile");
+            mHapClientProfile = new HapClientProfile(mContext, mDeviceManager, this);
+            addProfile(mHapClientProfile, HapClientProfile.NAME,
+                    BluetoothHapClient.ACTION_HAP_CONNECTION_STATE_CHANGED);
         }
         if (mHidProfile == null && supportedList.contains(BluetoothProfile.HID_HOST)) {
             if (DEBUG) Log.d(TAG, "Adding local HID_HOST profile");
@@ -411,23 +419,42 @@ public class LocalBluetoothProfileManager {
                 Log.i(TAG, "Failed to connect " + mProfile + " device");
             }
 
-            if (getHearingAidProfile() != null &&
-                mProfile instanceof HearingAidProfile &&
-                (newState == BluetoothProfile.STATE_CONNECTED)) {
-                final int side = getHearingAidProfile().getDeviceSide(cachedDevice.getDevice());
-                final int mode = getHearingAidProfile().getDeviceMode(cachedDevice.getDevice());
-                cachedDevice.setDeviceSide(side);
-                cachedDevice.setDeviceMode(mode);
+            if (getHearingAidProfile() != null
+                    && mProfile instanceof HearingAidProfile
+                    && (newState == BluetoothProfile.STATE_CONNECTED)) {
 
                 // Check if the HiSyncID has being initialized
                 if (cachedDevice.getHiSyncId() == BluetoothHearingAid.HI_SYNC_ID_INVALID) {
                     long newHiSyncId = getHearingAidProfile().getHiSyncId(cachedDevice.getDevice());
                     if (newHiSyncId != BluetoothHearingAid.HI_SYNC_ID_INVALID) {
-                        cachedDevice.setHiSyncId(newHiSyncId);
+                        final BluetoothDevice device = cachedDevice.getDevice();
+                        final HearingAidInfo.Builder infoBuilder = new HearingAidInfo.Builder()
+                                .setAshaDeviceSide(getHearingAidProfile().getDeviceSide(device))
+                                .setAshaDeviceMode(getHearingAidProfile().getDeviceMode(device))
+                                .setHiSyncId(newHiSyncId);
+                        cachedDevice.setHearingAidInfo(infoBuilder.build());
                     }
                 }
-
                 HearingAidStatsLogUtils.logHearingAidInfo(cachedDevice);
+            }
+
+            final boolean isHapClientProfile = getHapClientProfile() != null
+                    && mProfile instanceof HapClientProfile;
+            final boolean isLeAudioProfile = getLeAudioProfile() != null
+                    && mProfile instanceof LeAudioProfile;
+            final boolean isHapClientOrLeAudioProfile = isHapClientProfile || isLeAudioProfile;
+            if (isHapClientOrLeAudioProfile && newState == BluetoothProfile.STATE_CONNECTED) {
+
+                // Checks if both profiles are connected to the device. Hearing aid info need
+                // to be retrieved from these profiles separately.
+                if (cachedDevice.isConnectedLeAudioHearingAidDevice()) {
+                    final BluetoothDevice device = cachedDevice.getDevice();
+                    final HearingAidInfo.Builder infoBuilder = new HearingAidInfo.Builder()
+                            .setLeAudioLocation(getLeAudioProfile().getAudioLocation(device))
+                            .setHapDeviceType(getHapClientProfile().getHearingAidType(device));
+                    cachedDevice.setHearingAidInfo(infoBuilder.build());
+                    HearingAidStatsLogUtils.logHearingAidInfo(cachedDevice);
+                }
             }
 
             if (getCsipSetCoordinatorProfile() != null
@@ -597,6 +624,10 @@ public class LocalBluetoothProfileManager {
 
     public HearingAidProfile getHearingAidProfile() {
         return mHearingAidProfile;
+    }
+
+    public HapClientProfile getHapClientProfile() {
+        return mHapClientProfile;
     }
 
     public LeAudioProfile getLeAudioProfile() {
@@ -821,6 +852,11 @@ public class LocalBluetoothProfileManager {
         if (ArrayUtils.contains(uuids, BluetoothUuid.HEARING_AID) && mHearingAidProfile != null) {
             profiles.add(mHearingAidProfile);
             removedProfiles.remove(mHearingAidProfile);
+        }
+
+        if (mHapClientProfile != null && ArrayUtils.contains(uuids, BluetoothUuid.HAS)) {
+            profiles.add(mHapClientProfile);
+            removedProfiles.remove(mHapClientProfile);
         }
 
         if (mSapProfile != null && ArrayUtils.contains(uuids, BluetoothUuid.SAP)) {

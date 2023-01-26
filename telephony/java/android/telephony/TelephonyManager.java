@@ -71,6 +71,7 @@ import android.os.PersistableBundle;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.SystemProperties;
+import android.os.UserHandle;
 import android.os.WorkSource;
 import android.provider.Settings.SettingNotFoundException;
 import android.service.carrier.CarrierIdentifier;
@@ -2453,47 +2454,6 @@ public class TelephonyManager {
     @RequiresFeature(PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION)
     public String getNai() {
         return getNaiBySubscriberId(getSubId());
-    }
-
-    /**
-     * Returns the NAI. Return null if NAI is not available.
-     *
-     * <p>Starting with API level 29, persistent device identifiers are guarded behind additional
-     * restrictions, and apps are recommended to use resettable identifiers (see <a
-     * href="/training/articles/user-data-ids">Best practices for unique identifiers</a>). This
-     * method can be invoked if one of the following requirements is met:
-     * <ul>
-     *     <li>If the calling app has been granted the READ_PRIVILEGED_PHONE_STATE permission; this
-     *     is a privileged permission that can only be granted to apps preloaded on the device.
-     *     <li>If the calling app is the device owner of a fully-managed device, a profile
-     *     owner of an organization-owned device, or their delegates (see {@link
-     *     android.app.admin.DevicePolicyManager#getEnrollmentSpecificId()}).
-     *     <li>If the calling app has carrier privileges (see {@link #hasCarrierPrivileges}).
-     *     <li>If the calling app is the default SMS role holder (see {@link
-     *     RoleManager#isRoleHeld(String)}).
-     * </ul>
-     *
-     * <p>If the calling app does not meet one of these requirements then this method will behave
-     * as follows:
-     *
-     * <ul>
-     *     <li>If the calling app's target SDK is API level 28 or lower and the app has the
-     *     READ_PHONE_STATE permission then null is returned.</li>
-     *     <li>If the calling app's target SDK is API level 28 or lower and the app does not have
-     *     the READ_PHONE_STATE permission, or if the calling app is targeting API level 29 or
-     *     higher, then a SecurityException is thrown.</li>
-     * </ul>
-     *
-     *  @param slotIndex of which Nai is returned
-     */
-    /** {@hide}*/
-    @UnsupportedAppUsage
-    public String getNai(int slotIndex) {
-        int[] subId = SubscriptionManager.getSubId(slotIndex);
-        if (subId == null) {
-            return null;
-        }
-        return getNaiBySubscriberId(subId[0]);
     }
 
     private String getNaiBySubscriberId(int subId) {
@@ -6218,46 +6178,6 @@ public class TelephonyManager {
         }
     }
 
-    /**
-    * @hide
-    */
-    @UnsupportedAppUsage
-    private IPhoneSubInfo getSubscriberInfo() {
-        return getSubscriberInfoService();
-    }
-
-    /**
-     * Returns the Telephony call state for calls on a specific SIM slot.
-     * <p>
-     * Note: This method considers ONLY telephony/mobile calls, where {@link #getCallState()}
-     * considers the state of calls from other {@link android.telecom.ConnectionService}
-     * implementations.
-     * <p>
-     * Requires Permission:
-     * {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE} for applications
-     * targeting API level 31+ or that the calling application has carrier privileges
-     * (see {@link #hasCarrierPrivileges()}).
-     *
-     * @param slotIndex the SIM slot index to check call state for.
-     * @hide
-     */
-    @RequiresPermission(value = android.Manifest.permission.READ_PHONE_STATE, conditional = true)
-    public @CallState int getCallStateForSlot(int slotIndex) {
-        try {
-            int[] subId = SubscriptionManager.getSubId(slotIndex);
-            ITelephony telephony = getITelephony();
-            if (telephony == null || subId == null || subId.length  == 0) {
-                return CALL_STATE_IDLE;
-            }
-            return telephony.getCallStateForSubscription(subId[0], mContext.getPackageName(),
-                    mContext.getAttributionTag());
-        } catch (RemoteException | NullPointerException ex) {
-            // the phone process is restarting.
-            return CALL_STATE_IDLE;
-        }
-    }
-
-
     /** Data connection activity: No traffic. */
     public static final int DATA_ACTIVITY_NONE = 0x00000000;
     /** Data connection activity: Currently receiving IP PPP traffic. */
@@ -8333,16 +8253,23 @@ public class TelephonyManager {
     /** Authentication type for UICC challenge is EAP AKA. See RFC 4187 for details. */
     public static final int AUTHTYPE_EAP_AKA = PhoneConstants.AUTH_CONTEXT_EAP_AKA;
     /**
-     * Authentication type for GBA Bootstrap Challenge is GBA_BOOTSTRAP.
-     * See 3GPP 33.220 Section 5.3.2.
-     * @hide
+     * Authentication type for GBA Bootstrap Challenge.
+     * Pass this authentication type into the {@link #getIccAuthentication} API to perform a GBA
+     * Bootstrap challenge (BSF), with {@code data} (generated according to the procedure defined in
+     * 3GPP 33.220 Section 5.3.2 step.4) in base64 encoding.
+     * This method will return the Bootstrapping response in base64 encoding when ICC authentication
+     * is completed.
+     * Ref 3GPP 33.220 Section 5.3.2.
      */
     public static final int AUTHTYPE_GBA_BOOTSTRAP = PhoneConstants.AUTH_CONTEXT_GBA_BOOTSTRAP;
     /**
-     * Authentication type for GBA Network Application Functions (NAF) key
-     * External Challenge is AUTHTYPE_GBA_NAF_KEY_EXTERNAL.
-     * See 3GPP 33.220 Section 5.3.2.
-     * @hide
+     * Authentication type for GBA Network Application Functions (NAF) key External Challenge.
+     * Pass this authentication type into the {@link #getIccAuthentication} API to perform a GBA
+     * Network Applications Functions (NAF) key External challenge using the NAF_ID parameter
+     * as the {@code data} in base64 encoding.
+     * This method will return the Ks_Ext_Naf key in base64 encoding when ICC authentication
+     * is completed.
+     * Ref 3GPP 33.220 Section 5.3.2.
      */
     public static final int AUTHTYPE_GBA_NAF_KEY_EXTERNAL =
             PhoneConstants.AUTHTYPE_GBA_NAF_KEY_EXTERNAL;
@@ -8371,7 +8298,8 @@ public class TelephonyManager {
      *
      * @param appType the icc application type, like {@link #APPTYPE_USIM}
      * @param authType the authentication type, any one of {@link #AUTHTYPE_EAP_AKA} or
-     * {@link #AUTHTYPE_EAP_SIM}
+     * {@link #AUTHTYPE_EAP_SIM} or {@link #AUTHTYPE_GBA_BOOTSTRAP} or
+     * {@link #AUTHTYPE_GBA_NAF_KEY_EXTERNAL}
      * @param data authentication challenge data, base64 encoded.
      * See 3GPP TS 31.102 7.1.2 for more details.
      * @return the response of authentication. This value will be null in the following cases:
@@ -8399,7 +8327,8 @@ public class TelephonyManager {
      * @param subId subscription ID used for authentication
      * @param appType the icc application type, like {@link #APPTYPE_USIM}
      * @param authType the authentication type, any one of {@link #AUTHTYPE_EAP_AKA} or
-     * {@link #AUTHTYPE_EAP_SIM}
+     * {@link #AUTHTYPE_EAP_SIM} or {@link #AUTHTYPE_GBA_BOOTSTRAP} or
+     * {@link #AUTHTYPE_GBA_NAF_KEY_EXTERNAL}
      * @param data authentication challenge data, base64 encoded.
      * See 3GPP TS 31.102 7.1.2 for more details.
      * @return the response of authentication. This value will be null in the following cases only
@@ -9566,12 +9495,13 @@ public class TelephonyManager {
     /**
      * Set the allowed network types of the device and provide the reason triggering the allowed
      * network change.
-     * <p>Requires permission: android.Manifest.MODIFY_PHONE_STATE or
+     * <p>Requires permission: {@link android.Manifest.permission#MODIFY_PHONE_STATE} or
      * that the calling app has carrier privileges (see {@link #hasCarrierPrivileges}).
      *
-     * This can be called for following reasons
+     * This can be called for following reasons:
      * <ol>
-     * <li>Allowed network types control by USER {@link #ALLOWED_NETWORK_TYPES_REASON_USER}
+     * <li>Allowed network types control by USER
+     * {@link TelephonyManager#ALLOWED_NETWORK_TYPES_REASON_USER}
      * <li>Allowed network types control by carrier {@link #ALLOWED_NETWORK_TYPES_REASON_CARRIER}
      * </ol>
      * This API will result in allowing an intersection of allowed network types for all reasons,
@@ -9581,7 +9511,13 @@ public class TelephonyManager {
      * @param allowedNetworkTypes The bitmask of allowed network type
      * @throws IllegalStateException if the Telephony process is not currently available.
      * @throws IllegalArgumentException if invalid AllowedNetworkTypesReason is passed.
-     * @throws SecurityException if the caller does not have the required privileges
+     * @throws SecurityException if the caller does not have the required privileges or if the
+     * caller tries to use one of the following security-based reasons without
+     * {@link android.Manifest.permission#MODIFY_PHONE_STATE} permissions.
+     * <ol>
+     *     <li>{@code TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_ENABLE_2G}</li>
+     *     <li>{@code TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_USER_RESTRICTIONS}</li>
+     * </ol>
      */
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     @RequiresFeature(
@@ -12034,8 +11970,9 @@ public class TelephonyManager {
     }
 
     /**
-     * Gets the default Respond Via Message application, updating the cache if there is no
-     * respond-via-message application currently configured.
+     * Get the component name of the default app to direct respond-via-message intent for the
+     * user associated with this subscription, update the cache if there is no respond-via-message
+     * application currently configured for this user.
      * @return component name of the app and class to direct Respond Via Message intent to, or
      * {@code null} if the functionality is not supported.
      * @hide
@@ -12044,11 +11981,20 @@ public class TelephonyManager {
     @RequiresPermission(Manifest.permission.INTERACT_ACROSS_USERS)
     @RequiresFeature(PackageManager.FEATURE_TELEPHONY_MESSAGING)
     public @Nullable ComponentName getAndUpdateDefaultRespondViaMessageApplication() {
-        return SmsApplication.getDefaultRespondViaMessageApplication(mContext, true);
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                return telephony.getDefaultRespondViaMessageApplication(getSubId(), true);
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error in getAndUpdateDefaultRespondViaMessageApplication: " + e);
+        }
+        return null;
     }
 
     /**
-     * Gets the default Respond Via Message application.
+     * Get the component name of the default app to direct respond-via-message intent for the
+     * user associated with this subscription.
      * @return component name of the app and class to direct Respond Via Message intent to, or
      * {@code null} if the functionality is not supported.
      * @hide
@@ -12057,7 +12003,15 @@ public class TelephonyManager {
     @RequiresPermission(Manifest.permission.INTERACT_ACROSS_USERS)
     @RequiresFeature(PackageManager.FEATURE_TELEPHONY_MESSAGING)
     public @Nullable ComponentName getDefaultRespondViaMessageApplication() {
-        return SmsApplication.getDefaultRespondViaMessageApplication(mContext, false);
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                return telephony.getDefaultRespondViaMessageApplication(getSubId(), false);
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error in getDefaultRespondViaMessageApplication: " + e);
+        }
+        return null;
     }
 
     /**
@@ -12565,7 +12519,7 @@ public class TelephonyManager {
             Log.e(TAG, "Error calling ITelephony#getServiceStateForSubscriber", e);
         } catch (NullPointerException e) {
             AnomalyReporter.reportAnomaly(
-                    UUID.fromString("a3ab0b9d-f2aa-4baf-911d-7096c0d4645a"),
+                    UUID.fromString("e2bed88e-def9-476e-bd71-3e572a8de6d1"),
                     "getServiceStateForSubscriber " + subId + " NPE");
         }
         return null;
@@ -14992,21 +14946,132 @@ public class TelephonyManager {
      * @return a Pair of (major version, minor version) or (-1,-1) if unknown.
      *
      * @hide
+     *
+     * @deprecated Use {@link #getHalVersion} instead.
      */
+    @Deprecated
     @UnsupportedAppUsage
     @TestApi
     public Pair<Integer, Integer> getRadioHalVersion() {
+        return getHalVersion(HAL_SERVICE_RADIO);
+    }
+
+    /** @hide */
+    public static final int HAL_SERVICE_RADIO = 0;
+
+    /**
+     * HAL service type that supports the HAL APIs implementation of IRadioData
+     * {@link RadioDataProxy}
+     * @hide
+     */
+    @TestApi
+    public static final int HAL_SERVICE_DATA = 1;
+
+    /**
+     * HAL service type that supports the HAL APIs implementation of IRadioMessaging
+     * {@link RadioMessagingProxy}
+     * @hide
+     */
+    @TestApi
+    public static final int HAL_SERVICE_MESSAGING = 2;
+
+    /**
+     * HAL service type that supports the HAL APIs implementation of IRadioModem
+     * {@link RadioModemProxy}
+     * @hide
+     */
+    @TestApi
+    public static final int HAL_SERVICE_MODEM = 3;
+
+    /**
+     * HAL service type that supports the HAL APIs implementation of IRadioNetwork
+     * {@link RadioNetworkProxy}
+     * @hide
+     */
+    @TestApi
+    public static final int HAL_SERVICE_NETWORK = 4;
+
+    /**
+     * HAL service type that supports the HAL APIs implementation of IRadioSim
+     * {@link RadioSimProxy}
+     * @hide
+     */
+    @TestApi
+    public static final int HAL_SERVICE_SIM = 5;
+
+    /**
+     * HAL service type that supports the HAL APIs implementation of IRadioVoice
+     * {@link RadioVoiceProxy}
+     * @hide
+     */
+    @TestApi
+    public static final int HAL_SERVICE_VOICE = 6;
+
+    /**
+     * HAL service type that supports the HAL APIs implementation of IRadioIms
+     * {@link RadioImsProxy}
+     * @hide
+     */
+    @TestApi
+    public static final int HAL_SERVICE_IMS = 7;
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(prefix = {"HAL_SERVICE_"},
+            value = {
+                    HAL_SERVICE_RADIO,
+                    HAL_SERVICE_DATA,
+                    HAL_SERVICE_MESSAGING,
+                    HAL_SERVICE_MODEM,
+                    HAL_SERVICE_NETWORK,
+                    HAL_SERVICE_SIM,
+                    HAL_SERVICE_VOICE,
+                    HAL_SERVICE_IMS,
+            })
+    public @interface HalService {}
+
+    /**
+     * The HAL Version indicating that the version is unknown or invalid.
+     * @hide
+     */
+    @TestApi
+    public static final Pair HAL_VERSION_UNKNOWN = new Pair(-1, -1);
+
+    /**
+     * The HAL Version indicating that the version is unsupported.
+     * @hide
+     */
+    @TestApi
+    public static final Pair HAL_VERSION_UNSUPPORTED = new Pair(-2, -2);
+
+    /**
+     * Retrieve the HAL Version of a specific service for this device.
+     *
+     * Get the HAL version for a specific HAL interface for test purposes.
+     *
+     * @param halService the service id to query.
+     * @return a Pair of (major version, minor version), HAL_VERSION_UNKNOWN if unknown
+     * or HAL_VERSION_UNSUPPORTED if unsupported.
+     *
+     * @hide
+     */
+    @TestApi
+    public @NonNull Pair<Integer, Integer> getHalVersion(@HalService int halService) {
         try {
             ITelephony service = getITelephony();
             if (service != null) {
-                int version = service.getRadioHalVersion();
-                if (version == -1) return new Pair<Integer, Integer>(-1, -1);
-                return new Pair<Integer, Integer>(version / 100, version % 100);
+                int version = service.getHalVersion(halService);
+                if (version != -1) {
+                    return new Pair<Integer, Integer>(version / 100, version % 100);
+                }
+            } else {
+                throw new IllegalStateException("telephony service is null.");
             }
         } catch (RemoteException e) {
-            Log.e(TAG, "getRadioHalVersion() RemoteException", e);
+            Log.e(TAG, "getHalVersion() RemoteException", e);
+            e.rethrowAsRuntimeException();
         }
-        return new Pair<Integer, Integer>(-1, -1);
+        return HAL_VERSION_UNKNOWN;
     }
 
     /**
@@ -17374,7 +17439,7 @@ public class TelephonyManager {
      * Subsequent attempts will return the same error until the request is made on the default
      * data subscription.
      */
-    public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_NOT_DEFAULT_DATA_SUB = 14;
+    public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_NOT_DEFAULT_DATA_SUBSCRIPTION = 14;
 
     /**
      * Purchase premium capability was successful and is waiting for the network to setup the
@@ -17404,7 +17469,7 @@ public class TelephonyManager {
             PURCHASE_PREMIUM_CAPABILITY_RESULT_FEATURE_NOT_SUPPORTED,
             PURCHASE_PREMIUM_CAPABILITY_RESULT_NETWORK_NOT_AVAILABLE,
             PURCHASE_PREMIUM_CAPABILITY_RESULT_ENTITLEMENT_CHECK_FAILED,
-            PURCHASE_PREMIUM_CAPABILITY_RESULT_NOT_DEFAULT_DATA_SUB,
+            PURCHASE_PREMIUM_CAPABILITY_RESULT_NOT_DEFAULT_DATA_SUBSCRIPTION,
             PURCHASE_PREMIUM_CAPABILITY_RESULT_PENDING_NETWORK_SETUP})
     public @interface PurchasePremiumCapabilityResult {}
 
@@ -17444,8 +17509,8 @@ public class TelephonyManager {
                 return "NETWORK_NOT_AVAILABLE";
             case PURCHASE_PREMIUM_CAPABILITY_RESULT_ENTITLEMENT_CHECK_FAILED:
                 return "ENTITLEMENT_CHECK_FAILED";
-            case PURCHASE_PREMIUM_CAPABILITY_RESULT_NOT_DEFAULT_DATA_SUB:
-                return "NOT_DEFAULT_DATA_SUB";
+            case PURCHASE_PREMIUM_CAPABILITY_RESULT_NOT_DEFAULT_DATA_SUBSCRIPTION:
+                return "NOT_DEFAULT_DATA_SUBSCRIPTION";
             case PURCHASE_PREMIUM_CAPABILITY_RESULT_PENDING_NETWORK_SETUP:
                 return "PENDING_NETWORK_SETUP";
             default:

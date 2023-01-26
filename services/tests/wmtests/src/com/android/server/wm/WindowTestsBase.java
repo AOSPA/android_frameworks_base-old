@@ -100,6 +100,7 @@ import android.view.SurfaceControl.Transaction;
 import android.view.View;
 import android.view.WindowManager;
 import android.view.WindowManager.DisplayImePolicy;
+import android.view.inputmethod.ImeTracker;
 import android.window.ITransitionPlayer;
 import android.window.ScreenCapture;
 import android.window.StartingWindowInfo;
@@ -654,7 +655,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
     Task createTaskInRootTask(Task rootTask, int userId) {
         final Task task = new TaskBuilder(rootTask.mTaskSupervisor)
                 .setUserId(userId)
-                .setParentTaskFragment(rootTask)
+                .setParentTask(rootTask)
                 .build();
         return task;
     }
@@ -740,28 +741,18 @@ class WindowTestsBase extends SystemServiceTestsBase {
         activity.mVisibleRequested = true;
     }
 
-    static TaskFragment createTaskFragmentWithParentTask(@NonNull Task parentTask) {
-        return createTaskFragmentWithParentTask(parentTask, false /* createEmbeddedTask */);
-    }
-
     /**
-     * Creates a {@link TaskFragment} and attach it to the {@code parentTask}.
+     * Creates a {@link TaskFragment} with {@link ActivityRecord} and attach it to the
+     * {@code parentTask}.
      *
      * @param parentTask the {@link Task} this TaskFragment is going to be attached
-     * @param createEmbeddedTask Sets to {@code true} to create an embedded Task for this
-     *                           TaskFragment. Otherwise, create a {@link ActivityRecord}.
      * @return the created TaskFragment
      */
-    static TaskFragment createTaskFragmentWithParentTask(@NonNull Task parentTask,
-            boolean createEmbeddedTask) {
-        final TaskFragmentBuilder builder = new TaskFragmentBuilder(parentTask.mAtmService)
-                .setParentTask(parentTask);
-        if (createEmbeddedTask) {
-            builder.createEmbeddedTask();
-        } else {
-            builder.createActivityCount(1);
-        }
-        return builder.build();
+    static TaskFragment createTaskFragmentWithActivity(@NonNull Task parentTask) {
+        return new TaskFragmentBuilder(parentTask.mAtmService)
+                .setParentTask(parentTask)
+                .createActivityCount(1)
+                .build();
     }
 
     static TaskFragment createTaskFragmentWithEmbeddedActivity(@NonNull Task parentTask,
@@ -848,11 +839,13 @@ class WindowTestsBase extends SystemServiceTestsBase {
             }
 
             @Override
-            public void showInsets(int i, boolean b) throws RemoteException {
+            public void showInsets(int i, boolean b, @Nullable ImeTracker.Token t)
+                    throws RemoteException {
             }
 
             @Override
-            public void hideInsets(int i, boolean b) throws RemoteException {
+            public void hideInsets(int i, boolean b, @Nullable ImeTracker.Token t)
+                    throws RemoteException {
             }
 
             @Override
@@ -1215,7 +1208,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
                         // Apply the root activity info and intent
                         .setActivityInfo(aInfo)
                         .setIntent(intent)
-                        .setParentTaskFragment(mParentTask).build();
+                        .setParentTask(mParentTask).build();
             } else if (mTask == null && mParentTask != null && DisplayContent.alwaysCreateRootTask(
                     mParentTask.getWindowingMode(), mParentTask.getActivityType())) {
                 // The parent task can be the task root.
@@ -1272,7 +1265,6 @@ class WindowTestsBase extends SystemServiceTestsBase {
         private final ActivityTaskManagerService mAtm;
         private Task mParentTask;
         private boolean mCreateParentTask;
-        private boolean mCreateEmbeddedTask;
         private int mCreateActivityCount = 0;
         @Nullable
         private TaskFragmentOrganizer mOrganizer;
@@ -1290,12 +1282,6 @@ class WindowTestsBase extends SystemServiceTestsBase {
 
         TaskFragmentBuilder setParentTask(Task task) {
             mParentTask = task;
-            return this;
-        }
-
-        /** Creates a child embedded Task and its Activity */
-        TaskFragmentBuilder createEmbeddedTask() {
-            mCreateEmbeddedTask = true;
             return this;
         }
 
@@ -1329,12 +1315,6 @@ class WindowTestsBase extends SystemServiceTestsBase {
             }
             if (mParentTask != null) {
                 mParentTask.addChild(taskFragment, POSITION_TOP);
-            }
-            if (mCreateEmbeddedTask) {
-                new TaskBuilder(mAtm.mTaskSupervisor)
-                        .setParentTaskFragment(taskFragment)
-                        .setCreateActivity(true)
-                        .build();
             }
             while (mCreateActivityCount > 0) {
                 final ActivityRecord activity = new ActivityBuilder(mAtm).build();
@@ -1374,7 +1354,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
         private IVoiceInteractionSession mVoiceSession;
 
         private boolean mCreateParentTask = false;
-        private TaskFragment mParentTaskFragment;
+        private Task mParentTask;
 
         private boolean mCreateActivity = false;
         private boolean mCreatedByOrganizer = false;
@@ -1459,8 +1439,8 @@ class WindowTestsBase extends SystemServiceTestsBase {
             return this;
         }
 
-        TaskBuilder setParentTaskFragment(TaskFragment parentTaskFragment) {
-            mParentTaskFragment = parentTaskFragment;
+        TaskBuilder setParentTask(Task parentTask) {
+            mParentTask = parentTask;
             return this;
         }
 
@@ -1478,13 +1458,12 @@ class WindowTestsBase extends SystemServiceTestsBase {
             SystemServicesTestRule.checkHoldsLock(mSupervisor.mService.mGlobalLock);
 
             // Create parent task.
-            if (mParentTaskFragment == null && mCreateParentTask) {
-                mParentTaskFragment = mTaskDisplayArea.createRootTask(
+            if (mParentTask == null && mCreateParentTask) {
+                mParentTask = mTaskDisplayArea.createRootTask(
                         WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
             }
-            if (mParentTaskFragment != null
-                    && !Mockito.mockingDetails(mParentTaskFragment).isSpy()) {
-                spyOn(mParentTaskFragment);
+            if (mParentTask != null && !Mockito.mockingDetails(mParentTask).isSpy()) {
+                spyOn(mParentTask);
             }
 
             // Create task.
@@ -1512,15 +1491,13 @@ class WindowTestsBase extends SystemServiceTestsBase {
                     .setVoiceSession(mVoiceSession)
                     .setCreatedByOrganizer(mCreatedByOrganizer);
             final Task task;
-            if (mParentTaskFragment == null) {
+            if (mParentTask == null) {
                 task = builder.setActivityType(mActivityType)
                         .setParent(mTaskDisplayArea)
                         .build();
             } else {
-                task = builder.setParent(mParentTaskFragment).build();
-                if (mParentTaskFragment.asTask() != null) {
-                    mParentTaskFragment.asTask().moveToFront("build-task");
-                }
+                task = builder.setParent(mParentTask).build();
+                mParentTask.moveToFront("build-task");
             }
             spyOn(task);
             task.mUserId = mUserId;

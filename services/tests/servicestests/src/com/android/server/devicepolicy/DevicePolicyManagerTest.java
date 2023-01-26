@@ -133,18 +133,18 @@ import android.os.IpcDataCache;
 import android.os.Process;
 import android.os.UserHandle;
 import android.os.UserManager;
-import android.platform.test.annotations.FlakyTest;
 import android.platform.test.annotations.Presubmit;
 import android.provider.Settings;
 import android.security.KeyChain;
 import android.security.keystore.AttestationUtils;
 import android.telephony.TelephonyManager;
 import android.telephony.data.ApnSetting;
-import android.test.MoreAsserts; // TODO(b/171932723): replace by Truth
+import android.test.MoreAsserts;
 import android.util.ArraySet;
 import android.util.Log;
 import android.util.Pair;
 
+import androidx.test.filters.FlakyTest;
 import androidx.test.filters.SmallTest;
 
 import com.android.internal.R;
@@ -4782,6 +4782,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     }
 
     @Test
+    @FlakyTest(bugId = 260145949)
     public void testLockTaskPolicyForProfileOwner() throws Exception {
         mockPolicyExemptApps();
         mockVendorPolicyExemptApps();
@@ -4817,6 +4818,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     }
 
     @Test
+    @FlakyTest(bugId = 260145949)
     public void testLockTaskFeatures_IllegalArgumentException() throws Exception {
         // Setup a device owner.
         mContext.binder.callingUid = DpmMockContext.CALLER_SYSTEM_USER_UID;
@@ -5087,7 +5089,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     }
 
     @Test
-    public void testWipeDataDeviceOwner() throws Exception {
+    public void testWipeDevice_DeviceOwner() throws Exception {
         setDeviceOwner();
         when(getServices().userManager.getUserRestrictionSource(
                 UserManager.DISALLOW_FACTORY_RESET,
@@ -5096,7 +5098,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         when(mContext.getResources().getString(R.string.work_profile_deleted_description_dpm_wipe)).
                 thenReturn("Just a test string.");
 
-        dpm.wipeData(0);
+        dpm.wipeDevice(0);
 
         verifyRebootWipeUserData(/* wipeEuicc= */ false);
     }
@@ -5111,13 +5113,13 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         when(mContext.getResources().getString(R.string.work_profile_deleted_description_dpm_wipe)).
                 thenReturn("Just a test string.");
 
-        dpm.wipeData(WIPE_EUICC);
+        dpm.wipeDevice(WIPE_EUICC);
 
         verifyRebootWipeUserData(/* wipeEuicc= */ true);
     }
 
     @Test
-    public void testWipeDataDeviceOwnerDisallowed() throws Exception {
+    public void testWipeDevice_DeviceOwnerDisallowed() throws Exception {
         setDeviceOwner();
         when(getServices().userManager.getUserRestrictionSource(
                 UserManager.DISALLOW_FACTORY_RESET,
@@ -5128,7 +5130,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         // The DO is not allowed to wipe the device if the user restriction was set
         // by the system
         assertExpectException(SecurityException.class, /* messageRegex= */ null,
-                () -> dpm.wipeData(0));
+                () -> dpm.wipeDevice(0));
     }
 
     @Test
@@ -7812,6 +7814,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     }
 
     @Test
+    @FlakyTest(bugId = 260145949)
     public void testSetLockTaskFeatures_financeDo_validLockTaskFeatures_lockTaskFeaturesSet()
             throws Exception {
         int validLockTaskFeatures = LOCK_TASK_FEATURE_SYSTEM_INFO | LOCK_TASK_FEATURE_KEYGUARD
@@ -7827,6 +7830,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     }
 
     @Test
+    @FlakyTest(bugId = 260145949)
     public void testSetLockTaskFeatures_financeDo_invalidLockTaskFeatures_throwsException()
             throws Exception {
         int invalidLockTaskFeatures = LOCK_TASK_FEATURE_NONE | LOCK_TASK_FEATURE_OVERVIEW
@@ -7843,6 +7847,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     }
 
     @Test
+    @FlakyTest(bugId = 260145949)
     public void testIsUninstallBlocked_financeDo_success() throws Exception {
         String packageName = "com.android.foo.package";
         setDeviceOwner();
@@ -7943,6 +7948,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     }
 
     @Test
+    @FlakyTest(bugId = 260145949)
     public void testSetLockTaskPackages_financeDo_success() throws Exception {
         String[] packages = {"com.android.foo.package"};
         mockEmptyPolicyExemptApps();
@@ -7986,7 +7992,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     }
 
     @Test
-    public void testWipeData_financeDo_success() throws Exception {
+    public void testWipeDevice_financeDo_success() throws Exception {
         setDeviceOwner();
         dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
         when(getServices().userManager.getUserRestrictionSource(
@@ -7997,7 +8003,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
                 .getString(R.string.work_profile_deleted_description_dpm_wipe))
                 .thenReturn("Test string");
 
-        dpm.wipeData(0);
+        dpm.wipeDevice(0);
 
         verifyRebootWipeUserData(/* wipeEuicc= */ false);
     }

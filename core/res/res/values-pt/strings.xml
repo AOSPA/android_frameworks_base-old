@@ -396,6 +396,30 @@
     <string name="permdesc_persistentActivity" product="default" msgid="1914841924366562051">"Permite que o app torne partes de si mesmo persistentes na memória. Pode limitar a memória disponível para outros apps, deixando o telefone mais lento."</string>
     <string name="permlab_foregroundService" msgid="1768855976818467491">"executar serviço em primeiro plano"</string>
     <string name="permdesc_foregroundService" msgid="8720071450020922795">"Permite que o app use serviços em primeiro plano."</string>
+    <string name="permlab_foregroundServiceCamera" msgid="7814751737955715297">"executar serviços em primeiro plano com o tipo \"camera\""</string>
+    <string name="permdesc_foregroundServiceCamera" msgid="6973701931250595727">"Permite que o app use serviços em primeiro plano com o tipo \"camera\""</string>
+    <string name="permlab_foregroundServiceConnectedDevice" msgid="3019650546176872501">"executar serviços em primeiro plano com o tipo \"connectedDevice\""</string>
+    <string name="permdesc_foregroundServiceConnectedDevice" msgid="1067457315741352963">"Permite que o app use serviços em primeiro plano com o tipo \"connectedDevice\""</string>
+    <string name="permlab_foregroundServiceDataSync" msgid="5847463514326881076">"executar serviços em primeiro plano com o tipo \"dataSync\""</string>
+    <string name="permdesc_foregroundServiceDataSync" msgid="2267140263423973050">"Permite que o app use serviços em primeiro plano com o tipo \"dataSync\""</string>
+    <string name="permlab_foregroundServiceLocation" msgid="3745428302378535690">"executar serviços em primeiro plano com o tipo \"location\""</string>
+    <string name="permdesc_foregroundServiceLocation" msgid="118894034365177183">"Permite que o app use serviços em primeiro plano com o tipo \"location\""</string>
+    <string name="permlab_foregroundServiceMediaPlayback" msgid="4002687983891935514">"executar serviços em primeiro plano com o tipo \"mediaPlayback\""</string>
+    <string name="permdesc_foregroundServiceMediaPlayback" msgid="3638032446063968043">"Permite que o app use serviços em primeiro plano com o tipo \"mediaPlayback\""</string>
+    <string name="permlab_foregroundServiceMediaProjection" msgid="2630868915733312527">"executar serviços em primeiro plano com o tipo \"mediaProjection\""</string>
+    <string name="permdesc_foregroundServiceMediaProjection" msgid="4805677128082002298">"Permite que o app use serviços em primeiro plano com o tipo \"mediaProjection\""</string>
+    <string name="permlab_foregroundServiceMicrophone" msgid="7390033424890545399">"executar serviços em primeiro plano com o tipo \"microphone\""</string>
+    <string name="permdesc_foregroundServiceMicrophone" msgid="1206041516173483201">"Permite que o app use serviços em primeiro plano com o tipo \"microphone\""</string>
+    <string name="permlab_foregroundServicePhoneCall" msgid="627937743867697892">"executar serviços em primeiro plano com o tipo \"phoneCall\""</string>
+    <string name="permdesc_foregroundServicePhoneCall" msgid="5941660252587015147">"Permite que o app use serviços em primeiro plano com o tipo \"phoneCall\""</string>
+    <string name="permlab_foregroundServiceHealth" msgid="3675776442080928184">"executar serviços em primeiro plano com o tipo \"health\""</string>
+    <string name="permdesc_foregroundServiceHealth" msgid="2024586220562667185">"Permite que o app use serviços em primeiro plano com o tipo \"health\""</string>
+    <string name="permlab_foregroundServiceRemoteMessaging" msgid="105670277002780950">"executar serviços em primeiro plano com o tipo \"remoteMessaging\""</string>
+    <string name="permdesc_foregroundServiceRemoteMessaging" msgid="8767598075877576277">"Permite que o app use serviços em primeiro plano com o tipo \"remoteMessaging\""</string>
+    <string name="permlab_foregroundServiceSystemExempted" msgid="1597663713590612685">"executar serviços em primeiro plano com o tipo \"systemExempted\""</string>
+    <string name="permdesc_foregroundServiceSystemExempted" msgid="947381760834649622">"Permite que o app use serviços em primeiro plano com o tipo \"systemExempted\""</string>
+    <string name="permlab_foregroundServiceSpecialUse" msgid="7973536745876645082">"executar serviços em primeiro plano com o tipo \"specialUse\""</string>
+    <string name="permdesc_foregroundServiceSpecialUse" msgid="646713654541885919">"Permite que o app use serviços em primeiro plano com o tipo \"specialUse\""</string>
     <string name="permlab_getPackageSize" msgid="375391550792886641">"medir o espaço de armazenamento do app"</string>
     <string name="permdesc_getPackageSize" msgid="742743530909966782">"Permite que o app recupere o código, os dados e os tamanhos de cache"</string>
     <string name="permlab_writeSettings" msgid="8057285063719277394">"modificar configurações do sistema"</string>
@@ -448,6 +472,8 @@
     <string name="permdesc_recordAudio" msgid="5857246765327514062">"Enquanto está sendo usado, este app pode gravar áudio usando o microfone."</string>
     <string name="permlab_recordBackgroundAudio" msgid="5891032812308878254">"gravar áudio em segundo plano"</string>
     <string name="permdesc_recordBackgroundAudio" msgid="1992623135737407516">"Este app pode gravar áudio usando o microfone a qualquer momento."</string>
+    <string name="permlab_detectScreenCapture" msgid="4447042362828799433">"detectar capturas de tela de janelas do app"</string>
+    <string name="permdesc_detectScreenCapture" msgid="3485784917960342284">"O app vai ser notificado quando uma captura de tela for tirada enquanto ele estiver em uso."</string>
     <string name="permlab_sim_communication" msgid="176788115994050692">"enviar comandos para o chip"</string>
     <string name="permdesc_sim_communication" msgid="4179799296415957960">"Permite que o app envie comandos ao chip. Muito perigoso."</string>
     <string name="permlab_activityRecognition" msgid="1782303296053990884">"reconhecer atividade física"</string>
@@ -2051,12 +2077,6 @@
     <string name="harmful_app_warning_uninstall" msgid="6472912975664191772">"DESINSTALAR"</string>
     <string name="harmful_app_warning_open_anyway" msgid="5963657791740211807">"ABRIR MESMO ASSIM"</string>
     <string name="harmful_app_warning_title" msgid="8794823880881113856">"App nocivo detectado"</string>
-    <string name="log_access_confirmation_title" msgid="2343578467290592708">"Permitir que o app <xliff:g id="LOG_ACCESS_APP_NAME">%s</xliff:g> acesse todos os registros do dispositivo?"</string>
-    <string name="log_access_confirmation_allow" msgid="5302517782599389507">"Permitir o acesso único"</string>
-    <string name="log_access_confirmation_deny" msgid="7685790957455099845">"Não permitir"</string>
-    <string name="log_access_confirmation_body" product="default" msgid="1806692062668620735">"Os registros do dispositivo gravam o que acontece nele. Os apps podem usar esses registros para encontrar e corrigir problemas.\n\nAlguns registros podem conter informações sensíveis, então autorize o acesso a eles apenas para os apps em que você confia. \n\nSe você não permitir que esse app acesse todos os registros do dispositivo, ele ainda vai poder acessar os próprios. O fabricante do dispositivo também pode ter acesso a alguns registros ou informações."</string>
-    <string name="log_access_confirmation_body" product="tv" msgid="7379536536425265262">"Os registros do dispositivo gravam o que acontece nele. Os apps podem usar esses registros para encontrar e corrigir problemas.\n\nAlguns registros podem conter informações sensíveis, então autorize o acesso a eles apenas para os apps em que você confia. \n\nSe você não permitir que esse app acesse todos os registros do dispositivo, ele ainda vai poder acessar os próprios. O fabricante do dispositivo também pode ter acesso a alguns registros ou informações.\n\nSaiba mais em g.co/android/devicelogs."</string>
-    <string name="log_access_do_not_show_again" msgid="1058690599083091552">"Não mostrar novamente"</string>
     <string name="slices_permission_request" msgid="3677129866636153406">"<xliff:g id="APP_0">%1$s</xliff:g> quer mostrar partes do app <xliff:g id="APP_2">%2$s</xliff:g>"</string>
     <string name="screenshot_edit" msgid="7408934887203689207">"Editar"</string>
     <string name="volume_dialog_ringer_guidance_vibrate" msgid="2055927873175228519">"Chamadas e notificações farão o dispositivo vibrar"</string>
@@ -2297,6 +2317,7 @@
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"Não é possível acessar a câmera do smartphone pelo <xliff:g id="DEVICE">%1$s</xliff:g>"</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"Não é possível acessar a câmera do tablet pelo <xliff:g id="DEVICE">%1$s</xliff:g>"</string>
     <string name="vdm_secure_window" msgid="161700398158812314">"Não é possível acessar esse conteúdo durante o streaming. Tente pelo smartphone."</string>
+    <string name="vdm_pip_blocked" msgid="4036107522497281397">"Não é possível usar o modo picture-in-picture durante o streaming"</string>
     <string name="system_locale_title" msgid="711882686834677268">"Padrão do sistema"</string>
     <string name="default_card_name" msgid="9198284935962911468">"CHIP <xliff:g id="CARDNUMBER">%d</xliff:g>"</string>
 </resources>

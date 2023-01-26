@@ -703,10 +703,6 @@
     <protected-broadcast android:name="android.media.tv.action.WATCH_NEXT_PROGRAM_BROWSABLE_DISABLED" />
     <protected-broadcast android:name="android.media.tv.action.CHANNEL_BROWSABLE_REQUESTED" />
 
-    <!-- Time zone rules update intents fired by the system server -->
-    <protected-broadcast android:name="com.android.intent.action.timezone.RULES_UPDATE_OPERATION" />
-    <protected-broadcast android:name="com.android.intent.action.timezone.TRIGGER_RULES_UPDATE_CHECK" />
-
     <!-- Made protected in P (was introduced in JB-MR2) -->
     <protected-broadcast android:name="android.intent.action.GET_RESTRICTION_ENTRIES" />
     <protected-broadcast android:name="android.telephony.euicc.action.OTA_STATUS_CHANGED" />
@@ -1187,8 +1183,16 @@
     <!-- Allows an application to read image or video files from external storage that a user has
       selected via the permission prompt photo picker. Apps can check this permission to verify that
       a user has decided to use the photo picker, instead of granting access to
-      {@link #READ_MEDIA_IMAGES or #READ_MEDIA_VIDEO}. It does not prevent apps from accessing the
-      standard photo picker manually.
+      {@link #READ_MEDIA_IMAGES} or {@link #READ_MEDIA_VIDEO}. It does not prevent apps from
+      accessing the standard photo picker manually. This permission should be requested alongside
+      {@link #READ_MEDIA_IMAGES} and/or {@link #READ_MEDIA_VIDEO}, depending on which type of media
+      is desired.
+      <p> This permission will be automatically added to an app's manifest if the app requests
+      {@link #READ_MEDIA_IMAGES}, {@link #READ_MEDIA_VIDEO}, or {@link #ACCESS_MEDIA_LOCATION}
+      regardless of target SDK. If an app does not request this permission, then the grant dialog
+      will return `PERMISSION_GRANTED` for {@link #READ_MEDIA_IMAGES} and/or
+      {@link #READ_MEDIA_VIDEO}, but the app will only have access to the media selected by the
+      user. This false grant state will persist until the app goes into the background.
    <p>Protection level: dangerous -->
     <permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED"
         android:permissionGroup="android.permission-group.UNDEFINED"
@@ -3216,10 +3220,10 @@
     <permission android:name="android.permission.START_FOREGROUND_SERVICES_FROM_BACKGROUND"
                 android:protectionLevel="signature|privileged|vendorPrivileged|oem|verifier|role"/>
 
-    <!-- Allows an application to hint that a broadcast is associated with an
-         "interactive" usage scenario
+    <!-- Allows an application to hint that a component lifecycle operation such as sending
+         a broadcast is associated with an "interactive" usage scenario.
          @hide -->
-    <permission android:name="android.permission.BROADCAST_OPTION_INTERACTIVE"
+    <permission android:name="android.permission.COMPONENT_OPTION_INTERACTIVE"
                 android:protectionLevel="signature|privileged" />
 
     <!-- @SystemApi Must be required by activities that handle the intent action
@@ -3812,7 +3816,8 @@
 
     <!-- Allows an application to query the current time zone rules state
          on device.
-         @SystemApi @hide -->
+         @SystemApi @hide
+         @deprecated Vestigial permission declaration. No longer used. -->
     <permission android:name="android.permission.QUERY_TIME_ZONE_RULES"
                 android:protectionLevel="signature|privileged" />
 
@@ -3821,16 +3826,10 @@
          <p>An application requesting this permission is responsible for
          verifying the source and integrity of the update before passing
          it off to the installer components.
-         @SystemApi @hide -->
+         @SystemApi @hide
+         @deprecated Vestigial permission declaration. No longer used. -->
     <permission android:name="android.permission.UPDATE_TIME_ZONE_RULES"
         android:protectionLevel="signature|privileged" />
-
-    <!-- Must be required by a time zone rule updater application,
-         to ensure that only the system can trigger it.
-         @hide -->
-    <permission android:name="android.permission.TRIGGER_TIME_ZONE_RULES_CHECK"
-        android:protectionLevel="signature" />
-    <uses-permission android:name="android.permission.TRIGGER_TIME_ZONE_RULES_CHECK"/>
 
     <!-- Allows the system to reset throttling in shortcut manager.
          @hide -->
@@ -6223,6 +6222,116 @@
         android:label="@string/permlab_foregroundService"
         android:protectionLevel="normal|instant" />
 
+    <!-- Allows a regular application to use {@link android.app.Service#startForeground
+         Service.startForeground} with the type "camera".
+         <p>Protection level: normal|instant
+    -->
+    <permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA"
+        android:description="@string/permdesc_foregroundServiceCamera"
+        android:label="@string/permlab_foregroundServiceCamera"
+        android:protectionLevel="normal|instant" />
+
+    <!-- Allows a regular application to use {@link android.app.Service#startForeground
+         Service.startForeground} with the type "connectedDevice".
+         <p>Protection level: normal|instant
+    -->
+    <permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE"
+        android:description="@string/permdesc_foregroundServiceConnectedDevice"
+        android:label="@string/permlab_foregroundServiceConnectedDevice"
+        android:protectionLevel="normal|instant" />
+
+    <!-- Allows a regular application to use {@link android.app.Service#startForeground
+         Service.startForeground} with the type "dataSync".
+         <p>Protection level: normal|instant
+    -->
+    <permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"
+        android:description="@string/permdesc_foregroundServiceDataSync"
+        android:label="@string/permlab_foregroundServiceDataSync"
+        android:protectionLevel="normal|instant" />
+
+    <!-- Allows a regular application to use {@link android.app.Service#startForeground
+         Service.startForeground} with the type "location".
+         <p>Protection level: normal|instant
+    -->
+    <permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"
+        android:description="@string/permdesc_foregroundServiceLocation"
+        android:label="@string/permlab_foregroundServiceLocation"
+        android:protectionLevel="normal|instant" />
+
+    <!-- Allows a regular application to use {@link android.app.Service#startForeground
+         Service.startForeground} with the type "mediaPlayback".
+         <p>Protection level: normal|instant
+    -->
+    <permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+        android:description="@string/permdesc_foregroundServiceMediaPlayback"
+        android:label="@string/permlab_foregroundServiceMediaPlayback"
+        android:protectionLevel="normal|instant" />
+
+    <!-- Allows a regular application to use {@link android.app.Service#startForeground
+         Service.startForeground} with the type "mediaProjection".
+         <p>Protection level: normal|instant
+    -->
+    <permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"
+        android:description="@string/permdesc_foregroundServiceMediaProjection"
+        android:label="@string/permlab_foregroundServiceMediaProjection"
+        android:protectionLevel="normal|instant" />
+
+    <!-- Allows a regular application to use {@link android.app.Service#startForeground
+         Service.startForeground} with the type "microphone".
+         <p>Protection level: normal|instant
+    -->
+    <permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"
+        android:description="@string/permdesc_foregroundServiceMicrophone"
+        android:label="@string/permlab_foregroundServiceMicrophone"
+        android:protectionLevel="normal|instant" />
+
+    <!-- Allows a regular application to use {@link android.app.Service#startForeground
+         Service.startForeground} with the type "phoneCall".
+         <p>Protection level: normal|instant
+    -->
+    <permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL"
+        android:description="@string/permdesc_foregroundServicePhoneCall"
+        android:label="@string/permlab_foregroundServicePhoneCall"
+        android:protectionLevel="normal|instant" />
+
+    <!-- Allows a regular application to use {@link android.app.Service#startForeground
+         Service.startForeground} with the type "health".
+         <p>Protection level: normal|instant
+    -->
+    <permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH"
+        android:description="@string/permdesc_foregroundServiceHealth"
+        android:label="@string/permlab_foregroundServiceHealth"
+        android:protectionLevel="normal|instant" />
+
+    <!-- Allows a regular application to use {@link android.app.Service#startForeground
+         Service.startForeground} with the type "remoteMessaging".
+         <p>Protection level: normal|instant
+    -->
+    <permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING"
+        android:description="@string/permdesc_foregroundServiceRemoteMessaging"
+        android:label="@string/permlab_foregroundServiceRemoteMessaging"
+        android:protectionLevel="normal|instant" />
+
+    <!-- Allows a regular application to use {@link android.app.Service#startForeground
+         Service.startForeground} with the type "systemExempted".
+         Apps are allowed to use this type only in the use cases listed in
+         {@link android.content.pm.ServiceInfo#FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED}.
+         <p>Protection level: normal|instant
+    -->
+    <permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED"
+        android:description="@string/permdesc_foregroundServiceSystemExempted"
+        android:label="@string/permlab_foregroundServiceSystemExempted"
+        android:protectionLevel="normal|instant" />
+
+    <!-- Allows a regular application to use {@link android.app.Service#startForeground
+         Service.startForeground} with the type "specialUse".
+         <p>Protection level: signature|appop|instant
+    -->
+    <permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"
+        android:description="@string/permdesc_foregroundServiceSpecialUse"
+        android:label="@string/permlab_foregroundServiceSpecialUse"
+        android:protectionLevel="signature|appop|instant" />
+
     <!-- @SystemApi Allows to access all app shortcuts.
          @hide -->
     <permission android:name="android.permission.ACCESS_SHORTCUTS"
@@ -6692,6 +6801,21 @@
     -->
     <permission android:name="android.permission.MANAGE_DEVICE_LOCK_STATE"
                 android:protectionLevel="internal|role" />
+
+    <!-- @SystemApi Required by a WearableSensingService to
+          ensure that only the caller with this permission can bind to it.
+          <p> Protection level: signature
+     @hide
+    -->
+    <permission android:name="android.permission.BIND_WEARABLE_SENSING_SERVICE"
+                android:protectionLevel="signature" />
+
+    <!-- @SystemApi Allows an app to manage the wearable sensing service.
+             <p>Protection level: signature|privileged
+             @hide
+        -->
+    <permission android:name="android.permission.MANAGE_WEARABLE_SENSING_SERVICE"
+                android:protectionLevel="signature|privileged" />
 
     <!-- Allows applications to use the long running jobs APIs.
          <p>This is a special access permission that can be revoked by the system or the user.

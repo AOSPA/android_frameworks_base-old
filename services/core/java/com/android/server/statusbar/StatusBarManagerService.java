@@ -16,6 +16,7 @@
 
 package com.android.server.statusbar;
 
+import static android.Manifest.permission.CONTROL_DEVICE_STATE;
 import static android.Manifest.permission.INTERACT_ACROSS_USERS;
 import static android.Manifest.permission.INTERACT_ACROSS_USERS_FULL;
 import static android.app.StatusBarManager.DISABLE2_GLOBAL_ACTIONS;
@@ -31,6 +32,7 @@ import static android.view.WindowManagerPolicyConstants.NAV_BAR_MODE_3BUTTON_OVE
 import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.RequiresPermission;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
 import android.app.ActivityThread;
@@ -273,7 +275,6 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
         mContext = context;
 
         LocalServices.addService(StatusBarManagerInternal.class, mInternalService);
-        LocalServices.addService(GlobalActionsProvider.class, mGlobalActionsProvider);
 
         // We always have a default display.
         final UiState state = new UiState();
@@ -288,6 +289,17 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
 
         mTileRequestTracker = new TileRequestTracker(mContext);
         mSessionMonitor = new SessionMonitor(mContext);
+    }
+
+    /**
+     * Publish the {@link GlobalActionsProvider}.
+     */
+    // TODO(b/259420401): investigate if we can extract GlobalActionsProvider to its own system
+    // service.
+    public void publishGlobalActionsProvider() {
+        if (LocalServices.getService(GlobalActionsProvider.class) == null) {
+            LocalServices.addService(GlobalActionsProvider.class, mGlobalActionsProvider);
+        }
     }
 
     private IOverlayManager getOverlayManager() {
@@ -703,6 +715,15 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
             if (mBar != null) {
                 try {
                     mBar.setUdfpsRefreshRateCallback(callback);
+                } catch (RemoteException ex) { }
+            }
+        }
+
+        @Override
+        public void showRearDisplayDialog(int currentBaseState) {
+            if (mBar != null) {
+                try {
+                    mBar.showRearDisplayDialog(currentBaseState);
                 } catch (RemoteException ex) { }
             }
         }
@@ -1307,6 +1328,11 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
         mContext.enforceCallingOrSelfPermission(
                 android.Manifest.permission.MEDIA_CONTENT_CONTROL,
                 "StatusBarManagerService");
+    }
+
+    @RequiresPermission(android.Manifest.permission.CONTROL_DEVICE_STATE)
+    private void enforceControlDeviceStatePermission() {
+        mContext.enforceCallingOrSelfPermission(CONTROL_DEVICE_STATE, "StatusBarManagerService");
     }
 
     private boolean doesCallerHoldInteractAcrossUserPermission() {
@@ -2188,6 +2214,19 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
                 mBar.unregisterNearbyMediaDevicesProvider(provider);
             } catch (RemoteException e) {
                 Slog.e(TAG, "unregisterNearbyMediaDevicesProvider", e);
+            }
+        }
+    }
+
+    @RequiresPermission(android.Manifest.permission.CONTROL_DEVICE_STATE)
+    @Override
+    public void showRearDisplayDialog(int currentState) {
+        enforceControlDeviceStatePermission();
+        if (mBar != null) {
+            try {
+                mBar.showRearDisplayDialog(currentState);
+            } catch (RemoteException e) {
+                Slog.e(TAG, "showRearDisplayDialog", e);
             }
         }
     }

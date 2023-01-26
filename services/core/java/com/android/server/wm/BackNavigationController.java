@@ -16,13 +16,18 @@
 
 package com.android.server.wm;
 
+import static android.app.ActivityTaskManager.INVALID_TASK_ID;
 import static android.view.RemoteAnimationTarget.MODE_CLOSING;
 import static android.view.RemoteAnimationTarget.MODE_OPENING;
 import static android.view.WindowManager.LayoutParams.INVALID_WINDOW_TYPE;
+import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
 import static android.view.WindowManager.TRANSIT_CLOSE;
 import static android.view.WindowManager.TRANSIT_TO_BACK;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_BACK_PREVIEW;
+import static com.android.server.wm.BackNavigationProto.ANIMATION_IN_PROGRESS;
+import static com.android.server.wm.BackNavigationProto.LAST_BACK_TYPE;
+import static com.android.server.wm.BackNavigationProto.SHOW_WALLPAPER;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -36,6 +41,7 @@ import android.os.RemoteException;
 import android.os.SystemProperties;
 import android.util.ArraySet;
 import android.util.Slog;
+import android.util.proto.ProtoOutputStream;
 import android.view.IWindowFocusObserver;
 import android.view.RemoteAnimationTarget;
 import android.view.SurfaceControl;
@@ -59,6 +65,7 @@ class BackNavigationController {
     private WindowManagerService mWindowManagerService;
     private IWindowFocusObserver mFocusObserver;
     private boolean mBackAnimationInProgress;
+    private @BackNavigationInfo.BackTargetType int mLastBackType;
     private boolean mShowWallpaper;
     private Runnable mPendingAnimation;
 
@@ -214,15 +221,14 @@ class BackNavigationController {
                 infoBuilder.setOnBackNavigationDone(new RemoteCallback(result ->
                         onBackNavigationDone(result, finalFocusedWindow,
                                 BackNavigationInfo.TYPE_CALLBACK)));
-
+                mLastBackType = backType;
                 return infoBuilder.setType(backType).build();
             }
 
             mBackAnimationInProgress = true;
             // We don't have an application callback, let's find the destination of the back gesture
-            Task finalTask = currentTask;
-            prevActivity = currentTask.getActivity(
-                    (r) -> !r.finishing && r.getTask() == finalTask && !r.isTopRunningActivity());
+            // The search logic should align with ActivityClientController#finishActivity
+            prevActivity = currentTask.topRunningActivity(currentActivity.token, INVALID_TASK_ID);
             // TODO Dialog window does not need to attach on activity, check
             // window.mAttrs.type != TYPE_BASE_APPLICATION
             if ((window.getParent().getChildCount() > 1
@@ -238,12 +244,14 @@ class BackNavigationController {
             } else if (currentTask.returnsToHomeRootTask()) {
                 // Our Task should bring back to home
                 removedWindowContainer = currentTask;
+                prevTask = currentTask.getDisplayArea().getRootHomeTask();
                 backType = BackNavigationInfo.TYPE_RETURN_TO_HOME;
                 mShowWallpaper = true;
             } else if (currentActivity.isRootOfTask()) {
                 // TODO(208789724): Create single source of truth for this, maybe in
                 //  RootWindowContainer
-                prevTask = currentTask.mRootWindowContainer.getTaskBelow(currentTask);
+                prevTask = currentTask.mRootWindowContainer.getTask(Task::showToCurrentUser,
+                        currentTask, false /*includeBoundary*/, true /*traverseTopToBottom*/);
                 removedWindowContainer = currentTask;
                 // If it reaches the top activity, we will check the below task from parent.
                 // If it's null or multi-window, fallback the type to TYPE_CALLBACK.
@@ -300,7 +308,7 @@ class BackNavigationController {
                     result, finalFocusedWindow, finalBackType));
             infoBuilder.setOnBackNavigationDone(onBackNavigationDone);
         }
-
+        mLastBackType = backType;
         return infoBuilder.build();
     }
 
@@ -417,6 +425,11 @@ class BackNavigationController {
 
         void reset(@NonNull WindowContainer close, @NonNull WindowContainer open) {
             clearBackAnimateTarget(null);
+            if (close == null || open == null) {
+                Slog.e(TAG, "reset animation with null target close: "
+                        + close + " open: " + open);
+                return;
+            }
             if (close.asActivityRecord() != null && open.asActivityRecord() != null
                     && (close.asActivityRecord().getTask() == open.asActivityRecord().getTask())) {
                 mSwitchType = ACTIVITY_SWITCH;
@@ -831,9 +844,17 @@ class BackNavigationController {
     }
 
     boolean isWallpaperVisible(WindowState w) {
-        if (mBackAnimationInProgress && w.isFocused()) {
-            return mShowWallpaper;
-        }
-        return false;
+        return mAnimationTargets.mComposed && mShowWallpaper
+                && w.mAttrs.type == TYPE_BASE_APPLICATION && w.mActivityRecord != null
+                && mAnimationTargets.isTarget(w.mActivityRecord, true /* open */);
+    }
+
+    // Called from WindowManagerService to write to a protocol buffer output stream.
+    void dumpDebug(ProtoOutputStream proto, long fieldId) {
+        final long token = proto.start(fieldId);
+        proto.write(ANIMATION_IN_PROGRESS, mBackAnimationInProgress);
+        proto.write(LAST_BACK_TYPE, mLastBackType);
+        proto.write(SHOW_WALLPAPER, mShowWallpaper);
+        proto.end(token);
     }
 }

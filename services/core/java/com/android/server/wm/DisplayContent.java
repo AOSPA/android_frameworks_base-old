@@ -230,6 +230,7 @@ import android.view.WindowInsets.Type.InsetsType;
 import android.view.WindowManager;
 import android.view.WindowManager.DisplayImePolicy;
 import android.view.WindowManagerPolicyConstants.PointerEventListener;
+import android.view.inputmethod.ImeTracker;
 import android.window.DisplayWindowPolicyController;
 import android.window.IDisplayAreaOrganizer;
 import android.window.ScreenCapture;
@@ -309,6 +310,9 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      * overlay.
      */
     private SurfaceControl mOverlayLayer;
+
+    /** A surfaceControl specifically for accessibility overlays. */
+    private SurfaceControl mA11yOverlayLayer;
 
     /**
      * The direct child layer of the display to put all non-overlay windows. This is also used for
@@ -454,7 +458,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
     /**
      * Compat metrics computed based on {@link #mDisplayMetrics}.
-     * @see #updateDisplayAndOrientation(int, Configuration)
+     * @see #updateDisplayAndOrientation(Configuration)
      */
     private final DisplayMetrics mCompatDisplayMetrics = new DisplayMetrics();
 
@@ -1268,12 +1272,21 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             transaction.reparent(mOverlayLayer, mSurfaceControl);
         }
 
+        if (mA11yOverlayLayer == null) {
+            mA11yOverlayLayer =
+                    b.setName("Accessibility Overlays").setParent(mSurfaceControl).build();
+        } else {
+            transaction.reparent(mA11yOverlayLayer, mSurfaceControl);
+        }
+
         transaction
                 .setLayer(mSurfaceControl, 0)
                 .setLayerStack(mSurfaceControl, mDisplayId)
                 .show(mSurfaceControl)
                 .setLayer(mOverlayLayer, Integer.MAX_VALUE)
-                .show(mOverlayLayer);
+                .show(mOverlayLayer)
+                .setLayer(mA11yOverlayLayer, Integer.MAX_VALUE - 1)
+                .show(mA11yOverlayLayer);
     }
 
     boolean isReady() {
@@ -3249,6 +3262,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             setRemoteInsetsController(null);
             mWmService.mAnimator.removeDisplayLocked(mDisplayId);
             mOverlayLayer.release();
+            mA11yOverlayLayer.release();
             mWindowingLayer.release();
             mInputMonitor.onDisplayRemoved();
             mWmService.mDisplayNotificationController.dispatchDisplayRemoved(this);
@@ -4938,9 +4952,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     @Override
     boolean okToAnimate(boolean ignoreFrozen, boolean ignoreScreenOn) {
         return okToDisplay(ignoreFrozen, ignoreScreenOn)
-                && (mDisplayId != DEFAULT_DISPLAY
-                || mWmService.mPolicy.okToAnimate(ignoreScreenOn))
-                && getDisplayPolicy().isScreenOnFully();
+                && (mDisplayId != DEFAULT_DISPLAY || mWmService.mPolicy.okToAnimate(ignoreScreenOn))
+                && (ignoreFrozen || mDisplayPolicy.isScreenOnFully());
     }
 
     static final class TaskForResizePointSearchResult implements Predicate<Task> {
@@ -5028,7 +5041,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      *   layer has been assigned since), to facilitate assigning the layer from the IME target, or
      *   fall back if there is no target.
      * - the container doesn't always participate in window traversal, according to
-     *   {@link #skipImeWindowsDuringTraversal()}
+     *   {@link #skipImeWindowsDuringTraversal(DisplayContent)}
      */
     private static class ImeContainer extends DisplayArea.Tokens {
         boolean mNeedsLayer = false;
@@ -5496,6 +5509,10 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
     SurfaceControl getOverlayLayer() {
         return mOverlayLayer;
+    }
+
+    SurfaceControl getA11yOverlayLayer() {
+        return mA11yOverlayLayer;
     }
 
     SurfaceControl[] findRoundedCornerOverlays() {
@@ -6709,25 +6726,35 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 mRemoteInsetsController.insetsControlChanged(stateController.getRawInsetsState(),
                         stateController.getControlsForDispatch(this));
             } catch (RemoteException e) {
-                Slog.w(TAG, "Failed to deliver inset state change", e);
+                Slog.w(TAG, "Failed to deliver inset control state change", e);
             }
         }
 
         @Override
-        public void showInsets(@WindowInsets.Type.InsetsType int types, boolean fromIme) {
+        public void showInsets(@WindowInsets.Type.InsetsType int types, boolean fromIme,
+                @Nullable ImeTracker.Token statsToken) {
             try {
-                mRemoteInsetsController.showInsets(types, fromIme);
+                ImeTracker.get().onProgress(statsToken,
+                        ImeTracker.PHASE_WM_REMOTE_INSETS_CONTROL_TARGET_SHOW_INSETS);
+                mRemoteInsetsController.showInsets(types, fromIme, statsToken);
             } catch (RemoteException e) {
                 Slog.w(TAG, "Failed to deliver showInsets", e);
+                ImeTracker.get().onFailed(statsToken,
+                        ImeTracker.PHASE_WM_REMOTE_INSETS_CONTROL_TARGET_SHOW_INSETS);
             }
         }
 
         @Override
-        public void hideInsets(@InsetsType int types, boolean fromIme) {
+        public void hideInsets(@InsetsType int types, boolean fromIme,
+                @Nullable ImeTracker.Token statsToken) {
             try {
-                mRemoteInsetsController.hideInsets(types, fromIme);
+                ImeTracker.get().onProgress(statsToken,
+                        ImeTracker.PHASE_WM_REMOTE_INSETS_CONTROL_TARGET_HIDE_INSETS);
+                mRemoteInsetsController.hideInsets(types, fromIme, statsToken);
             } catch (RemoteException e) {
-                Slog.w(TAG, "Failed to deliver showInsets", e);
+                Slog.w(TAG, "Failed to deliver hideInsets", e);
+                ImeTracker.get().onFailed(statsToken,
+                        ImeTracker.PHASE_WM_REMOTE_INSETS_CONTROL_TARGET_HIDE_INSETS);
             }
         }
 

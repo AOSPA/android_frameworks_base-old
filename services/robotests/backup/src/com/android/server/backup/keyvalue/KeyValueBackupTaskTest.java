@@ -74,9 +74,12 @@ import android.annotation.Nullable;
 import android.app.Application;
 import android.app.IBackupAgent;
 import android.app.backup.BackupAgent;
+import android.app.backup.BackupAnnotations;
 import android.app.backup.BackupDataInput;
 import android.app.backup.BackupDataOutput;
 import android.app.backup.BackupManager;
+import android.app.backup.BackupManagerMonitor;
+import android.app.backup.BackupRestoreEventLogger;
 import android.app.backup.BackupTransport;
 import android.app.backup.IBackupCallback;
 import android.app.backup.IBackupManager;
@@ -89,6 +92,7 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManagerInternal;
 import android.net.Uri;
+import android.os.Bundle;
 import android.os.ConditionVariable;
 import android.os.DeadObjectException;
 import android.os.Handler;
@@ -100,6 +104,7 @@ import android.platform.test.annotations.Presubmit;
 import android.util.Pair;
 
 import com.android.internal.backup.IBackupTransport;
+import com.android.internal.infra.AndroidFuture;
 import com.android.server.EventLogTags;
 import com.android.server.LocalServices;
 import com.android.server.backup.BackupRestoreTask;
@@ -131,6 +136,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatcher;
 import org.mockito.InOrder;
 import org.mockito.Mock;
@@ -178,7 +184,7 @@ public class KeyValueBackupTaskTest  {
     private static final String BACKUP_AGENT_SHARED_PREFS_SYNCHRONIZER_CLASS =
             "android.app.backup.BackupAgent$SharedPrefsSynchronizer";
     private static final int USER_ID = 10;
-    private static final int OPERATION_TYPE = BackupManager.OperationType.BACKUP;
+    private static final int BACKUP_DESTINATION = BackupAnnotations.BackupDestination.CLOUD;
 
     @Mock private TransportManager mTransportManager;
     @Mock private DataChangedJournal mOldJournal;
@@ -259,7 +265,8 @@ public class KeyValueBackupTaskTest  {
         LocalServices.removeServiceForTest(PackageManagerInternal.class);
         LocalServices.addService(PackageManagerInternal.class, mPackageManagerInternal);
         mBackupEligibilityRules = new BackupEligibilityRules(mPackageManager,
-                LocalServices.getService(PackageManagerInternal.class), USER_ID, OPERATION_TYPE);
+                LocalServices.getService(PackageManagerInternal.class), USER_ID,
+                BACKUP_DESTINATION);
     }
 
     @After
@@ -1445,6 +1452,36 @@ public class KeyValueBackupTaskTest  {
 
         assertEventLogged(
                 EventLogTags.BACKUP_PACKAGE, PACKAGE_1.packageName, Files.size(backupData));
+    }
+
+    @Test
+    public void testRunTask_whenFinishBackupSucceeds_sendsAgentLogsToMonitor() throws Exception {
+        TransportMock transportMock = setUpInitializedTransport(mTransport);
+        AgentMock agentMock = setUpAgentWithData(PACKAGE_1);
+        KeyValueBackupTask task = createKeyValueBackupTask(transportMock, PACKAGE_1);
+        // Mock the agent logging and returning its logs.
+        List<BackupRestoreEventLogger.DataTypeResult> results = new ArrayList<>();
+        results.add(new BackupRestoreEventLogger.DataTypeResult("testDataTypeResult"));
+        doAnswer(
+                        invocation -> {
+                            AndroidFuture<List<BackupRestoreEventLogger.DataTypeResult>> in =
+                                    invocation.getArgument(0);
+                            in.complete(results);
+                            return null;
+                        })
+                .when(agentMock.agentBinder)
+                .getLoggerResults(any());
+
+        runTask(task);
+
+        ArgumentCaptor<Bundle> bundleCaptor = ArgumentCaptor.forClass(Bundle.class);
+        verify(mMonitor).onEvent(bundleCaptor.capture());
+        Bundle eventBundle = bundleCaptor.getValue();
+        List<BackupRestoreEventLogger.DataTypeResult> sentLoggingResults =
+                eventBundle.getParcelableArrayList(
+                        BackupManagerMonitor.EXTRA_LOG_AGENT_LOGGING_RESULTS,
+                        BackupRestoreEventLogger.DataTypeResult.class);
+        assertThat(sentLoggingResults.get(0).getDataType()).isEqualTo("testDataTypeResult");
     }
 
     @Test

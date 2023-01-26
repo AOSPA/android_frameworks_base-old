@@ -26,11 +26,15 @@ object KeyguardDataQuickAffordanceModule {
     @Provides
     @ElementsIntoSet
     fun quickAffordanceConfigs(
+        flashlight: FlashlightQuickAffordanceConfig,
         home: HomeControlsKeyguardQuickAffordanceConfig,
         quickAccessWallet: QuickAccessWalletKeyguardQuickAffordanceConfig,
         qrCodeScanner: QrCodeScannerKeyguardQuickAffordanceConfig,
+        camera: CameraQuickAffordanceConfig,
     ): Set<KeyguardQuickAffordanceConfig> {
         return setOf(
+            camera,
+            flashlight,
             home,
             quickAccessWallet,
             qrCodeScanner,

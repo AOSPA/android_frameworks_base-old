@@ -29,8 +29,6 @@ import java.util.Objects;
 
 /**
  * Request for getting user's credentials from a given credential provider.
- *
- * @hide
  */
 public final class GetCredentialsRequest implements Parcelable {
     /** Calling package of the app requesting for credentials. */
@@ -119,9 +117,9 @@ public final class GetCredentialsRequest implements Parcelable {
          */
         public @NonNull Builder setGetCredentialOptions(
                 @NonNull List<GetCredentialOption> getCredentialOptions) {
-            Preconditions.checkCollectionNotEmpty(mGetCredentialOptions,
+            Preconditions.checkCollectionNotEmpty(getCredentialOptions,
                     "getCredentialOptions");
-            Preconditions.checkCollectionElementsNotNull(mGetCredentialOptions,
+            Preconditions.checkCollectionElementsNotNull(getCredentialOptions,
                     "getCredentialOptions");
             mGetCredentialOptions = getCredentialOptions;
             return this;

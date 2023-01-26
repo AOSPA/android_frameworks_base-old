@@ -2284,8 +2284,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         doReturn(false).when(mAtm).shouldDisableNonVrUiLocked();
 
         spyOn(mDisplayContent.mDwpcHelper);
-        doReturn(false).when(mDisplayContent.mDwpcHelper).isWindowingModeSupported(
-                WINDOWING_MODE_PINNED);
+        doReturn(false).when(mDisplayContent.mDwpcHelper).isEnteringPipAllowed(anyInt());
 
         assertFalse(activity.checkEnterPictureInPictureState("TEST", false /* beforeStopping */));
     }
@@ -2807,7 +2806,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         final Task task = activity.getTask();
         final ActivityRecord topActivity = new ActivityBuilder(mAtm).setTask(task).build();
         topActivity.setVisible(false);
-        task.positionChildAt(topActivity, POSITION_TOP);
+        task.positionChildAt(POSITION_TOP, topActivity, false /* includeParents */);
         activity.addStartingWindow(mPackageName, android.R.style.Theme, null, true, true, false,
                 true, false, false, false);
         waitUntilHandlersIdle();
@@ -2959,8 +2958,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         removeGlobalMinSizeRestriction();
         final Task task = new TaskBuilder(mSupervisor).setCreateParentTask(true).build();
         final Task rootTask = task.getRootTask();
-        final TaskFragment taskFragment = createTaskFragmentWithParentTask(task,
-                false /* createEmbeddedTask */);
+        final TaskFragment taskFragment = createTaskFragmentWithActivity(task);
         final ActivityRecord activity = taskFragment.getTopNonFinishingActivity();
         final Rect stackBounds = new Rect(0, 0, 1000, 600);
         final Rect taskBounds = new Rect(100, 400, 600, 800);
@@ -3089,6 +3087,17 @@ public class ActivityRecordTests extends WindowTestsBase {
         assertTrue(activity.mVisibleRequested);
         assertTrue(activity.mDisplayContent.mOpeningApps.contains(activity));
         assertFalse(activity.mDisplayContent.mClosingApps.contains(activity));
+
+        // There should still be animation (add to opening) if keyguard is going away while the
+        // screen is off because it will be visible after screen is turned on by unlocking.
+        mDisplayContent.mOpeningApps.remove(activity);
+        mDisplayContent.mClosingApps.remove(activity);
+        activity.commitVisibility(false /* visible */, false /* performLayout */);
+        mDisplayContent.getDisplayPolicy().screenTurnedOff();
+        final KeyguardController controller = mSupervisor.getKeyguardController();
+        doReturn(true).when(controller).isKeyguardGoingAway(anyInt());
+        activity.setVisibility(true);
+        assertTrue(mDisplayContent.mOpeningApps.contains(activity));
     }
 
     @Test

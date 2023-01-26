@@ -151,6 +151,7 @@ import com.android.server.am.AppTimeTracker;
 import com.android.server.am.UserState;
 import com.android.server.policy.PermissionPolicyInternal;
 import com.android.server.policy.WindowManagerPolicy;
+import com.android.server.utils.Slogf;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -1511,7 +1512,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         }
 
         if (aInfo == null) {
-            Slog.wtf(TAG, "No home screen found for " + homeIntent, new Throwable());
+            Slogf.wtf(TAG, new Exception(), "No home screen found for %s and user %d", homeIntent,
+                    userId);
             return null;
         }
 

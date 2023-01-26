@@ -395,6 +395,30 @@
     <string name="permdesc_persistentActivity" product="default" msgid="1914841924366562051">"Lar appen gjøre deler av seg selv vedvarende i minnet. Dette kan begrense minnet for andre apper og gjøre telefonen treg."</string>
     <string name="permlab_foregroundService" msgid="1768855976818467491">"kjøre tjenesten i forgrunnen"</string>
     <string name="permdesc_foregroundService" msgid="8720071450020922795">"Lar appen bruke tjenester i forgrunnen."</string>
+    <string name="permlab_foregroundServiceCamera" msgid="7814751737955715297">"kjøre forgrunnstjeneste med typen «camera»"</string>
+    <string name="permdesc_foregroundServiceCamera" msgid="6973701931250595727">"Lar appen bruke forgrunnstjenester med typen «camera»"</string>
+    <string name="permlab_foregroundServiceConnectedDevice" msgid="3019650546176872501">"kjøre forgrunnstjeneste med typen «connectedDevice»"</string>
+    <string name="permdesc_foregroundServiceConnectedDevice" msgid="1067457315741352963">"Lar appen bruke forgrunnstjenester med typen «connectedDevice»"</string>
+    <string name="permlab_foregroundServiceDataSync" msgid="5847463514326881076">"kjøre forgrunnstjeneste med typen «dataSync»"</string>
+    <string name="permdesc_foregroundServiceDataSync" msgid="2267140263423973050">"Lar appen bruke forgrunnstjenester med typen «dataSync»"</string>
+    <string name="permlab_foregroundServiceLocation" msgid="3745428302378535690">"kjøre forgrunnstjeneste med typen «location»"</string>
+    <string name="permdesc_foregroundServiceLocation" msgid="118894034365177183">"Lar appen bruke forgrunnstjenester med typen «location»"</string>
+    <string name="permlab_foregroundServiceMediaPlayback" msgid="4002687983891935514">"kjøre forgrunnstjeneste med typen «mediaPlayback»"</string>
+    <string name="permdesc_foregroundServiceMediaPlayback" msgid="3638032446063968043">"Lar appen bruke forgrunnstjenester med typen «mediaPlayback»"</string>
+    <string name="permlab_foregroundServiceMediaProjection" msgid="2630868915733312527">"kjøre forgrunnstjeneste med typen «mediaProjection»"</string>
+    <string name="permdesc_foregroundServiceMediaProjection" msgid="4805677128082002298">"Lar appen bruke forgrunnstjenester med typen «mediaProjection»"</string>
+    <string name="permlab_foregroundServiceMicrophone" msgid="7390033424890545399">"kjøre forgrunnstjeneste med typen «microphone»"</string>
+    <string name="permdesc_foregroundServiceMicrophone" msgid="1206041516173483201">"Lar appen bruke forgrunnstjenester med typen «microphone»"</string>
+    <string name="permlab_foregroundServicePhoneCall" msgid="627937743867697892">"kjøre forgrunnstjeneste med typen «phoneCall»"</string>
+    <string name="permdesc_foregroundServicePhoneCall" msgid="5941660252587015147">"Lar appen bruke forgrunnstjenester med typen «phoneCall»"</string>
+    <string name="permlab_foregroundServiceHealth" msgid="3675776442080928184">"kjøre forgrunnstjeneste med typen «health»"</string>
+    <string name="permdesc_foregroundServiceHealth" msgid="2024586220562667185">"Lar appen bruke forgrunnstjenester med typen «health»"</string>
+    <string name="permlab_foregroundServiceRemoteMessaging" msgid="105670277002780950">"kjøre forgrunnstjeneste med typen «remoteMessaging»"</string>
+    <string name="permdesc_foregroundServiceRemoteMessaging" msgid="8767598075877576277">"Lar appen bruke forgrunnstjenester med typen «remoteMessaging»"</string>
+    <string name="permlab_foregroundServiceSystemExempted" msgid="1597663713590612685">"kjøre forgrunnstjeneste med typen «systemExempted»"</string>
+    <string name="permdesc_foregroundServiceSystemExempted" msgid="947381760834649622">"Lar appen bruke forgrunnstjenester med typen «systemExempted»"</string>
+    <string name="permlab_foregroundServiceSpecialUse" msgid="7973536745876645082">"kjøre forgrunnstjeneste med typen «specialUse»"</string>
+    <string name="permdesc_foregroundServiceSpecialUse" msgid="646713654541885919">"Lar appen bruke forgrunnstjenester med typen «specialUse»"</string>
     <string name="permlab_getPackageSize" msgid="375391550792886641">"måle lagringsplass for apper"</string>
     <string name="permdesc_getPackageSize" msgid="742743530909966782">"Lar appen hente ut koden, dataene og bufferstørrelsene til appen"</string>
     <string name="permlab_writeSettings" msgid="8057285063719277394">"endre systeminnstillingene"</string>
@@ -447,6 +471,8 @@
     <string name="permdesc_recordAudio" msgid="5857246765327514062">"Denne appen kan ta opp lyd med mikrofonen mens den er i bruk."</string>
     <string name="permlab_recordBackgroundAudio" msgid="5891032812308878254">"ta opp lyd i bakgrunnen"</string>
     <string name="permdesc_recordBackgroundAudio" msgid="1992623135737407516">"Denne appen kan når som helst ta opp lyd med mikrofonen."</string>
+    <string name="permlab_detectScreenCapture" msgid="4447042362828799433">"registrere skjermdumper av appvinduer"</string>
+    <string name="permdesc_detectScreenCapture" msgid="3485784917960342284">"Denne appen varsles hvis det tas skjermdumper mens appen er i bruk."</string>
     <string name="permlab_sim_communication" msgid="176788115994050692">"sende kommandoer til SIM-kortet"</string>
     <string name="permdesc_sim_communication" msgid="4179799296415957960">"Lar appen sende kommandoer til SIM-kortet. Dette er veldig farlig."</string>
     <string name="permlab_activityRecognition" msgid="1782303296053990884">"gjenkjenn fysisk aktivitet"</string>
@@ -698,10 +724,8 @@
     <string name="permdesc_readMediaVideo" msgid="3846400073770403528">"Lar appen lese videofiler fra den delte lagringsplassen din."</string>
     <string name="permlab_readMediaImages" msgid="4057590631020986789">"lese bildefiler fra delt lagringsplass"</string>
     <string name="permdesc_readMediaImages" msgid="5836219373138469259">"Lar appen lese bildefiler fra den delte lagringsplassen din."</string>
-    <!-- no translation found for permlab_readVisualUserSelect (5516204215354667586) -->
-    <skip />
-    <!-- no translation found for permdesc_readVisualUserSelect (8027174717714968217) -->
-    <skip />
+    <string name="permlab_readVisualUserSelect" msgid="5516204215354667586">"lese brukervalgte bilde- og videofiler fra den delte lagringen"</string>
+    <string name="permdesc_readVisualUserSelect" msgid="8027174717714968217">"lar appen lese bilde- og videofiler du velger fra den delte lagringen din"</string>
     <string name="permlab_sdcardWrite" msgid="4863021819671416668">"endre eller slette innholdet i den delte lagringen din"</string>
     <string name="permdesc_sdcardWrite" msgid="8376047679331387102">"Lar appen skrive innholdet i den delte lagringen din."</string>
     <string name="permlab_use_sip" msgid="8250774565189337477">"foreta/motta SIP-anrop"</string>
@@ -1158,7 +1182,7 @@
     <string name="input_method_ime_switch_button_desc" msgid="2736542240252198501">"Bytt inndatametode"</string>
     <string name="low_internal_storage_view_title" msgid="9024241779284783414">"Lite ledig lagringsplass"</string>
     <string name="low_internal_storage_view_text" msgid="8172166728369697835">"Enkelte systemfunksjoner fungerer muligens ikke slik de skal"</string>
-    <string name="low_internal_storage_view_text_no_boot" msgid="7368968163411251788">"Det er ikke nok lagringsplass for systemet. Kontrollér at du har 250 MB ledig plass, og start på nytt."</string>
+    <string name="low_internal_storage_view_text_no_boot" msgid="7368968163411251788">"Det er ikke nok lagringsplass for systemet. Kontroller at du har 250 MB ledig plass, og start på nytt."</string>
     <string name="app_running_notification_title" msgid="8985999749231486569">"<xliff:g id="APP_NAME">%1$s</xliff:g> kjører"</string>
     <string name="app_running_notification_text" msgid="5120815883400228566">"Trykk for å få mer informasjon eller for å stoppe appen."</string>
     <string name="ok" msgid="2646370155170753815">"OK"</string>
@@ -1691,7 +1715,7 @@
     <string name="accessibility_shortcut_menu_item_status_off" msgid="5531598275559472393">"AV"</string>
     <string name="accessibility_enable_service_title" msgid="3931558336268541484">"Vil du gi <xliff:g id="SERVICE">%1$s</xliff:g> full kontroll over enheten din?"</string>
     <string name="accessibility_service_warning_description" msgid="291674995220940133">"Full kontroll er passende for apper som hjelper deg med tilgjengelighetsbehov, men ikke for de fleste apper."</string>
-    <string name="accessibility_service_screen_control_title" msgid="190017412626919776">"Se og kontrollér skjermen"</string>
+    <string name="accessibility_service_screen_control_title" msgid="190017412626919776">"Se og kontroller skjermen"</string>
     <string name="accessibility_service_screen_control_description" msgid="6946315917771791525">"Den kan lese alt innhold på skjermen og vise innhold over andre apper."</string>
     <string name="accessibility_service_action_perform_title" msgid="779670378951658160">"Se og utfør handlinger"</string>
     <string name="accessibility_service_action_perform_description" msgid="2718852014003170558">"Den kan spore kommunikasjonen din med en app eller maskinvaresensor og kommunisere med apper på dine vegne."</string>
@@ -2052,12 +2076,6 @@
     <string name="harmful_app_warning_uninstall" msgid="6472912975664191772">"AVINSTALLER"</string>
     <string name="harmful_app_warning_open_anyway" msgid="5963657791740211807">"ÅPNE LIKEVEL"</string>
     <string name="harmful_app_warning_title" msgid="8794823880881113856">"En skadelig app ble oppdaget"</string>
-    <string name="log_access_confirmation_title" msgid="2343578467290592708">"Vil du gi <xliff:g id="LOG_ACCESS_APP_NAME">%s</xliff:g> tilgang til alle enhetslogger?"</string>
-    <string name="log_access_confirmation_allow" msgid="5302517782599389507">"Gi éngangstilgang"</string>
-    <string name="log_access_confirmation_deny" msgid="7685790957455099845">"Ikke tillat"</string>
-    <string name="log_access_confirmation_body" product="default" msgid="1806692062668620735">"Enhetslogger registrerer det som skjer på enheten din. Apper kan bruke disse loggene til å finne og løse problemer.\n\nNoen logger kan inneholde sensitiv informasjon, så du bør bare gi tilgang til alle enhetslogger til apper du stoler på. \n\nHvis du ikke gir denne appen tilgang til alle enhetslogger, har den fortsatt tilgang til sine egne logger. Enhetsprodusenten kan fortsatt ha tilgang til visse logger eller noe informasjon på enheten din."</string>
-    <string name="log_access_confirmation_body" product="tv" msgid="7379536536425265262">"Enhetslogger registrerer det som skjer på enheten. Apper kan bruke disse loggene til å finne og løse problemer.\n\nNoen logger kan inneholde sensitiv informasjon, så du bør bare gi tilgang til alle enhetslogger til apper du stoler på. \n\nHvis du ikke gir denne appen tilgang til alle enhetslogger, har den fortsatt tilgang til sine egne logger. Enhetsprodusenten kan fortsatt ha tilgang til visse logger eller noe informasjon på enheten.\n\nFinn ut mer på g.co/android/devicelogs."</string>
-    <string name="log_access_do_not_show_again" msgid="1058690599083091552">"Ikke vis igjen"</string>
     <string name="slices_permission_request" msgid="3677129866636153406">"<xliff:g id="APP_0">%1$s</xliff:g> vil vise <xliff:g id="APP_2">%2$s</xliff:g>-utsnitt"</string>
     <string name="screenshot_edit" msgid="7408934887203689207">"Endre"</string>
     <string name="volume_dialog_ringer_guidance_vibrate" msgid="2055927873175228519">"Anrop og varsler vibrerer"</string>
@@ -2298,6 +2316,7 @@
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"Det er ikke mulig å få tilgang til telefonkameraet fra <xliff:g id="DEVICE">%1$s</xliff:g>"</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"Det er ikke mulig å få tilgang til kameraet på nettbrettet fra <xliff:g id="DEVICE">%1$s</xliff:g>"</string>
     <string name="vdm_secure_window" msgid="161700398158812314">"Dette er ikke tilgjengelig under strømming. Prøv på telefonen i stedet."</string>
+    <string name="vdm_pip_blocked" msgid="4036107522497281397">"Kan ikke se bilde-i-bilde under strømming"</string>
     <string name="system_locale_title" msgid="711882686834677268">"Systemstandard"</string>
     <string name="default_card_name" msgid="9198284935962911468">"KORT <xliff:g id="CARDNUMBER">%d</xliff:g>"</string>
 </resources>

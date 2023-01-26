@@ -17,7 +17,10 @@
 package com.android.server.pm;
 
 import static com.android.server.pm.PackageManagerService.PLATFORM_PACKAGE_NAME;
+import static com.android.server.pm.PackageManagerServiceCompilerMapping.getCompilerFilterForReason;
 import static com.android.server.pm.dex.ArtStatsLogUtils.BackgroundDexoptJobStatsLogger;
+
+import static dalvik.system.DexFile.isProfileGuidedCompilerFilter;
 
 import android.annotation.IntDef;
 import android.annotation.NonNull;
@@ -89,6 +92,8 @@ public final class BackgroundDexOptService {
             new ComponentName("android", BackgroundDexOptJobService.class.getName());
 
     // Possible return codes of individual optimization steps.
+    /** Initial value. */
+    public static final int STATUS_UNSPECIFIED = -1;
     /** Ok status: Optimizations finished, All packages were processed, can continue */
     public static final int STATUS_OK = 0;
     /** Optimizations should be aborted. Job scheduler requested it. */
@@ -105,16 +110,20 @@ public final class BackgroundDexOptService {
      * job will exclude those failed packages.
      */
     public static final int STATUS_DEX_OPT_FAILED = 5;
+    /** Encountered fatal error, such as a runtime exception. */
+    public static final int STATUS_FATAL_ERROR = 6;
 
     @IntDef(prefix = {"STATUS_"},
             value =
                     {
+                            STATUS_UNSPECIFIED,
                             STATUS_OK,
                             STATUS_ABORT_BY_CANCELLATION,
                             STATUS_ABORT_NO_SPACE_LEFT,
                             STATUS_ABORT_THERMAL,
                             STATUS_ABORT_BATTERY,
                             STATUS_DEX_OPT_FAILED,
+                            STATUS_FATAL_ERROR,
                     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface Status {}
@@ -150,7 +159,7 @@ public final class BackgroundDexOptService {
     // True if JobScheduler invocations of dexopt have been disabled.
     @GuardedBy("mLock") private boolean mDisableJobSchedulerJobs;
 
-    @GuardedBy("mLock") @Status private int mLastExecutionStatus = STATUS_OK;
+    @GuardedBy("mLock") @Status private int mLastExecutionStatus = STATUS_UNSPECIFIED;
 
     @GuardedBy("mLock") private long mLastExecutionStartUptimeMs;
     @GuardedBy("mLock") private long mLastExecutionDurationMs;
@@ -558,18 +567,26 @@ public final class BackgroundDexOptService {
     private boolean runIdleOptimization(
             PackageManagerService pm, List<String> pkgs, boolean isPostBootUpdate) {
         synchronized (mLock) {
+            mLastExecutionStatus = STATUS_UNSPECIFIED;
             mLastExecutionStartUptimeMs = SystemClock.uptimeMillis();
             mLastExecutionDurationMs = -1;
         }
-        long lowStorageThreshold = getLowStorageThreshold();
-        int status = idleOptimizePackages(pm, pkgs, lowStorageThreshold, isPostBootUpdate);
-        logStatus(status);
-        synchronized (mLock) {
-            mLastExecutionStatus = status;
-            mLastExecutionDurationMs = SystemClock.uptimeMillis() - mLastExecutionStartUptimeMs;
-        }
 
-        return status == STATUS_OK || status == STATUS_DEX_OPT_FAILED;
+        int status = STATUS_UNSPECIFIED;
+        try {
+            long lowStorageThreshold = getLowStorageThreshold();
+            status = idleOptimizePackages(pm, pkgs, lowStorageThreshold, isPostBootUpdate);
+            logStatus(status);
+            return status == STATUS_OK || status == STATUS_DEX_OPT_FAILED;
+        } catch (RuntimeException e) {
+            status = STATUS_FATAL_ERROR;
+            throw e;
+        } finally {
+            synchronized (mLock) {
+                mLastExecutionStatus = status;
+                mLastExecutionDurationMs = SystemClock.uptimeMillis() - mLastExecutionStartUptimeMs;
+            }
+        }
     }
 
     /** Gets the size of the directory. It uses recursion to go over all files. */
@@ -748,10 +765,21 @@ public final class BackgroundDexOptService {
             return PackageDexOptimizer.DEX_OPT_CANCELLED;
         }
         int reason = PackageManagerService.REASON_INACTIVE_PACKAGE_DOWNGRADE;
+        String filter = getCompilerFilterForReason(reason);
         int dexoptFlags = DexoptOptions.DEXOPT_BOOT_COMPLETE | DexoptOptions.DEXOPT_DOWNGRADE;
+
+        if (isProfileGuidedCompilerFilter(filter)) {
+            // We don't expect updates in current profiles to be significant here, but
+            // DEXOPT_CHECK_FOR_PROFILES_UPDATES is set to replicate behaviour that will be
+            // unconditionally enabled for profile guided filters when ART Service is called instead
+            // of the legacy PackageDexOptimizer implementation.
+            dexoptFlags |= DexoptOptions.DEXOPT_CHECK_FOR_PROFILES_UPDATES;
+        }
+
         if (!isPostBootUpdate) {
             dexoptFlags |= DexoptOptions.DEXOPT_IDLE_BACKGROUND_JOB;
         }
+
         long package_size_before = getPackageSize(snapshot, pkg);
         int result = PackageDexOptimizer.DEX_OPT_SKIPPED;
         if (isForPrimaryDex || PLATFORM_PACKAGE_NAME.equals(pkg)) {
@@ -762,10 +790,10 @@ public final class BackgroundDexOptService {
                 // remove their compiler artifacts from dalvik cache.
                 pm.deleteOatArtifactsOfPackage(snapshot, pkg);
             } else {
-                result = performDexOptPrimary(pkg, reason, dexoptFlags);
+                result = performDexOptPrimary(pkg, reason, filter, dexoptFlags);
             }
         } else {
-            result = performDexOptSecondary(pkg, reason, dexoptFlags);
+            result = performDexOptSecondary(pkg, reason, filter, dexoptFlags);
         }
 
         if (result == PackageDexOptimizer.DEX_OPT_PERFORMED) {
@@ -801,32 +829,42 @@ public final class BackgroundDexOptService {
     private int optimizePackage(String pkg, boolean isForPrimaryDex, boolean isPostBootUpdate) {
         int reason = isPostBootUpdate ? PackageManagerService.REASON_POST_BOOT
                                       : PackageManagerService.REASON_BACKGROUND_DEXOPT;
+        String filter = getCompilerFilterForReason(reason);
+
         int dexoptFlags = DexoptOptions.DEXOPT_BOOT_COMPLETE;
         if (!isPostBootUpdate) {
             dexoptFlags |= DexoptOptions.DEXOPT_CHECK_FOR_PROFILES_UPDATES
                     | DexoptOptions.DEXOPT_IDLE_BACKGROUND_JOB;
         }
 
+        if (isProfileGuidedCompilerFilter(filter)) {
+            // Ensure DEXOPT_CHECK_FOR_PROFILES_UPDATES is enabled if the filter is profile guided,
+            // to replicate behaviour that will be unconditionally enabled when ART Service is
+            // called instead of the legacy PackageDexOptimizer implementation.
+            dexoptFlags |= DexoptOptions.DEXOPT_CHECK_FOR_PROFILES_UPDATES;
+        }
+
         // System server share the same code path as primary dex files.
         // PackageManagerService will select the right optimization path for it.
         if (isForPrimaryDex || PLATFORM_PACKAGE_NAME.equals(pkg)) {
-            return performDexOptPrimary(pkg, reason, dexoptFlags);
+            return performDexOptPrimary(pkg, reason, filter, dexoptFlags);
         } else {
-            return performDexOptSecondary(pkg, reason, dexoptFlags);
+            return performDexOptSecondary(pkg, reason, filter, dexoptFlags);
         }
     }
 
     @DexOptResult
-    private int performDexOptPrimary(String pkg, int reason, int dexoptFlags) {
-        DexoptOptions dexoptOptions = new DexoptOptions(pkg, reason, dexoptFlags);
+    private int performDexOptPrimary(String pkg, int reason, String filter, int dexoptFlags) {
+        DexoptOptions dexoptOptions =
+                new DexoptOptions(pkg, reason, filter, /*splitName=*/null, dexoptFlags);
         return trackPerformDexOpt(pkg, /*isForPrimaryDex=*/true,
                 () -> mDexOptHelper.performDexOptWithStatus(dexoptOptions));
     }
 
     @DexOptResult
-    private int performDexOptSecondary(String pkg, int reason, int dexoptFlags) {
-        DexoptOptions dexoptOptions = new DexoptOptions(
-                pkg, reason, dexoptFlags | DexoptOptions.DEXOPT_ONLY_SECONDARY_DEX);
+    private int performDexOptSecondary(String pkg, int reason, String filter, int dexoptFlags) {
+        DexoptOptions dexoptOptions = new DexoptOptions(pkg, reason, filter, /*splitName=*/null,
+                dexoptFlags | DexoptOptions.DEXOPT_ONLY_SECONDARY_DEX);
         return trackPerformDexOpt(pkg, /*isForPrimaryDex=*/false,
                 ()
                         -> mDexOptHelper.performDexOpt(dexoptOptions)

@@ -251,14 +251,14 @@ public class LockSettingsService extends ILockSettings.Stub {
 
     // Locking order is mUserCreationAndRemovalLock -> mSpManager.
     private final Object mUserCreationAndRemovalLock = new Object();
-    // These two arrays are only used at boot time.  To save memory, they are set to null when
-    // PHASE_BOOT_COMPLETED is reached.
+    // These two arrays are only used at boot time.  To save memory, they are set to null near the
+    // end of the boot, when onThirdPartyAppsStarted() is called.
     @GuardedBy("mUserCreationAndRemovalLock")
     private SparseIntArray mEarlyCreatedUsers = new SparseIntArray();
     @GuardedBy("mUserCreationAndRemovalLock")
     private SparseIntArray mEarlyRemovedUsers = new SparseIntArray();
     @GuardedBy("mUserCreationAndRemovalLock")
-    private boolean mBootComplete;
+    private boolean mThirdPartyAppsStarted;
 
     // Current password metrics for all secured users on the device. Updated when user unlocks the
     // device or changes password. Removed when user is stopped.
@@ -300,16 +300,9 @@ public class LockSettingsService extends ILockSettings.Stub {
         @Override
         public void onBootPhase(int phase) {
             super.onBootPhase(phase);
-            switch (phase) {
-                case PHASE_ACTIVITY_MANAGER_READY:
-                    mLockSettingsService.migrateOldDataAfterSystemReady();
-                    mLockSettingsService.loadEscrowData();
-                    break;
-                case PHASE_BOOT_COMPLETED:
-                    mLockSettingsService.bootCompleted();
-                    break;
-                default:
-                    break;
+            if (phase == PHASE_ACTIVITY_MANAGER_READY) {
+                mLockSettingsService.migrateOldDataAfterSystemReady();
+                mLockSettingsService.loadEscrowData();
             }
         }
 
@@ -752,8 +745,8 @@ public class LockSettingsService extends ILockSettings.Stub {
      * <p>
      * This is primarily needed for users that were removed by Android 13 or earlier, which didn't
      * guarantee removal of LSS state as it relied on the {@code ACTION_USER_REMOVED} intent.  It is
-     * also needed because {@link #removeUser()} delays requests to remove LSS state until the
-     * {@code PHASE_BOOT_COMPLETED} boot phase, so they can be lost.
+     * also needed because {@link #removeUser()} delays requests to remove LSS state until Weaver is
+     * guaranteed to be available, so they can be lost.
      * <p>
      * Stale state is detected by checking whether the user serial number changed.  This works
      * because user serial numbers are never reused.
@@ -934,7 +927,9 @@ public class LockSettingsService extends ILockSettings.Stub {
         return success;
     }
 
-    private void bootCompleted() {
+    // This is called when Weaver is guaranteed to be available (if the device supports Weaver).
+    // It does any synthetic password related work that was delayed from earlier in the boot.
+    private void onThirdPartyAppsStarted() {
         synchronized (mUserCreationAndRemovalLock) {
             // Handle delayed calls to LSS.removeUser() and LSS.createNewUser().
             for (int i = 0; i < mEarlyRemovedUsers.size(); i++) {
@@ -979,7 +974,7 @@ public class LockSettingsService extends ILockSettings.Stub {
                 setString("migrated_all_users_to_sp_and_bound_ce", "true", 0);
             }
 
-            mBootComplete = true;
+            mThirdPartyAppsStarted = true;
         }
     }
 
@@ -2128,6 +2123,7 @@ public class LockSettingsService extends ILockSettings.Stub {
     public VerifyCredentialResponse checkCredential(LockscreenCredential credential, int userId,
             ICheckCredentialProgressCallback progressCallback) {
         checkPasswordReadPermission();
+        final long identity = Binder.clearCallingIdentity();
         try {
             VerifyCredentialResponse response = doVerifyCredential(credential,
                                                   userId, progressCallback, 0 /* flags */);
@@ -2139,6 +2135,7 @@ public class LockSettingsService extends ILockSettings.Stub {
             }
             return response;
         } finally {
+            Binder.restoreCallingIdentity(identity);
             scheduleGc();
         }
     }
@@ -2354,14 +2351,14 @@ public class LockSettingsService extends ILockSettings.Stub {
 
     private void createNewUser(@UserIdInt int userId, int userSerialNumber) {
         synchronized (mUserCreationAndRemovalLock) {
-            // Before PHASE_BOOT_COMPLETED, don't actually create the synthetic password yet, but
-            // rather automatically delay it to later.  We do this because protecting the synthetic
+            // During early boot, don't actually create the synthetic password yet, but rather
+            // automatically delay it to later.  We do this because protecting the synthetic
             // password requires the Weaver HAL if the device supports it, and some devices don't
             // make Weaver available until fairly late in the boot process.  This logic ensures a
             // consistent flow across all devices, regardless of their Weaver implementation.
-            if (!mBootComplete) {
-                Slogf.i(TAG, "Delaying locksettings state creation for user %d until boot complete",
-                        userId);
+            if (!mThirdPartyAppsStarted) {
+                Slogf.i(TAG, "Delaying locksettings state creation for user %d until third-party " +
+                        "apps are started", userId);
                 mEarlyCreatedUsers.put(userId, userSerialNumber);
                 mEarlyRemovedUsers.delete(userId);
                 return;
@@ -2375,14 +2372,14 @@ public class LockSettingsService extends ILockSettings.Stub {
 
     private void removeUser(@UserIdInt int userId) {
         synchronized (mUserCreationAndRemovalLock) {
-            // Before PHASE_BOOT_COMPLETED, don't actually remove the LSS state yet, but rather
-            // automatically delay it to later.  We do this because deleting synthetic password
-            // protectors requires the Weaver HAL if the device supports it, and some devices don't
-            // make Weaver available until fairly late in the boot process.  This logic ensures a
-            // consistent flow across all devices, regardless of their Weaver implementation.
-            if (!mBootComplete) {
-                Slogf.i(TAG, "Delaying locksettings state removal for user %d until boot complete",
-                        userId);
+            // During early boot, don't actually remove the LSS state yet, but rather automatically
+            // delay it to later.  We do this because deleting synthetic password protectors
+            // requires the Weaver HAL if the device supports it, and some devices don't make Weaver
+            // available until fairly late in the boot process.  This logic ensures a consistent
+            // flow across all devices, regardless of their Weaver implementation.
+            if (!mThirdPartyAppsStarted) {
+                Slogf.i(TAG, "Delaying locksettings state removal for user %d until third-party " +
+                        "apps are started", userId);
                 if (mEarlyCreatedUsers.indexOfKey(userId) >= 0) {
                     mEarlyCreatedUsers.delete(userId);
                 } else {
@@ -2684,9 +2681,8 @@ public class LockSettingsService extends ILockSettings.Stub {
      * protects the user's CE key with a key derived from the SP.
      * <p>
      * This is called just once in the lifetime of the user: at user creation time (possibly delayed
-     * until {@code PHASE_BOOT_COMPLETED} to ensure that the Weaver HAL is available if the device
-     * supports it), or when upgrading from Android 13 or earlier where users with no LSKF didn't
-     * necessarily have an SP.
+     * until the time when Weaver is guaranteed to be available), or when upgrading from Android 13
+     * or earlier where users with no LSKF didn't necessarily have an SP.
      */
     @GuardedBy("mSpManager")
     @VisibleForTesting
@@ -3209,7 +3205,7 @@ public class LockSettingsService extends ILockSettings.Stub {
 
         pw.println("PasswordHandleCount: " + mGatekeeperPasswords.size());
         synchronized (mUserCreationAndRemovalLock) {
-            pw.println("BootComplete: " + mBootComplete);
+            pw.println("ThirdPartyAppsStarted: " + mThirdPartyAppsStarted);
         }
     }
 
@@ -3365,6 +3361,11 @@ public class LockSettingsService extends ILockSettings.Stub {
     }
 
     private final class LocalService extends LockSettingsInternal {
+
+        @Override
+        public void onThirdPartyAppsStarted() {
+            LockSettingsService.this.onThirdPartyAppsStarted();
+        }
 
         @Override
         public void unlockUserKeyIfUnsecured(@UserIdInt int userId) {

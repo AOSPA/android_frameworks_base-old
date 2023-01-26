@@ -114,14 +114,6 @@ interface ISub {
     oneway void requestEmbeddedSubscriptionInfoListRefresh(int cardId);
 
     /**
-     * Add a new SubscriptionInfo to subinfo database if needed
-     * @param iccId the IccId of the SIM card
-     * @param slotIndex the slot which the SIM is inserted
-     * @return the URL of the newly created row or the updated row
-     */
-    int addSubInfoRecord(String iccId, int slotIndex);
-
-    /**
      * Add a new subscription info record, if needed
      * @param uniqueId This is the unique identifier for the subscription within the specific
      *                 subscription type.
@@ -244,7 +236,9 @@ interface ISub {
 
     int getSlotIndex(int subId);
 
-    int[] getSubId(int slotIndex);
+    int[] getSubIds(int slotIndex);
+
+    int getSubId(int slotIndex);
 
     int getDefaultSubId();
 

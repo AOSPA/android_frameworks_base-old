@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/**
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ */
+
 package com.android.keyguard;
 
 import android.content.Context;
@@ -40,6 +46,7 @@ import com.android.systemui.keyguard.WakefulnessLifecycle;
 import com.android.systemui.statusbar.policy.FiveGServiceClient;
 import com.android.systemui.statusbar.policy.FiveGServiceClient.FiveGServiceState;
 import com.android.systemui.telephony.TelephonyListenerManager;
+import com.android.systemui.util.CarrierNameCustomization;
 
 import java.util.List;
 import java.util.Objects;
@@ -91,7 +98,7 @@ public class CarrierTextManager {
                 }
             };
     private FiveGServiceClient mFiveGServiceClient;
-
+    private CarrierNameCustomization mCarrierNameCustomization;
     @VisibleForTesting
     protected final KeyguardUpdateMonitorCallback mCallback = new KeyguardUpdateMonitorCallback() {
         @Override
@@ -174,7 +181,8 @@ public class CarrierTextManager {
             WakefulnessLifecycle wakefulnessLifecycle,
             @Main Executor mainExecutor,
             @Background Executor bgExecutor,
-            KeyguardUpdateMonitor keyguardUpdateMonitor) {
+            KeyguardUpdateMonitor keyguardUpdateMonitor,
+            CarrierNameCustomization carrierNameCustomization) {
         mContext = context;
         mIsEmergencyCallCapable = telephonyManager.isVoiceCapable();
 
@@ -200,6 +208,7 @@ public class CarrierTextManager {
                 handleSetListening(mCarrierTextCallback);
             }
         });
+        mCarrierNameCustomization = carrierNameCustomization;
     }
 
     private TelephonyManager getTelephonyManager() {
@@ -327,8 +336,13 @@ public class CarrierTextManager {
             subOrderBySlot[subs.get(i).getSimSlotIndex()] = i;
             int simState = mKeyguardUpdateMonitor.getSimState(subId);
             CharSequence carrierName = subs.get(i).getCarrierName();
-            if ( showCustomizeName ) {
-                carrierName = getCustomizeCarrierName(carrierName, subs.get(i));
+            if (showCustomizeName) {
+                if (mCarrierNameCustomization.isRoamingCustomizationEnabled()
+                        && mCarrierNameCustomization.isRoaming(subId)) {
+                    carrierName = mCarrierNameCustomization.getRoamingCarrierName(subId);
+                } else {
+                    carrierName = getCustomizeCarrierName(carrierName, subs.get(i));
+                }
             }
             CharSequence carrierTextForSimState = getCarrierTextForSimState(simState, carrierName);
             if (DEBUG) {
@@ -652,6 +666,7 @@ public class CarrierTextManager {
         private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
         private boolean mShowAirplaneMode;
         private boolean mShowMissingSim;
+        private CarrierNameCustomization mCarrierNameCustomization;
 
         @Inject
         public Builder(
@@ -663,7 +678,8 @@ public class CarrierTextManager {
                 WakefulnessLifecycle wakefulnessLifecycle,
                 @Main Executor mainExecutor,
                 @Background Executor bgExecutor,
-                KeyguardUpdateMonitor keyguardUpdateMonitor) {
+                KeyguardUpdateMonitor keyguardUpdateMonitor,
+                CarrierNameCustomization carrierNameCustomization) {
             mContext = context;
             mSeparator = resources.getString(
                     com.android.internal.R.string.kg_text_message_separator);
@@ -674,6 +690,7 @@ public class CarrierTextManager {
             mMainExecutor = mainExecutor;
             mBgExecutor = bgExecutor;
             mKeyguardUpdateMonitor = keyguardUpdateMonitor;
+            mCarrierNameCustomization = carrierNameCustomization;
         }
 
         /** */
@@ -693,7 +710,7 @@ public class CarrierTextManager {
             return new CarrierTextManager(
                     mContext, mSeparator, mShowAirplaneMode, mShowMissingSim, mWifiManager,
                     mTelephonyManager, mTelephonyListenerManager, mWakefulnessLifecycle,
-                    mMainExecutor, mBgExecutor, mKeyguardUpdateMonitor);
+                    mMainExecutor, mBgExecutor, mKeyguardUpdateMonitor, mCarrierNameCustomization);
         }
     }
     /**

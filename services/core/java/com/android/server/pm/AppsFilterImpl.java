@@ -73,7 +73,6 @@ import com.android.server.utils.Snappable;
 import com.android.server.utils.SnapshotCache;
 import com.android.server.utils.Watchable;
 import com.android.server.utils.WatchableImpl;
-import com.android.server.utils.WatchedArrayList;
 import com.android.server.utils.WatchedArraySet;
 import com.android.server.utils.WatchedSparseBooleanMatrix;
 import com.android.server.utils.WatchedSparseSetArray;
@@ -82,11 +81,8 @@ import com.android.server.utils.Watcher;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * Implementation of the methods that update the internal structures of AppsFilter. Because of the
@@ -114,7 +110,7 @@ public final class AppsFilterImpl extends AppsFilterLocked implements Watchable,
      */
     @GuardedBy("mQueryableViaUsesPermissionLock")
     @NonNull
-    private HashMap<String, Set<Integer>> mPermissionToUids;
+    private final ArrayMap<String, ArraySet<Integer>> mPermissionToUids;
 
     /**
      * A cache that maps parsed {@link android.R.styleable#AndroidManifestUsesPermission
@@ -124,7 +120,7 @@ public final class AppsFilterImpl extends AppsFilterLocked implements Watchable,
      */
     @GuardedBy("mQueryableViaUsesPermissionLock")
     @NonNull
-    private HashMap<String, Set<Integer>> mUsesPermissionToUids;
+    private final ArrayMap<String, ArraySet<Integer>> mUsesPermissionToUids;
 
     /**
      * Ensures an observer is in the list, exactly once. The observer cannot be null.  The
@@ -223,11 +219,11 @@ public final class AppsFilterImpl extends AppsFilterLocked implements Watchable,
         mForceQueryable = new WatchedArraySet<>();
         mForceQueryableSnapshot = new SnapshotCache.Auto<>(
                 mForceQueryable, mForceQueryable, "AppsFilter.mForceQueryable");
-        mProtectedBroadcasts = new WatchedArrayList<>();
+        mProtectedBroadcasts = new WatchedArraySet<>();
         mProtectedBroadcastsSnapshot = new SnapshotCache.Auto<>(
                 mProtectedBroadcasts, mProtectedBroadcasts, "AppsFilter.mProtectedBroadcasts");
-        mPermissionToUids = new HashMap<>();
-        mUsesPermissionToUids = new HashMap<>();
+        mPermissionToUids = new ArrayMap<>();
+        mUsesPermissionToUids = new ArrayMap<>();
 
         mSnapshot = new SnapshotCache<AppsFilterSnapshot>(this, this) {
             @Override
@@ -573,13 +569,17 @@ public final class AppsFilterImpl extends AppsFilterLocked implements Watchable,
             return null;
         }
 
-        final boolean protectedBroadcastsChanged;
-        synchronized (mProtectedBroadcastsLock) {
-            protectedBroadcastsChanged =
-                    mProtectedBroadcasts.addAll(newPkg.getProtectedBroadcasts());
-        }
-        if (protectedBroadcastsChanged) {
-            mQueriesViaComponentRequireRecompute.set(true);
+        final List<String> newBroadcasts = newPkg.getProtectedBroadcasts();
+        if (newBroadcasts.size() != 0) {
+            final boolean protectedBroadcastsChanged;
+            synchronized (mProtectedBroadcastsLock) {
+                final int oldSize = mProtectedBroadcasts.size();
+                mProtectedBroadcasts.addAll(newBroadcasts);
+                protectedBroadcastsChanged = mProtectedBroadcasts.size() != oldSize;
+            }
+            if (protectedBroadcastsChanged) {
+                mQueriesViaComponentRequireRecompute.set(true);
+            }
         }
 
         final boolean newIsForceQueryable;
@@ -606,7 +606,10 @@ public final class AppsFilterImpl extends AppsFilterLocked implements Watchable,
                     // Lookup in the mPermissionToUids cache if installed packages have
                     // defined this permission.
                     if (mPermissionToUids.containsKey(usesPermissionName)) {
-                        for (int targetAppId : mPermissionToUids.get(usesPermissionName)) {
+                        final ArraySet<Integer> permissionDefiners =
+                                mPermissionToUids.get(usesPermissionName);
+                        for (int j = 0; j < permissionDefiners.size(); j++) {
+                            final int targetAppId = permissionDefiners.valueAt(j);
                             if (targetAppId != newPkgSetting.getAppId()) {
                                 mQueryableViaUsesPermission.add(newPkgSetting.getAppId(),
                                         targetAppId);
@@ -616,7 +619,7 @@ public final class AppsFilterImpl extends AppsFilterLocked implements Watchable,
                     // Record in mUsesPermissionToUids that a permission was requested
                     // by a new package
                     if (!mUsesPermissionToUids.containsKey(usesPermissionName)) {
-                        mUsesPermissionToUids.put(usesPermissionName, new HashSet<>());
+                        mUsesPermissionToUids.put(usesPermissionName, new ArraySet<>());
                     }
                     mUsesPermissionToUids.get(usesPermissionName).add(newPkgSetting.getAppId());
                 }
@@ -630,7 +633,10 @@ public final class AppsFilterImpl extends AppsFilterLocked implements Watchable,
                     // Lookup in the mUsesPermissionToUids cache if installed packages have
                     // requested this permission.
                     if (mUsesPermissionToUids.containsKey(permissionName)) {
-                        for (int queryingAppId : mUsesPermissionToUids.get(permissionName)) {
+                        final ArraySet<Integer> permissionUsers = mUsesPermissionToUids.get(
+                                permissionName);
+                        for (int j = 0; j < permissionUsers.size(); j++) {
+                            final int queryingAppId = permissionUsers.valueAt(j);
                             if (queryingAppId != newPkgSetting.getAppId()) {
                                 mQueryableViaUsesPermission.add(queryingAppId,
                                         newPkgSetting.getAppId());
@@ -639,7 +645,7 @@ public final class AppsFilterImpl extends AppsFilterLocked implements Watchable,
                     }
                     // Record in mPermissionToUids that a permission was defined by a new package
                     if (!mPermissionToUids.containsKey(permissionName)) {
-                        mPermissionToUids.put(permissionName, new HashSet<>());
+                        mPermissionToUids.put(permissionName, new ArraySet<>());
                     }
                     mPermissionToUids.get(permissionName).add(newPkgSetting.getAppId());
                 }
@@ -1149,7 +1155,12 @@ public final class AppsFilterImpl extends AppsFilterLocked implements Watchable,
                 final ArrayList<String> protectedBroadcasts = new ArrayList<>(
                         mProtectedBroadcasts.untrackedStorage());
                 collectProtectedBroadcasts(settings, removingPackageName);
-                protectedBroadcastsChanged = !mProtectedBroadcasts.containsAll(protectedBroadcasts);
+                for (int i = 0; i < protectedBroadcasts.size(); ++i) {
+                    if (!mProtectedBroadcasts.contains(protectedBroadcasts.get(i))) {
+                        protectedBroadcastsChanged = true;
+                        break;
+                    }
+                }
             }
         }
 

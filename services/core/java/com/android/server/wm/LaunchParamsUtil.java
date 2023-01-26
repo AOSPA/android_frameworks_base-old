@@ -26,6 +26,7 @@ import android.annotation.NonNull;
 import android.content.pm.ActivityInfo;
 import android.graphics.Rect;
 import android.util.Size;
+import android.view.View;
 
 /**
  * The static class that defines some utility constants and functions that are shared among launch
@@ -42,6 +43,10 @@ class LaunchParamsUtil {
     // One of the most common tablet sizes that are small enough to fit in most large screens.
     private static final int DEFAULT_LANDSCAPE_FREEFORM_WIDTH_DP = 1064;
     private static final int DEFAULT_LANDSCAPE_FREEFORM_HEIGHT_DP = 600;
+
+    private static final int DISPLAY_EDGE_OFFSET_DP = 27;
+
+    private static final Rect TMP_STABLE_BOUNDS = new Rect();
 
     private LaunchParamsUtil() {}
 
@@ -125,5 +130,69 @@ class LaunchParamsUtil {
         }
 
         return new Size(adjWidth, adjHeight);
+    }
+
+    static void adjustBoundsToFitInDisplayArea(@NonNull TaskDisplayArea displayArea,
+                                               int layoutDirection,
+                                               @NonNull ActivityInfo.WindowLayout layout,
+                                               @NonNull Rect inOutBounds) {
+        // Give a small margin between the window bounds and the display bounds.
+        final Rect stableBounds = TMP_STABLE_BOUNDS;
+        displayArea.getStableRect(stableBounds);
+        final float density = (float) displayArea.getConfiguration().densityDpi / DENSITY_DEFAULT;
+        final int displayEdgeOffset = (int) (DISPLAY_EDGE_OFFSET_DP * density + 0.5f);
+        stableBounds.inset(displayEdgeOffset, displayEdgeOffset);
+
+        if (stableBounds.width() < inOutBounds.width()
+                || stableBounds.height() < inOutBounds.height()) {
+            final float heightShrinkRatio = stableBounds.width() / (float) inOutBounds.width();
+            final float widthShrinkRatio =
+                    stableBounds.height() / (float) inOutBounds.height();
+            final float shrinkRatio = Math.min(heightShrinkRatio, widthShrinkRatio);
+            // Minimum layout requirements.
+            final int layoutMinWidth = (layout == null) ? -1 : layout.minWidth;
+            final int layoutMinHeight = (layout == null) ? -1 : layout.minHeight;
+            int adjustedWidth = Math.max(layoutMinWidth, (int) (inOutBounds.width() * shrinkRatio));
+            int adjustedHeight = Math.max(layoutMinHeight,
+                    (int) (inOutBounds.height() * shrinkRatio));
+            if (stableBounds.width() < adjustedWidth
+                    || stableBounds.height() < adjustedHeight) {
+                // There is no way for us to fit the bounds in the displayArea without breaking min
+                // size constraints. Set the min size to make visible as much content as possible.
+                final int left = layoutDirection == View.LAYOUT_DIRECTION_RTL
+                        ? stableBounds.right - adjustedWidth
+                        : stableBounds.left;
+                inOutBounds.set(left, stableBounds.top, left + adjustedWidth,
+                        stableBounds.top + adjustedHeight);
+                return;
+            }
+            inOutBounds.set(inOutBounds.left, inOutBounds.top,
+                    inOutBounds.left + adjustedWidth, inOutBounds.top + adjustedHeight);
+        }
+
+        final int dx;
+        if (inOutBounds.right > stableBounds.right) {
+            // Right edge is out of displayArea.
+            dx = stableBounds.right - inOutBounds.right;
+        } else if (inOutBounds.left < stableBounds.left) {
+            // Left edge is out of displayArea.
+            dx = stableBounds.left - inOutBounds.left;
+        } else {
+            // Vertical edges are all in displayArea.
+            dx = 0;
+        }
+
+        final int dy;
+        if (inOutBounds.top < stableBounds.top) {
+            // Top edge is out of displayArea.
+            dy = stableBounds.top - inOutBounds.top;
+        } else if (inOutBounds.bottom > stableBounds.bottom) {
+            // Bottom edge is out of displayArea.
+            dy = stableBounds.bottom - inOutBounds.bottom;
+        } else {
+            // Horizontal edges are all in displayArea.
+            dy = 0;
+        }
+        inOutBounds.offset(dx, dy);
     }
 }

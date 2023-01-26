@@ -396,6 +396,30 @@
     <string name="permdesc_persistentActivity" product="default" msgid="1914841924366562051">"Дозвољава апликацији да учини сопствене компоненте трајним у меморији. Ово може да ограничи меморију доступну другим апликацијама и успори телефон."</string>
     <string name="permlab_foregroundService" msgid="1768855976818467491">"покрени услугу у првом плану"</string>
     <string name="permdesc_foregroundService" msgid="8720071450020922795">"Дозвољава апликацији да користи услуге у првом плану."</string>
+    <string name="permlab_foregroundServiceCamera" msgid="7814751737955715297">"покретање услуге у првом плану која припада типу „camera“"</string>
+    <string name="permdesc_foregroundServiceCamera" msgid="6973701931250595727">"Дозвољава апликацији да користи услуге у првом плану које припадају типу „camera“"</string>
+    <string name="permlab_foregroundServiceConnectedDevice" msgid="3019650546176872501">"покретање услуге у првом плану која припада типу „connectedDevice“"</string>
+    <string name="permdesc_foregroundServiceConnectedDevice" msgid="1067457315741352963">"Дозвољава апликацији да користи услуге у првом плану које припадају типу „connectedDevice“"</string>
+    <string name="permlab_foregroundServiceDataSync" msgid="5847463514326881076">"покретање услуге у првом плану која припада типу „dataSync“"</string>
+    <string name="permdesc_foregroundServiceDataSync" msgid="2267140263423973050">"Дозвољава апликацији да користи услуге у првом плану које припадају типу „dataSync“"</string>
+    <string name="permlab_foregroundServiceLocation" msgid="3745428302378535690">"покретање услуге у првом плану која припада типу „location“"</string>
+    <string name="permdesc_foregroundServiceLocation" msgid="118894034365177183">"Дозвољава апликацији да користи услуге у првом плану које припадају типу „location“"</string>
+    <string name="permlab_foregroundServiceMediaPlayback" msgid="4002687983891935514">"покретање услуге у првом плану која припада типу „mediaPlayback“"</string>
+    <string name="permdesc_foregroundServiceMediaPlayback" msgid="3638032446063968043">"Дозвољава апликацији да користи услуге у првом плану које припадају типу „mediaPlayback“"</string>
+    <string name="permlab_foregroundServiceMediaProjection" msgid="2630868915733312527">"покретање услуге у првом плану која припада типу „mediaProjection“"</string>
+    <string name="permdesc_foregroundServiceMediaProjection" msgid="4805677128082002298">"Дозвољава апликацији да користи услуге у првом плану које припадају типу „mediaProjection“"</string>
+    <string name="permlab_foregroundServiceMicrophone" msgid="7390033424890545399">"покретање услуге у првом плану која припада типу „microphone“"</string>
+    <string name="permdesc_foregroundServiceMicrophone" msgid="1206041516173483201">"Дозвољава апликацији да користи услуге у првом плану које припадају типу „microphone“"</string>
+    <string name="permlab_foregroundServicePhoneCall" msgid="627937743867697892">"покретање услуге у првом плану која припада типу „phoneCall“"</string>
+    <string name="permdesc_foregroundServicePhoneCall" msgid="5941660252587015147">"Дозвољава апликацији да користи услуге у првом плану које припадају типу „phoneCall“"</string>
+    <string name="permlab_foregroundServiceHealth" msgid="3675776442080928184">"покретање услуге у првом плану која припада типу „health“"</string>
+    <string name="permdesc_foregroundServiceHealth" msgid="2024586220562667185">"Дозвољава апликацији да користи услуге у првом плану које припадају типу „health“"</string>
+    <string name="permlab_foregroundServiceRemoteMessaging" msgid="105670277002780950">"покретање услуге у првом плану која припада типу „remoteMessaging“"</string>
+    <string name="permdesc_foregroundServiceRemoteMessaging" msgid="8767598075877576277">"Дозвољава апликацији да користи услуге у првом плану које припадају типу „remoteMessaging“"</string>
+    <string name="permlab_foregroundServiceSystemExempted" msgid="1597663713590612685">"покретање услуге у првом плану која припада типу „systemExempted“"</string>
+    <string name="permdesc_foregroundServiceSystemExempted" msgid="947381760834649622">"Дозвољава апликацији да користи услуге у првом плану које припадају типу „systemExempted“"</string>
+    <string name="permlab_foregroundServiceSpecialUse" msgid="7973536745876645082">"покретање услуге у првом плану која припада типу „specialUse“"</string>
+    <string name="permdesc_foregroundServiceSpecialUse" msgid="646713654541885919">"Дозвољава апликацији да користи услуге у првом плану које припадају типу „specialUse“"</string>
     <string name="permlab_getPackageSize" msgid="375391550792886641">"мерење меморијског простора у апликацији"</string>
     <string name="permdesc_getPackageSize" msgid="742743530909966782">"Дозвољава апликацији да преузме величине кôда, података и кеша."</string>
     <string name="permlab_writeSettings" msgid="8057285063719277394">"измена подешавања система"</string>
@@ -448,6 +472,8 @@
     <string name="permdesc_recordAudio" msgid="5857246765327514062">"Ова апликација може да снима звук помоћу микрофона док се апликација користи."</string>
     <string name="permlab_recordBackgroundAudio" msgid="5891032812308878254">"да снима звук у позадини"</string>
     <string name="permdesc_recordBackgroundAudio" msgid="1992623135737407516">"Ова апликација може да снима звук помоћу микрофона у било ком тренутку."</string>
+    <string name="permlab_detectScreenCapture" msgid="4447042362828799433">"откривање снимања екрана у прозорима апликација"</string>
+    <string name="permdesc_detectScreenCapture" msgid="3485784917960342284">"Ако се током коришћења ове апликације направи снимак екрана, апликација ће добити обавештење."</string>
     <string name="permlab_sim_communication" msgid="176788115994050692">"слање команди на SIM"</string>
     <string name="permdesc_sim_communication" msgid="4179799296415957960">"Омогућава апликацији да шаље команде SIM картици. То је веома опасно."</string>
     <string name="permlab_activityRecognition" msgid="1782303296053990884">"препознавање физичких активности"</string>
@@ -699,10 +725,8 @@
     <string name="permdesc_readMediaVideo" msgid="3846400073770403528">"Омогућава апликацији да чита видео фајлове из дељеног меморијског простора."</string>
     <string name="permlab_readMediaImages" msgid="4057590631020986789">"читање фајлова слика из дељеног меморијског простора"</string>
     <string name="permdesc_readMediaImages" msgid="5836219373138469259">"Омогућава апликацији да чита фајлове слика из дељеног меморијског простора."</string>
-    <!-- no translation found for permlab_readVisualUserSelect (5516204215354667586) -->
-    <skip />
-    <!-- no translation found for permdesc_readVisualUserSelect (8027174717714968217) -->
-    <skip />
+    <string name="permlab_readVisualUserSelect" msgid="5516204215354667586">"читање фајлова слика и видео снимака које корисник бира из дељеног меморијског простора"</string>
+    <string name="permdesc_readVisualUserSelect" msgid="8027174717714968217">"Омогућава апликацији да чита фајлове слика и видео снимака које изаберете из дељеног меморијског простора."</string>
     <string name="permlab_sdcardWrite" msgid="4863021819671416668">"мењање или брисање садржаја дељеног меморијског простора"</string>
     <string name="permdesc_sdcardWrite" msgid="8376047679331387102">"Дозвољава апликацији да уписује садржај дељеног меморијског простора."</string>
     <string name="permlab_use_sip" msgid="8250774565189337477">"упућивање/пријем SIP позива"</string>
@@ -2053,12 +2077,6 @@
     <string name="harmful_app_warning_uninstall" msgid="6472912975664191772">"ДЕИНСТАЛИРАЈ"</string>
     <string name="harmful_app_warning_open_anyway" msgid="5963657791740211807">"ИПАК ОТВОРИ"</string>
     <string name="harmful_app_warning_title" msgid="8794823880881113856">"Откривена је штетна апликација"</string>
-    <string name="log_access_confirmation_title" msgid="2343578467290592708">"Желите да дозволите апликацији <xliff:g id="LOG_ACCESS_APP_NAME">%s</xliff:g> да приступа свим евиденцијама уређаја?"</string>
-    <string name="log_access_confirmation_allow" msgid="5302517782599389507">"Дозволи једнократан приступ"</string>
-    <string name="log_access_confirmation_deny" msgid="7685790957455099845">"Не дозволи"</string>
-    <string name="log_access_confirmation_body" product="default" msgid="1806692062668620735">"Евиденције уређаја региструју шта се дешава на уређају. Апликације могу да користе те евиденције да би пронашле и решиле проблеме.\n\nНеке евиденције могу да садрже осетљиве информације, па приступ свим евиденцијама уређаја треба да дозвољавате само апликацијама у које имате поверења. \n\nАко не дозволите овој апликацији да приступа свим евиденцијама уређаја, она и даље може да приступа сопственим евиденцијама. Произвођач уређаја ће можда и даље моћи да приступа неким евиденцијама или информацијама на уређају."</string>
-    <string name="log_access_confirmation_body" product="tv" msgid="7379536536425265262">"Евиденције уређаја региструју шта се дешава на уређају. Апликације могу да користе те евиденције да би пронашле и решиле проблеме.\n\nНеке евиденције могу да садрже осетљиве информације, па приступ свим евиденцијама уређаја треба да дозвољавате само апликацијама у које имате поверења. \n\nАко не дозволите овој апликацији да приступа свим евиденцијама уређаја, она и даље може да приступа сопственим евиденцијама. Произвођач уређаја ће можда и даље моћи да приступа неким евиденцијама или информацијама на уређају.\n\nСазнајте више на g.co/android/devicelogs."</string>
-    <string name="log_access_do_not_show_again" msgid="1058690599083091552">"Не приказуј поново"</string>
     <string name="slices_permission_request" msgid="3677129866636153406">"Апликација <xliff:g id="APP_0">%1$s</xliff:g> жели да приказује исечке из апликације <xliff:g id="APP_2">%2$s</xliff:g>"</string>
     <string name="screenshot_edit" msgid="7408934887203689207">"Измени"</string>
     <string name="volume_dialog_ringer_guidance_vibrate" msgid="2055927873175228519">"Вибрација за позиве и обавештења је укључена"</string>
@@ -2299,6 +2317,7 @@
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"Не може да се приступи камери телефона са <xliff:g id="DEVICE">%1$s</xliff:g> уређаја"</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"Не може да се приступи камери таблета са <xliff:g id="DEVICE">%1$s</xliff:g> уређаја"</string>
     <string name="vdm_secure_window" msgid="161700398158812314">"Овом не можете да приступате током стримовања. Пробајте на телефону."</string>
+    <string name="vdm_pip_blocked" msgid="4036107522497281397">"Не можете да гледате слику у слици при стримовању"</string>
     <string name="system_locale_title" msgid="711882686834677268">"Подразумевани системски"</string>
     <string name="default_card_name" msgid="9198284935962911468">"КАРТИЦА <xliff:g id="CARDNUMBER">%d</xliff:g>"</string>
 </resources>

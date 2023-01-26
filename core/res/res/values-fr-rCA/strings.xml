@@ -396,6 +396,30 @@
     <string name="permdesc_persistentActivity" product="default" msgid="1914841924366562051">"Permet à l\'application de rendre certains de ces composants persistants dans la mémoire. Cette autorisation peut limiter la mémoire disponible pour d\'autres applications et ralentir le téléphone."</string>
     <string name="permlab_foregroundService" msgid="1768855976818467491">"exécuter le service en premier plan"</string>
     <string name="permdesc_foregroundService" msgid="8720071450020922795">"Permet à l\'application d\'utiliser les services en premier plan."</string>
+    <string name="permlab_foregroundServiceCamera" msgid="7814751737955715297">"exécuter le service d\'avant-plan avec le type « appareil photo »"</string>
+    <string name="permdesc_foregroundServiceCamera" msgid="6973701931250595727">"Autoriser l\'application à utiliser les services d\'avant-plan avec le type « appareil photo »"</string>
+    <string name="permlab_foregroundServiceConnectedDevice" msgid="3019650546176872501">"exécuter le service d\'avant-plan avec le type « appareil connecté »"</string>
+    <string name="permdesc_foregroundServiceConnectedDevice" msgid="1067457315741352963">"Autoriser l\'application à utiliser les services d\'avant-plan avec le type « appareil connecté »"</string>
+    <string name="permlab_foregroundServiceDataSync" msgid="5847463514326881076">"exécuter le service d\'avant-plan avec le type « synchronisation des données »"</string>
+    <string name="permdesc_foregroundServiceDataSync" msgid="2267140263423973050">"Autoriser l\'application à utiliser les services d\'avant-plan avec le type « synchronisation des données »"</string>
+    <string name="permlab_foregroundServiceLocation" msgid="3745428302378535690">"exécuter le service d\'avant-plan avec le type « emplacement »"</string>
+    <string name="permdesc_foregroundServiceLocation" msgid="118894034365177183">"Autoriser l\'application à utiliser les services d\'avant-plan avec le type « emplacement »"</string>
+    <string name="permlab_foregroundServiceMediaPlayback" msgid="4002687983891935514">"exécuter le service d\'avant-plan avec le type « lecture multimédia »"</string>
+    <string name="permdesc_foregroundServiceMediaPlayback" msgid="3638032446063968043">"Autoriser l\'application à utiliser les services d\'avant-plan avec le type « lecture multimédia »"</string>
+    <string name="permlab_foregroundServiceMediaProjection" msgid="2630868915733312527">"exécuter le service d\'avant-plan avec le type « projection de contenus multimédias »"</string>
+    <string name="permdesc_foregroundServiceMediaProjection" msgid="4805677128082002298">"Autoriser l\'application à utiliser les services d\'avant-plan avec le type « projection de contenus multimédias »"</string>
+    <string name="permlab_foregroundServiceMicrophone" msgid="7390033424890545399">"exécuter le service d\'avant-plan avec le type « microphone »"</string>
+    <string name="permdesc_foregroundServiceMicrophone" msgid="1206041516173483201">"Autoriser l\'application à utiliser les services d\'avant-plan avec le type « microphone »"</string>
+    <string name="permlab_foregroundServicePhoneCall" msgid="627937743867697892">"exécuter le service d\'avant-plan avec le type « appel téléphonique »"</string>
+    <string name="permdesc_foregroundServicePhoneCall" msgid="5941660252587015147">"Autoriser l\'application à utiliser les services d\'avant-plan avec le type « appel téléphonique »"</string>
+    <string name="permlab_foregroundServiceHealth" msgid="3675776442080928184">"exécuter le service d\'avant-plan avec le type « santé »"</string>
+    <string name="permdesc_foregroundServiceHealth" msgid="2024586220562667185">"Autoriser l\'application à utiliser les services d\'avant-plan avec le type « santé »"</string>
+    <string name="permlab_foregroundServiceRemoteMessaging" msgid="105670277002780950">"exécuter le service d\'avant-plan avec le type « messagerie à distance »"</string>
+    <string name="permdesc_foregroundServiceRemoteMessaging" msgid="8767598075877576277">"Autoriser l\'application à utiliser les services d\'avant-plan avec le type « messagerie à distance »"</string>
+    <string name="permlab_foregroundServiceSystemExempted" msgid="1597663713590612685">"exécuter le service d\'avant-plan avec le type « système exempté »"</string>
+    <string name="permdesc_foregroundServiceSystemExempted" msgid="947381760834649622">"Autoriser l\'application à utiliser les services d\'avant-plan avec le type « système exempté »"</string>
+    <string name="permlab_foregroundServiceSpecialUse" msgid="7973536745876645082">"exécuter le service d\'avant-plan avec le type « usage spécial »"</string>
+    <string name="permdesc_foregroundServiceSpecialUse" msgid="646713654541885919">"Autoriser l\'application à utiliser les services d\'avant-plan avec le type « usage spécial »"</string>
     <string name="permlab_getPackageSize" msgid="375391550792886641">"évaluer l\'espace de stockage de l\'application"</string>
     <string name="permdesc_getPackageSize" msgid="742743530909966782">"Permet à l\'application de récupérer la taille de son code, de ses données et de sa mémoire cache."</string>
     <string name="permlab_writeSettings" msgid="8057285063719277394">"modifier les paramètres du système"</string>
@@ -448,6 +472,8 @@
     <string name="permdesc_recordAudio" msgid="5857246765327514062">"Cette application peut enregistrer de l\'audio à l\'aide du microphone lorsque vous utilisez l\'application."</string>
     <string name="permlab_recordBackgroundAudio" msgid="5891032812308878254">"enregistrer de l\'audio en arrière-plan"</string>
     <string name="permdesc_recordBackgroundAudio" msgid="1992623135737407516">"Cette application peut enregistrer de l\'audio à l\'aide du microphone en tout temps."</string>
+    <string name="permlab_detectScreenCapture" msgid="4447042362828799433">"détecter les captures d\'écran des fenêtres d\'application"</string>
+    <string name="permdesc_detectScreenCapture" msgid="3485784917960342284">"Cette application recevra une notification lorsqu\'une capture d\'écran sera prise pendant que l\'application est en cours d\'utilisation."</string>
     <string name="permlab_sim_communication" msgid="176788115994050692">"envoyer des commandes à la carte SIM"</string>
     <string name="permdesc_sim_communication" msgid="4179799296415957960">"Permet à l\'application d\'envoyer des commandes à la carte SIM. Cette fonctionnalité est très dangereuse."</string>
     <string name="permlab_activityRecognition" msgid="1782303296053990884">"reconnaître les activités physiques"</string>
@@ -699,10 +725,8 @@
     <string name="permdesc_readMediaVideo" msgid="3846400073770403528">"Permet à l\'application de lire les fichiers vidéo de votre espace de stockage partagé."</string>
     <string name="permlab_readMediaImages" msgid="4057590631020986789">"lire des fichiers d\'image à partir de l\'espace de stockage partagé"</string>
     <string name="permdesc_readMediaImages" msgid="5836219373138469259">"Permet à l\'application de lire les fichiers d\'image de votre espace de stockage partagé."</string>
-    <!-- no translation found for permlab_readVisualUserSelect (5516204215354667586) -->
-    <skip />
-    <!-- no translation found for permdesc_readVisualUserSelect (8027174717714968217) -->
-    <skip />
+    <string name="permlab_readVisualUserSelect" msgid="5516204215354667586">"lire les fichiers d\'images et de vidéos sélectionnés par l\'utilisateur dans l\'espace de stockage partagé"</string>
+    <string name="permdesc_readVisualUserSelect" msgid="8027174717714968217">"Permet à l\'application de lire les fichiers d\'images et de vidéos que vous sélectionnez dans votre espace de stockage partagé."</string>
     <string name="permlab_sdcardWrite" msgid="4863021819671416668">"modifier ou supprimer le contenu de votre espace de stockage partagé"</string>
     <string name="permdesc_sdcardWrite" msgid="8376047679331387102">"Autorise l\'application à écrire le contenu de votre espace de stockage partagé."</string>
     <string name="permlab_use_sip" msgid="8250774565189337477">"faire et recevoir des appels SIP"</string>
@@ -2053,12 +2077,6 @@
     <string name="harmful_app_warning_uninstall" msgid="6472912975664191772">"DÉSINSTALLER"</string>
     <string name="harmful_app_warning_open_anyway" msgid="5963657791740211807">"OUVRIR QUAND MÊME"</string>
     <string name="harmful_app_warning_title" msgid="8794823880881113856">"Une application nuisible a été détectée"</string>
-    <string name="log_access_confirmation_title" msgid="2343578467290592708">"Autoriser <xliff:g id="LOG_ACCESS_APP_NAME">%s</xliff:g> à accéder à l\'ensemble des journaux de l\'appareil?"</string>
-    <string name="log_access_confirmation_allow" msgid="5302517782599389507">"Autoriser un accès unique"</string>
-    <string name="log_access_confirmation_deny" msgid="7685790957455099845">"Ne pas autoriser"</string>
-    <string name="log_access_confirmation_body" product="default" msgid="1806692062668620735">"Les journaux de l\'appareil enregistrent ce qui se passe sur celui-ci. Les applications peuvent utiliser ces journaux pour trouver et résoudre des problèmes.\n\nCertains journaux peuvent contenir des renseignements confidentiels. N\'autorisez donc que les applications auxquelles vous faites confiance puisque celles-ci pourront accéder à l\'ensemble des journaux de l\'appareil. \n\nMême si vous n\'autorisez pas cette application à accéder à l\'ensemble des journaux de l\'appareil, elle aura toujours accès à ses propres journaux. Le fabricant de votre appareil pourrait toujours être en mesure d\'accéder à certains journaux ou renseignements sur votre appareil."</string>
-    <string name="log_access_confirmation_body" product="tv" msgid="7379536536425265262">"Les journaux de l\'appareil enregistrent ce qui se passe sur celui-ci. Les applications peuvent utiliser ces journaux pour trouver et résoudre des problèmes.\n\nCertains journaux peuvent contenir des renseignements confidentiels. N\'autorisez donc que les applications auxquelles vous faites confiance puisque celles-ci pourront accéder à l\'ensemble des journaux de l\'appareil. \n\nMême si vous n\'autorisez pas cette application à accéder à l\'ensemble des journaux de l\'appareil, elle aura toujours accès à ses propres journaux. Le fabricant de votre appareil pourrait toujours être en mesure d\'accéder à certains journaux ou renseignements sur votre appareil.\n\nPour en savoir plus, consultez la page g.co/android/devicelogs."</string>
-    <string name="log_access_do_not_show_again" msgid="1058690599083091552">"Ne plus afficher"</string>
     <string name="slices_permission_request" msgid="3677129866636153406">"<xliff:g id="APP_0">%1$s</xliff:g> souhaite afficher <xliff:g id="APP_2">%2$s</xliff:g> tranches"</string>
     <string name="screenshot_edit" msgid="7408934887203689207">"Modifier"</string>
     <string name="volume_dialog_ringer_guidance_vibrate" msgid="2055927873175228519">"Les appels et les notifications vibreront"</string>
@@ -2127,7 +2145,7 @@
     <string name="accessibility_system_action_notifications_label" msgid="6083767351772162010">"Notifications"</string>
     <string name="accessibility_system_action_quick_settings_label" msgid="4583900123506773783">"Paramètres rapides"</string>
     <string name="accessibility_system_action_power_dialog_label" msgid="8095341821683910781">"Boîte de dialogue sur l\'alimentation"</string>
-    <string name="accessibility_system_action_lock_screen_label" msgid="5484190691945563838">"Écran de verrouillage"</string>
+    <string name="accessibility_system_action_lock_screen_label" msgid="5484190691945563838">"Verrouiller l\'écran"</string>
     <string name="accessibility_system_action_screenshot_label" msgid="3581566515062741676">"Capture d\'écran"</string>
     <string name="accessibility_system_action_headset_hook_label" msgid="8524691721287425468">"Crochet de casque d\'écoute"</string>
     <string name="accessibility_system_action_on_screen_a11y_shortcut_label" msgid="8488701469459210309">"Raccourci d\'accessibilité à l\'écran"</string>
@@ -2299,6 +2317,7 @@
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"Impossible d\'accéder à l\'appareil photo du téléphone à partir de votre <xliff:g id="DEVICE">%1$s</xliff:g>"</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"Impossible d\'accéder à l\'appareil photo de la tablette à partir de votre <xliff:g id="DEVICE">%1$s</xliff:g>"</string>
     <string name="vdm_secure_window" msgid="161700398158812314">"Vous ne pouvez pas y accéder lorsque vous utilisez la diffusion en continu. Essayez sur votre téléphone à la place."</string>
+    <string name="vdm_pip_blocked" msgid="4036107522497281397">"Impossible d\'afficher des incrustations d\'image pendant une diffusion en continu"</string>
     <string name="system_locale_title" msgid="711882686834677268">"Paramètre système par défaut"</string>
     <string name="default_card_name" msgid="9198284935962911468">"CARTE <xliff:g id="CARDNUMBER">%d</xliff:g>"</string>
 </resources>

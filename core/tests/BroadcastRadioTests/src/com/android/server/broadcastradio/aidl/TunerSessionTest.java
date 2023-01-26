@@ -16,6 +16,8 @@
 
 package com.android.server.broadcastradio.aidl;
 
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
+
 import static com.google.common.truth.Truth.assertWithMessage;
 
 import static org.junit.Assert.assertThrows;
@@ -44,12 +46,14 @@ import android.os.ServiceSpecificException;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 
+import com.android.dx.mockito.inline.extended.StaticMockitoSessionBuilder;
+import com.android.server.broadcastradio.ExtendedRadioMockitoTestCase;
+import com.android.server.broadcastradio.RadioServiceUserController;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.junit.MockitoJUnitRunner;
 import org.mockito.verification.VerificationWithTimeout;
 
 import java.util.ArrayList;
@@ -59,8 +63,7 @@ import java.util.Map;
 /**
  * Tests for AIDL HAL TunerSession.
  */
-@RunWith(MockitoJUnitRunner.class)
-public final class TunerSessionTest {
+public final class TunerSessionTest extends ExtendedRadioMockitoTestCase {
 
     private static final VerificationWithTimeout CALLBACK_TIMEOUT =
             timeout(/* millis= */ 200);
@@ -91,8 +94,15 @@ public final class TunerSessionTest {
 
     private TunerSession[] mTunerSessions;
 
+    @Override
+    protected void initializeSession(StaticMockitoSessionBuilder builder) {
+        builder.spyStatic(RadioServiceUserController.class);
+    }
+
     @Before
     public void setup() throws Exception {
+        doReturn(true).when(() -> RadioServiceUserController.isCurrentOrSystemUser());
+
         mRadioModule = new RadioModule(mBroadcastRadioMock,
                 AidlTestUtils.makeDefaultModuleProperties(), mLock);
 
@@ -317,6 +327,20 @@ public final class TunerSessionTest {
 
         assertWithMessage("Exception for tuning on unsupported program selector")
                 .that(thrown).hasMessageThat().contains("tune: NOT_SUPPORTED");
+    }
+
+    @Test
+    public void tune_forCurrentUser_doesNotTune() throws Exception {
+        openAidlClients(/* numClients= */ 1);
+        doReturn(false).when(() -> RadioServiceUserController.isCurrentOrSystemUser());
+        ProgramSelector initialSel = AidlTestUtils.makeFmSelector(AM_FM_FREQUENCY_LIST[1]);
+        RadioManager.ProgramInfo tuneInfo =
+                AidlTestUtils.makeProgramInfo(initialSel, SIGNAL_QUALITY);
+
+        mTunerSessions[0].tune(initialSel);
+
+        verify(mAidlTunerCallbackMocks[0], CALLBACK_TIMEOUT.times(0))
+                .onCurrentProgramInfoChanged(tuneInfo);
     }
 
     @Test

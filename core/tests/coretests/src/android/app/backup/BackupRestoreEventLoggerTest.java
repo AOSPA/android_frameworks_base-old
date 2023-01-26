@@ -16,8 +16,8 @@
 
 package android.app.backup;
 
-import static android.app.backup.BackupRestoreEventLogger.OperationType.BACKUP;
-import static android.app.backup.BackupRestoreEventLogger.OperationType.RESTORE;
+import static android.app.backup.BackupAnnotations.OperationType.BACKUP;
+import static android.app.backup.BackupAnnotations.OperationType.RESTORE;
 
 import static com.google.common.truth.Truth.assertThat;
 
@@ -25,6 +25,7 @@ import static junit.framework.Assert.fail;
 
 import android.app.backup.BackupRestoreEventLogger.BackupRestoreDataType;
 import android.app.backup.BackupRestoreEventLogger.DataTypeResult;
+import android.os.Parcel;
 import android.platform.test.annotations.Presubmit;
 
 import androidx.test.runner.AndroidJUnit4;
@@ -35,6 +36,7 @@ import org.junit.runner.RunWith;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -63,18 +65,22 @@ public class BackupRestoreEventLoggerTest {
     public void testBackupLogger_rejectsRestoreLogs() {
         mLogger = new BackupRestoreEventLogger(BACKUP);
 
-        assertThat(mLogger.logItemsRestored(DATA_TYPE_1, /* count */ 5)).isFalse();
-        assertThat(mLogger.logItemsRestoreFailed(DATA_TYPE_1, /* count */ 5, ERROR_1)).isFalse();
-        assertThat(mLogger.logRestoreMetadata(DATA_TYPE_1, /* metadata */ "metadata")).isFalse();
+        mLogger.logItemsRestored(DATA_TYPE_1, /* count */ 5);
+        mLogger.logItemsRestoreFailed(DATA_TYPE_1, /* count */ 5, ERROR_1);
+        mLogger.logRestoreMetadata(DATA_TYPE_1, /* metadata */ "metadata");
+
+        assertThat(getResultForDataTypeIfPresent(mLogger, DATA_TYPE_1)).isEqualTo(Optional.empty());
     }
 
     @Test
     public void testRestoreLogger_rejectsBackupLogs() {
         mLogger = new BackupRestoreEventLogger(RESTORE);
 
-        assertThat(mLogger.logItemsBackedUp(DATA_TYPE_1, /* count */ 5)).isFalse();
-        assertThat(mLogger.logItemsBackupFailed(DATA_TYPE_1, /* count */ 5, ERROR_1)).isFalse();
-        assertThat(mLogger.logBackupMetaData(DATA_TYPE_1, /* metadata */ "metadata")).isFalse();
+        mLogger.logItemsBackedUp(DATA_TYPE_1, /* count */ 5);
+        mLogger.logItemsBackupFailed(DATA_TYPE_1, /* count */ 5, ERROR_1);
+        mLogger.logBackupMetaData(DATA_TYPE_1, /* metadata */ "metadata");
+
+        assertThat(getResultForDataTypeIfPresent(mLogger, DATA_TYPE_1)).isEqualTo(Optional.empty());
     }
 
     @Test
@@ -83,16 +89,17 @@ public class BackupRestoreEventLoggerTest {
 
         for (int i = 0; i < DATA_TYPES_ALLOWED; i++) {
             String dataType = DATA_TYPE_1 + i;
-            assertThat(mLogger.logItemsBackedUp(dataType, /* count */ 5)).isTrue();
-            assertThat(mLogger.logItemsBackupFailed(dataType, /* count */ 5, /* error */ null))
-                    .isTrue();
-            assertThat(mLogger.logBackupMetaData(dataType, METADATA_1)).isTrue();
+            mLogger.logItemsBackedUp(dataType, /* count */ 5);
+            mLogger.logItemsBackupFailed(dataType, /* count */ 5, /* error */ null);
+            mLogger.logBackupMetaData(dataType, METADATA_1);
+
+            assertThat(getResultForDataTypeIfPresent(mLogger, dataType)).isNotEqualTo(
+                    Optional.empty());
         }
 
-        assertThat(mLogger.logItemsBackedUp(DATA_TYPE_2, /* count */ 5)).isFalse();
-        assertThat(mLogger.logItemsBackupFailed(DATA_TYPE_2, /* count */ 5, /* error */ null))
-                .isFalse();
-        assertThat(mLogger.logRestoreMetadata(DATA_TYPE_2, METADATA_1)).isFalse();
+        mLogger.logItemsBackedUp(DATA_TYPE_2, /* count */ 5);
+        mLogger.logItemsBackupFailed(DATA_TYPE_2, /* count */ 5, /* error */ null);
+        mLogger.logRestoreMetadata(DATA_TYPE_2, METADATA_1);
         assertThat(getResultForDataTypeIfPresent(mLogger, DATA_TYPE_2)).isEqualTo(Optional.empty());
     }
 
@@ -102,16 +109,17 @@ public class BackupRestoreEventLoggerTest {
 
         for (int i = 0; i < DATA_TYPES_ALLOWED; i++) {
             String dataType = DATA_TYPE_1 + i;
-            assertThat(mLogger.logItemsRestored(dataType, /* count */ 5)).isTrue();
-            assertThat(mLogger.logItemsRestoreFailed(dataType, /* count */ 5, /* error */ null))
-                    .isTrue();
-            assertThat(mLogger.logRestoreMetadata(dataType, METADATA_1)).isTrue();
+            mLogger.logItemsRestored(dataType, /* count */ 5);
+            mLogger.logItemsRestoreFailed(dataType, /* count */ 5, /* error */ null);
+            mLogger.logRestoreMetadata(dataType, METADATA_1);
+
+            assertThat(getResultForDataTypeIfPresent(mLogger, dataType)).isNotEqualTo(
+                    Optional.empty());
         }
 
-        assertThat(mLogger.logItemsRestored(DATA_TYPE_2, /* count */ 5)).isFalse();
-        assertThat(mLogger.logItemsRestoreFailed(DATA_TYPE_2, /* count */ 5, /* error */ null))
-                .isFalse();
-        assertThat(mLogger.logRestoreMetadata(DATA_TYPE_2, METADATA_1)).isFalse();
+        mLogger.logItemsRestored(DATA_TYPE_2, /* count */ 5);
+        mLogger.logItemsRestoreFailed(DATA_TYPE_2, /* count */ 5, /* error */ null);
+        mLogger.logRestoreMetadata(DATA_TYPE_2, METADATA_1);
         assertThat(getResultForDataTypeIfPresent(mLogger, DATA_TYPE_2)).isEqualTo(Optional.empty());
     }
 
@@ -230,10 +238,10 @@ public class BackupRestoreEventLoggerTest {
         mLogger.logItemsBackupFailed(DATA_TYPE_1, firstCount, ERROR_1);
         mLogger.logItemsBackupFailed(DATA_TYPE_1, secondCount, ERROR_2);
 
-        int firstErrorTypeCount = getResultForDataType(mLogger, DATA_TYPE_1)
-                .getErrors().get(ERROR_1);
-        int secondErrorTypeCount = getResultForDataType(mLogger, DATA_TYPE_1)
-                .getErrors().get(ERROR_2);
+        int firstErrorTypeCount =
+                getResultForDataType(mLogger, DATA_TYPE_1).getErrors().get(ERROR_1);
+        int secondErrorTypeCount =
+                getResultForDataType(mLogger, DATA_TYPE_1).getErrors().get(ERROR_2);
         assertThat(firstErrorTypeCount).isEqualTo(firstCount);
         assertThat(secondErrorTypeCount).isEqualTo(secondCount);
     }
@@ -247,16 +255,54 @@ public class BackupRestoreEventLoggerTest {
         mLogger.logItemsRestoreFailed(DATA_TYPE_1, firstCount, ERROR_1);
         mLogger.logItemsRestoreFailed(DATA_TYPE_1, secondCount, ERROR_2);
 
-        int firstErrorTypeCount = getResultForDataType(mLogger, DATA_TYPE_1)
-                .getErrors().get(ERROR_1);
-        int secondErrorTypeCount = getResultForDataType(mLogger, DATA_TYPE_1)
-                .getErrors().get(ERROR_2);
+        int firstErrorTypeCount =
+                getResultForDataType(mLogger, DATA_TYPE_1).getErrors().get(ERROR_1);
+        int secondErrorTypeCount =
+                getResultForDataType(mLogger, DATA_TYPE_1).getErrors().get(ERROR_2);
         assertThat(firstErrorTypeCount).isEqualTo(firstCount);
         assertThat(secondErrorTypeCount).isEqualTo(secondCount);
     }
 
-    private static DataTypeResult getResultForDataType(BackupRestoreEventLogger logger,
-            @BackupRestoreDataType String dataType) {
+    @Test
+    public void testGetLoggingResults_resultsParceledAndUnparceled_recreatedCorrectly() {
+        mLogger = new BackupRestoreEventLogger(RESTORE);
+        int firstTypeSuccessCount = 1;
+        int firstTypeErrorOneCount = 2;
+        int firstTypeErrorTwoCount = 3;
+        mLogger.logItemsRestored(DATA_TYPE_1, firstTypeSuccessCount);
+        mLogger.logItemsRestoreFailed(DATA_TYPE_1, firstTypeErrorOneCount, ERROR_1);
+        mLogger.logItemsRestoreFailed(DATA_TYPE_1, firstTypeErrorTwoCount, ERROR_2);
+        mLogger.logRestoreMetadata(DATA_TYPE_1, METADATA_1);
+        int secondTypeSuccessCount = 4;
+        int secondTypeErrorOneCount = 5;
+        mLogger.logItemsRestored(DATA_TYPE_2, secondTypeSuccessCount);
+        mLogger.logItemsRestoreFailed(DATA_TYPE_2, secondTypeErrorOneCount, ERROR_1);
+
+        List<DataTypeResult> resultsList = mLogger.getLoggingResults();
+        Parcel parcel = Parcel.obtain();
+
+        parcel.writeParcelableList(resultsList, /* flags= */ 0);
+
+        parcel.setDataPosition(0);
+        List<DataTypeResult> recreatedList = new ArrayList<>();
+        parcel.readParcelableList(
+                recreatedList, DataTypeResult.class.getClassLoader(), DataTypeResult.class);
+
+        assertThat(recreatedList.get(0).getDataType()).isEqualTo(DATA_TYPE_1);
+        assertThat(recreatedList.get(0).getSuccessCount()).isEqualTo(firstTypeSuccessCount);
+        assertThat(recreatedList.get(0).getFailCount())
+                .isEqualTo(firstTypeErrorOneCount + firstTypeErrorTwoCount);
+        assertThat(recreatedList.get(0).getErrors().get(ERROR_1)).isEqualTo(firstTypeErrorOneCount);
+        assertThat(recreatedList.get(0).getErrors().get(ERROR_2)).isEqualTo(firstTypeErrorTwoCount);
+        assertThat(recreatedList.get(1).getDataType()).isEqualTo(DATA_TYPE_2);
+        assertThat(recreatedList.get(1).getSuccessCount()).isEqualTo(secondTypeSuccessCount);
+        assertThat(recreatedList.get(1).getFailCount()).isEqualTo(secondTypeErrorOneCount);
+        assertThat(recreatedList.get(1).getErrors().get(ERROR_1))
+                .isEqualTo(secondTypeErrorOneCount);
+    }
+
+    private static DataTypeResult getResultForDataType(
+            BackupRestoreEventLogger logger, @BackupRestoreDataType String dataType) {
         Optional<DataTypeResult> result = getResultForDataTypeIfPresent(logger, dataType);
         if (result.isEmpty()) {
             fail("Failed to find result for data type: " + dataType);
@@ -267,8 +313,9 @@ public class BackupRestoreEventLoggerTest {
     private static Optional<DataTypeResult> getResultForDataTypeIfPresent(
             BackupRestoreEventLogger logger, @BackupRestoreDataType String dataType) {
         List<DataTypeResult> resultList = logger.getLoggingResults();
-        return resultList.stream().filter(
-                dataTypeResult -> dataTypeResult.getDataType().equals(dataType)).findAny();
+        return resultList.stream()
+                .filter(dataTypeResult -> dataTypeResult.getDataType().equals(dataType))
+                .findAny();
     }
 
     private byte[] getMetaDataHash(String metaData) {

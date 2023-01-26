@@ -338,7 +338,7 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         return mFinishTransaction;
     }
 
-    private boolean isCollecting() {
+    boolean isCollecting() {
         return mState == STATE_COLLECTING || mState == STATE_STARTED;
     }
 
@@ -910,13 +910,6 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
             mSyncId = -1;
             mOverrideOptions = null;
             return;
-        }
-        // Ensure that wallpaper visibility is updated with the latest wallpaper target.
-        for (int i = mParticipants.size() - 1; i >= 0; --i) {
-            final WindowContainer<?> wc = mParticipants.valueAt(i);
-            if (isWallpaper(wc) && wc.getDisplayContent() != null) {
-                wc.getDisplayContent().mWallpaperController.adjustWallpaperWindows();
-            }
         }
 
         mState = STATE_PLAYING;

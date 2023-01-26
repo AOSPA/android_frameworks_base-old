@@ -21,9 +21,6 @@ import static android.app.ActivityTaskManager.INVALID_TASK_ID;
 import static android.app.ActivityTaskManager.RESIZE_MODE_FORCED;
 import static android.app.ActivityTaskManager.RESIZE_MODE_SYSTEM_SCREEN_ROTATION;
 import static android.app.ITaskStackListener.FORCED_RESIZEABLE_REASON_SPLIT_SCREEN;
-import static android.app.WindowConfiguration.ACTIVITY_TYPE_ASSISTANT;
-import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
-import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
@@ -1408,13 +1405,26 @@ class Task extends TaskFragment {
      * Reorder the history task so that the passed activity is brought to the front.
      * @return whether it was actually moved (vs already being top).
      */
-    final boolean moveActivityToFrontLocked(ActivityRecord newTop) {
+    final boolean moveActivityToFront(ActivityRecord newTop) {
         ProtoLog.i(WM_DEBUG_ADD_REMOVE, "Removing and adding activity %s to root task at top "
                 + "callers=%s", newTop, Debug.getCallers(4));
-        int origDist = getDistanceFromTop(newTop);
-        positionChildAtTop(newTop);
+        final TaskFragment taskFragment = newTop.getTaskFragment();
+        boolean moved;
+        if (taskFragment != this) {
+            if (taskFragment.isEmbedded() && taskFragment.getNonFinishingActivityCount() == 1) {
+                taskFragment.mClearedForReorderActivityToFront = true;
+            }
+            newTop.reparent(this, POSITION_TOP);
+            moved = true;
+            if (taskFragment.isEmbedded()) {
+                mAtmService.mWindowOrganizerController.mTaskFragmentOrganizerController
+                        .onActivityReparentedToTask(newTop);
+            }
+        } else {
+            moved = moveChildToFront(newTop);
+        }
         updateEffectiveIntent();
-        return getDistanceFromTop(newTop) != origDist;
+        return moved;
     }
 
     @Override
@@ -1582,6 +1592,11 @@ class Task extends TaskFragment {
                 removeChild(r, reason);
             });
         } else {
+            // Finish or destroy apps from the bottom to ensure that all the other activity have
+            // been finished and the top task in another task gets resumed when a top activity is
+            // removed. Otherwise, the next top activity could be started while the top activity
+            // is removed, which is not necessary since the next top activity is on the same Task
+            // and should also be removed.
             forAllActivities((r) -> {
                 if (r.finishing || (excludingTaskOverlay && r.isTaskOverlay())) {
                     return;
@@ -1595,7 +1610,7 @@ class Task extends TaskFragment {
                 } else {
                     r.destroyIfPossible(reason);
                 }
-            });
+            }, false /* traverseTopToBottom */);
         }
     }
 
@@ -3082,20 +3097,6 @@ class Task extends TaskFragment {
         });
     }
 
-    void positionChildAtTop(ActivityRecord child) {
-        positionChildAt(child, POSITION_TOP);
-    }
-
-    void positionChildAt(ActivityRecord child, int position) {
-        if (child == null) {
-            Slog.w(TAG_WM,
-                    "Attempted to position of non-existing app");
-            return;
-        }
-
-        positionChildAt(position, child, false /* includeParents */);
-    }
-
     void setTaskDescription(TaskDescription taskDescription) {
         mTaskDescription = taskDescription;
     }
@@ -3108,20 +3109,6 @@ class Task extends TaskFragment {
 
     TaskDescription getTaskDescription() {
         return mTaskDescription;
-    }
-
-    @Override
-    int getOrientation(int candidate) {
-        return canSpecifyOrientation() ? super.getOrientation(candidate) : SCREEN_ORIENTATION_UNSET;
-    }
-
-    private boolean canSpecifyOrientation() {
-        final int windowingMode = getWindowingMode();
-        final int activityType = getActivityType();
-        return windowingMode == WINDOWING_MODE_FULLSCREEN
-                || activityType == ACTIVITY_TYPE_HOME
-                || activityType == ACTIVITY_TYPE_RECENTS
-                || activityType == ACTIVITY_TYPE_ASSISTANT;
     }
 
     @Override
@@ -4298,13 +4285,14 @@ class Task extends TaskFragment {
     }
 
     /**
-     * @return true if the task is currently focused.
+     * @return {@code true} if the task is currently focused or one of its children is focused.
      */
     boolean isFocused() {
         if (mDisplayContent == null || mDisplayContent.mFocusedApp == null) {
             return false;
         }
-        return mDisplayContent.mFocusedApp.getTask() == this;
+        final Task focusedTask = mDisplayContent.mFocusedApp.getTask();
+        return focusedTask == this || (focusedTask != null && focusedTask.getParent() == this);
     }
 
     /**
@@ -4324,6 +4312,8 @@ class Task extends TaskFragment {
      */
     void onAppFocusChanged(boolean hasFocus) {
         dispatchTaskInfoChangedIfNeeded(false /* force */);
+        final Task parentTask = getParent().asTask();
+        if (parentTask != null) parentTask.dispatchTaskInfoChangedIfNeeded(false /* force */);
     }
 
     void onPictureInPictureParamsChanged() {
@@ -5170,7 +5160,16 @@ class Task extends TaskFragment {
         final Task task = taskTop.getTask();
 
         // If ActivityOptions are moved out and need to be aborted or moved to taskTop.
-        final ActivityOptions topOptions = sResetTargetTaskHelper.process(task, forceReset);
+        final ActivityOptions topOptions;
+
+        // Set the task to be reused, so the TaskFragment#mClearedTaskForReuse can be set if the
+        // embedded activities are finished while reset task.
+        mReuseTask = true;
+        try {
+            topOptions = sResetTargetTaskHelper.process(task, forceReset);
+        } finally {
+            mReuseTask = false;
+        }
 
         if (mChildren.contains(task)) {
             final ActivityRecord newTop = task.getTopNonFinishingActivity();

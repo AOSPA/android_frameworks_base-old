@@ -16,6 +16,8 @@
 
 package com.android.server.broadcastradio.hal2;
 
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
+
 import static com.google.common.truth.Truth.assertWithMessage;
 
 import static org.junit.Assert.assertThrows;
@@ -25,6 +27,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -45,6 +48,10 @@ import android.hardware.radio.RadioTuner;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 
+import com.android.dx.mockito.inline.extended.StaticMockitoSessionBuilder;
+import com.android.server.broadcastradio.ExtendedRadioMockitoTestCase;
+import com.android.server.broadcastradio.RadioServiceUserController;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -61,7 +68,7 @@ import java.util.Map;
  * Tests for HIDL HAL TunerSession.
  */
 @RunWith(MockitoJUnitRunner.class)
-public final class TunerSessionHidlTest {
+public final class TunerSessionHidlTest extends ExtendedRadioMockitoTestCase {
 
     private static final VerificationWithTimeout CALLBACK_TIMEOUT =
             timeout(/* millis= */ 200);
@@ -88,8 +95,15 @@ public final class TunerSessionHidlTest {
     @Mock ITunerSession mHalTunerSessionMock;
     private android.hardware.radio.ITunerCallback[] mAidlTunerCallbackMocks;
 
+    @Override
+    protected void initializeSession(StaticMockitoSessionBuilder builder) {
+        builder.spyStatic(RadioServiceUserController.class);
+    }
+
     @Before
     public void setup() throws Exception {
+        doReturn(true).when(() -> RadioServiceUserController.isCurrentOrSystemUser());
+
         mRadioModule = new RadioModule(mBroadcastRadioMock,
                 TestUtils.makeDefaultModuleProperties(), mLock);
 
@@ -324,6 +338,20 @@ public final class TunerSessionHidlTest {
     }
 
     @Test
+    public void tune_forCurrentUser_doesNotTune() throws Exception {
+        openAidlClients(/* numClients= */ 1);
+        doReturn(false).when(() -> RadioServiceUserController.isCurrentOrSystemUser());
+        ProgramSelector initialSel = TestUtils.makeFmSelector(AM_FM_FREQUENCY_LIST[1]);
+        RadioManager.ProgramInfo tuneInfo =
+                TestUtils.makeProgramInfo(initialSel, SIGNAL_QUALITY);
+
+        mTunerSessions[0].tune(initialSel);
+
+        verify(mAidlTunerCallbackMocks[0], CALLBACK_TIMEOUT.times(0))
+                .onCurrentProgramInfoChanged(tuneInfo);
+    }
+
+    @Test
     public void step_withDirectionUp() throws Exception {
         long initFreq = AM_FM_FREQUENCY_LIST[1];
         ProgramSelector initialSel = TestUtils.makeFmSelector(initFreq);
@@ -411,6 +439,18 @@ public final class TunerSessionHidlTest {
         mTunerSessions[0].cancel();
 
         verify(mHalTunerSessionMock).cancel();
+    }
+
+    @Test
+    public void cancel_forNonCurrentUser() throws Exception {
+        openAidlClients(/* numClients= */ 1);
+        ProgramSelector initialSel = TestUtils.makeFmSelector(AM_FM_FREQUENCY_LIST[1]);
+        mTunerSessions[0].tune(initialSel);
+        doReturn(false).when(() -> RadioServiceUserController.isCurrentOrSystemUser());
+
+        mTunerSessions[0].cancel();
+
+        verify(mHalTunerSessionMock, never()).cancel();
     }
 
     @Test

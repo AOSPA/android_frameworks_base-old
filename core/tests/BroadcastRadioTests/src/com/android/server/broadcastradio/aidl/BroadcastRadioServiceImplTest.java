@@ -20,6 +20,7 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 
 import static com.google.common.truth.Truth.assertWithMessage;
 
+import static org.junit.Assert.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -28,6 +29,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.hardware.broadcastradio.IBroadcastRadio;
+import android.hardware.radio.Announcement;
+import android.hardware.radio.IAnnouncementListener;
+import android.hardware.radio.ICloseHandle;
 import android.hardware.radio.ITuner;
 import android.hardware.radio.ITunerCallback;
 import android.hardware.radio.RadioManager;
@@ -39,6 +43,7 @@ import android.os.ServiceManager;
 
 import com.android.dx.mockito.inline.extended.StaticMockitoSessionBuilder;
 import com.android.server.broadcastradio.ExtendedRadioMockitoTestCase;
+import com.android.server.broadcastradio.RadioServiceUserController;
 
 import org.junit.Test;
 import org.mockito.Mock;
@@ -53,6 +58,7 @@ public final class BroadcastRadioServiceImplTest extends ExtendedRadioMockitoTes
     private static final int DAB_RADIO_MODULE_ID = 1;
     private static final ArrayList<String> SERVICE_LIST =
             new ArrayList<>(Arrays.asList("FmService", "DabService"));
+    private static final int[] TEST_ENABLED_TYPES = new int[]{Announcement.TYPE_TRAFFIC};
 
     private BroadcastRadioServiceImpl mBroadcastRadioService;
     private IBinder.DeathRecipient mFmDeathRecipient;
@@ -77,11 +83,20 @@ public final class BroadcastRadioServiceImplTest extends ExtendedRadioMockitoTes
     private TunerSession mFmTunerSessionMock;
     @Mock
     private ITunerCallback mTunerCallbackMock;
+    @Mock
+    private ICloseHandle mFmCloseHandleMock;
+    @Mock
+    private ICloseHandle mDabCloseHandleMock;
+    @Mock
+    private IAnnouncementListener mAnnouncementListenerMock;
+    @Mock
+    private IBinder mListenerBinderMock;
 
     @Override
     protected void initializeSession(StaticMockitoSessionBuilder builder) {
         builder.spyStatic(ServiceManager.class)
-                .spyStatic(RadioModule.class);
+                .spyStatic(RadioModule.class)
+                .spyStatic(RadioServiceUserController.class);
     }
 
     @Test
@@ -139,6 +154,19 @@ public final class BroadcastRadioServiceImplTest extends ExtendedRadioMockitoTes
     }
 
     @Test
+    public void openSession_forNonCurrentUser_throwsException() throws Exception {
+        createBroadcastRadioService();
+        doReturn(false).when(() -> RadioServiceUserController.isCurrentOrSystemUser());
+
+        IllegalStateException thrown = assertThrows(IllegalStateException.class,
+                () -> mBroadcastRadioService.openSession(FM_RADIO_MODULE_ID,
+                        /* legacyConfig= */ null, /* withAudio= */ true, mTunerCallbackMock));
+
+        assertWithMessage("Exception for opening session by non-current user")
+                .that(thrown).hasMessageThat().contains("Cannot open session for non-current user");
+    }
+
+    @Test
     public void binderDied_forDeathRecipient() throws Exception {
         createBroadcastRadioService();
 
@@ -149,7 +177,24 @@ public final class BroadcastRadioServiceImplTest extends ExtendedRadioMockitoTes
                 .that(mBroadcastRadioService.hasModule(FM_RADIO_MODULE_ID)).isFalse();
     }
 
+    @Test
+    public void addAnnouncementListener_addsOnAllRadioModules() throws Exception {
+        createBroadcastRadioService();
+        when(mAnnouncementListenerMock.asBinder()).thenReturn(mListenerBinderMock);
+        when(mFmRadioModuleMock.addAnnouncementListener(any(), any()))
+                .thenReturn(mFmCloseHandleMock);
+        when(mDabRadioModuleMock.addAnnouncementListener(any(), any()))
+                .thenReturn(mDabCloseHandleMock);
+
+        mBroadcastRadioService.addAnnouncementListener(TEST_ENABLED_TYPES,
+                mAnnouncementListenerMock);
+
+        verify(mFmRadioModuleMock).addAnnouncementListener(any(), any());
+        verify(mDabRadioModuleMock).addAnnouncementListener(any(), any());
+    }
+
     private void createBroadcastRadioService() throws RemoteException {
+        doReturn(true).when(() -> RadioServiceUserController.isCurrentOrSystemUser());
         mockServiceManager();
         mBroadcastRadioService = new BroadcastRadioServiceImpl(SERVICE_LIST);
     }

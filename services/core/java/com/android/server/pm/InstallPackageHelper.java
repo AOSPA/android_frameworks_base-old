@@ -151,7 +151,6 @@ import android.util.BoostFramework;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.content.F2fsUtils;
-import com.android.internal.content.InstallLocationUtils;
 import com.android.internal.security.VerityUtils;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.CollectionUtils;
@@ -176,6 +175,7 @@ import com.android.server.pm.pkg.component.ParsedPermission;
 import com.android.server.pm.pkg.component.ParsedPermissionGroup;
 import com.android.server.pm.pkg.parsing.ParsingPackageUtils;
 import com.android.server.rollback.RollbackManagerInternal;
+import com.android.server.security.FileIntegrityService;
 import com.android.server.utils.WatchedArrayMap;
 import com.android.server.utils.WatchedLongSparseArray;
 
@@ -309,9 +309,9 @@ final class InstallPackageHelper {
         // previous device state.
         InstallSource installSource = request.getInstallSource();
         if (installSource != null) {
-            if (installSource.initiatingPackageName != null) {
+            if (installSource.mInitiatingPackageName != null) {
                 final PackageSetting ips = mPm.mSettings.getPackageLPr(
-                        installSource.initiatingPackageName);
+                        installSource.mInitiatingPackageName);
                 if (ips != null) {
                     installSource = installSource.setInitiatingPackageSignatures(
                             ips.getSignatures());
@@ -876,7 +876,7 @@ final class InstallPackageHelper {
                 }
             }
 
-            Map<String, ReconciledPackage> reconciledPackages;
+            List<ReconciledPackage> reconciledPackages;
             synchronized (mPm.mLock) {
                 try {
                     Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "reconcilePackages");
@@ -1577,7 +1577,7 @@ final class InstallPackageHelper {
                 removedInfo.mUid = oldPackage.getUid();
                 removedInfo.mRemovedPackage = oldPackage.getPackageName();
                 removedInfo.mInstallerPackageName =
-                        ps.getInstallSource().installerPackageName;
+                        ps.getInstallSource().mInstallerPackageName;
                 removedInfo.mIsStaticSharedLib =
                         parsedPackage.getStaticSharedLibraryName() != null;
                 removedInfo.mIsUpdate = true;
@@ -1827,8 +1827,6 @@ final class InstallPackageHelper {
 
         // Collect files we care for fs-verity setup.
         ArrayMap<String, String> fsverityCandidates = new ArrayMap<>();
-        // NB: These files will become only accessible if the signing key is loaded in kernel's
-        // .fs-verity keyring.
         fsverityCandidates.put(pkg.getBaseApkPath(),
                 VerityUtils.getFsveritySignatureFilePath(pkg.getBaseApkPath()));
 
@@ -1848,6 +1846,7 @@ final class InstallPackageHelper {
             }
         }
 
+        var fis = FileIntegrityService.getService();
         for (Map.Entry<String, String> entry : fsverityCandidates.entrySet()) {
             try {
                 final String filePath = entry.getKey();
@@ -1855,13 +1854,17 @@ final class InstallPackageHelper {
                     continue;
                 }
 
-                // Set up fs-verity with optional signature.
                 final String signaturePath = entry.getValue();
-                String optionalSignaturePath = null;
                 if (new File(signaturePath).exists()) {
-                    optionalSignaturePath = signaturePath;
+                    // If signature is provided, enable fs-verity first so that the file can be
+                    // measured for signature check below.
+                    VerityUtils.setUpFsverity(filePath, (byte[]) null);
+
+                    if (!fis.verifyPkcs7DetachedSignature(signaturePath, filePath)) {
+                        throw new PrepareFailure(PackageManager.INSTALL_FAILED_BAD_SIGNATURE,
+                                "fs-verity signature does not verify against a known key");
+                    }
                 }
-                VerityUtils.setUpFsverity(filePath, optionalSignaturePath);
             } catch (IOException e) {
                 throw new PrepareFailure(PackageManager.INSTALL_FAILED_BAD_SIGNATURE,
                         "Failed to enable fs-verity: " + e);
@@ -1894,11 +1897,11 @@ final class InstallPackageHelper {
     }
 
     @GuardedBy("mPm.mLock")
-    private void commitPackagesLocked(Map<String, ReconciledPackage> reconciledPackages,
+    private void commitPackagesLocked(List<ReconciledPackage> reconciledPackages,
             @NonNull int[] allUsers) {
         // TODO: remove any expected failures from this method; this should only be able to fail due
         //       to unavoidable errors (I/O, etc.)
-        for (ReconciledPackage reconciledPkg : reconciledPackages.values()) {
+        for (ReconciledPackage reconciledPkg : reconciledPackages) {
             final InstallRequest installRequest = reconciledPkg.mInstallRequest;
             final ParsedPackage parsedPackage = installRequest.getParsedPackage();
             final String packageName = parsedPackage.getPackageName();
@@ -2227,9 +2230,9 @@ final class InstallPackageHelper {
      * locks on {@link com.android.server.pm.PackageManagerService.mLock}.
      */
     @GuardedBy("mPm.mInstallLock")
-    private void executePostCommitStepsLIF(Map<String, ReconciledPackage> reconciledPackages) {
+    private void executePostCommitStepsLIF(List<ReconciledPackage> reconciledPackages) {
         final ArraySet<IncrementalStorage> incrementalStorages = new ArraySet<>();
-        for (ReconciledPackage reconciledPkg : reconciledPackages.values()) {
+        for (ReconciledPackage reconciledPkg : reconciledPackages) {
             final InstallRequest installRequest = reconciledPkg.mInstallRequest;
             final boolean instantApp = ((installRequest.getScanFlags() & SCAN_AS_INSTANT_APP) != 0);
             final boolean isApex = ((installRequest.getScanFlags() & SCAN_AS_APEX) != 0);
@@ -2246,6 +2249,22 @@ final class InstallPackageHelper {
                 }
                 incrementalStorages.add(storage);
             }
+
+            try {
+                if (!VerityUtils.hasFsverity(pkg.getBaseApkPath())) {
+                    VerityUtils.setUpFsverity(pkg.getBaseApkPath(), (byte[]) null);
+                }
+                for (String path : pkg.getSplitCodePaths()) {
+                    if (!VerityUtils.hasFsverity(path)) {
+                        VerityUtils.setUpFsverity(path, (byte[]) null);
+                    }
+                }
+            } catch (IOException e) {
+                // There's nothing we can do if the setup failed. Since fs-verity is
+                // optional, just ignore the error for now.
+                Slog.e(TAG, "Failed to fully enable fs-verity to " + packageName);
+            }
+
             // Hardcode previousAppId to 0 to disable any data migration (http://b/221088088)
             mAppDataHelper.prepareAppDataPostCommitLIF(pkg, 0);
             if (installRequest.isClearCodeCache()) {
@@ -2358,45 +2377,6 @@ final class InstallPackageHelper {
         }
         PackageManagerServiceUtils.waitForNativeBinariesExtractionForIncremental(
                 incrementalStorages);
-    }
-
-    public int installLocationPolicy(PackageInfoLite pkgLite, int installFlags) {
-        String packageName = pkgLite.packageName;
-        int installLocation = pkgLite.installLocation;
-        // reader
-        synchronized (mPm.mLock) {
-            // Currently installed package which the new package is attempting to replace or
-            // null if no such package is installed.
-            AndroidPackage installedPkg = mPm.mPackages.get(packageName);
-
-            if (installedPkg != null) {
-                if ((installFlags & PackageManager.INSTALL_REPLACE_EXISTING) != 0) {
-                    // Check for updated system application.
-                    if (installedPkg.isSystem()) {
-                        return InstallLocationUtils.RECOMMEND_INSTALL_INTERNAL;
-                    } else {
-                        // If current upgrade specifies particular preference
-                        if (installLocation == PackageInfo.INSTALL_LOCATION_INTERNAL_ONLY) {
-                            // Application explicitly specified internal.
-                            return InstallLocationUtils.RECOMMEND_INSTALL_INTERNAL;
-                        } else if (
-                                installLocation == PackageInfo.INSTALL_LOCATION_PREFER_EXTERNAL) {
-                            // App explicitly prefers external. Let policy decide
-                        } else {
-                            // Prefer previous location
-                            if (installedPkg.isExternalStorage()) {
-                                return InstallLocationUtils.RECOMMEND_INSTALL_EXTERNAL;
-                            }
-                            return InstallLocationUtils.RECOMMEND_INSTALL_INTERNAL;
-                        }
-                    }
-                } else {
-                    // Invalid install. Return error code
-                    return InstallLocationUtils.RECOMMEND_FAILED_ALREADY_EXISTS;
-                }
-            }
-        }
-        return pkgLite.recommendedInstallLocation;
     }
 
     Pair<Integer, String> verifyReplacingVersionCode(PackageInfoLite pkgLite,
@@ -2681,11 +2661,29 @@ final class InstallPackageHelper {
                 }
             }
 
+            Bundle extras = new Bundle();
+            extras.putInt(Intent.EXTRA_UID, request.getUid());
+            if (update) {
+                extras.putBoolean(Intent.EXTRA_REPLACING, true);
+            }
+            extras.putInt(PackageInstaller.EXTRA_DATA_LOADER_TYPE, dataLoaderType);
+
+            // If a package is a static shared library, then only the installer of the package
+            // should get the broadcast.
+            if (installerPackageName != null
+                    && request.getPkg().getStaticSharedLibraryName() != null) {
+                mPm.sendPackageBroadcast(Intent.ACTION_PACKAGE_ADDED, packageName,
+                        extras, 0 /*flags*/,
+                        installerPackageName, null /*finishedReceiver*/,
+                        request.getNewUsers(), null /* instantUserIds*/,
+                        null /* broadcastAllowList */, null);
+            }
+
             // Send installed broadcasts if the package is not a static shared lib.
             if (request.getPkg().getStaticSharedLibraryName() == null) {
                 mPm.mProcessLoggingHandler.invalidateBaseApkHash(request.getPkg().getBaseApkPath());
 
-                // Send added for users that see the package for the first time
+                // Send PACKAGE_ADDED broadcast for users that see the package for the first time
                 // sendPackageAddedForNewUsers also deals with system apps
                 int appId = UserHandle.getAppId(request.getUid());
                 boolean isSystem = request.getPkg().isSystem();
@@ -2693,13 +2691,9 @@ final class InstallPackageHelper {
                         isSystem || virtualPreload, virtualPreload /*startReceiver*/, appId,
                         firstUserIds, firstInstantUserIds, dataLoaderType);
 
-                // Send added for users that don't see the package for the first time
-                Bundle extras = new Bundle();
-                extras.putInt(Intent.EXTRA_UID, request.getUid());
-                if (update) {
-                    extras.putBoolean(Intent.EXTRA_REPLACING, true);
-                }
-                extras.putInt(PackageInstaller.EXTRA_DATA_LOADER_TYPE, dataLoaderType);
+                // Send PACKAGE_ADDED broadcast for users that don't see
+                // the package for the first time
+
                 // Send to all running apps.
                 final SparseArray<int[]> newBroadcastAllowList;
                 synchronized (mPm.mLock) {
@@ -2712,8 +2706,8 @@ final class InstallPackageHelper {
                         extras, 0 /*flags*/,
                         null /*targetPackage*/, null /*finishedReceiver*/,
                         updateUserIds, instantUserIds, newBroadcastAllowList, null);
+                // Send to the installer, even if it's not running.
                 if (installerPackageName != null) {
-                    // Send to the installer, even if it's not running.
                     mPm.sendPackageBroadcast(Intent.ACTION_PACKAGE_ADDED, packageName,
                             extras, 0 /*flags*/,
                             installerPackageName, null /*finishedReceiver*/,
@@ -3667,7 +3661,7 @@ final class InstallPackageHelper {
             boolean appIdCreated = false;
             try {
                 final String pkgName = scanResult.mPkgSetting.getPackageName();
-                final Map<String, ReconciledPackage> reconcileResult =
+                final List<ReconciledPackage> reconcileResult =
                         ReconcilePackageUtils.reconcilePackages(
                                 Collections.singletonList(installRequest),
                                 mPm.mPackages, Collections.singletonMap(pkgName,
@@ -3679,7 +3673,7 @@ final class InstallPackageHelper {
                 } else {
                     installRequest.setScannedPackageSettingAppId(Process.INVALID_UID);
                 }
-                commitReconciledScanResultLocked(reconcileResult.get(pkgName),
+                commitReconciledScanResultLocked(reconcileResult.get(0),
                         mPm.mUserManager.getUserIds());
             } catch (PackageManagerException e) {
                 if (appIdCreated) {

@@ -18,7 +18,6 @@ package com.android.systemui.statusbar.policy;
 
 import static android.net.TetheringManager.TETHERING_WIFI;
 
-import android.app.ActivityManager;
 import android.content.Context;
 import android.net.ConnectivityManager;
 import android.net.TetheringManager;
@@ -39,6 +38,7 @@ import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dump.DumpManager;
+import com.android.systemui.settings.UserTracker;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -60,6 +60,7 @@ public class HotspotControllerImpl implements HotspotController, WifiManager.Sof
     private final WifiManager mWifiManager;
     private final Handler mMainHandler;
     private final Context mContext;
+    private final UserTracker mUserTracker;
 
     private int mHotspotState;
     private volatile int mNumConnectedDevices;
@@ -96,10 +97,12 @@ public class HotspotControllerImpl implements HotspotController, WifiManager.Sof
     @Inject
     public HotspotControllerImpl(
             Context context,
+            UserTracker userTracker,
             @Main Handler mainHandler,
             @Background Handler backgroundHandler,
             DumpManager dumpManager) {
         mContext = context;
+        mUserTracker = userTracker;
         mTetheringManager = context.getSystemService(TetheringManager.class);
         mWifiManager = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
         mMainHandler = mainHandler;
@@ -126,7 +129,7 @@ public class HotspotControllerImpl implements HotspotController, WifiManager.Sof
     @Override
     public boolean isHotspotSupported() {
         return mIsTetheringSupportedConfig && mIsTetheringSupported && mHasTetherableWifiRegexs
-                && UserManager.get(mContext).isUserAdmin(ActivityManager.getCurrentUser());
+                && UserManager.get(mContext).isUserAdmin(mUserTracker.getUserId());
     }
 
     public void dump(PrintWriter pw, String[] args) {

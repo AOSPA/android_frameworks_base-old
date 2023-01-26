@@ -542,6 +542,10 @@ public interface RILConstants {
     int RIL_REQUEST_STOP_IMS_TRAFFIC = 236;
     int RIL_REQUEST_SEND_ANBR_QUERY = 237;
     int RIL_REQUEST_TRIGGER_EPS_FALLBACK = 238;
+    int RIL_REQUEST_SET_NULL_CIPHER_AND_INTEGRITY_ENABLED = 239;
+    int RIL_REQUEST_UPDATE_IMS_CALL_STATUS = 240;
+    int RIL_REQUEST_SET_N1_MODE_ENABLED = 241;
+    int RIL_REQUEST_IS_N1_MODE_ENABLED = 242;
 
     /* RIL Request to get newly supported radio
        capabilities include 5G SA*/

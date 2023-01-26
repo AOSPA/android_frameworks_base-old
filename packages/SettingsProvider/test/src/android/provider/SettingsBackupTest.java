@@ -272,6 +272,7 @@ public class SettingsBackupTest {
                     Settings.Global.SMART_REPLIES_IN_NOTIFICATIONS_FLAGS,
                     Settings.Global.SMART_SUGGESTIONS_IN_NOTIFICATIONS_FLAGS,
                     Settings.Global.STYLUS_HANDWRITING_ENABLED,
+                    Settings.Global.STYLUS_EVER_USED,
                     Settings.Global.ENABLE_ADB_INCREMENTAL_INSTALL_DEFAULT,
                     Settings.Global.ENABLE_MULTI_SLOT_TIMEOUT_MILLIS,
                     Settings.Global.ENHANCED_4G_MODE_ENABLED,
@@ -884,7 +885,7 @@ public class SettingsBackupTest {
                         Settings.Secure.SHOW_QR_CODE_SCANNER_SETTING,
                         Settings.Secure.SKIP_ACCESSIBILITY_SHORTCUT_DIALOG_TIMEOUT_RESTRICTION,
                         Settings.Secure.SPATIAL_AUDIO_ENABLED,
-                        Settings.Secure.TIMEOUT_TO_USER_ZERO,
+                        Settings.Secure.TIMEOUT_TO_DOCK_USER,
                         Settings.Secure.UI_NIGHT_MODE_LAST_COMPUTED,
                         Settings.Secure.UI_NIGHT_MODE_OVERRIDE_OFF,
                         Settings.Secure.UI_NIGHT_MODE_OVERRIDE_ON);

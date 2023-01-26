@@ -17,32 +17,36 @@
 
 package com.android.systemui.keyguard.data.repository
 
+import android.content.Context
+import com.android.systemui.Dumpable
+import com.android.systemui.R
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
-import com.android.systemui.dagger.qualifiers.Background
+import com.android.systemui.dump.DumpManager
 import com.android.systemui.keyguard.data.quickaffordance.KeyguardQuickAffordanceConfig
+import com.android.systemui.keyguard.data.quickaffordance.KeyguardQuickAffordanceLegacySettingSyncer
 import com.android.systemui.keyguard.data.quickaffordance.KeyguardQuickAffordanceSelectionManager
 import com.android.systemui.keyguard.shared.model.KeyguardQuickAffordancePickerRepresentation
 import com.android.systemui.keyguard.shared.model.KeyguardSlotPickerRepresentation
-import com.android.systemui.shared.keyguard.shared.model.KeyguardQuickAffordanceSlots
+import java.io.PrintWriter
 import javax.inject.Inject
-import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 
 /** Abstracts access to application state related to keyguard quick affordances. */
 @SysUISingleton
 class KeyguardQuickAffordanceRepository
 @Inject
 constructor(
+    @Application private val appContext: Context,
     @Application private val scope: CoroutineScope,
-    @Background private val backgroundDispatcher: CoroutineDispatcher,
     private val selectionManager: KeyguardQuickAffordanceSelectionManager,
+    legacySettingSyncer: KeyguardQuickAffordanceLegacySettingSyncer,
     private val configs: Set<@JvmSuppressWildcards KeyguardQuickAffordanceConfig>,
+    dumpManager: DumpManager,
 ) {
     /**
      * List of [KeyguardQuickAffordanceConfig] instances of the affordances at the slot with the
@@ -61,11 +65,40 @@ constructor(
                 initialValue = emptyMap(),
             )
 
+    private val _slotPickerRepresentations: List<KeyguardSlotPickerRepresentation> by lazy {
+        fun parseSlot(unparsedSlot: String): Pair<String, Int> {
+            val split = unparsedSlot.split(SLOT_CONFIG_DELIMITER)
+            check(split.size == 2)
+            val slotId = split[0]
+            val slotCapacity = split[1].toInt()
+            return slotId to slotCapacity
+        }
+
+        val unparsedSlots =
+            appContext.resources.getStringArray(R.array.config_keyguardQuickAffordanceSlots)
+
+        val seenSlotIds = mutableSetOf<String>()
+        unparsedSlots.mapNotNull { unparsedSlot ->
+            val (slotId, slotCapacity) = parseSlot(unparsedSlot)
+            check(!seenSlotIds.contains(slotId)) { "Duplicate slot \"$slotId\"!" }
+            seenSlotIds.add(slotId)
+            KeyguardSlotPickerRepresentation(
+                id = slotId,
+                maxSelectedAffordances = slotCapacity,
+            )
+        }
+    }
+
+    init {
+        legacySettingSyncer.startSyncing()
+        dumpManager.registerDumpable("KeyguardQuickAffordances", Dumpster())
+    }
+
     /**
      * Returns a snapshot of the [KeyguardQuickAffordanceConfig] instances of the affordances at the
      * slot with the given ID. The configs are sorted in descending priority order.
      */
-    suspend fun getSelections(slotId: String): List<KeyguardQuickAffordanceConfig> {
+    fun getSelections(slotId: String): List<KeyguardQuickAffordanceConfig> {
         val selections = selectionManager.getSelections().getOrDefault(slotId, emptyList())
         return configs.filter { selections.contains(it.key) }
     }
@@ -74,7 +107,7 @@ constructor(
      * Returns a snapshot of the IDs of the selected affordances, indexed by slot ID. The configs
      * are sorted in descending priority order.
      */
-    suspend fun getSelections(): Map<String, List<String>> {
+    fun getSelections(): Map<String, List<String>> {
         return selectionManager.getSelections()
     }
 
@@ -86,27 +119,39 @@ constructor(
         slotId: String,
         affordanceIds: List<String>,
     ) {
-        scope.launch(backgroundDispatcher) {
-            selectionManager.setSelections(
-                slotId = slotId,
-                affordanceIds = affordanceIds,
-            )
-        }
+        selectionManager.setSelections(
+            slotId = slotId,
+            affordanceIds = affordanceIds,
+        )
     }
 
     /**
-     * Returns the list of representation objects for all known affordances, regardless of what is
-     * selected. This is useful for building experiences like the picker/selector or user settings
-     * so the user can see everything that can be selected in a menu.
+     * Returns the list of representation objects for all known, device-available affordances,
+     * regardless of what is selected. This is useful for building experiences like the
+     * picker/selector or user settings so the user can see everything that can be selected in a
+     * menu.
      */
-    fun getAffordancePickerRepresentations(): List<KeyguardQuickAffordancePickerRepresentation> {
-        return configs.map { config ->
-            KeyguardQuickAffordancePickerRepresentation(
-                id = config.key,
-                name = config.pickerName,
-                iconResourceId = config.pickerIconResourceId,
-            )
-        }
+    suspend fun getAffordancePickerRepresentations():
+        List<KeyguardQuickAffordancePickerRepresentation> {
+        return configs
+            .associateWith { config -> config.getPickerScreenState() }
+            .filterNot { (_, pickerState) ->
+                pickerState is KeyguardQuickAffordanceConfig.PickerScreenState.UnavailableOnDevice
+            }
+            .map { (config, pickerState) ->
+                val disabledPickerState =
+                    pickerState as? KeyguardQuickAffordanceConfig.PickerScreenState.Disabled
+                KeyguardQuickAffordancePickerRepresentation(
+                    id = config.key,
+                    name = config.pickerName,
+                    iconResourceId = config.pickerIconResourceId,
+                    isEnabled =
+                        pickerState is KeyguardQuickAffordanceConfig.PickerScreenState.Default,
+                    instructions = disabledPickerState?.instructions,
+                    actionText = disabledPickerState?.actionText,
+                    actionComponentName = disabledPickerState?.actionComponentName,
+                )
+            }
     }
 
     /**
@@ -115,14 +160,34 @@ constructor(
      * each slot and select which affordance(s) is/are installed in each slot on the keyguard.
      */
     fun getSlotPickerRepresentations(): List<KeyguardSlotPickerRepresentation> {
-        // TODO(b/256195304): source these from a config XML file.
-        return listOf(
-            KeyguardSlotPickerRepresentation(
-                id = KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_START,
-            ),
-            KeyguardSlotPickerRepresentation(
-                id = KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_END,
-            ),
-        )
+        return _slotPickerRepresentations
+    }
+
+    private inner class Dumpster : Dumpable {
+        override fun dump(pw: PrintWriter, args: Array<out String>) {
+            val slotPickerRepresentations = getSlotPickerRepresentations()
+            val selectionsBySlotId = getSelections()
+            pw.println("Slots & selections:")
+            slotPickerRepresentations.forEach { slotPickerRepresentation ->
+                val slotId = slotPickerRepresentation.id
+                val capacity = slotPickerRepresentation.maxSelectedAffordances
+                val affordanceIds = selectionsBySlotId[slotId]
+
+                val selectionText =
+                    if (!affordanceIds.isNullOrEmpty()) {
+                        ": ${affordanceIds.joinToString(", ")}"
+                    } else {
+                        " is empty"
+                    }
+
+                pw.println("    $slotId$selectionText (capacity = $capacity)")
+            }
+            pw.println("Available affordances on device:")
+            configs.forEach { config -> pw.println("    ${config.key} (\"${config.pickerName}\")") }
+        }
+    }
+
+    companion object {
+        private const val SLOT_CONFIG_DELIMITER = ":"
     }
 }

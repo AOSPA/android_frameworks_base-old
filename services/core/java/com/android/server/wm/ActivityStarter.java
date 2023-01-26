@@ -1392,9 +1392,9 @@ class ActivityStarter {
                 && transitionController.getTransitionPlayer() != null)
                 ? transitionController.createTransition(TRANSIT_OPEN) : null;
         RemoteTransition remoteTransition = r.takeRemoteTransition();
-        transitionController.collect(r);
         try {
             mService.deferWindowLayout();
+            transitionController.collect(r);
             try {
                 Trace.traceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "startActivityInner");
                 result = startActivityInner(r, sourceRecord, voiceSession, voiceInteractor,
@@ -1993,12 +1993,6 @@ class ActivityStarter {
                 ? targetTask.getTopNonFinishingActivity()
                 : targetTaskTop;
 
-        // At this point we are certain we want the task moved to the front. If we need to dismiss
-        // any other always-on-top root tasks, now is the time to do it.
-        if (targetTaskTop.canTurnScreenOn() && mService.isDreaming()) {
-            targetTaskTop.mTaskSupervisor.wakeUp("recycleTask#turnScreenOnFlag");
-        }
-
         if (mMovedToFront) {
             // We moved the task to front, use starting window to hide initial drawn delay.
             targetTaskTop.showStartingWindow(true /* taskSwitch */);
@@ -2009,6 +2003,12 @@ class ActivityStarter {
         // We didn't do anything...  but it was needed (a.k.a., client don't use that intent!)
         // And for paranoia, make sure we have correctly resumed the top activity.
         resumeTargetRootTaskIfNeeded();
+
+        // This is moving an existing task to front. But since dream activity has a higher z-order
+        // to cover normal activities, it needs the awakening event to be dismissed.
+        if (mService.isDreaming() && targetTaskTop.canTurnScreenOn()) {
+            targetTaskTop.mTaskSupervisor.wakeUp("recycleTask#turnScreenOnFlag");
+        }
 
         mLastStartActivityRecord = targetTaskTop;
         return mMovedToFront ? START_TASK_TO_FRONT : START_DELIVERED_TO_TOP;
@@ -2140,7 +2140,7 @@ class ActivityStarter {
                             mStartActivity.mUserId);
             if (act != null) {
                 final Task task = act.getTask();
-                boolean actuallyMoved = task.moveActivityToFrontLocked(act);
+                boolean actuallyMoved = task.moveActivityToFront(act);
                 if (actuallyMoved) {
                     // Only record if the activity actually moved.
                     mMovedToTopActivity = act;
@@ -2768,12 +2768,6 @@ class ActivityStarter {
                 // activity can be embedded.
                 newParent = candidateTf;
             }
-        }
-        if (newParent.asTask() == null) {
-            // only collect task-fragments.
-            // TODO(b/258095975): we probably shouldn't ever collect the parent here since it isn't
-            //                    changing. The logic that changes it should collect it.
-            newParent.mTransitionController.collect(newParent);
         }
         if (mStartActivity.getTaskFragment() == null
                 || mStartActivity.getTaskFragment() == newParent) {

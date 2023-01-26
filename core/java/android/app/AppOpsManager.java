@@ -42,6 +42,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ParceledListSlice;
 import android.database.DatabaseUtils;
+import android.healthconnect.HealthConnectManager;
 import android.media.AudioAttributes.AttributeUsage;
 import android.os.Binder;
 import android.os.Build;
@@ -1390,9 +1391,57 @@ public class AppOpsManager {
     public static final int OP_SYSTEM_EXEMPT_FROM_FORCED_APP_STANDBY =
             AppProtoEnums.APP_OP_SYSTEM_EXEMPT_FROM_FORCED_APP_STANDBY;
 
+    /**
+     * An app op for reading/writing health connect data.
+     *
+     * @hide
+     */
+    public static final int OP_READ_WRITE_HEALTH_DATA = AppProtoEnums.APP_OP_READ_WRITE_HEALTH_DATA;
+
+    /**
+     * Use foreground service with the type
+     * {@link android.content.pm.ServiceInfo#FOREGROUND_SERVICE_TYPE_SPECIAL_USE}.
+     *
+     * @hide
+     */
+    public static final int OP_FOREGROUND_SERVICE_SPECIAL_USE =
+            AppProtoEnums.APP_OP_FOREGROUND_SERVICE_SPECIAL_USE;
+
+    /**
+     * Exempt from start foreground service from background restriction.
+     *
+     * Only to be used by the system.
+     *
+     * @hide
+     */
+    public static final int OP_SYSTEM_EXEMPT_FROM_FGS_BG_START_RESTRICTION =
+            AppProtoEnums.APP_OP_SYSTEM_EXEMPT_FROM_FGS_BG_START_RESTRICTION;
+
+    /**
+     * Exempt from start foreground service from background with while in user permission
+     * restriction.
+     *
+     * Only to be used by the system.
+     *
+     * @hide
+     */
+    public static final int OP_SYSTEM_EXEMPT_FROM_FGS_BG_START_WHILE_IN_USE_PERMISSION_RESTRICTION =
+            AppProtoEnums
+                    .APP_OP_SYSTEM_EXEMPT_FROM_FGS_BG_START_WHILE_IN_USE_PERMISSION_RESTRICTION;
+
+    /**
+     * Hide foreground service stop button in quick settings.
+     *
+     * Only to be used by the system.
+     *
+     * @hide
+     */
+    public static final int OP_SYSTEM_EXEMPT_FROM_FGS_STOP_BUTTON =
+            AppProtoEnums.APP_OP_SYSTEM_EXEMPT_FROM_FGS_STOP_BUTTON;
+
     /** @hide */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-    public static final int _NUM_OP = 126;
+    public static final int _NUM_OP = 131;
 
     /** Access to coarse location information. */
     public static final String OPSTR_COARSE_LOCATION = "android:coarse_location";
@@ -1873,6 +1922,15 @@ public class AppOpsManager {
             "android:read_media_visual_user_selected";
 
     /**
+     * An app op for reading/writing health connect data.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String OPSTR_READ_WRITE_HEALTH_DATA =
+            "android:read_write_health_data";
+
+    /**
      * Record audio from near-field microphone (ie. TV remote)
      * Allows audio recording regardless of sensor privacy state,
      *  as it is an intentional user interaction: hold-to-talk
@@ -1912,6 +1970,46 @@ public class AppOpsManager {
      */
     public static final String OPSTR_SYSTEM_EXEMPT_FROM_FORCED_APP_STANDBY =
             "android:system_exempt_from_forced_app_standby";
+
+    /**
+     * Start a foreground service with the type "specialUse".
+     *
+     * @hide
+     */
+    public static final String OPSTR_FOREGROUND_SERVICE_SPECIAL_USE =
+            "android:foreground_service_special_use";
+
+    /**
+     * Exempt from start foreground service from background restriction.
+     *
+     * Only to be used by the system.
+     *
+     * @hide
+     */
+    public static final String OPSTR_SYSTEM_EXEMPT_FROM_FGS_BG_START_RESTRICTION =
+            "android:system_exempt_from_fgs_bg_start_restriction";
+
+    /**
+     * Exempt from start foreground service from background with while in user permission
+     * restriction.
+     *
+     * Only to be used by the system.
+     *
+     * @hide
+     */
+    public static final String
+            OPSTR_SYSTEM_EXEMPT_FROM_FGS_BG_START_WHILE_IN_USE_PERMISSION_RESTRICTION =
+            "android:system_exempt_from_fgs_bg_start_while_in_use_permission_restriction";
+
+    /**
+     * Hide foreground service stop button in quick settings.
+     *
+     * Only to be used by the system.
+     *
+     * @hide
+     */
+    public static final String OPSTR_SYSTEM_EXEMPT_FROM_FGS_STOP_BUTTON =
+            "android:system_exempt_from_fgs_stop_button";
 
     /** {@link #sAppOpsToNote} not initialized yet for this op */
     private static final byte SHOULD_COLLECT_NOTE_OP_NOT_INITIALIZED = 0;
@@ -2009,6 +2107,7 @@ public class AppOpsManager {
             OP_TURN_SCREEN_ON,
             OP_RUN_LONG_JOBS,
             OP_READ_MEDIA_VISUAL_USER_SELECTED,
+            OP_FOREGROUND_SERVICE_SPECIAL_USE,
     };
 
     static final AppOpInfo[] sAppOpInfos = new AppOpInfo[]{
@@ -2400,8 +2499,27 @@ public class AppOpsManager {
                 "SYSTEM_EXEMPT_FROM_APP_STANDBY").build(),
         new AppOpInfo.Builder(OP_SYSTEM_EXEMPT_FROM_FORCED_APP_STANDBY,
                 OPSTR_SYSTEM_EXEMPT_FROM_FORCED_APP_STANDBY,
-                "SYSTEM_EXEMPT_FROM_FORCED_APP_STANDBY").build()
+                "SYSTEM_EXEMPT_FROM_FORCED_APP_STANDBY").build(),
+        new AppOpInfo.Builder(OP_READ_WRITE_HEALTH_DATA, OPSTR_READ_WRITE_HEALTH_DATA,
+                "READ_WRITE_HEALTH_DATA").setDefaultMode(AppOpsManager.MODE_ALLOWED).build(),
+        new AppOpInfo.Builder(OP_FOREGROUND_SERVICE_SPECIAL_USE,
+                OPSTR_FOREGROUND_SERVICE_SPECIAL_USE, "FOREGROUND_SERVICE_SPECIAL_USE")
+                .setPermission(Manifest.permission.FOREGROUND_SERVICE_SPECIAL_USE).build(),
+        new AppOpInfo.Builder(OP_SYSTEM_EXEMPT_FROM_FGS_BG_START_RESTRICTION,
+                OPSTR_SYSTEM_EXEMPT_FROM_FGS_BG_START_RESTRICTION,
+                "SYSTEM_EXEMPT_FROM_FGS_BG_START_RESTRICTION").build(),
+        new AppOpInfo.Builder(
+                OP_SYSTEM_EXEMPT_FROM_FGS_BG_START_WHILE_IN_USE_PERMISSION_RESTRICTION,
+                OPSTR_SYSTEM_EXEMPT_FROM_FGS_BG_START_WHILE_IN_USE_PERMISSION_RESTRICTION,
+                "SYSTEM_EXEMPT_FROM_FGS_BG_START_WHILE_IN_USE_PERMISSION_RESTRICTION")
+                .build(),
+        new AppOpInfo.Builder(OP_SYSTEM_EXEMPT_FROM_FGS_STOP_BUTTON,
+                OPSTR_SYSTEM_EXEMPT_FROM_FGS_STOP_BUTTON,
+                "SYSTEM_EXEMPT_FROM_FGS_STOP_BUTTON").build()
     };
+
+    // The number of longs needed to form a full bitmask of app ops
+    private static final int BITMASK_LEN = ((_NUM_OP - 1) / Long.SIZE) + 1;
 
     /**
      * @hide
@@ -2437,8 +2555,8 @@ public class AppOpsManager {
      * @see #getNotedOpCollectionMode
      * @see #collectNotedOpSync
      */
-    private static final ThreadLocal<ArrayMap<String, long[]>> sAppOpsNotedInThisBinderTransaction =
-            new ThreadLocal<>();
+    private static final ThreadLocal<ArrayMap<String, BitSet>>
+            sAppOpsNotedInThisBinderTransaction = new ThreadLocal<>();
 
     static {
         if (sAppOpInfos.length != _NUM_OP) {
@@ -2454,12 +2572,6 @@ public class AppOpsManager {
             if (sAppOpInfos[op].permission != null) {
                 sPermToOp.put(sAppOpInfos[op].permission, op);
             }
-        }
-
-        if ((_NUM_OP + Long.SIZE - 1) / Long.SIZE != 2) {
-            // The code currently assumes that the length of sAppOpsNotedInThisBinderTransaction is
-            // two longs
-            throw new IllegalStateException("notedAppOps collection code assumes < 128 appops");
         }
     }
 
@@ -2557,7 +2669,14 @@ public class AppOpsManager {
     @TestApi
     public static int permissionToOpCode(String permission) {
         Integer boxedOpCode = sPermToOp.get(permission);
-        return boxedOpCode != null ? boxedOpCode : OP_NONE;
+        if (boxedOpCode != null) {
+            return boxedOpCode;
+        }
+        if (permission != null && HealthConnectManager.isHealthPermission(
+                ActivityThread.currentApplication(), permission)) {
+            return OP_READ_WRITE_HEALTH_DATA;
+        }
+        return OP_NONE;
     }
 
     /**
@@ -7221,10 +7340,14 @@ public class AppOpsManager {
      */
     public static @Nullable String permissionToOp(@NonNull String permission) {
         final Integer opCode = sPermToOp.get(permission);
-        if (opCode == null) {
-            return null;
+        if (opCode != null) {
+            return sAppOpInfos[opCode].name;
         }
-        return sAppOpInfos[opCode].name;
+        if (HealthConnectManager.isHealthPermission(ActivityThread.currentApplication(),
+                permission)) {
+            return sAppOpInfos[OP_READ_WRITE_HEALTH_DATA].name;
+        }
+        return null;
     }
 
     /**
@@ -8453,8 +8576,9 @@ public class AppOpsManager {
      */
     public int startProxyOpNoThrow(int op, @NonNull AttributionSource attributionSource,
             @Nullable String message, boolean skipProxyOperation) {
-        return startProxyOpNoThrow(op, attributionSource, message, skipProxyOperation,
-                ATTRIBUTION_FLAGS_NONE, ATTRIBUTION_FLAGS_NONE, ATTRIBUTION_CHAIN_ID_NONE);
+        return startProxyOpNoThrow(attributionSource.getToken(), op, attributionSource, message,
+                skipProxyOperation, ATTRIBUTION_FLAGS_NONE, ATTRIBUTION_FLAGS_NONE,
+                ATTRIBUTION_CHAIN_ID_NONE);
     }
 
     /**
@@ -8466,7 +8590,8 @@ public class AppOpsManager {
      *
      * @hide
      */
-    public int startProxyOpNoThrow(int op, @NonNull AttributionSource attributionSource,
+    public int startProxyOpNoThrow(@NonNull IBinder clientId, int op,
+            @NonNull AttributionSource attributionSource,
             @Nullable String message, boolean skipProxyOperation, @AttributionFlags
             int proxyAttributionFlags, @AttributionFlags int proxiedAttributionFlags,
             int attributionChainId) {
@@ -8484,7 +8609,7 @@ public class AppOpsManager {
                 }
             }
 
-            SyncNotedAppOp syncOp = mService.startProxyOperation(op,
+            SyncNotedAppOp syncOp = mService.startProxyOperation(clientId, op,
                     attributionSource, false, collectionMode == COLLECT_ASYNC, message,
                     shouldCollectMessage, skipProxyOperation, proxyAttributionFlags,
                     proxiedAttributionFlags, attributionChainId);
@@ -8582,9 +8707,10 @@ public class AppOpsManager {
      */
     public void finishProxyOp(@NonNull String op, int proxiedUid,
             @NonNull String proxiedPackageName, @Nullable String proxiedAttributionTag) {
-        finishProxyOp(op, new AttributionSource(mContext.getAttributionSource(),
+        IBinder token = mContext.getAttributionSource().getToken();
+        finishProxyOp(token, op, new AttributionSource(mContext.getAttributionSource(),
                 new AttributionSource(proxiedUid, proxiedPackageName,  proxiedAttributionTag,
-                        mContext.getAttributionSource().getToken())), /*skipProxyOperation*/ false);
+                        token)), /*skipProxyOperation*/ false);
     }
 
     /**
@@ -8599,10 +8725,11 @@ public class AppOpsManager {
      *
      * @hide
      */
-    public void finishProxyOp(@NonNull String op, @NonNull AttributionSource attributionSource,
-            boolean skipProxyOperation) {
+    public void finishProxyOp(@NonNull IBinder clientId, @NonNull String op,
+            @NonNull AttributionSource attributionSource, boolean skipProxyOperation) {
         try {
-            mService.finishProxyOperation(strOpToOp(op), attributionSource, skipProxyOperation);
+            mService.finishProxyOperation(clientId, strOpToOp(op), attributionSource,
+                    skipProxyOperation);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -8684,10 +8811,10 @@ public class AppOpsManager {
      */
     public static class PausedNotedAppOpsCollection {
         final int mUid;
-        final @Nullable ArrayMap<String, long[]> mCollectedNotedAppOps;
+        final @Nullable ArrayMap<String, BitSet> mCollectedNotedAppOps;
 
         PausedNotedAppOpsCollection(int uid, @Nullable ArrayMap<String,
-                long[]> collectedNotedAppOps) {
+                BitSet> collectedNotedAppOps) {
             mUid = uid;
             mCollectedNotedAppOps = collectedNotedAppOps;
         }
@@ -8705,7 +8832,7 @@ public class AppOpsManager {
     public static @Nullable PausedNotedAppOpsCollection pauseNotedAppOpsCollection() {
         Integer previousUid = sBinderThreadCallingUid.get();
         if (previousUid != null) {
-            ArrayMap<String, long[]> previousCollectedNotedAppOps =
+            ArrayMap<String, BitSet> previousCollectedNotedAppOps =
                     sAppOpsNotedInThisBinderTransaction.get();
 
             sBinderThreadCallingUid.remove();
@@ -8779,23 +8906,19 @@ public class AppOpsManager {
         // We are inside of a two-way binder call. Delivered to caller via
         // {@link #prefixParcelWithAppOpsIfNeeded}
         int op = sOpStrToOp.get(syncOp.getOp());
-        ArrayMap<String, long[]> appOpsNoted = sAppOpsNotedInThisBinderTransaction.get();
+        ArrayMap<String, BitSet> appOpsNoted = sAppOpsNotedInThisBinderTransaction.get();
         if (appOpsNoted == null) {
             appOpsNoted = new ArrayMap<>(1);
             sAppOpsNotedInThisBinderTransaction.set(appOpsNoted);
         }
 
-        long[] appOpsNotedForAttribution = appOpsNoted.get(syncOp.getAttributionTag());
+        BitSet appOpsNotedForAttribution = appOpsNoted.get(syncOp.getAttributionTag());
         if (appOpsNotedForAttribution == null) {
-            appOpsNotedForAttribution = new long[2];
+            appOpsNotedForAttribution = new BitSet(_NUM_OP);
             appOpsNoted.put(syncOp.getAttributionTag(), appOpsNotedForAttribution);
         }
 
-        if (op < 64) {
-            appOpsNotedForAttribution[0] |= 1L << op;
-        } else {
-            appOpsNotedForAttribution[1] |= 1L << (op - 64);
-        }
+        appOpsNotedForAttribution.set(op);
     }
 
     /** @hide */
@@ -8869,7 +8992,7 @@ public class AppOpsManager {
      */
     // TODO (b/186872903) Refactor how sync noted ops are propagated.
     public static void prefixParcelWithAppOpsIfNeeded(@NonNull Parcel p) {
-        ArrayMap<String, long[]> notedAppOps = sAppOpsNotedInThisBinderTransaction.get();
+        ArrayMap<String, BitSet> notedAppOps = sAppOpsNotedInThisBinderTransaction.get();
         if (notedAppOps == null) {
             return;
         }
@@ -8881,8 +9004,15 @@ public class AppOpsManager {
 
         for (int i = 0; i < numAttributionWithNotesAppOps; i++) {
             p.writeString(notedAppOps.keyAt(i));
-            p.writeLong(notedAppOps.valueAt(i)[0]);
-            p.writeLong(notedAppOps.valueAt(i)[1]);
+            // Bitmask's toLongArray will truncate the array, if upper bits arent used
+            long[] notedOpsMask = notedAppOps.valueAt(i).toLongArray();
+            for (int j = 0; j < BITMASK_LEN; j++) {
+                if (j < notedOpsMask.length) {
+                    p.writeLong(notedOpsMask[j]);
+                } else {
+                    p.writeLong(0);
+                }
+            }
         }
     }
 
@@ -8901,12 +9031,13 @@ public class AppOpsManager {
 
         for (int i = 0; i < numAttributionsWithNotedAppOps; i++) {
             String attributionTag = p.readString();
-            long[] rawNotedAppOps = new long[2];
-            rawNotedAppOps[0] = p.readLong();
-            rawNotedAppOps[1] = p.readLong();
+            long[] rawNotedAppOps = new long[BITMASK_LEN];
+            for (int j = 0; j < rawNotedAppOps.length; j++) {
+                rawNotedAppOps[j] = p.readLong();
+            }
+            BitSet notedAppOps = BitSet.valueOf(rawNotedAppOps);
 
-            if (rawNotedAppOps[0] != 0 || rawNotedAppOps[1] != 0) {
-                BitSet notedAppOps = BitSet.valueOf(rawNotedAppOps);
+            if (!notedAppOps.isEmpty()) {
 
                 synchronized (sLock) {
                     for (int code = notedAppOps.nextSetBit(0); code != -1;

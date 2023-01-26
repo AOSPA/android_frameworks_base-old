@@ -23,6 +23,7 @@ import static android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL
 import static android.app.ActivityManager.LOCK_TASK_MODE_NONE;
 import static android.app.AppOpsManager.MODE_ALLOWED;
 import static android.app.AppOpsManager.MODE_DEFAULT;
+import static android.app.AppOpsManager.OPSTR_SYSTEM_EXEMPT_FROM_APP_STANDBY;
 import static android.app.admin.DeviceAdminReceiver.ACTION_COMPLIANCE_ACKNOWLEDGEMENT_REQUIRED;
 import static android.app.admin.DeviceAdminReceiver.EXTRA_TRANSFER_OWNERSHIP_ADMIN_EXTRAS_BUNDLE;
 import static android.app.admin.DevicePolicyManager.ACTION_CHECK_POLICY_COMPLIANCE;
@@ -46,6 +47,7 @@ import static android.app.admin.DevicePolicyManager.DELEGATION_SECURITY_LOGGING;
 import static android.app.admin.DevicePolicyManager.DEVICE_OWNER_TYPE_DEFAULT;
 import static android.app.admin.DevicePolicyManager.DEVICE_OWNER_TYPE_FINANCED;
 import static android.app.admin.DevicePolicyManager.ENCRYPTION_STATUS_ACTIVE_PER_USER;
+import static android.app.admin.DevicePolicyManager.EXEMPT_FROM_APP_STANDBY;
 import static android.app.admin.DevicePolicyManager.EXTRA_PROVISIONING_ACCOUNT_TO_MIGRATE;
 import static android.app.admin.DevicePolicyManager.EXTRA_RESOURCE_IDS;
 import static android.app.admin.DevicePolicyManager.EXTRA_RESOURCE_TYPE;
@@ -330,8 +332,10 @@ import android.util.ArraySet;
 import android.util.AtomicFile;
 import android.util.DebugUtils;
 import android.util.IndentingPrintWriter;
+import android.util.IntArray;
 import android.util.Log;
 import android.util.Pair;
+import android.util.Slog;
 import android.util.SparseArray;
 import android.util.Xml;
 import android.view.IWindowManager;
@@ -646,6 +650,15 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.Q)
     private static final long USE_SET_LOCATION_ENABLED = 117835097L;
 
+    /**
+     * Forces wipeDataNoLock to attempt removing the user or throw an error as
+     * opposed to trying to factory reset the device first and only then falling back to user
+     * removal.
+     */
+    @ChangeId
+    @EnabledSince(targetSdkVersion = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    public static final long EXPLICIT_WIPE_BEHAVIOUR = 242193913L;
+
     // Only add to the end of the list. Do not change or rearrange these values, that will break
     // historical data. Do not use negative numbers or zero, logger only handles positive
     // integers.
@@ -660,6 +673,17 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             COPY_ACCOUNT_TIMED_OUT,
             COPY_ACCOUNT_EXCEPTION})
     private @interface CopyAccountStatus {}
+
+    /**
+     * Mapping of {@link android.app.admin.DevicePolicyManager.ApplicationExemptionConstants} to
+     * corresponding app-ops.
+     */
+    private static final Map<Integer, String> APPLICATION_EXEMPTION_CONSTANTS_TO_APP_OPS =
+            new ArrayMap<>();
+    static {
+        APPLICATION_EXEMPTION_CONSTANTS_TO_APP_OPS.put(
+                EXEMPT_FROM_APP_STANDBY, OPSTR_SYSTEM_EXEMPT_FROM_APP_STANDBY);
+    }
 
     /**
      * Admin apps targeting Android S+ may not use
@@ -2878,60 +2902,60 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
         policy.validatePasswordOwner();
         updateMaximumTimeToLockLocked(userHandle);
-        updateLockTaskPackagesLocked(policy.mLockTaskPackages, userHandle);
+        updateLockTaskPackagesLocked(mContext, policy.mLockTaskPackages, userHandle);
         updateLockTaskFeaturesLocked(policy.mLockTaskFeatures, userHandle);
         if (policy.mStatusBarDisabled) {
             setStatusBarDisabledInternal(policy.mStatusBarDisabled, userHandle);
         }
     }
 
-    private void updateLockTaskPackagesLocked(List<String> packages, int userId) {
-        String[] packagesArray = null;
+    static void updateLockTaskPackagesLocked(Context context, List<String> packages, int userId) {
+        Binder.withCleanCallingIdentity(() -> {
 
-        if (!packages.isEmpty()) {
-            // When adding packages, we need to include the exempt apps so they can still be
-            // launched (ideally we should use a different AM API as these apps don't need to use
-            // lock-task mode).
-            // They're not added when the packages is empty though, as in that case we're disabling
-            // lock-task mode.
-            List<String> exemptApps = listPolicyExemptAppsUnchecked();
-            if (!exemptApps.isEmpty()) {
-                // TODO(b/175377361): add unit test to verify it (cannot be CTS because the policy-
-                // -exempt apps are provided by OEM and the test would have no control over it) once
-                // tests are migrated to the new infra-structure
-                HashSet<String> updatedPackages = new HashSet<>(packages);
-                updatedPackages.addAll(exemptApps);
-                if (VERBOSE_LOG) {
-                    Slogf.v(LOG_TAG, "added %d policy-exempt apps to %d lock task packages. Final "
-                            + "list: %s", exemptApps.size(), packages.size(), updatedPackages);
+            String[] packagesArray = null;
+            if (!packages.isEmpty()) {
+                // When adding packages, we need to include the exempt apps so they can still be
+                // launched (ideally we should use a different AM API as these apps don't need to
+                // use lock-task mode).
+                // They're not added when the packages is empty though, as in that case we're
+                // disabling lock-task mode.
+                List<String> exemptApps = listPolicyExemptAppsUnchecked(context);
+                if (!exemptApps.isEmpty()) {
+                    // TODO(b/175377361): add unit test to verify it (cannot be CTS because the
+                    //  policy-exempt apps are provided by OEM and the test would have no control
+                    //  over it) once tests are migrated to the new infra-structure
+                    HashSet<String> updatedPackages = new HashSet<>(packages);
+                    updatedPackages.addAll(exemptApps);
+                    if (VERBOSE_LOG) {
+                        Slogf.v(LOG_TAG, "added %d policy-exempt apps to %d lock task "
+                                + "packages. Final list: %s",
+                                exemptApps.size(), packages.size(), updatedPackages);
+                    }
+                    packagesArray = updatedPackages.toArray(new String[updatedPackages.size()]);
                 }
-                packagesArray = updatedPackages.toArray(new String[updatedPackages.size()]);
             }
-        }
 
-        if (packagesArray == null) {
-            packagesArray = packages.toArray(new String[packages.size()]);
-        }
-
-        long ident = mInjector.binderClearCallingIdentity();
-        try {
-            mInjector.getIActivityManager().updateLockTaskPackages(userId, packagesArray);
-        } catch (RemoteException e) {
-            // Not gonna happen.
-        } finally {
-            mInjector.binderRestoreCallingIdentity(ident);
-        }
+            if (packagesArray == null) {
+                packagesArray = packages.toArray(new String[packages.size()]);
+            }
+            try {
+                ActivityManager.getService().updateLockTaskPackages(userId, packagesArray);
+            } catch (RemoteException e) {
+                // Shouldn't happen.
+                Slog.wtf(LOG_TAG, "Remote Exception: ", e);
+            }
+        });
     }
 
-    private void updateLockTaskFeaturesLocked(int flags, int userId) {
-        long ident = mInjector.binderClearCallingIdentity();
-        try {
-            mInjector.getIActivityTaskManager().updateLockTaskFeatures(userId, flags);
-        } catch (RemoteException e) {
-            // Not gonna happen.
-        } finally {
-            mInjector.binderRestoreCallingIdentity(ident);
-        }
+    static void updateLockTaskFeaturesLocked(int flags, int userId) {
+        Binder.withCleanCallingIdentity(() -> {
+            try {
+                ActivityTaskManager.getService().updateLockTaskFeatures(userId, flags);
+            } catch (RemoteException e) {
+                // Shouldn't happen.
+                Slog.wtf(LOG_TAG, "Remote Exception: ", e);
+            }
+        });
     }
 
     static void validateQualityConstant(int quality) {
@@ -6699,8 +6723,8 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     }
 
     @Override
-    public void wipeDataWithReason(int flags, String wipeReasonForUser,
-            boolean calledOnParentInstance) {
+    public void wipeDataWithReason(int flags, @NonNull String wipeReasonForUser,
+            boolean calledOnParentInstance, boolean factoryReset) {
         if (!mHasFeature && !hasCallingOrSelfPermission(permission.MASTER_CLEAR)) {
             return;
         }
@@ -6782,7 +6806,8 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 "DevicePolicyManager.wipeDataWithReason() from %s, organization-owned? %s",
                 adminName, calledByProfileOwnerOnOrgOwnedDevice);
 
-        wipeDataNoLock(adminComp, flags, internalReason, wipeReasonForUser, userId);
+        wipeDataNoLock(adminComp, flags, internalReason, wipeReasonForUser, userId,
+                calledOnParentInstance, factoryReset);
     }
 
     private String getGenericWipeReason(
@@ -6844,8 +6869,13 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         Slogf.i(LOG_TAG, "Cleaning up device-wide policies done.");
     }
 
+    /**
+     * @param factoryReset null: legacy behaviour, false: attempt to remove user, true: attempt to
+     *                     factory reset
+     */
     private void wipeDataNoLock(ComponentName admin, int flags, String internalReason,
-                                String wipeReasonForUser, int userId) {
+            @NonNull String wipeReasonForUser, int userId, boolean calledOnParentInstance,
+            @Nullable Boolean factoryReset) {
         wtfIfInLock();
 
         mInjector.binderWithCleanCallingIdentity(() -> {
@@ -6863,7 +6893,39 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                         + " restriction is set for user " + userId);
             }
 
-            if (userId == UserHandle.USER_SYSTEM) {
+            boolean isSystemUser = userId == UserHandle.USER_SYSTEM;
+            boolean wipeDevice;
+            if (factoryReset == null || !mInjector.isChangeEnabled(EXPLICIT_WIPE_BEHAVIOUR,
+                    admin.getPackageName(),
+                    userId)) {
+                // Legacy mode
+                wipeDevice = isSystemUser;
+            } else {
+                // Explicit behaviour
+                if (factoryReset) {
+                    // TODO(b/254031494) Replace with new factory reset permission checks
+                    boolean hasPermission = isDeviceOwnerUserId(userId)
+                            || (isOrganizationOwnedDeviceWithManagedProfile()
+                            && calledOnParentInstance);
+                    Preconditions.checkState(hasPermission,
+                            "Admin %s does not have permission to factory reset the device.",
+                            userId);
+                    wipeDevice = true;
+                } else {
+                    Preconditions.checkCallAuthorization(!isSystemUser,
+                            "User %s is a system user and cannot be removed", userId);
+                    boolean isLastNonHeadlessUser = getUserInfo(userId).isFull()
+                            && mUserManager.getAliveUsers().stream()
+                            .filter((it) -> it.getUserHandle().getIdentifier() != userId)
+                            .noneMatch(UserInfo::isFull);
+                    Preconditions.checkState(!isLastNonHeadlessUser,
+                            "Removing user %s would leave the device without any active users. "
+                                    + "Consider factory resetting the device instead.",
+                            userId);
+                    wipeDevice = false;
+                }
+            }
+            if (wipeDevice) {
                 forceWipeDeviceNoLock(
                         (flags & WIPE_EXTERNAL_STORAGE) != 0,
                         internalReason,
@@ -7131,7 +7193,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     }
 
     @Override
-    public void reportFailedPasswordAttempt(int userHandle) {
+    public void reportFailedPasswordAttempt(int userHandle, boolean parent) {
         Preconditions.checkArgumentNonnegative(userHandle, "Invalid userId");
 
         final CallerIdentity caller = getCallerIdentity();
@@ -7153,7 +7215,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 saveSettingsLocked(userHandle);
                 if (mHasFeature) {
                     strictestAdmin = getAdminWithMinimumFailedPasswordsForWipeLocked(
-                            userHandle, /* parent */ false);
+                            userHandle, /* parent= */ false);
                     int max = strictestAdmin != null
                             ? strictestAdmin.maximumFailedPasswordsForWipe : 0;
                     if (max > 0 && policy.mFailedPasswordAttempts >= max) {
@@ -7183,10 +7245,13 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             // IMPORTANT: Call without holding the lock to prevent deadlock.
             try {
                 wipeDataNoLock(strictestAdmin.info.getComponent(),
-                        /*flags=*/ 0,
-                        /*reason=*/ "reportFailedPasswordAttempt()",
+                        /* flags= */ 0,
+                        /* reason= */ "reportFailedPasswordAttempt()",
                         getFailedPasswordAttemptWipeMessage(),
-                        userId);
+                        userId,
+                        /* calledOnParentInstance= */ parent,
+                        // factoryReset=null to enable U- behaviour
+                        /* factoryReset= */ null);
             } catch (SecurityException e) {
                 Slogf.w(LOG_TAG, "Failed to wipe user " + userId
                         + " after max failed password attempts reached.", e);
@@ -7195,7 +7260,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
         if (mInjector.securityLogIsLoggingEnabled()) {
             SecurityLog.writeEvent(SecurityLog.TAG_KEYGUARD_DISMISS_AUTH_ATTEMPT,
-                    /*result*/ 0, /*method strength*/ 1);
+                    /* result= */ 0, /* method strength= */ 1);
         }
     }
 
@@ -8941,7 +9006,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         policy.mUserProvisioningState = DevicePolicyManager.STATE_USER_UNMANAGED;
         policy.mAffiliationIds.clear();
         policy.mLockTaskPackages.clear();
-        updateLockTaskPackagesLocked(policy.mLockTaskPackages, userId);
+        updateLockTaskPackagesLocked(mContext, policy.mLockTaskPackages, userId);
         policy.mLockTaskFeatures = DevicePolicyManager.LOCK_TASK_FEATURE_NONE;
         saveSettingsLocked(userId);
 
@@ -11217,7 +11282,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     private String[] populateNonExemptAndExemptFromPolicyApps(String[] packageNames,
             Set<String> outputExemptApps) {
         Preconditions.checkArgument(outputExemptApps.isEmpty(), "outputExemptApps is not empty");
-        List<String> exemptAppsList = listPolicyExemptAppsUnchecked();
+        List<String> exemptAppsList = listPolicyExemptAppsUnchecked(mContext);
         if (exemptAppsList.isEmpty()) {
             return packageNames;
         }
@@ -11330,16 +11395,16 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 hasCallingOrSelfPermission(permission.MANAGE_DEVICE_ADMINS)
                         || isDefaultDeviceOwner(caller) || isProfileOwner(caller));
 
-        return listPolicyExemptAppsUnchecked();
+        return listPolicyExemptAppsUnchecked(mContext);
     }
 
-    private List<String> listPolicyExemptAppsUnchecked() {
+    private static List<String> listPolicyExemptAppsUnchecked(Context context) {
         // TODO(b/181238156): decide whether it should only list the apps set by the resources,
         // or also the "critical" apps defined by PersonalAppsSuspensionHelper (like SMS app).
         // If it's the latter, refactor PersonalAppsSuspensionHelper so it (or a superclass) takes
         // the resources on constructor.
-        String[] core = mContext.getResources().getStringArray(R.array.policy_exempt_apps);
-        String[] vendor = mContext.getResources().getStringArray(R.array.vendor_policy_exempt_apps);
+        String[] core = context.getResources().getStringArray(R.array.policy_exempt_apps);
+        String[] vendor = context.getResources().getStringArray(R.array.vendor_policy_exempt_apps);
 
         int size = core.length + vendor.length;
         Set<String> apps = new ArraySet<>(size);
@@ -11516,7 +11581,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 && (isProfileOwner(caller) || isDefaultDeviceOwner(caller)))
                 || (caller.hasPackage() && isCallerDelegate(caller, DELEGATION_PACKAGE_ACCESS)));
 
-        List<String> exemptApps = listPolicyExemptAppsUnchecked();
+        List<String> exemptApps = listPolicyExemptAppsUnchecked(mContext);
         if (exemptApps.contains(packageName)) {
             Slogf.d(LOG_TAG, "setApplicationHidden(): ignoring %s as it's on policy-exempt list",
                     packageName);
@@ -12191,7 +12256,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
         // Store the settings persistently.
         saveSettingsLocked(userHandle);
-        updateLockTaskPackagesLocked(packages, userHandle);
+        updateLockTaskPackagesLocked(mContext, packages, userHandle);
     }
 
     @Override
@@ -12210,7 +12275,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     @Override
     public boolean isLockTaskPermitted(String pkg) {
         // Check policy-exempt apps first, as it doesn't require the lock
-        if (listPolicyExemptAppsUnchecked().contains(pkg)) {
+        if (listPolicyExemptAppsUnchecked(mContext).contains(pkg)) {
             if (VERBOSE_LOG) {
                 Slogf.v(LOG_TAG, "isLockTaskPermitted(%s): returning true for policy-exempt app",
                             pkg);
@@ -16966,6 +17031,88 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             }
             return true;
         });
+    }
+
+    @Override
+    public void setApplicationExemptions(String packageName, int[] exemptions) {
+        if (!mHasFeature) {
+            return;
+        }
+        Preconditions.checkStringNotEmpty(packageName, "Package name cannot be empty.");
+        Objects.requireNonNull(exemptions, "Application exemptions must not be null.");
+        Preconditions.checkArgument(areApplicationExemptionsValid(exemptions),
+                "Invalid application exemption constant found in application exemptions set.");
+        Preconditions.checkCallAuthorization(
+                hasCallingOrSelfPermission(permission.MANAGE_DEVICE_POLICY_APP_EXEMPTIONS));
+
+        final CallerIdentity caller = getCallerIdentity();
+        final ApplicationInfo packageInfo;
+        packageInfo = getPackageInfoWithNullCheck(packageName, caller);
+
+        for (Map.Entry<Integer, String> entry :
+                APPLICATION_EXEMPTION_CONSTANTS_TO_APP_OPS.entrySet()) {
+            int currentMode = mInjector.getAppOpsManager().unsafeCheckOpNoThrow(
+                    entry.getValue(), packageInfo.uid, packageInfo.packageName);
+            int newMode = ArrayUtils.contains(exemptions, entry.getKey())
+                    ? MODE_ALLOWED : MODE_DEFAULT;
+            mInjector.binderWithCleanCallingIdentity(() -> {
+                if (currentMode != newMode) {
+                    mInjector.getAppOpsManager()
+                            .setMode(entry.getValue(),
+                                    packageInfo.uid,
+                                    packageName,
+                                    newMode);
+                }
+            });
+        }
+    }
+
+    @Override
+    public int[] getApplicationExemptions(String packageName) {
+        if (!mHasFeature) {
+            return new int[0];
+        }
+        Preconditions.checkStringNotEmpty(packageName, "Package name cannot be empty.");
+        Preconditions.checkCallAuthorization(
+                hasCallingOrSelfPermission(permission.MANAGE_DEVICE_POLICY_APP_EXEMPTIONS));
+
+        final CallerIdentity caller = getCallerIdentity();
+        final ApplicationInfo packageInfo;
+        packageInfo = getPackageInfoWithNullCheck(packageName, caller);
+
+        IntArray appliedExemptions = new IntArray(0);
+        for (Map.Entry<Integer, String> entry :
+                APPLICATION_EXEMPTION_CONSTANTS_TO_APP_OPS.entrySet()) {
+            if (mInjector.getAppOpsManager().unsafeCheckOpNoThrow(
+                    entry.getValue(), packageInfo.uid, packageInfo.packageName) == MODE_ALLOWED) {
+                appliedExemptions.add(entry.getKey());
+            }
+        }
+        return appliedExemptions.toArray();
+    }
+
+    private ApplicationInfo getPackageInfoWithNullCheck(String packageName, CallerIdentity caller) {
+        final ApplicationInfo packageInfo =
+                mInjector.getPackageManagerInternal().getApplicationInfo(
+                        packageName,
+                        /* flags= */ 0,
+                        caller.getUid(),
+                        caller.getUserId());
+        if (packageInfo == null) {
+            throw new ServiceSpecificException(
+                    DevicePolicyManager.ERROR_PACKAGE_NAME_NOT_FOUND,
+                    "Package name not found.");
+        }
+        return packageInfo;
+    }
+
+    private boolean areApplicationExemptionsValid(int[] exemptions) {
+        for (int exemption : exemptions) {
+            if (!APPLICATION_EXEMPTION_CONSTANTS_TO_APP_OPS.containsKey(exemption)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private boolean isCallingFromPackage(String packageName, int callingUid) {

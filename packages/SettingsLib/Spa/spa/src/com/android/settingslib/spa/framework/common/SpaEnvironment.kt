@@ -17,10 +17,12 @@
 package com.android.settingslib.spa.framework.common
 
 import android.app.Activity
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
+import com.android.settingslib.spa.slice.SettingsSliceDataRepository
 
 private const val TAG = "SpaEnvironment"
 
@@ -46,6 +48,10 @@ object SpaEnvironmentFactory {
         Log.d(TAG, "resetForPreview")
     }
 
+    fun isReady(): Boolean {
+        return spaEnvironment != null
+    }
+
     val instance: SpaEnvironment
         get() {
             if (spaEnvironment == null)
@@ -59,14 +65,19 @@ abstract class SpaEnvironment(context: Context) {
 
     val entryRepository = lazy { SettingsEntryRepository(pageProviderRepository.value) }
 
+    val sliceDataRepository = lazy { SettingsSliceDataRepository(entryRepository.value) }
+
     // In Robolectric test, applicationContext is not available. Use context as fallback.
     val appContext: Context = context.applicationContext ?: context
 
-    open val browseActivityClass: Class<out Activity>? = null
-
-    open val searchProviderAuthorities: String? = null
-
     open val logger: SpaLogger = object : SpaLogger {}
+
+    open val browseActivityClass: Class<out Activity>? = null
+    open val sliceBroadcastReceiverClass: Class<out BroadcastReceiver>? = null
+
+    // Specify provider authorities for debugging purpose.
+    open val searchProviderAuthorities: String? = null
+    open val sliceProviderAuthorities: String? = null
 
     // TODO: add other environment setup here.
 }

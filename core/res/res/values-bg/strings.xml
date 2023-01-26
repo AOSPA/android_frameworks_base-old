@@ -395,6 +395,30 @@
     <string name="permdesc_persistentActivity" product="default" msgid="1914841924366562051">"Разрешава на приложението да прави части от себе си постоянни в паметта. Това може да ограничи наличната за другите приложения, забавяйки телефона."</string>
     <string name="permlab_foregroundService" msgid="1768855976818467491">"изпълнение на услуги на преден план"</string>
     <string name="permdesc_foregroundService" msgid="8720071450020922795">"Разрешава на приложението да се възползва от услуги на преден план."</string>
+    <string name="permlab_foregroundServiceCamera" msgid="7814751737955715297">"изпълнение на услуги на преден план от тип camera"</string>
+    <string name="permdesc_foregroundServiceCamera" msgid="6973701931250595727">"Разрешава на приложението да се възползва от услуги на преден план от тип camera"</string>
+    <string name="permlab_foregroundServiceConnectedDevice" msgid="3019650546176872501">"изпълнение на услуги на преден план от тип connectedDevice"</string>
+    <string name="permdesc_foregroundServiceConnectedDevice" msgid="1067457315741352963">"Разрешава на приложението да се възползва от услуги на преден план от тип connectedDevice"</string>
+    <string name="permlab_foregroundServiceDataSync" msgid="5847463514326881076">"изпълнение на услуги на преден план от тип dataSync"</string>
+    <string name="permdesc_foregroundServiceDataSync" msgid="2267140263423973050">"Разрешава на приложението да се възползва от услуги на преден план от тип dataSync"</string>
+    <string name="permlab_foregroundServiceLocation" msgid="3745428302378535690">"изпълнение на услуги на преден план от тип location"</string>
+    <string name="permdesc_foregroundServiceLocation" msgid="118894034365177183">"Разрешава на приложението да се възползва от услуги на преден план от тип location"</string>
+    <string name="permlab_foregroundServiceMediaPlayback" msgid="4002687983891935514">"изпълнение на услуги на преден план от тип mediaPlayback"</string>
+    <string name="permdesc_foregroundServiceMediaPlayback" msgid="3638032446063968043">"Разрешава на приложението да се възползва от услуги на преден план от тип mediaPlayback"</string>
+    <string name="permlab_foregroundServiceMediaProjection" msgid="2630868915733312527">"изпълнение на услуги на преден план от тип mediaProjection"</string>
+    <string name="permdesc_foregroundServiceMediaProjection" msgid="4805677128082002298">"Разрешава на приложението да се възползва от услуги на преден план от тип mediaProjection"</string>
+    <string name="permlab_foregroundServiceMicrophone" msgid="7390033424890545399">"изпълнение на услуги на преден план от тип microphone"</string>
+    <string name="permdesc_foregroundServiceMicrophone" msgid="1206041516173483201">"Разрешава на приложението да се възползва от услуги на преден план от тип microphone"</string>
+    <string name="permlab_foregroundServicePhoneCall" msgid="627937743867697892">"изпълнение на услуги на преден план от тип phoneCall"</string>
+    <string name="permdesc_foregroundServicePhoneCall" msgid="5941660252587015147">"Разрешава на приложението да се възползва от услуги на преден план от тип phoneCall"</string>
+    <string name="permlab_foregroundServiceHealth" msgid="3675776442080928184">"изпълнение на услуги на преден план от тип health"</string>
+    <string name="permdesc_foregroundServiceHealth" msgid="2024586220562667185">"Разрешава на приложението да се възползва от услуги на преден план от тип health"</string>
+    <string name="permlab_foregroundServiceRemoteMessaging" msgid="105670277002780950">"изпълнение на услуги на преден план от тип remoteMessaging"</string>
+    <string name="permdesc_foregroundServiceRemoteMessaging" msgid="8767598075877576277">"Разрешава на приложението да се възползва от услуги на преден план от тип remoteMessaging"</string>
+    <string name="permlab_foregroundServiceSystemExempted" msgid="1597663713590612685">"изпълнение на услуги на преден план от тип systemExempted"</string>
+    <string name="permdesc_foregroundServiceSystemExempted" msgid="947381760834649622">"Разрешава на приложението да се възползва от услуги на преден план от тип systemExempted"</string>
+    <string name="permlab_foregroundServiceSpecialUse" msgid="7973536745876645082">"изпълнение на услуги на преден план от тип specialUse"</string>
+    <string name="permdesc_foregroundServiceSpecialUse" msgid="646713654541885919">"Разрешава на приложението да се възползва от услуги на преден план от тип specialUse"</string>
     <string name="permlab_getPackageSize" msgid="375391550792886641">"измерване на ползваното от приложението място в хранилището"</string>
     <string name="permdesc_getPackageSize" msgid="742743530909966782">"Разрешава на приложението да извлича размера на своя код, данни и кеш"</string>
     <string name="permlab_writeSettings" msgid="8057285063719277394">"промяна на системните настройки"</string>
@@ -447,6 +471,8 @@
     <string name="permdesc_recordAudio" msgid="5857246765327514062">"Когато се използва, това приложение може да записва аудио посредством микрофона."</string>
     <string name="permlab_recordBackgroundAudio" msgid="5891032812308878254">"записва аудио на заден план"</string>
     <string name="permdesc_recordBackgroundAudio" msgid="1992623135737407516">"Това приложение може по всяко време да записва аудио посредством микрофона."</string>
+    <string name="permlab_detectScreenCapture" msgid="4447042362828799433">"установяване на заснемания на екрана на прозорците на приложението"</string>
+    <string name="permdesc_detectScreenCapture" msgid="3485784917960342284">"Това приложение ще получава известия, когато по време на използването му бъде направена екранна снимка."</string>
     <string name="permlab_sim_communication" msgid="176788115994050692">"изпращане на команди до SIM картата"</string>
     <string name="permdesc_sim_communication" msgid="4179799296415957960">"Разрешава на приложението да изпраща команди до SIM картата. Това е много опасно."</string>
     <string name="permlab_activityRecognition" msgid="1782303296053990884">"разпознаване на физическата активност"</string>
@@ -698,10 +724,8 @@
     <string name="permdesc_readMediaVideo" msgid="3846400073770403528">"Разрешава на приложението да чете видеофайлове от споделеното ви хранилище."</string>
     <string name="permlab_readMediaImages" msgid="4057590631020986789">"да чете графични файлове от споделеното хранилище"</string>
     <string name="permdesc_readMediaImages" msgid="5836219373138469259">"Разрешава на приложението да чете графични файлове от споделеното ви хранилище."</string>
-    <!-- no translation found for permlab_readVisualUserSelect (5516204215354667586) -->
-    <skip />
-    <!-- no translation found for permdesc_readVisualUserSelect (8027174717714968217) -->
-    <skip />
+    <string name="permlab_readVisualUserSelect" msgid="5516204215354667586">"да чете избраните от потребителя графични и видеофайлове от споделеното хранилище"</string>
+    <string name="permdesc_readVisualUserSelect" msgid="8027174717714968217">"Разрешава на приложението да чете графичните и видеофайловете, които сте избрали от споделеното си хранилище."</string>
     <string name="permlab_sdcardWrite" msgid="4863021819671416668">"промяна или изтрив. на съдърж. от сподел. ви хранил."</string>
     <string name="permdesc_sdcardWrite" msgid="8376047679331387102">"Разрешава на прил. да записва съдърж. от сподел. ви хранил."</string>
     <string name="permlab_use_sip" msgid="8250774565189337477">"извършване/получаване на обаждания чрез SIP"</string>
@@ -2052,12 +2076,6 @@
     <string name="harmful_app_warning_uninstall" msgid="6472912975664191772">"ДЕИНСТАЛИРАНЕ"</string>
     <string name="harmful_app_warning_open_anyway" msgid="5963657791740211807">"ОТВАРЯНЕ"</string>
     <string name="harmful_app_warning_title" msgid="8794823880881113856">"Открито е опасно приложение"</string>
-    <string name="log_access_confirmation_title" msgid="2343578467290592708">"Да се разреши ли на <xliff:g id="LOG_ACCESS_APP_NAME">%s</xliff:g> достъп до всички регистрационни файлове за устройството?"</string>
-    <string name="log_access_confirmation_allow" msgid="5302517782599389507">"Разрешаване на еднократен достъп"</string>
-    <string name="log_access_confirmation_deny" msgid="7685790957455099845">"Забраняване"</string>
-    <string name="log_access_confirmation_body" product="default" msgid="1806692062668620735">"В регистрационните файлове за устройството се записва какво се извършва на него. Приложенията могат да използват тези регистрационни файлове, за да откриват и отстраняват проблеми.\n\nНякои регистрационни файлове за устройството може да съдържат поверителна информация, затова разрешавайте достъп до всички тях само на приложения, на които имате доверие. \n\nАко не разрешите на това приложение достъп до всички регистрационни файлове за устройството, то пак може да осъществява достъп до собствените си регистрационни файлове. Производителят на устройството пак може да има достъп до някои регистрационни файлове или информация на устройството ви."</string>
-    <string name="log_access_confirmation_body" product="tv" msgid="7379536536425265262">"В регистрационните файлове за устройството се записва какво се извършва на него. Приложенията могат да използват тези регистрационни файлове, за да откриват и отстраняват проблеми.\n\nНякои регистрационни файлове за устройството може да съдържат поверителна информация, затова разрешавайте достъп до всички тях само на приложения, на които имате доверие. \n\nАко не разрешите на това приложение достъп до всички регистрационни файлове за устройството, то пак може да осъществява достъп до собствените си регистрационни файлове. Производителят на устройството може да има достъп до някои регистрационни файлове или информация на устройството ви.\n\nНаучете повече на адрес g.co/android/devicelogs."</string>
-    <string name="log_access_do_not_show_again" msgid="1058690599083091552">"Да не се показва пак"</string>
     <string name="slices_permission_request" msgid="3677129866636153406">"<xliff:g id="APP_0">%1$s</xliff:g> иска да показва части от <xliff:g id="APP_2">%2$s</xliff:g>"</string>
     <string name="screenshot_edit" msgid="7408934887203689207">"Редактиране"</string>
     <string name="volume_dialog_ringer_guidance_vibrate" msgid="2055927873175228519">"При обаждания и известия устройството ще вибрира"</string>
@@ -2298,6 +2316,7 @@
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"Няма достъп до камерата на телефона от вашия <xliff:g id="DEVICE">%1$s</xliff:g>"</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"Няма достъп до камерата на таблета от вашия <xliff:g id="DEVICE">%1$s</xliff:g>"</string>
     <string name="vdm_secure_window" msgid="161700398158812314">"До това съдържание не може да се осъществи достъп при поточно предаване. Вместо това опитайте от телефона си."</string>
+    <string name="vdm_pip_blocked" msgid="4036107522497281397">"Функцията „Картина в картината“ не е налице при поточно предаване"</string>
     <string name="system_locale_title" msgid="711882686834677268">"Стандартно за системата"</string>
     <string name="default_card_name" msgid="9198284935962911468">"КАРТА <xliff:g id="CARDNUMBER">%d</xliff:g>"</string>
 </resources>

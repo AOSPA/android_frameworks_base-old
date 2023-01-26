@@ -44,6 +44,7 @@ import android.hardware.hdmi.HdmiPortInfo;
 import android.hardware.hdmi.IHdmiCecVolumeControlFeatureListener;
 import android.hardware.hdmi.IHdmiControlStatusChangeListener;
 import android.hardware.hdmi.IHdmiVendorCommandListener;
+import android.media.AudioManager;
 import android.os.Binder;
 import android.os.Looper;
 import android.os.RemoteException;
@@ -58,7 +59,9 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.Mock;
 import org.mockito.Mockito;
+import org.mockito.MockitoAnnotations;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -86,8 +89,12 @@ public class HdmiControlServiceTest {
     private HdmiPortInfo[] mHdmiPortInfo;
     private ArrayList<Integer> mLocalDeviceTypes = new ArrayList<>();
 
+    @Mock protected AudioManager mAudioManager;
+
     @Before
     public void setUp() throws Exception {
+        MockitoAnnotations.initMocks(this);
+
         mContextSpy = spy(new ContextWrapper(InstrumentationRegistry.getTargetContext()));
 
         HdmiCecConfig hdmiCecConfig = new FakeHdmiCecConfig(mContextSpy);
@@ -132,6 +139,7 @@ public class HdmiControlServiceTest {
         mPowerManager = new FakePowerManagerWrapper(mContextSpy);
         mHdmiControlServiceSpy.setPowerManager(mPowerManager);
         mHdmiControlServiceSpy.allocateLogicalAddress(mLocalDevices, INITIATED_BY_ENABLE_CEC);
+        mHdmiControlServiceSpy.setAudioManager(mAudioManager);
 
         mTestLooper.dispatchAll();
     }
@@ -195,7 +203,7 @@ public class HdmiControlServiceTest {
                 HdmiControlManager.CEC_SETTING_NAME_HDMI_CEC_VERSION,
                 HdmiControlManager.HDMI_CEC_VERSION_1_4_B);
 
-        mHdmiControlServiceSpy.setControlEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
+        mHdmiControlServiceSpy.setCecEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
         mNativeWrapper.clearResultMessages();
 
         assertThat(mHdmiControlServiceSpy.getInitialPowerStatus()).isEqualTo(
@@ -228,7 +236,7 @@ public class HdmiControlServiceTest {
                 HdmiControlManager.HDMI_CEC_VERSION_2_0);
         mTestLooper.dispatchAll();
 
-        mHdmiControlServiceSpy.setControlEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
+        mHdmiControlServiceSpy.setCecEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
         mNativeWrapper.clearResultMessages();
         mTestLooper.dispatchAll();
 
@@ -285,11 +293,11 @@ public class HdmiControlServiceTest {
         int volumeControlEnabled = HdmiControlManager.VOLUME_CONTROL_ENABLED;
         mHdmiControlServiceSpy.setHdmiCecVolumeControlEnabledInternal(volumeControlEnabled);
 
-        mHdmiControlServiceSpy.setControlEnabled(HdmiControlManager.HDMI_CEC_CONTROL_DISABLED);
+        mHdmiControlServiceSpy.setCecEnabled(HdmiControlManager.HDMI_CEC_CONTROL_DISABLED);
         assertThat(mHdmiControlServiceSpy.getHdmiCecVolumeControl()).isEqualTo(
                 HdmiControlManager.VOLUME_CONTROL_DISABLED);
 
-        mHdmiControlServiceSpy.setControlEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
+        mHdmiControlServiceSpy.setCecEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
         assertThat(mHdmiControlServiceSpy.getHdmiCecVolumeControl())
                 .isEqualTo(volumeControlEnabled);
     }
@@ -300,12 +308,12 @@ public class HdmiControlServiceTest {
         mHdmiControlServiceSpy.getHdmiCecConfig().setIntValue(
                 HdmiControlManager.CEC_SETTING_NAME_VOLUME_CONTROL_MODE, volumeControlEnabled);
 
-        mHdmiControlServiceSpy.setControlEnabled(HdmiControlManager.HDMI_CEC_CONTROL_DISABLED);
+        mHdmiControlServiceSpy.setCecEnabled(HdmiControlManager.HDMI_CEC_CONTROL_DISABLED);
         assertThat(mHdmiControlServiceSpy.getHdmiCecConfig().getIntValue(
                 HdmiControlManager.CEC_SETTING_NAME_VOLUME_CONTROL_MODE)).isEqualTo(
                 volumeControlEnabled);
 
-        mHdmiControlServiceSpy.setControlEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
+        mHdmiControlServiceSpy.setCecEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
         assertThat(mHdmiControlServiceSpy.getHdmiCecConfig().getIntValue(
                 HdmiControlManager.CEC_SETTING_NAME_VOLUME_CONTROL_MODE)).isEqualTo(
                 volumeControlEnabled);
@@ -320,13 +328,13 @@ public class HdmiControlServiceTest {
         VolumeControlFeatureCallback callback = new VolumeControlFeatureCallback();
         mHdmiControlServiceSpy.addHdmiCecVolumeControlFeatureListener(callback);
 
-        mHdmiControlServiceSpy.setControlEnabled(HdmiControlManager.HDMI_CEC_CONTROL_DISABLED);
+        mHdmiControlServiceSpy.setCecEnabled(HdmiControlManager.HDMI_CEC_CONTROL_DISABLED);
         assertThat(callback.mCallbackReceived).isTrue();
         assertThat(callback.mVolumeControlEnabled).isEqualTo(
                 HdmiControlManager.VOLUME_CONTROL_DISABLED);
 
 
-        mHdmiControlServiceSpy.setControlEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
+        mHdmiControlServiceSpy.setCecEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
         assertThat(callback.mVolumeControlEnabled).isEqualTo(
                 HdmiControlManager.VOLUME_CONTROL_ENABLED);
     }
@@ -423,7 +431,7 @@ public class HdmiControlServiceTest {
         mHdmiControlServiceSpy.getHdmiCecConfig().setIntValue(
                 HdmiControlManager.CEC_SETTING_NAME_HDMI_CEC_VERSION,
                 HdmiControlManager.HDMI_CEC_VERSION_1_4_B);
-        mHdmiControlServiceSpy.setControlEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
+        mHdmiControlServiceSpy.setCecEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
         assertThat(mHdmiControlServiceSpy.getCecVersion()).isEqualTo(
                 HdmiControlManager.HDMI_CEC_VERSION_1_4_B);
     }
@@ -433,7 +441,7 @@ public class HdmiControlServiceTest {
         mHdmiControlServiceSpy.getHdmiCecConfig().setIntValue(
                 HdmiControlManager.CEC_SETTING_NAME_HDMI_CEC_VERSION,
                 HdmiControlManager.HDMI_CEC_VERSION_2_0);
-        mHdmiControlServiceSpy.setControlEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
+        mHdmiControlServiceSpy.setCecEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
         assertThat(mHdmiControlServiceSpy.getCecVersion()).isEqualTo(
                 HdmiControlManager.HDMI_CEC_VERSION_2_0);
     }
@@ -443,14 +451,14 @@ public class HdmiControlServiceTest {
         mHdmiControlServiceSpy.getHdmiCecConfig().setIntValue(
                 HdmiControlManager.CEC_SETTING_NAME_HDMI_CEC_VERSION,
                 HdmiControlManager.HDMI_CEC_VERSION_1_4_B);
-        mHdmiControlServiceSpy.setControlEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
+        mHdmiControlServiceSpy.setCecEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
         assertThat(mHdmiControlServiceSpy.getCecVersion()).isEqualTo(
                 HdmiControlManager.HDMI_CEC_VERSION_1_4_B);
 
         mHdmiControlServiceSpy.getHdmiCecConfig().setIntValue(
                 HdmiControlManager.CEC_SETTING_NAME_HDMI_CEC_VERSION,
                 HdmiControlManager.HDMI_CEC_VERSION_2_0);
-        mHdmiControlServiceSpy.setControlEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
+        mHdmiControlServiceSpy.setCecEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
         assertThat(mHdmiControlServiceSpy.getCecVersion()).isEqualTo(
                 HdmiControlManager.HDMI_CEC_VERSION_2_0);
     }
@@ -460,7 +468,7 @@ public class HdmiControlServiceTest {
         mHdmiControlServiceSpy.getHdmiCecConfig().setIntValue(
                 HdmiControlManager.CEC_SETTING_NAME_HDMI_CEC_VERSION,
                 HdmiControlManager.HDMI_CEC_VERSION_1_4_B);
-        mHdmiControlServiceSpy.setControlEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
+        mHdmiControlServiceSpy.setCecEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
         mTestLooper.dispatchAll();
 
         mNativeWrapper.onCecMessage(HdmiCecMessageBuilder.buildGiveFeatures(Constants.ADDR_TV,
@@ -478,7 +486,7 @@ public class HdmiControlServiceTest {
         mHdmiControlServiceSpy.getHdmiCecConfig().setIntValue(
                 HdmiControlManager.CEC_SETTING_NAME_HDMI_CEC_VERSION,
                 HdmiControlManager.HDMI_CEC_VERSION_2_0);
-        mHdmiControlServiceSpy.setControlEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
+        mHdmiControlServiceSpy.setCecEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
         mHdmiControlServiceSpy.allocateLogicalAddress(mLocalDevices, INITIATED_BY_ENABLE_CEC);
         mTestLooper.dispatchAll();
 
@@ -500,7 +508,7 @@ public class HdmiControlServiceTest {
         mHdmiControlServiceSpy.getHdmiCecConfig().setIntValue(
                 HdmiControlManager.CEC_SETTING_NAME_HDMI_CEC_VERSION,
                 HdmiControlManager.HDMI_CEC_VERSION_1_4_B);
-        mHdmiControlServiceSpy.setControlEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
+        mHdmiControlServiceSpy.setCecEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
         mHdmiControlServiceSpy.allocateLogicalAddress(mLocalDevices, INITIATED_BY_ENABLE_CEC);
         mTestLooper.dispatchAll();
 
@@ -517,7 +525,7 @@ public class HdmiControlServiceTest {
         mHdmiControlServiceSpy.getHdmiCecConfig().setIntValue(
                 HdmiControlManager.CEC_SETTING_NAME_HDMI_CEC_VERSION,
                 HdmiControlManager.HDMI_CEC_VERSION_2_0);
-        mHdmiControlServiceSpy.setControlEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
+        mHdmiControlServiceSpy.setCecEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
         mHdmiControlServiceSpy.allocateLogicalAddress(mLocalDevices, INITIATED_BY_ENABLE_CEC);
         mTestLooper.dispatchAll();
 
@@ -624,11 +632,11 @@ public class HdmiControlServiceTest {
     @Test
     public void initCec_statusListener_CecEnabled_CecAvailable_TvOn() {
         HdmiControlStatusCallback hdmiControlStatusCallback = new HdmiControlStatusCallback();
-        mHdmiControlServiceSpy.setControlEnabled(HdmiControlManager.HDMI_CEC_CONTROL_DISABLED);
+        mHdmiControlServiceSpy.setCecEnabled(HdmiControlManager.HDMI_CEC_CONTROL_DISABLED);
         mTestLooper.dispatchAll();
 
         mHdmiControlServiceSpy.addHdmiControlStatusChangeListener(hdmiControlStatusCallback);
-        mHdmiControlServiceSpy.setControlEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
+        mHdmiControlServiceSpy.setCecEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
         mHdmiControlServiceSpy.allocateLogicalAddress(mLocalDevices, INITIATED_BY_ENABLE_CEC);
         mTestLooper.dispatchAll();
 
@@ -647,11 +655,11 @@ public class HdmiControlServiceTest {
     @Test
     public void initCec_statusListener_CecEnabled_CecAvailable_TvStandby() {
         HdmiControlStatusCallback hdmiControlStatusCallback = new HdmiControlStatusCallback();
-        mHdmiControlServiceSpy.setControlEnabled(HdmiControlManager.HDMI_CEC_CONTROL_DISABLED);
+        mHdmiControlServiceSpy.setCecEnabled(HdmiControlManager.HDMI_CEC_CONTROL_DISABLED);
         mTestLooper.dispatchAll();
 
         mHdmiControlServiceSpy.addHdmiControlStatusChangeListener(hdmiControlStatusCallback);
-        mHdmiControlServiceSpy.setControlEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
+        mHdmiControlServiceSpy.setCecEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
         mHdmiControlServiceSpy.allocateLogicalAddress(mLocalDevices, INITIATED_BY_ENABLE_CEC);
         mTestLooper.dispatchAll();
 
@@ -670,11 +678,11 @@ public class HdmiControlServiceTest {
     @Test
     public void initCec_statusListener_CecEnabled_CecAvailable_TvTransientToOn() {
         HdmiControlStatusCallback hdmiControlStatusCallback = new HdmiControlStatusCallback();
-        mHdmiControlServiceSpy.setControlEnabled(HdmiControlManager.HDMI_CEC_CONTROL_DISABLED);
+        mHdmiControlServiceSpy.setCecEnabled(HdmiControlManager.HDMI_CEC_CONTROL_DISABLED);
         mTestLooper.dispatchAll();
 
         mHdmiControlServiceSpy.addHdmiControlStatusChangeListener(hdmiControlStatusCallback);
-        mHdmiControlServiceSpy.setControlEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
+        mHdmiControlServiceSpy.setCecEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
         mHdmiControlServiceSpy.allocateLogicalAddress(mLocalDevices, INITIATED_BY_ENABLE_CEC);
         mTestLooper.dispatchAll();
 
@@ -693,11 +701,11 @@ public class HdmiControlServiceTest {
     @Test
     public void initCec_statusListener_CecEnabled_CecAvailable_TvTransientToStandby() {
         HdmiControlStatusCallback hdmiControlStatusCallback = new HdmiControlStatusCallback();
-        mHdmiControlServiceSpy.setControlEnabled(HdmiControlManager.HDMI_CEC_CONTROL_DISABLED);
+        mHdmiControlServiceSpy.setCecEnabled(HdmiControlManager.HDMI_CEC_CONTROL_DISABLED);
         mTestLooper.dispatchAll();
 
         mHdmiControlServiceSpy.addHdmiControlStatusChangeListener(hdmiControlStatusCallback);
-        mHdmiControlServiceSpy.setControlEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
+        mHdmiControlServiceSpy.setCecEnabled(HdmiControlManager.HDMI_CEC_CONTROL_ENABLED);
         mHdmiControlServiceSpy.allocateLogicalAddress(mLocalDevices, INITIATED_BY_ENABLE_CEC);
         mTestLooper.dispatchAll();
 
@@ -1024,6 +1032,48 @@ public class HdmiControlServiceTest {
 
         assertThat(mHdmiControlServiceSpy.readDeviceTypes())
                 .containsExactly(DEVICE_PLAYBACK, DEVICE_AUDIO_SYSTEM);
+    }
+
+    @Test
+    public void setSoundbarMode_enabled_addAudioSystemLocalDevice() {
+        // Initialize the local devices excluding the audio system.
+        mHdmiControlServiceSpy.clearCecLocalDevices();
+        mLocalDevices.remove(mAudioSystemDeviceSpy);
+        mHdmiControlServiceSpy.allocateLogicalAddress(mLocalDevices, INITIATED_BY_ENABLE_CEC);
+        mTestLooper.dispatchAll();
+        assertThat(mHdmiControlServiceSpy.audioSystem()).isNull();
+
+        // Enable the setting and check if the audio system local device is found in the network.
+        mHdmiControlServiceSpy.getHdmiCecConfig().setIntValue(
+                HdmiControlManager.CEC_SETTING_NAME_SOUNDBAR_MODE,
+                HdmiControlManager.SOUNDBAR_MODE_ENABLED);
+        mTestLooper.dispatchAll();
+        assertThat(mHdmiControlServiceSpy.audioSystem()).isNotNull();
+    }
+
+    @Test
+    public void setSoundbarMode_disabled_removeAudioSystemLocalDevice() {
+        // Initialize the local devices excluding the audio system.
+        mHdmiControlServiceSpy.clearCecLocalDevices();
+        mLocalDevices.remove(mAudioSystemDeviceSpy);
+        mHdmiControlServiceSpy.allocateLogicalAddress(mLocalDevices, INITIATED_BY_ENABLE_CEC);
+        mTestLooper.dispatchAll();
+        assertThat(mHdmiControlServiceSpy.audioSystem()).isNull();
+
+        // Enable the setting and check if the audio system local device is found in the network.
+        mHdmiControlServiceSpy.getHdmiCecConfig().setIntValue(
+                HdmiControlManager.CEC_SETTING_NAME_SOUNDBAR_MODE,
+                HdmiControlManager.SOUNDBAR_MODE_ENABLED);
+        mTestLooper.dispatchAll();
+        assertThat(mHdmiControlServiceSpy.audioSystem()).isNotNull();
+
+        // Disable the setting and check if the audio system local device is removed from the
+        // network.
+        mHdmiControlServiceSpy.getHdmiCecConfig().setIntValue(
+                HdmiControlManager.CEC_SETTING_NAME_SOUNDBAR_MODE,
+                HdmiControlManager.SOUNDBAR_MODE_DISABLED);
+        mTestLooper.dispatchAll();
+        assertThat(mHdmiControlServiceSpy.audioSystem()).isNull();
     }
 
     protected static class MockPlaybackDevice extends HdmiCecLocalDevicePlayback {

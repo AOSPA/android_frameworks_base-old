@@ -113,6 +113,12 @@ data class SettingsPage(
         )
     }
 
+    fun createBrowseIntent(entryId: String? = null): Intent? {
+        val context = SpaEnvironmentFactory.instance.appContext
+        val browseActivityClass = SpaEnvironmentFactory.instance.browseActivityClass
+        return createBrowseIntent(context, browseActivityClass, entryId)
+    }
+
     fun createBrowseIntent(
         context: Context?,
         browseActivityClass: Class<out Activity>?,
@@ -148,6 +154,15 @@ data class SettingsPage(
             !isCreateBy(NULL_PAGE_NAME) &&
             !hasRuntimeParam()
     }
+}
+
+fun SettingsPageProvider.createSettingsPage(arguments: Bundle? = null): SettingsPage {
+    return SettingsPage.create(
+        name = name,
+        displayName = displayName,
+        parameter = parameter,
+        arguments = arguments
+    )
 }
 
 fun String.toHashId(): String {

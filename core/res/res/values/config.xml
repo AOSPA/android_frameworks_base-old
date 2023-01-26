@@ -1855,6 +1855,10 @@
     -->
     <string name="config_defaultCaptivePortalLoginPackageName" translatable="false">com.android.captiveportallogin</string>
 
+    <!-- The package name of the dock manager app. Must be granted the
+         POST_NOTIFICATIONS permission. -->
+    <string name="config_defaultDockManagerPackageName" translatable="false"></string>
+
     <!-- Whether to enable geocoder overlay which allows geocoder to be replaced
          by an app at run-time. When disabled, only the
          config_geocoderProviderPackageName package will be searched for
@@ -2425,15 +2429,15 @@
     <integer name="config_dreamsBatteryLevelDrainCutoff">5</integer>
     <!-- Limit of how long the device can remain unlocked due to attention checking.  -->
     <integer name="config_attentionMaximumExtension">900000</integer> <!-- 15 minutes.  -->
-    <!-- Is the system user the only user allowed to dream. -->
-    <bool name="config_dreamsOnlyEnabledForSystemUser">false</bool>
+    <!-- Whether there is to be a chosen Dock User who is the only user allowed to dream. -->
+    <bool name="config_dreamsOnlyEnabledForDockUser">false</bool>
     <!-- Whether dreams are disabled when ambient mode is suppressed. -->
     <bool name="config_dreamsDisabledByAmbientModeSuppressionConfig">false</bool>
 
     <!-- The duration in milliseconds of the dream opening animation.  -->
     <integer name="config_dreamOpenAnimationDuration">250</integer>
     <!-- The duration in milliseconds of the dream closing animation.  -->
-    <integer name="config_dreamCloseAnimationDuration">100</integer>
+    <integer name="config_dreamCloseAnimationDuration">300</integer>
 
     <!-- Whether to dismiss the active dream when an activity is started. Doesn't apply to
          assistant activities (ACTIVITY_TYPE_ASSISTANT) -->
@@ -2675,9 +2679,9 @@
          Should be false for most devices, except automotive vehicle with passenger displays. -->
     <bool name="config_multiuserUsersOnSecondaryDisplays">false</bool>
 
-    <!-- Whether to automatically switch a non-primary user back to the primary user after a
-         timeout when the device is docked.  -->
-    <bool name="config_enableTimeoutToUserZeroWhenDocked">false</bool>
+    <!-- Whether to automatically switch to the designated Dock User (the user chosen for
+         displaying dreams, etc.) after a timeout when the device is docked.  -->
+    <bool name="config_enableTimeoutToDockUserWhenDocked">false</bool>
 
     <!-- Whether to only install system packages on a user if they're allowlisted for that user
          type. These are flags and can be freely combined.
@@ -3690,6 +3694,12 @@
          experience while the device is non-interactive. -->
     <bool name="config_emergencyGestureEnabled">true</bool>
 
+    <!-- Default value for Use Emergency SOS in Settings false = disabled, true = enabled -->
+    <bool name="config_defaultEmergencyGestureEnabled">true</bool>
+
+    <!-- Default value for Use Play countdown alarm in Settings false = disabled, true = enabled -->
+    <bool name="config_defaultEmergencyGestureSoundEnabled">false</bool>
+
     <!-- Allow the gesture power + volume up to change the ringer mode while the device
          is interactive. -->
     <bool name="config_volumeHushGestureEnabled">true</bool>
@@ -4144,6 +4154,12 @@
         See android.service.ambientcontext.AmbientContextDetectionService.
    -->
     <string name="config_defaultAmbientContextDetectionService" translatable="false"></string>
+
+    <!-- The component name for the default system wearable sensing service.
+        This service must be trusted, as it can be activated without explicit consent of the user.
+        See android.service.wearable.WearableSensingService.
+   -->
+    <string name="config_defaultWearableSensingService" translatable="false"></string>
 
     <!-- Component name that accepts ACTION_SEND intents for requesting ambient context consent. -->
     <string translatable="false" name="config_defaultAmbientContextConsentComponent"></string>
@@ -5357,6 +5373,12 @@
     <bool name="config_cecRoutingControlDisabled_allowed">true</bool>
     <bool name="config_cecRoutingControlDisabled_default">true</bool>
 
+    <bool name="config_cecSoundbarMode_userConfigurable">true</bool>
+    <bool name="config_cecSoundbarModeEnabled_allowed">true</bool>
+    <bool name="config_cecSoundbarModeEnabled_default">false</bool>
+    <bool name="config_cecSoundbarModeDisabled_allowed">true</bool>
+    <bool name="config_cecSoundbarModeDisabled_default">true</bool>
+
     <bool name="config_cecPowerControlMode_userConfigurable">true</bool>
     <bool name="config_cecPowerControlModeTv_allowed">true</bool>
     <bool name="config_cecPowerControlModeTv_default">false</bool>
@@ -5541,6 +5563,13 @@
     <bool name="config_cecQuerySadMaxEnabled_default">true</bool>
     <bool name="config_cecQuerySadMaxDisabled_allowed">true</bool>
     <bool name="config_cecQuerySadMaxDisabled_default">false</bool>
+
+    <!-- eARC Configuration -->
+    <bool name="config_earcEnabled_userConfigurable">true</bool>
+    <bool name="config_earcFeatureEnabled_allowed">true</bool>
+    <bool name="config_earcFeatureEnabled_default">true</bool>
+    <bool name="config_earcFeatureDisabled_allowed">true</bool>
+    <bool name="config_earcFeatureDisabled_default">false</bool>
 
     <!-- Whether app hibernation deletes OAT artifact files as part of global hibernation. -->
     <bool name="config_hibernationDeletesOatArtifactsEnabled">true</bool>

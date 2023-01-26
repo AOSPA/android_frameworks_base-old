@@ -72,10 +72,6 @@ constructor(
     /** Observe whether screen is turned off. */
     val screenTurnedOff: Flow<Unit> = interactor.screenTurnedOff
 
-    /** Notify that view visibility has changed. */
-    fun notifyBouncerVisibilityHasChanged(visibility: Int) {
-        return interactor.notifyBouncerVisibilityHasChanged(visibility)
-    }
     /** Observe whether we want to update resources. */
     fun notifyUpdateResources() {
         interactor.notifyUpdatedResources()
@@ -84,6 +80,11 @@ constructor(
     /** Notify that keyguard authenticated was handled */
     fun notifyKeyguardAuthenticated() {
         interactor.notifyKeyguardAuthenticatedHandled()
+    }
+
+    /** Notifies that the message was shown. */
+    fun onMessageShown() {
+        interactor.onMessageShown()
     }
 
     /** Observe whether back button is enabled. */

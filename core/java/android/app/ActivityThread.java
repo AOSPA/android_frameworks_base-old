@@ -40,7 +40,6 @@ import static com.android.internal.annotations.VisibleForTesting.Visibility.PACK
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.RemoteServiceException.BadForegroundServiceNotificationException;
-import android.app.RemoteServiceException.CannotDeliverBroadcastException;
 import android.app.RemoteServiceException.CannotPostForegroundServiceNotificationException;
 import android.app.RemoteServiceException.CrashedByAdbException;
 import android.app.RemoteServiceException.ForegroundServiceDidNotStartInTimeException;
@@ -48,6 +47,8 @@ import android.app.RemoteServiceException.MissingRequestPasswordComplexityPermis
 import android.app.assist.AssistContent;
 import android.app.assist.AssistStructure;
 import android.app.backup.BackupAgent;
+import android.app.backup.BackupAnnotations.BackupDestination;
+import android.app.backup.BackupAnnotations.OperationType;
 import android.app.servertransaction.ActivityLifecycleItem;
 import android.app.servertransaction.ActivityLifecycleItem.LifecycleState;
 import android.app.servertransaction.ActivityRelaunchItem;
@@ -801,7 +802,7 @@ public final class ActivityThread extends ClientTransactionHandler
         ApplicationInfo appInfo;
         int backupMode;
         int userId;
-        int operationType;
+        @BackupDestination int backupDestination;
         public String toString() {
             return "CreateBackupAgentData{appInfo=" + appInfo
                     + " backupAgent=" + appInfo.backupAgentName
@@ -1036,12 +1037,12 @@ public final class ActivityThread extends ClientTransactionHandler
         }
 
         public final void scheduleCreateBackupAgent(ApplicationInfo app,
-                int backupMode, int userId, int operationType) {
+                int backupMode, int userId, @BackupDestination int backupDestination) {
             CreateBackupAgentData d = new CreateBackupAgentData();
             d.appInfo = app;
             d.backupMode = backupMode;
             d.userId = userId;
-            d.operationType = operationType;
+            d.backupDestination = backupDestination;
 
             sendMessage(H.CREATE_BACKUP_AGENT, d);
         }
@@ -1104,6 +1105,11 @@ public final class ActivityThread extends ClientTransactionHandler
 
         public final void scheduleStopService(IBinder token) {
             sendMessage(H.STOP_SERVICE, token);
+        }
+
+        @Override
+        public final void scheduleTimeoutService(IBinder token, int startId) {
+            sendMessage(H.TIMEOUT_SERVICE, token, startId);
         }
 
         @Override
@@ -1995,9 +2001,6 @@ public final class ActivityThread extends ClientTransactionHandler
             case ForegroundServiceDidNotStartInTimeException.TYPE_ID:
                 throw generateForegroundServiceDidNotStartInTimeException(message, extras);
 
-            case CannotDeliverBroadcastException.TYPE_ID:
-                throw new CannotDeliverBroadcastException(message);
-
             case CannotPostForegroundServiceNotificationException.TYPE_ID:
                 throw new CannotPostForegroundServiceNotificationException(message);
 
@@ -2086,6 +2089,7 @@ public final class ActivityThread extends ClientTransactionHandler
         public static final int SET_CONTENT_CAPTURE_OPTIONS_CALLBACK = 164;
         public static final int DUMP_GFXINFO = 165;
         public static final int DUMP_RESOURCES = 166;
+        public static final int TIMEOUT_SERVICE = 167;
 
         public static final int INSTRUMENT_WITHOUT_RESTART = 170;
         public static final int FINISH_INSTRUMENTATION_WITHOUT_RESTART = 171;
@@ -2140,6 +2144,7 @@ public final class ActivityThread extends ClientTransactionHandler
                     case FINISH_INSTRUMENTATION_WITHOUT_RESTART:
                         return "FINISH_INSTRUMENTATION_WITHOUT_RESTART";
                     case DUMP_RESOURCES: return "DUMP_RESOURCES";
+                    case TIMEOUT_SERVICE: return "TIMEOUT_SERVICE";
                 }
             }
             return Integer.toString(code);
@@ -2204,6 +2209,11 @@ public final class ActivityThread extends ClientTransactionHandler
                     Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "serviceStop");
                     handleStopService((IBinder)msg.obj);
                     schedulePurgeIdler();
+                    Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
+                    break;
+                case TIMEOUT_SERVICE:
+                    Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "serviceTimeout");
+                    handleTimeoutService((IBinder) msg.obj, msg.arg1);
                     Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
                     break;
                 case CONFIGURATION_CHANGED:
@@ -4395,7 +4405,8 @@ public final class ActivityThread extends ClientTransactionHandler
                     context.setOuterContext(agent);
                     agent.attach(context);
 
-                    agent.onCreate(UserHandle.of(data.userId), data.operationType);
+                    agent.onCreate(UserHandle.of(data.userId), data.backupDestination,
+                            getOperationTypeFromBackupMode(data.backupMode));
                     binder = agent.onBind();
                     backupAgents.put(packageName, agent);
                 } catch (Exception e) {
@@ -4420,6 +4431,22 @@ public final class ActivityThread extends ClientTransactionHandler
         } catch (Exception e) {
             throw new RuntimeException("Unable to create BackupAgent "
                     + classname + ": " + e.toString(), e);
+        }
+    }
+
+    @OperationType
+    private static int getOperationTypeFromBackupMode(int backupMode) {
+        switch (backupMode) {
+            case ApplicationThreadConstants.BACKUP_MODE_RESTORE:
+            case ApplicationThreadConstants.BACKUP_MODE_RESTORE_FULL:
+                return OperationType.RESTORE;
+            case ApplicationThreadConstants.BACKUP_MODE_FULL:
+            case ApplicationThreadConstants.BACKUP_MODE_INCREMENTAL:
+                return OperationType.BACKUP;
+            default:
+                Slog.w(TAG, "Invalid backup mode when initialising BackupAgent: "
+                        + backupMode);
+                return OperationType.UNKNOWN;
         }
     }
 
@@ -4731,6 +4758,27 @@ public final class ActivityThread extends ClientTransactionHandler
         //Slog.i(TAG, "Running services: " + mServices);
     }
 
+    private void handleTimeoutService(IBinder token, int startId) {
+        Service s = mServices.get(token);
+        if (s != null) {
+            try {
+                if (localLOGV) Slog.v(TAG, "Timeout short service " + s);
+                s.callOnTimeout(startId);
+
+                // TODO(short-service): Do we need "service executing" for timeout?
+                // (see handleStopService())
+            } catch (Exception e) {
+                if (!mInstrumentation.onException(s, e)) {
+                    throw new RuntimeException(
+                            "Unable to timeout service " + s
+                                    + ": " + e.toString(), e);
+                }
+                Slog.i(TAG, "handleTimeoutService: exception for " + token, e);
+            }
+        } else {
+            Slog.wtf(TAG, "handleTimeoutService: token=" + token + " not found.");
+        }
+    }
     /**
      * Resume the activity.
      * @param r Target activity record.
@@ -6379,23 +6427,28 @@ public final class ActivityThread extends ClientTransactionHandler
     }
 
     private void handleTrimMemory(int level) {
-        Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "trimMemory");
+        if (Trace.isTagEnabled(Trace.TRACE_TAG_ACTIVITY_MANAGER)) {
+            Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "trimMemory: " + level);
+        }
         if (DEBUG_MEMORY_TRIM) Slog.v(TAG, "Trimming memory to level: " + level);
 
-        if (level >= ComponentCallbacks2.TRIM_MEMORY_COMPLETE) {
-            PropertyInvalidatedCache.onTrimMemory();
-        }
+        try {
+            if (level >= ComponentCallbacks2.TRIM_MEMORY_COMPLETE) {
+                PropertyInvalidatedCache.onTrimMemory();
+            }
 
-        final ArrayList<ComponentCallbacks2> callbacks =
-                collectComponentCallbacks(true /* includeUiContexts */);
+            final ArrayList<ComponentCallbacks2> callbacks =
+                    collectComponentCallbacks(true /* includeUiContexts */);
 
-        final int N = callbacks.size();
-        for (int i = 0; i < N; i++) {
-            callbacks.get(i).onTrimMemory(level);
+            final int N = callbacks.size();
+            for (int i = 0; i < N; i++) {
+                callbacks.get(i).onTrimMemory(level);
+            }
+        } finally {
+            Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
         }
 
         WindowManagerGlobal.getInstance().trimMemory(level);
-        Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
 
         if (SystemProperties.getInt("debug.am.run_gc_trim_level", Integer.MAX_VALUE) <= level) {
             unscheduleGcIdler();

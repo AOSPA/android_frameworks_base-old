@@ -998,6 +998,7 @@ public class Tuner implements AutoCloseable  {
     private native int nativeScan(int settingsType, FrontendSettings settings, int scanType);
     private native int nativeStopScan();
     private native int nativeSetLnb(Lnb lnb);
+    private native boolean nativeIsLnaSupported();
     private native int nativeSetLna(boolean enable);
     private native FrontendStatus nativeGetFrontendStatus(int[] statusTypes);
     private native Integer nativeGetAvSyncHwId(Filter filter);
@@ -1382,11 +1383,32 @@ public class Tuner implements AutoCloseable  {
     }
 
     /**
+     * Is Low Noise Amplifier (LNA) supported by the Tuner.
+     *
+     * <p>This API is only supported by Tuner HAL 3.0 or higher.
+     * Unsupported version would throw UnsupportedOperationException. Use
+     * {@link TunerVersionChecker#getTunerVersion()} to check the version.
+     *
+     * @return {@code true} if supported, otherwise {@code false}.
+     * @throws UnsupportedOperationException if the Tuner HAL version is lower than 3.0
+     * @see android.media.tv.tuner.TunerVersionChecker#TUNER_VERSION_3_0
+     */
+    public boolean isLnaSupported() {
+        if (!TunerVersionChecker.checkHigherOrEqualVersionTo(
+                TunerVersionChecker.TUNER_VERSION_3_0, "isLnaSupported")) {
+            throw new UnsupportedOperationException("Tuner HAL version "
+                    + TunerVersionChecker.getTunerVersion() + " doesn't support this method.");
+        }
+        return nativeIsLnaSupported();
+    }
+
+    /**
      * Enable or Disable Low Noise Amplifier (LNA).
      *
      * @param enable {@code true} to activate LNA module; {@code false} to deactivate LNA.
      *
-     * @return result status of the operation.
+     * @return result status of the operation. {@link #RESULT_UNAVAILABLE} if the device doesn't
+     *         support LNA.
      */
     @Result
     public int setLnaEnabled(boolean enable) {
@@ -2376,19 +2398,20 @@ public class Tuner implements AutoCloseable  {
     }
 
     /**
-     * Request a frontend by frontend id.
+     * Request a frontend by frontend info.
      *
      * <p> This API is used if the applications want to select a desired frontend before
      * {@link tune} to use a specific satellite or sending SatCR DiSEqC command for {@link tune}.
      *
-     * @param desiredId the desired fronted Id. It can be retrieved by
+     * @param desiredFrontendInfo the FrontendInfo of the desired fronted. It can be retrieved by
      * {@link getAvailableFrontendInfos}
      *
      * @return result status of open operation.
      * @throws SecurityException if the caller does not have appropriate permissions.
      */
     @Result
-    public int requestFrontendById(int desiredId) {
+    public int applyFrontend(@NonNull FrontendInfo desiredFrontendInfo) {
+        Objects.requireNonNull(desiredFrontendInfo, "desiredFrontendInfo must not be null");
         mFrontendLock.lock();
         try {
             if (mFeOwnerTuner != null) {
@@ -2399,17 +2422,12 @@ public class Tuner implements AutoCloseable  {
                 Log.e(TAG, "A frontend has been opened before");
                 return RESULT_INVALID_STATE;
             }
-            FrontendInfo frontendInfo = getFrontendInfoById(desiredId);
-            if (frontendInfo == null) {
-                Log.e(TAG, "Failed to get a FrontendInfo by frontend id: " + desiredId);
-                return RESULT_UNAVAILABLE;
-            }
-            int frontendType = frontendInfo.getType();
+            mFrontendType = desiredFrontendInfo.getType();
+            mDesiredFrontendId = desiredFrontendInfo.getId();
             if (DEBUG) {
-                Log.d(TAG, "Opening frontend with type " + frontendType + ", id " + desiredId);
+                Log.d(TAG, "Applying frontend with type " + mFrontendType + ", id "
+                        + mDesiredFrontendId);
             }
-            mFrontendType = frontendType;
-            mDesiredFrontendId = desiredId;
             if (!checkResource(TunerResourceManager.TUNER_RESOURCE_TYPE_FRONTEND, mFrontendLock)) {
                 return RESULT_UNAVAILABLE;
             }

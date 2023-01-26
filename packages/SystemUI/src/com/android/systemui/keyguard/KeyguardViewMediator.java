@@ -36,7 +36,6 @@ import static com.android.systemui.DejankUtils.whitelistIpcs;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
-import android.app.ActivityManager;
 import android.app.ActivityTaskManager;
 import android.app.AlarmManager;
 import android.app.PendingIntent;
@@ -125,6 +124,7 @@ import com.android.systemui.dump.DumpManager;
 import com.android.systemui.keyguard.dagger.KeyguardModule;
 import com.android.systemui.navigationbar.NavigationModeController;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
+import com.android.systemui.settings.UserTracker;
 import com.android.systemui.shade.NotificationPanelViewController;
 import com.android.systemui.shade.ShadeController;
 import com.android.systemui.shade.ShadeExpansionStateManager;
@@ -138,6 +138,7 @@ import com.android.systemui.statusbar.phone.CentralSurfaces;
 import com.android.systemui.statusbar.phone.DozeParameters;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.ScreenOffAnimationController;
+import com.android.systemui.statusbar.phone.ScrimController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.statusbar.policy.UserSwitcherController;
 import com.android.systemui.util.DeviceConfigProxy;
@@ -264,6 +265,7 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
     private AlarmManager mAlarmManager;
     private AudioManager mAudioManager;
     private StatusBarManager mStatusBarManager;
+    private final UserTracker mUserTracker;
     private final SysuiStatusBarStateController mStatusBarStateController;
     private final Executor mUiBgExecutor;
     private final ScreenOffAnimationController mScreenOffAnimationController;
@@ -410,6 +412,11 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
      * The duration in milliseconds of the dream open animation.
      */
     private final int mDreamOpenAnimationDuration;
+
+    /**
+     * The duration in milliseconds of the dream close animation.
+     */
+    private final int mDreamCloseAnimationDuration;
 
     /**
      * The animation used for hiding keyguard. This is used to fetch the animation timings if
@@ -719,7 +726,7 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
 
         @Override
         public void keyguardDone(boolean strongAuth, int targetUserId) {
-            if (targetUserId != ActivityManager.getCurrentUser()) {
+            if (targetUserId != mUserTracker.getUserId()) {
                 return;
             }
             if (DEBUG) Log.d(TAG, "keyguardDone");
@@ -742,7 +749,7 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
         public void keyguardDonePending(boolean strongAuth, int targetUserId) {
             Trace.beginSection("KeyguardViewMediator.mViewMediatorCallback#keyguardDonePending");
             if (DEBUG) Log.d(TAG, "keyguardDonePending");
-            if (targetUserId != ActivityManager.getCurrentUser()) {
+            if (targetUserId != mUserTracker.getUserId()) {
                 Trace.endSection();
                 return;
             }
@@ -850,6 +857,7 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
                 @Override
                 public void onLaunchAnimationStart(boolean isExpandingFullyAbove) {
                     mOccludeAnimationPlaying = true;
+                    mScrimControllerLazy.get().setOccludeAnimationPlaying(true);
                 }
 
                 @Override
@@ -860,6 +868,7 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
 
                     // Ensure keyguard state is set correctly if we're cancelled.
                     mCentralSurfaces.updateIsKeyguard();
+                    mScrimControllerLazy.get().setOccludeAnimationPlaying(false);
                 }
 
                 @Override
@@ -873,6 +882,7 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
                     // Hide the keyguard now that we're done launching the occluding activity over
                     // it.
                     mCentralSurfaces.updateIsKeyguard();
+                    mScrimControllerLazy.get().setOccludeAnimationPlaying(false);
 
                     mInteractionJankMonitor.end(CUJ_LOCKSCREEN_OCCLUSION);
                 }
@@ -894,25 +904,32 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
                 @NonNull
                 @Override
                 public LaunchAnimator.State createAnimatorState() {
-                    final int width = getLaunchContainer().getWidth();
-                    final int height = getLaunchContainer().getHeight();
-
-                    final float initialHeight = height / 3f;
-                    final float initialWidth = width / 3f;
+                    final int fullWidth = getLaunchContainer().getWidth();
+                    final int fullHeight = getLaunchContainer().getHeight();
 
                     if (mUpdateMonitor.isSecureCameraLaunchedOverKeyguard()) {
+                        final float initialHeight = fullHeight / 3f;
+                        final float initialWidth = fullWidth / 3f;
+
                         // Start the animation near the power button, at one-third size, since the
                         // camera was launched from the power button.
                         return new LaunchAnimator.State(
                                 (int) (mPowerButtonY - initialHeight / 2f) /* top */,
                                 (int) (mPowerButtonY + initialHeight / 2f) /* bottom */,
-                                (int) (width - initialWidth) /* left */,
-                                width /* right */,
+                                (int) (fullWidth - initialWidth) /* left */,
+                                fullWidth /* right */,
                                 mWindowCornerRadius, mWindowCornerRadius);
                     } else {
-                        // Start the animation in the center of the screen, scaled down.
+                        final float initialHeight = fullHeight / 2f;
+                        final float initialWidth = fullWidth / 2f;
+
+                        // Start the animation in the center of the screen, scaled down to half
+                        // size.
                         return new LaunchAnimator.State(
-                                height / 2, height / 2, width / 2, width / 2,
+                                (int) (fullHeight - initialHeight) / 2,
+                                (int) (initialHeight + (fullHeight - initialHeight) / 2),
+                                (int) (fullWidth - initialWidth) / 2,
+                                (int) (initialWidth + (fullWidth - initialWidth) / 2),
                                 mWindowCornerRadius, mWindowCornerRadius);
                     }
                 }
@@ -1059,7 +1076,8 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
                         }
 
                         mUnoccludeAnimator = ValueAnimator.ofFloat(1f, 0f);
-                        mUnoccludeAnimator.setDuration(UNOCCLUDE_ANIMATION_DURATION);
+                        mUnoccludeAnimator.setDuration(isDream ? mDreamCloseAnimationDuration
+                                : UNOCCLUDE_ANIMATION_DURATION);
                         mUnoccludeAnimator.setInterpolator(Interpolators.TOUCH_RESPONSE);
                         mUnoccludeAnimator.addUpdateListener(
                                 animation -> {
@@ -1126,12 +1144,14 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
     private ScreenOnCoordinator mScreenOnCoordinator;
 
     private Lazy<ActivityLaunchAnimator> mActivityLaunchAnimator;
+    private Lazy<ScrimController> mScrimControllerLazy;
 
     /**
      * Injected constructor. See {@link KeyguardModule}.
      */
     public KeyguardViewMediator(
             Context context,
+            UserTracker userTracker,
             FalsingCollector falsingCollector,
             LockPatternUtils lockPatternUtils,
             BroadcastDispatcher broadcastDispatcher,
@@ -1155,8 +1175,10 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
             DreamOverlayStateController dreamOverlayStateController,
             Lazy<ShadeController> shadeControllerLazy,
             Lazy<NotificationShadeWindowController> notificationShadeWindowControllerLazy,
-            Lazy<ActivityLaunchAnimator> activityLaunchAnimator) {
+            Lazy<ActivityLaunchAnimator> activityLaunchAnimator,
+            Lazy<ScrimController> scrimControllerLazy) {
         mContext = context;
+        mUserTracker = userTracker;
         mFalsingCollector = falsingCollector;
         mLockPatternUtils = lockPatternUtils;
         mBroadcastDispatcher = broadcastDispatcher;
@@ -1199,6 +1221,7 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
         mDreamOverlayStateController = dreamOverlayStateController;
 
         mActivityLaunchAnimator = activityLaunchAnimator;
+        mScrimControllerLazy = scrimControllerLazy;
 
         mPowerButtonY = context.getResources().getDimensionPixelSize(
                 R.dimen.physical_power_button_center_screen_location_y);
@@ -1206,6 +1229,8 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
 
         mDreamOpenAnimationDuration = context.getResources().getInteger(
                 com.android.internal.R.integer.config_dreamOpenAnimationDuration);
+        mDreamCloseAnimationDuration = context.getResources().getInteger(
+                com.android.internal.R.integer.config_dreamCloseAnimationDuration);
     }
 
     public void userActivity() {
@@ -1235,7 +1260,7 @@ public class KeyguardViewMediator implements CoreStartable, Dumpable,
 
         mAlarmManager = (AlarmManager) mContext.getSystemService(Context.ALARM_SERVICE);
 
-        KeyguardUpdateMonitor.setCurrentUser(ActivityManager.getCurrentUser());
+        KeyguardUpdateMonitor.setCurrentUser(mUserTracker.getUserId());
 
         // Assume keyguard is showing (unless it's disabled) until we know for sure, unless Keyguard
         // is disabled.

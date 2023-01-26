@@ -18,6 +18,7 @@ package com.android.internal.os;
 
 import android.annotation.IntDef;
 import android.annotation.NonNull;
+import android.content.Intent;
 import android.os.SystemClock;
 
 import com.android.internal.os.anr.AnrLatencyTracker;
@@ -39,7 +40,8 @@ public class TimeoutRecord {
             TimeoutKind.SERVICE_START,
             TimeoutKind.SERVICE_EXEC,
             TimeoutKind.CONTENT_PROVIDER,
-            TimeoutKind.APP_REGISTERED})
+            TimeoutKind.APP_REGISTERED,
+            TimeoutKind.SHORT_FGS_TIMEOUT})
 
     @Retention(RetentionPolicy.SOURCE)
     public @interface TimeoutKind {
@@ -50,6 +52,7 @@ public class TimeoutRecord {
         int SERVICE_EXEC = 5;
         int CONTENT_PROVIDER = 6;
         int APP_REGISTERED = 7;
+        int SHORT_FGS_TIMEOUT = 8;
     }
 
     /** Kind of timeout, e.g. BROADCAST_RECEIVER, etc. */
@@ -92,7 +95,17 @@ public class TimeoutRecord {
 
     /** Record for a broadcast receiver timeout. */
     @NonNull
-    public static TimeoutRecord forBroadcastReceiver(@NonNull String reason) {
+    public static TimeoutRecord forBroadcastReceiver(@NonNull Intent intent) {
+        String reason = "Broadcast of " + intent.toString();
+        return TimeoutRecord.endingNow(TimeoutKind.BROADCAST_RECEIVER, reason);
+    }
+
+    /** Record for a broadcast receiver timeout. */
+    @NonNull
+    public static TimeoutRecord forBroadcastReceiver(@NonNull Intent intent,
+            long timeoutDurationMs) {
+        String reason = "Broadcast of " + intent.toString() + ", waited " + timeoutDurationMs
+                + "ms";
         return TimeoutRecord.endingNow(TimeoutKind.BROADCAST_RECEIVER, reason);
     }
 
@@ -132,5 +145,11 @@ public class TimeoutRecord {
     @NonNull
     public static TimeoutRecord forApp(@NonNull String reason) {
         return TimeoutRecord.endingApproximatelyNow(TimeoutKind.APP_REGISTERED, reason);
+    }
+
+    /** Record for a "short foreground service" timeout. */
+    @NonNull
+    public static TimeoutRecord forShortFgsTimeout(String reason) {
+        return TimeoutRecord.endingNow(TimeoutKind.SHORT_FGS_TIMEOUT, reason);
     }
 }

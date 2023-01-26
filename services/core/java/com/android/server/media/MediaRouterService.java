@@ -17,6 +17,7 @@
 package com.android.server.media;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.app.ActivityManager;
 import android.app.UserSwitchObserver;
@@ -43,6 +44,7 @@ import android.media.MediaRouterClientState;
 import android.media.RemoteDisplayState;
 import android.media.RemoteDisplayState.RemoteDisplayInfo;
 import android.media.RouteDiscoveryPreference;
+import android.media.RouteListingPreference;
 import android.media.RoutingSessionInfo;
 import android.os.Binder;
 import android.os.Bundle;
@@ -189,10 +191,6 @@ public final class MediaRouterService extends IMediaRouterService.Stub
     // Binder call
     @Override
     public void registerClientAsUser(IMediaRouterClient client, String packageName, int userId) {
-        if (client == null) {
-            throw new IllegalArgumentException("client must not be null");
-        }
-
         final int uid = Binder.getCallingUid();
         if (!validatePackageName(uid, packageName)) {
             throw new SecurityException("packageName must match the calling uid");
@@ -217,9 +215,6 @@ public final class MediaRouterService extends IMediaRouterService.Stub
     // Binder call
     @Override
     public void registerClientGroupId(IMediaRouterClient client, String groupId) {
-        if (client == null) {
-            throw new NullPointerException("client must not be null");
-        }
         if (mContext.checkCallingOrSelfPermission(
                 android.Manifest.permission.CONFIGURE_WIFI_DISPLAY)
                 != PackageManager.PERMISSION_GRANTED) {
@@ -240,10 +235,6 @@ public final class MediaRouterService extends IMediaRouterService.Stub
     // Binder call
     @Override
     public void unregisterClient(IMediaRouterClient client) {
-        if (client == null) {
-            throw new IllegalArgumentException("client must not be null");
-        }
-
         final long token = Binder.clearCallingIdentity();
         try {
             synchronized (mLock) {
@@ -257,10 +248,6 @@ public final class MediaRouterService extends IMediaRouterService.Stub
     // Binder call
     @Override
     public MediaRouterClientState getState(IMediaRouterClient client) {
-        if (client == null) {
-            throw new IllegalArgumentException("client must not be null");
-        }
-
         final long token = Binder.clearCallingIdentity();
         try {
             synchronized (mLock) {
@@ -274,10 +261,6 @@ public final class MediaRouterService extends IMediaRouterService.Stub
     // Binder call
     @Override
     public boolean isPlaybackActive(IMediaRouterClient client) {
-        if (client == null) {
-            throw new IllegalArgumentException("client must not be null");
-        }
-
         final long token = Binder.clearCallingIdentity();
         try {
             ClientRecord clientRecord;
@@ -314,10 +297,6 @@ public final class MediaRouterService extends IMediaRouterService.Stub
     @Override
     public void setDiscoveryRequest(IMediaRouterClient client,
             int routeTypes, boolean activeScan) {
-        if (client == null) {
-            throw new IllegalArgumentException("client must not be null");
-        }
-
         final long token = Binder.clearCallingIdentity();
         try {
             synchronized (mLock) {
@@ -336,10 +315,6 @@ public final class MediaRouterService extends IMediaRouterService.Stub
     // selected route or a default selection.
     @Override
     public void setSelectedRoute(IMediaRouterClient client, String routeId, boolean explicit) {
-        if (client == null) {
-            throw new IllegalArgumentException("client must not be null");
-        }
-
         final long token = Binder.clearCallingIdentity();
         try {
             synchronized (mLock) {
@@ -353,12 +328,7 @@ public final class MediaRouterService extends IMediaRouterService.Stub
     // Binder call
     @Override
     public void requestSetVolume(IMediaRouterClient client, String routeId, int volume) {
-        if (client == null) {
-            throw new IllegalArgumentException("client must not be null");
-        }
-        if (routeId == null) {
-            throw new IllegalArgumentException("routeId must not be null");
-        }
+        Objects.requireNonNull(routeId, "routeId must not be null");
 
         final long token = Binder.clearCallingIdentity();
         try {
@@ -373,12 +343,7 @@ public final class MediaRouterService extends IMediaRouterService.Stub
     // Binder call
     @Override
     public void requestUpdateVolume(IMediaRouterClient client, String routeId, int direction) {
-        if (client == null) {
-            throw new IllegalArgumentException("client must not be null");
-        }
-        if (routeId == null) {
-            throw new IllegalArgumentException("routeId must not be null");
-        }
+        Objects.requireNonNull(routeId, "routeId must not be null");
 
         final long token = Binder.clearCallingIdentity();
         try {
@@ -453,6 +418,14 @@ public final class MediaRouterService extends IMediaRouterService.Stub
     public void setDiscoveryRequestWithRouter2(IMediaRouter2 router,
             RouteDiscoveryPreference request) {
         mService2.setDiscoveryRequestWithRouter2(router, request);
+    }
+
+    // Binder call
+    @Override
+    public void setRouteListingPreference(
+            @NonNull IMediaRouter2 router,
+            @Nullable RouteListingPreference routeListingPreference) {
+        mService2.setRouteListingPreference(router, routeListingPreference);
     }
 
     // Binder call
@@ -665,9 +638,11 @@ public final class MediaRouterService extends IMediaRouterService.Stub
         synchronized (mLock) {
             if (mCurrentActiveUserId != newActiveUserId) {
                 mCurrentActiveUserId = newActiveUserId;
-                for (int i = 0; i < mUserRecords.size(); i++) {
-                    int userId = mUserRecords.keyAt(i);
-                    UserRecord userRecord = mUserRecords.valueAt(i);
+                // disposeUserIfNeededLocked might modify the collection, hence clone
+                final var userRecords = mUserRecords.clone();
+                for (int i = 0; i < userRecords.size(); i++) {
+                    int userId = userRecords.keyAt(i);
+                    UserRecord userRecord = userRecords.valueAt(i);
                     if (isUserActiveLocked(userId)) {
                         // userId corresponds to the active user, or one of its profiles. We
                         // ensure the associated structures are initialized.

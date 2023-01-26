@@ -3662,6 +3662,18 @@ public class AudioService extends IAudioService.Stub
         }
     }
 
+    // TODO enforce MODIFY_AUDIO_SYSTEM_SETTINGS when defined
+    private void enforceModifyAudioRoutingOrSystemSettingsPermission() {
+        if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
+                != PackageManager.PERMISSION_GRANTED
+                /*&& mContext.checkCallingOrSelfPermission(
+                        android.Manifest.permission.MODIFY_AUDIO_SYSTEM_SETTINGS)
+                            != PackageManager.PERMISSION_DENIED*/) {
+            throw new SecurityException(
+                    "Missing MODIFY_AUDIO_ROUTING or MODIFY_AUDIO_SYSTEM_SETTINGS permission");
+        }
+    }
+
     private void enforceAccessUltrasoundPermission() {
         if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.ACCESS_ULTRASOUND)
                 != PackageManager.PERMISSION_GRANTED) {
@@ -3774,21 +3786,39 @@ public class AudioService extends IAudioService.Stub
     }
 
     /** @see AudioDeviceVolumeManager#setDeviceVolume(VolumeInfo, AudioDeviceAttributes)
-     * Part of service interface, check permissions and parameters here */
+     * Part of service interface, check permissions and parameters here
+     * Note calling package is for logging purposes only, not to be trusted
+     */
     public void setDeviceVolume(@NonNull VolumeInfo vi, @NonNull AudioDeviceAttributes ada,
-            @NonNull String callingPackage, @Nullable String attributionTag) {
-        enforceModifyAudioRoutingPermission();
+            @NonNull String callingPackage) {
+        enforceModifyAudioRoutingOrSystemSettingsPermission();
         Objects.requireNonNull(vi);
         Objects.requireNonNull(ada);
         Objects.requireNonNull(callingPackage);
+
         if (!vi.hasStreamType()) {
             Log.e(TAG, "Unsupported non-stream type based VolumeInfo", new Exception());
             return;
         }
         int index = vi.getVolumeIndex();
-        if (index == VolumeInfo.INDEX_NOT_SET) {
-            throw new IllegalArgumentException("changing device volume requires a volume index");
+        if (index == VolumeInfo.INDEX_NOT_SET && !vi.hasMuteCommand()) {
+            throw new IllegalArgumentException(
+                    "changing device volume requires a volume index or mute command");
         }
+
+        // TODO handle unmuting if current audio device
+        // if a stream is not muted but the VolumeInfo is for muting, set the volume index
+        // for the device to min volume
+        if (vi.hasMuteCommand() && vi.isMuted() && !isStreamMute(vi.getStreamType())) {
+            setStreamVolumeWithAttributionInt(vi.getStreamType(),
+                    mStreamStates[vi.getStreamType()].getMinIndex(),
+                    /*flags*/ 0,
+                    ada, callingPackage, null);
+            return;
+        }
+
+        AudioService.sVolumeLogger.enqueueAndLog("setDeviceVolume" + " from:" + callingPackage
+                + " " + vi + " " + ada, EventLogger.Event.ALOGI, TAG);
 
         if (vi.getMinVolumeIndex() == VolumeInfo.INDEX_NOT_SET
                 || vi.getMaxVolumeIndex() == VolumeInfo.INDEX_NOT_SET) {
@@ -3809,7 +3839,7 @@ public class AudioService extends IAudioService.Stub
             }
         }
         setStreamVolumeWithAttributionInt(vi.getStreamType(), index, /*flags*/ 0,
-                ada, callingPackage, attributionTag);
+                ada, callingPackage, null);
     }
 
     /** Retain API for unsupported app usage */
@@ -4720,6 +4750,36 @@ public class AudioService extends IAudioService.Stub
         }
     }
 
+    /**
+     * @see AudioDeviceVolumeManager#getDeviceVolume(VolumeInfo, AudioDeviceAttributes)
+     */
+    public @NonNull VolumeInfo getDeviceVolume(@NonNull VolumeInfo vi,
+            @NonNull AudioDeviceAttributes ada, @NonNull String callingPackage) {
+        enforceModifyAudioRoutingOrSystemSettingsPermission();
+        Objects.requireNonNull(vi);
+        Objects.requireNonNull(ada);
+        Objects.requireNonNull(callingPackage);
+        if (!vi.hasStreamType()) {
+            Log.e(TAG, "Unsupported non-stream type based VolumeInfo", new Exception());
+            return getDefaultVolumeInfo();
+        }
+
+        int streamType = vi.getStreamType();
+        final VolumeInfo.Builder vib = new VolumeInfo.Builder(vi);
+        vib.setMinVolumeIndex(mStreamStates[streamType].mIndexMin);
+        vib.setMaxVolumeIndex(mStreamStates[streamType].mIndexMax);
+        synchronized (VolumeStreamState.class) {
+            final int index;
+            if (isFixedVolumeDevice(ada.getInternalType())) {
+                index = (mStreamStates[streamType].mIndexMax + 5) / 10;
+            } else {
+                index = (mStreamStates[streamType].getIndex(ada.getInternalType()) + 5) / 10;
+            }
+            vib.setVolumeIndex(index);
+            return vib.setMuted(mStreamStates[streamType].mIsMuted).build();
+        }
+    }
+
     /** @see AudioManager#getStreamMaxVolume(int) */
     public int getStreamMaxVolume(int streamType) {
         ensureValidStreamType(streamType);
@@ -4760,7 +4820,6 @@ public class AudioService extends IAudioService.Stub
             sDefaultVolumeInfo = new VolumeInfo.Builder(AudioSystem.STREAM_MUSIC)
                     .setMinVolumeIndex(getStreamMinVolume(AudioSystem.STREAM_MUSIC))
                     .setMaxVolumeIndex(getStreamMaxVolume(AudioSystem.STREAM_MUSIC))
-                    .setMuted(false)
                     .build();
         }
         return sDefaultVolumeInfo;
@@ -7179,6 +7238,24 @@ public class AudioService extends IAudioService.Stub
                         state == CONNECTION_STATE_CONNECTED ? "connected" : "disconnected")
                 .record();
         mDeviceBroker.setWiredDeviceConnectionState(attributes, state, caller);
+        // The Dynamic Soundbar mode feature introduces dynamic presence for an HDMI Audio System
+        // Client. For example, the device can start with the Audio System Client unavailable.
+        // When the feature is activated the client becomes available, therefore Audio Service
+        // requests a new HDMI Audio System Client instance when the ARC status is changed.
+        if (attributes.getInternalType() == AudioSystem.DEVICE_IN_HDMI_ARC) {
+            updateHdmiAudioSystemClient();
+        }
+    }
+
+    /**
+     * Replace the current HDMI Audio System Client.
+     * See {@link #setWiredDeviceConnectionState(AudioDeviceAttributes, int, String)}.
+     */
+    private void updateHdmiAudioSystemClient() {
+        Slog.d(TAG, "Hdmi Audio System Client is updated");
+        synchronized (mHdmiClientLock) {
+            mHdmiAudioSystemClient = mHdmiManager.getAudioSystemClient();
+        }
     }
 
     /** @see AudioManager#setTestDeviceConnectionState(AudioDeviceAttributes, boolean) */
@@ -7961,6 +8038,7 @@ public class AudioService extends IAudioService.Stub
                 boolean hasModifyAudioSettings) {
             boolean changed;
             int oldIndex;
+            final boolean isCurrentDevice;
             synchronized (mSettingsLock) {
                 synchronized (VolumeStreamState.class) {
                     oldIndex = getIndex(device);
@@ -7976,7 +8054,7 @@ public class AudioService extends IAudioService.Stub
                     // - there is no volume index stored for this device on alias stream.
                     // If changing volume of current device, also change volume of current
                     // device on aliased stream
-                    final boolean isCurrentDevice = (device == getDeviceForStream(mStreamType));
+                    isCurrentDevice = (device == getDeviceForStream(mStreamType));
                     final int numStreamTypes = AudioSystem.getNumStreamTypes();
                     for (int streamType = numStreamTypes - 1; streamType >= 0; streamType--) {
                         final VolumeStreamState aliasStreamState = mStreamStates[streamType];
@@ -8016,8 +8094,9 @@ public class AudioService extends IAudioService.Stub
                     EventLogTags.writeVolumeChanged(mStreamType, oldIndex, index, mIndexMax / 10,
                             caller);
                 }
-                // fire changed intents for all streams
-                if (index != oldIndex) {
+                // fire changed intents for all streams, but only when the device it changed on
+                //  is the current device
+                if ((index != oldIndex) && isCurrentDevice) {
                     mVolumeChanged.putExtra(AudioManager.EXTRA_VOLUME_STREAM_VALUE, index);
                     mVolumeChanged.putExtra(AudioManager.EXTRA_PREV_VOLUME_STREAM_VALUE, oldIndex);
                     mVolumeChanged.putExtra(AudioManager.EXTRA_VOLUME_STREAM_TYPE_ALIAS,
@@ -8036,6 +8115,23 @@ public class AudioService extends IAudioService.Stub
                     index = mIndexMap.get(AudioSystem.DEVICE_OUT_DEFAULT);
                 }
                 return index;
+            }
+        }
+
+        public @NonNull VolumeInfo getVolumeInfo(int device) {
+            synchronized (VolumeStreamState.class) {
+                int index = mIndexMap.get(device, -1);
+                if (index == -1) {
+                    // there is always an entry for AudioSystem.DEVICE_OUT_DEFAULT
+                    index = mIndexMap.get(AudioSystem.DEVICE_OUT_DEFAULT);
+                }
+                final VolumeInfo vi = new VolumeInfo.Builder(mStreamType)
+                        .setMinVolumeIndex(mIndexMin)
+                        .setMaxVolumeIndex(mIndexMax)
+                        .setVolumeIndex(index)
+                        .setMuted(isFullyMuted())
+                        .build();
+                return vi;
             }
         }
 

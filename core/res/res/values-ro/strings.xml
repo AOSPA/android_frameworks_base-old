@@ -396,6 +396,30 @@
     <string name="permdesc_persistentActivity" product="default" msgid="1914841924366562051">"Permite aplicației să declare persistente în memorie anumite părți ale sale. Acest lucru poate limita memoria disponibilă pentru alte aplicații și poate încetini funcționarea telefonului."</string>
     <string name="permlab_foregroundService" msgid="1768855976818467491">"să ruleze serviciul în prim plan"</string>
     <string name="permdesc_foregroundService" msgid="8720071450020922795">"Permite aplicației să utilizeze serviciile din prim-plan."</string>
+    <string name="permlab_foregroundServiceCamera" msgid="7814751737955715297">"să folosească serviciile în prim-plan cu tipul „camera”"</string>
+    <string name="permdesc_foregroundServiceCamera" msgid="6973701931250595727">"Permite aplicației să folosească serviciile în prim-plan cu tipul „camera”"</string>
+    <string name="permlab_foregroundServiceConnectedDevice" msgid="3019650546176872501">"să folosească serviciile în prim-plan cu tipul „connectedDevice”"</string>
+    <string name="permdesc_foregroundServiceConnectedDevice" msgid="1067457315741352963">"Permite aplicației să folosească serviciile în prim-plan cu tipul „connectedDevice”"</string>
+    <string name="permlab_foregroundServiceDataSync" msgid="5847463514326881076">"să folosească serviciile în prim-plan cu tipul „dataSync”"</string>
+    <string name="permdesc_foregroundServiceDataSync" msgid="2267140263423973050">"Permite aplicației să folosească serviciile în prim-plan cu tipul „dataSync”"</string>
+    <string name="permlab_foregroundServiceLocation" msgid="3745428302378535690">"să folosească serviciile în prim-plan cu tipul „location”"</string>
+    <string name="permdesc_foregroundServiceLocation" msgid="118894034365177183">"Permite aplicației să folosească serviciile în prim-plan cu tipul „location”"</string>
+    <string name="permlab_foregroundServiceMediaPlayback" msgid="4002687983891935514">"să folosească serviciile în prim-plan cu tipul „mediaPlayback”"</string>
+    <string name="permdesc_foregroundServiceMediaPlayback" msgid="3638032446063968043">"Permite aplicației să folosească serviciile în prim-plan cu tipul „mediaPlayback”"</string>
+    <string name="permlab_foregroundServiceMediaProjection" msgid="2630868915733312527">"să folosească serviciile în prim-plan cu tipul „mediaProjection”"</string>
+    <string name="permdesc_foregroundServiceMediaProjection" msgid="4805677128082002298">"Permite aplicației să folosească serviciile în prim-plan cu tipul „mediaProjection”"</string>
+    <string name="permlab_foregroundServiceMicrophone" msgid="7390033424890545399">"să folosească serviciile în prim-plan cu tipul „microphone”"</string>
+    <string name="permdesc_foregroundServiceMicrophone" msgid="1206041516173483201">"Permite aplicației să folosească serviciile în prim-plan cu tipul „microphone”"</string>
+    <string name="permlab_foregroundServicePhoneCall" msgid="627937743867697892">"să folosească serviciile în prim-plan cu tipul „phoneCall”"</string>
+    <string name="permdesc_foregroundServicePhoneCall" msgid="5941660252587015147">"Permite aplicației să folosească serviciile în prim-plan cu tipul „phoneCall”"</string>
+    <string name="permlab_foregroundServiceHealth" msgid="3675776442080928184">"să folosească serviciile în prim-plan cu tipul „health”"</string>
+    <string name="permdesc_foregroundServiceHealth" msgid="2024586220562667185">"Permite aplicației să folosească serviciile în prim-plan cu tipul „health”"</string>
+    <string name="permlab_foregroundServiceRemoteMessaging" msgid="105670277002780950">"să folosească serviciile în prim-plan cu tipul „remoteMessaging”"</string>
+    <string name="permdesc_foregroundServiceRemoteMessaging" msgid="8767598075877576277">"Permite aplicației să folosească serviciile în prim-plan cu tipul „remoteMessaging”"</string>
+    <string name="permlab_foregroundServiceSystemExempted" msgid="1597663713590612685">"să folosească serviciile în prim-plan cu tipul „systemExempted”"</string>
+    <string name="permdesc_foregroundServiceSystemExempted" msgid="947381760834649622">"Permite aplicației să folosească serviciile în prim-plan cu tipul „systemExempted”"</string>
+    <string name="permlab_foregroundServiceSpecialUse" msgid="7973536745876645082">"să folosească serviciile în prim-plan cu tipul „specialUse”"</string>
+    <string name="permdesc_foregroundServiceSpecialUse" msgid="646713654541885919">"Permite aplicației să folosească serviciile în prim-plan cu tipul „specialUse”"</string>
     <string name="permlab_getPackageSize" msgid="375391550792886641">"măsurare spațiu de stocare al aplicației"</string>
     <string name="permdesc_getPackageSize" msgid="742743530909966782">"Permite aplicației să preia dimensiunile codului, ale datelor și ale memoriei cache"</string>
     <string name="permlab_writeSettings" msgid="8057285063719277394">"modifică setări de sistem"</string>
@@ -448,6 +472,8 @@
     <string name="permdesc_recordAudio" msgid="5857246765327514062">"Această aplicație poate să înregistreze conținut audio folosind microfonul când este în uz."</string>
     <string name="permlab_recordBackgroundAudio" msgid="5891032812308878254">"să înregistreze conținut audio în fundal"</string>
     <string name="permdesc_recordBackgroundAudio" msgid="1992623135737407516">"Această aplicație poate înregistra conținut audio folosind microfonul oricând."</string>
+    <string name="permlab_detectScreenCapture" msgid="4447042362828799433">"detectează capturile de ecran din ferestrele aplicației"</string>
+    <string name="permdesc_detectScreenCapture" msgid="3485784917960342284">"Aplicația va fi notificată când se realizează o captură de ecran din folosirea aplicației."</string>
     <string name="permlab_sim_communication" msgid="176788115994050692">"să trimită comenzi către SIM"</string>
     <string name="permdesc_sim_communication" msgid="4179799296415957960">"Permite aplicației să trimită comenzi pe cardul SIM. Această permisiune este foarte periculoasă."</string>
     <string name="permlab_activityRecognition" msgid="1782303296053990884">"recunoașterea activității fizice"</string>
@@ -699,10 +725,8 @@
     <string name="permdesc_readMediaVideo" msgid="3846400073770403528">"Permite aplicației să citească fișiere video din spațiul de stocare comun."</string>
     <string name="permlab_readMediaImages" msgid="4057590631020986789">"să citească fișiere imagine din spațiul de stocare comun"</string>
     <string name="permdesc_readMediaImages" msgid="5836219373138469259">"Permite aplicației să citească fișiere imagine din spațiul de stocare comun."</string>
-    <!-- no translation found for permlab_readVisualUserSelect (5516204215354667586) -->
-    <skip />
-    <!-- no translation found for permdesc_readVisualUserSelect (8027174717714968217) -->
-    <skip />
+    <string name="permlab_readVisualUserSelect" msgid="5516204215354667586">"să citească fișierele imagine și video selectate de utilizator din spațiul de stocare comun"</string>
+    <string name="permdesc_readVisualUserSelect" msgid="8027174717714968217">"Permite aplicației să citească fișierele imagine și video pe care le selectezi din spațiul de stocare comun."</string>
     <string name="permlab_sdcardWrite" msgid="4863021819671416668">"să modifice sau să șteargă conținutul spațiului de stocare comun"</string>
     <string name="permdesc_sdcardWrite" msgid="8376047679331387102">"Permite aplicației scrierea conținutul spațiului de stocare comun."</string>
     <string name="permlab_use_sip" msgid="8250774565189337477">"efectuarea/primirea apelurilor SIP"</string>
@@ -2053,12 +2077,6 @@
     <string name="harmful_app_warning_uninstall" msgid="6472912975664191772">"DEZINSTALEAZĂ"</string>
     <string name="harmful_app_warning_open_anyway" msgid="5963657791740211807">"Deschide oricum"</string>
     <string name="harmful_app_warning_title" msgid="8794823880881113856">"Aplicație dăunătoare detectată"</string>
-    <string name="log_access_confirmation_title" msgid="2343578467290592708">"Permiți ca <xliff:g id="LOG_ACCESS_APP_NAME">%s</xliff:g> să acceseze toate jurnalele dispozitivului?"</string>
-    <string name="log_access_confirmation_allow" msgid="5302517782599389507">"Permite accesul o dată"</string>
-    <string name="log_access_confirmation_deny" msgid="7685790957455099845">"Nu permite"</string>
-    <string name="log_access_confirmation_body" product="default" msgid="1806692062668620735">"Jurnalele dispozitivului înregistrează activitatea de pe dispozitivul tău. Aplicațiile pot folosi aceste jurnale pentru a identifica și a remedia probleme.\n\nUnele jurnale pot să conțină informații sensibile, prin urmare permite accesul la toate jurnalele dispozitivului doar aplicațiilor în care ai încredere. \n\nDacă nu permiți accesul aplicației la toate jurnalele dispozitivului, aceasta poate în continuare să acceseze propriile jurnale. Este posibil ca producătorul dispozitivului să acceseze în continuare unele jurnale sau informații de pe dispozitiv."</string>
-    <string name="log_access_confirmation_body" product="tv" msgid="7379536536425265262">"Jurnalele dispozitivului înregistrează activitatea de pe acesta. Aplicațiile pot folosi aceste jurnale pentru a identifica și a remedia probleme.\n\nUnele jurnale pot să conțină informații sensibile, prin urmare permite accesul la toate jurnalele dispozitivului doar aplicațiilor în care ai încredere. \n\nDacă nu permiți accesul aplicației la toate jurnalele dispozitivului, aceasta poate în continuare să acceseze propriile jurnale. E posibil ca producătorul dispozitivului să acceseze în continuare unele jurnale sau informații de pe dispozitiv.\n\nAflă mai multe la g.co/android/devicelogs."</string>
-    <string name="log_access_do_not_show_again" msgid="1058690599083091552">"Nu mai afișa"</string>
     <string name="slices_permission_request" msgid="3677129866636153406">"<xliff:g id="APP_0">%1$s</xliff:g> vrea să afișeze porțiuni din <xliff:g id="APP_2">%2$s</xliff:g>"</string>
     <string name="screenshot_edit" msgid="7408934887203689207">"Editează"</string>
     <string name="volume_dialog_ringer_guidance_vibrate" msgid="2055927873175228519">"Apelurile și notificările vor vibra"</string>
@@ -2299,6 +2317,7 @@
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"Nu se poate accesa camera foto a telefonului de pe <xliff:g id="DEVICE">%1$s</xliff:g>"</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"Nu se poate accesa camera foto a tabletei de pe <xliff:g id="DEVICE">%1$s</xliff:g>"</string>
     <string name="vdm_secure_window" msgid="161700398158812314">"Nu se poate accesa în timpul streamingului. Încearcă pe telefon."</string>
+    <string name="vdm_pip_blocked" msgid="4036107522497281397">"Nu se poate viziona picture-in-picture în timpul streamingului"</string>
     <string name="system_locale_title" msgid="711882686834677268">"Prestabilit de sistem"</string>
     <string name="default_card_name" msgid="9198284935962911468">"CARD <xliff:g id="CARDNUMBER">%d</xliff:g>"</string>
 </resources>

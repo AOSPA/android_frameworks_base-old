@@ -24,6 +24,7 @@ import androidx.test.filters.SmallTest
 import com.android.systemui.R
 import com.android.systemui.SysuiTestCase
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -42,7 +43,7 @@ class CombinedShadeHeaderConstraintsTest : SysuiTestCase() {
             load(context, context.resources.getXml(R.xml.qqs_header))
         }
         qsConstraint = ConstraintSet().apply {
-            load(context, context.resources.getXml(R.xml.qs_header_new))
+            load(context, context.resources.getXml(R.xml.qs_header))
         }
         largeScreenConstraint = ConstraintSet().apply {
             load(context, context.resources.getXml(R.xml.large_screen_shade_header))
@@ -318,6 +319,44 @@ class CombinedShadeHeaderConstraintsTest : SysuiTestCase() {
         }
 
         assertThat(changes.largeScreenConstraintsChanges).isNull()
+    }
+
+    @Test
+    fun testRelevantViewsAreNotMatchConstraints() {
+        val views = mapOf(
+                R.id.clock to "clock",
+                R.id.date to "date",
+                R.id.statusIcons to "icons",
+                R.id.privacy_container to "privacy",
+                R.id.carrier_group to "carriers",
+                R.id.batteryRemainingIcon to "battery",
+        )
+        views.forEach { (id, name) ->
+            assertWithMessage("$name has 0 height in qqs")
+                    .that(qqsConstraint.getConstraint(id).layout.mHeight).isNotEqualTo(0)
+            assertWithMessage("$name has 0 width in qqs")
+                    .that(qqsConstraint.getConstraint(id).layout.mWidth).isNotEqualTo(0)
+            assertWithMessage("$name has 0 height in qs")
+                    .that(qsConstraint.getConstraint(id).layout.mHeight).isNotEqualTo(0)
+            assertWithMessage("$name has 0 width in qs")
+                    .that(qsConstraint.getConstraint(id).layout.mWidth).isNotEqualTo(0)
+        }
+    }
+
+    @Test
+    fun testEmptyCutoutDateIconsAreConstrainedWidth() {
+        CombinedShadeHeadersConstraintManagerImpl.emptyCutoutConstraints()()
+
+        assertThat(qqsConstraint.getConstraint(R.id.date).layout.constrainedWidth).isTrue()
+        assertThat(qqsConstraint.getConstraint(R.id.statusIcons).layout.constrainedWidth).isTrue()
+    }
+
+    @Test
+    fun testCenterCutoutDateIconsAreConstrainedWidth() {
+        CombinedShadeHeadersConstraintManagerImpl.centerCutoutConstraints(false, 10)()
+
+        assertThat(qqsConstraint.getConstraint(R.id.date).layout.constrainedWidth).isTrue()
+        assertThat(qqsConstraint.getConstraint(R.id.statusIcons).layout.constrainedWidth).isTrue()
     }
 
     private operator fun ConstraintsChanges.invoke() {

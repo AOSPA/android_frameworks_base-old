@@ -570,6 +570,34 @@ public class AppTransitionController {
     }
 
     /**
+     * Whether the transition contains any embedded {@link TaskFragment} that does not fill the
+     * parent {@link Task} before or after the transition.
+     */
+    private boolean transitionContainsTaskFragmentWithBoundsOverride() {
+        for (int i = mDisplayContent.mChangingContainers.size() - 1; i >= 0; i--) {
+            final WindowContainer wc = mDisplayContent.mChangingContainers.valueAt(i);
+            if (wc.isEmbedded()) {
+                // Contains embedded TaskFragment with bounds changed.
+                return true;
+            }
+        }
+        mTempTransitionWindows.clear();
+        mTempTransitionWindows.addAll(mDisplayContent.mClosingApps);
+        mTempTransitionWindows.addAll(mDisplayContent.mOpeningApps);
+        boolean containsTaskFragmentWithBoundsOverride = false;
+        for (int i = mTempTransitionWindows.size() - 1; i >= 0; i--) {
+            final ActivityRecord r = mTempTransitionWindows.get(i).asActivityRecord();
+            final TaskFragment tf = r.getTaskFragment();
+            if (tf != null && tf.isEmbeddedWithBoundsOverride()) {
+                containsTaskFragmentWithBoundsOverride = true;
+                break;
+            }
+        }
+        mTempTransitionWindows.clear();
+        return containsTaskFragmentWithBoundsOverride;
+    }
+
+    /**
      * Finds the common parent {@link Task} that is parent of all embedded app windows in the
      * current transition.
      * @return {@code null} if app windows in the transition are not children of the same Task, or
@@ -672,12 +700,17 @@ public class AppTransitionController {
         if (transitionMayContainNonAppWindows(transit)) {
             return false;
         }
+        if (!transitionContainsTaskFragmentWithBoundsOverride()) {
+            // No need to play TaskFragment remote animation if all embedded TaskFragment in the
+            // transition fill the Task.
+            return false;
+        }
 
         final Task task = findParentTaskForAllEmbeddedWindows();
         final ITaskFragmentOrganizer organizer = findTaskFragmentOrganizer(task);
         final RemoteAnimationDefinition definition = organizer != null
                 ? mDisplayContent.mAtmService.mTaskFragmentOrganizerController
-                    .getRemoteAnimationDefinition(organizer, task.mTaskId)
+                    .getRemoteAnimationDefinition(organizer)
                 : null;
         final RemoteAnimationAdapter adapter = definition != null
                 ? definition.getAdapter(transit, activityTypes)
@@ -1179,13 +1212,23 @@ public class AppTransitionController {
                     "Delaying app transition for screen rotation animation to finish");
             return false;
         }
+        final boolean isRecentsInOpening = mDisplayContent.mOpeningApps.stream().anyMatch(
+                ConfigurationContainer::isActivityTypeRecents);
         for (int i = 0; i < apps.size(); i++) {
             WindowContainer wc = apps.valueAt(i);
             final ActivityRecord activity = getAppFromContainer(wc);
             if (activity == null) {
                 continue;
             }
-            if (activity.isAnimating(PARENTS, ANIMATION_TYPE_RECENTS)) {
+            // In order to avoid visual clutter caused by a conflict between app transition
+            // animation and recents animation, app transition is delayed until recents finishes.
+            // One exceptional case. When 3P launcher is used and a user taps a task screenshot in
+            // task switcher (isRecentsInOpening=true), app transition must start even though
+            // recents is running. Otherwise app transition is blocked until timeout (b/232984498).
+            // When 1P launcher is used, this animation is controlled by the launcher outside of
+            // the app transition, so delaying app transition doesn't cause visible delay. After
+            // recents finishes, app transition is handled just to commit visibility on apps.
+            if (!isRecentsInOpening && activity.isAnimating(PARENTS, ANIMATION_TYPE_RECENTS)) {
                 ProtoLog.v(WM_DEBUG_APP_TRANSITIONS,
                         "Delaying app transition for recents animation to finish");
                 return false;

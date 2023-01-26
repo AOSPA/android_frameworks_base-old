@@ -17,10 +17,12 @@
 package com.android.systemui.keyguard.domain.interactor
 
 import android.content.res.ColorStateList
+import android.hardware.biometrics.BiometricSourceType
 import android.os.Handler
 import android.os.Trace
 import android.os.UserHandle
 import android.os.UserManager
+import android.view.View
 import com.android.keyguard.KeyguardSecurityModel
 import com.android.keyguard.KeyguardUpdateMonitor
 import com.android.systemui.DejankUtils
@@ -70,7 +72,7 @@ constructor(
                 KeyguardUpdateMonitor.getCurrentUser()
             ) &&
             !needsFullscreenBouncer() &&
-            !keyguardUpdateMonitor.userNeedsStrongAuth() &&
+            keyguardUpdateMonitor.isUnlockingWithBiometricAllowed(BiometricSourceType.FACE) &&
             !keyguardBypassController.bypassEnabled
 
     /** Runnable to show the primary bouncer. */
@@ -84,6 +86,7 @@ constructor(
             )
         )
         repository.setPrimaryShowingSoon(false)
+        primaryBouncerCallbackInteractor.dispatchVisibilityChanged(View.VISIBLE)
     }
 
     val keyguardAuthenticated: Flow<Boolean> = repository.keyguardAuthenticated.filterNotNull()
@@ -182,6 +185,7 @@ constructor(
         repository.setPrimaryVisible(false)
         repository.setPrimaryHide(true)
         repository.setPrimaryShow(null)
+        primaryBouncerCallbackInteractor.dispatchVisibilityChanged(View.INVISIBLE)
         Trace.endSection()
     }
 
@@ -271,9 +275,9 @@ constructor(
         repository.setKeyguardAuthenticated(null)
     }
 
-    /** Notify that view visibility has changed. */
-    fun notifyBouncerVisibilityHasChanged(visibility: Int) {
-        primaryBouncerCallbackInteractor.dispatchVisibilityChanged(visibility)
+    /** Notifies that the message was shown. */
+    fun onMessageShown() {
+        repository.setShowMessage(null)
     }
 
     /** Notify that the resources have been updated */

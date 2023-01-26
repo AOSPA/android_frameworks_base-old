@@ -258,12 +258,14 @@ public final class ServiceManager {
      * waitForService should always be able to return the service.
      * @hide
      */
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    @NonNull
     public static String[] getDeclaredInstances(@NonNull String iface) {
         try {
             return getIServiceManager().getDeclaredInstances(iface);
         } catch (RemoteException e) {
             Log.e(TAG, "error in getDeclaredInstances", e);
-            return null;
+            throw e.rethrowFromSystemServer();
         }
     }
 
@@ -276,8 +278,6 @@ public final class ServiceManager {
      * @return {@code null} only if there are permission problems or fatal errors.
      * @hide
      */
-    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
-    @Nullable
     public static IBinder waitForService(@NonNull String name) {
         return Binder.allowBlocking(waitForServiceNative(name));
     }

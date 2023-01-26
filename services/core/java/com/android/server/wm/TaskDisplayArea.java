@@ -27,7 +27,6 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.content.Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_BEHIND;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
-import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ORIENTATION;
@@ -651,17 +650,6 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
             }, SCREEN_ORIENTATION_UNSET);
         }
 
-        // Apps and their containers are not allowed to specify an orientation of non floating
-        // visible tasks created by organizer and that has an adjacent task.
-        final Task nonFloatingTopTask =
-                getTask(t -> !t.getWindowConfiguration().tasksAreFloating());
-        if (nonFloatingTopTask != null) {
-            final Task task = nonFloatingTopTask.getCreatedByOrganizerTask();
-            if (task != null && task.getAdjacentTaskFragment() != null && task.isVisible()) {
-                return SCREEN_ORIENTATION_UNSPECIFIED;
-            }
-        }
-
         final int orientation = super.getOrientation(candidate);
         if (orientation != SCREEN_ORIENTATION_UNSET
                 && orientation != SCREEN_ORIENTATION_BEHIND) {
@@ -931,6 +919,7 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
             // Update windowing mode if necessary, e.g. launch into a different windowing mode.
             if (windowingMode != WINDOWING_MODE_UNDEFINED && candidateTask.isRootTask()
                     && candidateTask.getWindowingMode() != windowingMode) {
+                candidateTask.mTransitionController.collect(candidateTask);
                 candidateTask.setWindowingMode(windowingMode);
             }
             return candidateTask.getRootTask();

@@ -36,6 +36,7 @@ import static android.view.Surface.ROTATION_0;
 import static android.view.Surface.ROTATION_90;
 import static android.window.DisplayAreaOrganizer.FEATURE_VENDOR_FIRST;
 
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.times;
@@ -80,6 +81,7 @@ import android.util.DisplayMetrics;
 import android.util.Xml;
 import android.view.Display;
 import android.view.DisplayInfo;
+import android.window.TaskFragmentOrganizer;
 
 import androidx.test.filters.MediumTest;
 
@@ -147,8 +149,8 @@ public class TaskTests extends WindowTestsBase {
     public void testRemoveContainer_multipleNestedTasks() {
         final Task rootTask = createTask(mDisplayContent);
         rootTask.mCreatedByOrganizer = true;
-        final Task task1 = new TaskBuilder(mSupervisor).setParentTaskFragment(rootTask).build();
-        final Task task2 = new TaskBuilder(mSupervisor).setParentTaskFragment(rootTask).build();
+        final Task task1 = new TaskBuilder(mSupervisor).setParentTask(rootTask).build();
+        final Task task2 = new TaskBuilder(mSupervisor).setParentTask(rootTask).build();
         final ActivityRecord activity1 = createActivityRecord(task1);
         final ActivityRecord activity2 = createActivityRecord(task2);
         activity1.setVisible(false);
@@ -433,6 +435,24 @@ public class TaskTests extends WindowTestsBase {
     }
 
     @Test
+    public void testPropagateFocusedStateToRootTask() {
+        final Task rootTask = createTask(mDefaultDisplay);
+        final Task leafTask = createTaskInRootTask(rootTask, 0 /* userId */);
+
+        final ActivityRecord activity = createActivityRecord(leafTask);
+
+        leafTask.getDisplayContent().setFocusedApp(activity);
+
+        assertTrue(leafTask.getTaskInfo().isFocused);
+        assertTrue(rootTask.getTaskInfo().isFocused);
+
+        leafTask.getDisplayContent().setFocusedApp(null);
+
+        assertFalse(leafTask.getTaskInfo().isFocused);
+        assertFalse(rootTask.getTaskInfo().isFocused);
+    }
+
+    @Test
     public void testReturnsToHomeRootTask() throws Exception {
         final Task task = createTask(1);
         spyOn(task);
@@ -478,7 +498,7 @@ public class TaskTests extends WindowTestsBase {
         TaskDisplayArea taskDisplayArea = mAtm.mRootWindowContainer.getDefaultTaskDisplayArea();
         Task rootTask = taskDisplayArea.createRootTask(WINDOWING_MODE_FREEFORM,
                 ACTIVITY_TYPE_STANDARD, true /* onTop */);
-        Task task = new TaskBuilder(mSupervisor).setParentTaskFragment(rootTask).build();
+        Task task = new TaskBuilder(mSupervisor).setParentTask(rootTask).build();
         final Configuration parentConfig = rootTask.getConfiguration();
         parentConfig.windowConfiguration.setBounds(parentBounds);
         parentConfig.densityDpi = DisplayMetrics.DENSITY_DEFAULT;
@@ -780,7 +800,7 @@ public class TaskTests extends WindowTestsBase {
         DisplayInfo displayInfo = new DisplayInfo();
         mAtm.mContext.getDisplay().getDisplayInfo(displayInfo);
         final int displayHeight = displayInfo.logicalHeight;
-        final Task task = new TaskBuilder(mSupervisor).setParentTaskFragment(rootTask).build();
+        final Task task = new TaskBuilder(mSupervisor).setParentTask(rootTask).build();
         final Configuration inOutConfig = new Configuration();
         final Configuration parentConfig = new Configuration();
         final int longSide = 1200;
@@ -1436,10 +1456,8 @@ public class TaskTests extends WindowTestsBase {
     @Test
     public void testResumeTask_doNotResumeTaskFragmentBehindTranslucent() {
         final Task task = createTask(mDisplayContent);
-        final TaskFragment tfBehind = createTaskFragmentWithParentTask(
-                task, false /* createEmbeddedTask */);
-        final TaskFragment tfFront = createTaskFragmentWithParentTask(
-                task, false /* createEmbeddedTask */);
+        final TaskFragment tfBehind = createTaskFragmentWithActivity(task);
+        final TaskFragment tfFront = createTaskFragmentWithActivity(task);
         spyOn(tfFront);
         doReturn(true).when(tfFront).isTranslucent(any());
 
@@ -1459,8 +1477,8 @@ public class TaskTests extends WindowTestsBase {
     @Test
     public void testGetTaskFragment() {
         final Task parentTask = createTask(mDisplayContent);
-        final TaskFragment tf0 = createTaskFragmentWithParentTask(parentTask);
-        final TaskFragment tf1 = createTaskFragmentWithParentTask(parentTask);
+        final TaskFragment tf0 = createTaskFragmentWithActivity(parentTask);
+        final TaskFragment tf1 = createTaskFragmentWithActivity(parentTask);
 
         assertNull("Could not find it because there's no organized TaskFragment",
                 parentTask.getTaskFragment(TaskFragment::isOrganizedTaskFragment));
@@ -1469,6 +1487,26 @@ public class TaskTests extends WindowTestsBase {
 
         assertEquals("tf0 must be return because it's the organized TaskFragment.",
                 tf0, parentTask.getTaskFragment(TaskFragment::isOrganizedTaskFragment));
+    }
+
+    @Test
+    public void testReorderActivityToFront() {
+        final TaskFragmentOrganizer organizer = new TaskFragmentOrganizer(Runnable::run);
+        final Task task =  new TaskBuilder(mSupervisor).setCreateActivity(true).build();
+        doNothing().when(task).onActivityVisibleRequestedChanged();
+        final ActivityRecord activity = task.getTopMostActivity();
+
+        final TaskFragment fragment = createTaskFragmentWithEmbeddedActivity(task, organizer);
+        final ActivityRecord embeddedActivity = fragment.getTopMostActivity();
+        task.moveActivityToFront(activity);
+        assertEquals("Activity must be moved to front", activity, task.getTopMostActivity());
+
+        doNothing().when(fragment).sendTaskFragmentInfoChanged();
+        task.moveActivityToFront(embeddedActivity);
+        assertEquals("Activity must be moved to front", embeddedActivity,
+                task.getTopMostActivity());
+        assertEquals("Activity must not be embedded", embeddedActivity,
+                task.getTopChild());
     }
 
     private Task getTestTask() {
@@ -1482,7 +1520,7 @@ public class TaskTests extends WindowTestsBase {
         TaskDisplayArea taskDisplayArea = mAtm.mRootWindowContainer.getDefaultTaskDisplayArea();
         Task rootTask = taskDisplayArea.createRootTask(windowingMode, ACTIVITY_TYPE_STANDARD,
                 true /* onTop */);
-        Task task = new TaskBuilder(mSupervisor).setParentTaskFragment(rootTask).build();
+        Task task = new TaskBuilder(mSupervisor).setParentTask(rootTask).build();
 
         final Configuration parentConfig = rootTask.getConfiguration();
         parentConfig.windowConfiguration.setAppBounds(parentBounds);

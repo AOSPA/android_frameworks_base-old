@@ -395,6 +395,30 @@
     <string name="permdesc_persistentActivity" product="default" msgid="1914841924366562051">"Апп нь өөрийн хэсгийг санах ойд байнга байлгах боломжтой. Энэ нь бусад апп-уудын ашиглах санах ойг хязгаарлан утсыг удаашруулах болно."</string>
     <string name="permlab_foregroundService" msgid="1768855976818467491">"интерактив (foreground) үйлчилгээг ажиллуулах"</string>
     <string name="permdesc_foregroundService" msgid="8720071450020922795">"Аппад интерактив (foreground) үйлчилгээг ашиглахыг зөвшөөрнө үү."</string>
+    <string name="permlab_foregroundServiceCamera" msgid="7814751737955715297">"\"Камер\" төрөлтэй нүүрэн талын үйлчилгээг ажиллуулах"</string>
+    <string name="permdesc_foregroundServiceCamera" msgid="6973701931250595727">"Аппад \"камер\" төрөлтэй нүүрэн талын үйлчилгээнүүдийг ашиглахыг зөвшөөрнө"</string>
+    <string name="permlab_foregroundServiceConnectedDevice" msgid="3019650546176872501">"\"ConnectedDevice\" төрөлтэй нүүрэн талын үйлчилгээг ажиллуулах"</string>
+    <string name="permdesc_foregroundServiceConnectedDevice" msgid="1067457315741352963">"Аппад \"connectedDevice\" төрөлтэй нүүрэн талын үйлчилгээнүүдийг ашиглахыг зөвшөөрнө"</string>
+    <string name="permlab_foregroundServiceDataSync" msgid="5847463514326881076">"\"DataSync\" төрөлтэй нүүрэн талын үйлчилгээг ажиллуулах"</string>
+    <string name="permdesc_foregroundServiceDataSync" msgid="2267140263423973050">"Аппад \"dataSync\" төрөлтэй нүүрэн талын үйлчилгээнүүдийг ашиглахыг зөвшөөрнө"</string>
+    <string name="permlab_foregroundServiceLocation" msgid="3745428302378535690">"\"Байршил\" төрөлтэй нүүрэн талын үйлчилгээг ажиллуулах"</string>
+    <string name="permdesc_foregroundServiceLocation" msgid="118894034365177183">"Аппад \"байршил\" төрөлтэй нүүрэн талын үйлчилгээнүүдийг ашиглахыг зөвшөөрнө"</string>
+    <string name="permlab_foregroundServiceMediaPlayback" msgid="4002687983891935514">"\"MediaPlayback\" төрөлтэй нүүрэн талын үйлчилгээг ажиллуулах"</string>
+    <string name="permdesc_foregroundServiceMediaPlayback" msgid="3638032446063968043">"Аппад \"mediaPlayback\" төрөлтэй нүүрэн талын үйлчилгээнүүдийг ашиглахыг зөвшөөрнө"</string>
+    <string name="permlab_foregroundServiceMediaProjection" msgid="2630868915733312527">"\"MediaProjection\" төрөлтэй нүүрэн талын үйлчилгээг ажиллуулах"</string>
+    <string name="permdesc_foregroundServiceMediaProjection" msgid="4805677128082002298">"Аппад \"mediaProjection\" төрөлтэй нүүрэн талын үйлчилгээнүүдийг ашиглахыг зөвшөөрнө"</string>
+    <string name="permlab_foregroundServiceMicrophone" msgid="7390033424890545399">"\"Микрофон\" төрөлтэй нүүрэн талын үйлчилгээг ажиллуулах"</string>
+    <string name="permdesc_foregroundServiceMicrophone" msgid="1206041516173483201">"Аппад \"микрофон\" төрөлтэй нүүрэн талын үйлчилгээнүүдийг ашиглахыг зөвшөөрнө"</string>
+    <string name="permlab_foregroundServicePhoneCall" msgid="627937743867697892">"\"PhoneCall\" төрөлтэй нүүрэн талын үйлчилгээг ажиллуулах"</string>
+    <string name="permdesc_foregroundServicePhoneCall" msgid="5941660252587015147">"Аппад \"phoneCall\" төрөлтэй нүүрэн талын үйлчилгээнүүдийг ашиглахыг зөвшөөрнө"</string>
+    <string name="permlab_foregroundServiceHealth" msgid="3675776442080928184">"\"Эрүүл мэнд\" төрөлтэй нүүрэн талын үйлчилгээг ажиллуулах"</string>
+    <string name="permdesc_foregroundServiceHealth" msgid="2024586220562667185">"Аппад \"эрүүл мэнд\" төрөлтэй нүүрэн талын үйлчилгээнүүдийг ашиглахыг зөвшөөрнө"</string>
+    <string name="permlab_foregroundServiceRemoteMessaging" msgid="105670277002780950">"\"RemoteMessaging\" төрөлтэй нүүрэн талын үйлчилгээг ажиллуулах"</string>
+    <string name="permdesc_foregroundServiceRemoteMessaging" msgid="8767598075877576277">"Аппад \"remoteMessaging\" төрөлтэй нүүрэн талын үйлчилгээнүүдийг ашиглахыг зөвшөөрнө"</string>
+    <string name="permlab_foregroundServiceSystemExempted" msgid="1597663713590612685">"\"SystemExempted\"-н төрөлтэй нүүрэн талын үйлчилгээг ажиллуулах"</string>
+    <string name="permdesc_foregroundServiceSystemExempted" msgid="947381760834649622">"Аппад \"systemExempted\" төрөлтэй нүүрэн талын үйлчилгээнүүдийг ашиглахыг зөвшөөрнө"</string>
+    <string name="permlab_foregroundServiceSpecialUse" msgid="7973536745876645082">"\"SpecialUse\" төрөлтэй нүүрэн талын үйлчилгээг ажиллуулах"</string>
+    <string name="permdesc_foregroundServiceSpecialUse" msgid="646713654541885919">"Аппад \"specialUse\" төрөлтэй нүүрэн талын үйлчилгээнүүдийг ашиглахыг зөвшөөрнө"</string>
     <string name="permlab_getPackageSize" msgid="375391550792886641">"апп сангийн хэмжээг хэмжих"</string>
     <string name="permdesc_getPackageSize" msgid="742743530909966782">"Апп нь өөрийн код, дата болон кеш хэмжээг унших боломжтой"</string>
     <string name="permlab_writeSettings" msgid="8057285063719277394">"систем тохиргоог өөрчлөх"</string>
@@ -447,6 +471,8 @@
     <string name="permdesc_recordAudio" msgid="5857246765327514062">"Энэ аппыг ашиглаж байх үед энэ нь микрофон ашиглан аудио бичих боломжтой."</string>
     <string name="permlab_recordBackgroundAudio" msgid="5891032812308878254">"ард видео бичих"</string>
     <string name="permdesc_recordBackgroundAudio" msgid="1992623135737407516">"Энэ апп ямар ч үед микрофон ашиглан аудио бичих боломжтой."</string>
+    <string name="permlab_detectScreenCapture" msgid="4447042362828799433">"аппын цонхны дэлгэцийн зургийг илрүүлэх"</string>
+    <string name="permdesc_detectScreenCapture" msgid="3485784917960342284">"Энэ аппыг ашиглаж байх үеэр дэлгэцийн агшин авбал мэдэгдэл хүлээн авах болно."</string>
     <string name="permlab_sim_communication" msgid="176788115994050692">"SIM картад тушаал илгээх"</string>
     <string name="permdesc_sim_communication" msgid="4179799296415957960">"Апп-д SIM рүү комманд илгээхийг зөвшөөрнө. Энэ маш аюултай."</string>
     <string name="permlab_activityRecognition" msgid="1782303296053990884">"биеийн дасгал хөдөлгөөн таних"</string>
@@ -698,10 +724,8 @@
     <string name="permdesc_readMediaVideo" msgid="3846400073770403528">"Аппад таны дундын хадгалах сангаас видео файлыг унших боломжийг олгодог."</string>
     <string name="permlab_readMediaImages" msgid="4057590631020986789">"дундын хадгалах сангаас зургийн файл унших"</string>
     <string name="permdesc_readMediaImages" msgid="5836219373138469259">"Аппад таны дундын хадгалах сангаас зургийн файлыг унших зөвшөөрөл олгодог."</string>
-    <!-- no translation found for permlab_readVisualUserSelect (5516204215354667586) -->
-    <skip />
-    <!-- no translation found for permdesc_readVisualUserSelect (8027174717714968217) -->
-    <skip />
+    <string name="permlab_readVisualUserSelect" msgid="5516204215354667586">"дундын хадгалах сангаас хэрэглэгчийн сонгосон зураг болон видео файлуудыг унших"</string>
+    <string name="permdesc_readVisualUserSelect" msgid="8027174717714968217">"Аппад таны дундын хадгалах сангаас сонгосон зураг болон видео файлуудыг унших боломж олгодог."</string>
     <string name="permlab_sdcardWrite" msgid="4863021819671416668">"дундын хадгалах сангийнхаа контентыг өөрчлөх эсвэл устгах"</string>
     <string name="permdesc_sdcardWrite" msgid="8376047679331387102">"Аппад таны дундын хадгалах сангийн контентыг бичихийг зөвшөөрдөг."</string>
     <string name="permlab_use_sip" msgid="8250774565189337477">"SIP дуудлага хийх/хүлээн авах"</string>
@@ -2052,12 +2076,6 @@
     <string name="harmful_app_warning_uninstall" msgid="6472912975664191772">"УСТГАХ"</string>
     <string name="harmful_app_warning_open_anyway" msgid="5963657791740211807">"ЯМАР Ч ТОХИОЛДОЛД НЭЭХ"</string>
     <string name="harmful_app_warning_title" msgid="8794823880881113856">"Аюултай апп олдсон"</string>
-    <string name="log_access_confirmation_title" msgid="2343578467290592708">"<xliff:g id="LOG_ACCESS_APP_NAME">%s</xliff:g>-д төхөөрөмжийн бүх логт хандахыг зөвшөөрөх үү?"</string>
-    <string name="log_access_confirmation_allow" msgid="5302517782599389507">"Нэг удаагийн хандалтыг зөвшөөрнө үү"</string>
-    <string name="log_access_confirmation_deny" msgid="7685790957455099845">"Бүү зөвшөөр"</string>
-    <string name="log_access_confirmation_body" product="default" msgid="1806692062668620735">"Төхөөрөмжийн лог нь таны төхөөрөмж дээр юу болж байгааг бичдэг. Аппууд эдгээр логийг асуудлыг олох болон засахад ашиглах боломжтой.\n\nЗарим лог эмзэг мэдээлэл агуулж байж магадгүй тул та зөвхөн итгэдэг аппууддаа төхөөрөмжийн бүх логт хандахыг зөвшөөрнө үү. \n\nХэрэв та энэ аппад төхөөрөмжийн бүх логт хандахыг зөвшөөрөхгүй бол энэ нь өөрийн логт хандах боломжтой хэвээр байх болно. Tаны төхөөрөмж үйлдвэрлэгч таны төхөөрөмж дээрх зарим лог эсвэл мэдээлэлд хандах боломжтой хэвээр байж магадгүй."</string>
-    <string name="log_access_confirmation_body" product="tv" msgid="7379536536425265262">"Төхөөрөмжийн лог нь таны төхөөрөмж дээр юу болж байгааг бичдэг. Аппууд эдгээр логийг асуудлыг олох болон засахад ашиглах боломжтой.\n\nЗарим лог эмзэг мэдээлэл агуулж байж магадгүй тул та зөвхөн итгэдэг аппууддаа төхөөрөмжийн бүх логт хандахыг зөвшөөрнө үү. \n\nХэрэв та энэ аппад төхөөрөмжийн бүх логт хандахыг зөвшөөрөхгүй бол энэ нь өөрийн логт хандах боломжтой хэвээр байх болно. Таны төхөөрөмжийн үйлдвэрлэгч таны төхөөрөмж дээрх зарим лог эсвэл мэдээлэлд хандах боломжтой хэвээр байж магадгүй.\n\ng.co/android/devicelogs -с нэмэлт мэдээлэл аваарай."</string>
-    <string name="log_access_do_not_show_again" msgid="1058690599083091552">"Дахиж бүү харуул"</string>
     <string name="slices_permission_request" msgid="3677129866636153406">"<xliff:g id="APP_0">%1$s</xliff:g> <xliff:g id="APP_2">%2$s</xliff:g>-н хэсгүүдийг (slices) харуулах хүсэлтэй байна"</string>
     <string name="screenshot_edit" msgid="7408934887203689207">"Засах"</string>
     <string name="volume_dialog_ringer_guidance_vibrate" msgid="2055927873175228519">"Дуудлага болон мэдэгдэл чичирнэ"</string>
@@ -2298,6 +2316,7 @@
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"Таны <xliff:g id="DEVICE">%1$s</xliff:g>-с утасны камерт хандах боломжгүй"</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"Таны <xliff:g id="DEVICE">%1$s</xliff:g>-с таблетын камерт хандах боломжгүй"</string>
     <string name="vdm_secure_window" msgid="161700398158812314">"Стримингийн үед үүнд хандах боломжгүй. Оронд нь утас дээрээ туршиж үзнэ үү."</string>
+    <string name="vdm_pip_blocked" msgid="4036107522497281397">"Дамжуулах явцад дэлгэц доторх дэлгэцийг үзэх боломжгүй"</string>
     <string name="system_locale_title" msgid="711882686834677268">"Системийн өгөгдмөл"</string>
     <string name="default_card_name" msgid="9198284935962911468">"КАРТ <xliff:g id="CARDNUMBER">%d</xliff:g>"</string>
 </resources>

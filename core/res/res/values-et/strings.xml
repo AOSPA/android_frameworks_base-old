@@ -395,6 +395,30 @@
     <string name="permdesc_persistentActivity" product="default" msgid="1914841924366562051">"Võimaldab rakendusel muuta oma osi mälus püsivaks. See võib piirata teistele (telefoni aeglasemaks muutvatele) rakendustele saadaolevat mälu."</string>
     <string name="permlab_foregroundService" msgid="1768855976818467491">"käita esiplaanil olevat teenust"</string>
     <string name="permdesc_foregroundService" msgid="8720071450020922795">"Lubab rakendusel kasutada esiplaanil olevaid teenuseid."</string>
+    <string name="permlab_foregroundServiceCamera" msgid="7814751737955715297">"sellise esiplaanil oleva teenuse käitamine, mille tüüp on „camera“"</string>
+    <string name="permdesc_foregroundServiceCamera" msgid="6973701931250595727">"Lubab rakendusel kasutada esiplaanil olevaid teenuseid, mille tüüp on „camera“."</string>
+    <string name="permlab_foregroundServiceConnectedDevice" msgid="3019650546176872501">"sellise esiplaanil oleva teenuse käitamine, mille tüüp on „connectedDevice“"</string>
+    <string name="permdesc_foregroundServiceConnectedDevice" msgid="1067457315741352963">"Lubab rakendusel kasutada esiplaanil olevaid teenuseid, mille tüüp on „connectedDevice“."</string>
+    <string name="permlab_foregroundServiceDataSync" msgid="5847463514326881076">"sellise esiplaanil oleva teenuse käitamine, mille tüüp on „dataSync“"</string>
+    <string name="permdesc_foregroundServiceDataSync" msgid="2267140263423973050">"Lubab rakendusel kasutada esiplaanil olevaid teenuseid, mille tüüp on „dataSync“."</string>
+    <string name="permlab_foregroundServiceLocation" msgid="3745428302378535690">"sellise esiplaanil oleva teenuse käitamine, mille tüüp on „location“"</string>
+    <string name="permdesc_foregroundServiceLocation" msgid="118894034365177183">"Lubab rakendusel kasutada esiplaanil olevaid teenuseid, mille tüüp on „location“."</string>
+    <string name="permlab_foregroundServiceMediaPlayback" msgid="4002687983891935514">"sellise esiplaanil oleva teenuse käitamine, mille tüüp on „mediaPlayback“"</string>
+    <string name="permdesc_foregroundServiceMediaPlayback" msgid="3638032446063968043">"Lubab rakendusel kasutada esiplaanil olevaid teenuseid, mille tüüp on „mediaPlayback“."</string>
+    <string name="permlab_foregroundServiceMediaProjection" msgid="2630868915733312527">"sellise esiplaanil oleva teenuse käitamine, mille tüüp on „mediaProjection“"</string>
+    <string name="permdesc_foregroundServiceMediaProjection" msgid="4805677128082002298">"Lubab rakendusel kasutada esiplaanil olevaid teenuseid, mille tüüp on „mediaProjection“."</string>
+    <string name="permlab_foregroundServiceMicrophone" msgid="7390033424890545399">"sellise esiplaanil oleva teenuse käitamine, mille tüüp on „microphone“"</string>
+    <string name="permdesc_foregroundServiceMicrophone" msgid="1206041516173483201">"Lubab rakendusel kasutada esiplaanil olevaid teenuseid, mille tüüp on „microphone“."</string>
+    <string name="permlab_foregroundServicePhoneCall" msgid="627937743867697892">"sellise esiplaanil oleva teenuse käitamine, mille tüüp on „phoneCall“"</string>
+    <string name="permdesc_foregroundServicePhoneCall" msgid="5941660252587015147">"Lubab rakendusel kasutada esiplaanil olevaid teenuseid, mille tüüp on „phoneCall“."</string>
+    <string name="permlab_foregroundServiceHealth" msgid="3675776442080928184">"sellise esiplaanil oleva teenuse käitamine, mille tüüp on „health“"</string>
+    <string name="permdesc_foregroundServiceHealth" msgid="2024586220562667185">"Lubab rakendusel kasutada esiplaanil olevaid teenuseid, mille tüüp on „health“."</string>
+    <string name="permlab_foregroundServiceRemoteMessaging" msgid="105670277002780950">"sellise esiplaanil oleva teenuse käitamine, mille tüüp on „remoteMessaging“"</string>
+    <string name="permdesc_foregroundServiceRemoteMessaging" msgid="8767598075877576277">"Lubab rakendusel kasutada esiplaanil olevaid teenuseid, mille tüüp on „remoteMessaging“."</string>
+    <string name="permlab_foregroundServiceSystemExempted" msgid="1597663713590612685">"sellise esiplaanil oleva teenuse käitamine, mille tüüp on „systemExempted“"</string>
+    <string name="permdesc_foregroundServiceSystemExempted" msgid="947381760834649622">"Lubab rakendusel kasutada esiplaanil olevaid teenuseid, mille tüüp on „systemExempted“."</string>
+    <string name="permlab_foregroundServiceSpecialUse" msgid="7973536745876645082">"sellise esiplaanil oleva teenuse käitamine, mille tüüp on „specialUse“"</string>
+    <string name="permdesc_foregroundServiceSpecialUse" msgid="646713654541885919">"Lubab rakendusel kasutada esiplaanil olevaid teenuseid, mille tüüp on „specialUse“."</string>
     <string name="permlab_getPackageSize" msgid="375391550792886641">"Rakenduse mäluruumi mõõtmine"</string>
     <string name="permdesc_getPackageSize" msgid="742743530909966782">"Võimaldab rakendusel tuua oma koodi, andmed ja vahemälu suurused"</string>
     <string name="permlab_writeSettings" msgid="8057285063719277394">"muutke süsteemi seadeid"</string>
@@ -447,6 +471,8 @@
     <string name="permdesc_recordAudio" msgid="5857246765327514062">"See rakendus saab mikrofoniga heli salvestada siis, kui rakendus on kasutusel."</string>
     <string name="permlab_recordBackgroundAudio" msgid="5891032812308878254">"Taustal heli salvestamine."</string>
     <string name="permdesc_recordBackgroundAudio" msgid="1992623135737407516">"See rakendus saab mikrofoniga heli salvestada mis tahes ajal."</string>
+    <string name="permlab_detectScreenCapture" msgid="4447042362828799433">"rakenduste akende puhul ekraanikuva jäädvustamise tuvastamine"</string>
+    <string name="permdesc_detectScreenCapture" msgid="3485784917960342284">"Rakendust teavitatakse, kui selle kasutamise ajal jäädvustatakse ekraanipilt."</string>
     <string name="permlab_sim_communication" msgid="176788115994050692">"SIM-kaardile käskluste saatmine"</string>
     <string name="permdesc_sim_communication" msgid="4179799296415957960">"Lubab rakendusel saata käske SIM-kaardile. See on väga ohtlik."</string>
     <string name="permlab_activityRecognition" msgid="1782303296053990884">"füüsiliste tegevuste tuvastamine"</string>
@@ -698,10 +724,8 @@
     <string name="permdesc_readMediaVideo" msgid="3846400073770403528">"Võimaldab rakendusel lugeda teie jagatud salvestusruumis olevaid videofaile."</string>
     <string name="permlab_readMediaImages" msgid="4057590631020986789">"lugeda teie jagatud salvestusruumis olevaid pildifaile"</string>
     <string name="permdesc_readMediaImages" msgid="5836219373138469259">"Võimaldab rakendusel lugeda teie jagatud salvestusruumis olevaid pildifaile."</string>
-    <!-- no translation found for permlab_readVisualUserSelect (5516204215354667586) -->
-    <skip />
-    <!-- no translation found for permdesc_readVisualUserSelect (8027174717714968217) -->
-    <skip />
+    <string name="permlab_readVisualUserSelect" msgid="5516204215354667586">"lugeda jagatud salvestusruumis olevaid kasutaja valitud pildi- ja videofaile"</string>
+    <string name="permdesc_readVisualUserSelect" msgid="8027174717714968217">"Võimaldab rakendusel lugeda teie jagatud salvestusruumis olevaid valitud pildi- ja videofaile."</string>
     <string name="permlab_sdcardWrite" msgid="4863021819671416668">"Jagatud salvestusruumi sisu muutmine või kustutamine"</string>
     <string name="permdesc_sdcardWrite" msgid="8376047679331387102">"Lubab rakendusel kirjutada jagatud salvestusruumi sisu."</string>
     <string name="permlab_use_sip" msgid="8250774565189337477">"SIP-kõnede tegemine/vastuvõtmine"</string>
@@ -2052,12 +2076,6 @@
     <string name="harmful_app_warning_uninstall" msgid="6472912975664191772">"DESINSTALLI"</string>
     <string name="harmful_app_warning_open_anyway" msgid="5963657791740211807">"AVA IKKA"</string>
     <string name="harmful_app_warning_title" msgid="8794823880881113856">"Tuvastati kahjulik rakendus"</string>
-    <string name="log_access_confirmation_title" msgid="2343578467290592708">"Kas anda rakendusele <xliff:g id="LOG_ACCESS_APP_NAME">%s</xliff:g> juurdepääs kõigile seadmelogidele?"</string>
-    <string name="log_access_confirmation_allow" msgid="5302517782599389507">"Luba ühekordne juurdepääs"</string>
-    <string name="log_access_confirmation_deny" msgid="7685790957455099845">"Ära luba"</string>
-    <string name="log_access_confirmation_body" product="default" msgid="1806692062668620735">"Seadmelogid jäädvustavad, mis teie seadmes toimub. Rakendused saavad neid logisid kasutada probleemide tuvastamiseks ja lahendamiseks.\n\nMõned logid võivad sisaldada tundlikku teavet, seega lubage juurdepääs kõigile seadmelogidele ainult rakendustele, mida usaldate. \n\nKui te ei luba sellel rakendusel kõigile seadmelogidele juurde pääseda, pääseb see siiski juurde oma logidele. Teie seadme tootja võib teie seadmes siiski teatud logidele või teabele juurde pääseda."</string>
-    <string name="log_access_confirmation_body" product="tv" msgid="7379536536425265262">"Seadmelogid jäädvustavad, mis teie seadmes toimub. Rakendused saavad neid logisid kasutada probleemide tuvastamiseks ja lahendamiseks.\n\nMõned logid võivad sisaldada tundlikku teavet, seega lubage juurdepääs kõigile seadmelogidele ainult rakendustele, mida usaldate. \n\nKui te ei luba sellel rakendusel kõigile seadmelogidele juurde pääseda, pääseb see siiski juurde oma logidele. Teie seadme tootja võib teie seadmes siiski teatud logidele või teabele juurde pääseda.\n\nLugege lisateavet aadressil g.co/android/devicelogs."</string>
-    <string name="log_access_do_not_show_again" msgid="1058690599083091552">"Ära kuva uuesti"</string>
     <string name="slices_permission_request" msgid="3677129866636153406">"Rakendus <xliff:g id="APP_0">%1$s</xliff:g> soovib näidata rakenduse <xliff:g id="APP_2">%2$s</xliff:g> lõike"</string>
     <string name="screenshot_edit" msgid="7408934887203689207">"Muuda"</string>
     <string name="volume_dialog_ringer_guidance_vibrate" msgid="2055927873175228519">"Kõnede ja märguannete puhul seade vibreerib"</string>
@@ -2298,6 +2316,7 @@
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"Teie seadmest <xliff:g id="DEVICE">%1$s</xliff:g> ei pääse telefoni kaamerale juurde."</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"Teie seadmest <xliff:g id="DEVICE">%1$s</xliff:g> ei pääse tahvelarvuti kaamerale juurde"</string>
     <string name="vdm_secure_window" msgid="161700398158812314">"Sellele ei pääse voogesituse ajal juurde. Proovige juurde pääseda oma telefonis."</string>
+    <string name="vdm_pip_blocked" msgid="4036107522497281397">"Voogesitamise ajal ei saa pilt pildis funktsiooni kasutada"</string>
     <string name="system_locale_title" msgid="711882686834677268">"Süsteemi vaikeseade"</string>
     <string name="default_card_name" msgid="9198284935962911468">"KAART <xliff:g id="CARDNUMBER">%d</xliff:g>"</string>
 </resources>

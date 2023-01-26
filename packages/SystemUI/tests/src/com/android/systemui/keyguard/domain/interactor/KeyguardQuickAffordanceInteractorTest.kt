@@ -27,19 +27,24 @@ import com.android.systemui.flags.Flags
 import com.android.systemui.keyguard.data.quickaffordance.BuiltInKeyguardQuickAffordanceKeys
 import com.android.systemui.keyguard.data.quickaffordance.FakeKeyguardQuickAffordanceConfig
 import com.android.systemui.keyguard.data.quickaffordance.KeyguardQuickAffordanceConfig
+import com.android.systemui.keyguard.data.quickaffordance.KeyguardQuickAffordanceLegacySettingSyncer
 import com.android.systemui.keyguard.data.quickaffordance.KeyguardQuickAffordanceSelectionManager
 import com.android.systemui.keyguard.data.repository.FakeKeyguardRepository
 import com.android.systemui.keyguard.data.repository.KeyguardQuickAffordanceRepository
 import com.android.systemui.keyguard.domain.model.KeyguardQuickAffordanceModel
 import com.android.systemui.keyguard.domain.quickaffordance.FakeKeyguardQuickAffordanceRegistry
+import com.android.systemui.keyguard.shared.model.KeyguardQuickAffordancePickerRepresentation
 import com.android.systemui.keyguard.shared.quickaffordance.ActivationState
 import com.android.systemui.keyguard.shared.quickaffordance.KeyguardQuickAffordancePosition
 import com.android.systemui.plugins.ActivityStarter
+import com.android.systemui.settings.UserFileManager
 import com.android.systemui.settings.UserTracker
 import com.android.systemui.shared.keyguard.shared.model.KeyguardQuickAffordanceSlots
 import com.android.systemui.statusbar.policy.KeyguardStateController
+import com.android.systemui.util.FakeSharedPreferences
 import com.android.systemui.util.mockito.mock
 import com.android.systemui.util.mockito.whenever
+import com.android.systemui.util.settings.FakeSettings
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -53,6 +58,8 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.JUnit4
+import org.mockito.ArgumentMatchers.anyInt
+import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mock
 import org.mockito.MockitoAnnotations
 
@@ -89,13 +96,38 @@ class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
             )
         qrCodeScanner =
             FakeKeyguardQuickAffordanceConfig(BuiltInKeyguardQuickAffordanceKeys.QR_CODE_SCANNER)
+        val scope = CoroutineScope(IMMEDIATE)
 
+        val selectionManager =
+            KeyguardQuickAffordanceSelectionManager(
+                context = context,
+                userFileManager =
+                    mock<UserFileManager>().apply {
+                        whenever(
+                                getSharedPreferences(
+                                    anyString(),
+                                    anyInt(),
+                                    anyInt(),
+                                )
+                            )
+                            .thenReturn(FakeSharedPreferences())
+                    },
+                userTracker = userTracker,
+            )
         val quickAffordanceRepository =
             KeyguardQuickAffordanceRepository(
-                scope = CoroutineScope(IMMEDIATE),
-                backgroundDispatcher = IMMEDIATE,
-                selectionManager = KeyguardQuickAffordanceSelectionManager(),
+                appContext = context,
+                scope = scope,
+                selectionManager = selectionManager,
+                legacySettingSyncer =
+                    KeyguardQuickAffordanceLegacySettingSyncer(
+                        scope = scope,
+                        backgroundDispatcher = IMMEDIATE,
+                        secureSettings = FakeSettings(),
+                        selectionsManager = selectionManager,
+                    ),
                 configs = setOf(homeControls, quickAccessWallet, qrCodeScanner),
+                dumpManager = mock(),
             )
         featureFlags =
             FakeFeatureFlags().apply {
@@ -284,7 +316,13 @@ class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
                 .isEqualTo(
                     mapOf(
                         KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_START to
-                            listOf(homeControls.key),
+                            listOf(
+                                KeyguardQuickAffordancePickerRepresentation(
+                                    id = homeControls.key,
+                                    name = homeControls.pickerName,
+                                    iconResourceId = homeControls.pickerIconResourceId,
+                                ),
+                            ),
                         KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_END to emptyList(),
                     )
                 )
@@ -313,7 +351,13 @@ class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
                 .isEqualTo(
                     mapOf(
                         KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_START to
-                            listOf(quickAccessWallet.key),
+                            listOf(
+                                KeyguardQuickAffordancePickerRepresentation(
+                                    id = quickAccessWallet.key,
+                                    name = quickAccessWallet.pickerName,
+                                    iconResourceId = quickAccessWallet.pickerIconResourceId,
+                                ),
+                            ),
                         KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_END to emptyList(),
                     )
                 )
@@ -345,9 +389,21 @@ class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
                 .isEqualTo(
                     mapOf(
                         KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_START to
-                            listOf(quickAccessWallet.key),
+                            listOf(
+                                KeyguardQuickAffordancePickerRepresentation(
+                                    id = quickAccessWallet.key,
+                                    name = quickAccessWallet.pickerName,
+                                    iconResourceId = quickAccessWallet.pickerIconResourceId,
+                                ),
+                            ),
                         KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_END to
-                            listOf(qrCodeScanner.key),
+                            listOf(
+                                KeyguardQuickAffordancePickerRepresentation(
+                                    id = qrCodeScanner.key,
+                                    name = qrCodeScanner.pickerName,
+                                    iconResourceId = qrCodeScanner.pickerIconResourceId,
+                                ),
+                            ),
                     )
                 )
 
@@ -411,7 +467,13 @@ class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
                     mapOf(
                         KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_START to emptyList(),
                         KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_END to
-                            listOf(quickAccessWallet.key),
+                            listOf(
+                                KeyguardQuickAffordancePickerRepresentation(
+                                    id = quickAccessWallet.key,
+                                    name = quickAccessWallet.pickerName,
+                                    iconResourceId = quickAccessWallet.pickerIconResourceId,
+                                ),
+                            ),
                     )
                 )
 
@@ -472,7 +534,13 @@ class KeyguardQuickAffordanceInteractorTest : SysuiTestCase() {
                     mapOf(
                         KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_START to emptyList(),
                         KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_END to
-                            listOf(quickAccessWallet.key),
+                            listOf(
+                                KeyguardQuickAffordancePickerRepresentation(
+                                    id = quickAccessWallet.key,
+                                    name = quickAccessWallet.pickerName,
+                                    iconResourceId = quickAccessWallet.pickerIconResourceId,
+                                ),
+                            ),
                     )
                 )
 

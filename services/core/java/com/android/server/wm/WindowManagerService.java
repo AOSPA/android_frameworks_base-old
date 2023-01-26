@@ -140,6 +140,7 @@ import static com.android.server.wm.WindowManagerDebugConfig.SHOW_STACK_CRAWLS;
 import static com.android.server.wm.WindowManagerDebugConfig.SHOW_VERBOSE_TRANSACTIONS;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
+import static com.android.server.wm.WindowManagerServiceDumpProto.BACK_NAVIGATION;
 import static com.android.server.wm.WindowManagerServiceDumpProto.DISPLAY_FROZEN;
 import static com.android.server.wm.WindowManagerServiceDumpProto.FOCUSED_APP;
 import static com.android.server.wm.WindowManagerServiceDumpProto.FOCUSED_DISPLAY_ID;
@@ -293,6 +294,7 @@ import android.view.WindowManagerGlobal;
 import android.view.WindowManagerPolicyConstants.PointerEventListener;
 import android.view.displayhash.DisplayHash;
 import android.view.displayhash.VerifiedDisplayHash;
+import android.view.inputmethod.ImeTracker;
 import android.window.ClientWindowFrames;
 import android.window.ITaskFpsCallback;
 import android.window.ScreenCapture;
@@ -428,7 +430,7 @@ public class WindowManagerService extends IWindowManager.Stub
      * @see #ENABLE_SHELL_TRANSITIONS
      */
     public static final boolean sEnableShellTransitions =
-            SystemProperties.getBoolean(ENABLE_SHELL_TRANSITIONS, true);
+            SystemProperties.getBoolean(ENABLE_SHELL_TRANSITIONS, false);
 
     /**
      * Allows a fullscreen windowing mode activity to launch in its desired orientation directly
@@ -740,7 +742,6 @@ public class WindowManagerService extends IWindowManager.Stub
 
     @VisibleForTesting
     final ContentRecordingController mContentRecordingController = new ContentRecordingController();
-
     @VisibleForTesting
     final class SettingsObserver extends ContentObserver {
         private final Uri mDisplayInversionEnabledUri =
@@ -2557,6 +2558,12 @@ public class WindowManagerService extends IWindowManager.Stub
                         && win.mSyncSeqId > lastSyncSeqId) {
                     maybeSyncSeqId = win.shouldSyncWithBuffers() ? win.mSyncSeqId : -1;
                     win.markRedrawForSyncReported();
+                    if (win.mSyncState == WindowContainer.SYNC_STATE_WAITING_FOR_DRAW
+                            && winAnimator.mDrawState == WindowStateAnimator.HAS_DRAWN
+                            && maybeSyncSeqId < 0) {
+                        // Do not wait for a drawn window which won't report draw.
+                        win.onSyncFinishedDrawing();
+                    }
                 } else {
                     maybeSyncSeqId = -1;
                 }
@@ -6584,6 +6591,9 @@ public class WindowManagerService extends IWindowManager.Stub
         // Once we move the window layout to the client side, this can be false when we are waiting
         // for the frames.
         proto.write(WINDOW_FRAMES_VALID, true);
+
+        // Write the BackNavigationController's state into the protocol buffer
+        mAtmService.mBackNavigationController.dumpDebug(proto, BACK_NAVIGATION);
     }
 
     private void dumpWindowsLocked(PrintWriter pw, boolean dumpAll,
@@ -8044,7 +8054,8 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         @Override
-        public void showImePostLayout(IBinder imeTargetWindowToken) {
+        public void showImePostLayout(IBinder imeTargetWindowToken,
+                @Nullable ImeTracker.Token statsToken) {
             synchronized (mGlobalLock) {
                 InputTarget imeTarget = getInputTargetFromWindowTokenLocked(imeTargetWindowToken);
                 if (imeTarget == null) {
@@ -8053,17 +8064,18 @@ public class WindowManagerService extends IWindowManager.Stub
                 Trace.asyncTraceBegin(TRACE_TAG_WINDOW_MANAGER, "WMS.showImePostLayout", 0);
                 final InsetsControlTarget controlTarget = imeTarget.getImeControlTarget();
                 imeTarget = controlTarget.getWindow();
-                // If InsetsControlTarget doesn't have a window, its using remoteControlTarget which
-                // is controlled by default display
+                // If InsetsControlTarget doesn't have a window, it's using remoteControlTarget
+                // which is controlled by default display
                 final DisplayContent dc = imeTarget != null
                         ? imeTarget.getDisplayContent() : getDefaultDisplayContentLocked();
                 dc.getInsetsStateController().getImeSourceProvider()
-                        .scheduleShowImePostLayout(controlTarget);
+                        .scheduleShowImePostLayout(controlTarget, statsToken);
             }
         }
 
         @Override
-        public void hideIme(IBinder imeTargetWindowToken, int displayId) {
+        public void hideIme(IBinder imeTargetWindowToken, int displayId,
+                @Nullable ImeTracker.Token statsToken) {
             Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "WMS.hideIme");
             synchronized (mGlobalLock) {
                 WindowState imeTarget = mWindowMap.get(imeTargetWindowToken);
@@ -8079,10 +8091,15 @@ public class WindowManagerService extends IWindowManager.Stub
                     dc.getInsetsStateController().getImeSourceProvider().abortShowImePostLayout();
                 }
                 if (dc != null && dc.getImeTarget(IME_TARGET_CONTROL) != null) {
+                    ImeTracker.get().onProgress(statsToken,
+                            ImeTracker.PHASE_WM_HAS_IME_INSETS_CONTROL_TARGET);
                     ProtoLog.d(WM_DEBUG_IME, "hideIme Control target: %s ",
                             dc.getImeTarget(IME_TARGET_CONTROL));
-                    dc.getImeTarget(IME_TARGET_CONTROL).hideInsets(
-                            WindowInsets.Type.ime(), true /* fromIme */);
+                    dc.getImeTarget(IME_TARGET_CONTROL).hideInsets(WindowInsets.Type.ime(),
+                            true /* fromIme */, statsToken);
+                } else {
+                    ImeTracker.get().onFailed(statsToken,
+                            ImeTracker.PHASE_WM_HAS_IME_INSETS_CONTROL_TARGET);
                 }
                 if (dc != null) {
                     dc.getInsetsStateController().getImeSourceProvider().setImeShowing(false);
@@ -8322,6 +8339,17 @@ public class WindowManagerService extends IWindowManager.Stub
                         WindowManagerService.this);
                 return true;
             }
+        }
+
+        @Override
+        public SurfaceControl getA11yOverlayLayer(int displayId) {
+            synchronized (mGlobalLock) {
+                DisplayContent dc = mRoot.getDisplayContent(displayId);
+                if (dc != null) {
+                    return dc.getA11yOverlayLayer();
+                }
+            }
+            return null;
         }
     }
 

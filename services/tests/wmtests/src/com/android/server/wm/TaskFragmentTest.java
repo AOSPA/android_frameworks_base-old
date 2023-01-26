@@ -23,6 +23,7 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 import static android.os.Process.FIRST_APPLICATION_UID;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.any;
@@ -118,10 +119,13 @@ public class TaskFragmentTest extends WindowTestsBase {
         doReturn(true).when(mTaskFragment).isVisibleRequested();
 
         clearInvocations(mTransaction);
+        mTaskFragment.deferOrganizedTaskFragmentSurfaceUpdate();
         mTaskFragment.setBounds(endBounds);
+        assertTrue(mTaskFragment.shouldStartChangeTransition(startBounds));
+        mTaskFragment.initializeChangeTransition(startBounds);
+        mTaskFragment.continueOrganizedTaskFragmentSurfaceUpdate();
 
         // Surface reset when prepare transition.
-        verify(mTaskFragment).initializeChangeTransition(startBounds);
         verify(mTransaction).setPosition(mLeash, 0, 0);
         verify(mTransaction).setWindowCrop(mLeash, 0, 0);
 
@@ -166,7 +170,7 @@ public class TaskFragmentTest extends WindowTestsBase {
 
         mTaskFragment.setBounds(endBounds);
 
-        verify(mTaskFragment, never()).initializeChangeTransition(any());
+        assertFalse(mTaskFragment.shouldStartChangeTransition(startBounds));
     }
 
     /**
@@ -215,10 +219,8 @@ public class TaskFragmentTest extends WindowTestsBase {
         final ActivityRecord bottomActivity = createActivityRecord(bottomTask);
         final Task topTask = createTask(mDisplayContent);
         // First create primary TF, and then secondary TF, so that the secondary will be on the top.
-        final TaskFragment primaryTf = createTaskFragmentWithParentTask(
-                topTask, false /* createEmbeddedTask */);
-        final TaskFragment secondaryTf = createTaskFragmentWithParentTask(
-                topTask, false /* createEmbeddedTask */);
+        final TaskFragment primaryTf = createTaskFragmentWithActivity(topTask);
+        final TaskFragment secondaryTf = createTaskFragmentWithActivity(topTask);
         final ActivityRecord primaryActivity = primaryTf.getTopMostActivity();
         final ActivityRecord secondaryActivity = secondaryTf.getTopMostActivity();
         doReturn(true).when(primaryActivity).supportsPictureInPicture();
@@ -382,7 +384,7 @@ public class TaskFragmentTest extends WindowTestsBase {
         final Task rootTask = createTask(mDisplayContent, WINDOWING_MODE_MULTI_WINDOW,
                 ACTIVITY_TYPE_STANDARD);
         final Task leafTask0 = new TaskBuilder(mSupervisor)
-                .setParentTaskFragment(rootTask)
+                .setParentTask(rootTask)
                 .build();
         final TaskFragment organizedTf = new TaskFragmentBuilder(mAtm)
                 .createActivityCount(2)
@@ -418,7 +420,7 @@ public class TaskFragmentTest extends WindowTestsBase {
         // There is an activity in a different leaf task on top of activity0 and activity1.
         // None of the two has overlay over untrusted mode embedded because it is not the same Task.
         final Task leafTask1 = new TaskBuilder(mSupervisor)
-                .setParentTaskFragment(rootTask)
+                .setParentTask(rootTask)
                 .setOnTop(true)
                 .setCreateActivity(true)
                 .build();
@@ -543,5 +545,32 @@ public class TaskFragmentTest extends WindowTestsBase {
         // Making the activity0 be the focused activity and ensure the focused app is updated.
         activity0.moveFocusableActivityToTop("test");
         assertEquals(activity0, mDisplayContent.mFocusedApp);
+    }
+
+    @Test
+    public void testIsVisibleWithAdjacent_reportOrientationUnspecified() {
+        final Task task = createTask(mDisplayContent);
+        final TaskFragment tf0 = createTaskFragmentWithActivity(task);
+        final TaskFragment tf1 = createTaskFragmentWithActivity(task);
+        tf0.setAdjacentTaskFragment(tf1);
+        tf0.setWindowingMode(WINDOWING_MODE_MULTI_WINDOW);
+        tf1.setWindowingMode(WINDOWING_MODE_MULTI_WINDOW);
+        task.setBounds(0, 0, 1200, 1000);
+        tf0.setBounds(0, 0, 600, 1000);
+        tf1.setBounds(600, 0, 1200, 1000);
+        final ActivityRecord activity0 = tf0.getTopMostActivity();
+        final ActivityRecord activity1 = tf1.getTopMostActivity();
+        doReturn(true).when(activity0).isVisibleRequested();
+        doReturn(true).when(activity1).isVisibleRequested();
+
+        assertEquals(SCREEN_ORIENTATION_UNSPECIFIED, tf0.getOrientation(SCREEN_ORIENTATION_UNSET));
+        assertEquals(SCREEN_ORIENTATION_UNSPECIFIED, tf1.getOrientation(SCREEN_ORIENTATION_UNSET));
+        assertEquals(SCREEN_ORIENTATION_UNSPECIFIED, task.getOrientation(SCREEN_ORIENTATION_UNSET));
+
+        activity0.setRequestedOrientation(SCREEN_ORIENTATION_LANDSCAPE);
+
+        assertEquals(SCREEN_ORIENTATION_UNSPECIFIED, tf0.getOrientation(SCREEN_ORIENTATION_UNSET));
+        assertEquals(SCREEN_ORIENTATION_UNSPECIFIED, tf1.getOrientation(SCREEN_ORIENTATION_UNSET));
+        assertEquals(SCREEN_ORIENTATION_UNSPECIFIED, task.getOrientation(SCREEN_ORIENTATION_UNSET));
     }
 }

@@ -47,12 +47,14 @@ import com.android.systemui.keyguard.data.repository.KeyguardRepositoryModule;
 import com.android.systemui.keyguard.domain.interactor.StartKeyguardTransitionModule;
 import com.android.systemui.keyguard.domain.quickaffordance.KeyguardQuickAffordanceModule;
 import com.android.systemui.navigationbar.NavigationModeController;
+import com.android.systemui.settings.UserTracker;
 import com.android.systemui.shade.ShadeController;
 import com.android.systemui.statusbar.NotificationShadeDepthController;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.phone.DozeParameters;
 import com.android.systemui.statusbar.phone.ScreenOffAnimationController;
+import com.android.systemui.statusbar.phone.ScrimController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.statusbar.policy.UserSwitcherController;
 import com.android.systemui.util.DeviceConfigProxy;
@@ -86,6 +88,7 @@ public class KeyguardModule {
     @SysUISingleton
     public static KeyguardViewMediator newKeyguardViewMediator(
             Context context,
+            UserTracker userTracker,
             FalsingCollector falsingCollector,
             LockPatternUtils lockPatternUtils,
             BroadcastDispatcher broadcastDispatcher,
@@ -111,9 +114,11 @@ public class KeyguardModule {
             DreamOverlayStateController dreamOverlayStateController,
             Lazy<ShadeController> shadeController,
             Lazy<NotificationShadeWindowController> notificationShadeWindowController,
-            Lazy<ActivityLaunchAnimator> activityLaunchAnimator) {
+            Lazy<ActivityLaunchAnimator> activityLaunchAnimator,
+            Lazy<ScrimController> scrimControllerLazy) {
         return new KeyguardViewMediator(
                 context,
+                userTracker,
                 falsingCollector,
                 lockPatternUtils,
                 broadcastDispatcher,
@@ -139,7 +144,8 @@ public class KeyguardModule {
                 dreamOverlayStateController,
                 shadeController,
                 notificationShadeWindowController,
-                activityLaunchAnimator);
+                activityLaunchAnimator,
+                scrimControllerLazy);
     }
 
     /** */

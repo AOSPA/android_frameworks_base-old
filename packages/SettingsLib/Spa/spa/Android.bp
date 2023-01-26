@@ -24,12 +24,16 @@ android_library {
     srcs: ["src/**/*.kt"],
 
     static_libs: [
+        "androidx.slice_slice-builders",
+        "androidx.slice_slice-core",
+        "androidx.slice_slice-view",
         "androidx.compose.material3_material3",
         "androidx.compose.material_material-icons-extended",
         "androidx.compose.runtime_runtime",
         "androidx.compose.runtime_runtime-livedata",
         "androidx.compose.ui_ui-tooling-preview",
         "androidx.lifecycle_lifecycle-livedata-ktx",
+        "androidx.lifecycle_lifecycle-runtime-compose",
         "androidx.navigation_navigation-compose",
         "com.google.android.material_material",
         "lottie_compose",
@@ -37,7 +41,6 @@ android_library {
     ],
     kotlincflags: [
         "-Xjvm-default=all",
-        "-opt-in=kotlin.RequiresOptIn",
     ],
     min_sdk_version: "31",
 }

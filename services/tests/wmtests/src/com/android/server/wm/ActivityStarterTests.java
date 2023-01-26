@@ -507,12 +507,12 @@ public class ActivityStarterTests extends WindowTestsBase {
         // The fullscreen windowing mode activity will be moved to split-secondary by
         // TestSplitOrganizer when a split-primary task appears.
         final ActivityRecord splitPrimaryActivity = new TaskBuilder(mSupervisor)
-                .setParentTaskFragment(splitOrg.mPrimary)
+                .setParentTask(splitOrg.mPrimary)
                 .setCreateActivity(true)
                 .build()
                 .getTopMostActivity();
         final ActivityRecord splitSecondActivity = new TaskBuilder(mSupervisor)
-                .setParentTaskFragment(splitOrg.mSecondary)
+                .setParentTask(splitOrg.mSecondary)
                 .setCreateActivity(true)
                 .build()
                 .getTopMostActivity();
@@ -1060,7 +1060,7 @@ public class ActivityStarterTests extends WindowTestsBase {
         // Create another activity on top of the secondary display.
         final Task topStack = secondaryTaskContainer.createRootTask(WINDOWING_MODE_FULLSCREEN,
                 ACTIVITY_TYPE_STANDARD, true /* onTop */);
-        final Task topTask = new TaskBuilder(mSupervisor).setParentTaskFragment(topStack).build();
+        final Task topTask = new TaskBuilder(mSupervisor).setParentTask(topStack).build();
         new ActivityBuilder(mAtm).setTask(topTask).build();
 
         doReturn(mActivityMetricsLogger).when(mSupervisor).getActivityMetricsLogger();
@@ -1256,7 +1256,7 @@ public class ActivityStarterTests extends WindowTestsBase {
         final ActivityStarter starter = prepareStarter(0 /* flags */);
         starter.mStartActivity = new ActivityBuilder(mAtm).build();
         final Task task = new TaskBuilder(mAtm.mTaskSupervisor)
-                .setParentTaskFragment(createTask(mDisplayContent, WINDOWING_MODE_FULLSCREEN,
+                .setParentTask(createTask(mDisplayContent, WINDOWING_MODE_FULLSCREEN,
                         ACTIVITY_TYPE_STANDARD))
                 .setUserId(10)
                 .build();
@@ -1264,6 +1264,26 @@ public class ActivityStarterTests extends WindowTestsBase {
         final int result = starter.recycleTask(task, null, null, null);
         assertThat(result == START_SUCCESS).isTrue();
         assertThat(starter.mAddingToTask).isTrue();
+    }
+
+    @Test
+    public void testRecycleTaskWakeUpWhenDreaming() {
+        doNothing().when(mWm.mAtmService.mTaskSupervisor).wakeUp(anyString());
+        doReturn(true).when(mWm.mAtmService).isDreaming();
+        final ActivityStarter starter = prepareStarter(0 /* flags */);
+        final ActivityRecord target = new ActivityBuilder(mAtm).setCreateTask(true).build();
+        starter.mStartActivity = target;
+        target.mVisibleRequested = false;
+        target.setTurnScreenOn(true);
+        // Assume the flag was consumed by relayout.
+        target.setCurrentLaunchCanTurnScreenOn(false);
+        startActivityInner(starter, target, null /* source */, null /* options */,
+                null /* inTask */, null /* inTaskFragment */);
+        // The flag should be set again when resuming (from recycleTask) the target as top.
+        assertTrue(target.currentLaunchCanTurnScreenOn());
+        // In real case, dream activity has a higher priority (TaskDisplayArea#getPriority) that
+        // will be put at a higher z-order. So it relies on wakeUp() to be dismissed.
+        verify(mWm.mAtmService.mTaskSupervisor).wakeUp(anyString());
     }
 
     @Test

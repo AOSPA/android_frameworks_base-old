@@ -182,6 +182,28 @@ public final class VirtualDeviceManager {
     }
 
     /**
+     * Returns the device policy for the given virtual device and policy type.
+     *
+     * <p>In case the virtual device identifier is not valid, or there's no explicitly specified
+     * policy for that device and policy type, then
+     * {@link VirtualDeviceParams#DEVICE_POLICY_DEFAULT} is returned.
+     *
+     * @hide
+     */
+    public @VirtualDeviceParams.DevicePolicy int getDevicePolicy(
+            int deviceId, @VirtualDeviceParams.PolicyType int policyType) {
+        if (mService == null) {
+            Log.w(TAG, "Failed to retrieve device policy; no virtual device manager service.");
+            return VirtualDeviceParams.DEVICE_POLICY_DEFAULT;
+        }
+        try {
+            return mService.getDevicePolicy(deviceId, policyType);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * A virtual device has its own virtual display, audio output, microphone, and camera etc. The
      * creator of a virtual device can take the output from the virtual display and stream it over
      * to another device, and inject input events that are received from the remote device.
@@ -328,14 +350,72 @@ public final class VirtualDeviceManager {
                 @VirtualDisplayFlag int flags,
                 @Nullable @CallbackExecutor Executor executor,
                 @Nullable VirtualDisplay.Callback callback) {
-            // TODO(b/205343547): Handle display groups properly instead of creating a new display
-            //  group for every new virtual display created using this API.
-            // belongs to the same display group.
             VirtualDisplayConfig config = new VirtualDisplayConfig.Builder(
                     getVirtualDisplayName(), width, height, densityDpi)
                     .setSurface(surface)
                     .setFlags(getVirtualDisplayFlags(flags))
                     .build();
+            return createVirtualDisplayInternal(config, executor, callback);
+        }
+
+        /**
+         * Creates a virtual display for this virtual device. All displays created on the same
+         * device belongs to the same display group.
+         *
+         * @param width The width of the virtual display in pixels, must be greater than 0.
+         * @param height The height of the virtual display in pixels, must be greater than 0.
+         * @param densityDpi The density of the virtual display in dpi, must be greater than 0.
+         * @param displayCategories The categories of the virtual display, indicating the type of
+         * activities allowed to run on the display. Activities can declare their type using
+         * {@link android.content.pm.ActivityInfo#targetDisplayCategory}.
+         * @param surface The surface to which the content of the virtual display should
+         * be rendered, or null if there is none initially. The surface can also be set later using
+         * {@link VirtualDisplay#setSurface(Surface)}.
+         * @param flags A combination of virtual display flags accepted by
+         * {@link DisplayManager#createVirtualDisplay}. In addition, the following flags are
+         * automatically set for all virtual devices:
+         * {@link DisplayManager#VIRTUAL_DISPLAY_FLAG_PUBLIC VIRTUAL_DISPLAY_FLAG_PUBLIC} and
+         * {@link DisplayManager#VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY
+         * VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY}.
+         * @param executor The executor on which {@code callback} will be invoked. This is ignored
+         * if {@code callback} is {@code null}. If {@code callback} is specified, this executor must
+         * not be null.
+         * @param callback Callback to call when the state of the {@link VirtualDisplay} changes
+         * @return The newly created virtual display, or {@code null} if the application could
+         * not create the virtual display.
+         *
+         * @see DisplayManager#createVirtualDisplay
+         */
+        @Nullable
+        public VirtualDisplay createVirtualDisplay(
+                @IntRange(from = 1) int width,
+                @IntRange(from = 1) int height,
+                @IntRange(from = 1) int densityDpi,
+                @NonNull List<String> displayCategories,
+                @Nullable Surface surface,
+                @VirtualDisplayFlag int flags,
+                @Nullable @CallbackExecutor Executor executor,
+                @Nullable VirtualDisplay.Callback callback) {
+            VirtualDisplayConfig config = new VirtualDisplayConfig.Builder(
+                    getVirtualDisplayName(), width, height, densityDpi)
+                    .setDisplayCategories(displayCategories)
+                    .setSurface(surface)
+                    .setFlags(getVirtualDisplayFlags(flags))
+                    .build();
+            return createVirtualDisplayInternal(config, executor, callback);
+        }
+
+        /**
+         * @hide
+         */
+        @Nullable
+        private VirtualDisplay createVirtualDisplayInternal(
+                @NonNull VirtualDisplayConfig config,
+                @Nullable @CallbackExecutor Executor executor,
+                @Nullable VirtualDisplay.Callback callback) {
+            // TODO(b/205343547): Handle display groups properly instead of creating a new display
+            //  group for every new virtual display created using this API.
+            // belongs to the same display group.
             IVirtualDisplayCallback callbackWrapper =
                     new DisplayManagerGlobal.VirtualDisplayCallback(callback, executor);
             final int displayId;

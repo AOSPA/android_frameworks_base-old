@@ -3826,7 +3826,6 @@ public abstract class Context {
             STORAGE_SERVICE,
             STORAGE_STATS_SERVICE,
             WALLPAPER_SERVICE,
-            TIME_ZONE_RULES_MANAGER_SERVICE,
             VIBRATOR_MANAGER_SERVICE,
             VIBRATOR_SERVICE,
             //@hide: STATUS_BAR_SERVICE,
@@ -3851,6 +3850,7 @@ public abstract class Context {
             WIFI_RTT_RANGING_SERVICE,
             NSD_SERVICE,
             AUDIO_SERVICE,
+            AUDIO_DEVICE_VOLUME_SERVICE,
             AUTH_SERVICE,
             FINGERPRINT_SERVICE,
             //@hide: FACE_SERVICE,
@@ -3939,6 +3939,7 @@ public abstract class Context {
             DISPLAY_HASH_SERVICE,
             CREDENTIAL_SERVICE,
             DEVICE_LOCK_SERVICE,
+            VIRTUALIZATION_SERVICE,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ServiceName {}
@@ -4694,6 +4695,18 @@ public abstract class Context {
     public static final String AUDIO_SERVICE = "audio";
 
     /**
+     * @hide
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.media.AudioDeviceVolumeManager} for handling management of audio device
+     * (e.g. speaker, USB headset) volume.
+     *
+     * @see #getSystemService(String)
+     * @see android.media.AudioDeviceVolumeManager
+     */
+    @SystemApi
+    public static final String AUDIO_DEVICE_VOLUME_SERVICE = "audio_device_volume";
+
+    /**
      * Use with {@link #getSystemService(String)} to retrieve a {@link
      * android.media.MediaTranscodingManager} for transcoding media.
      *
@@ -4917,6 +4930,7 @@ public abstract class Context {
      * @see android.server.attention.AttentionManagerService
      * @hide
      */
+    @TestApi
     public static final String ATTENTION_SERVICE = "attention";
 
     /**
@@ -5771,15 +5785,6 @@ public abstract class Context {
     public static final String VR_SERVICE = "vrmanager";
 
     /**
-     * Use with {@link #getSystemService(String)} to retrieve an
-     * {@link android.app.timezone.ITimeZoneRulesManager}.
-     * @hide
-     *
-     * @see #getSystemService(String)
-     */
-    public static final String TIME_ZONE_RULES_MANAGER_SERVICE = "timezone";
-
-    /**
      * Use with {@link #getSystemService(String)} to retrieve a
      * {@link android.content.pm.CrossProfileApps} for cross profile operations.
      *
@@ -6074,6 +6079,17 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.app.wearable.WearableSensingManager}.
+     *
+     * @see #getSystemService(String)
+     * @see WearableSensingManager
+     * @hide
+     */
+    @SystemApi
+    public static final String WEARABLE_SENSING_SERVICE = "wearable_sensing";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a
      * {@link android.healthconnect.HealthConnectManager}.
      *
      * @see #getSystemService(String)
@@ -6097,6 +6113,20 @@ public abstract class Context {
      * @see #getSystemService(String)
      */
     public static final String DEVICE_LOCK_SERVICE = "device_lock";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.system.virtualmachine.VirtualMachineManager}.
+     *
+     * <p>On devices without {@link PackageManager#FEATURE_VIRTUALIZATION_FRAMEWORK} system feature
+     * the {@link #getSystemService(String)} will return {@code null}.
+     *
+     * @see #getSystemService(String)
+     * @see android.system.virtualmachine.VirtualMachineManager
+     * @hide
+     */
+    @SystemApi
+    public static final String VIRTUALIZATION_SERVICE = "virtualization";
 
     /**
      * Determine whether the given permission is allowed for a particular
@@ -6171,7 +6201,7 @@ public abstract class Context {
      */
     @CheckResult(suggest="#enforceCallingOrSelfPermission(String,String)")
     @PackageManager.PermissionResult
-    @PermissionMethod
+    @PermissionMethod(orSelf = true)
     public abstract int checkCallingOrSelfPermission(@NonNull @PermissionName String permission);
 
     /**
@@ -6239,7 +6269,7 @@ public abstract class Context {
      *
      * @see #checkCallingOrSelfPermission(String)
      */
-    @PermissionMethod
+    @PermissionMethod(orSelf = true)
     public abstract void enforceCallingOrSelfPermission(
             @NonNull @PermissionName String permission, @Nullable String message);
 

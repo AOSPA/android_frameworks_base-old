@@ -18,13 +18,20 @@
 package com.android.systemui.keyguard.data.repository
 
 import androidx.test.filters.SmallTest
+import com.android.systemui.R
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.keyguard.data.quickaffordance.FakeKeyguardQuickAffordanceConfig
 import com.android.systemui.keyguard.data.quickaffordance.KeyguardQuickAffordanceConfig
+import com.android.systemui.keyguard.data.quickaffordance.KeyguardQuickAffordanceLegacySettingSyncer
 import com.android.systemui.keyguard.data.quickaffordance.KeyguardQuickAffordanceSelectionManager
 import com.android.systemui.keyguard.shared.model.KeyguardQuickAffordancePickerRepresentation
 import com.android.systemui.keyguard.shared.model.KeyguardSlotPickerRepresentation
-import com.android.systemui.shared.keyguard.shared.model.KeyguardQuickAffordanceSlots
+import com.android.systemui.settings.FakeUserTracker
+import com.android.systemui.settings.UserFileManager
+import com.android.systemui.util.FakeSharedPreferences
+import com.android.systemui.util.mockito.mock
+import com.android.systemui.util.mockito.whenever
+import com.android.systemui.util.settings.FakeSettings
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -36,6 +43,8 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.JUnit4
+import org.mockito.ArgumentMatchers.anyInt
+import org.mockito.ArgumentMatchers.anyString
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @SmallTest
@@ -51,12 +60,38 @@ class KeyguardQuickAffordanceRepositoryTest : SysuiTestCase() {
     fun setUp() {
         config1 = FakeKeyguardQuickAffordanceConfig("built_in:1")
         config2 = FakeKeyguardQuickAffordanceConfig("built_in:2")
+        val scope = CoroutineScope(IMMEDIATE)
+        val selectionManager =
+            KeyguardQuickAffordanceSelectionManager(
+                context = context,
+                userFileManager =
+                    mock<UserFileManager>().apply {
+                        whenever(
+                                getSharedPreferences(
+                                    anyString(),
+                                    anyInt(),
+                                    anyInt(),
+                                )
+                            )
+                            .thenReturn(FakeSharedPreferences())
+                    },
+                userTracker = FakeUserTracker(),
+            )
+
         underTest =
             KeyguardQuickAffordanceRepository(
-                scope = CoroutineScope(IMMEDIATE),
-                backgroundDispatcher = IMMEDIATE,
-                selectionManager = KeyguardQuickAffordanceSelectionManager(),
+                appContext = context,
+                scope = scope,
+                selectionManager = selectionManager,
+                legacySettingSyncer =
+                    KeyguardQuickAffordanceLegacySettingSyncer(
+                        scope = scope,
+                        backgroundDispatcher = IMMEDIATE,
+                        secureSettings = FakeSettings(),
+                        selectionsManager = selectionManager,
+                    ),
                 configs = setOf(config1, config2),
+                dumpManager = mock(),
             )
     }
 
@@ -99,36 +134,53 @@ class KeyguardQuickAffordanceRepositoryTest : SysuiTestCase() {
         }
 
     @Test
-    fun getAffordancePickerRepresentations() {
-        assertThat(underTest.getAffordancePickerRepresentations())
-            .isEqualTo(
-                listOf(
-                    KeyguardQuickAffordancePickerRepresentation(
-                        id = config1.key,
-                        name = config1.pickerName,
-                        iconResourceId = config1.pickerIconResourceId,
-                    ),
-                    KeyguardQuickAffordancePickerRepresentation(
-                        id = config2.key,
-                        name = config2.pickerName,
-                        iconResourceId = config2.pickerIconResourceId,
-                    ),
+    fun getAffordancePickerRepresentations() =
+        runBlocking(IMMEDIATE) {
+            assertThat(underTest.getAffordancePickerRepresentations())
+                .isEqualTo(
+                    listOf(
+                        KeyguardQuickAffordancePickerRepresentation(
+                            id = config1.key,
+                            name = config1.pickerName,
+                            iconResourceId = config1.pickerIconResourceId,
+                        ),
+                        KeyguardQuickAffordancePickerRepresentation(
+                            id = config2.key,
+                            name = config2.pickerName,
+                            iconResourceId = config2.pickerIconResourceId,
+                        ),
+                    )
                 )
-            )
-    }
+        }
 
     @Test
     fun getSlotPickerRepresentations() {
+        val slot1 = "slot1"
+        val slot2 = "slot2"
+        val slot3 = "slot3"
+        context.orCreateTestableResources.addOverride(
+            R.array.config_keyguardQuickAffordanceSlots,
+            arrayOf(
+                "$slot1:2",
+                "$slot2:4",
+                "$slot3:5",
+            ),
+        )
+
         assertThat(underTest.getSlotPickerRepresentations())
             .isEqualTo(
                 listOf(
                     KeyguardSlotPickerRepresentation(
-                        id = KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_START,
-                        maxSelectedAffordances = 1,
+                        id = slot1,
+                        maxSelectedAffordances = 2,
                     ),
                     KeyguardSlotPickerRepresentation(
-                        id = KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_END,
-                        maxSelectedAffordances = 1,
+                        id = slot2,
+                        maxSelectedAffordances = 4,
+                    ),
+                    KeyguardSlotPickerRepresentation(
+                        id = slot3,
+                        maxSelectedAffordances = 5,
                     ),
                 )
             )

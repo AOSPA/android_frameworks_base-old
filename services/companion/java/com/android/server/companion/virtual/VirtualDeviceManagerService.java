@@ -233,6 +233,13 @@ public class VirtualDeviceManagerService extends SystemService {
         mLocalService.onAppsOnVirtualDeviceChanged();
     }
 
+    @VisibleForTesting
+    void addVirtualDevice(VirtualDeviceImpl virtualDevice) {
+        synchronized (mVirtualDeviceManagerLock) {
+            mVirtualDevices.put(virtualDevice.getAssociationId(), virtualDevice);
+        }
+    }
+
     class VirtualDeviceManagerImpl extends IVirtualDeviceManager.Stub implements
             VirtualDeviceImpl.PendingTrampolineCallback {
 
@@ -325,7 +332,8 @@ public class VirtualDeviceManagerService extends SystemService {
             GenericWindowPolicyController gwpc;
             final long token = Binder.clearCallingIdentity();
             try {
-                gwpc = virtualDeviceImpl.createWindowPolicyController();
+                gwpc = virtualDeviceImpl.createWindowPolicyController(
+                    virtualDisplayConfig.getDisplayCategories());
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -356,6 +364,12 @@ public class VirtualDeviceManagerService extends SystemService {
                 }
             }
             return virtualDevices;
+        }
+
+        @Override // BinderCall
+        @VirtualDeviceParams.DevicePolicy
+        public int getDevicePolicy(int deviceId, @VirtualDeviceParams.PolicyType int policyType) {
+            return mLocalService.getDevicePolicy(deviceId, policyType);
         }
 
         @Nullable
@@ -436,6 +450,20 @@ public class VirtualDeviceManagerService extends SystemService {
             synchronized (mVirtualDeviceManagerLock) {
                 return isValidVirtualDeviceLocked(virtualDevice);
             }
+        }
+
+        @Override
+        @VirtualDeviceParams.DevicePolicy
+        public int getDevicePolicy(int deviceId, @VirtualDeviceParams.PolicyType int policyType) {
+            synchronized (mVirtualDeviceManagerLock) {
+                for (int i = 0; i < mVirtualDevices.size(); i++) {
+                    final VirtualDeviceImpl device = mVirtualDevices.valueAt(i);
+                    if (device.getDeviceId() == deviceId) {
+                        return device.getDevicePolicy(policyType);
+                    }
+                }
+            }
+            return VirtualDeviceParams.DEVICE_POLICY_DEFAULT;
         }
 
         @Override

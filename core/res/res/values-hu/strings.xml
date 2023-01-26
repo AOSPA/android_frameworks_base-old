@@ -395,6 +395,30 @@
     <string name="permdesc_persistentActivity" product="default" msgid="1914841924366562051">"Lehetővé teszi az alkalmazás számára, hogy egyes részeit állandó jelleggel eltárolja a memóriában. Ez korlátozhatja a többi alkalmazás számára rendelkezésre álló memóriát, és lelassíthatja a telefont."</string>
     <string name="permlab_foregroundService" msgid="1768855976818467491">"előtérben lévő szolgáltatás futtatása"</string>
     <string name="permdesc_foregroundService" msgid="8720071450020922795">"Engedélyezi az alkalmazásnak az előtérben lévő szolgáltatások használatát."</string>
+    <string name="permlab_foregroundServiceCamera" msgid="7814751737955715297">"előtérben lévő szolgáltatás futtatása a következő típussal: „camera”"</string>
+    <string name="permdesc_foregroundServiceCamera" msgid="6973701931250595727">"Engedélyezi az alkalmazásnak az előtérben lévő szolgáltatások használatát a következő típussal: „camera”"</string>
+    <string name="permlab_foregroundServiceConnectedDevice" msgid="3019650546176872501">"előtérben lévő szolgáltatás futtatása a következő típussal: „connectedDevice”"</string>
+    <string name="permdesc_foregroundServiceConnectedDevice" msgid="1067457315741352963">"Engedélyezi az alkalmazásnak az előtérben lévő szolgáltatások használatát a következő típussal: „connectedDevice”"</string>
+    <string name="permlab_foregroundServiceDataSync" msgid="5847463514326881076">"előtérben lévő szolgáltatás futtatása a következő típussal: „dataSync\""</string>
+    <string name="permdesc_foregroundServiceDataSync" msgid="2267140263423973050">"Engedélyezi az alkalmazásnak az előtérben lévő szolgáltatások használatát a következő típussal: „dataSync”"</string>
+    <string name="permlab_foregroundServiceLocation" msgid="3745428302378535690">"előtérben lévő szolgáltatás futtatása a következő típussal: „location\""</string>
+    <string name="permdesc_foregroundServiceLocation" msgid="118894034365177183">"Engedélyezi az alkalmazásnak az előtérben lévő szolgáltatások használatát a következő típussal: „location”"</string>
+    <string name="permlab_foregroundServiceMediaPlayback" msgid="4002687983891935514">"előtérben lévő szolgáltatás futtatása a következő típussal: „mediaPlayback\""</string>
+    <string name="permdesc_foregroundServiceMediaPlayback" msgid="3638032446063968043">"Engedélyezi az alkalmazásnak az előtérben lévő szolgáltatások használatát a következő típussal: „mediaPlayback”"</string>
+    <string name="permlab_foregroundServiceMediaProjection" msgid="2630868915733312527">"előtérben lévő szolgáltatás futtatása a következő típussal: „mediaProjection\""</string>
+    <string name="permdesc_foregroundServiceMediaProjection" msgid="4805677128082002298">"Engedélyezi az alkalmazásnak az előtérben lévő szolgáltatások használatát a következő típussal: „mediaProjection”"</string>
+    <string name="permlab_foregroundServiceMicrophone" msgid="7390033424890545399">"előtérben lévő szolgáltatás futtatása a következő típussal: „microphone\""</string>
+    <string name="permdesc_foregroundServiceMicrophone" msgid="1206041516173483201">"Engedélyezi az alkalmazásnak az előtérben lévő szolgáltatások használatát a következő típussal: „microphone”"</string>
+    <string name="permlab_foregroundServicePhoneCall" msgid="627937743867697892">"előtérben lévő szolgáltatás futtatása a következő típussal: „phoneCall\""</string>
+    <string name="permdesc_foregroundServicePhoneCall" msgid="5941660252587015147">"Engedélyezi az alkalmazásnak az előtérben lévő szolgáltatások használatát a következő típussal: „phoneCall”"</string>
+    <string name="permlab_foregroundServiceHealth" msgid="3675776442080928184">"előtérben lévő szolgáltatás futtatása a következő típussal: „health\""</string>
+    <string name="permdesc_foregroundServiceHealth" msgid="2024586220562667185">"Engedélyezi az alkalmazásnak az előtérben lévő szolgáltatások használatát a következő típussal: „health”"</string>
+    <string name="permlab_foregroundServiceRemoteMessaging" msgid="105670277002780950">"előtérben lévő szolgáltatás futtatása a következő típussal: „remoteMessaging\""</string>
+    <string name="permdesc_foregroundServiceRemoteMessaging" msgid="8767598075877576277">"Engedélyezi az alkalmazásnak az előtérben lévő szolgáltatások használatát a következő típussal: „remoteMessaging”"</string>
+    <string name="permlab_foregroundServiceSystemExempted" msgid="1597663713590612685">"előtérben lévő szolgáltatás futtatása a következő típussal: „systemExempted\""</string>
+    <string name="permdesc_foregroundServiceSystemExempted" msgid="947381760834649622">"Engedélyezi az alkalmazásnak az előtérben lévő szolgáltatások használatát a következő típussal: „systemExempted”"</string>
+    <string name="permlab_foregroundServiceSpecialUse" msgid="7973536745876645082">"előtérben lévő szolgáltatás futtatása a következő típussal: „specialUse\""</string>
+    <string name="permdesc_foregroundServiceSpecialUse" msgid="646713654541885919">"Engedélyezi az alkalmazásnak az előtérben lévő szolgáltatások használatát a következő típussal: „specialUse”"</string>
     <string name="permlab_getPackageSize" msgid="375391550792886641">"alkalmazás-tárhely felmérése"</string>
     <string name="permdesc_getPackageSize" msgid="742743530909966782">"Lehetővé teszi az alkalmazás számára a kód, az adatok és a gyorsítótár-méret lekérését"</string>
     <string name="permlab_writeSettings" msgid="8057285063719277394">"rendszerbeállítások módosítása"</string>
@@ -447,6 +471,8 @@
     <string name="permdesc_recordAudio" msgid="5857246765327514062">"Az alkalmazás a mikrofon használatával akkor készíthet hangfelvételt, amikor az alkalmazás használatban van."</string>
     <string name="permlab_recordBackgroundAudio" msgid="5891032812308878254">"hangfelvétel készítése a háttérben"</string>
     <string name="permdesc_recordBackgroundAudio" msgid="1992623135737407516">"Az alkalmazás a mikrofon használatával bármikor készíthet hangfelvételt."</string>
+    <string name="permlab_detectScreenCapture" msgid="4447042362828799433">"alkalmazásablakokról készült képernyőfelvétel észlelése"</string>
+    <string name="permdesc_detectScreenCapture" msgid="3485784917960342284">"Ez az alkalmazás értesítést kap majd, amikor képernyőkép készül az alkalmazás használata közben."</string>
     <string name="permlab_sim_communication" msgid="176788115994050692">"parancsok küldése a SIM-kártyára"</string>
     <string name="permdesc_sim_communication" msgid="4179799296415957960">"Engedélyezi, hogy az alkalmazás parancsokat küldjön a SIM kártyára. Ez rendkívül veszélyes lehet."</string>
     <string name="permlab_activityRecognition" msgid="1782303296053990884">"testmozgás felismerése"</string>
@@ -698,10 +724,8 @@
     <string name="permdesc_readMediaVideo" msgid="3846400073770403528">"Engedélyezi az alkalmazásnak a megosztott tárhelyen található videófájlok olvasását."</string>
     <string name="permlab_readMediaImages" msgid="4057590631020986789">"a megosztott tárhelyen található képfájlok olvasása"</string>
     <string name="permdesc_readMediaImages" msgid="5836219373138469259">"Engedélyezi az alkalmazásnak a megosztott tárhelyen található képfájlok olvasását."</string>
-    <!-- no translation found for permlab_readVisualUserSelect (5516204215354667586) -->
-    <skip />
-    <!-- no translation found for permdesc_readVisualUserSelect (8027174717714968217) -->
-    <skip />
+    <string name="permlab_readVisualUserSelect" msgid="5516204215354667586">"a felhasználó által kiválasztott, megosztott tárhelyen található kép- és videófájlok olvasása"</string>
+    <string name="permdesc_readVisualUserSelect" msgid="8027174717714968217">"Engedélyezi az alkalmazásnak a megosztott tárhelyen található, Ön által kiválasztott kép- és videófájlok olvasását."</string>
     <string name="permlab_sdcardWrite" msgid="4863021819671416668">"a közös tárhely tartalmainak törlése és módosítása"</string>
     <string name="permdesc_sdcardWrite" msgid="8376047679331387102">"Engedélyezi az alkalmazás számára a közös tárhely tartalmainak felülírását."</string>
     <string name="permlab_use_sip" msgid="8250774565189337477">"SIP-hívások indítása/fogadása"</string>
@@ -2052,12 +2076,6 @@
     <string name="harmful_app_warning_uninstall" msgid="6472912975664191772">"ELTÁVOLÍTÁS"</string>
     <string name="harmful_app_warning_open_anyway" msgid="5963657791740211807">"MEGNYITÁS MÉGIS"</string>
     <string name="harmful_app_warning_title" msgid="8794823880881113856">"A rendszer kártékony alkalmazást észlelt"</string>
-    <string name="log_access_confirmation_title" msgid="2343578467290592708">"Engedélyezi a(z) <xliff:g id="LOG_ACCESS_APP_NAME">%s</xliff:g> számára, hogy hozzáférjen az összes eszköznaplóhoz?"</string>
-    <string name="log_access_confirmation_allow" msgid="5302517782599389507">"Egyszeri hozzáférés engedélyezése"</string>
-    <string name="log_access_confirmation_deny" msgid="7685790957455099845">"Tiltás"</string>
-    <string name="log_access_confirmation_body" product="default" msgid="1806692062668620735">"Az eszköznaplók rögzítik, hogy mi történik az eszközén. Az alkalmazások ezeket a naplókat használhatják a problémák megkeresésére és kijavítására.\n\nBizonyos naplók bizalmas adatokat is tartalmazhatnak, ezért csak olyan alkalmazások számára engedélyezze az összes eszköznaplóhoz való hozzáférést, amelyekben megbízik. \n\nHa nem engedélyezi ennek az alkalmazásnak, hogy hozzáférjen az összes eszköznaplójához, az app továbbra is hozzáférhet a saját naplóihoz. Előfordulhat, hogy az eszköz gyártója továbbra is hozzáfér az eszközön található bizonyos naplókhoz és adatokhoz."</string>
-    <string name="log_access_confirmation_body" product="tv" msgid="7379536536425265262">"Az eszköznaplók rögzítik, hogy mi történik az eszközén. Az alkalmazások ezeket a naplókat használhatják a problémák megkeresésére és kijavítására.\n\nBizonyos naplók bizalmas adatokat is tartalmazhatnak, ezért csak olyan alkalmazások számára engedélyezze az összes eszköznaplóhoz való hozzáférést, amelyekben megbízik. \n\nHa nem engedélyezi ennek az alkalmazásnak, hogy hozzáférjen az összes eszköznaplójához, az app továbbra is hozzáférhet a saját naplóihoz. Előfordulhat, hogy az eszköz gyártója továbbra is hozzáfér az eszközön található bizonyos naplókhoz és adatokhoz.\n\nTovábbi információ: g.co/android/devicelogs."</string>
-    <string name="log_access_do_not_show_again" msgid="1058690599083091552">"Ne jelenjen meg újra"</string>
     <string name="slices_permission_request" msgid="3677129866636153406">"A(z) <xliff:g id="APP_0">%1$s</xliff:g> alkalmazás részleteket szeretne megjeleníteni a(z) <xliff:g id="APP_2">%2$s</xliff:g> alkalmazásból"</string>
     <string name="screenshot_edit" msgid="7408934887203689207">"Szerkesztés"</string>
     <string name="volume_dialog_ringer_guidance_vibrate" msgid="2055927873175228519">"A hívások és az értesítések rezegnek"</string>
@@ -2298,6 +2316,7 @@
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"Nem lehet hozzáférni a telefon kamerájához a következő eszközön: <xliff:g id="DEVICE">%1$s</xliff:g>"</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"Nem lehet hozzáférni a táblagép kamerájához a következő eszközön: <xliff:g id="DEVICE">%1$s</xliff:g>"</string>
     <string name="vdm_secure_window" msgid="161700398158812314">"Ehhez a tartalomhoz nem lehet hozzáférni streamelés közben. Próbálja újra a telefonján."</string>
+    <string name="vdm_pip_blocked" msgid="4036107522497281397">"Streamelés közben nem lehetséges a kép a képben módban való lejátszás"</string>
     <string name="system_locale_title" msgid="711882686834677268">"Rendszerbeállítás"</string>
     <string name="default_card_name" msgid="9198284935962911468">"KÁRTYA: <xliff:g id="CARDNUMBER">%d</xliff:g>"</string>
 </resources>

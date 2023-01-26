@@ -18,6 +18,7 @@ package com.android.server.pm;
 
 import static android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
+import static android.os.UserManager.DEV_CREATE_OVERRIDE_PROPERTY;
 import static android.os.UserManager.DISALLOW_USER_SWITCH;
 import static android.os.UserManager.SYSTEM_USER_MODE_EMULATION_PROPERTY;
 
@@ -264,7 +265,7 @@ public class UserManagerService extends IUserManager.Stub {
     @VisibleForTesting
     static final int MAX_RECENTLY_REMOVED_IDS_SIZE = 100;
 
-    private static final int USER_VERSION = 10;
+    private static final int USER_VERSION = 11;
 
     private static final long EPOCH_PLUS_30_YEARS = 30L * 365 * 24 * 60 * 60 * 1000L; // ms
 
@@ -633,7 +634,7 @@ public class UserManagerService extends IUserManager.Stub {
     @GuardedBy("mUserStates")
     private final WatchedUserStates mUserStates = new WatchedUserStates();
 
-    private final UserVisibilityMediator mUserVisibilityMediator = new UserVisibilityMediator();
+    private final UserVisibilityMediator mUserVisibilityMediator;
 
     private static UserManagerService sInstance;
 
@@ -732,6 +733,7 @@ public class UserManagerService extends IUserManager.Stub {
         mPackagesLock = packagesLock;
         mUsers = users != null ? users : new SparseArray<>();
         mHandler = new MainHandler();
+        mUserVisibilityMediator = new UserVisibilityMediator(mHandler);
         mUserDataPreparer = userDataPreparer;
         mUserTypes = UserTypeFactory.getUserTypes();
         invalidateOwnerNameIfNecessary(context.getResources(), true /* forceUpdate */);
@@ -1644,8 +1646,7 @@ public class UserManagerService extends IUserManager.Stub {
         return isProfileUnchecked(userId);
     }
 
-    // TODO(b/244644281): make it private once UserVisibilityMediator don't use it anymore
-    boolean isProfileUnchecked(@UserIdInt int userId) {
+    private boolean isProfileUnchecked(@UserIdInt int userId) {
         synchronized (mUsersLock) {
             UserInfo userInfo = getUserInfoLU(userId);
             return userInfo != null && userInfo.isProfile();
@@ -1789,20 +1790,7 @@ public class UserManagerService extends IUserManager.Stub {
         }
         final long ident = Binder.clearCallingIdentity();
         try {
-            // TODO(b/2399825580): refactor into UserDisplayAssigner
-            IntArray visibleUsers;
-            synchronized (mUsersLock) {
-                int usersSize = mUsers.size();
-                visibleUsers = new IntArray();
-                for (int i = 0; i < usersSize; i++) {
-                    UserInfo ui = mUsers.valueAt(i).info;
-                    if (!ui.partial && !ui.preCreated && !mRemovingUserIds.get(ui.id)
-                            && mUserVisibilityMediator.isUserVisible(ui.id)) {
-                        visibleUsers.add(ui.id);
-                    }
-                }
-            }
-            return visibleUsers.toArray();
+            return mUserVisibilityMediator.getVisibleUsers().toArray();
         } finally {
             Binder.restoreCallingIdentity(ident);
         }
@@ -2814,7 +2802,8 @@ public class UserManagerService extends IUserManager.Stub {
         synchronized (mUsersLock) {
             count = getAliveUsersExcludingGuestsCountLU();
         }
-        return count >= UserManager.getMaxSupportedUsers();
+        return count >= UserManager.getMaxSupportedUsers()
+                && !isCreationOverrideEnabled();
     }
 
     /**
@@ -2824,15 +2813,16 @@ public class UserManagerService extends IUserManager.Stub {
      * <p>For checking whether more profiles can be added to a particular parent use
      * {@link #canAddMoreProfilesToUser}.
      */
-    private boolean canAddMoreUsersOfType(UserTypeDetails userTypeDetails) {
-        if (!userTypeDetails.isEnabled()) {
+    private boolean canAddMoreUsersOfType(@NonNull UserTypeDetails userTypeDetails) {
+        if (!isUserTypeEnabled(userTypeDetails)) {
             return false;
         }
         final int max = userTypeDetails.getMaxAllowed();
         if (max == UserTypeDetails.UNLIMITED_NUMBER_OF_USERS) {
             return true; // Indicates that there is no max.
         }
-        return getNumberOfUsersOfType(userTypeDetails.getName()) < max;
+        return getNumberOfUsersOfType(userTypeDetails.getName()) < max
+                || isCreationOverrideEnabled();
     }
 
     /**
@@ -2843,7 +2833,7 @@ public class UserManagerService extends IUserManager.Stub {
     public int getRemainingCreatableUserCount(String userType) {
         checkQueryOrCreateUsersPermission("get the remaining number of users that can be added.");
         final UserTypeDetails type = mUserTypes.get(userType);
-        if (type == null || !type.isEnabled()) {
+        if (type == null || !isUserTypeEnabled(type)) {
             return 0;
         }
         synchronized (mUsersLock) {
@@ -2917,7 +2907,21 @@ public class UserManagerService extends IUserManager.Stub {
     public boolean isUserTypeEnabled(String userType) {
         checkCreateUsersPermission("check if user type is enabled.");
         final UserTypeDetails userTypeDetails = mUserTypes.get(userType);
-        return userTypeDetails != null && userTypeDetails.isEnabled();
+        return userTypeDetails != null && isUserTypeEnabled(userTypeDetails);
+    }
+
+    /** Returns whether the creation of users of the given user type is enabled on this device. */
+    private boolean isUserTypeEnabled(@NonNull UserTypeDetails userTypeDetails) {
+        return userTypeDetails.isEnabled() || isCreationOverrideEnabled();
+    }
+
+    /**
+     * Returns whether to almost-always allow creating users even beyond their limit or if disabled.
+     * For Debug builds only.
+     */
+    private boolean isCreationOverrideEnabled() {
+        return Build.isDebuggable()
+                && SystemProperties.getBoolean(DEV_CREATE_OVERRIDE_PROPERTY, false);
     }
 
     @Override
@@ -2930,7 +2934,8 @@ public class UserManagerService extends IUserManager.Stub {
     @Override
     public boolean canAddMoreProfilesToUser(String userType, @UserIdInt int userId,
             boolean allowedToRemoveOne) {
-        return 0 < getRemainingCreatableProfileCount(userType, userId, allowedToRemoveOne);
+        return 0 < getRemainingCreatableProfileCount(userType, userId, allowedToRemoveOne)
+                || isCreationOverrideEnabled();
     }
 
     @Override
@@ -2948,7 +2953,7 @@ public class UserManagerService extends IUserManager.Stub {
         checkQueryOrCreateUsersPermission(
                 "get the remaining number of profiles that can be added to the given user.");
         final UserTypeDetails type = mUserTypes.get(userType);
-        if (type == null || !type.isEnabled()) {
+        if (type == null || !isUserTypeEnabled(type)) {
             return 0;
         }
         // Managed profiles have their own specific rules.
@@ -3337,6 +3342,7 @@ public class UserManagerService extends IUserManager.Stub {
                 final int oldFlags = systemUserData.info.flags;
                 final int newFlags;
                 final String newUserType;
+                // TODO(b/256624031): Also handle FLAG_MAIN
                 if (newHeadlessSystemUserMode) {
                     newUserType = UserManager.USER_TYPE_SYSTEM_HEADLESS;
                     newFlags = oldFlags & ~UserInfo.FLAG_FULL;
@@ -3629,6 +3635,22 @@ public class UserManagerService extends IUserManager.Stub {
             userVersion = 10;
         }
 
+        if (userVersion < 11) {
+            // Add FLAG_MAIN
+            if (isHeadlessSystemUserMode()) {
+                final UserInfo earliestCreatedUser = getEarliestCreatedFullUser();
+                earliestCreatedUser.flags |= UserInfo.FLAG_MAIN;
+                userIdsToWrite.add(earliestCreatedUser.id);
+            } else {
+                synchronized (mUsersLock) {
+                    final UserData userData = mUsers.get(UserHandle.USER_SYSTEM);
+                    userData.info.flags |= UserInfo.FLAG_MAIN;
+                    userIdsToWrite.add(userData.info.id);
+                }
+            }
+            userVersion = 11;
+        }
+
         // Reminder: If you add another upgrade, make sure to increment USER_VERSION too.
 
         // Done with userVersion changes, moving on to deal with userTypeVersion upgrades
@@ -3756,6 +3778,21 @@ public class UserManagerService extends IUserManager.Stub {
 
         // re-compute badge index
         userInfo.profileBadge = getFreeProfileBadgeLU(userInfo.profileGroupId, userInfo.userType);
+    }
+
+    private UserInfo getEarliestCreatedFullUser() {
+        final List<UserInfo> users = getUsersInternal(true, true, true);
+        UserInfo earliestUser = users.get(0);
+        long earliestCreationTime = Long.MAX_VALUE;
+        for (int i = 0; i < users.size(); i++) {
+            final UserInfo info = users.get(i);
+            if (info.isFull() && info.isAdmin() && info.creationTime >= 0
+                    && info.creationTime < earliestCreationTime) {
+                earliestCreationTime = info.creationTime;
+                earliestUser = info;
+            }
+        }
+        return earliestUser;
     }
 
     @GuardedBy({"mPackagesLock"})
@@ -4407,7 +4444,7 @@ public class UserManagerService extends IUserManager.Stub {
                     + ") indicated SYSTEM user, which cannot be created.");
             return null;
         }
-        if (!userTypeDetails.isEnabled()) {
+        if (!isUserTypeEnabled(userTypeDetails)) {
             throwCheckedUserOperationException(
                     "Cannot add a user of disabled type " + userType + ".",
                     UserManager.USER_OPERATION_ERROR_MAX_USERS);
@@ -4479,26 +4516,11 @@ public class UserManagerService extends IUserManager.Stub {
                                     + " for user " + parentId,
                             UserManager.USER_OPERATION_ERROR_MAX_USERS);
                 }
-                // In legacy mode, restricted profile's parent can only be the owner user
-                if (isRestricted && !UserManager.isSplitSystemUser()
-                        && (parentId != UserHandle.USER_SYSTEM)) {
+                if (isRestricted && (parentId != UserHandle.USER_SYSTEM)
+                        && !isCreationOverrideEnabled()) {
                     throwCheckedUserOperationException(
-                            "Cannot add restricted profile - parent user must be owner",
+                            "Cannot add restricted profile - parent user must be system",
                             UserManager.USER_OPERATION_ERROR_UNKNOWN);
-                }
-                if (isRestricted && UserManager.isSplitSystemUser()) {
-                    if (parent == null) {
-                        throwCheckedUserOperationException(
-                                "Cannot add restricted profile - parent user must be specified",
-                                UserManager.USER_OPERATION_ERROR_UNKNOWN);
-                    }
-                    if (!parent.info.canHaveProfile()) {
-                        throwCheckedUserOperationException(
-                                "Cannot add restricted profile - profiles cannot be created for "
-                                        + "the specified parent user id "
-                                        + parentId,
-                                UserManager.USER_OPERATION_ERROR_UNKNOWN);
-                    }
                 }
 
                 userId = getNextAvailableId();
@@ -6799,16 +6821,15 @@ public class UserManagerService extends IUserManager.Stub {
         }
 
         @Override
-        public void assignUserToDisplay(@UserIdInt int userId, @UserIdInt int profileGroupId,
+        public int assignUserToDisplayOnStart(@UserIdInt int userId, @UserIdInt int profileGroupId,
                 boolean foreground, int displayId) {
-            mUserVisibilityMediator.startUser(userId, profileGroupId, foreground, displayId);
-            mUserVisibilityMediator.assignUserToDisplay(userId, profileGroupId, displayId);
+            return mUserVisibilityMediator.assignUserToDisplayOnStart(userId, profileGroupId,
+                    foreground, displayId);
         }
 
         @Override
-        public void unassignUserFromDisplay(@UserIdInt int userId) {
-            mUserVisibilityMediator.unassignUserFromDisplay(userId);
-            mUserVisibilityMediator.stopUser(userId);
+        public void unassignUserFromDisplayOnStop(@UserIdInt int userId) {
+            mUserVisibilityMediator.unassignUserFromDisplayOnStop(userId);
         }
 
         @Override
@@ -6858,6 +6879,24 @@ public class UserManagerService extends IUserManager.Stub {
                     listener.onUserVisibilityChanged(userId, visible);
                 }
             });
+        }
+
+        @Override
+        public int[] getUserTypesForStatsd(@UserIdInt int[] userIds) {
+            if (userIds == null) {
+                return null;
+            }
+            final int[] userTypes = new int[userIds.length];
+            for (int i = 0; i < userTypes.length; i++) {
+                final UserInfo userInfo = getUserInfo(userIds[i]);
+                if (userInfo == null) {
+                    // Not possible because the input user ids should all be valid
+                    userTypes[i] = UserManager.getUserTypeForStatsd("");
+                } else {
+                    userTypes[i] = UserManager.getUserTypeForStatsd(userInfo.userType);
+                }
+            }
+            return userTypes;
         }
     } // class LocalService
 

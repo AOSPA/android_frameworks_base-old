@@ -397,6 +397,30 @@
     <string name="permdesc_persistentActivity" product="default" msgid="1914841924366562051">"Aplikaciji omogoča, da nekatere svoje dele naredi trajne v pomnilniku. S tem je lahko pomnilnik omejen za druge aplikacije, zaradi česar je delovanje telefona upočasnjeno."</string>
     <string name="permlab_foregroundService" msgid="1768855976818467491">"Izvajanje storitve v ospredju"</string>
     <string name="permdesc_foregroundService" msgid="8720071450020922795">"Aplikaciji dovoljuje uporabo storitev v ospredju."</string>
+    <string name="permlab_foregroundServiceCamera" msgid="7814751737955715297">"izvajanje storitve v ospredju vrste »camera«"</string>
+    <string name="permdesc_foregroundServiceCamera" msgid="6973701931250595727">"Aplikaciji dovoljuje, da uporablja storitve v ospredju vrste »camera«."</string>
+    <string name="permlab_foregroundServiceConnectedDevice" msgid="3019650546176872501">"izvajanje storitve v ospredju vrste »connectedDevice«"</string>
+    <string name="permdesc_foregroundServiceConnectedDevice" msgid="1067457315741352963">"Aplikaciji dovoljuje, da uporablja storitve v ospredju vrste »connectedDevice«."</string>
+    <string name="permlab_foregroundServiceDataSync" msgid="5847463514326881076">"izvajanje storitve v ospredju vrste »dataSync«"</string>
+    <string name="permdesc_foregroundServiceDataSync" msgid="2267140263423973050">"Aplikaciji dovoljuje, da uporablja storitve v ospredju vrste »dataSync«."</string>
+    <string name="permlab_foregroundServiceLocation" msgid="3745428302378535690">"izvajanje storitve v ospredju vrste »location«"</string>
+    <string name="permdesc_foregroundServiceLocation" msgid="118894034365177183">"Aplikaciji dovoljuje, da uporablja storitve v ospredju vrste »location«."</string>
+    <string name="permlab_foregroundServiceMediaPlayback" msgid="4002687983891935514">"izvajanje storitve v ospredju vrste »mediaPlayback«"</string>
+    <string name="permdesc_foregroundServiceMediaPlayback" msgid="3638032446063968043">"Aplikaciji dovoljuje, da uporablja storitve v ospredju vrste »mediaPlayback«."</string>
+    <string name="permlab_foregroundServiceMediaProjection" msgid="2630868915733312527">"izvajanje storitve v ospredju vrste »mediaProjection«"</string>
+    <string name="permdesc_foregroundServiceMediaProjection" msgid="4805677128082002298">"Aplikaciji dovoljuje, da uporablja storitve v ospredju vrste »mediaProjection«."</string>
+    <string name="permlab_foregroundServiceMicrophone" msgid="7390033424890545399">"izvajanje storitve v ospredju vrste »microphone«"</string>
+    <string name="permdesc_foregroundServiceMicrophone" msgid="1206041516173483201">"Aplikaciji dovoljuje, da uporablja storitve v ospredju vrste »microphone«."</string>
+    <string name="permlab_foregroundServicePhoneCall" msgid="627937743867697892">"izvajanje storitve v ospredju vrste »phoneCall«"</string>
+    <string name="permdesc_foregroundServicePhoneCall" msgid="5941660252587015147">"Aplikaciji dovoljuje, da uporablja storitve v ospredju vrste »phoneCall«."</string>
+    <string name="permlab_foregroundServiceHealth" msgid="3675776442080928184">"izvajanje storitve v ospredju vrste »health«"</string>
+    <string name="permdesc_foregroundServiceHealth" msgid="2024586220562667185">"Aplikaciji dovoljuje, da uporablja storitve v ospredju vrste »health«."</string>
+    <string name="permlab_foregroundServiceRemoteMessaging" msgid="105670277002780950">"izvajanje storitve v ospredju vrste »remoteMessaging«"</string>
+    <string name="permdesc_foregroundServiceRemoteMessaging" msgid="8767598075877576277">"Aplikaciji dovoljuje, da uporablja storitve v ospredju vrste »remoteMessaging«."</string>
+    <string name="permlab_foregroundServiceSystemExempted" msgid="1597663713590612685">"izvajanje storitve v ospredju vrste »systemExempted«"</string>
+    <string name="permdesc_foregroundServiceSystemExempted" msgid="947381760834649622">"Aplikaciji dovoljuje, da uporablja storitve v ospredju vrste »systemExempted«."</string>
+    <string name="permlab_foregroundServiceSpecialUse" msgid="7973536745876645082">"izvajanje storitve v ospredju vrste »specialUse«"</string>
+    <string name="permdesc_foregroundServiceSpecialUse" msgid="646713654541885919">"Aplikaciji dovoljuje, da uporablja storitve v ospredju vrste »specialUse«."</string>
     <string name="permlab_getPackageSize" msgid="375391550792886641">"izračunavanje prostora za shranjevanje aplikacije"</string>
     <string name="permdesc_getPackageSize" msgid="742743530909966782">"Aplikaciji omogoča, da pridobi njeno kodo, podatke in velikosti predpomnilnika."</string>
     <string name="permlab_writeSettings" msgid="8057285063719277394">"spreminjanje sistemskih nastavitev"</string>
@@ -449,6 +473,8 @@
     <string name="permdesc_recordAudio" msgid="5857246765327514062">"Ta aplikacija lahko uporablja mikrofon za snemanje zvoka med uporabo aplikacije."</string>
     <string name="permlab_recordBackgroundAudio" msgid="5891032812308878254">"snemanje zvoka v ozadju"</string>
     <string name="permdesc_recordBackgroundAudio" msgid="1992623135737407516">"Ta aplikacija lahko poljubno uporablja mikrofon za snemanje zvoka."</string>
+    <string name="permlab_detectScreenCapture" msgid="4447042362828799433">"zaznavanje zajemov zaslonskih slik v oknih aplikacij"</string>
+    <string name="permdesc_detectScreenCapture" msgid="3485784917960342284">"Ta aplikacija bo obveščena o vsakem posnetku zaslona, ustvarjenem med njeno uporabo."</string>
     <string name="permlab_sim_communication" msgid="176788115994050692">"pošiljanje ukazov na kartico SIM"</string>
     <string name="permdesc_sim_communication" msgid="4179799296415957960">"Aplikaciji dovoli pošiljanje ukazov kartici SIM. To je lahko zelo nevarno."</string>
     <string name="permlab_activityRecognition" msgid="1782303296053990884">"prepoznavanje telesne dejavnosti"</string>
@@ -700,10 +726,8 @@
     <string name="permdesc_readMediaVideo" msgid="3846400073770403528">"Aplikaciji omogoča branje videodatotek v deljeni shrambi."</string>
     <string name="permlab_readMediaImages" msgid="4057590631020986789">"branje slikovnih datotek v deljeni shrambi"</string>
     <string name="permdesc_readMediaImages" msgid="5836219373138469259">"Aplikaciji omogoča branje slikovnih datotek v deljeni shrambi."</string>
-    <!-- no translation found for permlab_readVisualUserSelect (5516204215354667586) -->
-    <skip />
-    <!-- no translation found for permdesc_readVisualUserSelect (8027174717714968217) -->
-    <skip />
+    <string name="permlab_readVisualUserSelect" msgid="5516204215354667586">"branje uporabniško izbranih slikovnih datotek in videodatotek v deljeni shrambi"</string>
+    <string name="permdesc_readVisualUserSelect" msgid="8027174717714968217">"Aplikaciji omogoča branje slikovnih datotek in videodatotek, ki jih izberete v deljeni shrambi."</string>
     <string name="permlab_sdcardWrite" msgid="4863021819671416668">"spreminjanje ali brisanje vsebine skupne shrambe"</string>
     <string name="permdesc_sdcardWrite" msgid="8376047679331387102">"Aplikaciji omogoča zapisovanje vsebine skupne shrambe."</string>
     <string name="permlab_use_sip" msgid="8250774565189337477">"opravljanje/sprejemanje klicev SIP"</string>
@@ -2054,12 +2078,6 @@
     <string name="harmful_app_warning_uninstall" msgid="6472912975664191772">"ODMESTI"</string>
     <string name="harmful_app_warning_open_anyway" msgid="5963657791740211807">"VSEENO ODPRI"</string>
     <string name="harmful_app_warning_title" msgid="8794823880881113856">"Zaznana je bila škodljiva aplikacija"</string>
-    <string name="log_access_confirmation_title" msgid="2343578467290592708">"Ali aplikaciji <xliff:g id="LOG_ACCESS_APP_NAME">%s</xliff:g> dovolite dostop do vseh dnevnikov naprave?"</string>
-    <string name="log_access_confirmation_allow" msgid="5302517782599389507">"Dovoli enkratni dostop"</string>
-    <string name="log_access_confirmation_deny" msgid="7685790957455099845">"Ne dovoli"</string>
-    <string name="log_access_confirmation_body" product="default" msgid="1806692062668620735">"V dnevnikih naprave se beleži dogajanje v napravi. Aplikacije lahko te dnevnike uporabijo za iskanje in odpravljanje težav.\n\nNekateri dnevniki morda vsebujejo občutljive podatke, zato dostop do vseh dnevnikov naprave omogočite le aplikacijam, ki jim zaupate. \n\nČe tej aplikaciji ne dovolite dostopa do vseh dnevnikov naprave, bo aplikacija kljub temu lahko dostopala do svojih dnevnikov. Proizvajalec naprave bo morda lahko kljub temu dostopal do nekaterih dnevnikov ali podatkov v napravi."</string>
-    <string name="log_access_confirmation_body" product="tv" msgid="7379536536425265262">"V dnevnikih naprave se beleži dogajanje v napravi. Aplikacije lahko te dnevnike uporabijo za iskanje in odpravljanje težav.\n\nNekateri dnevniki morda vsebujejo občutljive podatke, zato dostop do vseh dnevnikov naprave omogočite le aplikacijam, ki jim zaupate. \n\nČe tej aplikaciji ne dovolite dostopa do vseh dnevnikov naprave, bo aplikacija kljub temu lahko dostopala do svojih dnevnikov. Proizvajalec naprave bo morda lahko kljub temu dostopal do nekaterih dnevnikov ali podatkov v napravi.\n\nPreberite več o tem na g.co/android/devicelogs."</string>
-    <string name="log_access_do_not_show_again" msgid="1058690599083091552">"Ne prikaži več"</string>
     <string name="slices_permission_request" msgid="3677129866636153406">"Aplikacija <xliff:g id="APP_0">%1$s</xliff:g> želi prikazati izreze aplikacije <xliff:g id="APP_2">%2$s</xliff:g>"</string>
     <string name="screenshot_edit" msgid="7408934887203689207">"Uredi"</string>
     <string name="volume_dialog_ringer_guidance_vibrate" msgid="2055927873175228519">"Vibriranje bo vklopljeno za klice in obvestila"</string>
@@ -2300,6 +2318,7 @@
     <string name="vdm_camera_access_denied" product="default" msgid="6102378580971542473">"Ni mogoče dostopati do fotoaparata telefona prek naprave <xliff:g id="DEVICE">%1$s</xliff:g>."</string>
     <string name="vdm_camera_access_denied" product="tablet" msgid="6895968310395249076">"Ni mogoče dostopati do fotoaparata tabličnega računalnika prek naprave <xliff:g id="DEVICE">%1$s</xliff:g>."</string>
     <string name="vdm_secure_window" msgid="161700398158812314">"Do te vsebine ni mogoče dostopati med pretočnim predvajanjem. Poskusite s telefonom."</string>
+    <string name="vdm_pip_blocked" msgid="4036107522497281397">"Slike v sliki ni mogoče prikazati med pretočnim predvajanjem."</string>
     <string name="system_locale_title" msgid="711882686834677268">"Sistemsko privzeto"</string>
     <string name="default_card_name" msgid="9198284935962911468">"KARTICA <xliff:g id="CARDNUMBER">%d</xliff:g>"</string>
 </resources>

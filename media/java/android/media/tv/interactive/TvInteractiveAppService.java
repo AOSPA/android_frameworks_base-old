@@ -463,6 +463,16 @@ public abstract class TvInteractiveAppService extends Service {
         }
 
         /**
+         * Receives stopped recording's ID.
+         *
+         * @param recordingId The ID of the recording stopped
+         * @hide
+         */
+        public void onRecordingStopped(@NonNull String recordingId) {
+        }
+
+
+        /**
          * Receives signing result.
          * @param signingId the ID to identify the request. It's the same as the corresponding ID in
          *        {@link Session#requestSigning(String, String, String, byte[])}
@@ -942,6 +952,33 @@ public abstract class TvInteractiveAppService extends Service {
         }
 
         /**
+         * Requests starting of recording
+         *
+         * <p> This is used to request the active {@link android.media.tv.TvRecordingClient} to
+         * call {@link android.media.tv.TvRecordingClient#stopRecording()}.
+         * @see android.media.tv.TvRecordingClient#stopRecording()
+         *
+         * @hide
+         */
+        @CallSuper
+        public void requestStopRecording(@NonNull String recordingId) {
+            executeOrPostRunnableOnMainThread(() -> {
+                try {
+                    if (DEBUG) {
+                        Log.d(TAG, "requestStopRecording");
+                    }
+                    if (mSessionCallback != null) {
+                        mSessionCallback.onRequestStopRecording(recordingId);
+                    }
+                } catch (RemoteException e) {
+                    Log.w(TAG, "error in requestStopRecording", e);
+                }
+            });
+        }
+
+
+
+        /**
          * Requests signing of the given data.
          *
          * <p>This is used when the corresponding server of the broadcast-independent interactive
@@ -1151,8 +1188,18 @@ public abstract class TvInteractiveAppService extends Service {
             onAdResponse(response);
         }
 
+        /**
+         * Calls {@link #onRecordingStarted(String)}.
+         */
         void notifyRecordingStarted(String recordingId) {
             onRecordingStarted(recordingId);
+        }
+
+        /**
+         * Calls {@link #onRecordingStopped(String)}.
+         */
+        void notifyRecordingStopped(String recordingId) {
+            onRecordingStopped(recordingId);
         }
 
         /**

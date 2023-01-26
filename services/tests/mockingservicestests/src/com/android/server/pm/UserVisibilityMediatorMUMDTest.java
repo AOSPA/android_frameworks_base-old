@@ -15,15 +15,16 @@
  */
 package com.android.server.pm;
 
-import static android.os.UserHandle.USER_SYSTEM;
+import static android.os.UserHandle.USER_NULL;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
 
-import static com.google.common.truth.Truth.assertWithMessage;
-
-import static org.junit.Assert.assertThrows;
-
-import android.util.Log;
+import static com.android.server.pm.UserManagerInternal.USER_ASSIGNMENT_RESULT_FAILURE;
+import static com.android.server.pm.UserManagerInternal.USER_ASSIGNMENT_RESULT_SUCCESS_INVISIBLE;
+import static com.android.server.pm.UserManagerInternal.USER_ASSIGNMENT_RESULT_SUCCESS_VISIBLE;
+import static com.android.server.pm.UserVisibilityChangedEvent.onInvisible;
+import static com.android.server.pm.UserVisibilityChangedEvent.onVisible;
+import static com.android.server.pm.UserVisibilityMediator.INITIAL_CURRENT_USER_ID;
 
 import org.junit.Test;
 
@@ -36,244 +37,205 @@ import org.junit.Test;
  */
 public final class UserVisibilityMediatorMUMDTest extends UserVisibilityMediatorTestCase {
 
-    private static final String TAG = UserVisibilityMediatorMUMDTest.class.getSimpleName();
-
-    public UserVisibilityMediatorMUMDTest() {
+    public UserVisibilityMediatorMUMDTest() throws Exception {
         super(/* usersOnSecondaryDisplaysEnabled= */ true);
     }
 
     @Test
-    public void testAssignUserToDisplay_systemUser() {
-        assertThrows(IllegalArgumentException.class, () -> mMediator
-                .assignUserToDisplay(USER_SYSTEM, USER_SYSTEM, SECONDARY_DISPLAY_ID));
+    public void testStartFgUser_onDefaultDisplay() throws Exception {
+        AsyncUserVisibilityListener listener = addListenerForEvents(
+                onInvisible(INITIAL_CURRENT_USER_ID),
+                onVisible(USER_ID));
+
+        int result = mMediator.assignUserToDisplayOnStart(USER_ID, USER_ID, FG,
+                DEFAULT_DISPLAY);
+        assertStartUserResult(result, USER_ASSIGNMENT_RESULT_SUCCESS_VISIBLE);
+
+        expectUserIsVisible(USER_ID);
+        expectUserIsVisibleOnDisplay(USER_ID, DEFAULT_DISPLAY);
+        expectUserIsNotVisibleOnDisplay(USER_ID, INVALID_DISPLAY);
+        expectUserIsNotVisibleOnDisplay(USER_ID, SECONDARY_DISPLAY_ID);
+        expectVisibleUsers(USER_ID);
+
+        expectDisplayAssignedToUser(USER_ID, DEFAULT_DISPLAY);
+        expectUserAssignedToDisplay(DEFAULT_DISPLAY, USER_ID);
+        expectUserAssignedToDisplay(INVALID_DISPLAY, USER_ID);
+        expectUserAssignedToDisplay(SECONDARY_DISPLAY_ID, USER_ID);
+
+        expectDisplayAssignedToUser(USER_NULL, INVALID_DISPLAY);
+
+        listener.verify();
     }
 
     @Test
-    public void testAssignUserToDisplay_invalidDisplay() {
-        assertThrows(IllegalArgumentException.class,
-                () -> mMediator.assignUserToDisplay(USER_ID, USER_ID, INVALID_DISPLAY));
+    public void testSwitchFgUser_onDefaultDisplay() throws Exception {
+        int previousCurrentUserId = OTHER_USER_ID;
+        int currentUserId = USER_ID;
+        AsyncUserVisibilityListener listener = addListenerForEvents(
+                onInvisible(INITIAL_CURRENT_USER_ID),
+                onVisible(previousCurrentUserId),
+                onInvisible(previousCurrentUserId),
+                onVisible(currentUserId));
+        startForegroundUser(previousCurrentUserId);
+
+        int result = mMediator.assignUserToDisplayOnStart(currentUserId, currentUserId, FG,
+                DEFAULT_DISPLAY);
+        assertStartUserResult(result, USER_ASSIGNMENT_RESULT_SUCCESS_VISIBLE);
+
+        expectUserIsVisible(currentUserId);
+        expectUserIsVisibleOnDisplay(currentUserId, DEFAULT_DISPLAY);
+        expectUserIsNotVisibleOnDisplay(currentUserId, INVALID_DISPLAY);
+        expectUserIsNotVisibleOnDisplay(currentUserId, SECONDARY_DISPLAY_ID);
+        expectVisibleUsers(currentUserId);
+
+        expectDisplayAssignedToUser(currentUserId, DEFAULT_DISPLAY);
+        expectUserAssignedToDisplay(DEFAULT_DISPLAY, currentUserId);
+        expectUserAssignedToDisplay(INVALID_DISPLAY, currentUserId);
+        expectUserAssignedToDisplay(SECONDARY_DISPLAY_ID, currentUserId);
+
+        expectUserIsNotVisibleAtAll(previousCurrentUserId);
+        expectNoDisplayAssignedToUser(previousCurrentUserId);
+
+        listener.verify();
     }
 
     @Test
-    public void testAssignUserToDisplay_currentUser() {
-        mockCurrentUser(USER_ID);
+    public void testStartBgProfile_onDefaultDisplay_whenParentIsCurrentUser() throws Exception {
+        AsyncUserVisibilityListener listener = addListenerForEvents(
+                onInvisible(INITIAL_CURRENT_USER_ID),
+                onVisible(PARENT_USER_ID),
+                onVisible(PROFILE_USER_ID));
+        startForegroundUser(PARENT_USER_ID);
 
-        assertThrows(IllegalArgumentException.class,
-                () -> mMediator.assignUserToDisplay(USER_ID, USER_ID, SECONDARY_DISPLAY_ID));
+        int result = mMediator.assignUserToDisplayOnStart(PROFILE_USER_ID, PARENT_USER_ID, BG,
+                DEFAULT_DISPLAY);
+        assertStartUserResult(result, USER_ASSIGNMENT_RESULT_SUCCESS_VISIBLE);
 
-        assertNoUserAssignedToDisplay();
+        expectUserIsVisible(PROFILE_USER_ID);
+        expectUserIsNotVisibleOnDisplay(PROFILE_USER_ID, INVALID_DISPLAY);
+        expectUserIsNotVisibleOnDisplay(PROFILE_USER_ID, SECONDARY_DISPLAY_ID);
+        expectUserIsVisibleOnDisplay(PROFILE_USER_ID, DEFAULT_DISPLAY);
+        expectVisibleUsers(PARENT_USER_ID, PROFILE_USER_ID);
+
+        expectDisplayAssignedToUser(PROFILE_USER_ID, DEFAULT_DISPLAY);
+        expectUserAssignedToDisplay(DEFAULT_DISPLAY, PARENT_USER_ID);
+
+        listener.verify();
     }
 
     @Test
-    public void testAssignUserToDisplay_startedProfileOfCurrentUser() {
-        mockCurrentUser(PARENT_USER_ID);
+    public void testStartFgUser_onInvalidDisplay() throws Exception {
+        AsyncUserVisibilityListener listener = addListenerForNoEvents();
+
+        int result = mMediator.assignUserToDisplayOnStart(USER_ID, USER_ID, FG, INVALID_DISPLAY);
+
+        assertStartUserResult(result, USER_ASSIGNMENT_RESULT_FAILURE);
+
+        listener.verify();
+    }
+
+    @Test
+    public void testStartBgUser_onInvalidDisplay() throws Exception {
+        AsyncUserVisibilityListener listener = addListenerForNoEvents();
+
+        int result = mMediator.assignUserToDisplayOnStart(USER_ID, USER_ID, BG, INVALID_DISPLAY);
+
+        assertStartUserResult(result, USER_ASSIGNMENT_RESULT_FAILURE);
+
+        expectUserIsNotVisibleAtAll(USER_ID);
+
+        listener.verify();
+    }
+
+    @Test
+    public void testStartBgUser_onSecondaryDisplay_displayAvailable() throws Exception {
+        AsyncUserVisibilityListener listener = addListenerForEvents(onVisible(USER_ID));
+
+        int result = mMediator.assignUserToDisplayOnStart(USER_ID, USER_ID, BG,
+                SECONDARY_DISPLAY_ID);
+        assertStartUserResult(result, USER_ASSIGNMENT_RESULT_SUCCESS_VISIBLE);
+
+        expectUserIsVisible(USER_ID);
+        expectUserIsVisibleOnDisplay(USER_ID, SECONDARY_DISPLAY_ID);
+        expectUserIsNotVisibleOnDisplay(USER_ID, INVALID_DISPLAY);
+        expectUserIsNotVisibleOnDisplay(USER_ID, DEFAULT_DISPLAY);
+        expectVisibleUsers(INITIAL_CURRENT_USER_ID, USER_ID);
+
+        expectDisplayAssignedToUser(USER_ID, SECONDARY_DISPLAY_ID);
+        expectUserAssignedToDisplay(SECONDARY_DISPLAY_ID, USER_ID);
+
+        listener.verify();
+    }
+
+    @Test
+    public void testVisibilityOfCurrentUserAndProfilesOnDisplayAssignedToAnotherUser()
+            throws Exception {
         startDefaultProfile();
 
-        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> mMediator
-                .assignUserToDisplay(PROFILE_USER_ID, PARENT_USER_ID, SECONDARY_DISPLAY_ID));
+        // Make sure they were visible before
+        expectUserIsNotVisibleOnDisplay("before", PARENT_USER_ID, SECONDARY_DISPLAY_ID);
+        expectUserIsNotVisibleOnDisplay("before", PROFILE_USER_ID, SECONDARY_DISPLAY_ID);
 
-        Log.v(TAG, "Exception: " + e);
-        assertNoUserAssignedToDisplay();
+        int result = mMediator.assignUserToDisplayOnStart(USER_ID, USER_ID, BG,
+                SECONDARY_DISPLAY_ID);
+        assertStartUserResult(result, USER_ASSIGNMENT_RESULT_SUCCESS_VISIBLE);
+
+        expectUserIsNotVisibleOnDisplay("after", PARENT_USER_ID, SECONDARY_DISPLAY_ID);
+        expectUserIsNotVisibleOnDisplay("after", PROFILE_USER_ID, SECONDARY_DISPLAY_ID);
     }
 
     @Test
-    public void testAssignUserToDisplay_stoppedProfileOfCurrentUser() {
-        mockCurrentUser(PARENT_USER_ID);
-        stopDefaultProfile();
+    public void testStartBgUser_onSecondaryDisplay_displayAlreadyAssigned() throws Exception {
+        AsyncUserVisibilityListener listener = addListenerForEvents(onVisible(OTHER_USER_ID));
+        startUserInSecondaryDisplay(OTHER_USER_ID, SECONDARY_DISPLAY_ID);
 
-        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> mMediator
-                .assignUserToDisplay(PROFILE_USER_ID, PARENT_USER_ID, SECONDARY_DISPLAY_ID));
+        int result = mMediator.assignUserToDisplayOnStart(USER_ID, USER_ID, BG,
+                SECONDARY_DISPLAY_ID);
+        assertStartUserResult(result, USER_ASSIGNMENT_RESULT_FAILURE);
 
-        Log.v(TAG, "Exception: " + e);
-        assertNoUserAssignedToDisplay();
+        expectUserIsNotVisibleAtAll(USER_ID);
+        expectNoDisplayAssignedToUser(USER_ID);
+        expectUserAssignedToDisplay(SECONDARY_DISPLAY_ID, OTHER_USER_ID);
+
+        listener.verify();
     }
 
     @Test
-    public void testAssignUserToDisplay_displayAvailable() {
-        mMediator.assignUserToDisplay(USER_ID, USER_ID, SECONDARY_DISPLAY_ID);
+    public void testStartBgUser_onSecondaryDisplay_userAlreadyAssigned() throws Exception {
+        AsyncUserVisibilityListener listener = addListenerForEvents(onVisible(USER_ID));
+        startUserInSecondaryDisplay(USER_ID, OTHER_SECONDARY_DISPLAY_ID);
 
-        assertUserAssignedToDisplay(USER_ID, SECONDARY_DISPLAY_ID);
+        int result = mMediator.assignUserToDisplayOnStart(USER_ID, USER_ID, BG,
+                SECONDARY_DISPLAY_ID);
+        assertStartUserResult(result, USER_ASSIGNMENT_RESULT_FAILURE);
+
+        expectUserIsVisible(USER_ID);
+        expectUserIsVisibleOnDisplay(USER_ID, OTHER_SECONDARY_DISPLAY_ID);
+        expectUserIsNotVisibleOnDisplay(USER_ID, SECONDARY_DISPLAY_ID);
+        expectUserIsNotVisibleOnDisplay(USER_ID, INVALID_DISPLAY);
+        expectUserIsNotVisibleOnDisplay(USER_ID, DEFAULT_DISPLAY);
+        expectVisibleUsers(INITIAL_CURRENT_USER_ID, USER_ID);
+
+        expectDisplayAssignedToUser(USER_ID, OTHER_SECONDARY_DISPLAY_ID);
+        expectUserAssignedToDisplay(OTHER_SECONDARY_DISPLAY_ID, USER_ID);
+
+        listener.verify();
     }
 
     @Test
-    public void testAssignUserToDisplay_displayAlreadyAssigned() {
-        mMediator.assignUserToDisplay(USER_ID, USER_ID, SECONDARY_DISPLAY_ID);
+    public void testStartBgProfile_onDefaultDisplay_whenParentVisibleOnSecondaryDisplay()
+            throws Exception {
+        AsyncUserVisibilityListener listener = addListenerForEvents(onVisible(PARENT_USER_ID));
+        startUserInSecondaryDisplay(PARENT_USER_ID, OTHER_SECONDARY_DISPLAY_ID);
 
-        IllegalStateException e = assertThrows(IllegalStateException.class, () -> mMediator
-                .assignUserToDisplay(OTHER_USER_ID, OTHER_USER_ID, SECONDARY_DISPLAY_ID));
+        int result = mMediator.assignUserToDisplayOnStart(PROFILE_USER_ID, PARENT_USER_ID, BG,
+                DEFAULT_DISPLAY);
+        assertStartUserResult(result, USER_ASSIGNMENT_RESULT_SUCCESS_INVISIBLE);
 
-        Log.v(TAG, "Exception: " + e);
-        assertWithMessage("exception (%s) message", e).that(e).hasMessageThat()
-                .matches("Cannot.*" + OTHER_USER_ID + ".*" + SECONDARY_DISPLAY_ID + ".*already.*"
-                        + USER_ID + ".*");
+        expectUserIsNotVisibleAtAll(PROFILE_USER_ID);
+        expectNoDisplayAssignedToUser(PROFILE_USER_ID);
+        expectUserAssignedToDisplay(OTHER_SECONDARY_DISPLAY_ID, PARENT_USER_ID);
+
+        listener.verify();
     }
-
-    @Test
-    public void testAssignUserToDisplay_userAlreadyAssigned() {
-        mMediator.assignUserToDisplay(USER_ID, USER_ID, SECONDARY_DISPLAY_ID);
-
-        IllegalStateException e = assertThrows(IllegalStateException.class,
-                () -> mMediator.assignUserToDisplay(USER_ID, USER_ID, OTHER_SECONDARY_DISPLAY_ID));
-
-        Log.v(TAG, "Exception: " + e);
-        assertWithMessage("exception (%s) message", e).that(e).hasMessageThat()
-                .matches("Cannot.*" + USER_ID + ".*" + OTHER_SECONDARY_DISPLAY_ID + ".*already.*"
-                        + SECONDARY_DISPLAY_ID + ".*");
-
-        assertUserAssignedToDisplay(USER_ID, SECONDARY_DISPLAY_ID);
-    }
-
-    @Test
-    public void testAssignUserToDisplay_profileOnSameDisplayAsParent() {
-        mMediator.assignUserToDisplay(PARENT_USER_ID, PARENT_USER_ID, SECONDARY_DISPLAY_ID);
-        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> mMediator
-                .assignUserToDisplay(PROFILE_USER_ID, PARENT_USER_ID, SECONDARY_DISPLAY_ID));
-
-        Log.v(TAG, "Exception: " + e);
-        assertUserAssignedToDisplay(PARENT_USER_ID, SECONDARY_DISPLAY_ID);
-    }
-
-    @Test
-    public void testAssignUserToDisplay_profileOnDifferentDisplayAsParent() {
-        mMediator.assignUserToDisplay(PARENT_USER_ID, PARENT_USER_ID, SECONDARY_DISPLAY_ID);
-        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> mMediator
-                .assignUserToDisplay(PROFILE_USER_ID, PARENT_USER_ID, OTHER_SECONDARY_DISPLAY_ID));
-
-        Log.v(TAG, "Exception: " + e);
-        assertUserAssignedToDisplay(PARENT_USER_ID, SECONDARY_DISPLAY_ID);
-    }
-
-    @Test
-    public void testAssignUserToDisplay_profileDefaultDisplayParentOnSecondaryDisplay() {
-        mMediator.assignUserToDisplay(PARENT_USER_ID, PARENT_USER_ID, SECONDARY_DISPLAY_ID);
-        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> mMediator
-                .assignUserToDisplay(PROFILE_USER_ID, PARENT_USER_ID, DEFAULT_DISPLAY));
-
-        Log.v(TAG, "Exception: " + e);
-        assertUserAssignedToDisplay(PARENT_USER_ID, SECONDARY_DISPLAY_ID);
-    }
-
-    @Test
-    public void testUnassignUserFromDisplay() {
-        testAssignUserToDisplay_displayAvailable();
-
-        mMediator.unassignUserFromDisplay(USER_ID);
-
-        assertNoUserAssignedToDisplay();
-    }
-
-    @Test
-    public void testIsUserVisible_bgUserOnSecondaryDisplay() {
-        mockCurrentUser(OTHER_USER_ID);
-        assignUserToDisplay(USER_ID, SECONDARY_DISPLAY_ID);
-
-        assertWithMessage("isUserVisible(%s)", USER_ID)
-                .that(mMediator.isUserVisible(USER_ID)).isTrue();
-    }
-
-    // NOTE: we don't need to add tests for profiles (started / stopped profiles of bg user), as
-    // isUserVisible() for bg users relies only on the user / display assignments
-
-    @Test
-    public void testIsUserVisibleOnDisplay_currentUserUnassignedSecondaryDisplay() {
-        mockCurrentUser(USER_ID);
-
-        assertWithMessage("isUserVisible(%s, %s)", USER_ID, SECONDARY_DISPLAY_ID)
-                .that(mMediator.isUserVisible(USER_ID, SECONDARY_DISPLAY_ID)).isTrue();
-    }
-
-    @Test
-    public void testIsUserVisibleOnDisplay_currentUserSecondaryDisplayAssignedToAnotherUser() {
-        mockCurrentUser(USER_ID);
-        assignUserToDisplay(OTHER_USER_ID, SECONDARY_DISPLAY_ID);
-
-        assertWithMessage("isUserVisible(%s, %s)", USER_ID, SECONDARY_DISPLAY_ID)
-                .that(mMediator.isUserVisible(USER_ID, SECONDARY_DISPLAY_ID)).isFalse();
-    }
-
-    @Test
-    public void testIsUserVisibleOnDisplay_startedProfileOfCurrentUserSecondaryDisplayAssignedToAnotherUser() {
-        startDefaultProfile();
-        mockCurrentUser(PARENT_USER_ID);
-        assignUserToDisplay(OTHER_USER_ID, SECONDARY_DISPLAY_ID);
-
-        assertWithMessage("isUserVisible(%s, %s)", PROFILE_USER_ID, SECONDARY_DISPLAY_ID)
-                .that(mMediator.isUserVisible(PROFILE_USER_ID, SECONDARY_DISPLAY_ID)).isFalse();
-    }
-
-    @Test
-    public void testIsUserVisibleOnDisplay_stoppedProfileOfCurrentUserSecondaryDisplayAssignedToAnotherUser() {
-        stopDefaultProfile();
-        mockCurrentUser(PARENT_USER_ID);
-        assignUserToDisplay(OTHER_USER_ID, SECONDARY_DISPLAY_ID);
-
-        assertWithMessage("isUserVisible(%s, %s)", PROFILE_USER_ID, SECONDARY_DISPLAY_ID)
-                .that(mMediator.isUserVisible(PROFILE_USER_ID, SECONDARY_DISPLAY_ID)).isFalse();
-    }
-
-    @Test
-    public void testIsUserVisibleOnDisplay_startedProfileOfCurrentUserOnUnassignedSecondaryDisplay() {
-        startDefaultProfile();
-        mockCurrentUser(PARENT_USER_ID);
-
-        // TODO(b/244644281): change it to isFalse() once isUserVisible() is fixed (see note there)
-        assertWithMessage("isUserVisible(%s, %s)", PROFILE_USER_ID, SECONDARY_DISPLAY_ID)
-                .that(mMediator.isUserVisible(PROFILE_USER_ID, SECONDARY_DISPLAY_ID)).isTrue();
-    }
-
-    @Test
-    public void testIsUserVisibleOnDisplay_bgUserOnSecondaryDisplay() {
-        mockCurrentUser(OTHER_USER_ID);
-        assignUserToDisplay(USER_ID, SECONDARY_DISPLAY_ID);
-
-        assertWithMessage("isUserVisible(%s, %s)", USER_ID, SECONDARY_DISPLAY_ID)
-                .that(mMediator.isUserVisible(USER_ID, SECONDARY_DISPLAY_ID)).isTrue();
-    }
-
-    @Test
-    public void testIsUserVisibleOnDisplay_bgUserOnAnotherSecondaryDisplay() {
-        mockCurrentUser(OTHER_USER_ID);
-        assignUserToDisplay(USER_ID, SECONDARY_DISPLAY_ID);
-
-        assertWithMessage("isUserVisible(%s, %s)", USER_ID, SECONDARY_DISPLAY_ID)
-                .that(mMediator.isUserVisible(USER_ID, OTHER_SECONDARY_DISPLAY_ID)).isFalse();
-    }
-
-    // NOTE: we don't need to add tests for profiles (started / stopped profiles of bg user), as
-    // the tests for isUserVisible(userId, display) for non-current users relies on the explicit
-    // user / display assignments
-    // TODO(b/244644281): add such tests if the logic change
-
-    @Test
-    public void testGetDisplayAssignedToUser_bgUserOnSecondaryDisplay() {
-        mockCurrentUser(OTHER_USER_ID);
-        assignUserToDisplay(USER_ID, SECONDARY_DISPLAY_ID);
-
-        assertWithMessage("getDisplayAssignedToUser(%s)", USER_ID)
-                .that(mMediator.getDisplayAssignedToUser(USER_ID))
-                .isEqualTo(SECONDARY_DISPLAY_ID);
-    }
-
-    // NOTE: we don't need to add tests for profiles (started / stopped profiles of bg user), as
-    // getDisplayAssignedToUser() for bg users relies only on the user / display assignments
-
-    @Test
-    public void testGetUserAssignedToDisplay_bgUserOnSecondaryDisplay() {
-        mockCurrentUser(OTHER_USER_ID);
-        assignUserToDisplay(USER_ID, SECONDARY_DISPLAY_ID);
-
-        assertWithMessage("getUserAssignedToDisplay(%s)", SECONDARY_DISPLAY_ID)
-                .that(mMediator.getUserAssignedToDisplay(SECONDARY_DISPLAY_ID)).isEqualTo(USER_ID);
-    }
-
-    @Test
-    public void testGetUserAssignedToDisplay_noUserOnSecondaryDisplay() {
-        mockCurrentUser(USER_ID);
-
-        assertWithMessage("getUserAssignedToDisplay(%s)", SECONDARY_DISPLAY_ID)
-                .that(mMediator.getUserAssignedToDisplay(SECONDARY_DISPLAY_ID)).isEqualTo(USER_ID);
-    }
-
-    // NOTE: we don't need to add tests for profiles (started / stopped profiles of bg user), as
-    // getUserAssignedToDisplay() for bg users relies only on the user / display assignments
 }

@@ -153,6 +153,7 @@
   <java-symbol type="id" name="progress_horizontal" />
   <java-symbol type="id" name="progress_number" />
   <java-symbol type="id" name="progress_percent" />
+  <java-symbol type="id" name="progress_dialog_message" />
   <java-symbol type="id" name="progressContainer" />
   <java-symbol type="id" name="rew" />
   <java-symbol type="id" name="rightSpacer" />
@@ -466,7 +467,7 @@
   <java-symbol type="integer" name="config_multiuserMaxRunningUsers" />
   <java-symbol type="bool" name="config_multiuserDelayUserDataLocking" />
   <java-symbol type="bool" name="config_multiuserUsersOnSecondaryDisplays" />
-  <java-symbol type="bool" name="config_enableTimeoutToUserZeroWhenDocked" />
+  <java-symbol type="bool" name="config_enableTimeoutToDockUserWhenDocked" />
   <java-symbol type="integer" name="config_userTypePackageWhitelistMode"/>
   <java-symbol type="xml" name="config_user_types" />
   <java-symbol type="integer" name="config_safe_media_volume_index" />
@@ -838,6 +839,7 @@
   <java-symbol type="string" name="mismatchPin" />
   <java-symbol type="string" name="mmiComplete" />
   <java-symbol type="string" name="mmiError" />
+  <java-symbol type="string" name="mmiErrorNotSupported" />
   <java-symbol type="string" name="mmiFdnError" />
   <java-symbol type="string" name="mmiErrorWhileRoaming" />
   <java-symbol type="string" name="month_day_year" />
@@ -1298,6 +1300,7 @@
   <java-symbol type="array" name="vendor_cross_profile_apps" />
   <java-symbol type="array" name="policy_exempt_apps" />
   <java-symbol type="array" name="vendor_policy_exempt_apps" />
+  <java-symbol type="array" name="cloneable_apps" />
 
   <java-symbol type="drawable" name="default_wallpaper" />
   <java-symbol type="drawable" name="default_lock_wallpaper" />
@@ -1707,15 +1710,6 @@
 
   <!-- From android.policy -->
   <java-symbol type="anim" name="app_starting_exit" />
-  <java-symbol type="anim" name="dock_top_enter" />
-  <java-symbol type="anim" name="dock_top_exit" />
-  <java-symbol type="anim" name="dock_bottom_enter" />
-  <java-symbol type="anim" name="dock_bottom_exit" />
-  <java-symbol type="anim" name="dock_bottom_exit_keyguard" />
-  <java-symbol type="anim" name="dock_left_enter" />
-  <java-symbol type="anim" name="dock_left_exit" />
-  <java-symbol type="anim" name="dock_right_enter" />
-  <java-symbol type="anim" name="dock_right_exit" />
   <java-symbol type="anim" name="fade_in" />
   <java-symbol type="anim" name="fade_out" />
   <java-symbol type="anim" name="voice_activity_close_exit" />
@@ -2253,7 +2247,7 @@
   <java-symbol type="integer" name="config_dreamsBatteryLevelDrainCutoff" />
   <java-symbol type="string" name="config_dreamsDefaultComponent" />
   <java-symbol type="bool" name="config_dreamsDisabledByAmbientModeSuppressionConfig" />
-  <java-symbol type="bool" name="config_dreamsOnlyEnabledForSystemUser" />
+  <java-symbol type="bool" name="config_dreamsOnlyEnabledForDockUser" />
   <java-symbol type="integer" name="config_dreamOpenAnimationDuration" />
   <java-symbol type="integer" name="config_dreamCloseAnimationDuration" />
   <java-symbol type="array" name="config_supportedDreamComplications" />
@@ -3042,6 +3036,8 @@
   <java-symbol type="integer" name="config_cameraLiftTriggerSensorType" />
   <java-symbol type="string" name="config_cameraLiftTriggerSensorStringType" />
   <java-symbol type="bool" name="config_emergencyGestureEnabled" />
+  <java-symbol type="bool" name="config_defaultEmergencyGestureEnabled" />
+  <java-symbol type="bool" name="config_defaultEmergencyGestureSoundEnabled" />
   <java-symbol type="bool" name="config_volumeHushGestureEnabled" />
 
   <java-symbol type="drawable" name="platlogo_m" />
@@ -3498,6 +3494,9 @@
   <!-- Captive Portal Login -->
   <java-symbol type="string" name="config_defaultCaptivePortalLoginPackageName" />
 
+  <!-- Dock Manager -->
+  <java-symbol type="string" name="config_defaultDockManagerPackageName" />
+
   <!-- Optional IPsec algorithms -->
   <java-symbol type="array" name="config_optionalIpSecAlgorithms" />
 
@@ -3788,6 +3787,7 @@
   <java-symbol type="string" name="config_defaultAmbientContextConsentComponent" />
   <java-symbol type="string" name="config_ambientContextPackageNameExtraKey" />
   <java-symbol type="string" name="config_ambientContextEventArrayExtraKey" />
+  <java-symbol type="string" name="config_defaultWearableSensingService" />
   <java-symbol type="string" name="config_retailDemoPackage" />
   <java-symbol type="string" name="config_retailDemoPackageSignature" />
 
@@ -4583,6 +4583,12 @@
   <java-symbol type="bool" name="config_cecRoutingControlDisabled_allowed" />
   <java-symbol type="bool" name="config_cecRoutingControlDisabled_default" />
 
+  <java-symbol type="bool" name="config_cecSoundbarMode_userConfigurable" />
+  <java-symbol type="bool" name="config_cecSoundbarModeEnabled_allowed" />
+  <java-symbol type="bool" name="config_cecSoundbarModeEnabled_default" />
+  <java-symbol type="bool" name="config_cecSoundbarModeDisabled_allowed" />
+  <java-symbol type="bool" name="config_cecSoundbarModeDisabled_default" />
+
   <java-symbol type="bool" name="config_cecPowerControlMode_userConfigurable" />
   <java-symbol type="bool" name="config_cecPowerControlModeTv_allowed" />
   <java-symbol type="bool" name="config_cecPowerControlModeTv_default" />
@@ -4768,6 +4774,13 @@
   <java-symbol type="bool" name="config_cecQuerySadMaxDisabled_allowed" />
   <java-symbol type="bool" name="config_cecQuerySadMaxDisabled_default" />
 
+  <!-- eARC Configuration -->
+  <java-symbol type="bool" name="config_earcEnabled_userConfigurable" />
+  <java-symbol type="bool" name="config_earcFeatureEnabled_allowed" />
+  <java-symbol type="bool" name="config_earcFeatureEnabled_default" />
+  <java-symbol type="bool" name="config_earcFeatureDisabled_allowed" />
+  <java-symbol type="bool" name="config_earcFeatureDisabled_default" />
+
   <!-- Ids for RemoteViews -->
   <java-symbol type="id" name="remote_views_next_child" />
   <java-symbol type="id" name="remote_views_stable_id" />
@@ -4885,6 +4898,7 @@
   <!-- For VirtualDeviceManager -->
   <java-symbol type="string" name="vdm_camera_access_denied" />
   <java-symbol type="string" name="vdm_secure_window" />
+  <java-symbol type="string" name="vdm_pip_blocked" />
 
   <java-symbol type="color" name="camera_privacy_light_day"/>
   <java-symbol type="color" name="camera_privacy_light_night"/>

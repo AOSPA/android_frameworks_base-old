@@ -78,7 +78,11 @@ interface IActivityClientController {
     boolean willActivityBeVisible(in IBinder token);
     int getDisplayId(in IBinder activityToken);
     int getTaskForActivity(in IBinder token, in boolean onlyRoot);
-    int getTaskWindowingMode(in IBinder activityToken);
+    /**
+     * Returns the {@link Configuration} of the task which hosts the Activity, or {@code null} if
+     * the task {@link Configuration} cannot be obtained.
+     */
+    Configuration getTaskConfiguration(in IBinder activityToken);
     IBinder getActivityTokenBelow(IBinder token);
     ComponentName getCallingActivity(in IBinder token);
     String getCallingPackage(in IBinder token);
@@ -145,10 +149,9 @@ interface IActivityClientController {
     void unregisterRemoteAnimations(in IBinder token);
 
     /**
-     * Reports that an Activity received a back key press when there were no additional activities
-     * on the back stack.
+     * Reports that an Activity received a back key press.
      */
-    oneway void onBackPressedOnTaskRoot(in IBinder activityToken,
+    oneway void onBackPressed(in IBinder activityToken,
             in IRequestFinishCallback callback);
 
     /** Reports that the splash screen view has attached to activity.  */

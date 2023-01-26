@@ -71,6 +71,7 @@ cc_library {
     host_supported: true,
     srcs: [
         "libidmap2/**/*.cpp",
+        "self_targeting/*.cpp",
     ],
     export_include_dirs: ["include"],
     target: {
@@ -222,6 +223,7 @@ cc_test {
     },
     data: [
         "tests/data/**/*.apk",
+        "tests/data/**/*.png",
     ],
     compile_multilib: "first",
     test_options: {

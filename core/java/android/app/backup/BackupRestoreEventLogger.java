@@ -16,9 +16,13 @@
 
 package android.app.backup;
 
-import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.os.Bundle;
+import android.os.Parcel;
+import android.os.Parcelable;
+import android.util.ArrayMap;
+import android.app.backup.BackupAnnotations.OperationType;
 import android.util.Slog;
 
 import java.lang.annotation.Retention;
@@ -52,19 +56,6 @@ public class BackupRestoreEventLogger {
     public static final int DATA_TYPES_ALLOWED = 15;
 
     /**
-     * Operation types for which this logger can be used.
-     */
-    @Retention(RetentionPolicy.SOURCE)
-    @IntDef({
-            OperationType.BACKUP,
-            OperationType.RESTORE
-    })
-    @interface OperationType {
-        int BACKUP = 1;
-        int RESTORE = 2;
-    }
-
-    /**
      * Denotes that the annotated element identifies a data type as required by the logging methods
      * of {@code BackupRestoreEventLogger}
      */
@@ -87,6 +78,8 @@ public class BackupRestoreEventLogger {
      *                      {@link OperationType}. Attempts to use logging methods that don't match
      *                      the specified operation type will be rejected (e.g. use backup methods
      *                      for a restore logger and vice versa).
+     *
+     * @hide
      */
     public BackupRestoreEventLogger(@OperationType int operationType) {
         mOperationType = operationType;
@@ -111,11 +104,9 @@ public class BackupRestoreEventLogger {
      *
      * @param dataType the type of data being backed.
      * @param count number of items of the given type that have been successfully backed up.
-     *
-     * @return boolean, indicating whether the log has been accepted.
      */
-    public boolean logItemsBackedUp(@NonNull @BackupRestoreDataType String dataType, int count) {
-        return logSuccess(OperationType.BACKUP, dataType, count);
+    public void logItemsBackedUp(@NonNull @BackupRestoreDataType String dataType, int count) {
+        logSuccess(OperationType.BACKUP, dataType, count);
     }
 
     /**
@@ -130,12 +121,10 @@ public class BackupRestoreEventLogger {
      * @param dataType the type of data being backed.
      * @param count number of items of the given type that have failed to back up.
      * @param error optional, the error that has caused the failure.
-     *
-     * @return boolean, indicating whether the log has been accepted.
      */
-    public boolean logItemsBackupFailed(@NonNull @BackupRestoreDataType String dataType, int count,
+    public void logItemsBackupFailed(@NonNull @BackupRestoreDataType String dataType, int count,
             @Nullable @BackupRestoreError String error) {
-        return logFailure(OperationType.BACKUP, dataType, count, error);
+        logFailure(OperationType.BACKUP, dataType, count, error);
     }
 
     /**
@@ -151,12 +140,10 @@ public class BackupRestoreEventLogger {
      *
      * @param dataType the type of data being backed up.
      * @param metaData the metadata associated with the data type.
-     *
-     * @return boolean, indicating whether the log has been accepted.
      */
-    public boolean logBackupMetaData(@NonNull @BackupRestoreDataType String dataType,
+    public void logBackupMetaData(@NonNull @BackupRestoreDataType String dataType,
             @NonNull String metaData) {
-        return logMetaData(OperationType.BACKUP, dataType, metaData);
+        logMetaData(OperationType.BACKUP, dataType, metaData);
     }
 
     /**
@@ -172,11 +159,9 @@ public class BackupRestoreEventLogger {
      *
      * @param dataType the type of data being restored.
      * @param count number of items of the given type that have been successfully restored.
-     *
-     * @return boolean, indicating whether the log has been accepted.
      */
-    public boolean logItemsRestored(@NonNull @BackupRestoreDataType String dataType, int count) {
-        return logSuccess(OperationType.RESTORE, dataType, count);
+    public void logItemsRestored(@NonNull @BackupRestoreDataType String dataType, int count) {
+        logSuccess(OperationType.RESTORE, dataType, count);
     }
 
     /**
@@ -193,12 +178,10 @@ public class BackupRestoreEventLogger {
      * @param dataType the type of data being restored.
      * @param count number of items of the given type that have failed to restore.
      * @param error optional, the error that has caused the failure.
-     *
-     * @return boolean, indicating whether the log has been accepted.
      */
-    public boolean logItemsRestoreFailed(@NonNull @BackupRestoreDataType String dataType, int count,
+    public void logItemsRestoreFailed(@NonNull @BackupRestoreDataType String dataType, int count,
             @Nullable @BackupRestoreError String error) {
-        return logFailure(OperationType.RESTORE, dataType, count, error);
+        logFailure(OperationType.RESTORE, dataType, count, error);
     }
 
     /**
@@ -216,12 +199,10 @@ public class BackupRestoreEventLogger {
      *
      * @param dataType the type of data being restored.
      * @param metadata the metadata associated with the data type.
-     *
-     * @return boolean, indicating whether the log has been accepted.
      */
-    public boolean logRestoreMetadata(@NonNull @BackupRestoreDataType String dataType,
+    public void logRestoreMetadata(@NonNull @BackupRestoreDataType String dataType,
             @NonNull  String metadata) {
-        return logMetaData(OperationType.RESTORE, dataType, metadata);
+        logMetaData(OperationType.RESTORE, dataType, metadata);
     }
 
     /**
@@ -240,52 +221,47 @@ public class BackupRestoreEventLogger {
      *
      * @hide
      */
-    public @OperationType int getOperationType() {
+    @OperationType
+    public int getOperationType() {
         return mOperationType;
     }
 
-    private boolean logSuccess(@OperationType int operationType,
+    private void logSuccess(@OperationType int operationType,
             @BackupRestoreDataType String dataType, int count) {
         DataTypeResult dataTypeResult = getDataTypeResult(operationType, dataType);
         if (dataTypeResult == null) {
-            return false;
+            return;
         }
 
         dataTypeResult.mSuccessCount += count;
         mResults.put(dataType, dataTypeResult);
-
-        return true;
     }
 
-    private boolean logFailure(@OperationType int operationType,
+    private void logFailure(@OperationType int operationType,
             @NonNull @BackupRestoreDataType String dataType, int count,
             @Nullable @BackupRestoreError String error) {
         DataTypeResult dataTypeResult = getDataTypeResult(operationType, dataType);
         if (dataTypeResult == null) {
-            return false;
+            return;
         }
 
         dataTypeResult.mFailCount += count;
         if (error != null) {
             dataTypeResult.mErrors.merge(error, count, Integer::sum);
         }
-
-        return true;
     }
 
-    private boolean logMetaData(@OperationType int operationType,
+    private void logMetaData(@OperationType int operationType,
             @NonNull @BackupRestoreDataType String dataType, @NonNull String metaData) {
         if (mHashDigest == null) {
-            return false;
+            return;
         }
         DataTypeResult dataTypeResult = getDataTypeResult(operationType, dataType);
         if (dataTypeResult == null) {
-            return false;
+            return;
         }
 
         dataTypeResult.mMetadataHash = getMetaDataHash(metaData);
-
-        return true;
     }
 
     /**
@@ -325,7 +301,7 @@ public class BackupRestoreEventLogger {
     /**
      * Encapsulate logging results for a single data type.
      */
-    public static class DataTypeResult {
+    public static class DataTypeResult implements Parcelable {
         @BackupRestoreDataType
         private final String mDataType;
         private int mSuccessCount;
@@ -375,5 +351,57 @@ public class BackupRestoreEventLogger {
         public byte[] getMetadataHash() {
             return mMetadataHash;
         }
+
+        @Override
+        public int describeContents() {
+            return 0;
+        }
+
+        @Override
+        public void writeToParcel(Parcel dest, int flags) {
+            dest.writeString(mDataType);
+
+            dest.writeInt(mSuccessCount);
+
+            dest.writeInt(mFailCount);
+
+            Bundle errorsBundle = new Bundle();
+            for (Map.Entry<String, Integer> e : mErrors.entrySet()) {
+                errorsBundle.putInt(e.getKey(), e.getValue());
+            }
+            dest.writeBundle(errorsBundle);
+
+            dest.writeByteArray(mMetadataHash);
+        }
+
+        public static final Parcelable.Creator<DataTypeResult> CREATOR =
+                new Parcelable.Creator<>() {
+                    public DataTypeResult createFromParcel(Parcel in) {
+                        String dataType = in.readString();
+
+                        int successCount = in.readInt();
+
+                        int failCount = in.readInt();
+
+                        Map<String, Integer> errors = new ArrayMap<>();
+                        Bundle errorsBundle = in.readBundle(getClass().getClassLoader());
+                        for (String key : errorsBundle.keySet()) {
+                            errors.put(key, errorsBundle.getInt(key));
+                        }
+
+                        byte[] metadataHash = in.createByteArray();
+
+                        DataTypeResult result = new DataTypeResult(dataType);
+                        result.mSuccessCount = successCount;
+                        result.mFailCount = failCount;
+                        result.mErrors.putAll(errors);
+                        result.mMetadataHash = metadataHash;
+                        return result;
+                    }
+
+                    public DataTypeResult[] newArray(int size) {
+                        return new DataTypeResult[size];
+                    }
+                };
     }
 }

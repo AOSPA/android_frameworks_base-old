@@ -86,6 +86,15 @@ public class GenericWindowPolicyController extends DisplayWindowPolicyController
     }
 
     /**
+     * For communicating when activities are blocked from entering PIP on the display by this
+     * policy controller.
+     */
+    public interface PipBlockedCallback {
+        /** Called when an activity is blocked from entering PIP. */
+        void onEnteringPipBlocked(int uid);
+    }
+
+    /**
      * If required, allow the secure activity to display on remote device since
      * {@link android.os.Build.VERSION_CODES#TIRAMISU}.
      */
@@ -112,6 +121,7 @@ public class GenericWindowPolicyController extends DisplayWindowPolicyController
     @GuardedBy("mGenericWindowPolicyControllerLock")
     final ArraySet<Integer> mRunningUids = new ArraySet<>();
     @Nullable private final ActivityListener mActivityListener;
+    @Nullable private final PipBlockedCallback mPipBlockedCallback;
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     @NonNull
     @GuardedBy("mGenericWindowPolicyControllerLock")
@@ -120,6 +130,7 @@ public class GenericWindowPolicyController extends DisplayWindowPolicyController
     @Nullable
     private final @AssociationRequest.DeviceProfile String mDeviceProfile;
     @Nullable private final SecureWindowCallback mSecureWindowCallback;
+    @Nullable private final List<String> mDisplayCategories;
 
     /**
      * Creates a window policy controller that is generic to the different use cases of virtual
@@ -155,9 +166,11 @@ public class GenericWindowPolicyController extends DisplayWindowPolicyController
             @NonNull Set<ComponentName> blockedActivities,
             @ActivityPolicy int defaultActivityPolicy,
             @NonNull ActivityListener activityListener,
+            @NonNull PipBlockedCallback pipBlockedCallback,
             @NonNull ActivityBlockedCallback activityBlockedCallback,
             @NonNull SecureWindowCallback secureWindowCallback,
-            @AssociationRequest.DeviceProfile String deviceProfile) {
+            @AssociationRequest.DeviceProfile String deviceProfile,
+            @NonNull List<String> displayCategories) {
         super();
         mAllowedUsers = allowedUsers;
         mAllowedCrossTaskNavigations = new ArraySet<>(allowedCrossTaskNavigations);
@@ -169,7 +182,9 @@ public class GenericWindowPolicyController extends DisplayWindowPolicyController
         setInterestedWindowFlags(windowFlags, systemWindowFlags);
         mActivityListener = activityListener;
         mDeviceProfile = deviceProfile;
+        mPipBlockedCallback = pipBlockedCallback;
         mSecureWindowCallback = secureWindowCallback;
+        mDisplayCategories = displayCategories;
     }
 
     /**
@@ -307,7 +322,7 @@ public class GenericWindowPolicyController extends DisplayWindowPolicyController
         if (mDeviceProfile == null) {
             return true;
         }
-       // TODO(b/234075973) : Remove this once proper API is ready.
+        // TODO(b/234075973) : Remove this once proper API is ready.
         switch (mDeviceProfile) {
             case DEVICE_PROFILE_AUTOMOTIVE_PROJECTION:
                 return false;
@@ -315,6 +330,17 @@ public class GenericWindowPolicyController extends DisplayWindowPolicyController
             default:
                 return true;
         }
+    }
+
+    @Override
+    public boolean isEnteringPipAllowed(int uid) {
+        if (super.isEnteringPipAllowed(uid)) {
+            return true;
+        }
+        mHandler.post(() -> {
+            mPipBlockedCallback.onEnteringPipBlocked(uid);
+        });
+        return false;
     }
 
     /**
@@ -327,6 +353,15 @@ public class GenericWindowPolicyController extends DisplayWindowPolicyController
         }
     }
 
+    private boolean activityMatchesDisplayCategory(ActivityInfo activityInfo) {
+        if (mDisplayCategories.isEmpty()) {
+            return activityInfo.targetDisplayCategory == null;
+        }
+        return activityInfo.targetDisplayCategory != null
+                    && mDisplayCategories.contains(activityInfo.targetDisplayCategory);
+
+    }
+
     private boolean canContainActivity(ActivityInfo activityInfo, int windowFlags,
             int systemWindowFlags) {
         if ((activityInfo.flags & FLAG_CAN_DISPLAY_ON_REMOTE_DEVICES) == 0) {
@@ -334,8 +369,16 @@ public class GenericWindowPolicyController extends DisplayWindowPolicyController
         }
         ComponentName activityComponent = activityInfo.getComponentName();
         if (BLOCKED_APP_STREAMING_COMPONENT.equals(activityComponent)) {
-            // The error dialog alerting users that streaming is blocked is always allowed.
+            // The error dialog alerting users that streaming is blocked is always allowed. Need to
+            // run before the clauses below to ensure error dialog always shows up.
             return true;
+        }
+        if (!activityMatchesDisplayCategory(activityInfo)) {
+            Slog.d(TAG, String.format(
+                    "The activity's target display category: %s is not found on virtual display"
+                            + " with the following allowed display categories: %s",
+                    activityInfo.targetDisplayCategory, mDisplayCategories.toString()));
+            return false;
         }
         final UserHandle activityUser =
                 UserHandle.getUserHandleForUid(activityInfo.applicationInfo.uid);

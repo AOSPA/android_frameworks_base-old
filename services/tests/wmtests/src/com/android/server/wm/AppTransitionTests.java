@@ -49,6 +49,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assume.assumeFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.mock;
@@ -67,10 +68,13 @@ import android.view.RemoteAnimationAdapter;
 import android.view.RemoteAnimationTarget;
 import android.view.SurfaceControl;
 import android.view.WindowManager;
+import android.view.animation.Animation;
 import android.window.ITaskFragmentOrganizer;
 import android.window.TaskFragmentOrganizer;
 
 import androidx.test.filters.SmallTest;
+
+import com.android.internal.policy.TransitionAnimation;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -224,23 +228,7 @@ public class AppTransitionTests extends WindowTestsBase {
 
     @Test
     public void testTaskFragmentOpeningTransition() {
-        final ActivityRecord activity = createHierarchyForTaskFragmentTest(
-                false /* createEmbeddedTask */);
-        activity.setVisible(false);
-
-        mDisplayContent.prepareAppTransition(TRANSIT_OPEN);
-        mDisplayContent.mOpeningApps.add(activity);
-        assertEquals(TRANSIT_OLD_TASK_FRAGMENT_OPEN,
-                AppTransitionController.getTransitCompatType(mDisplayContent.mAppTransition,
-                        mDisplayContent.mOpeningApps, mDisplayContent.mClosingApps,
-                        mDisplayContent.mChangingContainers, null /* wallpaperTarget */,
-                        null /* oldWallpaper */, false /* skipAppTransitionAnimation */));
-    }
-
-    @Test
-    public void testEmbeddedTaskOpeningTransition() {
-        final ActivityRecord activity = createHierarchyForTaskFragmentTest(
-                true /* createEmbeddedTask */);
+        final ActivityRecord activity = createHierarchyForTaskFragmentTest();
         activity.setVisible(false);
 
         mDisplayContent.prepareAppTransition(TRANSIT_OPEN);
@@ -254,23 +242,7 @@ public class AppTransitionTests extends WindowTestsBase {
 
     @Test
     public void testTaskFragmentClosingTransition() {
-        final ActivityRecord activity = createHierarchyForTaskFragmentTest(
-                false /* createEmbeddedTask */);
-        activity.setVisible(true);
-
-        mDisplayContent.prepareAppTransition(TRANSIT_CLOSE);
-        mDisplayContent.mClosingApps.add(activity);
-        assertEquals(TRANSIT_OLD_TASK_FRAGMENT_CLOSE,
-                AppTransitionController.getTransitCompatType(mDisplayContent.mAppTransition,
-                        mDisplayContent.mOpeningApps, mDisplayContent.mClosingApps,
-                        mDisplayContent.mChangingContainers, null /* wallpaperTarget */,
-                        null /* oldWallpaper */, false /* skipAppTransitionAnimation */));
-    }
-
-    @Test
-    public void testEmbeddedTaskClosingTransition() {
-        final ActivityRecord activity = createHierarchyForTaskFragmentTest(
-                true /* createEmbeddedTask */);
+        final ActivityRecord activity = createHierarchyForTaskFragmentTest();
         activity.setVisible(true);
 
         mDisplayContent.prepareAppTransition(TRANSIT_CLOSE);
@@ -288,19 +260,16 @@ public class AppTransitionTests extends WindowTestsBase {
      * {@link AppTransitionController#getAnimationTargets(ArraySet, ArraySet, boolean) the animation
      * target} to promote to Task or above.
      *
-     * @param createEmbeddedTask {@code true} to create embedded Task for verified TaskFragment
      * @return The Activity to be put in either opening or closing Activity
      */
-    private ActivityRecord createHierarchyForTaskFragmentTest(boolean createEmbeddedTask) {
+    private ActivityRecord createHierarchyForTaskFragmentTest() {
         final Task parentTask = createTask(mDisplayContent);
-        final TaskFragment bottomTaskFragment = createTaskFragmentWithParentTask(parentTask,
-                false /* createEmbeddedTask */);
+        final TaskFragment bottomTaskFragment = createTaskFragmentWithActivity(parentTask);
         final ActivityRecord bottomActivity = bottomTaskFragment.getTopMostActivity();
         bottomActivity.setOccludesParent(true);
         bottomActivity.setVisible(true);
 
-        final TaskFragment verifiedTaskFragment = createTaskFragmentWithParentTask(parentTask,
-                createEmbeddedTask);
+        final TaskFragment verifiedTaskFragment = createTaskFragmentWithActivity(parentTask);
         final ActivityRecord activity = verifiedTaskFragment.getTopMostActivity();
         activity.setOccludesParent(true);
 
@@ -493,6 +462,80 @@ public class AppTransitionTests extends WindowTestsBase {
         assertTrue(mDc.mChangingContainers.contains(taskFragment));
         assertTrue(mDc.mAppTransition.containsTransitRequest(TRANSIT_CHANGE));
         assertEquals(startBounds, taskFragment.mSurfaceFreezer.mFreezeBounds);
+    }
+
+    @Test
+    public void testGetNextAppTransitionBackgroundColor() {
+        assumeFalse(WindowManagerService.sEnableShellTransitions);
+
+        // No override by default.
+        assertEquals(0, mDc.mAppTransition.getNextAppTransitionBackgroundColor());
+
+        // Override with a custom color.
+        mDc.mAppTransition.prepareAppTransition(TRANSIT_OPEN, 0);
+        final int testColor = 123;
+        mDc.mAppTransition.overridePendingAppTransition("testPackage", 0 /* enterAnim */,
+                0 /* exitAnim */, testColor, null /* startedCallback */, null /* endedCallback */,
+                false /* overrideTaskTransaction */);
+
+        assertEquals(testColor, mDc.mAppTransition.getNextAppTransitionBackgroundColor());
+        assertTrue(mDc.mAppTransition.isNextAppTransitionOverrideRequested());
+
+        // Override with ActivityEmbedding remote animation. Background color should be kept.
+        mDc.mAppTransition.overridePendingAppTransitionRemote(mock(RemoteAnimationAdapter.class),
+                false /* sync */, true /* isActivityEmbedding */);
+
+        assertEquals(testColor, mDc.mAppTransition.getNextAppTransitionBackgroundColor());
+        assertFalse(mDc.mAppTransition.isNextAppTransitionOverrideRequested());
+
+        // Background color should not be cleared anymore after #clear().
+        mDc.mAppTransition.clear();
+        assertEquals(0, mDc.mAppTransition.getNextAppTransitionBackgroundColor());
+        assertFalse(mDc.mAppTransition.isNextAppTransitionOverrideRequested());
+    }
+
+    @Test
+    public void testGetNextAppRequestedAnimation() {
+        assumeFalse(WindowManagerService.sEnableShellTransitions);
+        final String packageName = "testPackage";
+        final int enterAnimResId = 1;
+        final int exitAnimResId = 2;
+        final int testColor = 123;
+        final Animation enterAnim = mock(Animation.class);
+        final Animation exitAnim = mock(Animation.class);
+        final TransitionAnimation transitionAnimation = mDc.mAppTransition.mTransitionAnimation;
+        spyOn(transitionAnimation);
+        doReturn(enterAnim).when(transitionAnimation)
+                .loadAppTransitionAnimation(packageName, enterAnimResId);
+        doReturn(exitAnim).when(transitionAnimation)
+                .loadAppTransitionAnimation(packageName, exitAnimResId);
+
+        // No override by default.
+        assertNull(mDc.mAppTransition.getNextAppRequestedAnimation(true /* enter */));
+        assertNull(mDc.mAppTransition.getNextAppRequestedAnimation(false /* enter */));
+
+        // Override with a custom animation.
+        mDc.mAppTransition.prepareAppTransition(TRANSIT_OPEN, 0);
+        mDc.mAppTransition.overridePendingAppTransition(packageName, enterAnimResId, exitAnimResId,
+                testColor, null /* startedCallback */, null /* endedCallback */,
+                false /* overrideTaskTransaction */);
+
+        assertEquals(enterAnim, mDc.mAppTransition.getNextAppRequestedAnimation(true /* enter */));
+        assertEquals(exitAnim, mDc.mAppTransition.getNextAppRequestedAnimation(false /* enter */));
+        assertTrue(mDc.mAppTransition.isNextAppTransitionOverrideRequested());
+
+        // Override with ActivityEmbedding remote animation. Custom animation should be kept.
+        mDc.mAppTransition.overridePendingAppTransitionRemote(mock(RemoteAnimationAdapter.class),
+                false /* sync */, true /* isActivityEmbedding */);
+
+        assertEquals(enterAnim, mDc.mAppTransition.getNextAppRequestedAnimation(true /* enter */));
+        assertEquals(exitAnim, mDc.mAppTransition.getNextAppRequestedAnimation(false /* enter */));
+        assertFalse(mDc.mAppTransition.isNextAppTransitionOverrideRequested());
+
+        // Custom animation should not be cleared anymore after #clear().
+        mDc.mAppTransition.clear();
+        assertNull(mDc.mAppTransition.getNextAppRequestedAnimation(true /* enter */));
+        assertNull(mDc.mAppTransition.getNextAppRequestedAnimation(false /* enter */));
     }
 
     private class TestRemoteAnimationRunner implements IRemoteAnimationRunner {

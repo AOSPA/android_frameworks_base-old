@@ -16,6 +16,8 @@
 
 package com.android.credentialmanager.createflow
 
+import android.app.PendingIntent
+import android.content.Intent
 import android.graphics.drawable.Drawable
 
 open class ProviderInfo(
@@ -40,32 +42,41 @@ class DisabledProviderInfo(
 ) : ProviderInfo(icon, name, displayName)
 
 open class EntryInfo (
+  val providerId: String,
   val entryKey: String,
   val entrySubkey: String,
+  val pendingIntent: PendingIntent?,
+  val fillInIntent: Intent?,
 )
 
 class CreateOptionInfo(
+  providerId: String,
   entryKey: String,
   entrySubkey: String,
+  pendingIntent: PendingIntent?,
+  fillInIntent: Intent?,
   val userProviderDisplayName: String?,
-  val credentialTypeIcon: Drawable,
   val profileIcon: Drawable,
   val passwordCount: Int?,
   val passkeyCount: Int?,
   val totalCredentialCount: Int?,
   val lastUsedTimeMillis: Long?,
-) : EntryInfo(entryKey, entrySubkey)
+) : EntryInfo(providerId, entryKey, entrySubkey, pendingIntent, fillInIntent)
 
 class RemoteInfo(
+  providerId: String,
   entryKey: String,
   entrySubkey: String,
-) : EntryInfo(entryKey, entrySubkey)
+  pendingIntent: PendingIntent?,
+  fillInIntent: Intent?,
+) : EntryInfo(providerId, entryKey, entrySubkey, pendingIntent, fillInIntent)
 
 data class RequestDisplayInfo(
-  val userName: String,
-  val displayName: String,
+  val title: String,
+  val subtitle: String?,
   val type: String,
   val appDomainName: String,
+  val typeIcon: Drawable,
 )
 
 /**

@@ -82,6 +82,7 @@ extern int register_android_hardware_camera2_impl_CameraExtensionJpegProcessor(J
 extern int register_android_hardware_camera2_utils_SurfaceUtils(JNIEnv* env);
 extern int register_android_hardware_display_DisplayManagerGlobal(JNIEnv* env);
 extern int register_android_hardware_HardwareBuffer(JNIEnv *env);
+extern int register_android_hardware_OverlayProperties(JNIEnv* env);
 extern int register_android_hardware_SensorManager(JNIEnv *env);
 extern int register_android_hardware_SerialPort(JNIEnv *env);
 extern int register_android_hardware_SyncFence(JNIEnv* env);
@@ -198,6 +199,7 @@ extern int register_android_security_Scrypt(JNIEnv *env);
 extern int register_com_android_internal_content_F2fsUtils(JNIEnv* env);
 extern int register_com_android_internal_content_NativeLibraryHelper(JNIEnv *env);
 extern int register_com_android_internal_content_om_OverlayConfig(JNIEnv *env);
+extern int register_com_android_internal_content_om_OverlayManagerImpl(JNIEnv* env);
 extern int register_com_android_internal_expresslog_Counter(JNIEnv* env);
 extern int register_com_android_internal_net_NetworkUtilsInternal(JNIEnv* env);
 extern int register_com_android_internal_os_ClassLoaderFactory(JNIEnv* env);
@@ -1589,6 +1591,7 @@ static const RegJNIRec gRegJNI[] = {
         REG_JNI(register_android_os_SharedMemory),
         REG_JNI(register_android_os_incremental_IncrementalManager),
         REG_JNI(register_com_android_internal_content_om_OverlayConfig),
+        REG_JNI(register_com_android_internal_content_om_OverlayManagerImpl),
         REG_JNI(register_com_android_internal_expresslog_Counter),
         REG_JNI(register_com_android_internal_net_NetworkUtilsInternal),
         REG_JNI(register_com_android_internal_os_ClassLoaderFactory),
@@ -1606,6 +1609,7 @@ static const RegJNIRec gRegJNI[] = {
         REG_JNI(register_android_hardware_camera2_utils_SurfaceUtils),
         REG_JNI(register_android_hardware_display_DisplayManagerGlobal),
         REG_JNI(register_android_hardware_HardwareBuffer),
+        REG_JNI(register_android_hardware_OverlayProperties),
         REG_JNI(register_android_hardware_SensorManager),
         REG_JNI(register_android_hardware_SerialPort),
         REG_JNI(register_android_hardware_SyncFence),

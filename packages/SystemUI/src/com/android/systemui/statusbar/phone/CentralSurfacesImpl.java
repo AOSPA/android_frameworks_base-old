@@ -166,13 +166,13 @@ import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.OverlayPlugin;
 import com.android.systemui.plugins.PluginDependencyProvider;
 import com.android.systemui.plugins.PluginListener;
+import com.android.systemui.plugins.PluginManager;
 import com.android.systemui.plugins.qs.QS;
 import com.android.systemui.plugins.statusbar.NotificationSwipeActionHelper.SnoozeOption;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.qs.QSFragment;
 import com.android.systemui.qs.QSPanelController;
 import com.android.systemui.recents.ScreenPinningRequest;
-import com.android.systemui.ripple.RippleShader.RippleShape;
 import com.android.systemui.scrim.ScrimView;
 import com.android.systemui.settings.brightness.BrightnessSliderController;
 import com.android.systemui.shade.CameraLauncher;
@@ -182,7 +182,6 @@ import com.android.systemui.shade.NotificationShadeWindowViewController;
 import com.android.systemui.shade.ShadeController;
 import com.android.systemui.shade.ShadeExpansionChangeEvent;
 import com.android.systemui.shade.ShadeExpansionStateManager;
-import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.statusbar.AutoHideUiElement;
 import com.android.systemui.statusbar.BackDropView;
 import com.android.systemui.statusbar.CircleReveal;
@@ -232,6 +231,7 @@ import com.android.systemui.statusbar.policy.UserInfoControllerImpl;
 import com.android.systemui.statusbar.policy.UserSwitcherController;
 import com.android.systemui.statusbar.window.StatusBarWindowController;
 import com.android.systemui.statusbar.window.StatusBarWindowStateController;
+import com.android.systemui.surfaceeffects.ripple.RippleShader.RippleShape;
 import com.android.systemui.util.DumpUtilsKt;
 import com.android.systemui.util.WallpaperController;
 import com.android.systemui.util.concurrency.DelayableExecutor;
@@ -240,6 +240,8 @@ import com.android.systemui.volume.VolumeComponent;
 import com.android.wm.shell.bubbles.Bubbles;
 import com.android.wm.shell.startingsurface.SplashscreenContentDrawer;
 import com.android.wm.shell.startingsurface.StartingSurface;
+
+import dagger.Lazy;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -250,8 +252,6 @@ import java.util.concurrent.Executor;
 
 import javax.inject.Inject;
 import javax.inject.Named;
-
-import dagger.Lazy;
 
 /**
  * A class handling initialization and coordination between some of the key central surfaces in
@@ -279,6 +279,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
     // 1020-1040 reserved for BaseStatusBar
 
     /**
+     * TODO(b/249277686) delete this
      * The delay to reset the hint text when the hint animation is finished running.
      */
     private static final int HINT_RESET_DELAY_MS = 1200;
@@ -976,6 +977,11 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
         // Lastly, call to the icon policy to install/update all the icons.
         mIconPolicy.init();
 
+        // Based on teamfood flag, turn predictive back dispatch on at runtime.
+        if (mFeatureFlags.isEnabled(Flags.WM_ENABLE_PREDICTIVE_BACK_SYSUI)) {
+            mContext.getApplicationInfo().setEnableOnBackInvokedCallback(true);
+        }
+
         mKeyguardStateController.addCallback(new KeyguardStateController.Callback() {
             @Override
             public void onUnlockedChanged() {
@@ -1131,7 +1137,6 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
         // into fragments, but the rest here, it leaves some awkward lifecycle and whatnot.
         mNotificationIconAreaController.setupShelf(mNotificationShelfController);
         mShadeExpansionStateManager.addExpansionListener(mWakeUpCoordinator);
-        mUserSwitcherController.init(mNotificationShadeWindowView);
 
         // Allow plugins to reference DarkIconDispatcher and StatusBarStateController
         mPluginDependencyProvider.allowPluginDependency(DarkIconDispatcher.class);
@@ -1783,11 +1788,6 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
     @Override
     public boolean isWakeUpComingFromTouch() {
         return mWakeUpComingFromTouch;
-    }
-
-    @Override
-    public boolean isFalsingThresholdNeeded() {
-        return true;
     }
 
     /**
@@ -3393,22 +3393,6 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
         }
     }
 
-    @Override
-    public void onUnlockHintStarted() {
-        mFalsingCollector.onUnlockHintStarted();
-        mKeyguardIndicationController.showActionToUnlock();
-    }
-
-    @Override
-    public void onHintFinished() {
-        // Delay the reset a bit so the user can read the text.
-        mKeyguardIndicationController.hideTransientIndicationDelayed(HINT_RESET_DELAY_MS);
-    }
-
-    @Override
-    public void onTrackingStopped(boolean expand) {
-    }
-
     // TODO: Figure out way to remove these.
     @Override
     public NavigationBarView getNavigationBarView() {
@@ -4140,11 +4124,6 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
 
     // End Extra BaseStatusBarMethods.
 
-    @Override
-    public NotificationGutsManager getGutsManager() {
-        return mGutsManager;
-    }
-
     boolean isTransientShown() {
         return mTransientShown;
     }
@@ -4231,7 +4210,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
                 Log.wtf(TAG, "WallpaperManager not supported");
                 return;
             }
-            WallpaperInfo info = mWallpaperManager.getWallpaperInfo(UserHandle.USER_CURRENT);
+            WallpaperInfo info = mWallpaperManager.getWallpaperInfoForUser(UserHandle.USER_CURRENT);
             mWallpaperController.onWallpaperInfoUpdated(info);
 
             final boolean deviceSupportsAodWallpaper = mContext.getResources().getBoolean(
@@ -4267,7 +4246,6 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
             }
             // TODO: Bring these out of CentralSurfaces.
             mUserInfoControllerImpl.onDensityOrFontScaleChanged();
-            mUserSwitcherController.onDensityOrFontScaleChanged();
             mNotificationIconAreaController.onDensityOrFontScaleChanged(mContext);
             mHeadsUpManager.onDensityOrFontScaleChanged();
         }
