@@ -20,6 +20,40 @@
     {
       "unresolved": true,
       "key": {
+        "uuid": "82717a1c_99c726fa",
+        "filename": "core/java/android/os/VibrationEffect.java",
+        "patchSetId": 13
+      },
+      "lineNbr": 1433,
+      "author": {
+        "id": 1000427
+      },
+      "writtenOn": "2023-01-28T05:06:32Z",
+      "side": 1,
+      "message": "spaces for consistency",
+      "revId": "1737ac0f02febfb127007eedb2e75106bd296958",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "207f52e2_b9a3907c",
+        "filename": "core/java/com/sysaac/haptic/base/C3985s.java",
+        "patchSetId": 13
+      },
+      "lineNbr": 12,
+      "author": {
+        "id": 1000427
+      },
+      "writtenOn": "2023-01-28T05:06:32Z",
+      "side": 1,
+      "message": "combine into relevant class",
+      "revId": "1737ac0f02febfb127007eedb2e75106bd296958",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
         "uuid": "7cdce6a0_58393387",
         "filename": "core/java/com/sysaac/haptic/base/Util.java",
         "patchSetId": 13
@@ -31,6 +65,23 @@
       "writtenOn": "2022-12-29T11:03:53Z",
       "side": 1,
       "message": "This returns false upon failure but in RichtapPlayer the condition is inverted, basically this is called and error it thrown when we ACTUALLY have a valid .he file. I am posting a comment with the suggested \"fix\".",
+      "revId": "1737ac0f02febfb127007eedb2e75106bd296958",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "b35a5bd6_88b11566",
+        "filename": "core/java/com/sysaac/haptic/player/CurrentPlayingInfo.java",
+        "patchSetId": 13
+      },
+      "lineNbr": 11,
+      "author": {
+        "id": 1000427
+      },
+      "writtenOn": "2023-01-28T05:06:32Z",
+      "side": 1,
+      "message": "fix field names",
       "revId": "1737ac0f02febfb127007eedb2e75106bd296958",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
@@ -82,6 +133,40 @@
       "writtenOn": "2022-12-29T11:03:53Z",
       "side": 1,
       "message": "If this is true it means we have support (checkIfRichTapSupport returned value is set as the returned value for Util.m96c(), so not sure if the condition should or should not be inverted here. Looks like we should procede here instead of returning if we have support but i might need someone to check it.",
+      "revId": "1737ac0f02febfb127007eedb2e75106bd296958",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "0d6e68ca_ff8af924",
+        "filename": "packages/SystemUI/src/com/android/keyguard/KeyguardUpdateMonitor.java",
+        "patchSetId": 13
+      },
+      "lineNbr": 1549,
+      "author": {
+        "id": 1000427
+      },
+      "writtenOn": "2023-01-28T05:06:32Z",
+      "side": 1,
+      "message": "this should be an overlayable path (let\u0027s clean this change up first)",
+      "revId": "1737ac0f02febfb127007eedb2e75106bd296958",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "98d36753_339b9334",
+        "filename": "packages/SystemUI/src/com/android/systemui/util/RichTapVibrationUtils.java",
+        "patchSetId": 13
+      },
+      "lineNbr": 40,
+      "author": {
+        "id": 1000427
+      },
+      "writtenOn": "2023-01-28T05:06:32Z",
+      "side": 1,
+      "message": "make this private if we\u0027re using a singleton",
       "revId": "1737ac0f02febfb127007eedb2e75106bd296958",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
