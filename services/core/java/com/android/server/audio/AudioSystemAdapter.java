@@ -20,7 +20,10 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.media.AudioAttributes;
 import android.media.AudioDeviceAttributes;
+import android.media.AudioMixerAttributes;
 import android.media.AudioSystem;
+import android.media.ISoundDose;
+import android.media.ISoundDoseCallback;
 import android.media.audiopolicy.AudioMix;
 import android.os.SystemClock;
 import android.util.Log;
@@ -189,15 +192,7 @@ public class AudioSystemAdapter implements AudioSystem.RoutingUpdateCallback,
             synchronized (mDevicesForAttrCache) {
                 res = mDevicesForAttrCache.get(key);
                 if (res == null) {
-                    // result from AudioSystem guaranteed non-null, but could be invalid
-                    // if there is a failure to talk to APM
                     res = AudioSystem.getDevicesForAttributes(attributes, forVolume);
-                    if (res.size() > 1 && res.get(0) != null
-                            && res.get(0).getInternalType() == AudioSystem.DEVICE_NONE) {
-                        Log.e(TAG, "unable to get devices for " + attributes);
-                        // return now, do not put invalid value in cache
-                        return res;
-                    }
                     mDevicesForAttrCache.put(key, res);
                     if (DEBUG_CACHE) {
                         Log.d(TAG, mMethodNames[METHOD_GETDEVICESFORATTRIBUTES]
@@ -492,6 +487,45 @@ public class AudioSystemAdapter implements AudioSystem.RoutingUpdateCallback,
     public int removeUserIdDeviceAffinities(int userId) {
         invalidateRoutingCache();
         return AudioSystem.removeUserIdDeviceAffinities(userId);
+    }
+
+    /**
+     * Same as {@link AudioSystem#getSoundDoseInterface(ISoundDoseCallback)}
+     * @param callback
+     * @return
+     */
+    public ISoundDose getSoundDoseInterface(ISoundDoseCallback callback) {
+        return AudioSystem.getSoundDoseInterface(callback);
+    }
+
+    /**
+     * Same as
+     * {@link AudioSystem#setPreferredMixerAttributes(
+     *        AudioAttributes, int, int, AudioMixerAttributes)}
+     * @param attributes
+     * @param mixerAttributes
+     * @param uid
+     * @param portId
+     * @return
+     */
+    public int setPreferredMixerAttributes(
+            @NonNull AudioAttributes attributes,
+            int portId,
+            int uid,
+            @NonNull AudioMixerAttributes mixerAttributes) {
+        return AudioSystem.setPreferredMixerAttributes(attributes, portId, uid, mixerAttributes);
+    }
+
+    /**
+     * Same as {@link AudioSystem#clearPreferredMixerAttributes(AudioAttributes, int, int)}
+     * @param attributes
+     * @param uid
+     * @param portId
+     * @return
+     */
+    public int clearPreferredMixerAttributes(
+            @NonNull AudioAttributes attributes, int portId, int uid) {
+        return AudioSystem.clearPreferredMixerAttributes(attributes, portId, uid);
     }
 
     /**

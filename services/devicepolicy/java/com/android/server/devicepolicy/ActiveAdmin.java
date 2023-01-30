@@ -162,6 +162,8 @@ class ActiveAdmin {
     private static final String TAG_PREFERENTIAL_NETWORK_SERVICE_CONFIG =
             "preferential_network_service_config";
     private static final String TAG_PROTECTED_PACKAGES = "protected_packages";
+    private static final String TAG_SUSPENDED_PACKAGES = "suspended-packages";
+    private static final String TAG_MTE_POLICY = "mte-policy";
     private static final String ATTR_VALUE = "value";
     private static final String ATTR_LAST_NETWORK_LOGGING_NOTIFICATION = "last-notification";
     private static final String ATTR_NUM_NETWORK_LOGGING_NOTIFICATIONS = "num-notifications";
@@ -221,6 +223,8 @@ class ActiveAdmin {
     int numNetworkLoggingNotifications = 0;
     long lastNetworkLoggingNotificationTimeMs = 0; // Time in milliseconds since epoch
 
+    @DevicePolicyManager.MtePolicy int mtePolicy = DevicePolicyManager.MTE_NOT_CONTROLLED_BY_POLICY;
+
     ActiveAdmin parentAdmin;
     final boolean isParent;
 
@@ -256,6 +260,8 @@ class ActiveAdmin {
 
     // List of packages for which the user cannot invoke "clear data" or "force stop".
     List<String> protectedPackages;
+
+    List<String> suspendedPackages;
 
     // Wi-Fi SSID restriction policy.
     WifiSsidPolicy mWifiSsidPolicy;
@@ -508,6 +514,7 @@ class ActiveAdmin {
         writePackageListToXml(out, TAG_KEEP_UNINSTALLED_PACKAGES, keepUninstalledPackages);
         writePackageListToXml(out, TAG_METERED_DATA_DISABLED_PACKAGES, meteredDisabledPackages);
         writePackageListToXml(out, TAG_PROTECTED_PACKAGES, protectedPackages);
+        writePackageListToXml(out, TAG_SUSPENDED_PACKAGES, suspendedPackages);
         if (hasUserRestrictions()) {
             UserRestrictionsUtils.writeRestrictions(
                     out, userRestrictions, TAG_USER_RESTRICTIONS);
@@ -615,6 +622,9 @@ class ActiveAdmin {
                 config.writeToXml(out);
             }
             out.endTag(null, TAG_PREFERENTIAL_NETWORK_SERVICE_CONFIGS);
+        }
+        if (mtePolicy != DevicePolicyManager.MTE_NOT_CONTROLLED_BY_POLICY) {
+            writeAttributeValueToXml(out, TAG_MTE_POLICY, mtePolicy);
         }
     }
 
@@ -776,6 +786,8 @@ class ActiveAdmin {
                 meteredDisabledPackages = readPackageList(parser, tag);
             } else if (TAG_PROTECTED_PACKAGES.equals(tag)) {
                 protectedPackages = readPackageList(parser, tag);
+            } else if (TAG_SUSPENDED_PACKAGES.equals(tag)) {
+                suspendedPackages = readPackageList(parser, tag);
             } else if (TAG_USER_RESTRICTIONS.equals(tag)) {
                 userRestrictions = UserRestrictionsUtils.readRestrictions(parser);
             } else if (TAG_DEFAULT_ENABLED_USER_RESTRICTIONS.equals(tag)) {
@@ -900,6 +912,8 @@ class ActiveAdmin {
                 if (!configs.isEmpty()) {
                     mPreferentialNetworkServiceConfigs = configs;
                 }
+            } else if (TAG_MTE_POLICY.equals(tag)) {
+                mtePolicy = parser.getAttributeInt(null, ATTR_VALUE);
             } else {
                 Slogf.w(LOG_TAG, "Unknown admin tag: %s", tag);
                 XmlUtils.skipCurrentTag(parser);
@@ -1225,6 +1239,11 @@ class ActiveAdmin {
             pw.println(protectedPackages);
         }
 
+        if (suspendedPackages != null) {
+            pw.print("suspendedPackages=");
+            pw.println(suspendedPackages);
+        }
+
         pw.print("organizationColor=");
         pw.println(organizationColor);
 
@@ -1327,5 +1346,8 @@ class ActiveAdmin {
             }
             pw.decreaseIndent();
         }
+
+        pw.print("mtePolicy=");
+        pw.println(mtePolicy);
     }
 }

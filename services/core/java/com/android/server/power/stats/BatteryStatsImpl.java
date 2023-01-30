@@ -763,8 +763,6 @@ public class BatteryStatsImpl extends BatteryStats {
     @NonNull
     private final BatteryStatsHistory mHistory;
 
-    private BatteryStatsHistoryIterator mBatteryStatsHistoryIterator;
-
     int mStartCount;
 
     /**
@@ -4658,10 +4656,10 @@ public class BatteryStatsImpl extends BatteryStats {
         final int mappedUid = mapUid(uid);
         if (type == WAKE_TYPE_PARTIAL) {
             mWakeLockNesting--;
+            if (historyName == null) {
+                historyName = name;
+            }
             if (mRecordAllHistory) {
-                if (historyName == null) {
-                    historyName = name;
-                }
                 if (mActiveEvents.updateState(HistoryItem.EVENT_WAKE_LOCK_FINISH, historyName,
                         mappedUid, 0)) {
                     mHistory.recordEvent(elapsedRealtimeMs, uptimeMs,
@@ -4669,8 +4667,8 @@ public class BatteryStatsImpl extends BatteryStats {
                 }
             }
             if (mWakeLockNesting == 0) {
-                mHistory.recordStateStopEvent(elapsedRealtimeMs, uptimeMs,
-                        HistoryItem.STATE_WAKE_LOCK_FLAG);
+                mHistory.recordWakelockStopEvent(elapsedRealtimeMs, uptimeMs, historyName,
+                        mappedUid);
             }
         }
         if (mappedUid >= 0) {
@@ -11242,17 +11240,11 @@ public class BatteryStatsImpl extends BatteryStats {
         return mHistory.getHistoryUsedSize();
     }
 
-    @Override
-    public boolean startIteratingHistoryLocked() {
-        mBatteryStatsHistoryIterator = createBatteryStatsHistoryIterator();
-        return true;
-    }
-
     /**
      * Creates an iterator for battery stats history.
      */
-    @VisibleForTesting
-    public BatteryStatsHistoryIterator createBatteryStatsHistoryIterator() {
+    @Override
+    public BatteryStatsHistoryIterator iterateBatteryStatsHistory() {
         return mHistory.iterate();
     }
 
@@ -11274,17 +11266,6 @@ public class BatteryStatsImpl extends BatteryStats {
     @Override
     public int getHistoryTagPoolUid(int index) {
         return mHistory.getHistoryTagPoolUid(index);
-    }
-
-    @Override
-    public boolean getNextHistoryLocked(HistoryItem out) {
-        return mBatteryStatsHistoryIterator.next(out);
-    }
-
-    @Override
-    public void finishIteratingHistoryLocked() {
-        mBatteryStatsHistoryIterator.close();
-        mBatteryStatsHistoryIterator = null;
     }
 
     @Override

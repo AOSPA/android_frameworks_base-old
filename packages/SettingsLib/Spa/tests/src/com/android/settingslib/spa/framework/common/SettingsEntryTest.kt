@@ -16,10 +16,13 @@
 
 package com.android.settingslib.spa.framework.common
 
+import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.core.os.bundleOf
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.android.settingslib.spa.slice.appendSpaParams
+import com.android.settingslib.spa.slice.getEntryId
 import com.android.settingslib.spa.tests.testutils.getUniqueEntryId
 import com.android.settingslib.spa.tests.testutils.getUniquePageId
 import com.google.common.truth.Truth.assertThat
@@ -27,8 +30,8 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-const val INJECT_ENTRY_NAME = "INJECT"
-const val ROOT_ENTRY_NAME = "ROOT"
+const val INJECT_ENTRY_NAME_TEST = "INJECT"
+const val ROOT_ENTRY_NAME_TEST = "ROOT"
 
 class MacroForTest(private val pageId: String, private val entryId: String) : EntryMacro {
     @Composable
@@ -95,12 +98,12 @@ class SettingsEntryTest {
         val entryInject = SettingsEntryBuilder.createInject(owner).build()
         assertThat(entryInject.id).isEqualTo(
             getUniqueEntryId(
-                INJECT_ENTRY_NAME,
+                INJECT_ENTRY_NAME_TEST,
                 owner,
                 toPage = owner
             )
         )
-        assertThat(entryInject.displayName).isEqualTo("${INJECT_ENTRY_NAME}_mySpp")
+        assertThat(entryInject.displayName).isEqualTo("${INJECT_ENTRY_NAME_TEST}_mySpp")
         assertThat(entryInject.fromPage).isNull()
         assertThat(entryInject.toPage).isNotNull()
     }
@@ -111,7 +114,7 @@ class SettingsEntryTest {
         val entryInject = SettingsEntryBuilder.createRoot(owner, "myRootEntry").build()
         assertThat(entryInject.id).isEqualTo(
             getUniqueEntryId(
-                ROOT_ENTRY_NAME,
+                ROOT_ENTRY_NAME_TEST,
                 owner,
                 toPage = owner
             )
@@ -168,5 +171,26 @@ class SettingsEntryTest {
         assertThat(searchData?.keyword).isEmpty()
         assertThat(statusData?.isDisabled).isTrue()
         assertThat(statusData?.isSwitchOff).isTrue()
+    }
+
+    @Test
+    fun testSetSliceDataFn() {
+        val owner = SettingsPage.create("mySpp")
+        val entryId = getUniqueEntryId("myEntry", owner)
+        val emptySliceData = EntrySliceData()
+
+        val entryBuilder = SettingsEntryBuilder.create(owner, "myEntry")
+            .setSliceDataFn { uri, _ ->
+                return@setSliceDataFn if (uri.getEntryId() == entryId) emptySliceData else null
+            }
+        val entry = entryBuilder.build()
+        assertThat(entry.id).isEqualTo(entryId)
+        assertThat(entry.hasSliceSupport).isTrue()
+        assertThat(entry.getSliceData(Uri.EMPTY)).isNull()
+        assertThat(
+            entry.getSliceData(
+                Uri.Builder().scheme("content").appendSpaParams(entryId = entryId).build()
+            )
+        ).isEqualTo(emptySliceData)
     }
 }

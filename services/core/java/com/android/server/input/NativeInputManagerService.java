@@ -186,6 +186,10 @@ interface NativeInputManagerService {
 
     void changeUniqueIdAssociation();
 
+    void changeTypeAssociation();
+
+    void changeKeyboardLayoutAssociation();
+
     void notifyPointerDisplayIdChanged();
 
     void setDisplayEligibilityForPointerCapture(int displayId, boolean enabled);
@@ -398,6 +402,12 @@ interface NativeInputManagerService {
 
         @Override
         public native void changeUniqueIdAssociation();
+
+        @Override
+        public native void changeTypeAssociation();
+
+        @Override
+        public native void changeKeyboardLayoutAssociation();
 
         @Override
         public native void notifyPointerDisplayIdChanged();

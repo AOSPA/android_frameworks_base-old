@@ -1827,14 +1827,14 @@ class ActivityStarter {
         if (mPreferredTaskDisplayArea != null) {
             final DisplayContent displayContent = mRootWindowContainer.getDisplayContentOrCreate(
                     mPreferredTaskDisplayArea.getDisplayId());
-            if (displayContent != null && displayContent.mDwpcHelper.hasController()) {
+            if (displayContent != null) {
                 final int targetWindowingMode = (targetTask != null)
                         ? targetTask.getWindowingMode() : displayContent.getWindowingMode();
                 final int launchingFromDisplayId =
                         mSourceRecord != null ? mSourceRecord.getDisplayId() : DEFAULT_DISPLAY;
                 if (!displayContent.mDwpcHelper
-                        .canActivityBeLaunched(r.info, targetWindowingMode, launchingFromDisplayId,
-                          newTask)) {
+                        .canActivityBeLaunched(r.info, r.intent, targetWindowingMode,
+                          launchingFromDisplayId, newTask)) {
                     Slog.w(TAG, "Abort to launch " + r.info.getComponentName()
                             + " on display area " + mPreferredTaskDisplayArea);
                     return START_ABORTED;
@@ -2289,6 +2289,15 @@ class ActivityStarter {
             mLaunchFlags |= FLAG_ACTIVITY_NEW_TASK;
         }
 
+        if (r.info.requiredDisplayCategory != null && mSourceRecord != null
+                && !r.info.requiredDisplayCategory.equals(
+                        mSourceRecord.info.requiredDisplayCategory)) {
+            // Adding NEW_TASK flag for activity with display category attribute if the display
+            // category of the source record is different, so that the activity won't be launched
+            // in source record's task.
+            mLaunchFlags |= FLAG_ACTIVITY_NEW_TASK;
+        }
+
         sendNewTaskResultRequestIfNeeded();
 
         if ((mLaunchFlags & FLAG_ACTIVITY_NEW_DOCUMENT) != 0 && r.resultTo == null) {
@@ -2374,6 +2383,12 @@ class ActivityStarter {
         // consider it invalid.
         if (inTask != null && !inTask.inRecents) {
             Slog.w(TAG, "Starting activity in task not in recents: " + inTask);
+            mInTask = null;
+        }
+        // Prevent to start activity in Task with different display category
+        if (mInTask != null && !mInTask.isSameRequiredDisplayCategory(r.info)) {
+            Slog.w(TAG, "Starting activity in task with different display category: "
+                    + mInTask);
             mInTask = null;
         }
         mInTaskFragment = inTaskFragment;

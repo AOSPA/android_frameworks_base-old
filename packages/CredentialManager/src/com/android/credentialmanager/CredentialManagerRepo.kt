@@ -22,6 +22,7 @@ import android.app.slice.Slice
 import android.app.slice.SliceSpec
 import android.content.Context
 import android.content.Intent
+import android.content.pm.Signature
 import android.credentials.CreateCredentialRequest
 import android.credentials.GetCredentialOption
 import android.credentials.GetCredentialRequest
@@ -40,11 +41,9 @@ import android.os.Binder
 import android.os.Bundle
 import android.os.ResultReceiver
 import android.service.credentials.CredentialProviderService
+import android.util.ArraySet
 import com.android.credentialmanager.createflow.CreateCredentialUiState
-import com.android.credentialmanager.createflow.EnabledProviderInfo
-import com.android.credentialmanager.createflow.RemoteInfo
 import com.android.credentialmanager.getflow.GetCredentialUiState
-import com.android.credentialmanager.getflow.GetScreenState
 import com.android.credentialmanager.jetpack.developer.CreatePasswordRequest.Companion.toBundle
 import com.android.credentialmanager.jetpack.developer.CreatePublicKeyCredentialRequest
 import com.android.credentialmanager.jetpack.developer.PublicKeyCredential.Companion.TYPE_PUBLIC_KEY_CREDENTIAL
@@ -102,7 +101,7 @@ class CredentialManagerRepo(
   }
 
   fun onOptionSelected(
-    providerPackageName: String,
+    providerId: String,
     entryKey: String,
     entrySubkey: String,
     resultCode: Int? = null,
@@ -110,7 +109,7 @@ class CredentialManagerRepo(
   ) {
     val userSelectionDialogResult = UserSelectionDialogResult(
       requestInfo.token,
-      providerPackageName,
+      providerId,
       entryKey,
       entrySubkey,
       if (resultCode != null) ProviderPendingIntentResponse(resultCode, resultData) else null
@@ -124,11 +123,9 @@ class CredentialManagerRepo(
     val providerEnabledList = GetFlowUtils.toProviderList(
     // TODO: handle runtime cast error
       providerEnabledList as List<GetCredentialProviderData>, context)
-    // TODO: covert from real requestInfo
-    val requestDisplayInfo = com.android.credentialmanager.getflow.RequestDisplayInfo("the app")
+    val requestDisplayInfo = GetFlowUtils.toRequestDisplayInfo(requestInfo)
     return GetCredentialUiState(
       providerEnabledList,
-      GetScreenState.PRIMARY_SELECTION,
       requestDisplayInfo,
     )
   }
@@ -141,36 +138,15 @@ class CredentialManagerRepo(
     val providerDisabledList = CreateFlowUtils.toDisabledProviderList(
       // Handle runtime cast error
       providerDisabledList, context)
-    var defaultProvider: EnabledProviderInfo? = null
-    var remoteEntry: RemoteInfo? = null
-    var createOptionSize = 0
-    var lastSeenProviderWithNonEmptyCreateOptions: EnabledProviderInfo? = null
     providerEnabledList.forEach{providerInfo -> providerInfo.createOptions =
       providerInfo.createOptions.sortedWith(compareBy { it.lastUsedTimeMillis }).reversed()
-      if (providerInfo.isDefault) {defaultProvider = providerInfo}
-      if (providerInfo.remoteEntry != null) {
-        remoteEntry = providerInfo.remoteEntry!!
-      }
-      if (providerInfo.createOptions.isNotEmpty()) {
-        createOptionSize += providerInfo.createOptions.size
-        lastSeenProviderWithNonEmptyCreateOptions = providerInfo
-      }
     }
-    return CreateCredentialUiState(
-      enabledProviders = providerEnabledList,
-      disabledProviders = providerDisabledList,
-      CreateFlowUtils.toCreateScreenState(
-        createOptionSize, false,
-        requestDisplayInfo, defaultProvider, remoteEntry),
-      requestDisplayInfo,
-      false,
-      CreateFlowUtils.toActiveEntry(
-        /*defaultProvider=*/defaultProvider, createOptionSize,
-        lastSeenProviderWithNonEmptyCreateOptions, remoteEntry),
-    )
+    return CreateFlowUtils.toCreateCredentialUiState(
+      providerEnabledList, providerDisabledList, requestDisplayInfo, false)
   }
 
   companion object {
+    // TODO: find a way to resolve this static field leak problem
     lateinit var repo: CredentialManagerRepo
 
     fun setup(
@@ -201,7 +177,6 @@ class CredentialManagerRepo(
         .setRemoteEntry(
           newRemoteEntry("key2", "subkey-1")
         )
-        .setIsDefaultProvider(true)
         .build(),
       CreateCredentialProviderData
         .Builder("com.dashlane")
@@ -248,12 +223,10 @@ class CredentialManagerRepo(
           listOf(
             newActionEntry(
               "key3", "subkey-1", TYPE_PASSWORD_CREDENTIAL,
-              Icon.createWithResource(context, R.drawable.ic_manage_accounts),
               "Open Google Password Manager", "elisa.beckett@gmail.com"
             ),
             newActionEntry(
               "key3", "subkey-2", TYPE_PASSWORD_CREDENTIAL,
-              Icon.createWithResource(context, R.drawable.ic_manage_accounts),
               "Open Google Password Manager", "beckett-family@gmail.com"
             ),
           )
@@ -278,7 +251,6 @@ class CredentialManagerRepo(
           listOf(
             newActionEntry(
               "key3", "subkey-1", TYPE_PASSWORD_CREDENTIAL,
-              Icon.createWithResource(context, R.drawable.ic_face),
               "Open Enpass"
             ),
           )
@@ -290,7 +262,6 @@ class CredentialManagerRepo(
     key: String,
     subkey: String,
     credentialType: String,
-    icon: Icon,
     text: String,
     subtext: String? = null,
   ): Entry {
@@ -298,7 +269,7 @@ class CredentialManagerRepo(
       Entry.CREDENTIAL_MANAGER_ENTRY_URI, SliceSpec(credentialType, 1)
     ).addText(
       text, null, listOf(Entry.HINT_ACTION_TITLE)
-    ).addIcon(icon, null, listOf(Entry.HINT_ACTION_ICON))
+    )
     if (subtext != null) {
       slice.addText(subtext, null, listOf(Entry.HINT_ACTION_SUBTEXT))
     }
@@ -382,7 +353,8 @@ class CredentialManagerRepo(
       intent, (PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
               or PendingIntent.FLAG_ONE_SHOT))
     val createPasswordRequest = android.service.credentials.CreateCredentialRequest(
-            context.applicationInfo.packageName,
+            android.service.credentials.CallingAppInfo(
+                    context.applicationInfo.packageName, ArraySet<Signature>()),
             TYPE_PASSWORD_CREDENTIAL,
             toBundle("beckett-bakert@gmail.com", "password123")
     )

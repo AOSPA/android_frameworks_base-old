@@ -23,11 +23,6 @@
         xmlns:tools="http://schemas.android.com/tools"
         coreApp="true">
 
-    <!-- Using OpenGL ES 2.0 -->
-    <uses-feature
-        android:glEsVersion="0x00020000"
-        android:required="true" />
-
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- Used to read wallpaper -->
@@ -419,6 +414,7 @@
 
         <service android:name=".screenshot.ScreenshotCrossProfileService"
                  android:permission="com.android.systemui.permission.SELF"
+                 android:process=":screenshot_cross_profile"
                  android:exported="false" />
 
         <service android:name=".screenrecord.RecordingService" />
@@ -903,7 +899,7 @@
                   android:showForAllUsers="true"
                   android:finishOnTaskLaunch="true"
                   android:launchMode="singleInstance"
-                  android:configChanges="screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden"
+                  android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboard|keyboardHidden"
                   android:visibleToInstantApps="true">
         </activity>
 

@@ -239,6 +239,7 @@ applications that come with the platform
 
     <privapp-permissions package="com.android.shell">
         <!-- Needed for test only -->
+        <permission name="android.permission.MANAGE_HEALTH_DATA"/>
         <permission name="android.permission.LAUNCH_DEVICE_MANAGER_SETUP"/>
         <permission name="android.permission.MODIFY_DAY_NIGHT_MODE"/>
         <permission name="android.permission.ACCESS_LOWPAN_STATE"/>
@@ -393,6 +394,7 @@ applications that come with the platform
         <permission name="android.permission.MANAGE_COMPANION_DEVICES" />
         <permission name="android.permission.REQUEST_COMPANION_PROFILE_APP_STREAMING" />
         <permission name="android.permission.REQUEST_COMPANION_PROFILE_WATCH" />
+        <permission name="android.permission.REQUEST_COMPANION_PROFILE_NEARBY_DEVICE_STREAMING" />
         <permission name="android.permission.REQUEST_COMPANION_PROFILE_COMPUTER" />
         <permission name="android.permission.REQUEST_COMPANION_SELF_MANAGED" />
         <!-- Permission required for testing registering pull atom callbacks. -->
@@ -506,6 +508,7 @@ applications that come with the platform
         <permission name="android.permission.CAPTURE_MEDIA_OUTPUT" />
         <permission name="android.permission.CAPTURE_TUNER_AUDIO_INPUT" />
         <permission name="android.permission.CAPTURE_VOICE_COMMUNICATION_OUTPUT" />
+        <permission name="android.permission.MODIFY_CELL_BROADCASTS" />
     </privapp-permissions>
 
     <privapp-permissions package="com.android.statementservice">

@@ -40,6 +40,7 @@ import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_N
 import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_QUICK_SETTINGS_EXPANDED;
 import static com.android.systemui.statusbar.StatusBarState.KEYGUARD;
 import static com.android.systemui.statusbar.StatusBarState.SHADE;
+import static com.android.systemui.statusbar.StatusBarState.SHADE_LOCKED;
 import static com.android.systemui.statusbar.VibratorHelper.TOUCH_VIBRATION_ATTRIBUTES;
 import static com.android.systemui.statusbar.notification.stack.StackStateAnimator.ANIMATION_DURATION_FOLD_TO_AOD;
 import static com.android.systemui.util.DumpUtilsKt.asIndenting;
@@ -138,6 +139,7 @@ import com.android.systemui.flags.Flags;
 import com.android.systemui.fragments.FragmentHostManager.FragmentListener;
 import com.android.systemui.fragments.FragmentService;
 import com.android.systemui.keyguard.KeyguardUnlockAnimationController;
+import com.android.systemui.keyguard.domain.interactor.AlternateBouncerInteractor;
 import com.android.systemui.keyguard.domain.interactor.KeyguardBottomAreaInteractor;
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardBottomAreaViewModel;
 import com.android.systemui.media.controls.pipeline.MediaDataManager;
@@ -353,6 +355,7 @@ public final class NotificationPanelViewController implements Dumpable {
     private final FragmentListener mQsFragmentListener = new QsFragmentListener();
     private final AccessibilityDelegate mAccessibilityDelegate = new ShadeAccessibilityDelegate();
     private final NotificationGutsManager mGutsManager;
+    private final AlternateBouncerInteractor mAlternateBouncerInteractor;
 
     private long mDownTime;
     private boolean mTouchSlopExceededBeforeDown;
@@ -763,6 +766,7 @@ public final class NotificationPanelViewController implements Dumpable {
             SystemClock systemClock,
             KeyguardBottomAreaViewModel keyguardBottomAreaViewModel,
             KeyguardBottomAreaInteractor keyguardBottomAreaInteractor,
+            AlternateBouncerInteractor alternateBouncerInteractor,
             DumpManager dumpManager,
             EmergencyButtonController.Factory emergencyButtonControllerFactory) {
         keyguardStateController.addCallback(new KeyguardStateController.Callback() {
@@ -945,6 +949,7 @@ public final class NotificationPanelViewController implements Dumpable {
                         unlockAnimationStarted(playingCannedAnimation, isWakeAndUnlock, startDelay);
                     }
                 });
+        mAlternateBouncerInteractor = alternateBouncerInteractor;
         dumpManager.registerDumpable(this);
     }
 
@@ -1335,7 +1340,9 @@ public final class NotificationPanelViewController implements Dumpable {
         mKeyguardBottomArea.init(
                 mKeyguardBottomAreaViewModel,
                 mFalsingManager,
-                mLockIconViewController
+                mLockIconViewController,
+                stringResourceId ->
+                        mKeyguardIndicationController.showTransientIndication(stringResourceId)
         );
         EmergencyButton emergencyButton =
                 mKeyguardBottomArea.findViewById(R.id.emergency_call_button);
@@ -2153,7 +2160,6 @@ public final class NotificationPanelViewController implements Dumpable {
                 if ((h > touchSlop || (h < -touchSlop && mQsExpanded))
                         && Math.abs(h) > Math.abs(x - mInitialTouchX)
                         && shouldQuickSettingsIntercept(mInitialTouchX, mInitialTouchY, h)) {
-                    debugLog("onQsIntercept - start tracking expansion");
                     mView.getParent().requestDisallowInterceptTouchEvent(true);
                     mShadeLog.onQsInterceptMoveQsTrackingEnabled(h);
                     mQsTracking = true;
@@ -2338,7 +2344,7 @@ public final class NotificationPanelViewController implements Dumpable {
 
 
     private boolean handleQsTouch(MotionEvent event) {
-        if (mSplitShadeEnabled && touchXOutsideOfQs(event.getX())) {
+        if (isSplitShadeAndTouchXOutsideQs(event.getX())) {
             return false;
         }
         final int action = event.getActionMasked();
@@ -2364,7 +2370,7 @@ public final class NotificationPanelViewController implements Dumpable {
         if (!mSplitShadeEnabled
                 && computeQsExpansionFraction() <= 0.01 && getExpandedFraction() < 1.0) {
             mShadeLog.logMotionEvent(event,
-                    "handleQsTouch: QQS touched while shade collapsing");
+                    "handleQsTouch: QQS touched while shade collapsing, QS tracking disabled");
             mQsTracking = false;
         }
         if (!mQsExpandImmediate && mQsTracking) {
@@ -2395,12 +2401,14 @@ public final class NotificationPanelViewController implements Dumpable {
         return false;
     }
 
-    private boolean touchXOutsideOfQs(float touchX) {
-        return touchX < mQsFrame.getX() || touchX > mQsFrame.getX() + mQsFrame.getWidth();
+    /** Returns whether split shade is enabled and an x coordinate is outside of the QS frame. */
+    private boolean isSplitShadeAndTouchXOutsideQs(float touchX) {
+        return mSplitShadeEnabled && (touchX < mQsFrame.getX()
+                || touchX > mQsFrame.getX() + mQsFrame.getWidth());
     }
 
     private boolean isInQsArea(float x, float y) {
-        if (touchXOutsideOfQs(x)) {
+        if (isSplitShadeAndTouchXOutsideQs(x)) {
             return false;
         }
         // Let's reject anything at the very bottom around the home handle in gesture nav
@@ -4733,6 +4741,7 @@ public final class NotificationPanelViewController implements Dumpable {
             if (!openingWithTouch || !mHasVibratedOnOpen) {
                 mVibratorHelper.vibrate(VibrationEffect.EFFECT_TICK);
                 mHasVibratedOnOpen = true;
+                mShadeLog.v("Vibrating on opening, mHasVibratedOnOpen=true");
             }
         }
     }
@@ -4822,7 +4831,7 @@ public final class NotificationPanelViewController implements Dumpable {
                 mUpdateFlingVelocity = vel;
             }
         } else if (!mCentralSurfaces.isBouncerShowing()
-                && !mStatusBarKeyguardViewManager.isShowingAlternateBouncer()
+                && !mAlternateBouncerInteractor.isVisibleState()
                 && !mKeyguardStateController.isKeyguardGoingAway()) {
             onEmptySpaceClick();
             onTrackingStopped(true);
@@ -5001,8 +5010,35 @@ public final class NotificationPanelViewController implements Dumpable {
         return mExpandedFraction;
     }
 
+    /**
+     * This method should not be used anymore, you should probably use {@link #isShadeFullyOpen()}
+     * instead. It was overused as indicating if shade is open or we're on keyguard/AOD.
+     * Moving forward we should be explicit about the what state we're checking.
+     * @return if panel is covering the screen, which means we're in expanded shade or keyguard/AOD
+     *
+     * @deprecated depends on the state you check, use {@link #isShadeFullyOpen()},
+     * {@link #isOnAod()}, {@link #isOnKeyguard()} instead.
+     */
+    @Deprecated
     public boolean isFullyExpanded() {
         return mExpandedHeight >= getMaxPanelTransitionDistance();
+    }
+
+    /**
+     * Returns true if shade is fully opened, that is we're actually in the notification shade
+     * with QQS or QS. It's different from {@link #isFullyExpanded()} that it will not report
+     * shade as always expanded if we're on keyguard/AOD. It will return true only when user goes
+     * from keyguard to shade.
+     */
+    public boolean isShadeFullyOpen() {
+        if (mBarState == SHADE) {
+            return isFullyExpanded();
+        } else if (mBarState == SHADE_LOCKED) {
+            return true;
+        } else {
+            // case of two finger swipe from the top of keyguard
+            return computeQsExpansionFraction() == 1;
+        }
     }
 
     public boolean isFullyCollapsed() {
@@ -5329,7 +5365,7 @@ public final class NotificationPanelViewController implements Dumpable {
         @Override
         public void flingTopOverscroll(float velocity, boolean open) {
             // in split shade mode we want to expand/collapse QS only when touch happens within QS
-            if (mSplitShadeEnabled && touchXOutsideOfQs(mInitialTouchX)) {
+            if (isSplitShadeAndTouchXOutsideQs(mInitialTouchX)) {
                 return;
             }
             mLastOverscroll = 0f;
@@ -5490,6 +5526,15 @@ public final class NotificationPanelViewController implements Dumpable {
             mBarState = statusBarState;
             mKeyguardShowing = keyguardShowing;
 
+            boolean fromShadeToKeyguard = statusBarState == KEYGUARD
+                    && (oldState == SHADE || oldState == SHADE_LOCKED);
+            if (mSplitShadeEnabled && fromShadeToKeyguard) {
+                // user can go to keyguard from different shade states and closing animation
+                // may not fully run - we always want to make sure we close QS when that happens
+                // as we never need QS open in fresh keyguard state
+                closeQs();
+            }
+
             if (oldState == KEYGUARD && (goingToFullShade
                     || statusBarState == StatusBarState.SHADE_LOCKED)) {
 
@@ -5509,27 +5554,12 @@ public final class NotificationPanelViewController implements Dumpable {
                 mKeyguardStatusBarViewController.animateKeyguardStatusBarIn();
 
                 mNotificationStackScrollLayoutController.resetScrollPosition();
-                // Only animate header if the header is visible. If not, it will partially
-                // animate out
-                // the top of QS
-                if (!mQsExpanded) {
-                    // TODO(b/185683835) Nicer clipping when using new spacial model
-                    if (mSplitShadeEnabled) {
-                        mQs.animateHeaderSlidingOut();
-                    }
-                }
             } else {
                 // this else branch means we are doing one of:
                 //  - from KEYGUARD to SHADE (but not fully expanded as when swiping from the top)
                 //  - from SHADE to KEYGUARD
                 //  - from SHADE_LOCKED to SHADE
                 //  - getting notified again about the current SHADE or KEYGUARD state
-                if (mSplitShadeEnabled && oldState == SHADE && statusBarState == KEYGUARD) {
-                    // user can go to keyguard from different shade states and closing animation
-                    // may not fully run - we always want to make sure we close QS when that happens
-                    // as we never need QS open in fresh keyguard state
-                    closeQs();
-                }
                 final boolean animatingUnlockedShadeToKeyguard = oldState == SHADE
                         && statusBarState == KEYGUARD
                         && mScreenOffAnimationController.isKeyguardShowDelayed();
@@ -5808,12 +5838,9 @@ public final class NotificationPanelViewController implements Dumpable {
         /** @see ViewGroup#onInterceptTouchEvent(MotionEvent) */
         public boolean onInterceptTouchEvent(MotionEvent event) {
             mShadeLog.logMotionEvent(event, "NPVC onInterceptTouchEvent");
-            if (SPEW_LOGCAT) {
-                Log.v(TAG,
-                        "NPVC onInterceptTouchEvent (" + event.getId() + "): (" + event.getX()
-                                + "," + event.getY() + ")");
-            }
             if (mQs.disallowPanelTouches()) {
+                mShadeLog.logMotionEvent(event,
+                        "NPVC not intercepting touch, panel touches disallowed");
                 return false;
             }
             initDownStates(event);
@@ -5846,8 +5873,15 @@ public final class NotificationPanelViewController implements Dumpable {
                         + "QsIntercept");
                 return true;
             }
-            if (mInstantExpanding || !mNotificationsDragEnabled || mTouchDisabled || (mMotionAborted
-                    && event.getActionMasked() != MotionEvent.ACTION_DOWN)) {
+
+            if (mInstantExpanding || !mNotificationsDragEnabled || mTouchDisabled) {
+                mShadeLog.logNotInterceptingTouchInstantExpanding(mInstantExpanding,
+                        !mNotificationsDragEnabled, mTouchDisabled);
+                return false;
+            }
+            if (mMotionAborted && event.getActionMasked() != MotionEvent.ACTION_DOWN) {
+                mShadeLog.logMotionEventStatusBarState(event, mStatusBarStateController.getState(),
+                        "NPVC MotionEvent not intercepted: non-down action, motion was aborted");
                 return false;
             }
 
@@ -5902,6 +5936,9 @@ public final class NotificationPanelViewController implements Dumpable {
                     }
                     break;
                 case MotionEvent.ACTION_POINTER_DOWN:
+                    mShadeLog.logMotionEventStatusBarState(event,
+                            mStatusBarStateController.getState(),
+                            "onInterceptTouchEvent: pointer down action");
                     if (mStatusBarStateController.getState() == StatusBarState.KEYGUARD) {
                         mMotionAborted = true;
                         mVelocityTracker.clear();
@@ -5943,7 +5980,8 @@ public final class NotificationPanelViewController implements Dumpable {
                     // events are received in this handler with identical downTimes. Until the
                     // source of the issue can be located, detect this case and ignore.
                     // see b/193350347
-                    Log.w(TAG, "Duplicate down event detected... ignoring");
+                    mShadeLog.logMotionEvent(event,
+                            "onTouch: duplicate down event detected... ignoring");
                     return true;
                 }
                 mLastTouchDownTime = event.getDownTime();
@@ -5951,6 +5989,8 @@ public final class NotificationPanelViewController implements Dumpable {
 
 
             if (mQsFullyExpanded && mQs != null && mQs.disallowPanelTouches()) {
+                mShadeLog.logMotionEvent(event,
+                        "onTouch: ignore touch, panel touches disallowed and qs fully expanded");
                 return false;
             }
 
@@ -5958,6 +5998,8 @@ public final class NotificationPanelViewController implements Dumpable {
             // otherwise user would be able to pull down QS or expand the shade.
             if (mCentralSurfaces.isBouncerShowingScrimmed()
                     || mCentralSurfaces.isBouncerShowingOverDream()) {
+                mShadeLog.logMotionEvent(event,
+                        "onTouch: ignore touch, bouncer scrimmed or showing over dream");
                 return false;
             }
 
@@ -6015,15 +6057,17 @@ public final class NotificationPanelViewController implements Dumpable {
 
         private boolean handleTouch(MotionEvent event) {
             if (mInstantExpanding) {
-                mShadeLog.logMotionEvent(event, "onTouch: touch ignored due to instant expanding");
+                mShadeLog.logMotionEvent(event,
+                        "handleTouch: touch ignored due to instant expanding");
                 return false;
             }
             if (mTouchDisabled && event.getActionMasked() != MotionEvent.ACTION_CANCEL) {
-                mShadeLog.logMotionEvent(event, "onTouch: non-cancel action, touch disabled");
+                mShadeLog.logMotionEvent(event, "handleTouch: non-cancel action, touch disabled");
                 return false;
             }
             if (mMotionAborted && event.getActionMasked() != MotionEvent.ACTION_DOWN) {
-                mShadeLog.logMotionEvent(event, "onTouch: non-down action, motion was aborted");
+                mShadeLog.logMotionEventStatusBarState(event, mStatusBarStateController.getState(),
+                        "handleTouch: non-down action, motion was aborted");
                 return false;
             }
 
@@ -6033,7 +6077,7 @@ public final class NotificationPanelViewController implements Dumpable {
                     // Turn off tracking if it's on or the shade can get stuck in the down position.
                     onTrackingStopped(true /* expand */);
                 }
-                mShadeLog.logMotionEvent(event, "onTouch: drag not enabled");
+                mShadeLog.logMotionEvent(event, "handleTouch: drag not enabled");
                 return false;
             }
 
@@ -6106,6 +6150,9 @@ public final class NotificationPanelViewController implements Dumpable {
                     }
                     break;
                 case MotionEvent.ACTION_POINTER_DOWN:
+                    mShadeLog.logMotionEventStatusBarState(event,
+                            mStatusBarStateController.getState(),
+                            "handleTouch: pointer down action");
                     if (mStatusBarStateController.getState() == StatusBarState.KEYGUARD) {
                         mMotionAborted = true;
                         endMotionEvent(event, x, y, true /* forceCancel */);
@@ -6116,6 +6163,7 @@ public final class NotificationPanelViewController implements Dumpable {
                     if (isFullyCollapsed()) {
                         // If panel is fully collapsed, reset haptic effect before adding movement.
                         mHasVibratedOnOpen = false;
+                        mShadeLog.logHasVibrated(mHasVibratedOnOpen, mExpandedFraction);
                     }
                     addMovement(event);
                     if (!isFullyCollapsed()) {

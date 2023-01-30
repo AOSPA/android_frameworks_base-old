@@ -18,9 +18,7 @@ package com.android.systemui.biometrics;
 
 import static android.hardware.biometrics.BiometricAuthenticator.TYPE_FACE;
 import static android.hardware.biometrics.BiometricAuthenticator.TYPE_FINGERPRINT;
-
-import static com.android.systemui.keyguard.WakefulnessLifecycle.WAKEFULNESS_AWAKE;
-import static com.android.systemui.keyguard.WakefulnessLifecycle.WAKEFULNESS_GOING_TO_SLEEP;
+import static android.hardware.fingerprint.FingerprintSensorProperties.TYPE_REAR;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -73,13 +71,14 @@ import com.android.internal.os.SomeArgs;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.systemui.CoreStartable;
 import com.android.systemui.biometrics.domain.interactor.BiometricPromptCredentialInteractor;
+import com.android.systemui.biometrics.domain.interactor.LogContextInteractor;
 import com.android.systemui.biometrics.ui.viewmodel.CredentialViewModel;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.doze.DozeReceiver;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
-import com.android.systemui.plugins.statusbar.StatusBarStateController;
+import com.android.systemui.keyguard.data.repository.BiometricType;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.VibratorHelper;
 import com.android.systemui.util.concurrency.DelayableExecutor;
@@ -88,8 +87,10 @@ import com.android.systemui.util.concurrency.Execution;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -117,7 +118,6 @@ public class AuthController implements CoreStartable,  CommandQueue.Callbacks,
     private final Context mContext;
     private final Execution mExecution;
     private final CommandQueue mCommandQueue;
-    private final StatusBarStateController mStatusBarStateController;
     private final ActivityTaskManager mActivityTaskManager;
     @Nullable private final FingerprintManager mFingerprintManager;
     @Nullable private final FaceManager mFaceManager;
@@ -127,6 +127,7 @@ public class AuthController implements CoreStartable,  CommandQueue.Callbacks,
     // TODO: these should be migrated out once ready
     @NonNull private final Provider<BiometricPromptCredentialInteractor> mBiometricPromptInteractor;
     @NonNull private final Provider<CredentialViewModel> mCredentialViewModelProvider;
+    @NonNull private final LogContextInteractor mLogContextInteractor;
 
     private final Display mDisplay;
     private float mScaleFactor = 1f;
@@ -149,7 +150,6 @@ public class AuthController implements CoreStartable,  CommandQueue.Callbacks,
     @Nullable private UdfpsController mUdfpsController;
     @Nullable private IUdfpsRefreshRateRequestCallback mUdfpsRefreshRateRequestCallback;
     @Nullable private SideFpsController mSideFpsController;
-    @Nullable private IBiometricContextListener mBiometricContextListener;
     @Nullable private UdfpsLogger mUdfpsLogger;
     @VisibleForTesting IBiometricSysuiReceiver mReceiver;
     @VisibleForTesting @NonNull final BiometricDisplayListener mOrientationListener;
@@ -158,6 +158,7 @@ public class AuthController implements CoreStartable,  CommandQueue.Callbacks,
     @Nullable private List<FingerprintSensorPropertiesInternal> mUdfpsProps;
     @Nullable private List<FingerprintSensorPropertiesInternal> mSidefpsProps;
 
+    @NonNull private final Map<Integer, Boolean> mFpEnrolledForUser = new HashMap<>();
     @NonNull private final SparseBooleanArray mUdfpsEnrolledForUser;
     @NonNull private final SparseBooleanArray mFaceEnrolledForUser;
     @NonNull private final SparseBooleanArray mSfpsEnrolledForUser;
@@ -169,7 +170,6 @@ public class AuthController implements CoreStartable,  CommandQueue.Callbacks,
     @NonNull private final InteractionJankMonitor mInteractionJankMonitor;
     private final @Background DelayableExecutor mBackgroundExecutor;
     private final DisplayInfo mCachedDisplayInfo = new DisplayInfo();
-
 
     private final VibratorHelper mVibratorHelper;
 
@@ -348,12 +348,21 @@ public class AuthController implements CoreStartable,  CommandQueue.Callbacks,
         mExecution.assertIsMainThread();
         Log.d(TAG, "handleEnrollmentsChanged, userId: " + userId + ", sensorId: " + sensorId
                 + ", hasEnrollments: " + hasEnrollments);
-        if (mUdfpsProps == null) {
-            Log.d(TAG, "handleEnrollmentsChanged, mUdfpsProps is null");
-        } else {
-            for (FingerprintSensorPropertiesInternal prop : mUdfpsProps) {
+        BiometricType sensorBiometricType = BiometricType.UNKNOWN;
+        if (mFpProps != null) {
+            for (FingerprintSensorPropertiesInternal prop: mFpProps) {
                 if (prop.sensorId == sensorId) {
-                    mUdfpsEnrolledForUser.put(userId, hasEnrollments);
+                    mFpEnrolledForUser.put(userId, hasEnrollments);
+                    if (prop.isAnyUdfpsType()) {
+                        sensorBiometricType = BiometricType.UNDER_DISPLAY_FINGERPRINT;
+                        mUdfpsEnrolledForUser.put(userId, hasEnrollments);
+                    } else if (prop.isAnySidefpsType()) {
+                        sensorBiometricType = BiometricType.SIDE_FINGERPRINT;
+                        mSfpsEnrolledForUser.put(userId, hasEnrollments);
+                    } else if (prop.sensorType == TYPE_REAR) {
+                        sensorBiometricType = BiometricType.REAR_FINGERPRINT;
+                    }
+                    break;
                 }
             }
         }
@@ -363,20 +372,14 @@ public class AuthController implements CoreStartable,  CommandQueue.Callbacks,
             for (FaceSensorPropertiesInternal prop : mFaceProps) {
                 if (prop.sensorId == sensorId) {
                     mFaceEnrolledForUser.put(userId, hasEnrollments);
-                }
-            }
-        }
-        if (mSidefpsProps == null) {
-            Log.d(TAG, "handleEnrollmentsChanged, mSidefpsProps is null");
-        } else {
-            for (FingerprintSensorPropertiesInternal prop : mSidefpsProps) {
-                if (prop.sensorId == sensorId) {
-                    mSfpsEnrolledForUser.put(userId, hasEnrollments);
+                    sensorBiometricType = BiometricType.FACE;
+                    break;
                 }
             }
         }
         for (Callback cb : mCallbacks) {
             cb.onEnrollmentsChanged(modality);
+            cb.onEnrollmentsChanged(sensorBiometricType, userId, hasEnrollments);
         }
     }
 
@@ -629,6 +632,11 @@ public class AuthController implements CoreStartable,  CommandQueue.Callbacks,
         }
     }
 
+    /** Get FP sensor properties */
+    public @Nullable List<FingerprintSensorPropertiesInternal> getFingerprintProperties() {
+        return mFpProps;
+    }
+
     /**
      * @return where the face sensor exists in pixels in the current device orientation. Returns
      * null if no face sensor exists.
@@ -716,7 +724,7 @@ public class AuthController implements CoreStartable,  CommandQueue.Callbacks,
             @NonNull UserManager userManager,
             @NonNull LockPatternUtils lockPatternUtils,
             @NonNull UdfpsLogger udfpsLogger,
-            @NonNull StatusBarStateController statusBarStateController,
+            @NonNull LogContextInteractor logContextInteractor,
             @NonNull Provider<BiometricPromptCredentialInteractor> biometricPromptInteractor,
             @NonNull Provider<CredentialViewModel> credentialViewModelProvider,
             @NonNull InteractionJankMonitor jankMonitor,
@@ -744,6 +752,7 @@ public class AuthController implements CoreStartable,  CommandQueue.Callbacks,
         mFaceEnrolledForUser = new SparseBooleanArray();
         mVibratorHelper = vibrator;
 
+        mLogContextInteractor = logContextInteractor;
         mBiometricPromptInteractor = biometricPromptInteractor;
         mCredentialViewModelProvider = credentialViewModelProvider;
 
@@ -758,25 +767,6 @@ public class AuthController implements CoreStartable,  CommandQueue.Callbacks,
                 });
 
         mWakefulnessLifecycle = wakefulnessLifecycle;
-        mWakefulnessLifecycle.addObserver(new WakefulnessLifecycle.Observer() {
-            @Override
-            public void onFinishedWakingUp() {
-                notifyDozeChanged(mStatusBarStateController.isDozing(), WAKEFULNESS_AWAKE);
-            }
-
-            @Override
-            public void onStartedGoingToSleep() {
-                notifyDozeChanged(mStatusBarStateController.isDozing(), WAKEFULNESS_GOING_TO_SLEEP);
-            }
-        });
-
-        mStatusBarStateController = statusBarStateController;
-        mStatusBarStateController.addCallback(new StatusBarStateController.StateListener() {
-            @Override
-            public void onDozingChanged(boolean isDozing) {
-                notifyDozeChanged(isDozing, wakefulnessLifecycle.getWakefulness());
-            }
-        });
 
         mFaceProps = mFaceManager != null ? mFaceManager.getSensorPropertiesInternal() : null;
         int[] faceAuthLocation = context.getResources().getIntArray(
@@ -881,22 +871,8 @@ public class AuthController implements CoreStartable,  CommandQueue.Callbacks,
     }
 
     @Override
-    public void setBiometicContextListener(IBiometricContextListener listener) {
-        mBiometricContextListener = listener;
-        notifyDozeChanged(mStatusBarStateController.isDozing(),
-                mWakefulnessLifecycle.getWakefulness());
-    }
-
-    private void notifyDozeChanged(boolean isDozing,
-            @WakefulnessLifecycle.Wakefulness int wakefullness) {
-        if (mBiometricContextListener != null) {
-            try {
-                final boolean isAwake = wakefullness == WAKEFULNESS_AWAKE;
-                mBiometricContextListener.onDozeChanged(isDozing, isAwake);
-            } catch (RemoteException e) {
-                Log.w(TAG, "failed to notify initial doze state");
-            }
-        }
+    public void setBiometricContextListener(IBiometricContextListener listener) {
+        mLogContextInteractor.addBiometricContextListener(listener);
     }
 
     /**
@@ -1140,6 +1116,13 @@ public class AuthController implements CoreStartable,  CommandQueue.Callbacks,
         return mCurrentDialog != null;
     }
 
+    /**
+     * Whether the passed userId has enrolled at least one fingerprint.
+     */
+    public boolean isFingerprintEnrolled(int userId) {
+        return mFpEnrolledForUser.getOrDefault(userId, false);
+    }
+
     private void showDialog(SomeArgs args, boolean skipAnimation, Bundle savedState) {
         mCurrentDialogArgs = args;
 
@@ -1255,7 +1238,6 @@ public class AuthController implements CoreStartable,  CommandQueue.Callbacks,
             PromptInfo promptInfo, boolean requireConfirmation, int userId, int[] sensorIds,
             String opPackageName, boolean skipIntro, long operationId, long requestId,
             @BiometricMultiSensorMode int multiSensorConfig,
-
             @NonNull WakefulnessLifecycle wakefulnessLifecycle,
             @NonNull UserManager userManager,
             @NonNull LockPatternUtils lockPatternUtils) {
@@ -1321,6 +1303,16 @@ public class AuthController implements CoreStartable,  CommandQueue.Callbacks,
          * enrollment.
          */
         default void onEnrollmentsChanged(@Modality int modality) {}
+
+        /**
+         * Called when UDFPS enrollments have changed. This is called after boot and on changes to
+         * enrollment.
+         */
+        default void onEnrollmentsChanged(
+                @NonNull BiometricType biometricType,
+                int userId,
+                boolean hasEnrollments
+        ) {}
 
         /**
          * Called when the biometric prompt starts showing.

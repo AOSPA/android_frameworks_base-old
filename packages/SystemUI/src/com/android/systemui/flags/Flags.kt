@@ -83,7 +83,7 @@ object Flags {
     val STABILITY_INDEX_FIX = releasedFlag(114, "stability_index_fix")
 
     // TODO(b/259559750): Tracking Bug
-    val SEMI_STABLE_SORT = unreleasedFlag(115, "semi_stable_sort", teamfood = true)
+    val SEMI_STABLE_SORT = releasedFlag(115, "semi_stable_sort")
 
     @JvmField
     val USE_ROUNDNESS_SOURCETYPES = unreleasedFlag(116, "use_roundness_sourcetype", teamfood = true)
@@ -94,8 +94,7 @@ object Flags {
         unreleasedFlag(259217907, "notification_group_dismissal_animation", teamfood = true)
 
     // TODO(b/257506350): Tracking Bug
-    @JvmField
-    val FSI_CHROME = unreleasedFlag(117, "fsi_chrome")
+    @JvmField val FSI_CHROME = unreleasedFlag(117, "fsi_chrome")
 
     @JvmField
     val SIMPLIFIED_APPEAR_FRACTION =
@@ -138,7 +137,8 @@ object Flags {
      * Whether the clock on a wide lock screen should use the new "stepping" animation for moving
      * the digits when the clock moves.
      */
-    @JvmField val STEP_CLOCK_ANIMATION = unreleasedFlag(212, "step_clock_animation")
+    @JvmField
+    val STEP_CLOCK_ANIMATION = unreleasedFlag(212, "step_clock_animation", teamfood = true)
 
     /**
      * Migration from the legacy isDozing/dozeAmount paths to the new KeyguardTransitionRepository
@@ -165,14 +165,31 @@ object Flags {
 
     /** Shows chipbar UI whenever the device is unlocked by ActiveUnlock (watch). */
     // TODO(b/256513609): Tracking Bug
-    @JvmField val ACTIVE_UNLOCK_CHIPBAR = releasedFlag(217, "active_unlock_chipbar")
+    @JvmField
+    val ACTIVE_UNLOCK_CHIPBAR =
+        resourceBooleanFlag(217, R.bool.flag_active_unlock_chipbar, "active_unlock_chipbar")
 
     /**
      * Migrates control of the LightRevealScrim's reveal effect and amount from legacy code to the
      * new KeyguardTransitionRepository.
      */
     @JvmField
-    val LIGHT_REVEAL_MIGRATION = unreleasedFlag(218, "light_reveal_migration", teamfood = true)
+    val LIGHT_REVEAL_MIGRATION = unreleasedFlag(218, "light_reveal_migration", teamfood = false)
+
+    /**
+     * Whether to use the new alternate bouncer architecture, a refactor of and eventual replacement
+     * of the Alternate/Authentication Bouncer. No visual UI changes.
+     */
+    // TODO(b/260619425): Tracking Bug
+    @JvmField val MODERN_ALTERNATE_BOUNCER = unreleasedFlag(219, "modern_alternate_bouncer")
+
+    /** Flag to control the migration of face auth to modern architecture. */
+    // TODO(b/262838215): Tracking bug
+    @JvmField val FACE_AUTH_REFACTOR = unreleasedFlag(220, "face_auth_refactor")
+
+    /** Flag to control the revamp of keyguard biometrics progress animation */
+    // TODO(b/244313043): Tracking bug
+    @JvmField val BIOMETRICS_ANIMATION_REVAMP = unreleasedFlag(221, "biometrics_animation_revamp")
 
     // 300 - power menu
     // TODO(b/254512600): Tracking Bug
@@ -250,11 +267,7 @@ object Flags {
 
     // 801 - region sampling
     // TODO(b/254512848): Tracking Bug
-    val REGION_SAMPLING = unreleasedFlag(801, "region_sampling")
-
-    // 802 - wallpaper rendering
-    // TODO(b/254512923): Tracking Bug
-    @JvmField val USE_CANVAS_RENDERER = unreleasedFlag(802, "use_canvas_renderer")
+    val REGION_SAMPLING = unreleasedFlag(801, "region_sampling", teamfood = true)
 
     // 803 - screen contents translation
     // TODO(b/254513187): Tracking Bug
@@ -267,7 +280,7 @@ object Flags {
 
     // 900 - media
     // TODO(b/254512697): Tracking Bug
-    val MEDIA_TAP_TO_TRANSFER = releasedFlag(900, "media_tap_to_transfer")
+    val MEDIA_TAP_TO_TRANSFER = unreleasedFlag(900, "media_tap_to_transfer", teamfood = true)
 
     // TODO(b/254512502): Tracking Bug
     val MEDIA_SESSION_ACTIONS = unreleasedFlag(901, "media_session_actions")
@@ -287,7 +300,11 @@ object Flags {
     // TODO(b/254513168): Tracking Bug
     @JvmField val UMO_SURFACE_RIPPLE = unreleasedFlag(907, "umo_surface_ripple")
 
-    @JvmField val MEDIA_FALSING_PENALTY = unreleasedFlag(908, "media_falsing_media")
+    @JvmField
+    val MEDIA_FALSING_PENALTY = unreleasedFlag(908, "media_falsing_media", teamfood = true)
+
+    // TODO(b/261734857): Tracking Bug
+    @JvmField val UMO_TURBULENCE_NOISE = unreleasedFlag(909, "umo_turbulence_noise")
 
     // 1000 - dock
     val SIMULATE_DOCK_THROUGH_CHARGING = releasedFlag(1000, "simulate_dock_through_charging")
@@ -394,14 +411,19 @@ object Flags {
     // TODO(b/254512756): Tracking Bug
     val QUICK_TAP_IN_PCC = releasedFlag(1400, "quick_tap_in_pcc")
 
+    // TODO(b/261979569): Tracking Bug
+    val QUICK_TAP_FLOW_FRAMEWORK =
+            unreleasedFlag(1401, "quick_tap_flow_framework", teamfood = false)
+
     // 1500 - chooser
     // TODO(b/254512507): Tracking Bug
     val CHOOSER_UNBUNDLED = unreleasedFlag(1500, "chooser_unbundled", teamfood = true)
 
     // 1600 - accessibility
+    // TODO(b/262224538): Tracking Bug
     @JvmField
     val A11Y_FLOATING_MENU_FLING_SPRING_ANIMATIONS =
-        unreleasedFlag(1600, "a11y_floating_menu_fling_spring_animations", teamfood = true)
+        releasedFlag(1600, "a11y_floating_menu_fling_spring_animations")
 
     // 1700 - clipboard
     @JvmField val CLIPBOARD_OVERLAY_REFACTOR = releasedFlag(1700, "clipboard_overlay_refactor")
@@ -418,6 +440,10 @@ object Flags {
     // 2000 - device controls
     @Keep @JvmField val USE_APP_PANELS = unreleasedFlag(2000, "use_app_panels", teamfood = true)
 
+    @JvmField
+    val APP_PANELS_ALL_APPS_ALLOWED =
+        unreleasedFlag(2001, "app_panels_all_apps_allowed", teamfood = true)
+
     // 2100 - Falsing Manager
     @JvmField val FALSING_FOR_LONG_TAPS = releasedFlag(2100, "falsing_for_long_taps")
 
@@ -429,6 +455,9 @@ object Flags {
 
     // 2300 - stylus
     @JvmField val TRACK_STYLUS_EVER_USED = unreleasedFlag(2300, "track_stylus_ever_used")
+    @JvmField val ENABLE_STYLUS_CHARGING_UI = unreleasedFlag(2301, "enable_stylus_charging_ui")
+    @JvmField
+    val ENABLE_USI_BATTERY_NOTIFICATIONS = unreleasedFlag(2302, "enable_usi_battery_notifications")
 
     // 2400 - performance tools and debugging info
     // TODO(b/238923086): Tracking Bug
@@ -440,6 +469,11 @@ object Flags {
     // TODO(b/261538825): Tracking Bug
     @JvmField
     val OUTPUT_SWITCHER_ADVANCED_LAYOUT = unreleasedFlag(2500, "output_switcher_advanced_layout")
+    @JvmField
+    val OUTPUT_SWITCHER_ROUTES_PROCESSING =
+        unreleasedFlag(2501, "output_switcher_routes_processing")
+    @JvmField
+    val OUTPUT_SWITCHER_DEVICE_STATUS = unreleasedFlag(2502, "output_switcher_device_status")
 
     // TODO(b259590361): Tracking bug
     val EXPERIMENTAL_FLAG = unreleasedFlag(2, "exp_flag_release")

@@ -242,8 +242,6 @@ interface ISub {
 
     int getDefaultSubId();
 
-    int clearSubInfo();
-
     int getPhoneId(int subId);
 
     /**
@@ -274,11 +272,6 @@ interface ISub {
     boolean isSubscriptionEnabled(int subId);
 
     int getEnabledSubscriptionId(int slotIndex);
-    /**
-     * Get the SIM state for the slot index
-     * @return SIM state as the ordinal of IccCardConstants.State
-     */
-    int getSimStateForSlotIndex(int slotIndex);
 
     boolean isActiveSubId(int subId, String callingPackage, String callingFeatureId);
 

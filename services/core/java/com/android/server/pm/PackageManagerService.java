@@ -15,6 +15,7 @@
 
 package com.android.server.pm;
 
+import static android.Manifest.permission.GET_APP_METADATA;
 import static android.Manifest.permission.MANAGE_DEVICE_ADMINS;
 import static android.Manifest.permission.SET_HARMFUL_APP_WARNINGS;
 import static android.app.AppOpsManager.MODE_IGNORED;
@@ -194,6 +195,7 @@ import com.android.server.ServiceThread;
 import com.android.server.SystemConfig;
 import com.android.server.Watchdog;
 import com.android.server.apphibernation.AppHibernationManagerInternal;
+import com.android.server.art.DexUseManagerLocal;
 import com.android.server.compat.CompatChange;
 import com.android.server.compat.PlatformCompat;
 import com.android.server.pm.Installer.InstallerException;
@@ -213,6 +215,7 @@ import com.android.server.pm.permission.LegacyPermissionManagerService;
 import com.android.server.pm.permission.PermissionManagerService;
 import com.android.server.pm.permission.PermissionManagerServiceInternal;
 import com.android.server.pm.pkg.AndroidPackage;
+import com.android.server.pm.pkg.PackageState;
 import com.android.server.pm.pkg.PackageStateInternal;
 import com.android.server.pm.pkg.PackageUserState;
 import com.android.server.pm.pkg.PackageUserStateInternal;
@@ -557,6 +560,8 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
 
     static final String RANDOM_DIR_PREFIX = "~~";
     static final char RANDOM_CODEPATH_PREFIX = '-';
+
+    static final String APP_METADATA_FILE_NAME = "app.metadata";
 
     final Handler mHandler;
     final Handler mBackgroundHandler;
@@ -1539,7 +1544,10 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                 (i, pm) -> new BackgroundDexOptService(i.getContext(), i.getDexManager(), pm),
                 (i, pm) -> IBackupManager.Stub.asInterface(ServiceManager.getService(
                         Context.BACKUP_SERVICE)),
-                (i, pm) -> new SharedLibrariesImpl(pm, i));
+                (i, pm) -> new SharedLibrariesImpl(pm, i),
+                (i, pm) -> new CrossProfileIntentFilterHelper(i.getSettings(),
+                        i.getUserManagerService(), i.getLock(), i.getUserManagerInternal(),
+                        context));
 
         if (Build.VERSION.SDK_INT <= 0) {
             Slog.w(TAG, "**** ro.build.version.sdk not set!");
@@ -2032,13 +2040,21 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
             final WatchedArrayMap<String, PackageSetting> packageSettings =
                 mSettings.getPackagesLocked();
 
-            // Save the names of pre-existing packages prior to scanning, so we can determine
-            // which system packages are completely new due to an upgrade.
             if (isDeviceUpgrading()) {
+                // Save the names of pre-existing packages prior to scanning, so we can determine
+                // which system packages are completely new due to an upgrade.
                 mExistingPackages = new ArraySet<>(packageSettings.size());
                 for (PackageSetting ps : packageSettings.values()) {
                     mExistingPackages.add(ps.getPackageName());
                 }
+
+                // Triggering {@link com.android.server.pm.crossprofile.
+                // CrossProfileIntentFilterHelper.updateDefaultCrossProfileIntentFilter} to update
+                // {@link  CrossProfileIntentFilter}s between eligible users and their parent
+                t.traceBegin("cross profile intent filter update");
+                mInjector.getCrossProfileIntentFilterHelper()
+                        .updateDefaultCrossProfileIntentFilter();
+                t.traceEnd();
             }
 
             mCacheDir = PackageManagerServiceUtils.preparePackageParserCache(
@@ -3102,6 +3118,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         info.mRemovedUsers = new int[] {userId};
         info.mBroadcastUsers = new int[] {userId};
         info.mUid = UserHandle.getUid(userId, packageState.getAppId());
+        info.mRemovedPackageVersionCode = packageState.getVersionCode();
         info.sendPackageRemovedBroadcasts(true /*killApp*/, false /*removedBySystem*/);
     }
 
@@ -3278,6 +3295,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         return isPackageDeviceAdmin(packageName, UserHandle.USER_ALL);
     }
 
+    // TODO(b/261957226): centralise this logic in DPM
     boolean isPackageDeviceAdmin(String packageName, int userId) {
         final IDevicePolicyManager dpm = getDevicePolicyManager();
         try {
@@ -3304,11 +3322,32 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                     if (dpm.packageHasActiveAdmins(packageName, users[i])) {
                         return true;
                     }
+                    if (isDeviceManagementRoleHolder(packageName, users[i])) {
+                        return true;
+                    }
                 }
             }
         } catch (RemoteException e) {
         }
         return false;
+    }
+
+    private boolean isDeviceManagementRoleHolder(String packageName, int userId) {
+        return Objects.equals(packageName, getDevicePolicyManagementRoleHolderPackageName(userId));
+    }
+
+    @Nullable
+    private String getDevicePolicyManagementRoleHolderPackageName(int userId) {
+        return Binder.withCleanCallingIdentity(() -> {
+            RoleManager roleManager = mContext.getSystemService(RoleManager.class);
+            List<String> roleHolders =
+                    roleManager.getRoleHoldersAsUser(
+                            RoleManager.ROLE_DEVICE_POLICY_MANAGEMENT, UserHandle.of(userId));
+            if (roleHolders.isEmpty()) {
+                return null;
+            }
+            return roleHolders.get(0);
+        });
     }
 
     /** Returns the device policy manager interface. */
@@ -3446,6 +3485,11 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
 
         PackageManagerServiceUtils.enforceShellRestriction(mInjector.getUserManagerInternal(),
                 UserManager.DISALLOW_DEBUGGING_FEATURES, callingUid, sourceUserId);
+        if (!intentFilter.checkDataPathAndSchemeSpecificParts()) {
+            EventLog.writeEvent(0x534e4554, "246749936", callingUid);
+            throw new IllegalArgumentException("Invalid intent data paths or scheme specific parts"
+                    + " in the filter.");
+        }
         if (intentFilter.countActions() == 0) {
             Slog.w(TAG, "Cannot set a crossProfile intent filter with no filter actions");
             return;
@@ -3470,6 +3514,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         }
         scheduleWritePackageRestrictions(sourceUserId);
     }
+
 
     // Enforcing that callingUid is owning pkg on userId
     private void enforceOwnerRights(@NonNull Computer snapshot, String pkg, int callingUid) {
@@ -4662,21 +4707,9 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
             enforceOwnerRights(snapshot, ownerPackage, callingUid);
             PackageManagerServiceUtils.enforceShellRestriction(mInjector.getUserManagerInternal(),
                     UserManager.DISALLOW_DEBUGGING_FEATURES, callingUid, sourceUserId);
-            synchronized (mLock) {
-                CrossProfileIntentResolver resolver =
-                        mSettings.editCrossProfileIntentResolverLPw(sourceUserId);
-                ArraySet<CrossProfileIntentFilter> set =
-                        new ArraySet<>(resolver.filterSet());
-                for (CrossProfileIntentFilter filter : set) {
-                    //Only remove if calling user is allowed based on access control of
-                    // {@link CrossProfileIntentFilter}
-                    if (filter.getOwnerPackage().equals(ownerPackage)
-                            && mUserManager.isCrossProfileIntentFilterAccessible(sourceUserId,
-                            filter.mTargetUserId, /* addCrossProfileIntentFilter */ false)) {
-                        resolver.removeFilter(filter);
-                    }
-                }
-            }
+            PackageManagerService.this.mInjector.getCrossProfileIntentFilterHelper()
+                            .clearCrossProfileIntentFilters(sourceUserId, ownerPackage,
+                                    null);
             scheduleWritePackageRestrictions(sourceUserId);
         }
 
@@ -5058,6 +5091,20 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         }
 
         @Override
+        public String getAppMetadataPath(String packageName, int userId) {
+            mContext.enforceCallingOrSelfPermission(GET_APP_METADATA, "getAppMetadataPath");
+            final int callingUid = Binder.getCallingUid();
+            final Computer snapshot = snapshotComputer();
+            final PackageStateInternal ps = snapshot.getPackageStateForInstalledAndFiltered(
+                    packageName, callingUid, userId);
+            if (ps == null) {
+                throw new ParcelableException(
+                        new PackageManager.NameNotFoundException(packageName));
+            }
+            return new File(ps.getPathString(), APP_METADATA_FILE_NAME).getAbsolutePath();
+        }
+
+        @Override
         public String getPermissionControllerPackageName() {
             final int callingUid = Binder.getCallingUid();
             final int callingUserId = UserHandle.getUserId(callingUid);
@@ -5332,18 +5379,70 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                 return;
             }
 
-            // TODO(b/254043366): Call `ArtManagerLocal.notifyDexLoad`.
+            UserHandle user = Binder.getCallingUserHandle();
+            int userId = user.getIdentifier();
 
-            int userId = UserHandle.getCallingUserId();
-            ApplicationInfo ai =
-                    snapshot.getApplicationInfo(loadingPackageName, /*flags*/ 0, userId);
-            if (ai == null) {
-                Slog.w(PackageManagerService.TAG, "Loading a package that does not exist for the calling user. package="
-                        + loadingPackageName + ", user=" + userId);
-                return;
+            // Proxy the call to either ART Service or the legacy implementation. If the
+            // implementation is switched with the system property, the dex usage info will be
+            // incomplete, with these effects:
+            //
+            // -  Shared dex files may temporarily get compiled for private use.
+            // -  Secondary dex files may not get compiled at all.
+            // -  Stale compiled artifacts for secondary dex files may not get cleaned up.
+            //
+            // This recovers in the first background dexopt after the depending apps have been
+            // loaded for the first time.
+
+            DexUseManagerLocal dexUseManager = DexOptHelper.getDexUseManagerLocal();
+            if (dexUseManager != null) {
+                // TODO(chiuwinson): Retrieve filtered snapshot from Computer instance instead.
+                try (PackageManagerLocal.FilteredSnapshot filteredSnapshot =
+                                LocalManagerRegistry.getManager(PackageManagerLocal.class)
+                                        .withFilteredSnapshot(callingUid, user)) {
+                    if (loaderIsa != null) {
+                        // Check that loaderIsa agrees with the ISA that dexUseManager will
+                        // determine.
+                        PackageState loadingPkgState =
+                                filteredSnapshot.getPackageState(loadingPackageName);
+                        // If we don't find the loading package just pass it through and let
+                        // dexUseManager throw on it.
+                        if (loadingPkgState != null) {
+                            String loadingPkgAbi = loadingPkgState.getPrimaryCpuAbi();
+                            if (loadingPkgAbi == null) {
+                                loadingPkgAbi = Build.SUPPORTED_ABIS[0];
+                            }
+                            String loadingPkgDexCodeIsa = InstructionSets.getDexCodeInstructionSet(
+                                    VMRuntime.getInstructionSet(loadingPkgAbi));
+                            if (!loaderIsa.equals(loadingPkgDexCodeIsa)) {
+                                // TODO(b/251903639): Make this crash to surface this problem
+                                // better.
+                                Slog.w(PackageManagerService.TAG,
+                                        "Invalid loaderIsa in notifyDexLoad call from "
+                                                + loadingPackageName + ", uid " + callingUid
+                                                + ": expected " + loadingPkgDexCodeIsa + ", got "
+                                                + loaderIsa);
+                                return;
+                            }
+                        }
+                    }
+
+                    // This is called from binder, so exceptions thrown here are caught and handled
+                    // by it.
+                    dexUseManager.notifyDexContainersLoaded(
+                            filteredSnapshot, loadingPackageName, classLoaderContextMap);
+                }
+            } else {
+                ApplicationInfo ai =
+                        snapshot.getApplicationInfo(loadingPackageName, /*flags*/ 0, userId);
+                if (ai == null) {
+                    Slog.w(PackageManagerService.TAG,
+                            "Loading a package that does not exist for the calling user. package="
+                                    + loadingPackageName + ", user=" + userId);
+                    return;
+                }
+                mDexManager.notifyDexLoad(ai, classLoaderContextMap, loaderIsa, userId,
+                        Process.isIsolated(callingUid));
             }
-            mDexManager.notifyDexLoad(ai, classLoaderContextMap, loaderIsa, userId,
-                    Process.isIsolated(callingUid));
         }
 
         @Override

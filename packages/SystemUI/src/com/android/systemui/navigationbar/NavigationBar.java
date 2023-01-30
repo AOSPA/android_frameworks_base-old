@@ -847,6 +847,11 @@ public class NavigationBar extends ViewController<NavigationBarView> implements 
             refreshLayout(ld);
         }
         repositionNavigationBar(rotation);
+        // NOTE(b/260220098): In some cases, the recreated nav bar will already have the right
+        // configuration, which means that NavBarView will not receive a configuration change to
+        // propagate to EdgeBackGestureHandler (which is injected into this and NBV). As such, we
+        // should also force-update the gesture handler to ensure it updates to the right bounds
+        mEdgeBackGestureHandler.onConfigurationChanged(newConfig);
         if (canShowSecondaryHandle()) {
             if (rotation != mCurrentRotation) {
                 mCurrentRotation = rotation;
@@ -1305,8 +1310,10 @@ public class NavigationBar extends ViewController<NavigationBarView> implements 
     }
 
     private void onVerticalChanged(boolean isVertical) {
-        mCentralSurfacesOptionalLazy.get().ifPresent(statusBar ->
-                statusBar.getNotificationPanelViewController().setQsScrimEnabled(!isVertical));
+        Optional<CentralSurfaces> cs = mCentralSurfacesOptionalLazy.get();
+        if (cs.isPresent() && cs.get().getNotificationPanelViewController() != null) {
+            cs.get().getNotificationPanelViewController().setQsScrimEnabled(!isVertical);
+        }
     }
 
     private boolean onNavigationTouch(View v, MotionEvent event) {

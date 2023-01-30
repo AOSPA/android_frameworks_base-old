@@ -145,6 +145,24 @@ public final class DisplayDeviceConfigTest {
         assertArrayEquals(new float[]{23, 24, 25},
                 mDisplayDeviceConfig.getAmbientDarkeningPercentagesIdle(), ZERO_DELTA);
 
+        assertEquals(75, mDisplayDeviceConfig.getDefaultLowRefreshRate());
+        assertEquals(90, mDisplayDeviceConfig.getDefaultHighRefreshRate());
+        assertArrayEquals(new int[]{45, 55},
+                mDisplayDeviceConfig.getLowDisplayBrightnessThresholds());
+        assertArrayEquals(new int[]{50, 60},
+                mDisplayDeviceConfig.getLowAmbientBrightnessThresholds());
+        assertArrayEquals(new int[]{65, 75},
+                mDisplayDeviceConfig.getHighDisplayBrightnessThresholds());
+        assertArrayEquals(new int[]{70, 80},
+                mDisplayDeviceConfig.getHighAmbientBrightnessThresholds());
+
+        assertEquals("sensor_12345",
+                mDisplayDeviceConfig.getScreenOffBrightnessSensor().type);
+        assertEquals("Sensor 12345",
+                mDisplayDeviceConfig.getScreenOffBrightnessSensor().name);
+
+        assertArrayEquals(new int[]{-1, 10, 20, 30, 40},
+                mDisplayDeviceConfig.getScreenOffBrightnessSensorValueToLux());
 
         // Todo(brup): Add asserts for BrightnessThrottlingData, DensityMapping,
         // HighBrightnessModeData AmbientLightSensor, RefreshRateLimitations and ProximitySensor.
@@ -207,8 +225,8 @@ public final class DisplayDeviceConfigTest {
                 mDisplayDeviceConfig.getAmbientDarkeningLevelsIdle(), ZERO_DELTA);
         assertArrayEquals(new float[]{29, 30, 31},
                 mDisplayDeviceConfig.getAmbientDarkeningPercentagesIdle(), ZERO_DELTA);
-        assertEquals(mDisplayDeviceConfig.getDefaultRefreshRate(), DEFAULT_REFRESH_RATE);
-        assertEquals(mDisplayDeviceConfig.getDefaultPeakRefreshRate(), DEFAULT_PEAK_REFRESH_RATE);
+        assertEquals(mDisplayDeviceConfig.getDefaultLowRefreshRate(), DEFAULT_REFRESH_RATE);
+        assertEquals(mDisplayDeviceConfig.getDefaultHighRefreshRate(), DEFAULT_PEAK_REFRESH_RATE);
         assertArrayEquals(mDisplayDeviceConfig.getLowDisplayBrightnessThresholds(),
                 LOW_BRIGHTNESS_THRESHOLD_OF_PEAK_REFRESH_RATE);
         assertArrayEquals(mDisplayDeviceConfig.getLowAmbientBrightnessThresholds(),
@@ -217,6 +235,7 @@ public final class DisplayDeviceConfigTest {
                 HIGH_BRIGHTNESS_THRESHOLD_OF_PEAK_REFRESH_RATE);
         assertArrayEquals(mDisplayDeviceConfig.getHighAmbientBrightnessThresholds(),
                 HIGH_AMBIENT_THRESHOLD_OF_PEAK_REFRESH_RATE);
+
         // Todo(brup): Add asserts for BrightnessThrottlingData, DensityMapping,
         // HighBrightnessModeData AmbientLightSensor, RefreshRateLimitations and ProximitySensor.
     }
@@ -268,6 +287,10 @@ public final class DisplayDeviceConfigTest {
                 +       "<thermalStatusLimit>light</thermalStatusLimit>\n"
                 +       "<allowInLowPowerMode>false</allowInLowPowerMode>\n"
                 +   "</highBrightnessMode>\n"
+                +   "<screenOffBrightnessSensor>\n"
+                +       "<type>sensor_12345</type>\n"
+                +       "<name>Sensor 12345</name>\n"
+                +   "</screenOffBrightnessSensor>\n"
                 +   "<ambientBrightnessChangeThresholds>\n"
                 +       "<brighteningThresholds>\n"
                 +           "<minimum>10</minimum>\n"
@@ -416,6 +439,45 @@ public final class DisplayDeviceConfigTest {
                 +           "</brightnessThrottlingPoint>\n"
                 +       "</brightnessThrottlingMap>\n"
                 +   "</thermalThrottling>\n"
+                +   "<refreshRate>\n"
+                +       "<lowerBlockingZoneConfigs>\n"
+                +           "<defaultRefreshRate>75</defaultRefreshRate>\n"
+                +           "<blockingZoneThreshold>\n"
+                +               "<displayBrightnessPoint>\n"
+                +                   "<lux>50</lux>\n"
+                // This number will be rounded to integer when read by the system
+                +                   "<nits>45.3</nits>\n"
+                +               "</displayBrightnessPoint>\n"
+                +               "<displayBrightnessPoint>\n"
+                +                   "<lux>60</lux>\n"
+                // This number will be rounded to integer when read by the system
+                +                   "<nits>55.2</nits>\n"
+                +               "</displayBrightnessPoint>\n"
+                +           "</blockingZoneThreshold>\n"
+                +       "</lowerBlockingZoneConfigs>\n"
+                +       "<higherBlockingZoneConfigs>\n"
+                +           "<defaultRefreshRate>90</defaultRefreshRate>\n"
+                +           "<blockingZoneThreshold>\n"
+                +               "<displayBrightnessPoint>\n"
+                +                   "<lux>70</lux>\n"
+                // This number will be rounded to integer when read by the system
+                +                   "<nits>65.6</nits>\n"
+                +               "</displayBrightnessPoint>\n"
+                +               "<displayBrightnessPoint>\n"
+                +                   "<lux>80</lux>\n"
+                // This number will be rounded to integer when read by the system
+                +                   "<nits>75</nits>\n"
+                +               "</displayBrightnessPoint>\n"
+                +           "</blockingZoneThreshold>\n"
+                +       "</higherBlockingZoneConfigs>\n"
+                +   "</refreshRate>\n"
+                +   "<screenOffBrightnessSensorValueToLux>\n"
+                +       "<item>-1</item>\n"
+                +       "<item>10</item>\n"
+                +       "<item>20</item>\n"
+                +       "<item>30</item>\n"
+                +       "<item>40</item>\n"
+                +   "</screenOffBrightnessSensorValueToLux>\n"
                 + "</displayConfiguration>\n";
     }
 
@@ -493,6 +555,7 @@ public final class DisplayDeviceConfigTest {
         when(mResources.getIntArray(
                 R.array.config_highAmbientBrightnessThresholdsOfFixedRefreshRate))
                 .thenReturn(HIGH_AMBIENT_THRESHOLD_OF_PEAK_REFRESH_RATE);
+
         mDisplayDeviceConfig = DisplayDeviceConfig.create(mContext, true);
     }
 

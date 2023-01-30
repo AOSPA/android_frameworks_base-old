@@ -71,7 +71,6 @@ import android.os.PersistableBundle;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.SystemProperties;
-import android.os.UserHandle;
 import android.os.WorkSource;
 import android.provider.Settings.SettingNotFoundException;
 import android.service.carrier.CarrierIdentifier;
@@ -127,7 +126,6 @@ import com.android.internal.telephony.IccLogicalChannelRequest;
 import com.android.internal.telephony.OperatorInfo;
 import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.RILConstants;
-import com.android.internal.telephony.SmsApplication;
 import com.android.telephony.Rlog;
 
 import java.io.IOException;
@@ -389,6 +387,9 @@ public class TelephonyManager {
 
     /** @hide */
     public static final int INVALID_PORT_INDEX = -1;
+
+    /** @hide */
+    public static final String PROPERTY_ENABLE_NULL_CIPHER_TOGGLE = "enable_null_cipher_toggle";
 
     private final Context mContext;
     private final int mSubId;
@@ -2969,7 +2970,7 @@ public class TelephonyManager {
     public static final int NETWORK_TYPE_HSPA = TelephonyProtoEnums.NETWORK_TYPE_HSPA; // = 10.
     /**
      * Current network is iDen
-     * @deprecated Legacy network type no longer being used.
+     * @deprecated Legacy network type no longer being used starting in Android U.
      */
     @Deprecated
     public static final int NETWORK_TYPE_IDEN = TelephonyProtoEnums.NETWORK_TYPE_IDEN; // = 11.
@@ -3590,7 +3591,7 @@ public class TelephonyManager {
                     "state as absent");
             return SIM_STATE_ABSENT;
         }
-        return SubscriptionManager.getSimStateForSlotIndex(slotIndex);
+        return getSimStateForSlotIndex(slotIndex);
     }
 
     /**
@@ -3737,9 +3738,7 @@ public class TelephonyManager {
     @Deprecated
     public @SimState int getSimApplicationState(int physicalSlotIndex) {
         int activePort = getFirstActivePortIndex(physicalSlotIndex);
-        int simState =
-                SubscriptionManager.getSimStateForSlotIndex(getLogicalSlotIndex(physicalSlotIndex,
-                        activePort));
+        int simState = getSimStateForSlotIndex(getLogicalSlotIndex(physicalSlotIndex, activePort));
         return getSimApplicationStateFromSimState(simState);
     }
 
@@ -3765,9 +3764,7 @@ public class TelephonyManager {
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
     @RequiresFeature(PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION)
     public @SimState int getSimApplicationState(int physicalSlotIndex, int portIndex) {
-        int simState =
-                SubscriptionManager.getSimStateForSlotIndex(getLogicalSlotIndex(physicalSlotIndex,
-                        portIndex));
+        int simState = getSimStateForSlotIndex(getLogicalSlotIndex(physicalSlotIndex, portIndex));
         return getSimApplicationStateFromSimState(simState);
     }
 
@@ -3836,7 +3833,7 @@ public class TelephonyManager {
      */
     @RequiresFeature(PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION)
     public @SimState int getSimState(int slotIndex) {
-        int simState = SubscriptionManager.getSimStateForSlotIndex(slotIndex);
+        int simState = getSimStateForSlotIndex(slotIndex);
         if (simState == SIM_STATE_LOADED) {
             simState = SIM_STATE_READY;
         }
@@ -14001,7 +13998,7 @@ public class TelephonyManager {
      * If used, will be converted to {@link #NETWORK_TYPE_BITMASK_LTE}.
      * network type bitmask indicating the support of radio tech LTE CA (carrier aggregation).
      *
-     * @deprecated Please use {@link #NETWORK_TYPE_BITMASK_LTE} instead.
+     * @deprecated Please use {@link #NETWORK_TYPE_BITMASK_LTE} instead. Deprecated in Android U.
      */
     @Deprecated
     public static final long NETWORK_TYPE_BITMASK_LTE_CA = (1 << (NETWORK_TYPE_LTE_CA -1));
@@ -17781,5 +17778,304 @@ public class TelephonyManager {
             Rlog.e(TAG, "getSmscIdentity(): NullPointerException: " + ex.getMessage());
         }
         return null;
+    }
+
+    /**
+     * Returns a constant indicating the state of sim for the slot index.
+     *
+     * @param slotIndex Logical SIM slot index.
+     *
+     * @see TelephonyManager.SimState
+     *
+     * @hide
+     */
+    @SimState
+    public static int getSimStateForSlotIndex(int slotIndex) {
+        try {
+            ITelephony telephony = ITelephony.Stub.asInterface(
+                    TelephonyFrameworkInitializer
+                            .getTelephonyServiceManager()
+                            .getTelephonyServiceRegisterer()
+                            .get());
+            if (telephony != null) {
+                return telephony.getSimStateForSlotIndex(slotIndex);
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error in getSimStateForSlotIndex: " + e);
+        }
+        return TelephonyManager.SIM_STATE_UNKNOWN;
+    }
+
+    /**
+     * Set the UE's ability to accept/reject null ciphered and null integrity-protected connections.
+     *
+     * The modem is required to ignore this in case of an emergency call.
+     *
+     * <p>Requires permission: android.Manifest.MODIFY_PHONE_STATE</p>
+     *
+     * @param enabled if null ciphered and null integrity protected connections are permitted
+     * @throws IllegalStateException if the Telephony process is not currently available
+     * @throws SecurityException if the caller does not have the required privileges
+     * @throws UnsupportedOperationException if the modem does not support disabling null ciphers.
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
+    public void setNullCipherAndIntegrityEnabled(boolean enabled) {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                telephony.setNullCipherAndIntegrityEnabled(enabled);
+            } else {
+                throw new IllegalStateException("telephony service is null.");
+            }
+        } catch (RemoteException ex) {
+            Rlog.e(TAG, "setNullCipherAndIntegrityEnabled RemoteException", ex);
+            ex.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Get the value of the global preference for null cipher and integriy enablement.
+     * Note: This does not return the state of the modem, only the persisted global preference.
+     *
+     * <p>Requires permission: android.Manifest.READ_PHONE_STATE</p>
+     *
+     * @throws IllegalStateException if the Telephony process is not currently available
+     * @throws SecurityException if the caller does not have the required privileges
+     * @throws UnsupportedOperationException if the modem does not support disabling null ciphers.
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.READ_PHONE_STATE)
+    public boolean isNullCipherAndIntegrityPreferenceEnabled() {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                return telephony.isNullCipherAndIntegrityPreferenceEnabled();
+            } else {
+                throw new IllegalStateException("telephony service is null.");
+            }
+        } catch (RemoteException ex) {
+            Rlog.e(TAG, "isNullCipherAndIntegrityPreferenceEnabled RemoteException", ex);
+            ex.rethrowFromSystemServer();
+        }
+        return true;
+    }
+
+    /**
+     * Get current cell broadcast message identifier ranges.
+     *
+     * @throws SecurityException if the caller does not have the required permission
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_CELL_BROADCASTS)
+    @NonNull
+    public List<CellBroadcastIdRange> getCellBroadcastIdRanges() {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                return telephony.getCellBroadcastIdRanges(getSubId());
+            } else {
+                throw new IllegalStateException("telephony service is null.");
+            }
+        } catch (RemoteException ex) {
+            ex.rethrowFromSystemServer();
+        }
+        return new ArrayList<>();
+    }
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(prefix = {"CELLBROADCAST_RESULT_"}, value = {
+            CELLBROADCAST_RESULT_UNKNOWN,
+            CELLBROADCAST_RESULT_SUCCESS,
+            CELLBROADCAST_RESULT_UNSUPPORTED,
+            CELLBROADCAST_RESULT_FAIL_CONFIG,
+            CELLBROADCAST_RESULT_FAIL_ACTIVATION})
+    public @interface CellBroadcastResult {}
+
+    /**
+     * The result of the cell broadcast request is unknown
+     * @hide
+     */
+    @SystemApi
+    public static final int CELLBROADCAST_RESULT_UNKNOWN = -1;
+
+    /**
+     * The cell broadcast request is successful.
+     * @hide
+     */
+    @SystemApi
+    public static final int CELLBROADCAST_RESULT_SUCCESS = 0;
+
+    /**
+     * The cell broadcast request is not supported.
+     * @hide
+     */
+    @SystemApi
+    public static final int CELLBROADCAST_RESULT_UNSUPPORTED = 1;
+
+    /**
+     * The cell broadcast request is failed due to the error to set config
+     * @hide
+     */
+    @SystemApi
+    public static final int CELLBROADCAST_RESULT_FAIL_CONFIG = 2;
+
+    /**
+     * The cell broadcast request is failed due to the error to set activation
+     * @hide
+     */
+    @SystemApi
+    public static final int CELLBROADCAST_RESULT_FAIL_ACTIVATION = 3;
+
+    /**
+     * Set reception of cell broadcast messages with the list of the given ranges
+     *
+     * <p>The ranges set previously will be overridden by the new one. Empty list
+     * can be used to clear the ranges.
+     *
+     * @param ranges the list of {@link CellBroadcastIdRange} to be set.
+     * @param executor The {@link Executor} that will be used to call the callback.
+     * @param callback A callback called on the supplied {@link Executor} to notify
+     * the result when the operation completes.
+     * @throws SecurityException if the caller does not have the required permission
+     * @throws IllegalArgumentException when the ranges are invalid.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_CELL_BROADCASTS)
+    public void setCellBroadcastIdRanges(@NonNull List<CellBroadcastIdRange> ranges,
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull Consumer<Integer> callback) {
+        IIntegerConsumer consumer = callback == null ? null : new IIntegerConsumer.Stub() {
+            @Override
+            public void accept(int result) {
+                final long identity = Binder.clearCallingIdentity();
+                try {
+                    executor.execute(() -> callback.accept(result));
+                } finally {
+                    Binder.restoreCallingIdentity(identity);
+                }
+            }
+        };
+
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                telephony.setCellBroadcastIdRanges(getSubId(), ranges, consumer);
+            } else {
+                throw new IllegalStateException("telephony service is null.");
+            }
+        } catch (RemoteException ex) {
+            ex.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns whether the domain selection service is supported.
+     *
+     * <p>Requires Permission:
+     * {@link android.Manifest.permission#READ_PRIVILEGED_PHONE_STATE READ_PRIVILEGED_PHONE_STATE}.
+     *
+     * @return {@code true} if the domain selection service is supported.
+     * @hide
+     */
+    @TestApi
+    @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+    @RequiresFeature(PackageManager.FEATURE_TELEPHONY_CALLING)
+    public boolean isDomainSelectionSupported() {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                return telephony.isDomainSelectionSupported();
+            }
+        } catch (RemoteException ex) {
+            Rlog.w(TAG, "RemoteException", ex);
+        }
+        return false;
+    }
+
+    /**
+     * Returns the primary IMEI (International Mobile Equipment Identity) of the device as
+     * mentioned in GSMA TS.37. {@link #getImei(int)} returns the IMEI that belongs to the selected
+     * slotID whereas this API {@link #getPrimaryImei()} returns primary IMEI of the device.
+     * A single SIM device with only one IMEI will be set by default as primary IMEI.
+     * A multi-SIM device with multiple IMEIs will have one of the IMEIs set as primary as
+     * mentioned in GSMA TS37_2.2_REQ_8.
+     *
+     * <p>Requires one of the following permissions
+     * <ul>
+     *     <li>If the calling app has been granted the READ_PRIVILEGED_PHONE_STATE permission; this
+     *     is a privileged permission that can only be granted to apps preloaded on the device.
+     *     <li>If the calling app is the device owner of a fully-managed device, a profile
+     *     owner of an organization-owned device, or their delegates (see {@link
+     *     android.app.admin.DevicePolicyManager#getEnrollmentSpecificId()}).
+     *     <li>If the calling app has carrier privileges (see {@link #hasCarrierPrivileges}) on any
+     *     active subscription.
+     *     <li>If the calling app is the default SMS role holder (see {@link
+     *     RoleManager#isRoleHeld(String)}).
+     *     <li>If the calling app has been granted the
+     *      {@link Manifest.permission#USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER} permission.
+     * </ul>
+     *
+     * @return Primary IMEI of type string
+     * @throws UnsupportedOperationException if the radio doesn't support this feature.
+     * @throws SecurityException if the caller does not have the required permission/privileges
+     */
+    @NonNull
+    @RequiresFeature(PackageManager.FEATURE_TELEPHONY_GSM)
+    public String getPrimaryImei() {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony == null) {
+                Rlog.e(TAG, "getPrimaryImei(): IPhoneSubInfo instance is NULL");
+                throw new IllegalStateException("Telephony service not available.");
+            }
+            return telephony.getPrimaryImei(getOpPackageName(), getAttributionTag());
+        } catch (RemoteException ex) {
+            Rlog.e(TAG, "getPrimaryImei() RemoteException : " + ex);
+            throw ex.rethrowAsRuntimeException();
+        }
+    }
+
+    /**
+     * Convert SIM state into string.
+     *
+     * @param state SIM state.
+     * @return SIM state in string format.
+     *
+     * @hide
+     */
+    @NonNull
+    public static String simStateToString(@SimState int state) {
+        switch (state) {
+            case TelephonyManager.SIM_STATE_UNKNOWN:
+                return "UNKNOWN";
+            case TelephonyManager.SIM_STATE_ABSENT:
+                return "ABSENT";
+            case TelephonyManager.SIM_STATE_PIN_REQUIRED:
+                return "PIN_REQUIRED";
+            case TelephonyManager.SIM_STATE_PUK_REQUIRED:
+                return "PUK_REQUIRED";
+            case TelephonyManager.SIM_STATE_NETWORK_LOCKED:
+                return "NETWORK_LOCKED";
+            case TelephonyManager.SIM_STATE_READY:
+                return "READY";
+            case TelephonyManager.SIM_STATE_NOT_READY:
+                return "NOT_READY";
+            case TelephonyManager.SIM_STATE_PERM_DISABLED:
+                return "PERM_DISABLED";
+            case TelephonyManager.SIM_STATE_CARD_IO_ERROR:
+                return "CARD_IO_ERROR";
+            case TelephonyManager.SIM_STATE_CARD_RESTRICTED:
+                return "CARD_RESTRICTED";
+            case TelephonyManager.SIM_STATE_LOADED:
+                return "LOADED";
+            case TelephonyManager.SIM_STATE_PRESENT:
+                return "PRESENT";
+            default:
+                return "UNKNOWN(" + state + ")";
+        }
     }
 }

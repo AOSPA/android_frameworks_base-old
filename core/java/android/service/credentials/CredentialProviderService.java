@@ -21,8 +21,12 @@ import static com.android.internal.util.function.pooled.PooledLambda.obtainMessa
 import android.annotation.CallSuper;
 import android.annotation.NonNull;
 import android.annotation.SdkConstant;
+import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
+import android.credentials.ClearCredentialStateException;
+import android.credentials.CreateCredentialException;
+import android.credentials.GetCredentialException;
 import android.os.CancellationSignal;
 import android.os.Handler;
 import android.os.IBinder;
@@ -45,10 +49,21 @@ public abstract class CredentialProviderService extends Service {
      * returned as part of the {@link BeginCreateCredentialResponse}
      *
      * <p>
-     * Type: {@link android.credentials.CreateCredentialRequest}
+     * Type: {@link android.service.credentials.CreateCredentialRequest}
      */
     public static final String EXTRA_CREATE_CREDENTIAL_REQUEST =
             "android.service.credentials.extra.CREATE_CREDENTIAL_REQUEST";
+
+    /**
+     * Intent extra: The {@link GetCredentialRequest} attached with
+     * the {@code pendingIntent} that is invoked when the user selects a {@link CredentialEntry}
+     * returned as part of the {@link BeginGetCredentialResponse}
+     *
+     * <p>
+     * Type: {@link GetCredentialRequest}
+     */
+    public static final String EXTRA_GET_CREDENTIAL_REQUEST =
+            "android.service.credentials.extra.GET_CREDENTIAL_REQUEST";
 
     /**
      * Intent extra: The result of a create flow operation, to be set on finish of the
@@ -58,8 +73,8 @@ public abstract class CredentialProviderService extends Service {
      * <p>
      * Type: {@link android.credentials.CreateCredentialResponse}
      */
-    public static final String EXTRA_CREATE_CREDENTIAL_RESULT =
-            "android.service.credentials.extra.CREATE_CREDENTIAL_RESULT";
+    public static final String EXTRA_CREATE_CREDENTIAL_RESPONSE =
+            "android.service.credentials.extra.CREATE_CREDENTIAL_RESPONSE";
 
     /**
      * Intent extra: The result of a get credential flow operation, to be set on finish of the
@@ -67,33 +82,48 @@ public abstract class CredentialProviderService extends Service {
      * a {@link CredentialEntry}.
      *
      * <p>
-     * Type: {@link android.credentials.Credential}
+     * Type: {@link android.credentials.GetCredentialResponse}
      */
-    public static final String EXTRA_CREDENTIAL_RESULT =
-            "android.service.credentials.extra.CREDENTIAL_RESULT";
+    public static final String EXTRA_GET_CREDENTIAL_RESPONSE =
+            "android.service.credentials.extra.GET_CREDENTIAL_RESPONSE";
 
     /**
      * Intent extra: The result of an authentication flow, to be set on finish of the
      * {@link android.app.Activity} invoked through the {@link android.app.PendingIntent} set on
-     * a {@link GetCredentialsResponse}. This result should contain the actual content, including
-     * credential entries and action entries, to be shown on the selector.
+     * a {@link BeginGetCredentialResponse}. This result should contain the actual content,
+     * including credential entries and action entries, to be shown on the selector.
      *
      * <p>
      * Type: {@link CredentialsResponseContent}
      */
-    public static final String EXTRA_GET_CREDENTIALS_CONTENT_RESULT =
-            "android.service.credentials.extra.GET_CREDENTIALS_CONTENT_RESULT";
+    public static final String EXTRA_CREDENTIALS_RESPONSE_CONTENT =
+            "android.service.credentials.extra.CREDENTIALS_RESPONSE_CONTENT";
 
     /**
-     * Intent extra: The error result of any {@link android.app.PendingIntent} flow, to be set
-     * on finish of the corresponding {@link android.app.Activity}. This result should contain an
-     * error code, representing the error encountered by the provider.
+     * Intent extra: The failure exception set at the final stage of a get flow.
+     * This exception is set at the finishing result of the {@link android.app.Activity}
+     * invoked by the {@link PendingIntent} , when a user selects the {@link CredentialEntry}
+     * that contained the {@link PendingIntent} in question.
+     *
+     * <p>The result must be set through {@link android.app.Activity#setResult} as an intent extra
      *
      * <p>
-     * Type: {@link String}
+     * Type: {@link android.credentials.GetCredentialException}
      */
-    public static final String EXTRA_ERROR =
-            "android.service.credentials.extra.ERROR";
+    public static final String EXTRA_GET_CREDENTIAL_EXCEPTION =
+            "android.service.credentials.extra.GET_CREDENTIAL_EXCEPTION";
+
+    /**
+     * Intent extra: The failure exception set at the final stage of a create flow.
+     * This exception is set at the finishing result of the {@link android.app.Activity}
+     * invoked by the {@link PendingIntent} , when a user selects the {@link CreateEntry}
+     * that contained the {@link PendingIntent} in question.
+     *
+     * <p>
+     * Type: {@link android.credentials.CreateCredentialException}
+     */
+    public static final String EXTRA_CREATE_CREDENTIAL_EXCEPTION =
+            "android.service.credentials.extra.CREATE_CREDENTIAL_EXCEPTION";
 
     private static final String TAG = "CredProviderService";
 
@@ -127,21 +157,21 @@ public abstract class CredentialProviderService extends Service {
     }
 
     private final ICredentialProviderService mInterface = new ICredentialProviderService.Stub() {
-        @Override
-        public ICancellationSignal onGetCredentials(GetCredentialsRequest request,
-                IGetCredentialsCallback callback) {
+        public ICancellationSignal onBeginGetCredential(BeginGetCredentialRequest request,
+                IBeginGetCredentialCallback callback) {
             Objects.requireNonNull(request);
             Objects.requireNonNull(callback);
 
             ICancellationSignal transport = CancellationSignal.createTransport();
 
             mHandler.sendMessage(obtainMessage(
-                    CredentialProviderService::onGetCredentials,
+                    CredentialProviderService::onBeginGetCredential,
                     CredentialProviderService.this, request,
                     CancellationSignal.fromTransport(transport),
-                    new OutcomeReceiver<GetCredentialsResponse, CredentialProviderException>() {
+                    new OutcomeReceiver<BeginGetCredentialResponse,
+                            GetCredentialException>() {
                         @Override
-                        public void onResult(GetCredentialsResponse result) {
+                        public void onResult(BeginGetCredentialResponse result) {
                             try {
                                 callback.onSuccess(result);
                             } catch (RemoteException e) {
@@ -149,9 +179,9 @@ public abstract class CredentialProviderService extends Service {
                             }
                         }
                         @Override
-                        public void onError(CredentialProviderException e) {
+                        public void onError(GetCredentialException e) {
                             try {
-                                callback.onFailure(e.getErrorCode(), e.getMessage());
+                                callback.onFailure(e.errorType, e.getMessage());
                             } catch (RemoteException ex) {
                                 ex.rethrowFromSystemServer();
                             }
@@ -174,7 +204,7 @@ public abstract class CredentialProviderService extends Service {
                     CredentialProviderService.this, request,
                     CancellationSignal.fromTransport(transport),
                     new OutcomeReceiver<
-                            BeginCreateCredentialResponse, CredentialProviderException>() {
+                            BeginCreateCredentialResponse, CreateCredentialException>() {
                         @Override
                         public void onResult(BeginCreateCredentialResponse result) {
                             try {
@@ -184,9 +214,43 @@ public abstract class CredentialProviderService extends Service {
                             }
                         }
                         @Override
-                        public void onError(CredentialProviderException e) {
+                        public void onError(CreateCredentialException e) {
                             try {
-                                callback.onFailure(e.getErrorCode(), e.getMessage());
+                                callback.onFailure(e.errorType, e.getMessage());
+                            } catch (RemoteException ex) {
+                                ex.rethrowFromSystemServer();
+                            }
+                        }
+                    }
+            ));
+            return transport;
+        }
+
+        @Override
+        public ICancellationSignal onClearCredentialState(ClearCredentialStateRequest request,
+                IClearCredentialStateCallback callback) {
+            Objects.requireNonNull(request);
+            Objects.requireNonNull(callback);
+
+            ICancellationSignal transport = CancellationSignal.createTransport();
+
+            mHandler.sendMessage(obtainMessage(
+                    CredentialProviderService::onClearCredentialState,
+                    CredentialProviderService.this, request,
+                    CancellationSignal.fromTransport(transport),
+                    new OutcomeReceiver<Void, ClearCredentialStateException>() {
+                        @Override
+                        public void onResult(Void result) {
+                            try {
+                                callback.onSuccess();
+                            } catch (RemoteException e) {
+                                e.rethrowFromSystemServer();
+                            }
+                        }
+                        @Override
+                        public void onError(ClearCredentialStateException e) {
+                            try {
+                                callback.onFailure(e.errorType, e.getMessage());
                             } catch (RemoteException ex) {
                                 ex.rethrowFromSystemServer();
                             }
@@ -200,14 +264,27 @@ public abstract class CredentialProviderService extends Service {
     /**
      * Called by the android system to retrieve user credentials from the connected provider
      * service.
-     * @param request the credential request for the provider to handle
+     *
+     * <p>This API denotes a query stage request for getting user's credentials from a given
+     * credential provider. The request contains a list of
+     * {@link android.credentials.GetCredentialOption} that have parameters to be used for
+     * populating candidate credentials, as a list of {@link CredentialEntry} to be set
+     * on the {@link BeginGetCredentialResponse}. This list is then shown to the user on a
+     * selector.
+     *
+     * <p>If a {@link PendingIntent} is set on a {@link CredentialEntry}, and the user selects that
+     * entry, a {@link GetCredentialRequest} with all parameters needed to get the actual
+     * {@link android.credentials.Credential} will be sent as part of the {@link Intent} fired
+     * through the {@link PendingIntent}.
+     * @param request the request for the provider to handle
      * @param cancellationSignal signal for providers to listen to any cancellation requests from
      *                           the android system
      * @param callback object used to relay the response of the credentials request
      */
-    public abstract void onGetCredentials(@NonNull GetCredentialsRequest request,
+    public abstract void onBeginGetCredential(@NonNull BeginGetCredentialRequest request,
             @NonNull CancellationSignal cancellationSignal,
-            @NonNull OutcomeReceiver<GetCredentialsResponse, CredentialProviderException> callback);
+            @NonNull OutcomeReceiver<
+                    BeginGetCredentialResponse, GetCredentialException> callback);
 
     /**
      * Called by the android system to create a credential.
@@ -219,5 +296,27 @@ public abstract class CredentialProviderService extends Service {
     public abstract void onBeginCreateCredential(@NonNull BeginCreateCredentialRequest request,
             @NonNull CancellationSignal cancellationSignal,
             @NonNull OutcomeReceiver<BeginCreateCredentialResponse,
-                    CredentialProviderException> callback);
+                    CreateCredentialException> callback);
+
+    /**
+     * Called by the android system to clear the credential state.
+     *
+     * This api isinvoked by developers after users sign out of an app, with an intention to
+     * clear any stored credential session that providers have retained.
+     *
+     * As a provider, you must clear any credential state, if maintained. For e.g. a provider may
+     * have stored an active credential session that is used to limit or rank sign-in options for
+     * future credential retrieval flows. When a user signs out of the app, such state should be
+     * cleared and an exhaustive list of credentials must be presented to the user on subsequent
+     * credential retrieval flows.
+     *
+     * @param request The clear credential request for the provider to handle.
+     * @param cancellationSignal Signal for providers to listen to any cancellation requests from
+     *                           the android system.
+     * @param callback Object used to relay the result of the request.
+     */
+    public abstract void onClearCredentialState(@NonNull ClearCredentialStateRequest request,
+            @NonNull CancellationSignal cancellationSignal,
+            @NonNull OutcomeReceiver<Void,
+                    ClearCredentialStateException> callback);
 }

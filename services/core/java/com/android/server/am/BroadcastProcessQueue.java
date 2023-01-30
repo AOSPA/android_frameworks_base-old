@@ -183,6 +183,11 @@ class BroadcastProcessQueue {
     private String mCachedToString;
     private String mCachedToShortString;
 
+    /**
+     * The duration by which any broadcasts to this process need to be delayed
+     */
+    private long mForcedDelayedDurationMs;
+
     public BroadcastProcessQueue(@NonNull BroadcastConstants constants,
             @NonNull String processName, int uid) {
         this.constants = Objects.requireNonNull(constants);
@@ -275,7 +280,7 @@ class BroadcastProcessQueue {
      */
     @FunctionalInterface
     public interface BroadcastPredicate {
-        public boolean test(@NonNull BroadcastRecord r, int index);
+        boolean test(@NonNull BroadcastRecord r, int index);
     }
 
     /**
@@ -284,7 +289,7 @@ class BroadcastProcessQueue {
      */
     @FunctionalInterface
     public interface BroadcastConsumer {
-        public void accept(@NonNull BroadcastRecord r, int index);
+        void accept(@NonNull BroadcastRecord r, int index);
     }
 
     /**
@@ -418,6 +423,14 @@ class BroadcastProcessQueue {
     }
 
     /**
+     * Get package name of the first application loaded into this process.
+     */
+    @Nullable
+    public String getPackageName() {
+        return app == null ? null : app.getApplicationInfo().packageName;
+    }
+
+    /**
      * Set the currently active broadcast to the next pending broadcast.
      */
     public void makeActiveNextPending() {
@@ -520,15 +533,13 @@ class BroadcastProcessQueue {
     }
 
     public void traceActiveBegin() {
-        final int cookie = mActive.receivers.get(mActiveIndex).hashCode();
         Trace.asyncTraceForTrackBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
-                runningTraceTrackName, mActive.toShortString() + " scheduled", cookie);
+                runningTraceTrackName, mActive.toShortString() + " scheduled", hashCode());
     }
 
     public void traceActiveEnd() {
-        final int cookie = mActive.receivers.get(mActiveIndex).hashCode();
         Trace.asyncTraceForTrackEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER,
-                runningTraceTrackName, cookie);
+                runningTraceTrackName, hashCode());
     }
 
     /**
@@ -553,6 +564,10 @@ class BroadcastProcessQueue {
 
     public boolean isActive() {
         return mActive != null;
+    }
+
+    void forceDelayBroadcastDelivery(long delayedDurationMs) {
+        mForcedDelayedDurationMs = delayedDurationMs;
     }
 
     /**
@@ -729,6 +744,7 @@ class BroadcastProcessQueue {
     static final int REASON_BLOCKED = 4;
     static final int REASON_INSTRUMENTED = 5;
     static final int REASON_PERSISTENT = 6;
+    static final int REASON_FORCE_DELAYED = 7;
     static final int REASON_CONTAINS_FOREGROUND = 10;
     static final int REASON_CONTAINS_ORDERED = 11;
     static final int REASON_CONTAINS_ALARM = 12;
@@ -746,6 +762,7 @@ class BroadcastProcessQueue {
             REASON_BLOCKED,
             REASON_INSTRUMENTED,
             REASON_PERSISTENT,
+            REASON_FORCE_DELAYED,
             REASON_CONTAINS_FOREGROUND,
             REASON_CONTAINS_ORDERED,
             REASON_CONTAINS_ALARM,
@@ -767,6 +784,7 @@ class BroadcastProcessQueue {
             case REASON_BLOCKED: return "BLOCKED";
             case REASON_INSTRUMENTED: return "INSTRUMENTED";
             case REASON_PERSISTENT: return "PERSISTENT";
+            case REASON_FORCE_DELAYED: return "FORCE_DELAYED";
             case REASON_CONTAINS_FOREGROUND: return "CONTAINS_FOREGROUND";
             case REASON_CONTAINS_ORDERED: return "CONTAINS_ORDERED";
             case REASON_CONTAINS_ALARM: return "CONTAINS_ALARM";
@@ -796,6 +814,7 @@ class BroadcastProcessQueue {
      */
     private void updateRunnableAt() {
         final SomeArgs next = peekNextBroadcast();
+        mRunnableAtInvalidated = false;
         if (next != null) {
             final BroadcastRecord r = (BroadcastRecord) next.arg1;
             final int index = next.argi1;
@@ -809,7 +828,10 @@ class BroadcastProcessQueue {
                 return;
             }
 
-            if (mCountForeground > 0) {
+            if (mForcedDelayedDurationMs > 0) {
+                mRunnableAt = runnableAt + mForcedDelayedDurationMs;
+                mRunnableAtReason = REASON_FORCE_DELAYED;
+            } else if (mCountForeground > 0) {
                 mRunnableAt = runnableAt + constants.DELAY_URGENT_MILLIS;
                 mRunnableAtReason = REASON_CONTAINS_FOREGROUND;
             } else if (mCountInteractive > 0) {

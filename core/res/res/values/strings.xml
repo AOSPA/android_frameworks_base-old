@@ -139,9 +139,9 @@
     <!-- Displayed when a SIM PUK password is too short. -->
     <string name="invalidPuk">Type a PUK that is 8 numbers or longer.</string>
     <!-- Displayed to prompt the user to type the PUK password to unlock
-         the SIM card. -->
-    <string name="needPuk">Your SIM card is PUK-locked. Type the PUK code to unlock it.</string>
-    <string name="needPuk2">Type PUK2 to unblock SIM card.</string>
+         the SIM. -->
+    <string name="needPuk">Your SIM is PUK-locked. Type the PUK code to unlock it.</string>
+    <string name="needPuk2">Type PUK2 to unblock SIM.</string>
     <!-- Displayed when user attempts to change SIM PIN1 without enabling PIN1. -->
     <string name="enablePin">Unsuccessful, enable SIM/RUIM Lock.</string>
     <!-- Displayed when a SIM PIN/PUK is entered incorrectly. -->
@@ -1123,6 +1123,11 @@
     <string name="permlab_systemAlertWindow">This app can appear on top of other apps</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permdesc_systemAlertWindow">This app can appear on top of other apps or other parts of the screen. This may interfere with normal app usage and change the way that other apps appear.</string>
+
+    <!-- Title of hide overlay windows permission, which allows an app to hide overlay windows from other apps. -->
+    <string name="permlab_hideOverlayWindows">hide other apps overlays</string>
+    <!-- Description of hide overlay windows permission, which allows an app to prevent overlays from being drawn on top of it. [CHAR LIMIT=NONE] -->
+    <string name="permdesc_hideOverlayWindows">This app can request that the system hides overlays originating from apps from being shown on top of it.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_runInBackground">run in the background</string>
@@ -2531,23 +2536,23 @@
     <!-- Shown when face unlock failed multiple times so we're just using the backup -->
     <string name="faceunlock_multiple_failures">Maximum Face Unlock attempts exceeded</string>
 
-    <!-- Shown in the lock screen when there is no SIM card. -->
-    <string name="lockscreen_missing_sim_message_short">No SIM card</string>
-    <!-- Shown in the lock screen when there is no SIM card. -->
-    <string name="lockscreen_missing_sim_message" product="tablet">No SIM card in tablet.</string>
-    <!-- Shown in the lock screen when there is no SIM card. -->
-    <string name="lockscreen_missing_sim_message" product="tv">No SIM card in your Android TV device.</string>
-    <!-- Shown in the lock screen when there is no SIM card. -->
-    <string name="lockscreen_missing_sim_message" product="default">No SIM card in phone.</string>
-    <!-- Shown in the lock screen to ask the user to insert a SIM card. -->
-    <string name="lockscreen_missing_sim_instructions">Insert a SIM card.</string>
-    <!-- Shown in the lock screen to ask the user to insert a SIM card when sim is missing or not readable. -->
-    <string name="lockscreen_missing_sim_instructions_long">The SIM card is missing or not readable. Insert a SIM card.</string>
-    <!-- Shown in the lock screen when SIM card is permanently disabled. -->
-    <string name="lockscreen_permanent_disabled_sim_message_short">Unusable SIM card.</string>
-    <!-- Shown in the lock screen to inform the user to SIM card is permanently disabled. -->
-    <string name="lockscreen_permanent_disabled_sim_instructions">Your SIM card has been permanently disabled.\n
-    Contact your wireless service provider for another SIM card.</string>
+    <!-- Shown in the lock screen when there is no SIM. -->
+    <string name="lockscreen_missing_sim_message_short">No SIM</string>
+    <!-- Shown in the lock screen when there is no SIM. -->
+    <string name="lockscreen_missing_sim_message" product="tablet">No SIM in tablet.</string>
+    <!-- Shown in the lock screen when there is no SIM. -->
+    <string name="lockscreen_missing_sim_message" product="tv">No SIM in your Android TV device.</string>
+    <!-- Shown in the lock screen when there is no SIM. -->
+    <string name="lockscreen_missing_sim_message" product="default">No SIM in phone.</string>
+    <!-- Shown in the lock screen to ask the user to add a SIM. -->
+    <string name="lockscreen_missing_sim_instructions">Add a SIM.</string>
+    <!-- Shown in the lock screen to ask the user to add a SIM when sim is missing or not readable. -->
+    <string name="lockscreen_missing_sim_instructions_long">The SIM is missing or not readable. Add a SIM.</string>
+    <!-- Shown in the lock screen when SIM is permanently disabled. -->
+    <string name="lockscreen_permanent_disabled_sim_message_short">Unusable SIM.</string>
+    <!-- Shown in the lock screen to inform the user to SIM is permanently deactivated. -->
+    <string name="lockscreen_permanent_disabled_sim_instructions">Your SIM has been permanently deactivated.\n
+    Contact your wireless service provider for another SIM.</string>
 
     <!-- Shown on transport control of lockscreen. Pressing button goes to previous track. -->
     <string name="lockscreen_transport_prev_description">Previous track</string>
@@ -2574,17 +2579,17 @@
 
     <!-- When the user enters a wrong sim pin too many times, it becomes
          PUK locked (Pin Unlock Kode) -->
-    <string name="lockscreen_sim_puk_locked_message">SIM card is PUK-locked.</string>
+    <string name="lockscreen_sim_puk_locked_message">SIM is PUK-locked.</string>
     <!-- Shown in the lock screen when the SIM has become PUK locked and the user must call customer care to unlock it. -->
     <string name="lockscreen_sim_puk_locked_instructions">See the User Guide or contact Customer Care.</string>
 
     <!-- Shown in the lock screen to tell the user that their SIM is locked and they must unlock it. -->
-    <string name="lockscreen_sim_locked_message">SIM card is locked.</string>
+    <string name="lockscreen_sim_locked_message">SIM is locked.</string>
 
     <!-- For the unlock screen, When the user enters a sim unlock code, it takes a little while to check
          whether it is valid, and to unlock the sim if it is valid.  we display a
          progress dialog in the meantime.  this is the emssage. -->
-    <string name="lockscreen_sim_unlock_progress_dialog_message">Unlocking SIM card\u2026</string>
+    <string name="lockscreen_sim_unlock_progress_dialog_message">Unlocking SIM\u2026</string>
 
     <!-- For the unlock screen, Information message shown in dialog when user has too many failed attempts at
          drawing the unlock pattern -->
@@ -2824,229 +2829,8 @@
     <!-- Message in a javascript dialog asking if the user wishes to leave the current page -->
     <string name="js_dialog_before_unload"><xliff:g id="message">%s</xliff:g>\n\nAre you sure you want to navigate away from this page?</string>
 
-    <!-- Title of the WebView save password dialog.  If the user enters a password in a form on a website, a dialog will come up asking if they want to save the password. -->
-    <string name="save_password_label">Confirm</string>
-
-    <!-- Toast for double-tap -->
-    <string name="double_tap_toast">Tip: Double-tap to zoom in and out.</string>
-
-    <!-- Text to show in the auto complete drop down list on a text view when the WebView can auto fill the entire form, and the user has configured an AutoFill profile [CHAR-LIMIT=8] -->
-    <string name="autofill_this_form">Autofill</string>
-    <!-- Text to show in the auto complete drop down list on a text view when the WebView can auto fill the entire form but the user has not configured an AutoFill profile [CHAR-LIMIT=19] -->
-    <string name="setup_autofill">Set up Autofill</string>
-
     <!-- Title of fullscreen autofill window, including the name of which autofill service it is using [CHAR-LIMIT=NONE] -->
     <string name="autofill_window_title">Autofill with <xliff:g id="serviceName" example="MyPass">%1$s</xliff:g></string>
-
-    <!-- String used to separate FirstName and LastName when writing out a local name
-         e.g. John<separator>Smith [CHAR-LIMIT=NONE]-->
-    <string name="autofill_address_name_separator">\u0020</string>
-    <!-- Format string for displaying a name. $1 is First Name, $2 is autofill_address_name_separator, $3 is Last Name.
-         e.g. (John)( )(Smith) -->
-    <string name="autofill_address_summary_name_format">$1$2$3</string>
-
-    <!-- String used to separate Name and Address Line 1
-         e.g. John Smith<separator>123 Main Street [CHAR-LIMIT=NONE]-->
-    <string name="autofill_address_summary_separator">,\u0020</string>
-    <!-- Format string for displaying a name and address summary. $1 is the Full Name, $2 is autofill_address_summary_separator, $3 is the Address
-         e.g. (John Smith)(, )(123 Main Street) -->
-    <string name="autofill_address_summary_format">$1$2$3</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_attention_ignored_re">attention|attn</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_region_ignored_re">province|region|other<!-- es -->|provincia<!-- pt-BR, pt-PT -->|bairro|suburb</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_company_re">company|business|organization|organisation|department<!-- de-DE -->|firma|firmenname<!-- es -->|empresa<!-- fr-FR -->|societe|société<!-- it-IT -->|ragione.?sociale<!-- ja-JP -->|会社<!-- ru -->|название.?компании<!-- zh-CN -->|单位|公司</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_address_line_1_re">address.?line|address1|addr1|street<!-- de-DE -->|strasse|straße|hausnummer|housenumber<!-- en-GB -->|house.?name<!-- es -->|direccion|dirección<!-- fr-FR -->|adresse<!-- it-IT -->|indirizzo<!-- ja-JP -->|住所1<!-- pt-BR, pt-PT -->|morada|endereço<!-- ru -->|Адрес<!-- zh-CN -->|地址</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_address_line_1_label_re">address<!-- fr-FR -->|adresse<!-- it-IT -->|indirizzo<!-- ja-JP -->|住所<!-- zh-CN -->|地址</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_address_line_2_re">address.?line2|address2|addr2|street|suite|unit<!-- de-DE -->|adresszusatz|ergänzende.?angaben<!-- es -->|direccion2|colonia|adicional<!-- fr-FR -->|addresssuppl|complementnom|appartement<!-- it-IT -->|indirizzo2<!-- ja-JP -->|住所2</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_address_line_3_re">address.?line3|address3|addr3|street|line3<!-- es -->|municipio<!-- fr-FR -->|batiment|residence<!-- it-IT -->|indirizzo3</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_country_re">country|location<!-- ja-JP -->|国<!-- zh-CN -->|国家</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_zip_code_re">zip|postal|post code|pcode|^1z$<!-- de-DE -->|postleitzahl<!-- es -->|cp<!-- fr-FR -->|cdp<!-- it-IT -->|cap<!-- ja-JP -->|郵便番号<!-- pt-BR, pt-PT -->|codigo|codpos|cep<!-- ru -->|Почтовый.?Индекс<!--zh-CN -->|邮政编码|邮编<!-- zh-TW -->|郵遞區號</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_zip_4_re">zip|^-$|post2<!-- pt-BR, pt-PT -->|codpos2</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_city_re">city|town<!-- de-DE -->|ort|stadt<!-- en-AU -->|suburb<!-- es -->|ciudad|provincia|localidad|poblacion<!-- fr-FR -->|ville|commune<!-- it-IT -->|localita<!-- ja-JP -->|市区町村<!-- pt-BR, pt-PT -->|cidade<!-- ru -->|Город<!-- zh-CN -->|市<!-- zh-TW -->|分區</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_state_re">state|county|region|province<!-- de-DE -->|land<!-- en-UK -->|county|principality<!-- ja-JP -->|都道府県<!-- pt-BR, pt-PT -->|estado|provincia<!-- ru -->|область<!-- zh-CN -->|省<!-- zh-TW -->|地區</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_address_type_same_as_re">same as</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_address_type_use_my_re">use my</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_billing_designator_re">bill</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_shipping_designator_re">ship</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_email_re">e.?mail<!-- ja-JP -->|メールアドレス<!-- ru -->|Электронной.?Почты<!-- zh-CN -->|邮件|邮箱<!-- zh-TW -->|電郵地址</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_username_re">user.?name|user.?id<!-- de-DE -->|vollständiger.?name<!-- zh-CN -->|用户名</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_name_re">^name|full.?name|your.?name|customer.?name|firstandlastname<!-- es -->|nombre.*y.*apellidos<!-- fr-FR -->|^nom<!-- ja-JP -->|お名前|氏名<!-- pt-BR, pt-PT -->|^nome<!-- zh-CN -->|姓名</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_name_specific_re">^name<!-- fr-FR -->|^nom<!-- pt-BR, pt-PT -->|^nome</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-
-    <string name="autofill_first_name_re">irst.*name|initials|fname|first$<!-- de-DE -->|vorname<!-- es -->|nombre<!-- fr-FR -->|forename|prénom|prenom<!-- ja-JP -->|名<!-- pt-BR, pt-PT -->|nome<!-- ru -->|Имя</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_middle_initial_re">middle.*initial|m\\.i\\.|mi$</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_middle_name_re">middle.*name|mname|middle$<!-- es -->|apellido.?materno|lastlastname</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_last_name_re">last.*name|lname|surname|last$<!-- de-DE -->|nachname<!-- es -->|apellidos<!-- fr-FR -->|famille|^nom<!-- it-IT -->|cognome<!-- ja-JP -->|姓<!-- pt-BR, pt-PT -->|morada|apelidos|surename|sobrenome<!-- ru -->|Фамилия</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_phone_re">phone<!-- de-DE -->|telefonnummer<!-- es -->|telefono|teléfono<!-- fr-FR -->|telfixe<!-- ja-JP -->|電話<!-- pt-BR, pt-PT -->|telefone|telemovel<!-- ru -->|телефон<!-- zh-CN -->|电话</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_area_code_re">area.*code|acode|area</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_phone_prefix_re">prefix<!-- fr-FR -->|preselection<!-- pt-BR, pt-PT -->|ddd</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_phone_suffix_re">suffix</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_phone_extension_re">ext<!-- pt-BR, pt-PT -->|ramal</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_name_on_card_re">card.?holder|name.?on.?card|ccname|owner<!-- de-DE -->|karteninhaber<!-- es -->|nombre.*tarjeta<!-- fr-FR -->|nom.*carte<!-- it-IT -->|nome.*cart<!-- ja-JP -->|名前<!-- ru -->|Имя.*карты<!-- zh-CN -->|信用卡开户名|开户名|持卡人姓名<!-- zh-TW -->|持卡人姓名</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_name_on_card_contextual_re">name</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_card_cvc_re">verification|card identification|cvn|security code|cvv code|cvc</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_card_number_re">number|card.?#|card.?no|ccnum<!-- de-DE -->|nummer<!-- es -->|credito|numero|número<!-- fr-FR -->|numéro<!-- ja-JP -->|カード番号<!-- ru -->|Номер.*карты<!-- zh-CN -->|信用卡号|信用卡号码<!-- zh-TW -->|信用卡卡號</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_expiration_month_re">expir|exp.*month|exp.*date|ccmonth<!-- de-DE -->|gueltig|gültig|monat<!-- es -->|fecha<!-- fr-FR -->|date.*exp<!-- it-IT -->|scadenza<!-- ja-JP -->|有効期限<!-- pt-BR, pt-PT -->|validade<!-- ru -->|Срок действия карты<!-- zh-CN -->|月</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_expiration_date_re">exp|^/|year<!-- de-DE -->|ablaufdatum|gueltig|gültig|yahr<!-- es -->|fecha<!-- it-IT -->|scadenza<!-- ja-JP -->|有効期限<!-- pt-BR, pt-PT -->|validade<!-- ru -->|Срок действия карты<!-- zh-CN -->|年|有效期</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_card_ignored_re">^card</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_fax_re">fax<!-- fr-FR -->|télécopie|telecopie<!-- ja-JP -->|ファックス<!-- ru -->|факс<!-- zh-CN -->|传真<!-- zh-TW -->|傳真</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_country_code_re">country.*code|ccode|_cc</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_area_code_notext_re">^\\($</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_phone_prefix_separator_re">^-$|^\\)$</string>
-
-    <!-- Do not translate. Regex used by AutoFill. -->
-    <string name="autofill_phone_suffix_separator_re">^-$</string>
-
-    <!-- Label in a web form for "Province" [CHAR-LIMIT=NONE]  -->
-    <string name="autofill_province">Province</string>
-
-    <!-- Label in a web form for "Postal code" [CHAR-LIMIT=NONE]  -->
-    <string name="autofill_postal_code">Postal code</string>
-
-    <!-- Label in a web form for "State" [CHAR-LIMIT=NONE]  -->
-    <string name="autofill_state">State</string>
-
-    <!-- Label in a web form for "ZIP code" [CHAR-LIMIT=NONE]  -->
-    <string name="autofill_zip_code">ZIP code</string>
-
-    <!-- Label in a web form for "County" [CHAR-LIMIT=NONE]  -->
-    <string name="autofill_county">County</string>
-
-    <!-- Label in a web form for "Island" [CHAR-LIMIT=NONE]  -->
-    <string name="autofill_island">Island</string>
-
-    <!-- Label in a web form for "District" [CHAR-LIMIT=NONE]  -->
-    <string name="autofill_district">District</string>
-
-    <!-- Label in a web form for "Department" [CHAR-LIMIT=NONE]  -->
-    <string name="autofill_department">Department</string>
-
-    <!-- Label in a web form for "Prefecture" [CHAR-LIMIT=NONE]  -->
-    <string name="autofill_prefecture">Prefecture</string>
-
-    <!-- Label in a web form for "Parish" [CHAR-LIMIT=NONE]  -->
-    <string name="autofill_parish">Parish</string>
-
-    <!-- Label in a web form for "Area" [CHAR-LIMIT=NONE]  -->
-    <string name="autofill_area">Area</string>
-
-    <!-- Label in a web form for "Emirate" [CHAR-LIMIT=NONE]  -->
-    <string name="autofill_emirate">Emirate</string>
-
-
-    <!-- Title of an application permission, listed so the user can choose whether
-        they want to allow the application to do this. -->
-    <string name="permlab_readHistoryBookmarks">read your Web bookmarks and history</string>
-    <!-- Description of an application permission, listed so the user can choose whether
-        they want to allow the application to do this. -->
-    <string name="permdesc_readHistoryBookmarks">Allows the app to read the
-     history of all URLs that the Browser has visited, and all of the Browser\'s
-     bookmarks. Note: this permission may not be enforced by third-party
-     browsers or other  applications with web browsing capabilities.</string>
-    <!-- Title of an application permission, listed so the user can choose whether
-        they want to allow the application to do this. -->
-
-    <string name="permlab_writeHistoryBookmarks">write web bookmarks and history</string>
-    <!-- Description of an application permission, listed so the user can choose whether
-        they want to allow the application to do this. -->
-    <string name="permdesc_writeHistoryBookmarks" product="tablet">Allows the
-        app to modify the Browser\'s history or bookmarks stored on your tablet.
-        This may allow the app to erase or modify Browser data.  Note: this
-        permission may note be enforced by third-party browsers or other
-        applications with web browsing capabilities.</string>
-    <!-- Description of an application permission, listed so the user can choose whether
-        they want to allow the application to do this. -->
-    <string name="permdesc_writeHistoryBookmarks" product="tv">Allows the
-        app to modify the Browser\'s history or bookmarks stored on your Android TV device.
-        This may allow the app to erase or modify Browser data.  Note: this
-        permission may note be enforced by third-party browsers or other
-        applications with web browsing capabilities.</string>
-    <!-- Description of an application permission, listed so the user can choose whether
-        they want to allow the application to do this. -->
-    <string name="permdesc_writeHistoryBookmarks" product="default">Allows the
-        app to modify the Browser\'s history or bookmarks stored on your phone.
-        This may allow the app to erase or modify Browser data.  Note:
-        this permission may note be enforced by third-party browsers or other
-        applications with web browsing capabilities.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether
     they want to allow the application to do this. -->
@@ -3065,44 +2849,8 @@
     <string name="permdesc_addVoicemail">Allows the app to add messages
       to your voicemail inbox.</string>
 
-    <!-- Title of an application permission, listed so the user can choose whether
-        they want to allow the application to do this. -->
-    <string name="permlab_writeGeolocationPermissions">modify Browser geolocation permissions</string>
-    <!-- Description of an application permission, listed so the user can choose whether
-        they want to allow the application to do this. -->
-    <string name="permdesc_writeGeolocationPermissions">Allows the app to modify the
-        Browser\'s geolocation permissions. Malicious apps
-        may use this to allow sending location information to arbitrary web sites.</string>
-
-    <!-- If the user enters a password in a form on a website, a dialog will come up asking if they want to save the password. Text in the save password dialog, asking if the browser should remember a password. -->
-    <string name="save_password_message">Do you want the browser to remember this password?</string>
-    <!-- If the user enters a password in a form on a website, a dialog will come up asking if they want to save the password. Button in the save password dialog, saying not to remember this password. -->
-    <string name="save_password_notnow">Not now</string>
-    <!-- If the user enters a password in a form on a website, a dialog will come up asking if they want to save the password. Button in the save password dialog, saying to remember this password. -->
-    <string name="save_password_remember">Remember</string>
-    <!-- Button in the save password dialog, saying never to remember this password. This should be short. Should be "Never for this site". But it is too long, use "Never" instead -->
-    <string name="save_password_never">Never</string>
-
-    <!-- Displayed to the user when they do not have permission to open a particular web page. -->
-    <string name="open_permission_deny">You don\'t have permission to open this page.</string>
-
-    <!-- Displayed to the user to confirm that they have copied text from a web page to the clipboard. -->
-    <string name="text_copied">Text copied to clipboard.</string>
-
-    <!-- Displayed to the user to inform them that an app has accessed clipboard data (pasted as in "copy and paste") that was copied from another app [CHAR LIMIT=50] -->
-    <string name="pasted_from_app"><xliff:g id="pasting_app_name" example="Gmail">%1$s</xliff:g> pasted from <xliff:g id="source_app_name" example="Chrome">%2$s</xliff:g></string>
-
     <!-- Displayed to the user to inform them that an app has accessed clipboard data (pasted as in "copy and paste") [CHAR LIMIT=50] -->
     <string name="pasted_from_clipboard"><xliff:g id="pasting_app_name" example="Gmail">%1$s</xliff:g> pasted from your clipboard</string>
-
-    <!-- Displayed to the user to inform them that an app has accessed text from clipboard (pasted as in "copy and paste") [CHAR LIMIT=50] -->
-    <string name="pasted_text"><xliff:g id="pasting_app_name" example="Gmail">%1$s</xliff:g> pasted text you copied</string>
-
-    <!-- Displayed to the user to inform them that an app has accessed an image from clipboard (pasted as in "copy and paste") [CHAR LIMIT=50] -->
-    <string name="pasted_image"><xliff:g id="pasting_app_name" example="Gmail">%1$s</xliff:g> pasted an image you copied</string>
-
-    <!-- Displayed to the user to inform them that an app has accessed content from clipboard (pasted as in "copy and paste") [CHAR LIMIT=50] -->
-    <string name="pasted_content"><xliff:g id="pasting_app_name" example="Gmail">%1$s</xliff:g> pasted content you copied</string>
 
     <!-- Menu item displayed at the end of a menu to allow users to see another page worth of menu items. This is shown on any app's menu as long as the app has too many items in the menu.-->
     <string name="more_item_label">More</string>
@@ -3885,13 +3633,13 @@
 
     <!-- SIM swap and device reboot Dialog --> <skip />
     <!-- See SIM_REMOVED_DIALOG.  This is the title of that dialog. -->
-    <string name="sim_removed_title">SIM card removed</string>
+    <string name="sim_removed_title">SIM removed</string>
     <!-- See SIM_REMOVED_DIALOG.  This is the message of that dialog. -->
-    <string name="sim_removed_message">The mobile network will be unavailable until you restart with a valid SIM card inserted.</string>
+    <string name="sim_removed_message">The mobile network will be unavailable until you restart with a valid SIM.</string>
     <!-- See SIM_REMOVED_DIALOG.  This is the button of that dialog. -->
     <string name="sim_done_button">Done</string>
     <!-- See SIM_ADDED_DIALOG.  This is the title of that dialog. -->
-    <string name="sim_added_title">SIM card added</string>
+    <string name="sim_added_title">SIM added</string>
     <!-- See SIM_ADDED_DIALOG.  This is the message of that dialog. -->
     <string name="sim_added_message">Restart your device to access the mobile network.</string>
     <!-- See SIM_ADDED_DIALOG.  This is the button of that dialog. -->
@@ -4715,8 +4463,8 @@
     <string name="kg_puk_enter_pin_hint">Enter desired PIN code</string>
     <!-- Message shown when the user needs to confirm the PIN they just entered in the PUK screen -->
     <string name="kg_enter_confirm_pin_hint">Confirm desired PIN code</string>
-    <!-- Message shown in dialog while the device is unlocking the SIM card -->
-    <string name="kg_sim_unlock_progress_dialog_message">Unlocking SIM card\u2026</string>
+    <!-- Message shown in dialog while the device is unlocking the SIM -->
+    <string name="kg_sim_unlock_progress_dialog_message">Unlocking SIM\u2026</string>
     <!-- Message shown when the user enters the wrong PIN code -->
     <string name="kg_password_wrong_pin_code">Incorrect PIN code.</string>
     <!-- Message shown when the user enters an invalid SIM pin password in PUK screen -->
@@ -4939,7 +4687,7 @@
 
     <!-- Title of Color Correction feature, which is mostly used to help users who are colorblind,
      shown in the warning dialog about the accessibility shortcut. -->
-    <string name="color_correction_feature_name">Color Correction</string>
+    <string name="color_correction_feature_name">Color correction</string>
 
     <!-- Title of One Handed Mode feature, shown in the system gestures of the accessibility shortcut. [CHAR LIMIT=none] -->
     <string name="one_handed_mode_feature_name">One-Handed mode</string>
@@ -6437,4 +6185,8 @@ ul.</string>
     <string name="permlab_startForegroundServicesFromBackground">Start foreground services from background</string>
     <!-- Description of start foreground services from background permission [CHAR LIMIT=NONE] -->
     <string name="permdesc_startForegroundServicesFromBackground">Allows a companion app to start foreground services from background.</string>
+    <!-- Toast message that is shown when the user unmutes the microphone from the keyboard. [CHAR LIMIT=TOAST] -->
+    <string name="mic_access_on_toast">Microphone is available</string>
+    <!-- Toast message that is shown when the user mutes the microphone from the keyboard. [CHAR LIMIT=TOAST] -->
+    <string name="mic_access_off_toast">Microphone is blocked</string>
 </resources>

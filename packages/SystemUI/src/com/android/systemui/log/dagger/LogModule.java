@@ -23,6 +23,8 @@ import android.os.Looper;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.log.LogBufferFactory;
+import com.android.systemui.log.table.TableLogBuffer;
+import com.android.systemui.log.table.TableLogBufferFactory;
 import com.android.systemui.plugins.log.LogBuffer;
 import com.android.systemui.plugins.log.LogcatEchoTracker;
 import com.android.systemui.plugins.log.LogcatEchoTrackerDebug;
@@ -121,7 +123,7 @@ public class LogModule {
     @SysUISingleton
     @QSLog
     public static LogBuffer provideQuickSettingsLogBuffer(LogBufferFactory factory) {
-        return factory.create("QSLog", 500 /* maxSize */, false /* systrace */);
+        return factory.create("QSLog", 700 /* maxSize */, false /* systrace */);
     }
 
     /** Provides a logging buffer for {@link com.android.systemui.broadcast.BroadcastDispatcher} */
@@ -343,6 +345,14 @@ public class LogModule {
     @BluetoothLog
     public static LogBuffer providerBluetoothLogBuffer(LogBufferFactory factory) {
         return factory.create("BluetoothLog", 50);
+    }
+
+    /** Provides a logging buffer for the primary bouncer. */
+    @Provides
+    @SysUISingleton
+    @BouncerLog
+    public static TableLogBuffer provideBouncerLogBuffer(TableLogBufferFactory factory) {
+        return factory.create("BouncerLog", 250);
     }
 
     /**

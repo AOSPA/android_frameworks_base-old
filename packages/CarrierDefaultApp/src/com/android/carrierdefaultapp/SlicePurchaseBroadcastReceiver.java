@@ -16,6 +16,7 @@
 package com.android.carrierdefaultapp;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -24,20 +25,28 @@ import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.Configuration;
+import android.content.res.Resources;
 import android.graphics.drawable.Icon;
+import android.os.LocaleList;
+import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.telephony.AnomalyReporter;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Log;
+import android.webkit.URLUtil;
 import android.webkit.WebView;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.phone.slice.SlicePurchaseController;
 
-import java.lang.ref.WeakReference;
+import java.net.MalformedURLException;
+import java.net.URISyntaxException;
+import java.net.URL;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -57,10 +66,6 @@ public class SlicePurchaseBroadcastReceiver extends BroadcastReceiver{
      */
     private static final String UUID_BAD_PENDING_INTENT = "c360246e-95dc-4abf-9dc1-929a76cd7e53";
 
-    /** Weak references to {@link SlicePurchaseActivity} for each capability, if it exists. */
-    private static final Map<Integer, WeakReference<SlicePurchaseActivity>>
-            sSlicePurchaseActivities = new HashMap<>();
-
     /** Channel ID for the network boost notification. */
     private static final String NETWORK_BOOST_NOTIFICATION_CHANNEL_ID = "network_boost";
     /** Tag for the network boost notification. */
@@ -70,27 +75,28 @@ public class SlicePurchaseBroadcastReceiver extends BroadcastReceiver{
             "com.android.phone.slice.action.NOTIFICATION_CANCELED";
 
     /**
-     * Create a weak reference to {@link SlicePurchaseActivity}. The reference will be removed when
-     * {@link SlicePurchaseActivity#onDestroy()} is called.
-     *
-     * @param capability The premium capability requested.
-     * @param slicePurchaseActivity The instance of SlicePurchaseActivity.
+     * A map of Intents sent by {@link SlicePurchaseController} for each capability.
+     * If this map contains an Intent for a given capability, the network boost notification to
+     * purchase the capability is visible to the user.
+     * If this map does not contain an Intent for a given capability, either the capability was
+     * never requested or the {@link SlicePurchaseActivity} is visible to the user.
+     * An Intent is added to this map when the network boost notification is displayed to the user
+     * and removed from the map when the notification is canceled.
      */
-    public static void updateSlicePurchaseActivity(
-            @TelephonyManager.PremiumCapability int capability,
-            @NonNull SlicePurchaseActivity slicePurchaseActivity) {
-        sSlicePurchaseActivities.put(capability, new WeakReference<>(slicePurchaseActivity));
-    }
+    private static final Map<Integer, Intent> sIntents = new HashMap<>();
 
     /**
-     * Remove the weak reference to {@link SlicePurchaseActivity} when
-     * {@link SlicePurchaseActivity#onDestroy()} is called.
+     * Cancel the network boost notification for the given capability and
+     * remove the corresponding notification intent from the map.
      *
-     * @param capability The premium capability requested.
+     * @param context The context to cancel the notification in.
+     * @param capability The premium capability to cancel the notification for.
      */
-    public static void removeSlicePurchaseActivity(
+    public static void cancelNotification(@NonNull Context context,
             @TelephonyManager.PremiumCapability int capability) {
-        sSlicePurchaseActivities.remove(capability);
+        context.getSystemService(NotificationManager.class).cancelAsUser(
+                NETWORK_BOOST_NOTIFICATION_TAG, capability, UserHandle.ALL);
+        sIntents.remove(capability);
     }
 
     /**
@@ -139,7 +145,7 @@ public class SlicePurchaseBroadcastReceiver extends BroadcastReceiver{
      * Check whether the Intent is valid and can be used to complete purchases in the slice purchase
      * application. This checks that all necessary extras exist and that the values are valid.
      *
-     * @param intent The intent to check
+     * @param intent The intent to check.
      * @return {@code true} if the intent is valid and {@code false} otherwise.
      */
     public static boolean isIntentValid(@NonNull Intent intent) {
@@ -164,6 +170,12 @@ public class SlicePurchaseBroadcastReceiver extends BroadcastReceiver{
             return false;
         }
 
+        String purchaseUrl = intent.getStringExtra(SlicePurchaseController.EXTRA_PURCHASE_URL);
+        if (getPurchaseUrl(purchaseUrl) == null) {
+            loge("isIntentValid: invalid purchase URL: " + purchaseUrl);
+            return false;
+        }
+
         String appName = intent.getStringExtra(SlicePurchaseController.EXTRA_REQUESTING_APP_NAME);
         if (TextUtils.isEmpty(appName)) {
             loge("isIntentValid: empty requesting application name: " + appName);
@@ -175,7 +187,33 @@ public class SlicePurchaseBroadcastReceiver extends BroadcastReceiver{
                 && isPendingIntentValid(intent, SlicePurchaseController.EXTRA_INTENT_REQUEST_FAILED)
                 && isPendingIntentValid(intent,
                         SlicePurchaseController.EXTRA_INTENT_NOT_DEFAULT_DATA_SUBSCRIPTION)
-                && isPendingIntentValid(intent, SlicePurchaseController.EXTRA_INTENT_SUCCESS);
+                && isPendingIntentValid(intent, SlicePurchaseController.EXTRA_INTENT_SUCCESS)
+                && isPendingIntentValid(intent,
+                        SlicePurchaseController.EXTRA_INTENT_NOTIFICATION_SHOWN);
+    }
+
+    /**
+     * Get the {@link URL} from the given purchase URL String, if it is valid.
+     *
+     * @param purchaseUrl The purchase URL String to use to create the URL.
+     * @return The purchase URL from the given String or {@code null} if it is invalid.
+     */
+    @Nullable public static URL getPurchaseUrl(@Nullable String purchaseUrl) {
+        if (!URLUtil.isValidUrl(purchaseUrl)) {
+            return null;
+        }
+        if (URLUtil.isAssetUrl(purchaseUrl)
+                && !purchaseUrl.equals(SlicePurchaseController.SLICE_PURCHASE_TEST_FILE)) {
+            return null;
+        }
+        URL url = null;
+        try {
+            url = new URL(purchaseUrl);
+            url.toURI();
+        } catch (MalformedURLException | URISyntaxException e) {
+            loge("Invalid purchase URL: " + purchaseUrl + ", " + e);
+        }
+        return url;
     }
 
     private static boolean isPendingIntentValid(@NonNull Intent intent, @NonNull String extra) {
@@ -208,6 +246,8 @@ public class SlicePurchaseBroadcastReceiver extends BroadcastReceiver{
             case SlicePurchaseController.EXTRA_INTENT_NOT_DEFAULT_DATA_SUBSCRIPTION:
                 return "not default data subscription";
             case SlicePurchaseController.EXTRA_INTENT_SUCCESS: return "success";
+            case SlicePurchaseController.EXTRA_INTENT_NOTIFICATION_SHOWN:
+                return "notification shown";
             default: {
                 loge("Unknown pending intent extra: " + extra);
                 return "unknown(" + extra + ")";
@@ -219,8 +259,11 @@ public class SlicePurchaseBroadcastReceiver extends BroadcastReceiver{
     public void onReceive(@NonNull Context context, @NonNull Intent intent) {
         logd("onReceive intent: " + intent.getAction());
         switch (intent.getAction()) {
+            case Intent.ACTION_LOCALE_CHANGED:
+                onLocaleChanged(context);
+                break;
             case SlicePurchaseController.ACTION_START_SLICE_PURCHASE_APP:
-                onDisplayBoosterNotification(context, intent);
+                onDisplayNetworkBoostNotification(context, intent, false);
                 break;
             case SlicePurchaseController.ACTION_SLICE_PURCHASE_APP_RESPONSE_TIMEOUT:
                 onTimeout(context, intent);
@@ -233,16 +276,31 @@ public class SlicePurchaseBroadcastReceiver extends BroadcastReceiver{
         }
     }
 
-    private void onDisplayBoosterNotification(@NonNull Context context, @NonNull Intent intent) {
-        if (!isIntentValid(intent)) {
+    private void onLocaleChanged(@NonNull Context context) {
+        if (sIntents.isEmpty()) return;
+
+        for (int capability : new int[]{TelephonyManager.PREMIUM_CAPABILITY_PRIORITIZE_LATENCY}) {
+            if (sIntents.get(capability) != null) {
+                // Notification is active -- update notification for new locale
+                context.getSystemService(NotificationManager.class).cancelAsUser(
+                        NETWORK_BOOST_NOTIFICATION_TAG, capability, UserHandle.ALL);
+                onDisplayNetworkBoostNotification(context, sIntents.get(capability), true);
+            }
+        }
+    }
+
+    private void onDisplayNetworkBoostNotification(@NonNull Context context,
+            @NonNull Intent intent, boolean repeat) {
+        if (!repeat && !isIntentValid(intent)) {
             sendSlicePurchaseAppResponse(intent,
                     SlicePurchaseController.EXTRA_INTENT_REQUEST_FAILED);
             return;
         }
 
+        Resources res = getResources(context);
         NotificationChannel channel = new NotificationChannel(
                 NETWORK_BOOST_NOTIFICATION_CHANNEL_ID,
-                context.getResources().getString(R.string.network_boost_notification_channel),
+                res.getString(R.string.network_boost_notification_channel),
                 NotificationManager.IMPORTANCE_DEFAULT);
         // CarrierDefaultApp notifications are unblockable by default. Make this channel blockable
         //  to allow users to disable notifications posted to this channel without affecting other
@@ -252,12 +310,11 @@ public class SlicePurchaseBroadcastReceiver extends BroadcastReceiver{
 
         Notification notification =
                 new Notification.Builder(context, NETWORK_BOOST_NOTIFICATION_CHANNEL_ID)
-                        .setContentTitle(String.format(context.getResources().getString(
+                        .setContentTitle(String.format(res.getString(
                                 R.string.network_boost_notification_title),
                                 intent.getStringExtra(
                                         SlicePurchaseController.EXTRA_REQUESTING_APP_NAME)))
-                        .setContentText(context.getResources().getString(
-                                R.string.network_boost_notification_detail))
+                        .setContentText(res.getString(R.string.network_boost_notification_detail))
                         .setSmallIcon(R.drawable.ic_network_boost)
                         .setContentIntent(createContentIntent(context, intent, 1))
                         .setDeleteIntent(intent.getParcelableExtra(
@@ -266,24 +323,56 @@ public class SlicePurchaseBroadcastReceiver extends BroadcastReceiver{
                         // the user canceling or closing the notification.
                         .addAction(new Notification.Action.Builder(
                                 Icon.createWithResource(context, R.drawable.ic_network_boost),
-                                context.getResources().getString(
-                                        R.string.network_boost_notification_button_not_now),
+                                res.getString(R.string.network_boost_notification_button_not_now),
                                 createCanceledIntent(context, intent)).build())
                         // Add an action for the "Manage" button, which has the same behavior as
                         // the user clicking on the notification.
                         .addAction(new Notification.Action.Builder(
                                 Icon.createWithResource(context, R.drawable.ic_network_boost),
-                                context.getResources().getString(
-                                        R.string.network_boost_notification_button_manage),
+                                res.getString(R.string.network_boost_notification_button_manage),
                                 createContentIntent(context, intent, 2)).build())
                         .build();
 
         int capability = intent.getIntExtra(SlicePurchaseController.EXTRA_PREMIUM_CAPABILITY,
                 SlicePurchaseController.PREMIUM_CAPABILITY_INVALID);
-        logd("Display the booster notification for capability "
+        logd((repeat ? "Update" : "Display") + " the network boost notification for capability "
                 + TelephonyManager.convertPremiumCapabilityToString(capability));
         context.getSystemService(NotificationManager.class).notifyAsUser(
                 NETWORK_BOOST_NOTIFICATION_TAG, capability, notification, UserHandle.ALL);
+        if (!repeat) {
+            sIntents.put(capability, intent);
+            sendSlicePurchaseAppResponse(intent,
+                    SlicePurchaseController.EXTRA_INTENT_NOTIFICATION_SHOWN);
+        }
+    }
+
+    /**
+     * Get the {@link Resources} for the current locale.
+     *
+     * @param context The context to get the resources in.
+     *
+     * @return The resources in the current locale.
+     */
+    @VisibleForTesting
+    @NonNull public Resources getResources(@NonNull Context context) {
+        Resources resources = context.getResources();
+        Configuration config = resources.getConfiguration();
+        config.setLocale(getCurrentLocale());
+        return new Resources(resources.getAssets(), resources.getDisplayMetrics(), config);
+    }
+
+    /**
+     * Get the current {@link Locale} from the system property {@code persist.sys.locale}.
+     *
+     * @return The user's default/preferred language.
+     */
+    @VisibleForTesting
+    @NonNull public Locale getCurrentLocale() {
+        String languageTag = SystemProperties.get("persist.sys.locale");
+        if (TextUtils.isEmpty(languageTag)) {
+            return LocaleList.getAdjustedDefault().get(0);
+        }
+        return Locale.forLanguageTag(languageTag);
     }
 
     /**
@@ -336,16 +425,13 @@ public class SlicePurchaseBroadcastReceiver extends BroadcastReceiver{
                 SlicePurchaseController.PREMIUM_CAPABILITY_INVALID);
         logd("Purchase capability " + TelephonyManager.convertPremiumCapabilityToString(capability)
                 + " timed out.");
-        if (sSlicePurchaseActivities.get(capability) == null) {
-            // Notification is still active
-            logd("Closing booster notification since the user did not respond in time.");
-            context.getSystemService(NotificationManager.class).cancelAsUser(
-                    NETWORK_BOOST_NOTIFICATION_TAG, capability, UserHandle.ALL);
+        if (sIntents.get(capability) != null) {
+            // Notification is still active -- cancel pending notification
+            logd("Closing network boost notification since the user did not respond in time.");
+            cancelNotification(context, capability);
         } else {
-            // Notification was dismissed but SlicePurchaseActivity is still active
-            logd("Closing slice purchase application WebView since the user did not complete the "
-                    + "purchase in time.");
-            sSlicePurchaseActivities.get(capability).get().finishAndRemoveTask();
+            // SlicePurchaseActivity is still active -- ignore timer
+            logd("Ignoring timeout since the SlicePurchaseActivity is still active.");
         }
     }
 
@@ -353,8 +439,7 @@ public class SlicePurchaseBroadcastReceiver extends BroadcastReceiver{
         int capability = intent.getIntExtra(SlicePurchaseController.EXTRA_PREMIUM_CAPABILITY,
                 SlicePurchaseController.PREMIUM_CAPABILITY_INVALID);
         logd("onUserCanceled: " + TelephonyManager.convertPremiumCapabilityToString(capability));
-        context.getSystemService(NotificationManager.class)
-                .cancelAsUser(NETWORK_BOOST_NOTIFICATION_TAG, capability, UserHandle.ALL);
+        cancelNotification(context, capability);
         sendSlicePurchaseAppResponse(intent, SlicePurchaseController.EXTRA_INTENT_CANCELED);
     }
 

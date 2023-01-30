@@ -4310,7 +4310,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         mContext.binder.callingUid = DpmMockContext.CALLER_SYSTEM_USER_UID;
         setupDeviceOwner();
         assertExpectException(SecurityException.class, null, () ->
-                dpm.setSystemSetting(admin1, Settings.System.SCREEN_BRIGHTNESS_FOR_VR, "0"));
+                dpm.setSystemSetting(admin1, Settings.System.SCREEN_AUTO_BRIGHTNESS_ADJ, "0"));
     }
 
     @Test
@@ -7730,9 +7730,9 @@ public class DevicePolicyManagerTest extends DpmTestBase {
 
         dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
 
-        assertThat(dpm.getDeviceOwnerType(admin1)).isEqualTo(DEVICE_OWNER_TYPE_FINANCED);
+        assertThat(dpm.isFinancedDevice()).isTrue();
         initializeDpms();
-        assertThat(dpm.getDeviceOwnerType(admin1)).isEqualTo(DEVICE_OWNER_TYPE_FINANCED);
+        assertThat(dpm.isFinancedDevice()).isTrue();
     }
 
     @Test
@@ -7743,19 +7743,12 @@ public class DevicePolicyManagerTest extends DpmTestBase {
 
         dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
 
-        assertThat(dpm.getDeviceOwnerType(admin1)).isEqualTo(DEVICE_OWNER_TYPE_FINANCED);
+        assertThat(dpm.isFinancedDevice()).isTrue();
     }
 
     @Test
-    public void testGetDeviceOwnerType_throwsExceptionWhenThereIsNoDeviceOwner() {
-        assertThrows(IllegalStateException.class, () -> dpm.getDeviceOwnerType(admin1));
-    }
-
-    @Test
-    public void testGetDeviceOwnerType_throwsExceptionWhenNotAsDeviceOwnerAdmin() throws Exception {
-        setDeviceOwner();
-
-        assertThrows(IllegalStateException.class, () -> dpm.getDeviceOwnerType(admin2));
+    public void testIsFinancedDevice_throwsExceptionWhenThereIsNoDeviceOwner() {
+        assertThrows(SecurityException.class, () -> dpm.isFinancedDevice());
     }
 
     @Test

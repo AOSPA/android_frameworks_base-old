@@ -86,6 +86,7 @@ import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.IndentingPrintWriter;
 import android.util.Log;
+import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
@@ -2850,8 +2851,8 @@ public class JobSchedulerService extends com.android.server.SystemService
                 }
 
                 final boolean shouldForceBatchJob;
-                if (job.shouldTreatAsExpeditedJob()) {
-                    // Never batch expedited jobs, even for RESTRICTED apps.
+                if (job.shouldTreatAsExpeditedJob() || job.shouldTreatAsUserInitiatedJob()) {
+                    // Never batch expedited or user-initiated jobs, even for RESTRICTED apps.
                     shouldForceBatchJob = false;
                 } else if (job.getEffectiveStandbyBucket() == RESTRICTED_INDEX) {
                     // Restricted jobs must always be batched
@@ -3175,7 +3176,7 @@ public class JobSchedulerService extends com.android.server.SystemService
         synchronized (mLock) {
             final boolean shouldTreatAsDataTransfer = job.getJob().isDataTransfer()
                     && checkRunLongJobsPermission(job.getSourceUid(), job.getSourcePackageName());
-            if (job.shouldTreatAsUserInitiated()) {
+            if (job.shouldTreatAsUserInitiatedJob()) {
                 if (shouldTreatAsDataTransfer) {
                     final long estimatedTransferTimeMs =
                             mConnectivityController.getEstimatedTransferTimeMs(job);
@@ -3212,14 +3213,23 @@ public class JobSchedulerService extends com.android.server.SystemService
     /** Returns the maximum amount of time this job could run for. */
     public long getMaxJobExecutionTimeMs(JobStatus job) {
         synchronized (mLock) {
-            final boolean shouldTreatAsDataTransfer = job.getJob().isDataTransfer()
-                    && checkRunLongJobsPermission(job.getSourceUid(), job.getSourcePackageName());
-            if (job.shouldTreatAsUserInitiated()) {
-                if (shouldTreatAsDataTransfer) {
+            final boolean allowLongerJob;
+            final boolean isDataTransfer = job.getJob().isDataTransfer();
+            if (isDataTransfer || job.shouldTreatAsUserInitiatedJob()) {
+                allowLongerJob =
+                        checkRunLongJobsPermission(job.getSourceUid(), job.getSourcePackageName());
+            } else {
+                allowLongerJob = false;
+            }
+            if (job.shouldTreatAsUserInitiatedJob()) {
+                if (isDataTransfer && allowLongerJob) {
                     return mConstants.RUNTIME_USER_INITIATED_DATA_TRANSFER_LIMIT_MS;
                 }
-                return mConstants.RUNTIME_USER_INITIATED_LIMIT_MS;
-            } else if (shouldTreatAsDataTransfer) {
+                if (allowLongerJob) {
+                    return mConstants.RUNTIME_USER_INITIATED_LIMIT_MS;
+                }
+                return mConstants.RUNTIME_FREE_QUOTA_MAX_LIMIT_MS;
+            } else if (isDataTransfer && allowLongerJob) {
                 return mConstants.RUNTIME_DATA_TRANSFER_LIMIT_MS;
             }
             return Math.min(mConstants.RUNTIME_FREE_QUOTA_MAX_LIMIT_MS,
@@ -3875,7 +3885,7 @@ public class JobSchedulerService extends com.android.server.SystemService
             final int callingUid = Binder.getCallingUid();
             if (callingUid != uid && !UserHandle.isCore(callingUid)) {
                 throw new SecurityException("Uid " + callingUid
-                        + " cannot query canRunLongJobs for package " + packageName);
+                        + " cannot query hasRunLongJobsPermission for package " + packageName);
             }
 
             return checkRunLongJobsPermission(uid, packageName);
@@ -4159,6 +4169,100 @@ public class JobSchedulerService extends com.android.server.SystemService
         }
     }
 
+    int getEstimatedNetworkBytes(PrintWriter pw, String pkgName, int userId, int jobId,
+            int byteOption) {
+        try {
+            final int uid = AppGlobals.getPackageManager().getPackageUid(pkgName, 0,
+                    userId != UserHandle.USER_ALL ? userId : UserHandle.USER_SYSTEM);
+            if (uid < 0) {
+                pw.print("unknown(");
+                pw.print(pkgName);
+                pw.println(")");
+                return JobSchedulerShellCommand.CMD_ERR_NO_PACKAGE;
+            }
+
+            synchronized (mLock) {
+                final JobStatus js = mJobs.getJobByUidAndJobId(uid, jobId);
+                if (DEBUG) {
+                    Slog.d(TAG, "get-estimated-network-bytes " + uid + "/" + jobId + ": " + js);
+                }
+                if (js == null) {
+                    pw.print("unknown("); UserHandle.formatUid(pw, uid);
+                    pw.print("/jid"); pw.print(jobId); pw.println(")");
+                    return JobSchedulerShellCommand.CMD_ERR_NO_JOB;
+                }
+
+                final long downloadBytes;
+                final long uploadBytes;
+                final Pair<Long, Long> bytes =
+                        mConcurrencyManager.getEstimatedNetworkBytesLocked(pkgName, uid, jobId);
+                if (bytes == null) {
+                    downloadBytes = js.getEstimatedNetworkDownloadBytes();
+                    uploadBytes = js.getEstimatedNetworkUploadBytes();
+                } else {
+                    downloadBytes = bytes.first;
+                    uploadBytes = bytes.second;
+                }
+                if (byteOption == JobSchedulerShellCommand.BYTE_OPTION_DOWNLOAD) {
+                    pw.println(downloadBytes);
+                } else {
+                    pw.println(uploadBytes);
+                }
+                pw.println();
+            }
+        } catch (RemoteException e) {
+            // can't happen
+        }
+        return 0;
+    }
+
+    int getTransferredNetworkBytes(PrintWriter pw, String pkgName, int userId, int jobId,
+            int byteOption) {
+        try {
+            final int uid = AppGlobals.getPackageManager().getPackageUid(pkgName, 0,
+                    userId != UserHandle.USER_ALL ? userId : UserHandle.USER_SYSTEM);
+            if (uid < 0) {
+                pw.print("unknown(");
+                pw.print(pkgName);
+                pw.println(")");
+                return JobSchedulerShellCommand.CMD_ERR_NO_PACKAGE;
+            }
+
+            synchronized (mLock) {
+                final JobStatus js = mJobs.getJobByUidAndJobId(uid, jobId);
+                if (DEBUG) {
+                    Slog.d(TAG, "get-transferred-network-bytes " + uid + "/" + jobId + ": " + js);
+                }
+                if (js == null) {
+                    pw.print("unknown("); UserHandle.formatUid(pw, uid);
+                    pw.print("/jid"); pw.print(jobId); pw.println(")");
+                    return JobSchedulerShellCommand.CMD_ERR_NO_JOB;
+                }
+
+                final long downloadBytes;
+                final long uploadBytes;
+                final Pair<Long, Long> bytes =
+                        mConcurrencyManager.getTransferredNetworkBytesLocked(pkgName, uid, jobId);
+                if (bytes == null) {
+                    downloadBytes = 0;
+                    uploadBytes = 0;
+                } else {
+                    downloadBytes = bytes.first;
+                    uploadBytes = bytes.second;
+                }
+                if (byteOption == JobSchedulerShellCommand.BYTE_OPTION_DOWNLOAD) {
+                    pw.println(downloadBytes);
+                } else {
+                    pw.println(uploadBytes);
+                }
+                pw.println();
+            }
+        } catch (RemoteException e) {
+            // can't happen
+        }
+        return 0;
+    }
+
     private boolean checkRunLongJobsPermission(int packageUid, String packageName) {
         // Returns true if both the appop and permission are granted.
         return PermissionChecker.checkPermissionForPreflight(getTestableContext(),
@@ -4169,6 +4273,16 @@ public class JobSchedulerService extends com.android.server.SystemService
     @VisibleForTesting
     protected ConnectivityController getConnectivityController() {
         return mConnectivityController;
+    }
+
+    @VisibleForTesting
+    protected QuotaController getQuotaController() {
+        return mQuotaController;
+    }
+
+    @VisibleForTesting
+    protected TareController getTareController() {
+        return mTareController;
     }
 
     // Shell command infrastructure

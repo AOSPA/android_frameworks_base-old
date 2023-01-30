@@ -19,14 +19,16 @@ package com.android.server.permission.access
 import android.util.Log
 import com.android.modules.utils.BinaryXmlPullParser
 import com.android.modules.utils.BinaryXmlSerializer
+import com.android.server.SystemConfig
 import com.android.server.permission.access.appop.PackageAppOpPolicy
 import com.android.server.permission.access.appop.UidAppOpPolicy
 import com.android.server.permission.access.collection.* // ktlint-disable no-wildcard-imports
-import com.android.server.permission.access.external.PackageState
 import com.android.server.permission.access.permission.UidPermissionPolicy
 import com.android.server.permission.access.util.forEachTag
 import com.android.server.permission.access.util.tag
 import com.android.server.permission.access.util.tagName
+import com.android.server.pm.permission.PermissionAllowlist
+import com.android.server.pm.pkg.PackageState
 
 class AccessPolicy private constructor(
     private val schemePolicies: IndexedMap<String, IndexedMap<String, SchemePolicy>>
@@ -53,6 +55,47 @@ class AccessPolicy private constructor(
         with(getSchemePolicy(subject, `object`)) { setDecision(subject, `object`, decision) }
     }
 
+    fun initialize(
+        state: AccessState,
+        userIds: IntSet,
+        packageStates: Map<String, PackageState>,
+        disabledSystemPackageStates: Map<String, PackageState>,
+        knownPackages: IntMap<Array<String>>,
+        isLeanback: Boolean,
+        configPermissions: Map<String, SystemConfig.PermissionEntry>,
+        privilegedPermissionAllowlistPackages: IndexedListSet<String>,
+        permissionAllowlist: PermissionAllowlist,
+        implicitToSourcePermissions: IndexedMap<String, IndexedListSet<String>>
+    ) {
+        state.systemState.apply {
+            this.userIds += userIds
+            this.packageStates = packageStates
+            this.disabledSystemPackageStates = disabledSystemPackageStates
+            packageStates.forEach { (_, packageState) ->
+                appIds.getOrPut(packageState.appId) { IndexedListSet() }
+                    .add(packageState.packageName)
+            }
+            this.knownPackages = knownPackages
+            this.isLeanback = isLeanback
+            this.configPermissions = configPermissions
+            this.privilegedPermissionAllowlistPackages = privilegedPermissionAllowlistPackages
+            this.permissionAllowlist = permissionAllowlist
+            this.implicitToSourcePermissions = implicitToSourcePermissions
+        }
+    }
+
+    fun GetStateScope.onStateMutated() {
+        forEachSchemePolicy {
+            with(it) { onStateMutated() }
+        }
+    }
+
+    fun MutateStateScope.onInitialized() {
+        forEachSchemePolicy {
+            with(it) { onInitialized() }
+        }
+    }
+
     fun MutateStateScope.onUserAdded(userId: Int) {
         newState.systemState.userIds += userId
         newState.userStates[userId] = UserState()
@@ -69,18 +112,44 @@ class AccessPolicy private constructor(
         }
     }
 
-    fun MutateStateScope.onPackageAdded(packageState: PackageState) {
+    fun MutateStateScope.onStorageVolumeMounted(
+        packageStates: Map<String, PackageState>,
+        disabledSystemPackageStates: Map<String, PackageState>,
+        volumeUuid: String?,
+        isSystemUpdated: Boolean
+    ) {
+        newState.systemState.apply {
+            this.packageStates = packageStates
+            this.disabledSystemPackageStates = disabledSystemPackageStates
+        }
+        forEachSchemePolicy {
+            with(it) { onStorageVolumeMounted(volumeUuid, isSystemUpdated) }
+        }
+    }
+
+    fun MutateStateScope.onPackageAdded(
+        packageStates: Map<String, PackageState>,
+        disabledSystemPackageStates: Map<String, PackageState>,
+        packageName: String
+    ) {
+        val packageState = packageStates[packageName]
+        // TODO(zhanghai): STOPSHIP: Remove check before feature enable.
+        checkNotNull(packageState) {
+            "Added package $packageName isn't found in packageStates in onPackageAdded()"
+        }
+        val appId = packageState.appId
         var isAppIdAdded = false
         newState.systemState.apply {
-            packageStates[packageState.packageName] = packageState
-            appIds.getOrPut(packageState.appId) {
+            this.packageStates = packageStates
+            this.disabledSystemPackageStates = disabledSystemPackageStates
+            appIds.getOrPut(appId) {
                 isAppIdAdded = true
                 IndexedListSet()
-            }.add(packageState.packageName)
+            }.add(packageName)
         }
         if (isAppIdAdded) {
             forEachSchemePolicy {
-                with(it) { onAppIdAdded(packageState.appId) }
+                with(it) { onAppIdAdded(appId) }
             }
         }
         forEachSchemePolicy {
@@ -88,37 +157,81 @@ class AccessPolicy private constructor(
         }
     }
 
-    fun MutateStateScope.onPackageRemoved(packageState: PackageState) {
+    fun MutateStateScope.onPackageRemoved(
+        packageStates: Map<String, PackageState>,
+        disabledSystemPackageStates: Map<String, PackageState>,
+        packageName: String,
+        appId: Int
+    ) {
+        // TODO(zhanghai): STOPSHIP: Remove check before feature enable.
+        check(packageName !in packageStates) {
+            "Removed package $packageName is still in packageStates in onPackageRemoved()"
+        }
         var isAppIdRemoved = false
         newState.systemState.apply {
-            packageStates -= packageState.packageName
-            appIds.apply appIds@{
-                this[packageState.appId]?.apply {
-                    this -= packageState.packageName
-                    if (isEmpty()) {
-                        this@appIds -= packageState.appId
-                        isAppIdRemoved = true
-                    }
+            this.packageStates = packageStates
+            this.disabledSystemPackageStates = disabledSystemPackageStates
+            appIds[appId]?.apply {
+                this -= packageName
+                if (isEmpty()) {
+                    appIds -= appId
+                    isAppIdRemoved = true
                 }
             }
         }
         forEachSchemePolicy {
-            with(it) { onPackageRemoved(packageState) }
+            with(it) { onPackageRemoved(packageName, appId) }
         }
         if (isAppIdRemoved) {
             forEachSchemePolicy {
-                with(it) { onAppIdRemoved(packageState.appId) }
+                with(it) { onAppIdRemoved(appId) }
             }
         }
     }
 
-    fun BinaryXmlPullParser.parseSystemState(systemState: SystemState) {
+    fun MutateStateScope.onPackageInstalled(
+        packageStates: Map<String, PackageState>,
+        disabledSystemPackageStates: Map<String, PackageState>,
+        packageName: String,
+        userId: Int
+    ) {
+        newState.systemState.apply {
+            this.packageStates = packageStates
+            this.disabledSystemPackageStates = disabledSystemPackageStates
+        }
+        val packageState = packageStates[packageName]
+        // TODO(zhanghai): STOPSHIP: Remove check before feature enable.
+        checkNotNull(packageState) {
+            "Installed package $packageName isn't found in packageStates in onPackageInstalled()"
+        }
+        forEachSchemePolicy {
+            with(it) { onPackageInstalled(packageState, userId) }
+        }
+    }
+
+    fun MutateStateScope.onPackageUninstalled(
+        packageStates: Map<String, PackageState>,
+        disabledSystemPackageStates: Map<String, PackageState>,
+        packageName: String,
+        appId: Int,
+        userId: Int
+    ) {
+        newState.systemState.apply {
+            this.packageStates = packageStates
+            this.disabledSystemPackageStates = disabledSystemPackageStates
+        }
+        forEachSchemePolicy {
+            with(it) { onPackageUninstalled(packageName, appId, userId) }
+        }
+    }
+
+    fun BinaryXmlPullParser.parseSystemState(state: AccessState) {
         forEachTag {
             when (tagName) {
                 TAG_ACCESS -> {
                     forEachTag {
                         forEachSchemePolicy {
-                            with(it) { parseSystemState(systemState) }
+                            with(it) { parseSystemState(state) }
                         }
                     }
                 }
@@ -127,21 +240,21 @@ class AccessPolicy private constructor(
         }
     }
 
-    fun BinaryXmlSerializer.serializeSystemState(systemState: SystemState) {
+    fun BinaryXmlSerializer.serializeSystemState(state: AccessState) {
         tag(TAG_ACCESS) {
             forEachSchemePolicy {
-                with(it) { serializeSystemState(systemState) }
+                with(it) { serializeSystemState(state) }
             }
         }
     }
 
-    fun BinaryXmlPullParser.parseUserState(userId: Int, userState: UserState) {
+    fun BinaryXmlPullParser.parseUserState(state: AccessState, userId: Int) {
         forEachTag {
             when (tagName) {
                 TAG_ACCESS -> {
                     forEachTag {
                         forEachSchemePolicy {
-                            with(it) { parseUserState(userId, userState) }
+                            with(it) { parseUserState(state, userId) }
                         }
                     }
                 }
@@ -155,10 +268,10 @@ class AccessPolicy private constructor(
         }
     }
 
-    fun BinaryXmlSerializer.serializeUserState(userId: Int, userState: UserState) {
+    fun BinaryXmlSerializer.serializeUserState(state: AccessState, userId: Int) {
         tag(TAG_ACCESS) {
             forEachSchemePolicy {
-                with(it) { serializeUserState(userId, userState) }
+                with(it) { serializeUserState(state, userId) }
             }
         }
     }
@@ -182,10 +295,6 @@ class AccessPolicy private constructor(
 }
 
 abstract class SchemePolicy {
-    @Volatile
-    private var onDecisionChangedListeners = IndexedListSet<OnDecisionChangedListener>()
-    private val onDecisionChangedListenersLock = Any()
-
     abstract val subjectScheme: String
 
     abstract val objectScheme: String
@@ -198,29 +307,9 @@ abstract class SchemePolicy {
         decision: Int
     )
 
-    fun addOnDecisionChangedListener(listener: OnDecisionChangedListener) {
-        synchronized(onDecisionChangedListenersLock) {
-            onDecisionChangedListeners = onDecisionChangedListeners + listener
-        }
-    }
+    open fun GetStateScope.onStateMutated() {}
 
-    fun removeOnDecisionChangedListener(listener: OnDecisionChangedListener) {
-        synchronized(onDecisionChangedListenersLock) {
-            onDecisionChangedListeners = onDecisionChangedListeners - listener
-        }
-    }
-
-    protected fun notifyOnDecisionChangedListeners(
-        subject: AccessUri,
-        `object`: AccessUri,
-        oldDecision: Int,
-        newDecision: Int
-    ) {
-        val listeners = onDecisionChangedListeners
-        listeners.forEachIndexed { _, it ->
-            it.onDecisionChanged(subject, `object`, oldDecision, newDecision)
-        }
-    }
+    open fun MutateStateScope.onInitialized() {}
 
     open fun MutateStateScope.onUserAdded(userId: Int) {}
 
@@ -230,24 +319,24 @@ abstract class SchemePolicy {
 
     open fun MutateStateScope.onAppIdRemoved(appId: Int) {}
 
+    open fun MutateStateScope.onStorageVolumeMounted(
+        volumeUuid: String?,
+        isSystemUpdated: Boolean
+    ) {}
+
     open fun MutateStateScope.onPackageAdded(packageState: PackageState) {}
 
-    open fun MutateStateScope.onPackageRemoved(packageState: PackageState) {}
+    open fun MutateStateScope.onPackageRemoved(packageName: String, appId: Int) {}
 
-    open fun BinaryXmlPullParser.parseSystemState(systemState: SystemState) {}
+    open fun MutateStateScope.onPackageInstalled(packageState: PackageState, userId: Int) {}
 
-    open fun BinaryXmlSerializer.serializeSystemState(systemState: SystemState) {}
+    open fun MutateStateScope.onPackageUninstalled(packageName: String, appId: Int, userId: Int) {}
 
-    open fun BinaryXmlPullParser.parseUserState(userId: Int, userState: UserState) {}
+    open fun BinaryXmlPullParser.parseSystemState(state: AccessState) {}
 
-    open fun BinaryXmlSerializer.serializeUserState(userId: Int, userState: UserState) {}
+    open fun BinaryXmlSerializer.serializeSystemState(state: AccessState) {}
 
-    fun interface OnDecisionChangedListener {
-        fun onDecisionChanged(
-            subject: AccessUri,
-            `object`: AccessUri,
-            oldDecision: Int,
-            newDecision: Int
-        )
-    }
+    open fun BinaryXmlPullParser.parseUserState(state: AccessState, userId: Int) {}
+
+    open fun BinaryXmlSerializer.serializeUserState(state: AccessState, userId: Int) {}
 }

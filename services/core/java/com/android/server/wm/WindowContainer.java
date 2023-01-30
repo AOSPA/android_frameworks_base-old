@@ -18,6 +18,7 @@ package com.android.server.wm;
 
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
+import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_BEHIND;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
@@ -313,6 +314,13 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     private MagnificationSpec mLastMagnificationSpec;
 
     private boolean mIsFocusable = true;
+
+    /**
+     * This indicates whether this window is visible by policy. This can precede physical
+     * visibility ({@link #isVisible} - whether it has a surface showing on the screen) in
+     * cases where an animation is on-going.
+     */
+    protected boolean mVisibleRequested;
 
     /**
      * Used as a unique, cross-process identifier for this Container. It also serves a minimal
@@ -635,7 +643,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         if (showSurfaceOnCreation()) {
             getSyncTransaction().show(mSurfaceControl);
         }
-        onSurfaceShown(getSyncTransaction());
         updateSurfacePositionNonOrganized();
         if (mLastMagnificationSpec != null) {
             applyMagnificationSpec(getSyncTransaction(), mLastMagnificationSpec);
@@ -688,13 +695,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         }
 
         scheduleAnimation();
-    }
-
-    /**
-     * Called when the surface is shown for the first time.
-     */
-    void onSurfaceShown(Transaction t) {
-        // do nothing
     }
 
     // Temp. holders for a chain of containers we are currently processing.
@@ -772,6 +772,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             parent.mTreeWeight += child.mTreeWeight;
             parent = parent.getParent();
         }
+        onChildVisibleRequestedChanged(child);
         onChildPositionChanged(child);
     }
 
@@ -800,6 +801,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             parent.mTreeWeight -= child.mTreeWeight;
             parent = parent.getParent();
         }
+        onChildVisibleRequestedChanged(null);
         onChildPositionChanged(child);
     }
 
@@ -1023,10 +1025,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * @param dc The display this container is on after changes.
      */
     void onDisplayChanged(DisplayContent dc) {
-        if (mDisplayContent != null) {
+        if (mDisplayContent != null && mDisplayContent != dc) {
+            // Cancel any change transition queued-up for this container on the old display when
+            // this container is moved from the old display.
             mDisplayContent.mClosingChangingContainers.remove(this);
             if (mDisplayContent.mChangingContainers.remove(this)) {
-                // Cancel any change transition queued-up for this container on the old display.
                 mSurfaceFreezer.unfreeze(getSyncTransaction());
             }
         }
@@ -1288,13 +1291,41 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * the transition is finished.
      */
     boolean isVisibleRequested() {
-        for (int i = mChildren.size() - 1; i >= 0; --i) {
-            final WindowContainer child = mChildren.get(i);
-            if (child.isVisibleRequested()) {
-                return true;
+        return mVisibleRequested;
+    }
+
+    /** @return `true` if visibleRequested changed. */
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PROTECTED)
+    boolean setVisibleRequested(boolean visible) {
+        if (mVisibleRequested == visible) return false;
+        mVisibleRequested = visible;
+        final WindowContainer parent = getParent();
+        if (parent != null) {
+            parent.onChildVisibleRequestedChanged(this);
+        }
+        return true;
+    }
+
+    /**
+     * @param child The changed or added child. `null` if a child was removed.
+     * @return `true` if visibleRequested changed.
+     */
+    protected boolean onChildVisibleRequestedChanged(@Nullable WindowContainer child) {
+        final boolean childVisReq = child != null && child.isVisibleRequested();
+        boolean newVisReq = mVisibleRequested;
+        if (childVisReq && !mVisibleRequested) {
+            newVisReq = true;
+        } else if (!childVisReq && mVisibleRequested) {
+            newVisReq = false;
+            for (int i = mChildren.size() - 1; i >= 0; --i) {
+                final WindowContainer wc = mChildren.get(i);
+                if (wc != child && wc.isVisibleRequested()) {
+                    newVisReq = true;
+                    break;
+                }
             }
         }
-        return false;
+        return setVisibleRequested(newVisReq);
     }
 
     /**
@@ -1429,9 +1460,9 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * @return {@code true} if it handles or will handle orientation change in the future; {@code
      *         false} if it won't handle the change at anytime.
      */
-    boolean handlesOrientationChangeFromDescendant() {
+    boolean handlesOrientationChangeFromDescendant(int orientation) {
         final WindowContainer parent = getParent();
-        return parent != null && parent.handlesOrientationChangeFromDescendant();
+        return parent != null && parent.handlesOrientationChangeFromDescendant(orientation);
     }
 
     /**
@@ -1523,7 +1554,8 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
                     // portrait but the task is still in landscape. While updating from display,
                     // the task can be updated to portrait first so the configuration can be
                     // computed in a consistent environment.
-                    && (inMultiWindowMode() || !handlesOrientationChangeFromDescendant())) {
+                    && (inMultiWindowMode()
+                        || !handlesOrientationChangeFromDescendant(orientation))) {
                 // Resolve the requested orientation.
                 onConfigurationChanged(parent.getConfiguration());
             }
@@ -3207,7 +3239,8 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         if (isOrganized()
                 // TODO(b/161711458): Clean-up when moved to shell.
                 && getWindowingMode() != WINDOWING_MODE_FULLSCREEN
-                && getWindowingMode() != WINDOWING_MODE_FREEFORM) {
+                && getWindowingMode() != WINDOWING_MODE_FREEFORM
+                && getWindowingMode() != WINDOWING_MODE_MULTI_WINDOW) {
             return null;
         }
 
@@ -3951,27 +3984,54 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         unregisterConfigurationChangeListener(listener);
     }
 
+    static void overrideConfigurationPropagation(WindowContainer<?> receiver,
+            WindowContainer<?> supplier) {
+        overrideConfigurationPropagation(receiver, supplier, null /* configurationMerger */);
+    }
+
     /**
      * Forces the receiver container to always use the configuration of the supplier container as
      * its requested override configuration. It allows to propagate configuration without changing
      * the relationship between child and parent.
+     *
+     * @param receiver            The {@link WindowContainer<?>} which will receive the {@link
+     *                            Configuration} result of the merging operation.
+     * @param supplier            The {@link WindowContainer<?>} which provides the initial {@link
+     *                            Configuration}.
+     * @param configurationMerger A {@link ConfigurationMerger} which combines the {@link
+     *                            Configuration} of the receiver and the supplier.
      */
-    static void overrideConfigurationPropagation(WindowContainer<?> receiver,
-            WindowContainer<?> supplier) {
+    static WindowContainerListener overrideConfigurationPropagation(WindowContainer<?> receiver,
+            WindowContainer<?> supplier, @Nullable ConfigurationMerger configurationMerger) {
         final ConfigurationContainerListener listener = new ConfigurationContainerListener() {
             @Override
             public void onMergedOverrideConfigurationChanged(Configuration mergedOverrideConfig) {
-                receiver.onRequestedOverrideConfigurationChanged(supplier.getConfiguration());
+                final Configuration mergedConfiguration =
+                        configurationMerger != null
+                                ? configurationMerger.merge(mergedOverrideConfig,
+                                receiver.getConfiguration())
+                                : supplier.getConfiguration();
+                receiver.onRequestedOverrideConfigurationChanged(mergedConfiguration);
             }
         };
         supplier.registerConfigurationChangeListener(listener);
-        receiver.registerWindowContainerListener(new WindowContainerListener() {
+        final WindowContainerListener wcListener = new WindowContainerListener() {
             @Override
             public void onRemoved() {
                 receiver.unregisterWindowContainerListener(this);
                 supplier.unregisterConfigurationChangeListener(listener);
             }
-        });
+        };
+        receiver.registerWindowContainerListener(wcListener);
+        return wcListener;
+    }
+
+    /**
+     * Abstraction for functions merging two {@link Configuration} objects into one.
+     */
+    @FunctionalInterface
+    interface ConfigurationMerger {
+        Configuration merge(Configuration first, Configuration second);
     }
 
     /**

@@ -262,7 +262,7 @@ final class DeletePackageHelper {
             final boolean killApp = (deleteFlags & PackageManager.DELETE_DONT_KILL_APP) == 0;
             info.sendPackageRemovedBroadcasts(killApp, removedBySystem);
             info.sendSystemPackageUpdatedBroadcasts();
-            PackageMetrics.onUninstallSucceeded(info, deleteFlags, mUserManagerInternal);
+            PackageMetrics.onUninstallSucceeded(info, deleteFlags, userId);
         }
 
         // Force a gc to clear up things.
@@ -562,6 +562,7 @@ final class DeletePackageHelper {
             outInfo.mRemovedUsers = userIds;
             outInfo.mBroadcastUsers = userIds;
             outInfo.mIsExternal = ps.isExternalStorage();
+            outInfo.mRemovedPackageVersionCode = ps.getVersionCode();
         }
     }
 

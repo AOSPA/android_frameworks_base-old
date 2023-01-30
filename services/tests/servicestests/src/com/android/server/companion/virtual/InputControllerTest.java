@@ -21,6 +21,7 @@ import static com.google.common.truth.Truth.assertWithMessage;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -53,6 +54,8 @@ import org.mockito.MockitoAnnotations;
 @RunWith(AndroidTestingRunner.class)
 @TestableLooper.RunWithLooper(setAsMainLooper = true)
 public class InputControllerTest {
+    private static final String LANGUAGE_TAG = "en-US";
+    private static final String LAYOUT_TYPE = "qwerty";
 
     @Mock
     private InputManagerInternal mInputManagerInternalMock;
@@ -99,7 +102,7 @@ public class InputControllerTest {
 
         final IBinder device2Token = new Binder("device2");
         mInputController.createKeyboard("keyboard", /*vendorId= */2, /*productId= */ 2,
-                device2Token, 2);
+                device2Token, 2, LANGUAGE_TAG, LAYOUT_TYPE);
         int device2Id = mInputController.getInputDeviceId(device2Token);
 
         assertWithMessage("Different devices should have different id").that(
@@ -143,4 +146,51 @@ public class InputControllerTest {
         verify(mInputManagerInternalMock).setVirtualMousePointerDisplayId(eq(1));
     }
 
+    @Test
+    public void createNavigationTouchpad_hasDeviceId() {
+        final IBinder deviceToken = new Binder();
+        mInputController.createNavigationTouchpad("name", /*vendorId= */ 1, /*productId= */ 1,
+                deviceToken, /* displayId= */ 1, /* touchpadHeight= */ 50, /* touchpadWidth= */ 50);
+
+        int deviceId = mInputController.getInputDeviceId(deviceToken);
+        int[] deviceIds = InputManager.getInstance().getInputDeviceIds();
+
+        assertWithMessage("InputManager's deviceIds list should contain id of the device").that(
+            deviceIds).asList().contains(deviceId);
+    }
+
+    @Test
+    public void createNavigationTouchpad_setsTypeAssociation() {
+        final IBinder deviceToken = new Binder();
+        mInputController.createNavigationTouchpad("name", /*vendorId= */ 1, /*productId= */ 1,
+                deviceToken, /* displayId= */ 1, /* touchpadHeight= */ 50, /* touchpadWidth= */ 50);
+
+        verify(mInputManagerInternalMock).setTypeAssociation(
+                startsWith("virtualNavigationTouchpad:"), eq("touchNavigation"));
+    }
+
+    @Test
+    public void createAndUnregisterNavigationTouchpad_unsetsTypeAssociation() {
+        final IBinder deviceToken = new Binder();
+        mInputController.createNavigationTouchpad("name", /*vendorId= */ 1, /*productId= */ 1,
+                deviceToken, /* displayId= */ 1, /* touchpadHeight= */ 50, /* touchpadWidth= */ 50);
+
+        mInputController.unregisterInputDevice(deviceToken);
+
+        verify(mInputManagerInternalMock).unsetTypeAssociation(
+                startsWith("virtualNavigationTouchpad:"));
+    }
+
+    @Test
+    public void createKeyboard_addAndRemoveKeyboardLayoutAssociation() {
+        final IBinder deviceToken = new Binder("device");
+
+        mInputController.createKeyboard("keyboard", /*vendorId= */2, /*productId= */ 2, deviceToken,
+                2, LANGUAGE_TAG, LAYOUT_TYPE);
+        verify(mInputManagerInternalMock).addKeyboardLayoutAssociation(anyString(),
+                eq(LANGUAGE_TAG), eq(LAYOUT_TYPE));
+
+        mInputController.unregisterInputDevice(deviceToken);
+        verify(mInputManagerInternalMock).removeKeyboardLayoutAssociation(anyString());
+    }
 }

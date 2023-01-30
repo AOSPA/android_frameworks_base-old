@@ -513,7 +513,7 @@ package android.app.admin {
     method @RequiresPermission(android.Manifest.permission.FORCE_DEVICE_POLICY_MANAGER_LOGS) public long forceSecurityLogs();
     method public void forceUpdateUserSetupComplete(int);
     method @NonNull public java.util.Set<java.lang.String> getDefaultCrossProfilePackages();
-    method public int getDeviceOwnerType(@NonNull android.content.ComponentName);
+    method @Deprecated public int getDeviceOwnerType(@NonNull android.content.ComponentName);
     method @Nullable public String getDevicePolicyManagementRoleHolderUpdaterPackage();
     method @NonNull public java.util.Set<java.lang.String> getDisallowedSystemApps(@NonNull android.content.ComponentName, int, @NonNull String);
     method public long getLastBugReportRequestTime();
@@ -1158,6 +1158,7 @@ package android.hardware.camera2 {
   public final class CameraManager {
     method public String[] getCameraIdListNoLazy() throws android.hardware.camera2.CameraAccessException;
     method @RequiresPermission(allOf={android.Manifest.permission.SYSTEM_CAMERA, android.Manifest.permission.CAMERA}) public void openCamera(@NonNull String, int, @NonNull java.util.concurrent.Executor, @NonNull android.hardware.camera2.CameraDevice.StateCallback) throws android.hardware.camera2.CameraAccessException;
+    field public static final long OVERRIDE_FRONT_CAMERA_APP_COMPAT = 250678880L; // 0xef10e60L
   }
 
   public abstract static class CameraManager.AvailabilityCallback {
@@ -1859,6 +1860,14 @@ package android.os {
     method public static java.io.File getFile(java.io.FileDescriptor) throws java.io.IOException;
   }
 
+  public static class PerformanceHintManager.Session implements java.io.Closeable {
+    method public void sendHint(int);
+    field public static final int CPU_LOAD_DOWN = 1; // 0x1
+    field public static final int CPU_LOAD_RESET = 2; // 0x2
+    field public static final int CPU_LOAD_RESUME = 3; // 0x3
+    field public static final int CPU_LOAD_UP = 0; // 0x0
+  }
+
   public final class PowerManager {
     method public boolean areAutoPowerSaveModesEnabled();
     method @RequiresPermission(anyOf={android.Manifest.permission.MANAGE_LOW_POWER_STANDBY, android.Manifest.permission.DEVICE_POWER}) public void forceLowPowerStandbyActive(boolean);
@@ -1946,6 +1955,9 @@ package android.os {
     method public static android.os.VibrationEffect get(int, boolean);
     method @Nullable public static android.os.VibrationEffect get(android.net.Uri, android.content.Context);
     method public abstract long getDuration();
+    method @NonNull public static android.os.VibrationEffect.WaveformBuilder startWaveform();
+    method @NonNull public static android.os.VibrationEffect.WaveformBuilder startWaveform(@NonNull android.os.VibrationEffect.VibrationParameter);
+    method @NonNull public static android.os.VibrationEffect.WaveformBuilder startWaveform(@NonNull android.os.VibrationEffect.VibrationParameter, @NonNull android.os.VibrationEffect.VibrationParameter);
     field public static final int EFFECT_POP = 4; // 0x4
     field public static final int EFFECT_STRENGTH_LIGHT = 0; // 0x0
     field public static final int EFFECT_STRENGTH_MEDIUM = 1; // 0x1
@@ -1964,8 +1976,31 @@ package android.os {
     field @NonNull public static final android.os.Parcelable.Creator<android.os.VibrationEffect.Composed> CREATOR;
   }
 
+  public static final class VibrationEffect.Composition {
+    method @NonNull public android.os.VibrationEffect.Composition addEffect(@NonNull android.os.VibrationEffect);
+    method @NonNull public android.os.VibrationEffect.Composition addOffDuration(@NonNull java.time.Duration);
+    method @NonNull public android.os.VibrationEffect.Composition repeatEffectIndefinitely(@NonNull android.os.VibrationEffect);
+  }
+
+  public static final class VibrationEffect.Composition.UnreachableAfterRepeatingIndefinitelyException extends java.lang.IllegalStateException {
+  }
+
+  public static class VibrationEffect.VibrationParameter {
+    method @NonNull public static android.os.VibrationEffect.VibrationParameter targetAmplitude(@FloatRange(from=0, to=1) float);
+    method @NonNull public static android.os.VibrationEffect.VibrationParameter targetFrequency(@FloatRange(from=1) float);
+  }
+
+  public static final class VibrationEffect.WaveformBuilder {
+    method @NonNull public android.os.VibrationEffect.WaveformBuilder addSustain(@NonNull java.time.Duration);
+    method @NonNull public android.os.VibrationEffect.WaveformBuilder addTransition(@NonNull java.time.Duration, @NonNull android.os.VibrationEffect.VibrationParameter);
+    method @NonNull public android.os.VibrationEffect.WaveformBuilder addTransition(@NonNull java.time.Duration, @NonNull android.os.VibrationEffect.VibrationParameter, @NonNull android.os.VibrationEffect.VibrationParameter);
+    method @NonNull public android.os.VibrationEffect build();
+  }
+
   public abstract class Vibrator {
     method public int getDefaultVibrationIntensity(int);
+    method @Nullable public android.os.vibrator.VibratorFrequencyProfile getFrequencyProfile();
+    method public boolean hasFrequencyControl();
     field public static final int VIBRATION_INTENSITY_HIGH = 3; // 0x3
     field public static final int VIBRATION_INTENSITY_LOW = 1; // 0x1
     field public static final int VIBRATION_INTENSITY_MEDIUM = 2; // 0x2
@@ -2070,7 +2105,7 @@ package android.os.storage {
 
   public class StorageManager {
     method public long computeStorageCacheBytes(@NonNull java.io.File);
-    method @NonNull public static java.util.UUID convert(@NonNull String);
+    method @NonNull public static java.util.UUID convert(@Nullable String);
     method @NonNull public static String convert(@NonNull java.util.UUID);
     method @Nullable public String getCloudMediaProvider();
     method public boolean isAppIoBlocked(@NonNull java.util.UUID, int, int, int);
@@ -2143,6 +2178,13 @@ package android.os.vibrator {
     field @NonNull public static final android.os.Parcelable.Creator<android.os.vibrator.VibrationEffectSegment> CREATOR;
   }
 
+  public final class VibratorFrequencyProfile {
+    method public float getMaxAmplitudeMeasurementInterval();
+    method @FloatRange(from=0, to=1) @NonNull public float[] getMaxAmplitudeMeasurements();
+    method public float getMaxFrequency();
+    method public float getMinFrequency();
+  }
+
 }
 
 package android.permission {
@@ -2200,10 +2242,6 @@ package android.provider {
 
   public final class ContactsContract {
     field public static final String HIDDEN_COLUMN_PREFIX = "x_";
-  }
-
-  public static final class ContactsContract.CommonDataKinds.Phone implements android.provider.ContactsContract.CommonDataKinds.CommonColumns android.provider.ContactsContract.DataColumnsWithJoins {
-    field @NonNull @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS) public static final android.net.Uri ENTERPRISE_CONTENT_URI;
   }
 
   public static final class ContactsContract.PinnedPositions {
@@ -2637,6 +2675,8 @@ package android.telephony {
 
   public final class SmsManager {
     method @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE) public int checkSmsShortCodeDestination(String, String);
+    method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void clearStorageMonitorMemoryStatusOverride();
+    method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void setStorageMonitorMemoryStatusOverride(boolean);
     field public static final int SMS_CATEGORY_FREE_SHORT_CODE = 1; // 0x1
     field public static final int SMS_CATEGORY_NOT_SHORT_CODE = 0; // 0x0
     field public static final int SMS_CATEGORY_POSSIBLE_PREMIUM_SHORT_CODE = 3; // 0x3
@@ -2652,6 +2692,7 @@ package android.telephony {
     method @NonNull public android.util.Pair<java.lang.Integer,java.lang.Integer> getHalVersion(int);
     method @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE) public String getLine1AlphaTag();
     method @Deprecated public android.util.Pair<java.lang.Integer,java.lang.Integer> getRadioHalVersion();
+    method @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE) public boolean isDomainSelectionSupported();
     method public boolean modifyDevicePolicyOverrideApn(@NonNull android.content.Context, int, @NonNull android.telephony.data.ApnSetting);
     method @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE) public void refreshUiccProfile();
     method @Deprecated public void setCarrierTestOverride(String, String, String, String, String, String, String);
@@ -2703,6 +2744,7 @@ package android.text {
     method @IntRange(from=0) public int getConfigVersion();
     method @NonNull public java.util.List<android.text.FontConfig.FontFamily> getFontFamilies();
     method public long getLastModifiedTimeMillis();
+    method @NonNull public java.util.List<android.text.FontConfig.NamedFamilyList> getNamedFamilyLists();
     method public void writeToParcel(@NonNull android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.text.FontConfig> CREATOR;
   }
@@ -2732,13 +2774,21 @@ package android.text {
     method public int describeContents();
     method @NonNull public java.util.List<android.text.FontConfig.Font> getFontList();
     method @NonNull public android.os.LocaleList getLocaleList();
-    method @Nullable public String getName();
+    method @Deprecated @Nullable public String getName();
     method public int getVariant();
     method public void writeToParcel(@NonNull android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.text.FontConfig.FontFamily> CREATOR;
     field public static final int VARIANT_COMPACT = 1; // 0x1
     field public static final int VARIANT_DEFAULT = 0; // 0x0
     field public static final int VARIANT_ELEGANT = 2; // 0x2
+  }
+
+  public static final class FontConfig.NamedFamilyList implements android.os.Parcelable {
+    method public int describeContents();
+    method @NonNull public java.util.List<android.text.FontConfig.FontFamily> getFamilies();
+    method @NonNull public String getName();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.text.FontConfig.NamedFamilyList> CREATOR;
   }
 
   public static final class Selection.MemoryTextWatcher implements android.text.TextWatcher {
@@ -2927,7 +2977,7 @@ package android.view {
     method public static String actionToString(int);
     method public final void setDisplayId(int);
     field public static final int FLAG_IS_ACCESSIBILITY_EVENT = 2048; // 0x800
-    field public static final int LAST_KEYCODE = 311; // 0x137
+    field public static final int LAST_KEYCODE = 312; // 0x138
   }
 
   public final class KeyboardShortcutGroup implements android.os.Parcelable {
@@ -2941,6 +2991,7 @@ package android.view {
   }
 
   public final class MotionEvent extends android.view.InputEvent implements android.os.Parcelable {
+    method public int getDisplayId();
     method public void setActionButton(int);
     method public void setButtonState(int);
     method public void setDisplayId(int);
@@ -3433,14 +3484,20 @@ package android.window {
 
   public class TaskFragmentOrganizer extends android.window.WindowOrganizer {
     ctor public TaskFragmentOrganizer(@NonNull java.util.concurrent.Executor);
+    method public void applyTransaction(@NonNull android.window.WindowContainerTransaction, int, boolean);
     method @NonNull public java.util.concurrent.Executor getExecutor();
     method @NonNull public android.window.TaskFragmentOrganizerToken getOrganizerToken();
+    method public void onTransactionHandled(@NonNull android.os.IBinder, @NonNull android.window.WindowContainerTransaction, int, boolean);
     method public void onTransactionReady(@NonNull android.window.TaskFragmentTransaction);
     method @CallSuper public void registerOrganizer();
     method @CallSuper public void unregisterOrganizer();
     field public static final String KEY_ERROR_CALLBACK_OP_TYPE = "operation_type";
     field public static final String KEY_ERROR_CALLBACK_TASK_FRAGMENT_INFO = "task_fragment_info";
     field public static final String KEY_ERROR_CALLBACK_THROWABLE = "fragment_throwable";
+    field public static final int TASK_FRAGMENT_TRANSIT_CHANGE = 6; // 0x6
+    field public static final int TASK_FRAGMENT_TRANSIT_CLOSE = 2; // 0x2
+    field public static final int TASK_FRAGMENT_TRANSIT_NONE = 0; // 0x0
+    field public static final int TASK_FRAGMENT_TRANSIT_OPEN = 1; // 0x1
   }
 
   public final class TaskFragmentOrganizerToken implements android.os.Parcelable {
@@ -3562,8 +3619,8 @@ package android.window {
 
   public class WindowOrganizer {
     ctor public WindowOrganizer();
-    method @RequiresPermission(value=android.Manifest.permission.MANAGE_ACTIVITY_TASKS, conditional=true) public int applySyncTransaction(@NonNull android.window.WindowContainerTransaction, @NonNull android.window.WindowContainerTransactionCallback);
-    method @RequiresPermission(value=android.Manifest.permission.MANAGE_ACTIVITY_TASKS, conditional=true) public void applyTransaction(@NonNull android.window.WindowContainerTransaction);
+    method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS) public int applySyncTransaction(@NonNull android.window.WindowContainerTransaction, @NonNull android.window.WindowContainerTransactionCallback);
+    method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS) public void applyTransaction(@NonNull android.window.WindowContainerTransaction);
   }
 
   @UiContext public abstract class WindowProviderService extends android.app.Service {

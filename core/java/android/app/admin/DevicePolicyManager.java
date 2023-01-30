@@ -165,6 +165,17 @@ import java.util.function.Consumer;
 @SuppressLint("UseIcu")
 public class DevicePolicyManager {
 
+    /** @hide */
+    public static final String DEPRECATE_USERMANAGERINTERNAL_DEVICEPOLICY_FLAG =
+            "deprecate_usermanagerinternal_devicepolicy";
+    /** @hide */
+    public static final boolean DEPRECATE_USERMANAGERINTERNAL_DEVICEPOLICY_DEFAULT = true;
+    /** @hide */
+    public static final String ADD_ISFINANCED_DEVICE_FLAG =
+            "add-isfinanced-device";
+    /** @hide */
+    public static final boolean ADD_ISFINANCED_FEVICE_DEFAULT = true;
+
     private static String TAG = "DevicePolicyManager";
 
     private final Context mContext;
@@ -3907,34 +3918,48 @@ public class DevicePolicyManager {
     public static @interface MtePolicy {}
 
     /**
-     * Set MTE policy for device. MTE_ENABLED does not necessarily enable MTE if set on a device
-     * that does not support MTE.
-     *
-     * The default policy is MTE_NOT_CONTROLLED_BY_POLICY.
-     *
-     * Memory Tagging Extension (MTE) is a CPU extension that allows to protect against certain
+     * Called by a device owner or profile owner of an organization-owned device to set the Memory
+     * Tagging Extension (MTE) policy. MTE is a CPU extension that allows to protect against certain
      * classes of security problems at a small runtime performance cost overhead.
      *
-     * @param policy the policy to be set
+     * <p>The MTE policy can only be set to {@link #MTE_DISABLED} if called by a device owner.
+     * Otherwise a {@link SecurityException} will be thrown.
+     *
+     * <p>The device needs to be rebooted to apply changes to the MTE policy.
+     *
+     * @throws SecurityException if caller is not device owner or profile owner of org-owned device
+     *     or if called on a parent instance
+     * @param policy the MTE policy to be set
      */
     public void setMtePolicy(@MtePolicy int policy) {
-        // TODO(b/244290023): implement
-        // This is SecurityException to temporarily make ParentProfileTest happy.
-        // This is not used.
-        throw new SecurityException("not implemented");
+        throwIfParentInstance("setMtePolicy");
+        if (mService != null) {
+            try {
+                mService.setMtePolicy(policy);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
     }
 
     /**
-     * Get currently set MTE policy. This is not necessarily the same as the state of MTE on the
-     * device, as the device might not support MTE.
+     * Called by a device owner, a profile owner of an organization-owned device or the system to
+     * get the Memory Tagging Extension (MTE) policy
      *
-     * @return the currently set policy
+     * @throws SecurityException if caller is not device owner or profile owner of org-owned device
+     *                           or system uid, or if called on a parent instance
+     * @return the currently set MTE policy
      */
     public @MtePolicy int getMtePolicy() {
-        // TODO(b/244290023): implement
-        // This is SecurityException to temporarily make ParentProfileTest happy.
-        // This is not used.
-        throw new SecurityException("not implemented");
+        throwIfParentInstance("setMtePolicy");
+        if (mService != null) {
+            try {
+                return mService.getMtePolicy();
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+        return MTE_NOT_CONTROLLED_BY_POLICY;
     }
 
     // TODO: Expose this as SystemAPI once we add the query API
@@ -6288,13 +6313,12 @@ public class DevicePolicyManager {
      * personal use, removing the managed profile and all policies set by the profile owner.
      * </p>
      *
-     * <p>
-     * Calling this method from the primary user will only work if the calling app is targeting
-     * Android 13 or below, in which case it will cause the device to reboot, erasing all device
-     * data - including all the secondary users and their data - while booting up. If an app
-     * targeting Android 13+ is calling this method from the primary user or last full user,
-     * {@link IllegalStateException} will be thrown.
-     * </p>
+     * <p> Calling this method from the primary user will only work if the calling app is
+     * targeting SDK level {@link Build.VERSION_CODES#TIRAMISU} or below, in which case it will
+     * cause the device to reboot, erasing all device data - including all the secondary users
+     * and their data - while booting up. If an app targeting SDK level
+     * {@link Build.VERSION_CODES#UPSIDE_DOWN_CAKE} and above is calling this method from the
+     * primary user or last full user, {@link IllegalStateException} will be thrown. </p>
      *
      * If an app wants to wipe the entire device irrespective of which user they are from, they
      * should use {@link #wipeDevice} instead.
@@ -6429,6 +6453,10 @@ public class DevicePolicyManager {
      *
      * <p>The caller must hold the
      * {@link android.Manifest.permission#TRIGGER_LOST_MODE} permission.
+     *
+     * <p>Register a broadcast receiver to receive lost mode location updates. This receiver should
+     * subscribe to the {@link #ACTION_LOST_MODE_LOCATION_UPDATE} action and receive the location
+     * from an intent extra {@link #EXTRA_LOST_MODE_LOCATION}.
      *
      * <p> Not for use by third-party applications.
      *
@@ -15419,10 +15447,13 @@ public class DevicePolicyManager {
      *
      * @throws IllegalStateException When admin is not the device owner or there is no device owner.
      *
+     * @deprecated Use type-specific APIs (e.g. {@link #isFinancedDevice}).
      * @hide
      */
     @TestApi
     @DeviceOwnerType
+    @Deprecated
+    // TODO(b/259908270): remove
     public int getDeviceOwnerType(@NonNull ComponentName admin) {
         throwIfParentInstance("getDeviceOwnerType");
         if (mService != null) {
@@ -15433,6 +15464,20 @@ public class DevicePolicyManager {
             }
         }
         return DEVICE_OWNER_TYPE_DEFAULT;
+    }
+
+    /**
+     * {@code true} if this device is financed.
+     * @hide
+     */
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.MANAGE_USERS,
+            android.Manifest.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS
+    })
+    public boolean isFinancedDevice() {
+        return isDeviceManaged()
+                && getDeviceOwnerType(getDeviceOwnerComponentOnAnyUser())
+                == DEVICE_OWNER_TYPE_FINANCED;
     }
 
     /**

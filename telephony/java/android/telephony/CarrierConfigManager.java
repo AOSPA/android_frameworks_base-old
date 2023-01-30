@@ -17,6 +17,7 @@
 package android.telephony;
 
 import android.Manifest;
+import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -52,6 +53,7 @@ import com.android.internal.telephony.ICarrierConfigLoader;
 import com.android.telephony.Rlog;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -3060,6 +3062,39 @@ public class CarrierConfigManager {
             "5g_nr_sssinr_thresholds_int_array";
 
     /**
+     * An interval in dB for {@link SignalThresholdInfo#SIGNAL_MEASUREMENT_TYPE_SSRSRP} measurement
+     * type defining the required magnitude change between reports.
+     *
+     * <p>The default value is 2 and the minimum allowed value is 0. If no value or negative value
+     * is set, the default value 2 is used.
+     * @hide
+     */
+    public static final String
+            KEY_NGRAN_SSRSRP_HYSTERESIS_DB_INT = "ngran_ssrsrp_hysteresis_db_int";
+
+    /**
+     * An interval in dB for {@link SignalThresholdInfo#SIGNAL_MEASUREMENT_TYPE_SSRSRQ} measurement
+     * type defining the required magnitude change between reports.
+     *
+     * <p>The default value is 2 and the minimum allowed value is 0. If no value or negative value
+     * is set, the default value 2 is used.
+     *@hide
+     */
+    public static final String
+            KEY_NGRAN_SSRSRQ_HYSTERESIS_DB_INT = "ngran_ssrsrq_hysteresis_db_int";
+
+    /**
+     * An interval in dB for {@link SignalThresholdInfo#SIGNAL_MEASUREMENT_TYPE_SSSINR} measurement
+     * type defining the required magnitude change between reports.
+     *
+     * <p>The default value is 2 and the minimum allowed value is 0. If no value or negative value
+     * is set, the default value 2 is used.
+     * @hide
+     */
+    public static final String
+            KEY_NGRAN_SSSINR_HYSTERESIS_DB_INT = "ngran_sssinr_hysteresis_db_int";
+
+    /**
      * Bit-field integer to determine whether to use SS reference signal received power (SSRSRP),
      * SS reference signal received quality (SSRSRQ), or/and SS signal-to-noise and interference
      * ratio (SSSINR) for the number of 5G NR signal bars and signal criteria reporting enabling.
@@ -3396,6 +3431,38 @@ public class CarrierConfigManager {
             "lte_rssnr_thresholds_int_array";
 
     /**
+     * An interval in dB for {@link SignalThresholdInfo#SIGNAL_MEASUREMENT_TYPE_RSRP} measurement
+     * type defining the required magnitude change between reports.
+     *
+     * <p>The default value is 2 and the minimum allowed value is 0. If no value or negative value
+     * is set, the default value 2 is used.
+     * @hide
+     */
+    public static final String
+            KEY_EUTRAN_RSRP_HYSTERESIS_DB_INT = "eutran_rsrp_hysteresis_db_int";
+
+    /**
+     * An interval in dB for {@link SignalThresholdInfo#SIGNAL_MEASUREMENT_TYPE_RSRQ} measurement
+     * type defining the required magnitude change between reports.
+     *
+     * <p>The default value is 2 and the minimum allowed value is 0. If no value or negative value
+     * is set, the default value 2 is used.
+     * @hide
+     */
+    public static final String KEY_EUTRAN_RSRQ_HYSTERESIS_DB_INT = "eutran_rsrq_hysteresis_db_int";
+
+    /**
+     * An interval in dB for {@link SignalThresholdInfo#SIGNAL_MEASUREMENT_TYPE_RSSNR} measurement
+     * type defining the required magnitude change between reports.
+     *
+     * <p>The default value is 2 and the minimum allowed value is 0. If no value or negative value
+     * is set, the default value 2 is used.
+     * @hide
+     */
+    public static final String
+            KEY_EUTRAN_RSSNR_HYSTERESIS_DB_INT = "eutran_rssnr_hysteresis_db_int";
+
+    /**
      * Decides when clients try to bind to iwlan network service, which package name will
      * the binding intent go to.
      * @hide
@@ -3470,6 +3537,26 @@ public class CarrierConfigManager {
      */
     public static final String KEY_WCDMA_ECNO_THRESHOLDS_INT_ARRAY =
             "wcdma_ecno_thresholds_int_array";
+
+    /**
+     * An interval in dB for {@link SignalThresholdInfo#SIGNAL_MEASUREMENT_TYPE_RSCP} measurement
+     * type defining the required magnitude change between reports.
+     *
+     * <p>The default value is 2 and the minimum allowed value is 0. If no value or negative value
+     * is set, the default value 2 is used.
+     * @hide
+     */
+    public static final String KEY_UTRAN_RSCP_HYSTERESIS_DB_INT = "utran_rscp_hysteresis_db_int";
+
+    /**
+     * An interval in dB for {@link SignalThresholdInfo#SIGNAL_MEASUREMENT_TYPE_ECNO} measurement
+     * type defining the required magnitude change between reports.
+     *
+     * <p>The default value is 2 and the minimum allowed value is 0. If no value or negative value
+     * is set, the default value 2 is used.
+     * @hide
+     */
+    public static final String KEY_UTRAN_ECNO_HYSTERESIS_DB_INT = "utran_ecno_hysteresis_db_int";
 
     /**
      * The default measurement to use for signal strength reporting. If this is not specified, the
@@ -8756,6 +8843,16 @@ public class CarrierConfigManager {
             "gsm_rssi_thresholds_int_array";
 
     /**
+     * An interval in dB for {@link SignalThresholdInfo#SIGNAL_MEASUREMENT_TYPE_RSSI} measurement
+     * type defining the required magnitude change between reports.
+     *
+     * <p>The default value is 2 and the minimum allowed value is 0. If no value or negative value
+     * is set, the default value 2 is used.
+     * @hide
+     */
+    public static final String KEY_GERAN_RSSI_HYSTERESIS_DB_INT = "geran_rssi_hysteresis_db_int";
+
+    /**
      * Determines whether Wireless Priority Service call is supported over IMS.
      *
      * See Wireless Priority Service from https://www.fcc.gov/general/wireless-priority-service-wps
@@ -9857,6 +9954,15 @@ public class CarrierConfigManager {
                     15, /* SIGNAL_STRENGTH_GOOD */
                     30  /* SIGNAL_STRENGTH_GREAT */
                 });
+        sDefaults.putInt(KEY_GERAN_RSSI_HYSTERESIS_DB_INT, 2);
+        sDefaults.putInt(KEY_UTRAN_RSCP_HYSTERESIS_DB_INT, 2);
+        sDefaults.putInt(KEY_EUTRAN_RSRP_HYSTERESIS_DB_INT, 2);
+        sDefaults.putInt(KEY_EUTRAN_RSRQ_HYSTERESIS_DB_INT, 2);
+        sDefaults.putInt(KEY_EUTRAN_RSSNR_HYSTERESIS_DB_INT, 2);
+        sDefaults.putInt(KEY_NGRAN_SSRSRP_HYSTERESIS_DB_INT, 2);
+        sDefaults.putInt(KEY_NGRAN_SSRSRQ_HYSTERESIS_DB_INT, 2);
+        sDefaults.putInt(KEY_NGRAN_SSSINR_HYSTERESIS_DB_INT, 2);
+        sDefaults.putInt(KEY_UTRAN_ECNO_HYSTERESIS_DB_INT, 2);
         sDefaults.putInt(KEY_PARAMETERS_USE_FOR_5G_NR_SIGNAL_BAR_INT,
                 CellSignalStrengthNr.USE_SSRSRP);
         sDefaults.putBoolean(KEY_SIGNAL_STRENGTH_NR_NSA_USE_LTE_AS_PRIMARY_BOOL, true);
@@ -10180,10 +10286,13 @@ public class CarrierConfigManager {
      * @param subId the subscription ID, normally obtained from {@link SubscriptionManager}.
      * @return A {@link PersistableBundle} containing the config for the given subId, or default
      *         values for an invalid subId.
+     *
+     * @deprecated Use {@link #getConfigForSubId(int, String...)} instead.
      */
     @SuppressAutoDoc // Blocked by b/72967236 - no support for carrier privileges
     @RequiresPermission(Manifest.permission.READ_PHONE_STATE)
     @Nullable
+    @Deprecated
     public PersistableBundle getConfigForSubId(int subId) {
         try {
             ICarrierConfigLoader loader = getICarrierConfigLoader();
@@ -10199,6 +10308,59 @@ public class CarrierConfigManager {
                     + ex.toString());
         }
         return null;
+    }
+
+    /**
+     * Gets the configuration values of the specified keys for a particular subscription.
+     *
+     * <p>If an invalid subId is used, the returned configuration will contain default values for
+     * the specified keys. If the value for the key can't be found, the returned configuration will
+     * filter the key out.
+     *
+     * <p>After using this method to get the configuration bundle,
+     * {@link #isConfigForIdentifiedCarrier(PersistableBundle)} should be called to confirm whether
+     * any carrier specific configuration has been applied.
+     *
+     * <p>Note that on success, the key/value for {@link #KEY_CARRIER_CONFIG_VERSION_STRING} and
+     * {@link #KEY_CARRIER_CONFIG_APPLIED_BOOL} are always in the returned bundle, no matter if they
+     * were explicitly requested.
+     *
+     * <p>Requires Permission:
+     * {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}, or the calling app
+     * has carrier privileges on the specified subscription (see
+     * {@link TelephonyManager#hasCarrierPrivileges()}).
+     *
+     * @param subId The subscription ID on which the carrier config should be retrieved.
+     * @param keys  The carrier config keys to retrieve values.
+     * @return A {@link PersistableBundle} with key/value mapping for the specified configuration
+     * on success, or an empty (but never null) bundle on failure (for example, when the calling app
+     * has no permission).
+     */
+    @RequiresPermission(anyOf = {
+            Manifest.permission.READ_PHONE_STATE,
+            "carrier privileges",
+    })
+    @NonNull
+    public PersistableBundle getConfigForSubId(int subId, @NonNull String... keys) {
+        Objects.requireNonNull(keys, "Config keys should be non-null");
+        for (String key : keys) {
+            Objects.requireNonNull(key, "Config key should be non-null");
+        }
+
+        try {
+            ICarrierConfigLoader loader = getICarrierConfigLoader();
+            if (loader == null) {
+                Rlog.w(TAG, "Error getting config for subId " + subId
+                        + " ICarrierConfigLoader is null");
+                throw new IllegalStateException("Carrier config loader is not available.");
+            }
+            return loader.getConfigSubsetForSubIdWithFeature(subId, mContext.getOpPackageName(),
+                    mContext.getAttributionTag(), keys);
+        } catch (RemoteException ex) {
+            Rlog.e(TAG, "Error getting config for subId " + subId + ": " + ex);
+            ex.rethrowAsRuntimeException();
+        }
+        return new PersistableBundle();
     }
 
     /**
@@ -10275,12 +10437,49 @@ public class CarrierConfigManager {
      * has carrier privileges (see {@link TelephonyManager#hasCarrierPrivileges()}).
      *
      * @see #getConfigForSubId
+     * @see #getConfig(String...)
+     * @deprecated use {@link #getConfig(String...)} instead.
      */
     @SuppressAutoDoc // Blocked by b/72967236 - no support for carrier privileges
     @RequiresPermission(Manifest.permission.READ_PHONE_STATE)
     @Nullable
+    @Deprecated
     public PersistableBundle getConfig() {
         return getConfigForSubId(SubscriptionManager.getDefaultSubscriptionId());
+    }
+
+    /**
+     * Gets the configuration values of the specified config keys applied for the default
+     * subscription.
+     *
+     * <p>If the value for the key can't be found, the returned bundle will filter the key out.
+     *
+     * <p>After using this method to get the configuration bundle, {@link
+     * #isConfigForIdentifiedCarrier(PersistableBundle)} should be called to confirm whether any
+     * carrier specific configuration has been applied.
+     *
+     * <p>Note that on success, the key/value for {@link #KEY_CARRIER_CONFIG_VERSION_STRING} and
+     * {@link #KEY_CARRIER_CONFIG_APPLIED_BOOL} are always in the returned bundle, no matter if
+     * they were explicitly requested.
+     *
+     * <p>Requires Permission:
+     * {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}, or the calling app
+     * has carrier privileges for the default subscription (see
+     * {@link TelephonyManager#hasCarrierPrivileges()}).
+     *
+     * @param keys The config keys to retrieve values
+     * @return A {@link PersistableBundle} with key/value mapping for the specified carrier
+     * configs on success, or an empty (but never null) bundle on failure.
+     * @see #getConfigForSubId(int, String...)
+     * @see SubscriptionManager#getDefaultSubscriptionId()
+     */
+    @RequiresPermission(anyOf = {
+            Manifest.permission.READ_PHONE_STATE,
+            "carrier privileges",
+    })
+    @NonNull
+    public PersistableBundle getConfig(@NonNull String... keys) {
+        return getConfigForSubId(SubscriptionManager.getDefaultSubscriptionId(), keys);
     }
 
     /**
@@ -10468,5 +10667,86 @@ public class CarrierConfigManager {
         } else if (value instanceof PersistableBundle) {
             configs.putPersistableBundle(key, (PersistableBundle) value);
         }
+    }
+
+    /**
+     * Listener interface to get a notification when the carrier configurations have changed.
+     *
+     * Use this listener to receive timely updates when the carrier configuration changes. System
+     * components should prefer this listener over {@link #ACTION_CARRIER_CONFIG_CHANGED}
+     * whenever possible.
+     *
+     * To register the listener, call
+     * {@link #registerCarrierConfigChangeListener(Executor, CarrierConfigChangeListener)}.
+     * To unregister, call
+     * {@link #unregisterCarrierConfigChangeListener(CarrierConfigChangeListener)}.
+     *
+     * Note that on registration, registrants will NOT receive a notification on last carrier config
+     * change. Only carrier configs change AFTER the registration will be sent to registrants. And
+     * unlike {@link #ACTION_CARRIER_CONFIG_CHANGED}, notification wouldn't send when the device is
+     * unlocked. Registrants only receive the notification when there has been real carrier config
+     * changes.
+     *
+     * @see #registerCarrierConfigChangeListener(Executor, CarrierConfigChangeListener)
+     * @see #unregisterCarrierConfigChangeListener(CarrierConfigChangeListener)
+     * @see #ACTION_CARRIER_CONFIG_CHANGED
+     * @see #getConfig(String...)
+     * @see #getConfigForSubId(int, String...)
+     */
+    public interface CarrierConfigChangeListener {
+        /**
+         * Called when carrier configurations have changed.
+         *
+         * @param logicalSlotIndex  The logical SIM slot index on which to monitor and get
+         *                          notification. It is guaranteed to be valid.
+         * @param subscriptionId    The subscription on the SIM slot. May be
+         *                          {@link SubscriptionManager#INVALID_SUBSCRIPTION_ID}.
+         * @param carrierId         The optional carrier Id, may be
+         *                          {@link TelephonyManager#UNKNOWN_CARRIER_ID}.
+         *                          See {@link TelephonyManager#getSimCarrierId()}.
+         * @param specificCarrierId The optional fine-grained carrierId, may be {@link
+         *                          TelephonyManager#UNKNOWN_CARRIER_ID}. A specific carrierId may
+         *                          be different from the carrierId above in a MVNO scenario. See
+         *                          detail in {@link TelephonyManager#getSimSpecificCarrierId()}.
+         */
+        void onCarrierConfigChanged(int logicalSlotIndex, int subscriptionId, int carrierId,
+                int specificCarrierId);
+    }
+
+    /**
+     * Register a {@link CarrierConfigChangeListener} to get a notification when carrier
+     * configurations have changed.
+     *
+     * @param executor The executor on which the listener will be called.
+     * @param listener The CarrierConfigChangeListener called when carrier configs has changed.
+     */
+    public void registerCarrierConfigChangeListener(@NonNull @CallbackExecutor Executor executor,
+            @NonNull CarrierConfigChangeListener listener) {
+        Objects.requireNonNull(executor, "Executor should be non-null.");
+        Objects.requireNonNull(listener, "Listener should be non-null.");
+
+        TelephonyRegistryManager trm = mContext.getSystemService(TelephonyRegistryManager.class);
+        if (trm == null) {
+            throw new IllegalStateException("Telephony registry service is null");
+        }
+        trm.addCarrierConfigChangedListener(executor, listener);
+    }
+
+    /**
+     * Unregister the {@link CarrierConfigChangeListener} to stop notification on carrier
+     * configurations change.
+     *
+     * @param listener The CarrierConfigChangeListener which was registered with method
+     * {@link #registerCarrierConfigChangeListener(Executor, CarrierConfigChangeListener)}.
+     */
+    public void unregisterCarrierConfigChangeListener(
+            @NonNull CarrierConfigChangeListener listener) {
+        Objects.requireNonNull(listener, "Listener should be non-null.");
+
+        TelephonyRegistryManager trm = mContext.getSystemService(TelephonyRegistryManager.class);
+        if (trm == null) {
+            throw new IllegalStateException("Telephony registry service is null");
+        }
+        trm.removeCarrierConfigChangedListener(listener);
     }
 }

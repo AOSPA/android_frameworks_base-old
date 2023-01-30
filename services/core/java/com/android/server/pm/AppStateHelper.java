@@ -16,16 +16,18 @@
 
 package com.android.server.pm;
 
-import static android.media.AudioAttributes.USAGE_VOICE_COMMUNICATION;
-import static android.media.AudioAttributes.USAGE_VOICE_COMMUNICATION_SIGNALLING;
-
 import android.app.ActivityManager;
 import android.app.ActivityManager.RunningAppProcessInfo;
 import android.app.ActivityManagerInternal;
+import android.app.ActivityThread;
+import android.app.usage.NetworkStats;
+import android.app.usage.NetworkStatsManager;
 import android.content.Context;
 import android.media.AudioManager;
 import android.media.IAudioService;
+import android.net.ConnectivityManager;
 import android.os.ServiceManager;
+import android.os.SystemProperties;
 import android.telecom.TelecomManager;
 import android.text.TextUtils;
 import android.util.ArraySet;
@@ -35,11 +37,15 @@ import com.android.server.LocalServices;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * A helper class to provide queries for app states concerning gentle-update.
  */
 public class AppStateHelper {
+    // The duration to monitor network usage to determine if network is active or not
+    private static final long ACTIVE_NETWORK_DURATION_MILLIS = TimeUnit.MINUTES.toMillis(10);
+
     private final Context mContext;
 
     public AppStateHelper(Context context) {
@@ -84,19 +90,12 @@ public class AppStateHelper {
     private boolean hasVoiceCall() {
         var am = mContext.getSystemService(AudioManager.class);
         try {
-            for (var apc : am.getActivePlaybackConfigurations()) {
-                if (!apc.isActive()) {
-                    continue;
-                }
-                var usage = apc.getAudioAttributes().getUsage();
-                if (usage == USAGE_VOICE_COMMUNICATION
-                        || usage == USAGE_VOICE_COMMUNICATION_SIGNALLING) {
-                    return true;
-                }
-            }
+            int audioMode = am.getMode();
+            return audioMode == AudioManager.MODE_IN_CALL
+                    || audioMode == AudioManager.MODE_IN_COMMUNICATION;
         } catch (Exception ignore) {
+            return false;
         }
-        return false;
     }
 
     /**
@@ -136,12 +135,35 @@ public class AppStateHelper {
         return hasAudioFocus(packageName) || isRecordingAudio(packageName);
     }
 
-    /**
-     * True if the app is sending or receiving network data.
-     */
-    private boolean hasActiveNetwork(String packageName) {
-        // To be implemented
+    private boolean hasActiveNetwork(List<String> packageNames, int networkType) {
+        var pm = ActivityThread.getPackageManager();
+        var nsm = mContext.getSystemService(NetworkStatsManager.class);
+        var endTime = System.currentTimeMillis();
+        var startTime = endTime - ACTIVE_NETWORK_DURATION_MILLIS;
+        try (var stats = nsm.querySummary(networkType, null, startTime, endTime)) {
+            var bucket = new NetworkStats.Bucket();
+            while (stats.hasNextBucket()) {
+                stats.getNextBucket(bucket);
+                var packageName = pm.getNameForUid(bucket.getUid());
+                if (!packageNames.contains(packageName)) {
+                    continue;
+                }
+                if (bucket.getRxPackets() > 0 || bucket.getTxPackets() > 0) {
+                    return true;
+                }
+            }
+        } catch (Exception ignore) {
+        }
         return false;
+    }
+
+    /**
+     * True if any app has sent or received network data over the past
+     * {@link #ACTIVE_NETWORK_DURATION_MILLIS} milliseconds.
+     */
+    private boolean hasActiveNetwork(List<String> packageNames) {
+        return hasActiveNetwork(packageNames, ConnectivityManager.TYPE_WIFI)
+                || hasActiveNetwork(packageNames, ConnectivityManager.TYPE_MOBILE);
     }
 
     /**
@@ -150,12 +172,11 @@ public class AppStateHelper {
     public boolean hasInteractingApp(List<String> packageNames) {
         for (var packageName : packageNames) {
             if (hasActiveAudio(packageName)
-                    || hasActiveNetwork(packageName)
                     || isAppTopVisible(packageName)) {
                 return true;
             }
         }
-        return false;
+        return hasActiveNetwork(packageNames);
     }
 
     /**
@@ -186,6 +207,11 @@ public class AppStateHelper {
      * True if there is an ongoing phone call.
      */
     public boolean isInCall() {
+        // Simulate in-call during test
+        if (SystemProperties.getBoolean(
+                "debug.pm.gentle_update_test.is_in_call", false)) {
+            return true;
+        }
         // TelecomManager doesn't handle the case where some apps don't implement ConnectionService.
         // We check apps using voice communication to detect if the device is in call.
         var tm = mContext.getSystemService(TelecomManager.class);
