@@ -17,7 +17,7 @@
 package android.hardware;
 
 import static android.companion.virtual.VirtualDeviceManager.ACTION_VIRTUAL_DEVICE_REMOVED;
-import static android.companion.virtual.VirtualDeviceManager.DEFAULT_DEVICE_ID;
+import static android.companion.virtual.VirtualDeviceManager.DEVICE_ID_DEFAULT;
 import static android.companion.virtual.VirtualDeviceManager.EXTRA_VIRTUAL_DEVICE_ID;
 import static android.companion.virtual.VirtualDeviceParams.DEVICE_POLICY_DEFAULT;
 import static android.companion.virtual.VirtualDeviceParams.POLICY_TYPE_SENSORS;
@@ -135,7 +135,7 @@ public class SystemSensorManager extends SensorManager {
     private final boolean mIsPackageDebuggable;
     private final Context mContext;
     private final long mNativeInstance;
-    private final VirtualDeviceManager mVdm;
+    private VirtualDeviceManager mVdm;
 
     private Optional<Boolean> mHasHighSamplingRateSensorsPermission = Optional.empty();
 
@@ -154,7 +154,6 @@ public class SystemSensorManager extends SensorManager {
         mContext = context;
         mNativeInstance = nativeCreate(context.getOpPackageName());
         mIsPackageDebuggable = (0 != (appInfo.flags & ApplicationInfo.FLAG_DEBUGGABLE));
-        mVdm = mContext.getSystemService(VirtualDeviceManager.class);
 
         // initialize the sensor list
         for (int index = 0;; ++index) {
@@ -170,8 +169,7 @@ public class SystemSensorManager extends SensorManager {
     @Override
     public List<Sensor> getSensorList(int type) {
         final int deviceId = mContext.getDeviceId();
-        if (deviceId == DEFAULT_DEVICE_ID || mVdm == null
-                || mVdm.getDevicePolicy(deviceId, POLICY_TYPE_SENSORS) == DEVICE_POLICY_DEFAULT) {
+        if (isDeviceSensorPolicyDefault(deviceId)) {
             return super.getSensorList(type);
         }
 
@@ -207,8 +205,7 @@ public class SystemSensorManager extends SensorManager {
     @Override
     protected List<Sensor> getFullSensorList() {
         final int deviceId = mContext.getDeviceId();
-        if (deviceId == DEFAULT_DEVICE_ID || mVdm == null
-                || mVdm.getDevicePolicy(deviceId, POLICY_TYPE_SENSORS) == DEVICE_POLICY_DEFAULT) {
+        if (isDeviceSensorPolicyDefault(deviceId)) {
             return mFullSensorsList;
         }
 
@@ -535,7 +532,7 @@ public class SystemSensorManager extends SensorManager {
                     if (intent.getAction().equals(ACTION_VIRTUAL_DEVICE_REMOVED)) {
                         synchronized (mFullRuntimeSensorListByDevice) {
                             final int deviceId = intent.getIntExtra(
-                                    EXTRA_VIRTUAL_DEVICE_ID, DEFAULT_DEVICE_ID);
+                                    EXTRA_VIRTUAL_DEVICE_ID, DEVICE_ID_DEFAULT);
                             List<Sensor> removedSensors =
                                     mFullRuntimeSensorListByDevice.removeReturnOld(deviceId);
                             if (removedSensors != null) {
@@ -1136,6 +1133,17 @@ public class SystemSensorManager extends SensorManager {
         return nativeSetOperationParameter(
                 mNativeInstance, handle,
                 parameter.type, parameter.floatValues, parameter.intValues) == 0;
+    }
+
+    private boolean isDeviceSensorPolicyDefault(int deviceId) {
+        if (deviceId == DEVICE_ID_DEFAULT) {
+            return true;
+        }
+        if (mVdm == null) {
+            mVdm = mContext.getSystemService(VirtualDeviceManager.class);
+        }
+        return mVdm == null
+                || mVdm.getDevicePolicy(deviceId, POLICY_TYPE_SENSORS) == DEVICE_POLICY_DEFAULT;
     }
 
     /**

@@ -16,6 +16,7 @@
 
 package com.android.systemui.statusbar.phone;
 
+import static android.app.StatusBarManager.DISABLE_HOME;
 import static android.app.StatusBarManager.WINDOW_STATE_HIDDEN;
 import static android.app.StatusBarManager.WINDOW_STATE_SHOWING;
 import static android.app.StatusBarManager.WindowVisibleState;
@@ -34,6 +35,7 @@ import static com.android.systemui.Dependency.TIME_TICK_HANDLER_NAME;
 import static com.android.systemui.charging.WirelessChargingAnimation.UNKNOWN_BATTERY_LEVEL;
 import static com.android.systemui.keyguard.WakefulnessLifecycle.WAKEFULNESS_ASLEEP;
 import static com.android.systemui.statusbar.NotificationLockscreenUserManager.PERMISSION_SELF;
+import static com.android.systemui.statusbar.StatusBarState.SHADE;
 import static com.android.systemui.statusbar.phone.BarTransitions.MODE_LIGHTS_OUT;
 import static com.android.systemui.statusbar.phone.BarTransitions.MODE_LIGHTS_OUT_TRANSPARENT;
 import static com.android.systemui.statusbar.phone.BarTransitions.MODE_OPAQUE;
@@ -69,6 +71,7 @@ import android.graphics.Point;
 import android.hardware.devicestate.DeviceStateManager;
 import android.metrics.LogMaker;
 import android.net.Uri;
+import android.os.Binder;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -157,6 +160,7 @@ import com.android.systemui.keyguard.KeyguardUnlockAnimationController;
 import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.keyguard.ScreenLifecycle;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
+import com.android.systemui.keyguard.domain.interactor.AlternateBouncerInteractor;
 import com.android.systemui.keyguard.ui.binder.LightRevealScrimViewBinder;
 import com.android.systemui.keyguard.ui.viewmodel.LightRevealScrimViewModel;
 import com.android.systemui.navigationbar.NavigationBarController;
@@ -465,6 +469,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
     private final ShadeController mShadeController;
     private final InitController mInitController;
     private final Lazy<CameraLauncher> mCameraLauncherLazy;
+    private final AlternateBouncerInteractor mAlternateBouncerInteractor;
 
     private final PluginDependencyProvider mPluginDependencyProvider;
     private final KeyguardDismissUtil mKeyguardDismissUtil;
@@ -743,7 +748,9 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
             WiredChargingRippleController wiredChargingRippleController,
             IDreamManager dreamManager,
             Lazy<CameraLauncher> cameraLauncherLazy,
-            Lazy<LightRevealScrimViewModel> lightRevealScrimViewModelLazy) {
+            Lazy<LightRevealScrimViewModel> lightRevealScrimViewModelLazy,
+            AlternateBouncerInteractor alternateBouncerInteractor
+    ) {
         mContext = context;
         mNotificationsController = notificationsController;
         mFragmentService = fragmentService;
@@ -821,6 +828,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
         mWallpaperManager = wallpaperManager;
         mJankMonitor = jankMonitor;
         mCameraLauncherLazy = cameraLauncherLazy;
+        mAlternateBouncerInteractor = alternateBouncerInteractor;
 
         mLockscreenShadeTransitionController = lockscreenShadeTransitionController;
         mStartingSurfaceOptional = startingSurfaceOptional;
@@ -1030,8 +1038,21 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
         // set the initial view visibility
         int disabledFlags1 = result.mDisabledFlags1;
         int disabledFlags2 = result.mDisabledFlags2;
-        mInitController.addPostInitTask(
-                () -> setUpDisableFlags(disabledFlags1, disabledFlags2));
+        mInitController.addPostInitTask(() -> {
+            setUpDisableFlags(disabledFlags1, disabledFlags2);
+            try {
+                // NOTE(b/262059863): Force-update the disable flags after applying the flags
+                // returned from registerStatusBar(). The result's disabled flags may be stale
+                // if StatusBarManager's disabled flags are updated between registering the bar and
+                // this handling this post-init task. We force an update in this case, and use a new
+                // token to not conflict with any other disabled flags already requested by SysUI
+                Binder token = new Binder();
+                mBarService.disable(DISABLE_HOME, token, mContext.getPackageName());
+                mBarService.disable(0, token, mContext.getPackageName());
+            } catch (RemoteException ex) {
+                ex.rethrowFromSystemServer();
+            }
+        });
 
         mFalsingManager.addFalsingBeliefListener(mFalsingBeliefListener);
 
@@ -1115,10 +1136,9 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
     private void onFoldedStateChangedInternal(boolean isFolded, boolean willGoToSleep) {
         // Folded state changes are followed by a screen off event.
         // By default turning off the screen also closes the shade.
-        // We want to make sure that the shade status is kept after
-        // folding/unfolding.
-        boolean isShadeOpen = mShadeController.isShadeOpen();
-        boolean leaveOpen = isShadeOpen && !willGoToSleep;
+        // We want to make sure that the shade status is kept after folding/unfolding.
+        boolean isShadeOpen = mShadeController.isShadeFullyOpen();
+        boolean leaveOpen = isShadeOpen && !willGoToSleep && mState == SHADE;
         if (DEBUG) {
             Log.d(TAG, String.format(
                     "#onFoldedStateChanged(): "
@@ -1129,18 +1149,17 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
                     isFolded, willGoToSleep, isShadeOpen, leaveOpen));
         }
         if (leaveOpen) {
-            if (mKeyguardStateController.isShowing()) {
-                // When device state changes on keyguard we don't want to keep the state of
-                // the shade and instead we open clean state of keyguard with shade closed.
-                // Normally some parts of QS state (like expanded/collapsed) are persisted and
-                // that causes incorrect UI rendering, especially when changing state with QS
-                // expanded. To prevent that we can close QS which resets QS and some parts of
-                // the shade to its default state. Read more in b/201537421
-                mCloseQsBeforeScreenOff = true;
-            } else {
-                // below makes shade stay open when going from folded to unfolded
-                mStatusBarStateController.setLeaveOpenOnKeyguardHide(true);
-            }
+            // below makes shade stay open when going from folded to unfolded
+            mStatusBarStateController.setLeaveOpenOnKeyguardHide(true);
+        }
+        if (mState != SHADE && isShadeOpen) {
+            // When device state changes on KEYGUARD/SHADE_LOCKED we don't want to keep the state of
+            // the shade and instead we open clean state of keyguard with shade closed.
+            // Normally some parts of QS state (like expanded/collapsed) are persisted and
+            // that causes incorrect UI rendering, especially when changing state with QS
+            // expanded. To prevent that we can close QS which resets QS and some parts of
+            // the shade to its default state. Read more in b/201537421
+            mCloseQsBeforeScreenOff = true;
         }
     }
 
@@ -3222,8 +3241,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
     private void showBouncerOrLockScreenIfKeyguard() {
         // If the keyguard is animating away, we aren't really the keyguard anymore and should not
         // show the bouncer/lockscreen.
-        if (!mKeyguardViewMediator.isHiding()
-                && !mKeyguardUnlockAnimationController.isPlayingCannedUnlockAnimation()) {
+        if (!mKeyguardViewMediator.isHiding() && !mKeyguardUpdateMonitor.isKeyguardGoingAway()) {
             if (mState == StatusBarState.SHADE_LOCKED) {
                 // shade is showing while locked on the keyguard, so go back to showing the
                 // lock screen where users can use the UDFPS affordance to enter the device
@@ -3540,7 +3558,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
 
     final ScreenLifecycle.Observer mScreenObserver = new ScreenLifecycle.Observer() {
         @Override
-        public void onScreenTurningOn(Runnable onDrawn) {
+        public void onScreenTurningOn() {
             mFalsingCollector.onScreenTurningOn();
             mNotificationPanelViewController.onScreenTurningOn();
         }
@@ -3703,7 +3721,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
         boolean launchingAffordanceWithPreview = mLaunchingAffordance;
         mScrimController.setLaunchingAffordanceWithPreview(launchingAffordanceWithPreview);
 
-        if (mStatusBarKeyguardViewManager.isShowingAlternateBouncer()) {
+        if (mAlternateBouncerInteractor.isVisibleState()) {
             if (mState == StatusBarState.SHADE || mState == StatusBarState.SHADE_LOCKED
                     || mTransitionToFullShadeProgress > 0f) {
                 mScrimController.transitionTo(ScrimState.AUTH_SCRIMMED_SHADE);

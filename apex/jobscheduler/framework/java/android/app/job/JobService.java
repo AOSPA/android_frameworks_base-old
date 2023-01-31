@@ -232,16 +232,8 @@ public abstract class JobService extends Service {
     public abstract boolean onStopJob(JobParameters params);
 
     /**
-     * Update how much data this job will transfer. This method can
-     * be called multiple times within the first 30 seconds after
-     * {@link #onStartJob(JobParameters)} has been called. Only
-     * one call will be heeded after that time has passed.
+     * Update the amount of data this job is estimated to transfer after the job has started.
      *
-     * This method (or an overload) must be called within the first
-     * 30 seconds for a data transfer job if a payload size estimate
-     * was not provided at the time of scheduling.
-     *
-     * @hide
      * @see JobInfo.Builder#setEstimatedNetworkBytes(long, long)
      */
     public final void updateEstimatedNetworkBytes(@NonNull JobParameters params,
@@ -250,16 +242,9 @@ public abstract class JobService extends Service {
     }
 
     /**
-     * Update how much data will transfer for the JobWorkItem. This
-     * method can be called multiple times within the first 30 seconds
-     * after {@link #onStartJob(JobParameters)} has been called.
-     * Only one call will be heeded after that time has passed.
+     * Update the amount of data this JobWorkItem is estimated to transfer after the job has
+     * started.
      *
-     * This method (or an overload) must be called within the first
-     * 30 seconds for a data transfer job if a payload size estimate
-     * was not provided at the time of scheduling.
-     *
-     * @hide
      * @see JobInfo.Builder#setEstimatedNetworkBytes(long, long)
      */
     public final void updateEstimatedNetworkBytes(@NonNull JobParameters params,
@@ -270,7 +255,6 @@ public abstract class JobService extends Service {
 
     /**
      * Tell JobScheduler how much data has successfully been transferred for the data transfer job.
-     * @hide
      */
     public final void updateTransferredNetworkBytes(@NonNull JobParameters params,
             @BytesLong long transferredDownloadBytes, @BytesLong long transferredUploadBytes) {
@@ -281,7 +265,6 @@ public abstract class JobService extends Service {
     /**
      * Tell JobScheduler how much data has been transferred for the data transfer
      * {@link JobWorkItem}.
-     * @hide
      */
     public final void updateTransferredNetworkBytes(@NonNull JobParameters params,
             @NonNull JobWorkItem item,
@@ -400,9 +383,9 @@ public abstract class JobService extends Service {
 
     /**
      * Provide JobScheduler with a notification to post and tie to this job's lifecycle.
-     * This is required for all user-initiated jobs
-     * (scheduled via {link JobInfo.Builder#setUserInitiated(boolean)}) and optional for
-     * other jobs. If the app does not call this method for a required notification within
+     * This is only required for those user-initiated jobs which return {@code true} via
+     * {@link JobParameters#isUserInitiatedJob()}.
+     * If the app does not call this method for a required notification within
      * 10 seconds after {@link #onStartJob(JobParameters)} is called,
      * the system will trigger an ANR and stop this job.
      *
@@ -416,6 +399,11 @@ public abstract class JobService extends Service {
      * JobScheduler will not remember this notification after the job has finished running,
      * so apps must call this every time the job is started (if required or desired).
      *
+     * <p>
+     * If separate jobs use the same notification ID with this API, the most recently provided
+     * notification will be shown to the user, and the
+     * {@code jobEndNotificationPolicy} of the last job to stop will be applied.
+     *
      * @param params                   The parameters identifying this job, as supplied to
      *                                 the job in the {@link #onStartJob(JobParameters)} callback.
      * @param notificationId           The ID for this notification, as per
@@ -423,7 +411,6 @@ public abstract class JobService extends Service {
      *                                 Notification)}.
      * @param notification             The notification to be displayed.
      * @param jobEndNotificationPolicy The policy to apply to the notification when the job stops.
-     * @hide
      */
     public final void setNotification(@NonNull JobParameters params, int notificationId,
             @NonNull Notification notification,

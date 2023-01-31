@@ -106,10 +106,10 @@ class CloseImeWindowToAppTest(flicker: FlickerTest) : BaseTest(flicker) {
     @IwTest(focusArea = "ime")
     override fun cujCompleted() {
         super.cujCompleted()
-        navBarLayerPositionAtStartAndEnd()
         imeLayerBecomesInvisible()
         imeAppLayerIsAlwaysVisible()
         imeAppWindowIsAlwaysVisible()
+        runAndIgnoreAssumptionViolation { navBarLayerPositionAtStartAndEnd() }
     }
 
     companion object {

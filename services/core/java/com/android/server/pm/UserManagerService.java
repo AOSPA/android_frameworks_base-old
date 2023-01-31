@@ -127,8 +127,11 @@ import com.android.server.LocalServices;
 import com.android.server.LockGuard;
 import com.android.server.SystemService;
 import com.android.server.am.UserState;
+import com.android.server.pm.UserManagerInternal.UserAssignmentResult;
 import com.android.server.pm.UserManagerInternal.UserLifecycleListener;
 import com.android.server.pm.UserManagerInternal.UserRestrictionsListener;
+import com.android.server.pm.UserManagerInternal.UserStartMode;
+import com.android.server.pm.UserManagerInternal.UserVisibilityListener;
 import com.android.server.storage.DeviceStorageMonitorInternal;
 import com.android.server.utils.Slogf;
 import com.android.server.utils.TimingsTraceAndSlog;
@@ -2167,9 +2170,9 @@ public class UserManagerService extends IUserManager.Stub {
      */
     private @CrossProfileIntentFilter.AccessControlLevel int
                 getCrossProfileIntentFilterAccessControl(@UserIdInt int userId) {
-        final UserTypeDetails userTypeDetails = getUserTypeDetailsNoChecks(userId);
-        return userTypeDetails != null ? userTypeDetails.getCrossProfileIntentFilterAccessControl()
-                : CrossProfileIntentFilter.ACCESS_LEVEL_ALL;
+        final UserProperties userProperties = getUserPropertiesInternal(userId);
+        return userProperties != null ? userProperties.getCrossProfileIntentFilterAccessControl() :
+                CrossProfileIntentFilter.ACCESS_LEVEL_ALL;
     }
 
     /**
@@ -2437,8 +2440,8 @@ public class UserManagerService extends IUserManager.Stub {
         synchronized (mGuestRestrictions) {
             mGuestRestrictions.clear();
             mGuestRestrictions.putAll(restrictions);
-            UserInfo guest = findCurrentGuestUser();
-            if (guest != null) {
+            final List<UserInfo> guests = getGuestUsers();
+            for (UserInfo guest : guests) {
                 synchronized (mRestrictionsLock) {
                     updateUserRestrictionsInternalLR(mGuestRestrictions, guest.id);
                 }
@@ -3684,10 +3687,12 @@ public class UserManagerService extends IUserManager.Stub {
                 );
             }
             // DISALLOW_CONFIG_WIFI was made a default guest restriction some time during version 6.
-            final UserInfo currentGuestUser = findCurrentGuestUser();
-            if (currentGuestUser != null && !hasUserRestriction(
-                    UserManager.DISALLOW_CONFIG_WIFI, currentGuestUser.id)) {
-                setUserRestriction(UserManager.DISALLOW_CONFIG_WIFI, true, currentGuestUser.id);
+            final List<UserInfo> guestUsers = getGuestUsers();
+            for (UserInfo guestUser : guestUsers) {
+                if (guestUser != null && !hasUserRestriction(
+                        UserManager.DISALLOW_CONFIG_WIFI, guestUser.id)) {
+                    setUserRestriction(UserManager.DISALLOW_CONFIG_WIFI, true, guestUser.id);
+                }
             }
             userVersion = 7;
         }
@@ -5230,26 +5235,26 @@ public class UserManagerService extends IUserManager.Stub {
     }
 
     /**
-     * Find the current guest user. If the Guest user is partial,
+     * Gets the existing guest users. If a Guest user is partial,
      * then do not include it in the results as it is about to die.
      *
-     * @return The current guest user.  Null if it doesn't exist.
-     * @hide
+     * @return list of existing Guest users currently on the device.
      */
     @Override
-    public UserInfo findCurrentGuestUser() {
-        checkManageUsersPermission("findCurrentGuestUser");
+    public List<UserInfo> getGuestUsers() {
+        checkManageUsersPermission("getGuestUsers");
+        final ArrayList<UserInfo> guestUsers = new ArrayList<>();
         synchronized (mUsersLock) {
             final int size = mUsers.size();
             for (int i = 0; i < size; i++) {
                 final UserInfo user = mUsers.valueAt(i).info;
                 if (user.isGuest() && !user.guestToRemove && !user.preCreated
                         && !mRemovingUserIds.get(user.id)) {
-                    return user;
+                    guestUsers.add(user);
                 }
             }
         }
-        return null;
+        return guestUsers;
     }
 
     /**
@@ -6659,6 +6664,7 @@ public class UserManagerService extends IUserManager.Stub {
             }
         }
 
+        // TODO(b/258213147): Remove
         @Override
         public void setDeviceManaged(boolean isManaged) {
             synchronized (mUsersLock) {
@@ -6666,6 +6672,7 @@ public class UserManagerService extends IUserManager.Stub {
             }
         }
 
+        // TODO(b/258213147): Remove
         @Override
         public boolean isDeviceManaged() {
             synchronized (mUsersLock) {
@@ -6673,6 +6680,7 @@ public class UserManagerService extends IUserManager.Stub {
             }
         }
 
+        // TODO(b/258213147): Remove
         @Override
         public void setUserManaged(@UserIdInt int userId, boolean isManaged) {
             synchronized (mUsersLock) {
@@ -6680,6 +6688,7 @@ public class UserManagerService extends IUserManager.Stub {
             }
         }
 
+        // TODO(b/258213147): Remove
         @Override
         public boolean isUserManaged(@UserIdInt int userId) {
             synchronized (mUsersLock) {
@@ -6976,10 +6985,11 @@ public class UserManagerService extends IUserManager.Stub {
         }
 
         @Override
-        public int assignUserToDisplayOnStart(@UserIdInt int userId, @UserIdInt int profileGroupId,
-                boolean foreground, int displayId) {
+        @UserAssignmentResult
+        public int assignUserToDisplayOnStart(@UserIdInt int userId,
+                @UserIdInt int profileGroupId, @UserStartMode int userStartMode, int displayId) {
             return mUserVisibilityMediator.assignUserToDisplayOnStart(userId, profileGroupId,
-                    foreground, displayId);
+                    userStartMode, displayId);
         }
 
         @Override

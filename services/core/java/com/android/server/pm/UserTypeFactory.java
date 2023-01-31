@@ -123,8 +123,6 @@ public final class UserTypeFactory {
                 .setLabel(0)
                 .setDefaultRestrictions(null)
                 .setIsMediaSharedWithParent(true)
-                .setCrossProfileIntentFilterAccessControl(
-                        CrossProfileIntentFilter.ACCESS_LEVEL_SYSTEM)
                 .setIsCredentialSharableWithParent(true)
                 .setDefaultCrossProfileIntentFilters(getDefaultCloneCrossProfileIntentFilter())
                 .setDefaultUserProperties(new UserProperties.Builder()
@@ -132,7 +130,10 @@ public final class UserTypeFactory {
                         .setShowInLauncher(UserProperties.SHOW_IN_LAUNCHER_WITH_PARENT)
                         .setShowInSettings(UserProperties.SHOW_IN_SETTINGS_WITH_PARENT)
                         .setInheritDevicePolicy(UserProperties.INHERIT_DEVICE_POLICY_FROM_PARENT)
-                        .setUseParentsContacts(true));
+                        .setUseParentsContacts(true)
+                        .setUpdateCrossProfileIntentFiltersOnOTA(true)
+                        .setCrossProfileIntentFilterAccessControl(
+                                UserProperties.CROSS_PROFILE_INTENT_FILTER_ACCESS_LEVEL_SYSTEM));
     }
 
     /**

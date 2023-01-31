@@ -24,6 +24,7 @@ import static android.content.pm.PackageManager.MATCH_SYSTEM_ONLY;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.location.LocationManager.BLOCK_PENDING_INTENT_SYSTEM_API_USAGE;
 import static android.location.LocationManager.FUSED_PROVIDER;
+import static android.location.LocationManager.GPS_HARDWARE_PROVIDER;
 import static android.location.LocationManager.GPS_PROVIDER;
 import static android.location.LocationManager.NETWORK_PROVIDER;
 import static android.location.LocationRequest.LOW_POWER_EXCEPTIONS;
@@ -95,6 +96,7 @@ import android.util.IndentingPrintWriter;
 import android.util.Log;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.Preconditions;
 import com.android.server.FgThread;
@@ -324,6 +326,9 @@ public class LocationManagerService extends ILocationManager.Stub implements
 
         for (LocationProviderManager manager : mProviderManagers) {
             if (providerName.equals(manager.getName())) {
+                if (!manager.isVisibleToCaller()) {
+                    return null;
+                }
                 return manager;
             }
         }
@@ -346,8 +351,9 @@ public class LocationManagerService extends ILocationManager.Stub implements
         }
     }
 
-    private void addLocationProviderManager(LocationProviderManager manager,
-            @Nullable AbstractLocationProvider realProvider) {
+    @VisibleForTesting
+    void addLocationProviderManager(
+            LocationProviderManager manager, @Nullable AbstractLocationProvider realProvider) {
         synchronized (mProviderManagers) {
             Preconditions.checkState(getLocationProviderManager(manager.getName()) == null);
 
@@ -458,6 +464,20 @@ public class LocationManagerService extends ILocationManager.Stub implements
             }
             if (gnssProvider == null) {
                 gnssProvider = mGnssManagerService.getGnssLocationProvider();
+            } else {
+                // If we have a GNSS provider override, add the hardware provider as a standalone
+                // option for use by apps with the correct permission. Note the GNSS HAL can only
+                // support a single client, so mGnssManagerService.getGnssLocationProvider() can
+                // only be installed with a single provider.
+                LocationProviderManager gnssHardwareManager =
+                        new LocationProviderManager(
+                                mContext,
+                                mInjector,
+                                GPS_HARDWARE_PROVIDER,
+                                mPassiveManager,
+                                Collections.singletonList(Manifest.permission.LOCATION_HARDWARE));
+                addLocationProviderManager(
+                        gnssHardwareManager, mGnssManagerService.getGnssLocationProvider());
             }
 
             LocationProviderManager gnssManager = new LocationProviderManager(mContext, mInjector,
@@ -641,7 +661,9 @@ public class LocationManagerService extends ILocationManager.Stub implements
     public List<String> getAllProviders() {
         ArrayList<String> providers = new ArrayList<>(mProviderManagers.size());
         for (LocationProviderManager manager : mProviderManagers) {
-            providers.add(manager.getName());
+            if (manager.isVisibleToCaller()) {
+                providers.add(manager.getName());
+            }
         }
         return providers;
     }
@@ -656,15 +678,18 @@ public class LocationManagerService extends ILocationManager.Stub implements
         synchronized (mLock) {
             ArrayList<String> providers = new ArrayList<>(mProviderManagers.size());
             for (LocationProviderManager manager : mProviderManagers) {
-                String name = manager.getName();
-                if (enabledOnly && !manager.isEnabled(UserHandle.getCallingUserId())) {
-                    continue;
+                if (manager.isVisibleToCaller()) {
+                    String name = manager.getName();
+                    if (enabledOnly && !manager.isEnabled(UserHandle.getCallingUserId())) {
+                        continue;
+                    }
+                    if (criteria != null
+                            && !LocationProvider.propertiesMeetCriteria(
+                                    name, manager.getProperties(), criteria)) {
+                        continue;
+                    }
+                    providers.add(name);
                 }
-                if (criteria != null && !LocationProvider.propertiesMeetCriteria(name,
-                        manager.getProperties(), criteria)) {
-                    continue;
-                }
-                providers.add(name);
             }
             return providers;
         }
@@ -1071,7 +1096,9 @@ public class LocationManagerService extends ILocationManager.Stub implements
     public void addProviderRequestListener(IProviderRequestListener listener) {
         mContext.enforceCallingOrSelfPermission(INTERACT_ACROSS_USERS, null);
         for (LocationProviderManager manager : mProviderManagers) {
-            manager.addProviderRequestListener(listener);
+            if (manager.isVisibleToCaller()) {
+                manager.addProviderRequestListener(listener);
+            }
         }
     }
 
@@ -1661,7 +1688,7 @@ public class LocationManagerService extends ILocationManager.Stub implements
                 if (provider != null && !provider.equals(manager.getName())) {
                     continue;
                 }
-                if (identity.equals(manager.getProviderIdentity())) {
+                if (identity.equals(manager.getProviderIdentity()) && manager.isVisibleToCaller()) {
                     return true;
                 }
             }

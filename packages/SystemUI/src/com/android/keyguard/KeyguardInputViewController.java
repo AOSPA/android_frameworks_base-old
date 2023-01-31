@@ -142,7 +142,8 @@ public abstract class KeyguardInputViewController<T extends KeyguardInputView>
     }
 
     public void startAppearAnimation() {
-        if (TextUtils.isEmpty(mMessageAreaController.getMessage())) {
+        if (TextUtils.isEmpty(mMessageAreaController.getMessage())
+                && getInitialMessageResId() != 0) {
             mMessageAreaController.setMessage(
                     mView.getResources().getString(getInitialMessageResId()),
                     /* animate= */ false);
@@ -165,9 +166,7 @@ public abstract class KeyguardInputViewController<T extends KeyguardInputView>
     }
 
     /** Determines the message to show in the bouncer when it first appears. */
-    protected int getInitialMessageResId() {
-        return 0;
-    }
+    protected abstract int getInitialMessageResId();
 
     /** Factory for a {@link KeyguardInputViewController}. */
     public static class Factory {

@@ -100,8 +100,6 @@ public class SettingsBackupTest {
                     Settings.System.MIN_REFRESH_RATE, // depends on hardware capabilities
                     Settings.System.PEAK_REFRESH_RATE, // depends on hardware capabilities
                     Settings.System.SCREEN_BRIGHTNESS_FLOAT,
-                    Settings.System.SCREEN_BRIGHTNESS_FOR_VR,
-                    Settings.System.SCREEN_BRIGHTNESS_FOR_VR_FLOAT,
                     Settings.System.SCREEN_AUTO_BRIGHTNESS_ADJ,
                     Settings.System.MULTI_AUDIO_FOCUS_ENABLED // form-factor/OEM specific
                     );
@@ -427,6 +425,7 @@ public class SettingsBackupTest {
                     Settings.Global.RESTRICTED_NETWORKING_MODE,
                     Settings.Global.REQUIRE_PASSWORD_TO_DECRYPT,
                     Settings.Global.SAFE_BOOT_DISALLOWED,
+                    Settings.Global.SECURE_FRP_MODE,
                     Settings.Global.SELINUX_STATUS,
                     Settings.Global.SELINUX_UPDATE_CONTENT_URL,
                     Settings.Global.SELINUX_UPDATE_METADATA_URL,

@@ -65,6 +65,7 @@ import android.os.LocaleList;
 import android.os.Message;
 import android.os.Process;
 import android.os.RemoteException;
+import android.os.UserHandle;
 import android.util.ArraySet;
 import android.util.Log;
 import android.util.Slog;
@@ -263,7 +264,7 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
 
         boolean isSysUiPackage = info.packageName.equals(
                 mAtm.getSysUiServiceComponentLocked().getPackageName());
-        if (isSysUiPackage || mUid == Process.SYSTEM_UID) {
+        if (isSysUiPackage || UserHandle.getAppId(mUid) == Process.SYSTEM_UID) {
             // This is a system owned process and should not use an activity config.
             // TODO(b/151161907): Remove after support for display-independent (raw) SysUi configs.
             mIsActivityConfigOverrideAllowed = false;
@@ -903,7 +904,7 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
             if (launchedActivity == activity) {
                 continue;
             }
-            if (!activity.stopped) {
+            if (!activity.mAppStopped) {
                 return true;
             }
         }
@@ -926,7 +927,7 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
     boolean shouldKillProcessForRemovedTask(Task task) {
         for (int k = 0; k < mActivities.size(); k++) {
             final ActivityRecord activity = mActivities.get(k);
-            if (!activity.stopped) {
+            if (!activity.mAppStopped) {
                 // Don't kill process(es) that has an activity not stopped.
                 return false;
             }
@@ -956,7 +957,7 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
             }
             // Don't consider any activities that are currently not in a state where they
             // can be destroyed.
-            if (r.isVisibleRequested() || !r.stopped || !r.hasSavedState() || !r.isDestroyable()
+            if (r.isVisibleRequested() || !r.mAppStopped || !r.hasSavedState() || !r.isDestroyable()
                     || r.isState(STARTED, RESUMED, PAUSING, PAUSED, STOPPING)) {
                 if (DEBUG_RELEASE) Slog.d(TAG_RELEASE, "Not releasing in-use activity: " + r);
                 continue;

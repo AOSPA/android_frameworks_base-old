@@ -28,6 +28,7 @@ import android.util.Log;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.concurrent.Executor;
 
 /**
  * Base implementation for SMS over IMS.
@@ -129,6 +130,22 @@ public class ImsSmsImplBase {
     // Lock for feature synchronization
     private final Object mLock = new Object();
     private IImsSmsListener mListener;
+    private Executor mExecutor;
+
+    /**
+     * Create a new ImsSmsImplBase using the Executor set in MmTelFeature
+     */
+    public ImsSmsImplBase() {
+    }
+
+    /**
+     * Create a new ImsSmsImplBase with specified executor.
+     * <p>
+     * @param executor Default executor for ImsSmsImplBase
+     */
+    public ImsSmsImplBase(@NonNull Executor executor) {
+        mExecutor = executor;
+    }
 
     /**
      * Registers a listener responsible for handling tasks like delivering messages.
@@ -168,6 +185,20 @@ public class ImsSmsImplBase {
         } catch (RuntimeException e) {
             Log.e(LOG_TAG, "Can not send sms: " + e.getMessage());
         }
+    }
+
+    /**
+     * This method will be triggered by the platform when memory becomes available to receive SMS
+     * after a memory full event. This method should be implemented by IMS providers to
+     * send RP-SMMA notification from SMS Relay Layer to server over IMS as per section 7.3.2 of
+     * TS 124.11. Once the RP-SMMA Notification is sent to the network. The network will deliver all
+     * the pending messages which failed due to Unavailability of Memory.
+     *
+     * @param token unique token generated in {@link ImsSmsDispatcher#onMemoryAvailable(void)} that
+     *  should be used when triggering callbacks for this specific message.
+     */
+    public void onMemoryAvailable(int token) {
+        // Base Implementation - Should be overridden
     }
 
     /**
@@ -467,5 +498,30 @@ public class ImsSmsImplBase {
      */
     public void onReady() {
         // Base Implementation - Should be overridden
+    }
+
+    /**
+     * Set default Executor for ImsSmsImplBase.
+     *
+     * @param executor The default executor for the framework to use when executing the methods
+     * overridden by the implementation of ImsSms.
+     * @hide
+     */
+    public final void setDefaultExecutor(@NonNull Executor executor) {
+        if (mExecutor == null) {
+            mExecutor = executor;
+        }
+    }
+
+    /**
+     * Get Executor from ImsSmsImplBase.
+     * If there is no settings for the executor, all ImsSmsImplBase method calls will use
+     * Runnable::run as default
+     *
+     * @return an Executor used to execute methods in ImsSms called remotely by the framework.
+     * @hide
+     */
+    public @NonNull Executor getExecutor() {
+        return mExecutor != null ? mExecutor : Runnable::run;
     }
 }

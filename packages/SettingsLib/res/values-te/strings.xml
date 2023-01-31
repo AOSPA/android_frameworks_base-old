@@ -332,7 +332,7 @@
     <string name="bluetooth_enable_gabeldorsche_summary" msgid="2054730331770712629">"బ్లూటూత్ Gabeldorsche ఫీచర్ స్ట్యాక్‌ను ఎనేబుల్ చేస్తుంది."</string>
     <string name="enhanced_connectivity_summary" msgid="1576414159820676330">"మెరుగైన కనెక్టివిటీ ఫీచర్‌ను ఎనేబుల్ చేస్తుంది."</string>
     <string name="enable_terminal_title" msgid="3834790541986303654">"స్థానిక టెర్మినల్"</string>
-    <string name="enable_terminal_summary" msgid="2481074834856064500">"స్థానిక షెల్ యాక్సెస్‌ను అందించే టెర్మినల్ యాప్‌ను ప్రారంభించు"</string>
+    <string name="enable_terminal_summary" msgid="2481074834856064500">"స్థానిక షెల్ యాక్సెస్‌ను అందించే టెర్మినల్ యాప్‌ను ప్రారంభించండి"</string>
     <string name="hdcp_checking_title" msgid="3155692785074095986">"HDCP చెకింగ్‌"</string>
     <string name="hdcp_checking_dialog_title" msgid="7691060297616217781">"HDCP తనిఖీ ప్రవర్తనను సెట్ చేయండి"</string>
     <string name="debug_debugging_category" msgid="535341063709248842">"డీబగ్గింగ్"</string>
@@ -467,9 +467,8 @@
     <string name="power_charging" msgid="6727132649743436802">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="STATE">%2$s</xliff:g>"</string>
     <string name="power_remaining_charging_duration_only" msgid="8085099012811384899">"<xliff:g id="TIME">%1$s</xliff:g>లో పూర్తిగా ఛార్జ్ అవుతుంది"</string>
     <string name="power_charging_duration" msgid="6127154952524919719">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="TIME">%2$s</xliff:g>లో పూర్తిగా ఛార్జ్ అవుతుంది"</string>
-    <string name="power_charging_limited" msgid="6971664137170239141">"<xliff:g id="LEVEL">%1$s</xliff:g> - ఛార్జింగ్ పాజ్ చేయబడింది"</string>
-    <!-- no translation found for power_charging_future_paused (6829683663982987290) -->
-    <skip />
+    <string name="power_charging_limited" msgid="6732738149313642521">"<xliff:g id="LEVEL">%1$s</xliff:g> - ఛార్జింగ్ పాజ్ చేయబడింది"</string>
+    <string name="power_charging_future_paused" msgid="6829683663982987290">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="DOCK_DEFENDER_THRESHOLD">%2$s</xliff:g> ఛార్జింగ్"</string>
     <string name="battery_info_status_unknown" msgid="268625384868401114">"తెలియదు"</string>
     <string name="battery_info_status_charging" msgid="4279958015430387405">"ఛార్జ్ అవుతోంది"</string>
     <string name="battery_info_status_charging_fast" msgid="8027559755902954885">"వేగవంతమైన ఛార్జింగ్"</string>

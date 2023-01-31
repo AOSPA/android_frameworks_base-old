@@ -16,6 +16,8 @@
 
 package android.companion.virtual;
 
+import static android.media.AudioManager.AUDIO_SESSION_ID_GENERATE;
+
 import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
 import android.annotation.IntRange;
@@ -29,11 +31,16 @@ import android.app.PendingIntent;
 import android.companion.AssociationInfo;
 import android.companion.virtual.audio.VirtualAudioDevice;
 import android.companion.virtual.audio.VirtualAudioDevice.AudioConfigurationChangeCallback;
+import android.companion.virtual.camera.VirtualCameraDevice;
+import android.companion.virtual.camera.VirtualCameraInput;
 import android.companion.virtual.sensor.VirtualSensor;
 import android.companion.virtual.sensor.VirtualSensorConfig;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.graphics.Point;
+import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.DisplayManager.VirtualDisplayFlag;
 import android.hardware.display.DisplayManagerGlobal;
@@ -46,6 +53,8 @@ import android.hardware.input.VirtualKeyboard;
 import android.hardware.input.VirtualKeyboardConfig;
 import android.hardware.input.VirtualMouse;
 import android.hardware.input.VirtualMouseConfig;
+import android.hardware.input.VirtualNavigationTouchpad;
+import android.hardware.input.VirtualNavigationTouchpadConfig;
 import android.hardware.input.VirtualTouchscreen;
 import android.hardware.input.VirtualTouchscreenConfig;
 import android.os.Binder;
@@ -88,12 +97,12 @@ public final class VirtualDeviceManager {
     /**
      * The default device ID, which is the ID of the primary (non-virtual) device.
      */
-    public static final int DEFAULT_DEVICE_ID = 0;
+    public static final int DEVICE_ID_DEFAULT = 0;
 
     /**
      * Invalid device ID.
      */
-    public static final int INVALID_DEVICE_ID = -1;
+    public static final int DEVICE_ID_INVALID = -1;
 
     /**
      * Broadcast Action: A Virtual Device was removed.
@@ -231,6 +240,59 @@ public final class VirtualDeviceManager {
     }
 
     /**
+     * Returns the ID of the device which owns the display with the given ID.
+     *
+     * @hide
+     */
+    public int getDeviceIdForDisplayId(int displayId) {
+        if (mService == null) {
+            Log.w(TAG, "Failed to retrieve virtual devices; no virtual device manager service.");
+            return DEVICE_ID_DEFAULT;
+        }
+        try {
+            return mService.getDeviceIdForDisplayId(displayId);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns device-specific audio session id for audio playback.
+     *
+     * @param deviceId - id of the virtual audio device
+     * @return Device specific session id to be used for audio playback (see
+     *     {@link android.media.AudioManager.generateAudioSessionId}) if virtual device has
+     *     {@link VirtualDeviceParams.POLICY_TYPE_AUDIO} set to
+     *     {@link VirtualDeviceParams.DEVICE_POLICY_CUSTOM} and Virtual Audio Device
+     *     is configured in context-aware mode.
+     *     Otherwise {@link AUDIO_SESSION_ID_GENERATE} constant is returned.
+     * @hide
+     */
+    public int getAudioPlaybackSessionId(int deviceId) {
+        //TODO - Return session id rerouted to VirtualAudioDevice if the VirtualAudioDevice
+        //is configured to operate in context-aware mode.
+        return AUDIO_SESSION_ID_GENERATE;
+    }
+
+    /**
+     * Returns device-specific audio session id for audio recording.
+     *
+     * @param deviceId - id of the virtual audio device
+     * @return Device specific session id to be used for audio recording (see
+     *     {@link android.media.AudioManager.generateAudioSessionId}) if virtual device has
+     *     {@link VirtualDeviceParams.POLICY_TYPE_AUDIO} set to
+     *     {@link VirtualDeviceParams.DEVICE_POLICY_CUSTOM} and Virtual Audio Device
+     *     is configured in context-aware mode.
+     *     Otherwise {@link AUDIO_SESSION_ID_GENERATE} constant is returned.
+     * @hide
+     */
+    public int getAudioRecordingSessionId(int deviceId) {
+        //TODO - Return session id corresponding to VirtualAudioDevice injection if the
+        // VirtualAudioDevice is configured to operate in context-aware mode.
+        return AUDIO_SESSION_ID_GENERATE;
+    }
+
+    /**
      * A virtual device has its own virtual display, audio output, microphone, and camera etc. The
      * creator of a virtual device can take the output from the virtual display and stream it over
      * to another device, and inject input events that are received from the remote device.
@@ -246,6 +308,9 @@ public final class VirtualDeviceManager {
         private final IVirtualDeviceManager mService;
         private final IVirtualDevice mVirtualDevice;
         private final ArrayMap<ActivityListener, ActivityListenerDelegate> mActivityListeners =
+                new ArrayMap<>();
+        private final ArrayMap<IntentInterceptorCallback,
+                     VirtualIntentInterceptorDelegate> mIntentInterceptorListeners =
                 new ArrayMap<>();
         private final IVirtualDeviceActivityListener mActivityListenerBinder =
                 new IVirtualDeviceActivityListener.Stub() {
@@ -276,9 +341,11 @@ public final class VirtualDeviceManager {
                     }
                 };
         @Nullable
-        private VirtualAudioDevice mVirtualAudioDevice;
+        private VirtualCameraDevice mVirtualCameraDevice;
         @NonNull
-        private List<VirtualSensor> mVirtualSensors = new ArrayList<>();
+        private final List<VirtualSensor> mVirtualSensors = new ArrayList<>();
+        @Nullable
+        private VirtualAudioDevice mVirtualAudioDevice;
 
         @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)
         private VirtualDevice(
@@ -638,6 +705,30 @@ public final class VirtualDeviceManager {
         }
 
         /**
+         * Creates a virtual touchpad in navigation mode.
+         *
+         * A touchpad in navigation mode means that its events are interpreted as navigation events
+         * (up, down, etc) instead of using them to update a cursor's absolute position. If the
+         * events are not consumed they are converted to DPAD events.
+         *
+         * @param config the configurations of the virtual navigation touchpad.
+         */
+        @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)
+        @NonNull
+        public VirtualNavigationTouchpad createVirtualNavigationTouchpad(
+                 @NonNull VirtualNavigationTouchpadConfig config) {
+            try {
+                final IBinder token = new Binder(
+                        "android.hardware.input.VirtualNavigationTouchpad:"
+                            + config.getInputDeviceName());
+                mVirtualDevice.createVirtualNavigationTouchpad(config, token);
+                return new VirtualNavigationTouchpad(mVirtualDevice, token);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        /**
          * Creates a virtual touchscreen.
          *
          * @param display         the display that the events inputted through this device should
@@ -699,6 +790,34 @@ public final class VirtualDeviceManager {
         }
 
         /**
+         * Creates a new virtual camera. If a virtual camera was already created, it will be closed.
+         *
+         * @param cameraName name of the virtual camera.
+         * @param characteristics camera characteristics.
+         * @param virtualCameraInput callback that provides input to camera.
+         * @param executor Executor on which camera input will be sent into system. Don't
+         *         use the Main Thread for this executor.
+         * @return newly created camera;
+         *
+         * @hide
+         */
+        @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)
+        @NonNull
+        public VirtualCameraDevice createVirtualCameraDevice(
+                @NonNull String cameraName,
+                @NonNull CameraCharacteristics characteristics,
+                @NonNull VirtualCameraInput virtualCameraInput,
+                @NonNull Executor executor) {
+            if (mVirtualCameraDevice != null) {
+                mVirtualCameraDevice.close();
+            }
+            int deviceId = getDeviceId();
+            mVirtualCameraDevice = new VirtualCameraDevice(
+                    deviceId, cameraName, characteristics, virtualCameraInput, executor);
+            return mVirtualCameraDevice;
+        }
+
+        /**
          * Sets the visibility of the pointer icon for this VirtualDevice's associated displays.
          *
          * @param showPointerIcon True if the pointer should be shown; false otherwise. The default
@@ -726,11 +845,11 @@ public final class VirtualDeviceManager {
 
         private String getVirtualDisplayName() {
             try {
-                // Currently this just use the association ID, which means all of the virtual
-                // displays created using the same virtual device will have the same name. The name
-                // should only be used for informational purposes, and not for identifying the
-                // display in code.
-                return "VirtualDevice_" + mVirtualDevice.getAssociationId();
+                // Currently this just use the device ID, which means all of the virtual displays
+                // created using the same virtual device will have the same name. The name should
+                // only be used for informational purposes, and not for identifying the display in
+                // code.
+                return "VirtualDevice_" + mVirtualDevice.getDeviceId();
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -781,6 +900,53 @@ public final class VirtualDeviceManager {
         public void removeActivityListener(@NonNull ActivityListener listener) {
             mActivityListeners.remove(listener);
         }
+
+        /**
+         * Registers an intent interceptor that will intercept an intent attempting to launch
+         * when matching the provided IntentFilter and calls the callback with the intercepted
+         * intent.
+         *
+         * @param executor The executor where the interceptor is executed on.
+         * @param interceptorFilter The filter to match intents intended for interception.
+         * @param interceptorCallback The callback called when an intent matching interceptorFilter
+         * is intercepted.
+         * @see #unregisterIntentInterceptor(IntentInterceptorCallback)
+         */
+        @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)
+        public void registerIntentInterceptor(
+                @CallbackExecutor @NonNull Executor executor,
+                @NonNull IntentFilter interceptorFilter,
+                @NonNull IntentInterceptorCallback interceptorCallback) {
+            Objects.requireNonNull(executor);
+            Objects.requireNonNull(interceptorFilter);
+            Objects.requireNonNull(interceptorCallback);
+            final VirtualIntentInterceptorDelegate delegate =
+                    new VirtualIntentInterceptorDelegate(executor, interceptorCallback);
+            try {
+                mVirtualDevice.registerIntentInterceptor(delegate, interceptorFilter);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+            mIntentInterceptorListeners.put(interceptorCallback, delegate);
+        }
+
+        /**
+         * Unregisters the intent interceptorCallback previously registered with
+         * {@link #registerIntentInterceptor}.
+         */
+        @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)
+        public void unregisterIntentInterceptor(
+                    @NonNull IntentInterceptorCallback interceptorCallback) {
+            Objects.requireNonNull(interceptorCallback);
+            final VirtualIntentInterceptorDelegate delegate =
+                    mIntentInterceptorListeners.get(interceptorCallback);
+            try {
+                mVirtualDevice.unregisterIntentInterceptor(delegate);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+            mIntentInterceptorListeners.remove(interceptorCallback);
+        }
     }
 
     /**
@@ -830,6 +996,53 @@ public final class VirtualDeviceManager {
 
         public void onDisplayEmpty(int displayId) {
             mExecutor.execute(() -> mActivityListener.onDisplayEmpty(displayId));
+        }
+    }
+
+    /**
+     * Interceptor interface to be called when an intent matches the IntentFilter passed into {@link
+     * VirtualDevice#registerIntentInterceptor}. When the interceptor is called after matching the
+     * IntentFilter, the intended activity launch will be aborted and alternatively replaced by
+     * the interceptor's receiver.
+     *
+     * @hide
+     */
+    @SystemApi
+    public interface IntentInterceptorCallback {
+
+        /**
+         * Called when an intent that matches the IntentFilter registered in {@link
+         * VirtualDevice#registerIntentInterceptor} is intercepted for the virtual device to
+         * handle.
+         *
+         * @param intent The intent that has been intercepted by the interceptor.
+         */
+        void onIntentIntercepted(@NonNull Intent intent);
+    }
+
+    /**
+     * A wrapper for {@link IntentInterceptorCallback} that executes callbacks on the
+     * the given executor.
+     */
+    private static class VirtualIntentInterceptorDelegate
+            extends IVirtualDeviceIntentInterceptor.Stub {
+        @NonNull private final IntentInterceptorCallback mIntentInterceptorCallback;
+        @NonNull private final Executor mExecutor;
+
+        private VirtualIntentInterceptorDelegate(Executor executor,
+                IntentInterceptorCallback interceptorCallback) {
+            mExecutor = executor;
+            mIntentInterceptorCallback = interceptorCallback;
+        }
+
+        @Override
+        public void onIntentIntercepted(Intent intent) {
+            final long token = Binder.clearCallingIdentity();
+            try {
+                mExecutor.execute(() -> mIntentInterceptorCallback.onIntentIntercepted(intent));
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
         }
     }
 }

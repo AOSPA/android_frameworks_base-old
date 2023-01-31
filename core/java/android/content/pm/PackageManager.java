@@ -2979,6 +2979,14 @@ public abstract class PackageManager {
             "android.software.virtualization_framework";
 
     /**
+     * Feature for {@link #getSystemAvailableFeatures()} and {@link #hasSystemFeature(String)}.
+     * This feature indicates whether device supports seamless refresh rate switching.
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_SEAMLESS_REFRESH_RATE_SWITCHING
+            = "android.software.seamless_refresh_rate_switching";
+
+    /**
      * Feature for {@link #getSystemAvailableFeatures} and
      * {@link #hasSystemFeature(String, int)}: If this feature is supported, the Vulkan
      * implementation on this device is hardware accelerated, and the Vulkan native API will
@@ -5742,6 +5750,24 @@ public abstract class PackageManager {
     public List<PackageInfo> getInstalledPackages(@NonNull PackageInfoFlags flags) {
         throw new UnsupportedOperationException(
                 "getInstalledPackages not implemented in subclass");
+    }
+
+    /**
+     * Returns the app metadata for a package.
+     *
+     * @param packageName
+     * @return A PersistableBundle containing the app metadata that was provided by the installer.
+     *         In the case where a package does not have any metadata, an empty PersistableBundle is
+     *         returned.
+     * @throws NameNotFoundException if no such package is available to the caller.
+     * @hide
+     */
+    @NonNull
+    @SystemApi
+    @RequiresPermission(Manifest.permission.GET_APP_METADATA)
+    public PersistableBundle getAppMetadata(@NonNull String packageName)
+            throws NameNotFoundException {
+        throw new UnsupportedOperationException("getAppMetadata not implemented in subclass");
     }
 
     /**
@@ -10383,6 +10409,30 @@ public abstract class PackageManager {
      */
     public boolean canPackageQuery(@NonNull String sourcePackageName,
             @NonNull String targetPackageName) throws NameNotFoundException {
+        throw new UnsupportedOperationException(
+                "canPackageQuery not implemented in subclass");
+    }
+
+    /**
+     * Same as {@link #canPackageQuery(String, String)} but accepts an array of target packages to
+     * be queried.
+     *
+     * @param sourcePackageName The source package that would receive details about the
+     *                          target package.
+     * @param targetPackageNames An array of target packages whose details would be shared with the
+     *                           source package.
+     * @return An array of booleans where each member specifies whether the source package is able
+     * to query for details about the target package given by the corresponding value at the same
+     * index in the array of target packages.
+     * @throws NameNotFoundException if either a given package can not be found on the
+     * system, or if the caller is not able to query for details about the source or
+     * target packages.
+     * @hide
+     */
+    @SystemApi
+    @NonNull
+    public boolean[] canPackageQuery(@NonNull String sourcePackageName,
+            @NonNull String[] targetPackageNames) throws NameNotFoundException {
         throw new UnsupportedOperationException(
                 "canPackageQuery not implemented in subclass");
     }

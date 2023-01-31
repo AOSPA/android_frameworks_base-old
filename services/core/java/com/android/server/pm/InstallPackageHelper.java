@@ -1619,6 +1619,7 @@ final class InstallPackageHelper {
                             ps.getUninstallReason(userId));
                 }
                 removedInfo.mIsExternal = oldPackage.isExternalStorage();
+                removedInfo.mRemovedPackageVersionCode = oldPackage.getLongVersionCode();
                 request.setRemovedInfo(removedInfo);
 
                 sysPkg = oldPackage.isSystem();
@@ -1730,7 +1731,7 @@ final class InstallPackageHelper {
         final boolean onIncremental = mPm.mIncrementalManager != null
                 && isIncrementalPath(beforeCodeFile.getAbsolutePath());
         try {
-            makeDirRecursive(afterCodeFile.getParentFile(), 0775);
+            makeDirRecursive(afterCodeFile.getParentFile(), 0771);
             if (onIncremental) {
                 // Just link files here. The stage dir will be removed when the installation
                 // session is completed.
@@ -1882,7 +1883,7 @@ final class InstallPackageHelper {
                 if (new File(signaturePath).exists()) {
                     // If signature is provided, enable fs-verity first so that the file can be
                     // measured for signature check below.
-                    VerityUtils.setUpFsverity(filePath, (byte[]) null);
+                    VerityUtils.setUpFsverity(filePath);
 
                     if (!fis.verifyPkcs7DetachedSignature(signaturePath, filePath)) {
                         throw new PrepareFailure(PackageManager.INSTALL_FAILED_BAD_SIGNATURE,
@@ -2263,6 +2264,7 @@ final class InstallPackageHelper {
     @GuardedBy("mPm.mInstallLock")
     private void executePostCommitStepsLIF(List<ReconciledPackage> reconciledPackages) {
         final ArraySet<IncrementalStorage> incrementalStorages = new ArraySet<>();
+        final ArrayList<String> apkPaths = new ArrayList<>();
         for (ReconciledPackage reconciledPkg : reconciledPackages) {
             final InstallRequest installRequest = reconciledPkg.mInstallRequest;
             final boolean instantApp = ((installRequest.getScanFlags() & SCAN_AS_INSTANT_APP) != 0);
@@ -2282,25 +2284,11 @@ final class InstallPackageHelper {
             }
 
             // Enabling fs-verity is a blocking operation. To reduce the impact to the install time,
-            // run in a background thread.
-            final ArrayList<String> apkPaths = new ArrayList<>();
+            // collect the files to later enable in a background thread.
             apkPaths.add(pkg.getBaseApkPath());
             if (pkg.getSplitCodePaths() != null) {
                 Collections.addAll(apkPaths, pkg.getSplitCodePaths());
             }
-            mInjector.getBackgroundHandler().post(() -> {
-                try {
-                    for (String path : apkPaths) {
-                        if (!VerityUtils.hasFsverity(path)) {
-                            VerityUtils.setUpFsverity(path, (byte[]) null);
-                        }
-                    }
-                } catch (IOException e) {
-                    // There's nothing we can do if the setup failed. Since fs-verity is
-                    // optional, just ignore the error for now.
-                    Slog.e(TAG, "Failed to fully enable fs-verity to " + packageName);
-                }
-            });
 
             // Hardcode previousAppId to 0 to disable any data migration (http://b/221088088)
             mAppDataHelper.prepareAppDataPostCommitLIF(pkg, 0);
@@ -2414,6 +2402,20 @@ final class InstallPackageHelper {
         }
         PackageManagerServiceUtils.waitForNativeBinariesExtractionForIncremental(
                 incrementalStorages);
+
+        mInjector.getBackgroundHandler().post(() -> {
+            for (String path : apkPaths) {
+                if (!VerityUtils.hasFsverity(path)) {
+                    try {
+                        VerityUtils.setUpFsverity(path);
+                    } catch (IOException e) {
+                        // There's nothing we can do if the setup failed. Since fs-verity is
+                        // optional, just ignore the error for now.
+                        Slog.e(TAG, "Failed to fully enable fs-verity to " + path);
+                    }
+                }
+            }
+        });
     }
 
     Pair<Integer, String> verifyReplacingVersionCode(PackageInfoLite pkgLite,

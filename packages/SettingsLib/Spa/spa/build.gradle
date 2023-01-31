@@ -75,7 +75,7 @@ dependencies {
     api "androidx.slice:slice-builders:1.1.0-alpha02"
     api "androidx.slice:slice-core:1.1.0-alpha02"
     api "androidx.slice:slice-view:1.1.0-alpha02"
-    api "androidx.compose.material3:material3:1.1.0-alpha01"
+    api "androidx.compose.material3:material3:1.1.0-alpha03"
     api "androidx.compose.material:material-icons-extended:$jetpack_compose_version"
     api "androidx.compose.runtime:runtime-livedata:$jetpack_compose_version"
     api "androidx.compose.ui:ui-tooling-preview:$jetpack_compose_version"
@@ -108,6 +108,17 @@ task coverageReport(type: JacocoReport, dependsOn: "connectedDebugAndroidTest") 
                     // Excludes files forked from Accompanist.
                     "com/android/settingslib/spa/framework/compose/DrawablePainter*",
                     "com/android/settingslib/spa/framework/compose/Pager*",
+
+                    // Excludes inline functions, which is not covered in Jacoco reports.
+                    "com/android/settingslib/spa/framework/util/Collections*",
+                    "com/android/settingslib/spa/framework/util/Flows*",
+
+                    // Excludes debug functions
+                    "com/android/settingslib/spa/framework/compose/TimeMeasurer*",
+
+                    // Excludes slice demo presenter & provider
+                    "com/android/settingslib/spa/slice/presenter/Demo*",
+                    "com/android/settingslib/spa/slice/provider/Demo*",
             ],
     )
     executionData.from = fileTree(dir: "$buildDir/outputs/code_coverage/debugAndroidTest/connected")

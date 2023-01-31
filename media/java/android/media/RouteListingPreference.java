@@ -35,6 +35,7 @@ import java.util.Objects;
  * System UI Output Switcher).
  *
  * @see MediaRouter2#setRouteListingPreference
+ * @see Item
  */
 public final class RouteListingPreference implements Parcelable {
 
@@ -70,8 +71,8 @@ public final class RouteListingPreference implements Parcelable {
     }
 
     /**
-     * Returns an unmodifiable list containing the items that the app wants to be listed for media
-     * routing.
+     * Returns an unmodifiable list containing the {@link Item items} that the app wants to be
+     * listed for media routing.
      */
     @NonNull
     public List<Item> getItems() {
@@ -109,9 +110,7 @@ public final class RouteListingPreference implements Parcelable {
         return Objects.hash(mItems);
     }
 
-    // Internal classes.
-
-    /** Holds preference information for a specific route in a media routing listing. */
+    /** Holds preference information for a specific route in a {@link RouteListingPreference}. */
     public static final class Item implements Parcelable {
 
         /** @hide */
@@ -142,7 +141,12 @@ public final class RouteListingPreference implements Parcelable {
         @Retention(RetentionPolicy.SOURCE)
         @IntDef(
                 prefix = {"DISABLE_REASON_"},
-                value = {DISABLE_REASON_NONE, DISABLE_REASON_SUBSCRIPTION_REQUIRED})
+                value = {
+                    DISABLE_REASON_NONE,
+                    DISABLE_REASON_SUBSCRIPTION_REQUIRED,
+                    DISABLE_REASON_DOWNLOADED_CONTENT,
+                    DISABLE_REASON_AD
+                })
         public @interface DisableReason {}
 
         /** The corresponding route is available for routing. */
@@ -152,6 +156,13 @@ public final class RouteListingPreference implements Parcelable {
          * routing.
          */
         public static final int DISABLE_REASON_SUBSCRIPTION_REQUIRED = 1;
+        /**
+         * The corresponding route is not available because downloaded content cannot be routed to
+         * it.
+         */
+        public static final int DISABLE_REASON_DOWNLOADED_CONTENT = 2;
+        /** The corresponding route is not available because an ad is in progress. */
+        public static final int DISABLE_REASON_AD = 3;
 
         @NonNull
         public static final Creator<Item> CREATOR =
@@ -171,18 +182,10 @@ public final class RouteListingPreference implements Parcelable {
         @Flags private final int mFlags;
         @DisableReason private final int mDisableReason;
 
-        /**
-         * Creates an instance with the given value.
-         *
-         * @param routeId See {@link #getRouteId()}. Must not be empty.
-         * @param flags See {@link #getFlags()}.
-         * @param disableReason See {@link #getDisableReason()}.
-         */
-        public Item(@NonNull String routeId, @Flags int flags, @DisableReason int disableReason) {
-            Preconditions.checkArgument(!TextUtils.isEmpty(routeId));
-            mRouteId = routeId;
-            mFlags = flags;
-            mDisableReason = disableReason;
+        private Item(@NonNull Builder builder) {
+            mRouteId = builder.mRouteId;
+            mFlags = builder.mFlags;
+            mDisableReason = builder.mDisableReason;
         }
 
         private Item(Parcel in) {
@@ -216,6 +219,8 @@ public final class RouteListingPreference implements Parcelable {
          *
          * @see #DISABLE_REASON_NONE
          * @see #DISABLE_REASON_SUBSCRIPTION_REQUIRED
+         * @see #DISABLE_REASON_DOWNLOADED_CONTENT
+         * @see #DISABLE_REASON_AD
          */
         @DisableReason
         public int getDisableReason() {
@@ -255,6 +260,45 @@ public final class RouteListingPreference implements Parcelable {
         @Override
         public int hashCode() {
             return Objects.hash(mRouteId, mFlags, mDisableReason);
+        }
+
+        /** Builder for {@link Item}. */
+        public static final class Builder {
+
+            private final String mRouteId;
+            private int mFlags;
+            private int mDisableReason;
+
+            /**
+             * Constructor.
+             *
+             * @param routeId See {@link Item#getRouteId()}.
+             */
+            public Builder(@NonNull String routeId) {
+                Preconditions.checkArgument(!TextUtils.isEmpty(routeId));
+                mRouteId = routeId;
+                mDisableReason = DISABLE_REASON_NONE;
+            }
+
+            /** See {@link Item#getFlags()}. */
+            @NonNull
+            public Builder setFlags(int flags) {
+                mFlags = flags;
+                return this;
+            }
+
+            /** See {@link Item#getDisableReason()}. */
+            @NonNull
+            public Builder setDisableReason(int disableReason) {
+                mDisableReason = disableReason;
+                return this;
+            }
+
+            /** Creates and returns a new {@link Item} with the given parameters. */
+            @NonNull
+            public Item build() {
+                return new Item(this);
+            }
         }
     }
 }

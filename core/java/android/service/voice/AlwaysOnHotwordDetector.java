@@ -293,7 +293,7 @@ public class AlwaysOnHotwordDetector extends AbstractHotwordDetector {
     private final Handler mHandler;
     private final IBinder mBinder = new Binder();
     private final int mTargetSdkVersion;
-    private final boolean mSupportHotwordDetectionService;
+    private final boolean mSupportSandboxedDetectionService;
 
     @GuardedBy("mLock")
     private boolean mIsAvailabilityOverriddenByTestApi = false;
@@ -728,53 +728,24 @@ public class AlwaysOnHotwordDetector extends AbstractHotwordDetector {
          */
         public abstract void onDetected(@NonNull EventPayload eventPayload);
 
-        /**
-         * Called when the detection fails due to an error.
-         */
+        /** {@inheritDoc} */
         public abstract void onError();
 
-        /**
-         * Called when the recognition is paused temporarily for some reason.
-         * This is an informational callback, and the clients shouldn't be doing anything here
-         * except showing an indication on their UI if they have to.
-         */
+        /** {@inheritDoc} */
         public abstract void onRecognitionPaused();
 
-        /**
-         * Called when the recognition is resumed after it was temporarily paused.
-         * This is an informational callback, and the clients shouldn't be doing anything here
-         * except showing an indication on their UI if they have to.
-         */
+        /** {@inheritDoc} */
         public abstract void onRecognitionResumed();
 
-        /**
-         * Called when the {@link HotwordDetectionService second stage detection} did not detect the
-         * keyphrase.
-         *
-         * @param result Info about the second stage detection result, provided by the
-         *         {@link HotwordDetectionService}.
-         */
+        /** {@inheritDoc} */
         public void onRejected(@NonNull HotwordRejectedResult result) {
         }
 
-        /**
-         * Called when the {@link HotwordDetectionService} is created by the system and given a
-         * short amount of time to report it's initialization state.
-         *
-         * @param status Info about initialization state of {@link HotwordDetectionService}; the
-         * allowed values are {@link HotwordDetectionService#INITIALIZATION_STATUS_SUCCESS},
-         * 1<->{@link HotwordDetectionService#getMaxCustomInitializationStatus()},
-         * {@link HotwordDetectionService#INITIALIZATION_STATUS_UNKNOWN}.
-         */
+        /** {@inheritDoc} */
         public void onHotwordDetectionServiceInitialized(int status) {
         }
 
-        /**
-         * Called with the {@link HotwordDetectionService} is restarted.
-         *
-         * Clients are expected to call {@link HotwordDetector#updateState} to share the state with
-         * the newly created service.
-         */
+        /** {@inheritDoc} */
         public void onHotwordDetectionServiceRestarted() {
         }
     }
@@ -785,24 +756,16 @@ public class AlwaysOnHotwordDetector extends AbstractHotwordDetector {
      * @param callback A non-null Callback for receiving the recognition events.
      * @param modelManagementService A service that allows management of sound models.
      * @param targetSdkVersion The target SDK version.
-     * @param supportHotwordDetectionService {@code true} if hotword detection service should be
+     * @param SupportSandboxedDetectionService {@code true} if HotwordDetectionService should be
      * triggered, otherwise {@code false}.
-     * @param options Application configuration data provided by the
-     * {@link VoiceInteractionService}. PersistableBundle does not allow any remotable objects or
-     * other contents that can be used to communicate with other processes.
-     * @param sharedMemory The unrestricted data blob provided by the
-     * {@link VoiceInteractionService}. Use this to provide the hotword models data or other
-     * such data to the trusted process.
      *
      * @hide
      */
     public AlwaysOnHotwordDetector(String text, Locale locale, Callback callback,
             KeyphraseEnrollmentInfo keyphraseEnrollmentInfo,
             IVoiceInteractionManagerService modelManagementService, int targetSdkVersion,
-            boolean supportHotwordDetectionService) {
-        super(modelManagementService, callback,
-                supportHotwordDetectionService ? DETECTOR_TYPE_TRUSTED_HOTWORD_DSP
-                        : DETECTOR_TYPE_NORMAL);
+            boolean supportSandboxedDetectionService) {
+        super(modelManagementService, callback);
 
         mHandler = new MyHandler();
         mText = text;
@@ -812,12 +775,12 @@ public class AlwaysOnHotwordDetector extends AbstractHotwordDetector {
         mInternalCallback = new SoundTriggerListener(mHandler);
         mModelManagementService = modelManagementService;
         mTargetSdkVersion = targetSdkVersion;
-        mSupportHotwordDetectionService = supportHotwordDetectionService;
+        mSupportSandboxedDetectionService = supportSandboxedDetectionService;
     }
 
     @Override
     void initialize(@Nullable PersistableBundle options, @Nullable SharedMemory sharedMemory) {
-        if (mSupportHotwordDetectionService) {
+        if (mSupportSandboxedDetectionService) {
             initAndVerifyDetector(options, sharedMemory, mInternalCallback,
                     DETECTOR_TYPE_TRUSTED_HOTWORD_DSP);
         }
@@ -849,7 +812,7 @@ public class AlwaysOnHotwordDetector extends AbstractHotwordDetector {
     public final void updateState(@Nullable PersistableBundle options,
             @Nullable SharedMemory sharedMemory) throws IllegalDetectorStateException {
         synchronized (mLock) {
-            if (!mSupportHotwordDetectionService) {
+            if (!mSupportSandboxedDetectionService) {
                 throw new IllegalStateException(
                         "updateState called, but it doesn't support hotword detection service");
             }
@@ -1422,10 +1385,7 @@ public class AlwaysOnHotwordDetector extends AbstractHotwordDetector {
         return mKeyphraseEnrollmentInfo.getManageKeyphraseIntent(action, mText, mLocale);
     }
 
-    /**
-     * Invalidates this hotword detector so that any future calls to this result
-     * in an IllegalStateException.
-     */
+    /** {@inheritDoc} */
     @Override
     public void destroy() {
         synchronized (mLock) {
@@ -1448,8 +1408,8 @@ public class AlwaysOnHotwordDetector extends AbstractHotwordDetector {
      * @hide
      */
     @Override
-    public boolean isUsingHotwordDetectionService() {
-        return mSupportHotwordDetectionService;
+    public boolean isUsingSandboxedDetectionService() {
+        return mSupportSandboxedDetectionService;
     }
 
     /**

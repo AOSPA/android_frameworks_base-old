@@ -18,7 +18,6 @@ package com.android.server.companion.virtual;
 
 import android.annotation.NonNull;
 import android.companion.virtual.IVirtualDevice;
-import android.companion.virtual.VirtualDeviceParams;
 
 import java.util.Set;
 
@@ -36,7 +35,6 @@ public abstract class VirtualDeviceManagerInternal {
         /** Notifies that a virtual display was removed. */
         void onVirtualDisplayRemoved(int displayId);
     }
-
 
     /** Interface to listen to the changes on the list of app UIDs running on any virtual device. */
     public interface AppsOnVirtualDeviceListener {
@@ -73,6 +71,25 @@ public abstract class VirtualDeviceManagerInternal {
     public abstract boolean isValidVirtualDevice(IVirtualDevice virtualDevice);
 
     /**
+     * Gets the owner uid for a deviceId.
+     *
+     * @param deviceId which device we're asking about
+     * @return the uid of the app which created and owns the VirtualDevice with the given deviceId,
+     * or {@link android.os.Process#INVALID_UID} if no such device exists.
+     */
+    public abstract int getDeviceOwnerUid(int deviceId);
+
+    /**
+     * Finds VirtualDevices where an app is running.
+     *
+     * @param uid - the app's uid
+     * @return a set of id's of VirtualDevices where the app with the given uid is running.
+     * *Note* this only checks VirtualDevices, and does not include information about whether
+     * the app is running on the default device or not.
+     */
+    public abstract @NonNull Set<Integer> getDeviceIdsForUid(int uid);
+
+    /**
      * Notifies that a virtual display is created.
      *
      * @param displayId The display id of the created virtual display.
@@ -94,12 +111,6 @@ public abstract class VirtualDeviceManagerInternal {
     public abstract int getBaseVirtualDisplayFlags(IVirtualDevice virtualDevice);
 
     /**
-     * Returns true if the given {@code uid} is the owner of any virtual devices that are
-     * currently active.
-     */
-    public abstract boolean isAppOwnerOfAnyVirtualDevice(int uid);
-
-    /**
      * Returns true if the given {@code uid} is currently running on any virtual devices. This is
      * determined by whether the app has any activities in the task stack on a virtual-device-owned
      * display.
@@ -110,14 +121,4 @@ public abstract class VirtualDeviceManagerInternal {
      * Returns true if the {@code displayId} is owned by any virtual device
      */
     public abstract boolean isDisplayOwnedByAnyVirtualDevice(int displayId);
-
-    /**
-     * Returns the device policy for the given virtual device and policy type.
-     *
-     * <p>In case the virtual device identifier is not valid, or there's no explicitly specified
-     * policy for that device and policy type, then
-     * {@link VirtualDeviceParams#DEVICE_POLICY_DEFAULT} is returned.
-     */
-    public abstract @VirtualDeviceParams.DevicePolicy int getDevicePolicy(
-            int deviceId, @VirtualDeviceParams.PolicyType int policyType);
 }

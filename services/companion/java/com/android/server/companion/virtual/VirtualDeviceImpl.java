@@ -33,6 +33,7 @@ import android.app.admin.DevicePolicyManager;
 import android.companion.AssociationInfo;
 import android.companion.virtual.IVirtualDevice;
 import android.companion.virtual.IVirtualDeviceActivityListener;
+import android.companion.virtual.IVirtualDeviceIntentInterceptor;
 import android.companion.virtual.VirtualDeviceManager;
 import android.companion.virtual.VirtualDeviceManager.ActivityListener;
 import android.companion.virtual.VirtualDeviceParams;
@@ -43,6 +44,7 @@ import android.companion.virtual.sensor.VirtualSensorEvent;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
 import android.graphics.PointF;
 import android.hardware.display.DisplayManager;
@@ -53,6 +55,7 @@ import android.hardware.input.VirtualMouseButtonEvent;
 import android.hardware.input.VirtualMouseConfig;
 import android.hardware.input.VirtualMouseRelativeEvent;
 import android.hardware.input.VirtualMouseScrollEvent;
+import android.hardware.input.VirtualNavigationTouchpadConfig;
 import android.hardware.input.VirtualTouchEvent;
 import android.hardware.input.VirtualTouchscreenConfig;
 import android.os.Binder;
@@ -108,11 +111,13 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
     private VirtualAudioController mVirtualAudioController;
     @VisibleForTesting
     final Set<Integer> mVirtualDisplayIds = new ArraySet<>();
-    private final OnDeviceCloseListener mListener;
+    private final OnDeviceCloseListener mOnDeviceCloseListener;
     private final IBinder mAppToken;
     private final VirtualDeviceParams mParams;
     private final Map<Integer, PowerManager.WakeLock> mPerDisplayWakelocks = new ArrayMap<>();
     private final IVirtualDeviceActivityListener mActivityListener;
+    @GuardedBy("mVirtualDeviceLock")
+    private final Map<IBinder, IntentFilter> mIntentInterceptors = new ArrayMap<>();
     @NonNull
     private Consumer<ArraySet<Integer>> mRunningAppsChangedCallback;
     // The default setting for showing the pointer on new displays.
@@ -155,7 +160,7 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
             IBinder token,
             int ownerUid,
             int deviceId,
-            OnDeviceCloseListener listener,
+            OnDeviceCloseListener onDeviceCloseListener,
             PendingTrampolineCallback pendingTrampolineCallback,
             IVirtualDeviceActivityListener activityListener,
             Consumer<ArraySet<Integer>> runningAppsChangedCallback,
@@ -168,7 +173,7 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
                 deviceId,
                 /* inputController= */ null,
                 /* sensorController= */ null,
-                listener,
+                onDeviceCloseListener,
                 pendingTrampolineCallback,
                 activityListener,
                 runningAppsChangedCallback,
@@ -184,7 +189,7 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
             int deviceId,
             InputController inputController,
             SensorController sensorController,
-            OnDeviceCloseListener listener,
+            OnDeviceCloseListener onDeviceCloseListener,
             PendingTrampolineCallback pendingTrampolineCallback,
             IVirtualDeviceActivityListener activityListener,
             Consumer<ArraySet<Integer>> runningAppsChangedCallback,
@@ -212,7 +217,7 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
         } else {
             mSensorController = sensorController;
         }
-        mListener = listener;
+        mOnDeviceCloseListener = onDeviceCloseListener;
         try {
             token.linkToDeath(this, 0);
         } catch (RemoteException e) {
@@ -330,7 +335,7 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
                 mVirtualAudioController = null;
             }
         }
-        mListener.onClose(mAssociationInfo.getId());
+        mOnDeviceCloseListener.onClose(mDeviceId);
         mAppToken.unlinkToDeath(this, 0);
 
         final long ident = Binder.clearCallingIdentity();
@@ -434,7 +439,8 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
         final long ident = Binder.clearCallingIdentity();
         try {
             mInputController.createKeyboard(config.getInputDeviceName(), config.getVendorId(),
-                    config.getProductId(), deviceToken, config.getAssociatedDisplayId());
+                    config.getProductId(), deviceToken, config.getAssociatedDisplayId(),
+                    config.getLanguageTag(), config.getLayoutType());
         } finally {
             Binder.restoreCallingIdentity(ident);
         }
@@ -485,6 +491,38 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
             mInputController.createTouchscreen(config.getInputDeviceName(), config.getVendorId(),
                     config.getProductId(), deviceToken, config.getAssociatedDisplayId(),
                     screenHeightPixels, screenWidthPixels);
+        } finally {
+            Binder.restoreCallingIdentity(ident);
+        }
+    }
+
+    @Override // Binder call
+    public void createVirtualNavigationTouchpad(VirtualNavigationTouchpadConfig config,
+            @NonNull IBinder deviceToken) {
+        mContext.enforceCallingOrSelfPermission(
+                android.Manifest.permission.CREATE_VIRTUAL_DEVICE,
+                "Permission required to create a virtual navigation touchpad");
+        synchronized (mVirtualDeviceLock) {
+            if (!mVirtualDisplayIds.contains(config.getAssociatedDisplayId())) {
+                throw new SecurityException(
+                        "Cannot create a virtual navigation touchpad for a display not associated "
+                                + "with this virtual device");
+            }
+        }
+        int touchpadHeight = config.getHeight();
+        int touchpadWidth = config.getWidth();
+        if (touchpadHeight <= 0 || touchpadWidth <= 0) {
+            throw new IllegalArgumentException(
+                "Cannot create a virtual navigation touchpad, touchpad dimensions must be positive."
+                    + " Got: (" + touchpadHeight + ", " + touchpadWidth + ")");
+        }
+
+        final long ident = Binder.clearCallingIdentity();
+        try {
+            mInputController.createNavigationTouchpad(
+                    config.getInputDeviceName(), config.getVendorId(),
+                    config.getProductId(), deviceToken, config.getAssociatedDisplayId(),
+                    touchpadHeight, touchpadWidth);
         } finally {
             Binder.restoreCallingIdentity(ident);
         }
@@ -647,9 +685,35 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
         }
     }
 
+    @Override // Binder call
+    public void registerIntentInterceptor(IVirtualDeviceIntentInterceptor intentInterceptor,
+            IntentFilter filter) {
+        Objects.requireNonNull(intentInterceptor);
+        Objects.requireNonNull(filter);
+        mContext.enforceCallingOrSelfPermission(
+                android.Manifest.permission.CREATE_VIRTUAL_DEVICE,
+                "Permission required to register intent interceptor");
+        synchronized (mVirtualDeviceLock) {
+            mIntentInterceptors.put(intentInterceptor.asBinder(), filter);
+        }
+    }
+
+    @Override // Binder call
+    public void unregisterIntentInterceptor(
+            @NonNull IVirtualDeviceIntentInterceptor intentInterceptor) {
+        Objects.requireNonNull(intentInterceptor);
+        mContext.enforceCallingOrSelfPermission(
+                android.Manifest.permission.CREATE_VIRTUAL_DEVICE,
+                "Permission required to unregister intent interceptor");
+        synchronized (mVirtualDeviceLock) {
+            mIntentInterceptors.remove(intentInterceptor.asBinder());
+        }
+    }
+
     @Override
     protected void dump(FileDescriptor fd, PrintWriter fout, String[] args) {
         fout.println("  VirtualDevice: ");
+        fout.println("    mDeviceId: " + mDeviceId);
         fout.println("    mAssociationId: " + mAssociationInfo.getId());
         fout.println("    mParams: " + mParams);
         fout.println("    mVirtualDisplayIds: ");
@@ -679,6 +743,7 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
                             this::onEnteringPipBlocked,
                             this::onActivityBlocked,
                             this::onSecureWindowShown,
+                            this::shouldInterceptIntent,
                             displayCategories,
                             mParams.getDefaultRecentsPolicy());
             gwpc.registerRunningAppsChangedListener(/* listener= */ this);
@@ -838,8 +903,36 @@ final class VirtualDeviceImpl extends IVirtualDevice.Stub
                 Toast.LENGTH_LONG, mContext.getMainLooper());
     }
 
+    /**
+     * Intercepts intent when matching any of the IntentFilter of any interceptor. Returns true if
+     * the intent matches any filter notifying the DisplayPolicyController to abort the
+     * activity launch to be replaced by the interception.
+     */
+    private boolean shouldInterceptIntent(Intent intent) {
+        synchronized (mVirtualDeviceLock) {
+            boolean hasInterceptedIntent = false;
+            for (Map.Entry<IBinder, IntentFilter> interceptor : mIntentInterceptors.entrySet()) {
+                if (interceptor.getValue().match(
+                        intent.getAction(), intent.getType(), intent.getScheme(), intent.getData(),
+                        intent.getCategories(), TAG) >= 0) {
+                    try {
+                        // For privacy reasons, only returning the intents action and data. Any
+                        // other required field will require a review.
+                        IVirtualDeviceIntentInterceptor.Stub.asInterface(interceptor.getKey())
+                            .onIntentIntercepted(new Intent(intent.getAction(), intent.getData()));
+                        hasInterceptedIntent = true;
+                    } catch (RemoteException e) {
+                        Slog.w(TAG, "Unable to call mVirtualDeviceIntentInterceptor", e);
+                    }
+                }
+            }
+
+            return hasInterceptedIntent;
+        }
+    }
+
     interface OnDeviceCloseListener {
-        void onClose(int associationId);
+        void onClose(int deviceId);
     }
 
     interface PendingTrampolineCallback {

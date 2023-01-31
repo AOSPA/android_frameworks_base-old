@@ -17,9 +17,11 @@
 
 package com.android.systemui.keyguard.domain.interactor
 
+import android.app.AlertDialog
 import android.content.Intent
 import android.util.Log
 import com.android.internal.widget.LockPatternUtils
+import com.android.systemui.animation.DialogLaunchAnimator
 import com.android.systemui.animation.Expandable
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.flags.FeatureFlags
@@ -34,17 +36,17 @@ import com.android.systemui.keyguard.shared.model.KeyguardSlotPickerRepresentati
 import com.android.systemui.keyguard.shared.quickaffordance.KeyguardQuickAffordancePosition
 import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.settings.UserTracker
-import com.android.systemui.shared.keyguard.shared.model.KeyguardQuickAffordanceSlots
-import com.android.systemui.shared.quickaffordance.data.content.KeyguardQuickAffordanceProviderContract
+import com.android.systemui.shared.quickaffordance.data.content.KeyguardQuickAffordanceProviderContract as Contract
+import com.android.systemui.statusbar.phone.SystemUIDialog
 import com.android.systemui.statusbar.policy.KeyguardStateController
 import dagger.Lazy
-import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
+import javax.inject.Inject
 
 @SysUISingleton
 class KeyguardQuickAffordanceInteractor
@@ -58,8 +60,17 @@ constructor(
     private val activityStarter: ActivityStarter,
     private val featureFlags: FeatureFlags,
     private val repository: Lazy<KeyguardQuickAffordanceRepository>,
+    private val launchAnimator: DialogLaunchAnimator,
 ) {
     private val isUsingRepository: Boolean
+        get() = featureFlags.isEnabled(Flags.CUSTOMIZABLE_LOCK_SCREEN_QUICK_AFFORDANCES)
+
+    /**
+     * Whether the UI should use the long press gesture to activate quick affordances.
+     *
+     * If `false`, the UI goes back to using single taps.
+     */
+    val useLongPress: Boolean
         get() = featureFlags.isEnabled(Flags.CUSTOMIZABLE_LOCK_SCREEN_QUICK_AFFORDANCES)
 
     /** Returns an observable for the quick affordance at the given position. */
@@ -67,7 +78,7 @@ constructor(
         position: KeyguardQuickAffordancePosition
     ): Flow<KeyguardQuickAffordanceModel> {
         return combine(
-            quickAffordanceInternal(position),
+            quickAffordanceAlwaysVisible(position),
             keyguardInteractor.isDozing,
             keyguardInteractor.isKeyguardShowing,
         ) { affordance, isDozing, isKeyguardShowing ->
@@ -77,6 +88,19 @@ constructor(
                 KeyguardQuickAffordanceModel.Hidden
             }
         }
+    }
+
+    /**
+     * Returns an observable for the quick affordance at the given position but always visible,
+     * regardless of lock screen state.
+     *
+     * This is useful for experiences like the lock screen preview mode, where the affordances must
+     * always be visible.
+     */
+    fun quickAffordanceAlwaysVisible(
+        position: KeyguardQuickAffordancePosition,
+    ): Flow<KeyguardQuickAffordanceModel> {
+        return quickAffordanceInternal(position)
     }
 
     /**
@@ -111,6 +135,11 @@ constructor(
                     expandable = expandable,
                 )
             is KeyguardQuickAffordanceConfig.OnTriggeredResult.Handled -> Unit
+            is KeyguardQuickAffordanceConfig.OnTriggeredResult.ShowDialog ->
+                showDialog(
+                    result.dialog,
+                    result.expandable,
+                )
         }
     }
 
@@ -259,6 +288,19 @@ constructor(
         }
     }
 
+    private fun showDialog(dialog: AlertDialog, expandable: Expandable?) {
+        expandable?.dialogLaunchController()?.let { controller ->
+            SystemUIDialog.applyFlags(dialog)
+            SystemUIDialog.setShowForAllUsers(dialog, true)
+            SystemUIDialog.registerDismissListener(dialog)
+            SystemUIDialog.setDialogSize(dialog)
+            launchAnimator.show(
+                dialog,
+                controller
+            )
+        }
+    }
+
     private fun launchQuickAffordance(
         intent: Intent,
         canShowWhileLocked: Boolean,
@@ -290,15 +332,6 @@ constructor(
         }
     }
 
-    private fun KeyguardQuickAffordancePosition.toSlotId(): String {
-        return when (this) {
-            KeyguardQuickAffordancePosition.BOTTOM_START ->
-                KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_START
-            KeyguardQuickAffordancePosition.BOTTOM_END ->
-                KeyguardQuickAffordanceSlots.SLOT_ID_BOTTOM_END
-        }
-    }
-
     private fun String.encode(slotId: String): String {
         return "$slotId$DELIMITER$this"
     }
@@ -322,9 +355,13 @@ constructor(
     fun getPickerFlags(): List<KeyguardPickerFlag> {
         return listOf(
             KeyguardPickerFlag(
-                name = KeyguardQuickAffordanceProviderContract.FlagsTable.FLAG_NAME_FEATURE_ENABLED,
+                name = Contract.FlagsTable.FLAG_NAME_CUSTOM_LOCK_SCREEN_QUICK_AFFORDANCES_ENABLED,
                 value = featureFlags.isEnabled(Flags.CUSTOMIZABLE_LOCK_SCREEN_QUICK_AFFORDANCES),
-            )
+            ),
+            KeyguardPickerFlag(
+                name = Contract.FlagsTable.FLAG_NAME_CUSTOM_CLOCKS_ENABLED,
+                value = featureFlags.isEnabled(Flags.LOCKSCREEN_CUSTOM_CLOCKS),
+            ),
         )
     }
 

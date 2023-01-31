@@ -201,11 +201,6 @@ class ProcessRecord implements WindowProcessListener {
     private volatile long mStartElapsedTime;
 
     /**
-     * When the process was sent the bindApplication request
-     */
-    private volatile long mBindApplicationTime;
-
-    /**
      * This will be same as {@link #uid} usually except for some apps used during factory testing.
      */
     private volatile int mStartUid;
@@ -775,10 +770,6 @@ class ProcessRecord implements WindowProcessListener {
         return mStartElapsedTime;
     }
 
-    long getBindApplicationTime() {
-        return mBindApplicationTime;
-    }
-
     int getStartUid() {
         return mStartUid;
     }
@@ -1045,6 +1036,11 @@ class ProcessRecord implements WindowProcessListener {
 
     boolean hasRecentTasks() {
         return mWindowProcessController.hasRecentTasks();
+    }
+
+    @GuardedBy("mService")
+    public ApplicationInfo getApplicationInfo() {
+        return info;
     }
 
     @GuardedBy({"mService", "mProcLock"})

@@ -854,7 +854,7 @@
     <string name="sensor_privacy_htt_blocked_dialog_content">To use the microphone button, enable microphone access in Settings.</string>
 
     <!-- Sensor privacy dialog: Button to open system settings [CHAR LIMIT=50] -->
-    <string name="sensor_privacy_dialog_open_settings">Open settings.</string>
+    <string name="sensor_privacy_dialog_open_settings">Open Settings</string>
 
     <!-- Default name for the media device shown in the output switcher when the name is not available [CHAR LIMIT=30] -->
     <string name="media_seamless_other_device">Other device</string>
@@ -2096,6 +2096,9 @@
     <!-- Label for when Do not disturb is off in QS detail panel [CHAR LIMIT=NONE] -->
     <string name="dnd_is_off">Do Not Disturb is off</string>
 
+    <!-- Label for when Do not disturb is on in lockscreen quick affordance [CHAR LIMIT=NONE] -->
+    <string name="dnd_is_on">Do Not Disturb is on</string>
+
     <!-- Prompt for when Do not disturb is on from automatic rule in QS [CHAR LIMIT=NONE] -->
     <string name="qs_dnd_prompt_auto_rule">Do Not Disturb was turned on by an automatic rule (<xliff:g name="rule">%s</xliff:g>).</string>
 
@@ -2518,6 +2521,8 @@
     <string name="media_output_dialog_accessibility_seekbar">Volume</string>
     <!-- Summary for media output volume of a device in percentage [CHAR LIMIT=NONE] -->
     <string name="media_output_dialog_volume_percentage"><xliff:g id="percentage" example="10">%1$d</xliff:g>%%</string>
+    <!-- Title for Speakers and Displays group. [CHAR LIMIT=NONE] -->
+    <string name="media_output_group_title_speakers_and_displays">Speakers &amp; Displays</string>
 
     <!-- Media Output Broadcast Dialog -->
     <!-- Title for Broadcast First Notify Dialog [CHAR LIMIT=60] -->
@@ -2803,9 +2808,6 @@
     <!-- [CHAR LIMIT=NONE] Le audio broadcast dialog, media app is unknown -->
     <string name="bt_le_audio_broadcast_dialog_unknown_name">Unknown</string>
 
-    <!-- Date format for the Dream Date Complication [CHAR LIMIT=NONE] -->
-    <string name="dream_date_complication_date_format">EEE, MMM d</string>
-
     <!-- Time format for the Dream Time Complication for 12-hour time format [CHAR LIMIT=NONE] -->
     <string name="dream_time_complication_12_hr_time_format">h:mm</string>
 
@@ -2873,6 +2875,12 @@
     -->
     <string name="keyguard_affordance_enablement_dialog_home_instruction_2">&#8226; At least one device is available</string>
 
+    <!--
+    Error message shown when a button should be pressed and held to activate it, usually shown when
+    the user attempted to tap the button or held it for too short a time. [CHAR LIMIT=32].
+    -->
+    <string name="keyguard_affordance_press_too_short">Press and hold to activate</string>
+
     <!-- Text for education page of cancel button to hide the page. [CHAR_LIMIT=NONE] -->
     <string name="rear_display_bottom_sheet_cancel">Cancel</string>
     <!-- Text for the user to confirm they flipped the device around. [CHAR_LIMIT=NONE] -->
@@ -2885,4 +2893,11 @@
     <string name="rear_display_bottom_sheet_description">Use the rear-facing camera for a wider photo with higher resolution.</string>
     <!-- Text for education page description to warn user that the display will turn off if the button is clicked. [CHAR_LIMIT=NONE] -->
     <string name="rear_display_bottom_sheet_warning"><b>&#x2731; This screen will turn off</b></string>
+    <!-- Text for education page content description for folded animation. [CHAR_LIMIT=NONE] -->
+    <string name="rear_display_accessibility_folded_animation">Foldable device being unfolded</string>
+    <!-- Text for education page content description for unfolded animation. [CHAR_LIMIT=NONE] -->
+    <string name="rear_display_accessibility_unfolded_animation">Foldable device being flipped around</string>
+
+    <!-- Title for notification of low stylus battery. [CHAR_LIMIT=NONE] -->
+    <string name="stylus_battery_low">Stylus battery low</string>
 </resources>

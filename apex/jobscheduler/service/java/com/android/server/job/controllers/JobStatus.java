@@ -388,6 +388,8 @@ public final class JobStatus {
      */
     public boolean startedAsExpeditedJob = false;
 
+    public boolean startedWithImmediacyPrivilege = false;
+
     // If non-null, this is work that has been enqueued for the job.
     public ArrayList<JobWorkItem> pendingWork;
 
@@ -605,7 +607,7 @@ public final class JobStatus {
 
         // The first time a job is rescheduled it will not be subject to flexible constraints.
         // Otherwise, every consecutive reschedule increases a jobs' flexibility deadline.
-        if (!isRequestedExpeditedJob()
+        if (!isRequestedExpeditedJob() && !job.isUserInitiated()
                 && satisfiesMinWindowException
                 && (numFailures + numSystemStops) != 1
                 && lacksSomeFlexibleConstraints) {
@@ -1348,9 +1350,9 @@ public final class JobStatus {
      * @return true if the job was scheduled as a user-initiated job and it hasn't been downgraded
      * for any reason.
      */
-    public boolean shouldTreatAsUserInitiated() {
-        // TODO(248386641): implement
-        return false;
+    public boolean shouldTreatAsUserInitiatedJob() {
+        // TODO(248386641): update implementation to handle loss of privilege
+        return getJob().isUserInitiated();
     }
 
     /**
@@ -1369,9 +1371,7 @@ public final class JobStatus {
      * @return true if this is a job whose execution should be made visible to the user.
      */
     public boolean isUserVisibleJob() {
-        // TODO(255767350): limit to user-initiated jobs
-        // Placeholder implementation until we have the code in
-        return shouldTreatAsExpeditedJob();
+        return shouldTreatAsUserInitiatedJob();
     }
 
     /**
@@ -1382,12 +1382,14 @@ public final class JobStatus {
         return appHasDozeExemption
                 || (getFlags() & JobInfo.FLAG_WILL_BE_FOREGROUND) != 0
                 || ((shouldTreatAsExpeditedJob() || startedAsExpeditedJob)
+                || shouldTreatAsUserInitiatedJob()
                 && (mDynamicConstraints & CONSTRAINT_DEVICE_NOT_DOZING) == 0);
     }
 
     boolean canRunInBatterySaver() {
         return (getInternalFlags() & INTERNAL_FLAG_HAS_FOREGROUND_EXEMPTION) != 0
                 || ((shouldTreatAsExpeditedJob() || startedAsExpeditedJob)
+                || shouldTreatAsUserInitiatedJob()
                 && (mDynamicConstraints & CONSTRAINT_BACKGROUND_NOT_RESTRICTED) == 0);
     }
 

@@ -126,6 +126,11 @@ import dalvik.system.VMRuntime;
 
 import libcore.util.EmptyArray;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
 import java.lang.ref.WeakReference;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateEncodingException;
@@ -1221,6 +1226,33 @@ public class ApplicationPackageManager extends PackageManager {
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
+    }
+
+    @Override
+    @NonNull
+    public PersistableBundle getAppMetadata(@NonNull String packageName)
+            throws NameNotFoundException {
+        PersistableBundle appMetadata = null;
+        String path = null;
+        try {
+            path = mPM.getAppMetadataPath(packageName, getUserId());
+        } catch (ParcelableException e) {
+            e.maybeRethrow(NameNotFoundException.class);
+            throw new RuntimeException(e);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+        if (path != null) {
+            File file = new File(path);
+            try (InputStream inputStream = new FileInputStream(file)) {
+                appMetadata = PersistableBundle.readFromStream(inputStream);
+            } catch (FileNotFoundException e) {
+                // ignore and return empty bundle if app metadata does not exist
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        return appMetadata != null ? appMetadata : new PersistableBundle();
     }
 
     @SuppressWarnings("unchecked")
@@ -3816,8 +3848,17 @@ public class ApplicationPackageManager extends PackageManager {
             @NonNull String targetPackageName) throws NameNotFoundException {
         Objects.requireNonNull(sourcePackageName);
         Objects.requireNonNull(targetPackageName);
+        return canPackageQuery(sourcePackageName, new String[]{targetPackageName})[0];
+    }
+
+    @Override
+    @NonNull
+    public boolean[] canPackageQuery(@NonNull String sourcePackageName,
+            @NonNull String[] targetPackageNames) throws NameNotFoundException {
+        Objects.requireNonNull(sourcePackageName);
+        Objects.requireNonNull(targetPackageNames);
         try {
-            return mPM.canPackageQuery(sourcePackageName, targetPackageName, getUserId());
+            return mPM.canPackageQuery(sourcePackageName, targetPackageNames, getUserId());
         } catch (ParcelableException e) {
             e.maybeRethrow(PackageManager.NameNotFoundException.class);
             throw new RuntimeException(e);

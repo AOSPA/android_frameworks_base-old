@@ -2844,9 +2844,6 @@ class SettingsProtoDumpUtil {
                 Settings.System.SCREEN_BRIGHTNESS,
                 SystemSettingsProto.Screen.BRIGHTNESS);
         dumpSetting(s, p,
-                Settings.System.SCREEN_BRIGHTNESS_FOR_VR,
-                SystemSettingsProto.Screen.BRIGHTNESS_FOR_VR);
-        dumpSetting(s, p,
                 Settings.System.SCREEN_BRIGHTNESS_MODE,
                 SystemSettingsProto.Screen.BRIGHTNESS_MODE);
         dumpSetting(s, p,
@@ -2855,9 +2852,6 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.System.SCREEN_BRIGHTNESS_FLOAT,
                 SystemSettingsProto.Screen.BRIGHTNESS_FLOAT);
-        dumpSetting(s, p,
-                Settings.System.SCREEN_BRIGHTNESS_FOR_VR_FLOAT,
-                SystemSettingsProto.Screen.BRIGHTNESS_FOR_VR_FLOAT);
         p.end(screenToken);
 
         dumpSetting(s, p,

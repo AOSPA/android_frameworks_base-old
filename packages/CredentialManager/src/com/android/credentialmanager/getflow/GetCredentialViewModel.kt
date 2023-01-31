@@ -36,12 +36,13 @@ import com.android.internal.util.Preconditions
 
 data class GetCredentialUiState(
   val providerInfoList: List<ProviderInfo>,
-  val currentScreenState: GetScreenState,
   val requestDisplayInfo: RequestDisplayInfo,
+  val currentScreenState: GetScreenState = toGetScreenState(providerInfoList),
   val providerDisplayInfo: ProviderDisplayInfo = toProviderDisplayInfo(providerInfoList),
   val selectedEntry: EntryInfo? = null,
   val hidden: Boolean = false,
   val providerActivityPending: Boolean = false,
+  val isNoAccount: Boolean = false,
 )
 
 class GetCredentialViewModel(
@@ -127,6 +128,14 @@ class GetCredentialViewModel(
     )
   }
 
+  fun onMoreOptionOnSnackBarSelected(isNoAccount: Boolean) {
+    Log.d("Account Selector", "More Option on snackBar selected")
+    uiState = uiState.copy(
+      currentScreenState = GetScreenState.ALL_SIGN_IN_OPTIONS,
+      isNoAccount = isNoAccount,
+    )
+  }
+
   fun onBackToPrimarySelectionScreen() {
     uiState = uiState.copy(
       currentScreenState = GetScreenState.PRIMARY_SELECTION
@@ -192,9 +201,36 @@ private fun toProviderDisplayInfo(
   )
 }
 
+private fun toGetScreenState(
+  providerInfoList: List<ProviderInfo>
+): GetScreenState {
+  var noLocalAccount = true
+  var remoteInfo: RemoteEntryInfo? = null
+  providerInfoList.forEach{providerInfo -> if (
+    providerInfo.credentialEntryList.isNotEmpty() || providerInfo.authenticationEntry != null
+  ) { noLocalAccount = false }
+    // TODO: handle the error situation that if multiple remoteInfos exists
+    if (providerInfo.remoteEntry != null) {
+      remoteInfo = providerInfo.remoteEntry
+    }
+  }
+
+  return if (noLocalAccount && remoteInfo != null)
+    GetScreenState.REMOTE_ONLY else GetScreenState.PRIMARY_SELECTION
+}
+
 internal class CredentialEntryInfoComparator : Comparator<CredentialEntryInfo> {
   override fun compare(p0: CredentialEntryInfo, p1: CredentialEntryInfo): Int {
-    // First order by last used timestamp
+    // First prefer passkey type for its security benefits
+    if (p0.credentialType != p1.credentialType) {
+      if (PublicKeyCredential.TYPE_PUBLIC_KEY_CREDENTIAL == p0.credentialType) {
+        return -1
+      } else if (PublicKeyCredential.TYPE_PUBLIC_KEY_CREDENTIAL == p1.credentialType) {
+        return 1
+      }
+    }
+
+    // Then order by last used timestamp
     if (p0.lastUsedTimeMillis != null && p1.lastUsedTimeMillis != null) {
       if (p0.lastUsedTimeMillis < p1.lastUsedTimeMillis) {
         return 1
@@ -205,15 +241,6 @@ internal class CredentialEntryInfoComparator : Comparator<CredentialEntryInfo> {
       return -1
     } else if (p1.lastUsedTimeMillis != null && p1.lastUsedTimeMillis > 0) {
       return 1
-    }
-
-    // Then prefer passkey type for its security benefits
-    if (p0.credentialType != p1.credentialType) {
-      if (PublicKeyCredential.TYPE_PUBLIC_KEY_CREDENTIAL == p0.credentialType) {
-        return -1
-      } else if (PublicKeyCredential.TYPE_PUBLIC_KEY_CREDENTIAL == p1.credentialType) {
-        return 1
-      }
     }
     return 0
   }

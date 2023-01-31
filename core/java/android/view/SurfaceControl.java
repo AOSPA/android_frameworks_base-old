@@ -275,6 +275,7 @@ public final class SurfaceControl implements Parcelable {
             int l, int t, int r, int b);
     private static native void nativeSetDefaultApplyToken(IBinder token);
     private static native IBinder nativeGetDefaultApplyToken();
+    private static native boolean nativeBootFinished();
 
 
     /**
@@ -2379,6 +2380,14 @@ public final class SurfaceControl implements Parcelable {
     }
 
     /**
+     * Lets surfaceFlinger know the boot procedure is completed.
+     * @hide
+     */
+    public static boolean bootFinished() {
+        return nativeBootFinished();
+    }
+
+    /**
      * Interface to handle request to
      * {@link SurfaceControl.Transaction#addTransactionCommittedListener(Executor, TransactionCommittedListener)}
      */
@@ -3873,4 +3882,5 @@ public final class SurfaceControl implements Parcelable {
         SyncFence fence = new SyncFence(nativeFencePtr);
         callback.accept(fence);
     }
+
 }

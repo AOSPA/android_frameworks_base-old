@@ -61,6 +61,7 @@ import android.os.Message;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.provider.DeviceConfig;
 import android.text.TextUtils;
 import android.text.format.Formatter;
 import android.view.View;
@@ -90,6 +91,7 @@ import com.android.systemui.dock.DockManager;
 import com.android.systemui.keyguard.KeyguardIndication;
 import com.android.systemui.keyguard.KeyguardIndicationRotateTextViewController;
 import com.android.systemui.keyguard.ScreenLifecycle;
+import com.android.systemui.keyguard.domain.interactor.AlternateBouncerInteractor;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
@@ -155,6 +157,7 @@ public class KeyguardIndicationController {
     private final KeyguardBypassController mKeyguardBypassController;
     private final AccessibilityManager mAccessibilityManager;
     private final Handler mHandler;
+    private final AlternateBouncerInteractor mAlternateBouncerInteractor;
 
     @VisibleForTesting
     public KeyguardIndicationRotateTextViewController mRotateTextViewController;
@@ -234,7 +237,8 @@ public class KeyguardIndicationController {
             KeyguardBypassController keyguardBypassController,
             AccessibilityManager accessibilityManager,
             FaceHelpMessageDeferral faceHelpMessageDeferral,
-            KeyguardLogger keyguardLogger) {
+            KeyguardLogger keyguardLogger,
+            AlternateBouncerInteractor alternateBouncerInteractor) {
         mContext = context;
         mBroadcastDispatcher = broadcastDispatcher;
         mDevicePolicyManager = devicePolicyManager;
@@ -256,6 +260,7 @@ public class KeyguardIndicationController {
         mScreenLifecycle = screenLifecycle;
         mKeyguardLogger = keyguardLogger;
         mScreenLifecycle.addObserver(mScreenObserver);
+        mAlternateBouncerInteractor = alternateBouncerInteractor;
 
         mFaceAcquiredMessageDeferral = faceHelpMessageDeferral;
         mCoExFaceAcquisitionMsgIdsToShow = new HashSet<>();
@@ -413,14 +418,25 @@ public class KeyguardIndicationController {
 
     private CharSequence getDisclosureText(@Nullable CharSequence organizationName) {
         final Resources packageResources = mContext.getResources();
+
+        // TODO(b/259908270): remove and inline
+        boolean isFinanced;
+        if (DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_DEVICE_POLICY_MANAGER,
+                DevicePolicyManager.ADD_ISFINANCED_DEVICE_FLAG,
+                DevicePolicyManager.ADD_ISFINANCED_FEVICE_DEFAULT)) {
+            isFinanced = mDevicePolicyManager.isFinancedDevice();
+        } else {
+            isFinanced = mDevicePolicyManager.isDeviceManaged()
+                    && mDevicePolicyManager.getDeviceOwnerType(
+                    mDevicePolicyManager.getDeviceOwnerComponentOnAnyUser())
+                    == DEVICE_OWNER_TYPE_FINANCED;
+        }
+
         if (organizationName == null) {
             return mDevicePolicyManager.getResources().getString(
                     KEYGUARD_MANAGEMENT_DISCLOSURE,
                     () -> packageResources.getString(R.string.do_disclosure_generic));
-        } else if (mDevicePolicyManager.isDeviceManaged()
-                && mDevicePolicyManager.getDeviceOwnerType(
-                mDevicePolicyManager.getDeviceOwnerComponentOnAnyUser())
-                == DEVICE_OWNER_TYPE_FINANCED) {
+        } else if (isFinanced) {
             return packageResources.getString(R.string.do_financed_disclosure_with_name,
                     organizationName);
         } else {
@@ -928,7 +944,7 @@ public class KeyguardIndicationController {
         }
 
         if (mStatusBarKeyguardViewManager.isBouncerShowing()) {
-            if (mStatusBarKeyguardViewManager.isShowingAlternateBouncer()) {
+            if (mAlternateBouncerInteractor.isVisibleState()) {
                 return; // udfps affordance is highlighted, no need to show action to unlock
             } else if (mKeyguardUpdateMonitor.isFaceEnrolled()) {
                 String message = mContext.getString(R.string.keyguard_retry);
@@ -1193,8 +1209,12 @@ public class KeyguardIndicationController {
         }
 
         @Override
-        public void onTrustGrantedForCurrentUser(boolean dismissKeyguard,
-                @NonNull TrustGrantFlags flags, @Nullable String message) {
+        public void onTrustGrantedForCurrentUser(
+                boolean dismissKeyguard,
+                boolean newlyUnlocked,
+                @NonNull TrustGrantFlags flags,
+                @Nullable String message
+        ) {
             showTrustGrantedMessage(dismissKeyguard, message);
         }
 

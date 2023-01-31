@@ -75,6 +75,7 @@ import android.os.BatteryManager;
 import android.os.Looper;
 import android.os.RemoteException;
 import android.os.UserManager;
+import android.provider.DeviceConfig;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
 import android.view.ViewGroup;
@@ -99,6 +100,7 @@ import com.android.systemui.dock.DockManager;
 import com.android.systemui.keyguard.KeyguardIndication;
 import com.android.systemui.keyguard.KeyguardIndicationRotateTextViewController;
 import com.android.systemui.keyguard.ScreenLifecycle;
+import com.android.systemui.keyguard.domain.interactor.AlternateBouncerInteractor;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
@@ -177,6 +179,8 @@ public class KeyguardIndicationControllerTest extends SysuiTestCase {
     @Mock
     private FaceHelpMessageDeferral mFaceHelpMessageDeferral;
     @Mock
+    private AlternateBouncerInteractor mAlternateBouncerInteractor;
+    @Mock
     private ScreenLifecycle mScreenLifecycle;
     @Mock
     private AuthController mAuthController;
@@ -217,6 +221,10 @@ public class KeyguardIndicationControllerTest extends SysuiTestCase {
         mTextView = new KeyguardIndicationTextView(mContext);
         mTextView.setAnimationsEnabled(false);
 
+        // TODO(b/259908270): remove
+        DeviceConfig.setProperty(DeviceConfig.NAMESPACE_DEVICE_POLICY_MANAGER,
+                DevicePolicyManager.ADD_ISFINANCED_DEVICE_FLAG, "true",
+                /* makeDefault= */ false);
         mContext.addMockSystemService(Context.DEVICE_POLICY_SERVICE, mDevicePolicyManager);
         mContext.addMockSystemService(UserManager.class, mUserManager);
         mContext.addMockSystemService(Context.TRUST_SERVICE, mock(TrustManager.class));
@@ -238,8 +246,12 @@ public class KeyguardIndicationControllerTest extends SysuiTestCase {
         when(mDevicePolicyManager.getResources()).thenReturn(mDevicePolicyResourcesManager);
         when(mDevicePolicyManager.getDeviceOwnerComponentOnAnyUser())
                 .thenReturn(DEVICE_OWNER_COMPONENT);
+        when(mDevicePolicyManager.isFinancedDevice()).thenReturn(false);
+        // TODO(b/259908270): remove
         when(mDevicePolicyManager.getDeviceOwnerType(DEVICE_OWNER_COMPONENT))
                 .thenReturn(DEVICE_OWNER_TYPE_DEFAULT);
+
+
         when(mDevicePolicyResourcesManager.getString(anyString(), any()))
                 .thenReturn(mDisclosureGeneric);
         when(mDevicePolicyResourcesManager.getString(anyString(), any(), anyString()))
@@ -273,7 +285,8 @@ public class KeyguardIndicationControllerTest extends SysuiTestCase {
                 mUserManager, mExecutor, mExecutor, mFalsingManager,
                 mAuthController, mLockPatternUtils, mScreenLifecycle,
                 mKeyguardBypassController, mAccessibilityManager,
-                mFaceHelpMessageDeferral, mock(KeyguardLogger.class));
+                mFaceHelpMessageDeferral, mock(KeyguardLogger.class),
+                mAlternateBouncerInteractor);
         mController.init();
         mController.setIndicationArea(mIndicationArea);
         verify(mStatusBarStateController).addCallback(mStatusBarStateListenerCaptor.capture());
@@ -489,6 +502,8 @@ public class KeyguardIndicationControllerTest extends SysuiTestCase {
         when(mKeyguardStateController.isShowing()).thenReturn(true);
         when(mDevicePolicyManager.isDeviceManaged()).thenReturn(true);
         when(mDevicePolicyManager.getDeviceOwnerOrganizationName()).thenReturn(ORGANIZATION_NAME);
+        when(mDevicePolicyManager.isFinancedDevice()).thenReturn(true);
+        // TODO(b/259908270): remove
         when(mDevicePolicyManager.getDeviceOwnerType(DEVICE_OWNER_COMPONENT))
                 .thenReturn(DEVICE_OWNER_TYPE_FINANCED);
         sendUpdateDisclosureBroadcast();
@@ -1045,7 +1060,7 @@ public class KeyguardIndicationControllerTest extends SysuiTestCase {
         // GIVEN a trust granted message but trust isn't granted
         final String trustGrantedMsg = "testing trust granted message";
         mController.getKeyguardCallback().onTrustGrantedForCurrentUser(
-                false, new TrustGrantFlags(0), trustGrantedMsg);
+                false, false, new TrustGrantFlags(0), trustGrantedMsg);
 
         verifyHideIndication(INDICATION_TYPE_TRUST);
 
@@ -1070,7 +1085,7 @@ public class KeyguardIndicationControllerTest extends SysuiTestCase {
         // WHEN the showTrustGranted method is called
         final String trustGrantedMsg = "testing trust granted message";
         mController.getKeyguardCallback().onTrustGrantedForCurrentUser(
-                false, new TrustGrantFlags(0), trustGrantedMsg);
+                false, false, new TrustGrantFlags(0), trustGrantedMsg);
 
         // THEN verify the trust granted message shows
         verifyIndicationMessage(
@@ -1088,7 +1103,7 @@ public class KeyguardIndicationControllerTest extends SysuiTestCase {
 
         // WHEN the showTrustGranted method is called with a null message
         mController.getKeyguardCallback().onTrustGrantedForCurrentUser(
-                false, new TrustGrantFlags(0), null);
+                false, false, new TrustGrantFlags(0), null);
 
         // THEN verify the default trust granted message shows
         verifyIndicationMessage(
@@ -1106,7 +1121,7 @@ public class KeyguardIndicationControllerTest extends SysuiTestCase {
 
         // WHEN the showTrustGranted method is called with an EMPTY string
         mController.getKeyguardCallback().onTrustGrantedForCurrentUser(
-                false, new TrustGrantFlags(0), "");
+                false, false, new TrustGrantFlags(0), "");
 
         // THEN verify NO trust message is shown
         verifyNoMessage(INDICATION_TYPE_TRUST);

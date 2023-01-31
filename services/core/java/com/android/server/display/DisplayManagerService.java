@@ -603,7 +603,7 @@ public final class DisplayManagerService extends SystemService {
                             getBrightnessConfigForDisplayWithPdsFallbackLocked(
                             logicalDisplay.getPrimaryDisplayDeviceLocked().getUniqueId(),
                             userSerial);
-                    dpc.setBrightnessConfiguration(config);
+                    dpc.setBrightnessConfiguration(config, /* shouldResetShortTermModel= */ true);
                 }
                 dpc.onSwitchUser(newUserId);
             });
@@ -1425,12 +1425,20 @@ public final class DisplayManagerService extends SystemService {
         // LogicalDisplayMapper aware of the link between the new display and its associated virtual
         // device before triggering DISPLAY_DEVICE_EVENT_ADDED.
         if ((flags & VIRTUAL_DISPLAY_FLAG_DEVICE_DISPLAY_GROUP) != 0) {
-            try {
-                final int virtualDeviceId = virtualDevice.getDeviceId();
-                mLogicalDisplayMapper.associateDisplayDeviceWithVirtualDevice(
-                        device, virtualDeviceId);
-            } catch (RemoteException e) {
-                e.rethrowFromSystemServer();
+            if (virtualDevice != null) {
+                try {
+                    final int virtualDeviceId = virtualDevice.getDeviceId();
+                    mLogicalDisplayMapper.associateDisplayDeviceWithVirtualDevice(
+                            device, virtualDeviceId);
+                } catch (RemoteException e) {
+                    e.rethrowFromSystemServer();
+                }
+            } else {
+                Slog.i(
+                        TAG,
+                        "Display created with VIRTUAL_DISPLAY_FLAG_DEVICE_DISPLAY_GROUP set, but no"
+                            + " virtual device. The display will not be added to a device display"
+                            + " group.");
             }
         }
 
@@ -1855,15 +1863,7 @@ public final class DisplayManagerService extends SystemService {
         Settings.Global.putInt(mContext.getContentResolver(),
                 Settings.Global.USER_PREFERRED_RESOLUTION_WIDTH, resolutionWidth);
         mDisplayDeviceRepo.forEachLocked((DisplayDevice device) -> {
-            // If there is a display specific mode, don't override that
-            final Point deviceUserPreferredResolution =
-                    mPersistentDataStore.getUserPreferredResolution(device);
-            final float deviceRefreshRate =
-                    mPersistentDataStore.getUserPreferredRefreshRate(device);
-            if (!isValidResolution(deviceUserPreferredResolution)
-                    && !isValidRefreshRate(deviceRefreshRate)) {
-                device.setUserPreferredDisplayModeLocked(mode);
-            }
+            device.setUserPreferredDisplayModeLocked(mode);
         });
     }
 
@@ -1945,7 +1945,7 @@ public final class DisplayManagerService extends SystemService {
             }
             DisplayPowerControllerInterface dpc = getDpcFromUniqueIdLocked(uniqueId);
             if (dpc != null) {
-                dpc.setBrightnessConfiguration(c);
+                dpc.setBrightnessConfiguration(c, /* shouldResetShortTermModel= */ true);
             }
         }
     }
@@ -1994,7 +1994,8 @@ public final class DisplayManagerService extends SystemService {
                     final DisplayPowerControllerInterface dpc = mDisplayPowerControllers.get(
                             logicalDisplay.getDisplayIdLocked());
                     if (dpc != null) {
-                        dpc.setBrightnessConfiguration(config);
+                        dpc.setBrightnessConfiguration(config,
+                                /* shouldResetShortTermModel= */ false);
                     }
                 }
             });
@@ -3737,44 +3738,21 @@ public final class DisplayManagerService extends SystemService {
         @Override
         public Set<DisplayInfo> getPossibleDisplayInfo(int displayId) {
             synchronized (mSyncRoot) {
-                // Retrieve the group associated with this display id.
-                final int displayGroupId =
-                        mLogicalDisplayMapper.getDisplayGroupIdFromDisplayIdLocked(displayId);
-                if (displayGroupId == Display.INVALID_DISPLAY_GROUP) {
-                    Slog.w(TAG,
-                            "Can't get possible display info since display group for " + displayId
-                                    + " does not exist");
-                    return new ArraySet<>();
-                }
-
-                // Assume any display in this group can be swapped out for the given display id.
                 Set<DisplayInfo> possibleInfo = new ArraySet<>();
-                final DisplayGroup group = mLogicalDisplayMapper.getDisplayGroupLocked(
-                        displayGroupId);
-                for (int i = 0; i < group.getSizeLocked(); i++) {
-                    final int id = group.getIdLocked(i);
-                    final LogicalDisplay logical = mLogicalDisplayMapper.getDisplayLocked(id);
-                    if (logical == null) {
-                        Slog.w(TAG,
-                                "Can't get possible display info since logical display for "
-                                        + "display id " + id + " does not exist, as part of group "
-                                        + displayGroupId);
-                    } else {
-                        possibleInfo.add(logical.getDisplayInfoLocked());
-                    }
-                }
-
-                // For the supported device states, retrieve the DisplayInfos for the logical
-                // display layout.
+                // For each of supported device states, retrieve the display layout of that state,
+                // and return all of the DisplayInfos (one per state) for the given display id.
                 if (mDeviceStateManager == null) {
                     Slog.w(TAG, "Can't get supported states since DeviceStateManager not ready");
-                } else {
-                    final int[] supportedStates =
-                            mDeviceStateManager.getSupportedStateIdentifiers();
-                    for (int state : supportedStates) {
-                        possibleInfo.addAll(
-                                mLogicalDisplayMapper.getDisplayInfoForStateLocked(state, displayId,
-                                        displayGroupId));
+                    return possibleInfo;
+                }
+                final int[] supportedStates =
+                        mDeviceStateManager.getSupportedStateIdentifiers();
+                DisplayInfo displayInfo;
+                for (int state : supportedStates) {
+                    displayInfo = mLogicalDisplayMapper.getDisplayInfoForStateLocked(state,
+                            displayId);
+                    if (displayInfo != null) {
+                        possibleInfo.add(displayInfo);
                     }
                 }
                 return possibleInfo;

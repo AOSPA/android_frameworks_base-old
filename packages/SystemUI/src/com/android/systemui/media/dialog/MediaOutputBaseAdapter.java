@@ -58,7 +58,7 @@ import java.util.List;
  * Base adapter for media output dialog.
  */
 public abstract class MediaOutputBaseAdapter extends
-        RecyclerView.Adapter<MediaOutputBaseAdapter.MediaDeviceBaseViewHolder> {
+        RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
     static final int CUSTOMIZED_ITEM_PAIR_NEW = 1;
     static final int CUSTOMIZED_ITEM_GROUP = 2;
@@ -80,11 +80,11 @@ public abstract class MediaOutputBaseAdapter extends
     }
 
     @Override
-    public MediaDeviceBaseViewHolder onCreateViewHolder(@NonNull ViewGroup viewGroup,
+    public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup viewGroup,
             int viewType) {
         mContext = viewGroup.getContext();
         mHolderView = LayoutInflater.from(mContext).inflate(
-                mController.isAdvancedLayoutSupported() ? R.layout.media_output_list_item_advanced
+                mController.isAdvancedLayoutSupported() ? MediaItem.getMediaLayoutId(viewType)
                         : R.layout.media_output_list_item, viewGroup, false);
 
         return null;
@@ -175,7 +175,7 @@ public abstract class MediaOutputBaseAdapter extends
             initAnimator();
         }
 
-        void onBind(MediaDevice device, boolean topMargin, boolean bottomMargin, int position) {
+        void onBind(MediaDevice device, int position) {
             mDeviceId = device.getId();
             mCheckBox.setVisibility(View.GONE);
             mStatusIcon.setVisibility(View.GONE);
@@ -196,7 +196,7 @@ public abstract class MediaOutputBaseAdapter extends
                             PorterDuff.Mode.SRC_IN));
         }
 
-        abstract void onBind(int customizedItem, boolean topMargin, boolean bottomMargin);
+        abstract void onBind(int customizedItem);
 
         void setSingleLineLayout(CharSequence title) {
             setSingleLineLayout(title, false, false, false, false);
@@ -307,9 +307,10 @@ public abstract class MediaOutputBaseAdapter extends
                         updateTitleIcon(currentVolume == 0 ? R.drawable.media_output_icon_volume_off
                                         : R.drawable.media_output_icon_volume,
                                 mController.getColorItemContent());
+                    } else {
+                        animateCornerAndVolume(mSeekBar.getProgress(),
+                                MediaOutputSeekbar.scaleVolumeToProgress(currentVolume));
                     }
-                    animateCornerAndVolume(mSeekBar.getProgress(),
-                            MediaOutputSeekbar.scaleVolumeToProgress(currentVolume));
                 } else {
                     if (!mVolumeAnimator.isStarted()) {
                         if (mController.isAdvancedLayoutSupported()) {
@@ -398,23 +399,18 @@ public abstract class MediaOutputBaseAdapter extends
         }
 
         void updateMutedVolumeIcon() {
+            mIconAreaLayout.setBackground(
+                    mContext.getDrawable(R.drawable.media_output_item_background_active));
             updateTitleIcon(R.drawable.media_output_icon_volume_off,
                     mController.getColorItemContent());
-            final GradientDrawable iconAreaBackgroundDrawable =
-                    (GradientDrawable) mIconAreaLayout.getBackground();
-            iconAreaBackgroundDrawable.setCornerRadius(mController.getActiveRadius());
         }
 
         void updateUnmutedVolumeIcon() {
+            mIconAreaLayout.setBackground(
+                    mContext.getDrawable(R.drawable.media_output_title_icon_area)
+            );
             updateTitleIcon(R.drawable.media_output_icon_volume,
                     mController.getColorItemContent());
-            final GradientDrawable iconAreaBackgroundDrawable =
-                    (GradientDrawable) mIconAreaLayout.getBackground();
-            iconAreaBackgroundDrawable.setCornerRadii(new float[]{
-                    mController.getActiveRadius(),
-                    mController.getActiveRadius(),
-                    0, 0, 0, 0, mController.getActiveRadius(), mController.getActiveRadius()
-            });
         }
 
         void updateTitleIcon(@DrawableRes int id, int color) {

@@ -113,7 +113,8 @@ public final class JobConcurrencyManagerTest {
 
         @Override
         JobServiceContext createJobServiceContext(JobSchedulerService service,
-                JobConcurrencyManager concurrencyManager, IBatteryStats batteryStats,
+                JobConcurrencyManager concurrencyManager,
+                JobNotificationCoordinator notificationCoordinator, IBatteryStats batteryStats,
                 JobPackageTracker tracker, Looper looper) {
             final JobServiceContext context = mock(JobServiceContext.class);
             doAnswer((Answer<Boolean>) invocationOnMock -> {
@@ -216,7 +217,7 @@ public final class JobConcurrencyManagerTest {
         assertEquals(0, preferredUidOnly.size());
         assertEquals(0, stoppable.size());
         assertEquals(0, assignmentInfo.minPreferredUidOnlyWaitingTimeMs);
-        assertEquals(0, assignmentInfo.numRunningTopEj);
+        assertEquals(0, assignmentInfo.numRunningImmediacyPrivileged);
     }
 
     @Test
@@ -238,7 +239,7 @@ public final class JobConcurrencyManagerTest {
         assertEquals(0, preferredUidOnly.size());
         assertEquals(0, stoppable.size());
         assertEquals(0, assignmentInfo.minPreferredUidOnlyWaitingTimeMs);
-        assertEquals(0, assignmentInfo.numRunningTopEj);
+        assertEquals(0, assignmentInfo.numRunningImmediacyPrivileged);
     }
 
     @Test
@@ -264,15 +265,14 @@ public final class JobConcurrencyManagerTest {
         assertEquals(JobConcurrencyManager.STANDARD_CONCURRENCY_LIMIT, preferredUidOnly.size());
         assertEquals(0, stoppable.size());
         assertEquals(0, assignmentInfo.minPreferredUidOnlyWaitingTimeMs);
-        assertEquals(0, assignmentInfo.numRunningTopEj);
+        assertEquals(0, assignmentInfo.numRunningImmediacyPrivileged);
     }
 
     @Test
-    public void testPrepareForAssignmentDetermination_onlyRunningTopEjs() {
+    public void testPrepareForAssignmentDetermination_onlyStartedWithImmediacyPrivilege() {
         for (int i = 0; i < JobConcurrencyManager.STANDARD_CONCURRENCY_LIMIT; ++i) {
             JobStatus job = createJob(mDefaultUserId * UserHandle.PER_USER_RANGE + i);
-            job.startedAsExpeditedJob = true;
-            job.lastEvaluatedBias = JobInfo.BIAS_TOP_APP;
+            job.startedWithImmediacyPrivilege = true;
             mJobConcurrencyManager.addRunningJobForTesting(job);
         }
 
@@ -293,7 +293,7 @@ public final class JobConcurrencyManagerTest {
         assertEquals(JobConcurrencyManager.STANDARD_CONCURRENCY_LIMIT / 2, stoppable.size());
         assertEquals(0, assignmentInfo.minPreferredUidOnlyWaitingTimeMs);
         assertEquals(JobConcurrencyManager.STANDARD_CONCURRENCY_LIMIT,
-                assignmentInfo.numRunningTopEj);
+                assignmentInfo.numRunningImmediacyPrivileged);
     }
 
     @Test
@@ -496,6 +496,38 @@ public final class JobConcurrencyManagerTest {
         } else if (numAssignedJobs == 2) {
             assertFalse(changed.valueAt(1).newJob.shouldTreatAsExpeditedJob());
         }
+    }
+
+    @Test
+    public void testHasImmediacyPrivilege() {
+        JobStatus job = createJob(mDefaultUserId * UserHandle.PER_USER_RANGE, 0);
+        spyOn(job);
+        assertFalse(mJobConcurrencyManager.hasImmediacyPrivilegeLocked(job));
+
+        doReturn(false).when(job).shouldTreatAsExpeditedJob();
+        doReturn(false).when(job).shouldTreatAsUserInitiatedJob();
+        job.lastEvaluatedBias = JobInfo.BIAS_TOP_APP;
+        assertFalse(mJobConcurrencyManager.hasImmediacyPrivilegeLocked(job));
+
+        doReturn(true).when(job).shouldTreatAsExpeditedJob();
+        doReturn(false).when(job).shouldTreatAsUserInitiatedJob();
+        job.lastEvaluatedBias = JobInfo.BIAS_DEFAULT;
+        assertFalse(mJobConcurrencyManager.hasImmediacyPrivilegeLocked(job));
+
+        doReturn(false).when(job).shouldTreatAsExpeditedJob();
+        doReturn(true).when(job).shouldTreatAsUserInitiatedJob();
+        job.lastEvaluatedBias = JobInfo.BIAS_DEFAULT;
+        assertFalse(mJobConcurrencyManager.hasImmediacyPrivilegeLocked(job));
+
+        doReturn(false).when(job).shouldTreatAsExpeditedJob();
+        doReturn(true).when(job).shouldTreatAsUserInitiatedJob();
+        job.lastEvaluatedBias = JobInfo.BIAS_TOP_APP;
+        assertTrue(mJobConcurrencyManager.hasImmediacyPrivilegeLocked(job));
+
+        doReturn(true).when(job).shouldTreatAsExpeditedJob();
+        doReturn(false).when(job).shouldTreatAsUserInitiatedJob();
+        job.lastEvaluatedBias = JobInfo.BIAS_TOP_APP;
+        assertTrue(mJobConcurrencyManager.hasImmediacyPrivilegeLocked(job));
     }
 
     @Test

@@ -22,10 +22,13 @@ import android.os.PowerManager
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.view.View.ACCESSIBILITY_LIVE_REGION_ASSERTIVE
+import android.view.View.ACCESSIBILITY_LIVE_REGION_NONE
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityManager
 import android.widget.TextView
+import androidx.annotation.IdRes
 import com.android.internal.widget.CachingIconView
 import com.android.systemui.Gefingerpoken
 import com.android.systemui.R
@@ -43,6 +46,7 @@ import com.android.systemui.statusbar.VibratorHelper
 import com.android.systemui.statusbar.policy.ConfigurationController
 import com.android.systemui.temporarydisplay.TemporaryViewDisplayController
 import com.android.systemui.util.concurrency.DelayableExecutor
+import com.android.systemui.util.time.SystemClock
 import com.android.systemui.util.view.ViewUtil
 import com.android.systemui.util.wakelock.WakeLock
 import javax.inject.Inject
@@ -77,6 +81,7 @@ open class ChipbarCoordinator @Inject constructor(
         private val viewUtil: ViewUtil,
         private val vibratorHelper: VibratorHelper,
         wakeLockBuilder: WakeLock.Builder,
+        systemClock: SystemClock,
 ) : TemporaryViewDisplayController<ChipbarInfo, ChipbarLogger>(
         context,
         logger,
@@ -87,6 +92,7 @@ open class ChipbarCoordinator @Inject constructor(
         powerManager,
         R.layout.chipbar,
         wakeLockBuilder,
+        systemClock,
 ) {
 
     private lateinit var parent: ChipbarRootView
@@ -109,6 +115,8 @@ open class ChipbarCoordinator @Inject constructor(
                 is ChipbarEndItem.Button -> "button(${newInfo.endItem.text.loadText(context)})"
             }
         )
+
+        currentView.setTag(INFO_TAG, newInfo)
 
         // Detect falsing touches on the chip.
         parent = currentView.requireViewById(R.id.chipbar_root_view)
@@ -162,8 +170,11 @@ open class ChipbarCoordinator @Inject constructor(
         } else {
             ""
         }
-        currentView.requireViewById<ViewGroup>(R.id.chipbar_inner).contentDescription =
-            "$loadedIconDesc${newInfo.text.loadText(context)}"
+
+        val chipInnerView = currentView.getInnerView()
+        chipInnerView.contentDescription = "$loadedIconDesc${newInfo.text.loadText(context)}"
+        chipInnerView.accessibilityLiveRegion = ACCESSIBILITY_LIVE_REGION_ASSERTIVE
+        maybeGetAccessibilityFocus(newInfo, currentView)
 
         // ---- Haptics ----
         newInfo.vibrationEffect?.let {
@@ -171,29 +182,47 @@ open class ChipbarCoordinator @Inject constructor(
         }
     }
 
+    private fun maybeGetAccessibilityFocus(info: ChipbarInfo?, view: ViewGroup) {
+        // Don't steal focus unless the chipbar has something interactable.
+        // (The chipbar is marked as a live region, so its content will be announced whenever the
+        // content changes.)
+        if (info?.endItem is ChipbarEndItem.Button) {
+            view.getInnerView().requestAccessibilityFocus()
+        } else {
+            view.getInnerView().clearAccessibilityFocus()
+        }
+    }
+
     override fun animateViewIn(view: ViewGroup) {
-        val chipInnerView = view.requireViewById<ViewGroup>(R.id.chipbar_inner)
         ViewHierarchyAnimator.animateAddition(
-            chipInnerView,
+            view.getInnerView(),
             ViewHierarchyAnimator.Hotspot.TOP,
             Interpolators.EMPHASIZED_DECELERATE,
             duration = ANIMATION_IN_DURATION,
             includeMargins = true,
             includeFadeIn = true,
             // We can only request focus once the animation finishes.
-            onAnimationEnd = { chipInnerView.requestAccessibilityFocus() },
+            onAnimationEnd = {
+                maybeGetAccessibilityFocus(view.getTag(INFO_TAG) as ChipbarInfo?, view)
+            },
         )
     }
 
     override fun animateViewOut(view: ViewGroup, onAnimationEnd: Runnable) {
+        val innerView = view.getInnerView()
+        innerView.accessibilityLiveRegion = ACCESSIBILITY_LIVE_REGION_NONE
         ViewHierarchyAnimator.animateRemoval(
-            view.requireViewById<ViewGroup>(R.id.chipbar_inner),
+            innerView,
             ViewHierarchyAnimator.Hotspot.TOP,
             Interpolators.EMPHASIZED_ACCELERATE,
             ANIMATION_OUT_DURATION,
             includeMargins = true,
             onAnimationEnd,
         )
+    }
+
+    private fun ViewGroup.getInnerView(): ViewGroup {
+        return requireViewById(R.id.chipbar_inner)
     }
 
     override fun start() {}
@@ -213,3 +242,4 @@ open class ChipbarCoordinator @Inject constructor(
 
 private const val ANIMATION_IN_DURATION = 500L
 private const val ANIMATION_OUT_DURATION = 250L
+@IdRes private val INFO_TAG = R.id.tag_chipbar_info

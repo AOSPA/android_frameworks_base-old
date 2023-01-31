@@ -4647,21 +4647,6 @@ public final class Settings {
         public static final String SCREEN_BRIGHTNESS = "screen_brightness";
 
         /**
-         * The screen backlight brightness between 0 and 255.
-         * @hide
-         */
-        @Readable
-        public static final String SCREEN_BRIGHTNESS_FOR_VR = "screen_brightness_for_vr";
-
-        /**
-         * The screen backlight brightness between 0.0f and 1.0f.
-         * @hide
-         */
-        @Readable
-        public static final String SCREEN_BRIGHTNESS_FOR_VR_FLOAT =
-                "screen_brightness_for_vr_float";
-
-        /**
          * The screen backlight brightness between 0.0f and 1.0f.
          * @hide
          */
@@ -5646,8 +5631,6 @@ public final class Settings {
             PUBLIC_SETTINGS.add(SCREEN_OFF_TIMEOUT);
             PUBLIC_SETTINGS.add(SCREEN_BRIGHTNESS);
             PUBLIC_SETTINGS.add(SCREEN_BRIGHTNESS_FLOAT);
-            PUBLIC_SETTINGS.add(SCREEN_BRIGHTNESS_FOR_VR);
-            PUBLIC_SETTINGS.add(SCREEN_BRIGHTNESS_FOR_VR_FLOAT);
             PUBLIC_SETTINGS.add(SCREEN_BRIGHTNESS_MODE);
             PUBLIC_SETTINGS.add(MODE_RINGER_STREAMS_AFFECTED);
             PUBLIC_SETTINGS.add(MUTE_STREAMS_AFFECTED);
@@ -6238,6 +6221,7 @@ public final class Settings {
             MOVED_TO_GLOBAL.add(Settings.Global.DEFAULT_DNS_SERVER);
             MOVED_TO_GLOBAL.add(Settings.Global.PREFERRED_NETWORK_MODE);
             MOVED_TO_GLOBAL.add(Settings.Global.WEBVIEW_DATA_REDUCTION_PROXY_KEY);
+            MOVED_TO_GLOBAL.add(Settings.Global.SECURE_FRP_MODE);
         }
 
         /** @hide */
@@ -7100,7 +7084,10 @@ public final class Settings {
          * device is removed from this mode.
          * <p>
          * Type: int (0 for false, 1 for true)
+         *
+         * @deprecated Use Global.SECURE_FRP_MODE
          */
+        @Deprecated
         @Readable
         public static final String SECURE_FRP_MODE = "secure_frp_mode";
 
@@ -9670,6 +9657,16 @@ public final class Settings {
                 "lock_screen_show_silent_notifications";
 
         /**
+         * Indicates whether "seen" notifications should be suppressed from the lockscreen.
+         * <p>
+         * Type: int (0 for false, 1 for true)
+         *
+         * @hide
+         */
+        public static final String LOCK_SCREEN_SHOW_ONLY_UNSEEN_NOTIFICATIONS =
+                "lock_screen_show_only_unseen_notifications";
+
+        /**
          * Indicates whether snooze options should be shown on notifications
          * <p>
          * Type: int (0 for false, 1 for true)
@@ -10745,6 +10742,49 @@ public final class Settings {
         @Readable
         public static final String BACK_GESTURE_INSET_SCALE_RIGHT =
                 "back_gesture_inset_scale_right";
+
+        /**
+         * Indicates whether the trackpad back gesture is enabled.
+         * <p>Type: int (0 for false, 1 for true)
+         *
+         * @hide
+         */
+        public static final String TRACKPAD_GESTURE_BACK_ENABLED = "trackpad_gesture_back_enabled";
+
+        /**
+         * Indicates whether the trackpad home gesture is enabled.
+         * <p>Type: int (0 for false, 1 for true)
+         *
+         * @hide
+         */
+        public static final String TRACKPAD_GESTURE_HOME_ENABLED = "trackpad_gesture_home_enabled";
+
+        /**
+         * Indicates whether the trackpad overview gesture is enabled.
+         * <p>Type: int (0 for false, 1 for true)
+         *
+         * @hide
+         */
+        public static final String TRACKPAD_GESTURE_OVERVIEW_ENABLED =
+                "trackpad_gesture_overview_enabled";
+
+        /**
+         * Indicates whether the trackpad notification gesture is enabled.
+         * <p>Type: int (0 for false, 1 for true)
+         *
+         * @hide
+         */
+        public static final String TRACKPAD_GESTURE_NOTIFICATION_ENABLED =
+                "trackpad_gesture_notification_enabled";
+
+        /**
+         * Indicates whether the trackpad quick switch gesture is enabled.
+         * <p>Type: int (0 for false, 1 for true)
+         *
+         * @hide
+         */
+        public static final String TRACKPAD_GESTURE_QUICK_SWITCH_ENABLED =
+                "trackpad_gesture_quick_switch_enabled";
 
         /**
          * Current provider of proximity-based sharing services.
@@ -11925,7 +11965,19 @@ public final class Settings {
         public static final String DEVICE_PROVISIONED = "device_provisioned";
 
         /**
-         * Whether bypassing the device policy management role holder qualifcation is allowed,
+         * Indicates whether the device is under restricted secure FRP mode.
+         * Secure FRP mode is enabled when the device is under FRP. On solving of FRP challenge,
+         * device is removed from this mode.
+         * <p>
+         * Type: int (0 for false, 1 for true)
+         *
+         */
+        @Readable
+        @SuppressLint("NoSettingsProvider")
+        public static final String SECURE_FRP_MODE = "secure_frp_mode";
+
+        /**
+         * Whether bypassing the device policy management role holder qualification is allowed,
          * (0 = false, 1 = true).
          *
          * @hide

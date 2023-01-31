@@ -235,9 +235,14 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     private TaskFragment mCompanionTaskFragment;
 
     /**
-     * Prevents duplicate calls to onTaskAppeared.
+     * Prevents duplicate calls to onTaskFragmentAppeared.
      */
     boolean mTaskFragmentAppearedSent;
+
+    /**
+     * Prevents unnecessary callbacks after onTaskFragmentVanished.
+     */
+    boolean mTaskFragmentVanishedSent;
 
     /**
      * The last running activity of the TaskFragment was finished due to clear task while launching
@@ -329,9 +334,6 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     private boolean mDelayLastActivityRemoval;
 
     final Point mLastSurfaceSize = new Point();
-
-    /** The latest updated value when there's a child {@link #onActivityVisibleRequestedChanged} */
-    boolean mVisibleRequested;
 
     private final Rect mTmpBounds = new Rect();
     private final Rect mTmpFullBounds = new Rect();
@@ -1390,7 +1392,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
         if (next.attachedToProcess()) {
             if (DEBUG_SWITCH) {
-                Slog.v(TAG_SWITCH, "Resume running: " + next + " stopped=" + next.stopped
+                Slog.v(TAG_SWITCH, "Resume running: " + next + " stopped=" + next.mAppStopped
                         + " visibleRequested=" + next.isVisibleRequested());
             }
 
@@ -1405,7 +1407,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                     || mLastPausedActivity != null && !mLastPausedActivity.occludesParent();
 
             // This activity is now becoming visible.
-            if (!next.isVisibleRequested() || next.stopped || lastActivityTranslucent) {
+            if (!next.isVisibleRequested() || next.mAppStopped || lastActivityTranslucent) {
                 next.app.addToPendingTop();
                 next.setVisibility(true);
             }
@@ -1456,7 +1458,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                     // Do over!
                     mTaskSupervisor.scheduleResumeTopActivities();
                 }
-                if (!next.isVisibleRequested() || next.stopped) {
+                if (!next.isVisibleRequested() || next.mAppStopped) {
                     next.setVisibility(true);
                 }
                 next.completeResumeLocked();
@@ -1485,7 +1487,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
                 // Well the app will no longer be stopped.
                 // Clear app token stopped state in window manager if needed.
-                next.notifyAppResumed(next.stopped);
+                next.notifyAppResumed();
 
                 EventLogTags.writeWmResumeActivity(next.mUserId, System.identityHashCode(next),
                         next.getTask().mTaskId, next.shortComponentName);
@@ -2256,7 +2258,8 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                     // task, because they should not be affected by insets.
                     inOutConfig.smallestScreenWidthDp = (int) (0.5f
                             + Math.min(mTmpFullBounds.width(), mTmpFullBounds.height()) / density);
-                } else if (isEmbedded()) {
+                } else if (windowingMode == WINDOWING_MODE_MULTI_WINDOW
+                        && isEmbeddedWithBoundsOverride()) {
                     // For embedded TFs, the smallest width should be updated. Otherwise, inherit
                     // from the parent task would result in applications loaded wrong resource.
                     inOutConfig.smallestScreenWidthDp =
@@ -2575,7 +2578,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                 mRemoteToken.toWindowContainerToken(),
                 getConfiguration(),
                 getNonFinishingActivityCount(),
-                isVisibleRequested(),
+                shouldBeVisible(null /* starting */),
                 childActivities,
                 positionInParent,
                 mClearedTaskForReuse,
@@ -2865,20 +2868,12 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         return getWindowingMode() == WINDOWING_MODE_FULLSCREEN || matchParentBounds();
     }
 
-    void onActivityVisibleRequestedChanged() {
-        final boolean isVisibleRequested = isVisibleRequested();
-        if (mVisibleRequested == isVisibleRequested) {
-            return;
-        }
-        mVisibleRequested = isVisibleRequested;
-        final WindowContainer<?> parent = getParent();
-        if (parent == null) {
-            return;
-        }
-        final TaskFragment parentTf = parent.asTaskFragment();
-        if (parentTf != null) {
-            parentTf.onActivityVisibleRequestedChanged();
-        }
+    @Override
+    protected boolean onChildVisibleRequestedChanged(@Nullable WindowContainer child) {
+        if (!super.onChildVisibleRequestedChanged(child)) return false;
+        // Send the info changed to update the TaskFragment visibility.
+        sendTaskFragmentInfoChanged();
+        return true;
     }
 
     @Nullable

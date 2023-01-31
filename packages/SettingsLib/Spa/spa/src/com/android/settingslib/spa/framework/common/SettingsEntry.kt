@@ -25,8 +25,8 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import com.android.settingslib.spa.framework.compose.LocalNavController
 
-const val INJECT_ENTRY_NAME = "INJECT"
-const val ROOT_ENTRY_NAME = "ROOT"
+private const val INJECT_ENTRY_NAME = "INJECT"
+private const val ROOT_ENTRY_NAME = "ROOT"
 
 interface EntryData {
     val pageId: String?
@@ -151,7 +151,7 @@ data class SettingsEntry(
     }
 
     @Composable
-    fun provideLocalEntryData(arguments: Bundle): ProvidedValue<EntryData> {
+    private fun provideLocalEntryData(arguments: Bundle): ProvidedValue<EntryData> {
         val controller = LocalNavController.current
         return LocalEntryDataProvider provides remember {
             object : EntryData {
