@@ -13,9 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.android.systemui.biometrics;
-
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.Context;
@@ -37,23 +35,20 @@ import com.android.systemui.R;
  */
 public class UdfpsSurfaceView extends SurfaceView implements SurfaceHolder.Callback {
     private static final String TAG = "UdfpsSurfaceView";
-
     /**
      * Notifies {@link UdfpsView} when to enable GHBM illumination.
      */
     interface GhbmIlluminationListener {
         /**
          * @param surface the surface for which GHBM should be enabled.
-         * @param onDisplayConfigured a runnable that should be run after GHBM is enabled.
+         * @param onIlluminatedRunnable a runnable that should be run after GHBM is enabled.
          */
-        void enableGhbm(@NonNull Surface surface, @Nullable Runnable onDisplayConfigured);
+        void enableGhbm(@NonNull Surface surface, @Nullable Runnable onIlluminatedRunnable);
     }
-
     @NonNull private final SurfaceHolder mHolder;
     @NonNull private final Paint mSensorPaint;
-
     @Nullable private GhbmIlluminationListener mGhbmIlluminationListener;
-    @Nullable private Runnable mOnDisplayConfigured;
+    @Nullable private Runnable mOnIlluminatedRunnable;
     boolean mAwaitingSurfaceToStartIllumination;
     boolean mHasValidSurface;
 
@@ -61,17 +56,14 @@ public class UdfpsSurfaceView extends SurfaceView implements SurfaceHolder.Callb
 
     public UdfpsSurfaceView(Context context, AttributeSet attrs) {
         super(context, attrs);
-
         // Make this SurfaceView draw on top of everything else in this window. This allows us to
         // 1) Always show the HBM circle on top of everything else, and
         // 2) Properly composite this view with any other animations in the same window no matter
         //    what contents are added in which order to this view hierarchy.
         setZOrderOnTop(true);
-
         mHolder = getHolder();
         mHolder.addCallback(this);
         mHolder.setFormat(PixelFormat.RGBA_8888);
-
         mSensorPaint = new Paint(0 /* flags */);
         mSensorPaint.setAntiAlias(true);
         mSensorPaint.setColor(context.getColor(R.color.config_udfpsColor));
@@ -79,57 +71,48 @@ public class UdfpsSurfaceView extends SurfaceView implements SurfaceHolder.Callb
 
         mUdfpsIconPressed = context.getDrawable(R.drawable.udfps_icon_pressed);
     }
-
     @Override public void surfaceCreated(SurfaceHolder holder) {
         mHasValidSurface = true;
         if (mAwaitingSurfaceToStartIllumination) {
-            doIlluminate(mOnDisplayConfigured);
-            mOnDisplayConfigured = null;
+            doIlluminate(mOnIlluminatedRunnable);
+            mOnIlluminatedRunnable = null;
             mAwaitingSurfaceToStartIllumination = false;
         }
     }
-
     @Override
     public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
         // Unused.
     }
-
     @Override public void surfaceDestroyed(SurfaceHolder holder) {
         mHasValidSurface = false;
     }
-
     void setGhbmIlluminationListener(@Nullable GhbmIlluminationListener listener) {
         mGhbmIlluminationListener = listener;
     }
-
     /**
      * Note: there is no corresponding method to stop GHBM illumination. It is expected that
      * {@link UdfpsView} will hide this view, which would destroy the surface and remove the
      * illumination dot.
      */
-    void startGhbmIllumination(@Nullable Runnable onDisplayConfigured) {
+    void startGhbmIllumination(@Nullable Runnable onIlluminatedRunnable) {
         if (mGhbmIlluminationListener == null) {
             Log.e(TAG, "startIllumination | mGhbmIlluminationListener is null");
             return;
         }
-
         if (mHasValidSurface) {
-            doIlluminate(onDisplayConfigured);
+            doIlluminate(onIlluminatedRunnable);
         } else {
             mAwaitingSurfaceToStartIllumination = true;
-            mOnDisplayConfigured = onDisplayConfigured;
+            mOnIlluminatedRunnable = onIlluminatedRunnable;
         }
     }
-
-    private void doIlluminate(@Nullable Runnable onDisplayConfigured) {
+    private void doIlluminate(@Nullable Runnable onIlluminatedRunnable) {
         if (mGhbmIlluminationListener == null) {
             Log.e(TAG, "doIlluminate | mGhbmIlluminationListener is null");
             return;
         }
-
-        mGhbmIlluminationListener.enableGhbm(mHolder.getSurface(), onDisplayConfigured);
+        mGhbmIlluminationListener.enableGhbm(mHolder.getSurface(), onIlluminatedRunnable);
     }
-
     /**
      * Immediately draws the illumination dot on this SurfaceView's surface.
      */
