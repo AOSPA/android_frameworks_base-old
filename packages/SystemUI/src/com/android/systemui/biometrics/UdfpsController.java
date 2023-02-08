@@ -60,6 +60,7 @@ import com.android.internal.util.LatencyTracker;
 import com.android.keyguard.FaceAuthApiRequestReason;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.Dumpable;
+import com.android.systemui.R;
 import com.android.systemui.animation.ActivityLaunchAnimator;
 import com.android.systemui.biometrics.dagger.BiometricsBackground;
 import com.android.systemui.biometrics.udfps.InteractionEvent;
@@ -190,6 +191,8 @@ public class UdfpsController implements DozeReceiver, Dumpable {
     private BoostFramework mPerf = null;
     private boolean mIsPerfLockAcquired = false;
     private static final int BOOST_DURATION_TIMEOUT = 2000;
+
+    private boolean mTriggerOnFingerDownForActionDown;
 
     @VisibleForTesting
     public static final VibrationAttributes UDFPS_VIBRATION_ATTRIBUTES =
@@ -574,7 +577,14 @@ public class UdfpsController implements DozeReceiver, Dumpable {
                     // We need to persist its ID to track it during ACTION_MOVE that could include
                     // data for many other pointers because of multi-touch support.
                     mActivePointerId = event.getPointerId(0);
+                    final int idx = mActivePointerId == -1
+                            ? event.getPointerId(0)
+                            : event.findPointerIndex(mActivePointerId);
                     mVelocityTracker.addMovement(event);
+                    if (mTriggerOnFingerDownForActionDown) {
+                        onFingerDown(requestId, (int) event.getRawX(), (int) event.getRawY(),
+                                (int) event.getTouchMinor(idx), (int) event.getTouchMajor(idx));
+                    }
                     handled = true;
                     mAcquiredReceived = false;
                 }
@@ -794,6 +804,8 @@ public class UdfpsController implements DozeReceiver, Dumpable {
         udfpsHapticsSimulator.setUdfpsController(this);
         udfpsShell.setUdfpsOverlayController(mUdfpsOverlayController);
         mPerf = new BoostFramework();
+        mTriggerOnFingerDownForActionDown = mContext.getResources().getBoolean(
+                R.bool.config_udfpsTriggerOnFingerDownForActionDown);
     }
 
     /**
