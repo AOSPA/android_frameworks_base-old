@@ -6846,6 +6846,13 @@
     <permission android:name="android.permission.MAKE_UID_VISIBLE"
                 android:protectionLevel="signature" />
 
+    <!-- Used for permissions that are associated with enabling secondary SIM do not disturb feature
+         @hide -->
+    <permission android:name="com.qualcomm.qti.qesdk.permission.CALL_CONTROL_SECONDARY_DND"
+                android:label="@string/permlabel_sec_dnd"
+                android:description="@string/permdesc_sec_dnd"
+		android:protectionLevel="dangerous" />
+
     <!-- Limits the system as the only handler of the QUERY_PACKAGE_RESTART broadcast
          @hide -->
     <permission android:name="android.permission.HANDLE_QUERY_PACKAGE_RESTART"
