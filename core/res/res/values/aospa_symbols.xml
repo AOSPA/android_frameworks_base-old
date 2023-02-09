@@ -61,6 +61,9 @@
     <!-- Whether to to intercept inputs on screen off. -->
     <java-symbol type="bool" name="config_enableKeyHandler" />
 
+    <!-- PropImitationHooks -->
+    <java-symbol type="bool" name="config_spoofGoogleApps" />
+
     <!-- DC Dimming -->
     <java-symbol type="string" name="config_deviceDcDimmingSysfsNode" />
     <java-symbol type="string" name="config_deviceDcDimmingEnableValue" />
