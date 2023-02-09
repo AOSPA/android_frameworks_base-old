@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "3a6197fa_af0cfe53",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 3
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2023-02-09T01:43:27Z",
+      "side": 1,
+      "message": "maybe you have an idea about a better fix or an idea to fix the squiggly animation?",
+      "revId": "aa04a563386ee81c05f655bd222b2c877875841c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
