@@ -106,7 +106,12 @@ import com.android.systemui.fragments.FragmentService;
 import com.android.systemui.keyguard.KeyguardUnlockAnimationController;
 import com.android.systemui.keyguard.domain.interactor.AlternateBouncerInteractor;
 import com.android.systemui.keyguard.domain.interactor.KeyguardBottomAreaInteractor;
+import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInteractor;
+import com.android.systemui.keyguard.ui.viewmodel.DreamingToLockscreenTransitionViewModel;
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardBottomAreaViewModel;
+import com.android.systemui.keyguard.ui.viewmodel.LockscreenToDreamingTransitionViewModel;
+import com.android.systemui.keyguard.ui.viewmodel.LockscreenToOccludedTransitionViewModel;
+import com.android.systemui.keyguard.ui.viewmodel.OccludedToLockscreenTransitionViewModel;
 import com.android.systemui.media.controls.pipeline.MediaDataManager;
 import com.android.systemui.media.controls.ui.KeyguardMediaController;
 import com.android.systemui.media.controls.ui.MediaHierarchyManager;
@@ -188,6 +193,8 @@ import org.mockito.stubbing.Answer;
 import java.util.List;
 import java.util.Optional;
 
+import kotlinx.coroutines.CoroutineDispatcher;
+
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
 @TestableLooper.RunWithLooper
@@ -221,6 +228,7 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     @Mock private KeyguardStateController mKeyguardStateController;
     @Mock private DozeLog mDozeLog;
     @Mock private ShadeLogger mShadeLog;
+    @Mock private ShadeHeightLogger mShadeHeightLogger;
     @Mock private CommandQueue mCommandQueue;
     @Mock private VibratorHelper mVibratorHelper;
     @Mock private LatencyTracker mLatencyTracker;
@@ -289,6 +297,13 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     @Mock private KeyguardBottomAreaViewModel mKeyguardBottomAreaViewModel;
     @Mock private KeyguardBottomAreaInteractor mKeyguardBottomAreaInteractor;
     @Mock private AlternateBouncerInteractor mAlternateBouncerInteractor;
+    @Mock private DreamingToLockscreenTransitionViewModel mDreamingToLockscreenTransitionViewModel;
+    @Mock private OccludedToLockscreenTransitionViewModel mOccludedToLockscreenTransitionViewModel;
+    @Mock private LockscreenToDreamingTransitionViewModel mLockscreenToDreamingTransitionViewModel;
+    @Mock private LockscreenToOccludedTransitionViewModel mLockscreenToOccludedTransitionViewModel;
+
+    @Mock private KeyguardTransitionInteractor mKeyguardTransitionInteractor;
+    @Mock private CoroutineDispatcher mMainDispatcher;
     @Mock private MotionEvent mDownMotionEvent;
     @Captor
     private ArgumentCaptor<NotificationStackScrollLayout.OnEmptySpaceClickListener>
@@ -459,6 +474,7 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
                 mLatencyTracker, mPowerManager, mAccessibilityManager, 0, mUpdateMonitor,
                 mMetricsLogger,
                 mShadeLog,
+                mShadeHeightLogger,
                 mConfigurationController,
                 () -> flingAnimationUtilsBuilder, mStatusBarTouchableRegionManager,
                 mConversationNotificationManager, mMediaHierarchyManager,
@@ -505,6 +521,12 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
                 mKeyguardBottomAreaViewModel,
                 mKeyguardBottomAreaInteractor,
                 mAlternateBouncerInteractor,
+                mDreamingToLockscreenTransitionViewModel,
+                mOccludedToLockscreenTransitionViewModel,
+                mLockscreenToDreamingTransitionViewModel,
+                mLockscreenToOccludedTransitionViewModel,
+                mMainDispatcher,
+                mKeyguardTransitionInteractor,
                 mDumpManager,
                 mEmergencyButtonControllerFactory);
         mNotificationPanelViewController.initDependencies(

@@ -24,6 +24,7 @@ import android.app.RemoteInput;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.UserInfo;
+import android.os.PowerManager;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemClock;
@@ -120,7 +121,8 @@ public class NotificationRemoteInputManager implements Dumpable {
                 View view, PendingIntent pendingIntent, RemoteViews.RemoteResponse response) {
             mCentralSurfacesOptionalLazy.get().ifPresent(
                     centralSurfaces -> centralSurfaces.wakeUpIfDozing(
-                            SystemClock.uptimeMillis(), view, "NOTIFICATION_CLICK"));
+                            SystemClock.uptimeMillis(), view, "NOTIFICATION_CLICK",
+                            PowerManager.WAKE_REASON_GESTURE));
 
             final NotificationEntry entry = getNotificationForParent(view.getParent());
             mLogger.logInitialClick(entry, pendingIntent);

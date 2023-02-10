@@ -26,6 +26,7 @@ import android.graphics.Rect;
 import android.os.Binder;
 import android.os.IBinder;
 import android.util.Size;
+import android.window.TaskFragmentAnimationParams;
 import android.window.TaskFragmentInfo;
 import android.window.WindowContainerTransaction;
 
@@ -108,6 +109,13 @@ class TaskFragmentContainer {
     private int mLastRequestedWindowingMode = WINDOWING_MODE_UNDEFINED;
 
     /**
+     * TaskFragmentAnimationParams that was requested last via
+     * {@link android.window.WindowContainerTransaction}.
+     */
+    @NonNull
+    private TaskFragmentAnimationParams mLastAnimationParams = TaskFragmentAnimationParams.DEFAULT;
+
+    /**
      * When the TaskFragment has appeared in server, but is empty, we should remove the TaskFragment
      * if it is still empty after the timeout.
      */
@@ -133,12 +141,26 @@ class TaskFragmentContainer {
         mToken = new Binder("TaskFragmentContainer");
         mTaskContainer = taskContainer;
         if (pairedPrimaryContainer != null) {
+            // The TaskFragment will be positioned right above the paired container.
             if (pairedPrimaryContainer.getTaskContainer() != taskContainer) {
                 throw new IllegalArgumentException(
                         "pairedPrimaryContainer must be in the same Task");
             }
             final int primaryIndex = taskContainer.mContainers.indexOf(pairedPrimaryContainer);
             taskContainer.mContainers.add(primaryIndex + 1, this);
+        } else if (pendingAppearedActivity != null) {
+            // The TaskFragment will be positioned right above the pending appeared Activity. If any
+            // existing TaskFragment is empty with pending Intent, it is likely that the Activity of
+            // the pending Intent hasn't been created yet, so the new Activity should be below the
+            // empty TaskFragment.
+            int i = taskContainer.mContainers.size() - 1;
+            for (; i >= 0; i--) {
+                final TaskFragmentContainer container = taskContainer.mContainers.get(i);
+                if (!container.isEmpty() || container.getPendingAppearedIntent() == null) {
+                    break;
+                }
+            }
+            taskContainer.mContainers.add(i + 1, this);
         } else {
             taskContainer.mContainers.add(this);
         }
@@ -492,6 +514,8 @@ class TaskFragmentContainer {
         }
 
         if (!shouldFinishDependent) {
+            // Always finish the placeholder when the primary is finished.
+            finishPlaceholderIfAny(wct, presenter);
             return;
         }
 
@@ -516,6 +540,28 @@ class TaskFragmentContainer {
             wct.finishActivity(activity.getActivityToken());
         }
         mActivitiesToFinishOnExit.clear();
+    }
+
+    @GuardedBy("mController.mLock")
+    private void finishPlaceholderIfAny(@NonNull WindowContainerTransaction wct,
+            @NonNull SplitPresenter presenter) {
+        final List<TaskFragmentContainer> containersToRemove = new ArrayList<>();
+        for (TaskFragmentContainer container : mContainersToFinishOnExit) {
+            if (container.mIsFinished) {
+                continue;
+            }
+            final SplitContainer splitContainer = mController.getActiveSplitForContainers(
+                    this, container);
+            if (splitContainer != null && splitContainer.isPlaceholderContainer()
+                    && splitContainer.getSecondaryContainer() == container) {
+                // Remove the placeholder secondary TaskFragment.
+                containersToRemove.add(container);
+            }
+        }
+        mContainersToFinishOnExit.removeAll(containersToRemove);
+        for (TaskFragmentContainer container : containersToRemove) {
+            container.finish(false /* shouldFinishDependent */, presenter, wct, mController);
+        }
     }
 
     boolean isFinished() {
@@ -558,6 +604,21 @@ class TaskFragmentContainer {
      */
     void setLastRequestedWindowingMode(@WindowingMode int windowingModes) {
         mLastRequestedWindowingMode = windowingModes;
+    }
+
+    /**
+     * Checks if last requested {@link TaskFragmentAnimationParams} are equal to the provided value.
+     */
+    boolean areLastRequestedAnimationParamsEqual(
+            @NonNull TaskFragmentAnimationParams animationParams) {
+        return mLastAnimationParams.equals(animationParams);
+    }
+
+    /**
+     * Updates the last requested {@link TaskFragmentAnimationParams}.
+     */
+    void setLastRequestAnimationParams(@NonNull TaskFragmentAnimationParams animationParams) {
+        mLastAnimationParams = animationParams;
     }
 
     /** Gets the parent leaf Task id. */

@@ -4574,6 +4574,28 @@
        "Raise volume above recommended level?\n\nListening at high volume for long periods may damage your hearing."
     </string>
 
+    <!-- Message shown in dialog when user goes over a multiple of 100% of the safe weekly dose -->
+    <string name="csd_dose_reached_warning" product="default">
+        "Warning,\nYou have exceeded the amount of loud sound signals one can safely listen to in a week over headphones.\n\nGoing over this limit will permanently damage your hearing."
+    </string>
+
+    <!-- Message shown in dialog when user goes over 500% of the safe weekly dose and volume is
+    automatically lowered -->
+    <string name="csd_dose_repeat_warning" product="default">
+        "Warning,\nYou have exceeded 5 times the amount of loud sound signals one can safely listen to in a week over headphones.\n\nVolume has been lowered to protect your hearing."
+    </string>
+
+    <!-- Message shown in dialog when user's dose enters RS2 -->
+    <string name="csd_entering_RS2_warning" product="default">
+        "The level at which you are listening to media can result in hearing damage when sustained over long periods of time.\n\nContinuing to play at this level for long periods of time could damage your hearing."
+    </string>
+
+    <!-- Message shown in dialog when user is momentarily listening to unsafely loud content
+    over headphones -->
+    <string name="csd_momentary_exposure_warning" product="default">
+        "Warning,\nYou are currently listening to loud content played at an unsafe level.\n\nContinuing to listen this loud will permanently damage your hearing."
+    </string>
+
     <!-- Dialog title for dialog shown when the accessibility shortcut is activated, and we want
      to confirm that the user understands what's going to happen-->
     <string name="accessibility_shortcut_warning_dialog_title">Use Accessibility Shortcut?</string>
@@ -4694,6 +4716,9 @@
 
     <!-- Title of Reduce Brightness feature, shown in the warning dialog about the accessibility shortcut. [CHAR LIMIT=none] -->
     <string name="reduce_bright_colors_feature_name">Extra dim</string>
+
+    <!-- Title of hearing aids feature, shown in the warning dialog about the accessibility shortcut. [CHAR LIMIT=none] -->
+    <string name="hearing_aids_feature_name">Hearing devices</string>
 
     <!-- Text in toast to alert the user that the accessibility shortcut turned on an accessibility service. [CHAR LIMIT=none] -->
     <string name="accessibility_shortcut_enabling_service">Held volume keys. <xliff:g id="service_name" example="TalkBack">%1$s</xliff:g> turned on.</string>
@@ -5306,6 +5331,10 @@
     <string name="work_mode_off_message">Get access to your work apps and notifications</string>
     <!-- Title for button to turn on work profile. [CHAR LIMIT=NONE] -->
     <string name="work_mode_turn_on">Turn on</string>
+    <!-- Title for button to launch the personal safety app to make an emergency call    -->
+    <string name="work_mode_emergency_call_button">Emergency</string>
+    <!-- Text shown in a dialog when the user tries to launch a disabled work profile app when work apps are paused-->
+    <string name="work_mode_dialer_off_message">Get access to your work apps and calls</string>
 
     <!-- Title of the dialog that is shown when the user tries to launch a blocked application [CHAR LIMIT=50] -->
     <string name="app_blocked_title">App is not available</string>

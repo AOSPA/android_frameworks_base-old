@@ -30,12 +30,16 @@ import android.view.accessibility.AccessibilityManager
 import android.view.accessibility.AccessibilityManager.FLAG_CONTENT_CONTROLS
 import android.view.accessibility.AccessibilityManager.FLAG_CONTENT_ICONS
 import android.view.accessibility.AccessibilityManager.FLAG_CONTENT_TEXT
+import androidx.annotation.CallSuper
 import com.android.systemui.CoreStartable
+import com.android.systemui.Dumpable
 import com.android.systemui.dagger.qualifiers.Main
+import com.android.systemui.dump.DumpManager
 import com.android.systemui.statusbar.policy.ConfigurationController
 import com.android.systemui.util.concurrency.DelayableExecutor
 import com.android.systemui.util.time.SystemClock
 import com.android.systemui.util.wakelock.WakeLock
+import java.io.PrintWriter
 
 /**
  * A generic controller that can temporarily display a new view in a new window.
@@ -69,11 +73,12 @@ abstract class TemporaryViewDisplayController<T : TemporaryViewInfo, U : Tempora
     @Main private val mainExecutor: DelayableExecutor,
     private val accessibilityManager: AccessibilityManager,
     private val configurationController: ConfigurationController,
+    private val dumpManager: DumpManager,
     private val powerManager: PowerManager,
     @LayoutRes private val viewLayoutRes: Int,
     private val wakeLockBuilder: WakeLock.Builder,
     private val systemClock: SystemClock,
-) : CoreStartable {
+) : CoreStartable, Dumpable {
     /**
      * Window layout params that will be used as a starting point for the [windowLayoutParams] of
      * all subclasses.
@@ -107,6 +112,11 @@ abstract class TemporaryViewDisplayController<T : TemporaryViewInfo, U : Tempora
 
     private fun getCurrentDisplayInfo(): DisplayInfo? {
         return activeViews.getOrNull(0)
+    }
+
+    @CallSuper
+    override fun start() {
+        dumpManager.registerNormalDumpable(this)
     }
 
     /**
@@ -321,7 +331,7 @@ abstract class TemporaryViewDisplayController<T : TemporaryViewInfo, U : Tempora
             return
         }
 
-        removeViewFromWindow(displayInfo)
+        removeViewFromWindow(displayInfo, removalReason)
 
         // Prune anything that's already timed out before determining if we should re-display a
         // different chipbar.
@@ -348,14 +358,14 @@ abstract class TemporaryViewDisplayController<T : TemporaryViewInfo, U : Tempora
         removeViewFromWindow(displayInfo)
     }
 
-    private fun removeViewFromWindow(displayInfo: DisplayInfo) {
+    private fun removeViewFromWindow(displayInfo: DisplayInfo, removalReason: String? = null) {
         val view = displayInfo.view
         if (view == null) {
             logger.logViewRemovalIgnored(displayInfo.info.id, "View is null")
             return
         }
         displayInfo.view = null // Need other places??
-        animateViewOut(view) {
+        animateViewOut(view, removalReason) {
             windowManager.removeView(view)
             displayInfo.wakeLock?.release(displayInfo.info.wakeReason)
         }
@@ -382,6 +392,19 @@ abstract class TemporaryViewDisplayController<T : TemporaryViewInfo, U : Tempora
         }
     }
 
+    @Synchronized
+    @CallSuper
+    override fun dump(pw: PrintWriter, args: Array<out String>) {
+        pw.println("Current time millis: ${systemClock.currentTimeMillis()}")
+        pw.println("Active views size: ${activeViews.size}")
+        activeViews.forEachIndexed { index, displayInfo ->
+            pw.println("View[$index]:")
+            pw.println("  info=${displayInfo.info}")
+            pw.println("  hasView=${displayInfo.view != null}")
+            pw.println("  timeExpiration=${displayInfo.timeExpirationMillis}")
+        }
+    }
+
     /**
      * A method implemented by subclasses to update [currentView] based on [newInfo].
      */
@@ -405,7 +428,11 @@ abstract class TemporaryViewDisplayController<T : TemporaryViewInfo, U : Tempora
      *
      * @param onAnimationEnd an action that *must* be run once the animation finishes successfully.
      */
-    internal open fun animateViewOut(view: ViewGroup, onAnimationEnd: Runnable) {
+    internal open fun animateViewOut(
+        view: ViewGroup,
+        removalReason: String? = null,
+        onAnimationEnd: Runnable
+    ) {
         onAnimationEnd.run()
     }
 
@@ -445,8 +472,6 @@ abstract class TemporaryViewDisplayController<T : TemporaryViewInfo, U : Tempora
          */
         var cancelViewTimeout: Runnable?,
     )
-
-    // TODO(b/258019006): Add a dump method that dumps the currently active views.
 }
 
 private const val REMOVAL_REASON_TIMEOUT = "TIMEOUT"

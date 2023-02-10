@@ -265,14 +265,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     /**
-     * Callback which is triggered while changing the parent, after setting up the surface but
-     * before asking the parent to assign child layers.
-     */
-    interface PreAssignChildLayersCallback {
-        void onPreAssignChildLayers();
-    }
-
-    /**
      * True if this an AppWindowToken and the activity which created this was launched with
      * ActivityOptions.setLaunchTaskBehind.
      *
@@ -450,15 +442,17 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             mLocalInsetsSourceProviders = new SparseArray<>();
         }
         for (int i = 0; i < insetsTypes.length; i++) {
+            final @InsetsState.InternalInsetsType int type = insetsTypes[i];
             InsetsSourceProvider insetsSourceProvider =
-                    mLocalInsetsSourceProviders.get(insetsTypes[i]);
+                    mLocalInsetsSourceProviders.get(type);
             if (insetsSourceProvider != null) {
                 if (DEBUG) {
-                    Slog.d(TAG, "The local insets provider for this type " + insetsTypes[i]
+                    Slog.d(TAG, "The local insets provider for this type " + type
                             + " already exists. Overwriting");
                 }
             }
-            insetsSourceProvider = new RectInsetsSourceProvider(new InsetsSource(insetsTypes[i]),
+            insetsSourceProvider = new RectInsetsSourceProvider(
+                    new InsetsSource(type, InsetsState.toPublicType(type)),
                     mDisplayContent.getInsetsStateController(), mDisplayContent);
             mLocalInsetsSourceProviders.put(insetsTypes[i], insetsSourceProvider);
             ((RectInsetsSourceProvider) insetsSourceProvider).setRect(providerFrame);
@@ -603,11 +597,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      */
     @Override
     void onParentChanged(ConfigurationContainer newParent, ConfigurationContainer oldParent) {
-        onParentChanged(newParent, oldParent, null);
-    }
-
-    void onParentChanged(ConfigurationContainer newParent, ConfigurationContainer oldParent,
-            PreAssignChildLayersCallback callback) {
         super.onParentChanged(newParent, oldParent);
         if (mParent == null) {
             return;
@@ -625,13 +614,8 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             reparentSurfaceControl(getSyncTransaction(), mParent.mSurfaceControl);
         }
 
-        if (callback != null) {
-            callback.onPreAssignChildLayers();
-        }
-
         // Either way we need to ask the parent to assign us a Z-order.
         mParent.assignChildLayers();
-        scheduleAnimation();
     }
 
     void createSurfaceControl(boolean force) {
@@ -1302,6 +1286,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         final WindowContainer parent = getParent();
         if (parent != null) {
             parent.onChildVisibleRequestedChanged(this);
+        }
+
+        // Notify listeners about visibility change.
+        for (int i = mListeners.size() - 1; i >= 0; --i) {
+            mListeners.get(i).onVisibleRequestedChanged(mVisibleRequested);
         }
         return true;
     }
@@ -3196,14 +3185,26 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
                     // which if set originates from a call to overridePendingAppTransition.
                     backgroundColorForTransition = adapter.getBackgroundColor();
                 } else {
-                    // Otherwise default to the window's background color if provided through
-                    // the theme as the background color for the animation - the top most window
-                    // with a valid background color and showBackground set takes precedence.
-                    final Task parentTask = activityRecord != null
-                            ? activityRecord.getTask()
-                            : taskFragment.getTask();
-                    backgroundColorForTransition = ColorUtils.setAlphaComponent(
-                            parentTask.getTaskDescription().getBackgroundColor(), 255);
+                    final TaskFragment organizedTf = activityRecord != null
+                            ? activityRecord.getOrganizedTaskFragment()
+                            : taskFragment.getOrganizedTaskFragment();
+                    if (organizedTf != null && organizedTf.getAnimationParams()
+                            .getAnimationBackgroundColor() != 0) {
+                        // This window is embedded and has an animation background color set on the
+                        // TaskFragment. Pass this color with this window, so the handler can use it
+                        // as the animation background color if needed,
+                        backgroundColorForTransition = organizedTf.getAnimationParams()
+                                .getAnimationBackgroundColor();
+                    } else {
+                        // Otherwise default to the window's background color if provided through
+                        // the theme as the background color for the animation - the top most window
+                        // with a valid background color and showBackground set takes precedence.
+                        final Task parentTask = activityRecord != null
+                                ? activityRecord.getTask()
+                                : taskFragment.getTask();
+                        backgroundColorForTransition = ColorUtils.setAlphaComponent(
+                                parentTask.getTaskDescription().getBackgroundColor(), 255);
+                    }
                 }
                 animationRunnerBuilder.setTaskBackgroundColor(backgroundColorForTransition);
             }
@@ -3236,11 +3237,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
     private Animation loadAnimation(WindowManager.LayoutParams lp, int transit, boolean enter,
                                     boolean isVoiceInteraction) {
-        if (isOrganized()
+        if (AppTransitionController.isTaskViewTask(this) || (isOrganized()
                 // TODO(b/161711458): Clean-up when moved to shell.
                 && getWindowingMode() != WINDOWING_MODE_FULLSCREEN
                 && getWindowingMode() != WINDOWING_MODE_FREEFORM
-                && getWindowingMode() != WINDOWING_MODE_MULTI_WINDOW) {
+                && getWindowingMode() != WINDOWING_MODE_MULTI_WINDOW)) {
             return null;
         }
 
@@ -3790,7 +3791,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         if (mSyncState == SYNC_STATE_NONE) return false;
         mSyncState = SYNC_STATE_READY;
         mSyncMethodOverride = BLASTSyncEngine.METHOD_UNDEFINED;
-        mWmService.mWindowPlacerLocked.requestTraversal();
         ProtoLog.v(WM_DEBUG_SYNC_ENGINE, "onSyncFinishedDrawing %s", this);
         return true;
     }
@@ -3860,8 +3860,8 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
     /**
      * Checks if the subtree rooted at this container is finished syncing (everything is ready or
-     * not visible). NOTE, this is not const: it will cancel/prepare itself depending on its state
-     * in the hierarchy.
+     * not visible). NOTE, this is not const: it may cancel/prepare/complete itself depending on
+     * its state in the hierarchy.
      *
      * @return {@code true} if this subtree is finished waiting for sync participants.
      */

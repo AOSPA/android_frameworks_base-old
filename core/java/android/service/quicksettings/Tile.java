@@ -40,8 +40,8 @@ public final class Tile implements Parcelable {
 
     /**
      * An unavailable state indicates that for some reason this tile is not currently
-     * available to the user for some reason, and will have no click action.  The tile's
-     * icon will be tinted differently to reflect this state.
+     * available to the user, and will have no click action.  The tile's icon will be
+     * tinted differently to reflect this state.
      */
     public static final int STATE_UNAVAILABLE = 0;
 
@@ -227,7 +227,6 @@ public final class Tile implements Parcelable {
 
     /**
      * Gets the Activity {@link PendingIntent} to be launched when the tile is clicked.
-     * @hide
      */
     @Nullable
     public PendingIntent getActivityLaunchForClick() {
@@ -243,7 +242,6 @@ public final class Tile implements Parcelable {
      * (This is the default behavior if this method is never called.)
      * @param pendingIntent a PendingIntent for an activity to be launched onclick, or {@code null}
      *                      to handle the clicks in the `TileService`.
-     * @hide
      */
     public void setActivityLaunchForClick(@Nullable PendingIntent pendingIntent) {
         if (pendingIntent != null && !pendingIntent.isActivity()) {

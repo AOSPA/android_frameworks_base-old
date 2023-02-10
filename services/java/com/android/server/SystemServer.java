@@ -46,6 +46,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.PackageManagerInternal;
 import android.content.res.Configuration;
 import android.content.res.Resources.Theme;
+import android.credentials.CredentialManager;
 import android.database.sqlite.SQLiteCompatibilityWalFlags;
 import android.database.sqlite.SQLiteGlobal;
 import android.graphics.GraphicsStatsService;
@@ -108,7 +109,6 @@ import com.android.internal.widget.LockSettingsInternal;
 import com.android.server.am.ActivityManagerService;
 import com.android.server.ambientcontext.AmbientContextManagerService;
 import com.android.server.appbinding.AppBindingService;
-import com.android.server.art.ArtManagerLocal;
 import com.android.server.art.ArtModuleServiceInitializer;
 import com.android.server.art.DexUseManagerLocal;
 import com.android.server.attention.AttentionManagerService;
@@ -133,6 +133,7 @@ import com.android.server.display.color.ColorDisplayService;
 import com.android.server.dreams.DreamManagerService;
 import com.android.server.emergency.EmergencyAffordanceService;
 import com.android.server.gpu.GpuService;
+import com.android.server.grammaticalinflection.GrammaticalInflectionService;
 import com.android.server.graphics.fonts.FontManagerService;
 import com.android.server.hdmi.HdmiControlService;
 import com.android.server.incident.IncidentCompanionService;
@@ -146,6 +147,7 @@ import com.android.server.logcat.LogcatManagerService;
 import com.android.server.media.MediaRouterService;
 import com.android.server.media.metrics.MediaMetricsManagerService;
 import com.android.server.media.projection.MediaProjectionManagerService;
+import com.android.server.net.NetworkManagementService;
 import com.android.server.net.NetworkPolicyManagerService;
 import com.android.server.net.watchlist.NetworkWatchlistService;
 import com.android.server.notification.NotificationManagerService;
@@ -162,6 +164,7 @@ import com.android.server.pm.ApexSystemServiceInfo;
 import com.android.server.pm.BackgroundInstallControlService;
 import com.android.server.pm.CrossProfileAppsService;
 import com.android.server.pm.DataLoaderManagerService;
+import com.android.server.pm.DexOptHelper;
 import com.android.server.pm.DynamicCodeLoggingService;
 import com.android.server.pm.Installer;
 import com.android.server.pm.LauncherAppsService;
@@ -426,6 +429,8 @@ public final class SystemServer implements Dumpable {
             "com.android.server.sdksandbox.SdkSandboxManagerService$Lifecycle";
     private static final String AD_SERVICES_MANAGER_SERVICE_CLASS =
             "com.android.server.adservices.AdServicesManagerService$Lifecycle";
+    private static final String UPDATABLE_DEVICE_CONFIG_SERVICE_CLASS =
+            "com.android.server.deviceconfig.DeviceConfigInit$Lifecycle";
 
     private static final String TETHERING_CONNECTOR_CLASS = "android.net.ITetheringConnector";
 
@@ -1050,6 +1055,17 @@ public final class SystemServer implements Dumpable {
     private void startBootstrapServices(@NonNull TimingsTraceAndSlog t) {
         t.traceBegin("startBootstrapServices");
 
+        t.traceBegin("ArtModuleServiceInitializer");
+        // This needs to happen before DexUseManagerLocal init. We do it here to avoid colliding
+        // with a GC. ArtModuleServiceInitializer is a class from a separate dex file
+        // "service-art.jar", so referencing it involves the class linker. The class linker and the
+        // GC are mutually exclusive (b/263486535). Therefore, we do this here to force trigger the
+        // class linker earlier. If we did this later, especially after PackageManagerService init,
+        // the class linker would be consistently blocked by a GC because PackageManagerService
+        // allocates a lot of memory and almost certainly triggers a GC.
+        ArtModuleServiceInitializer.setArtModuleServiceManager(new ArtModuleServiceManager());
+        t.traceEnd();
+
         // Start the watchdog as early as possible so we can crash the system server
         // if we deadlock during early boot
         t.traceBegin("StartWatchdog");
@@ -1229,16 +1245,17 @@ public final class SystemServer implements Dumpable {
             Watchdog.getInstance().resumeWatchingCurrentThread("packagemanagermain");
         }
 
-        // DexUseManagerLocal needs to be loaded after PackageManagerLocal has been registered, but
-        // before PackageManagerService starts processing binder calls to notifyDexLoad.
-        // DexUseManagerLocal may also call artd, so ensure ArtModuleServiceManager is instantiated.
-        ArtModuleServiceInitializer.setArtModuleServiceManager(new ArtModuleServiceManager());
-        LocalManagerRegistry.addManager(
-                DexUseManagerLocal.class, DexUseManagerLocal.createInstance());
-
         mFirstBoot = mPackageManagerService.isFirstBoot();
         mPackageManager = mSystemContext.getPackageManager();
         t.traceEnd();
+
+        t.traceBegin("DexUseManagerLocal");
+        // DexUseManagerLocal needs to be loaded after PackageManagerLocal has been registered, but
+        // before PackageManagerService starts processing binder calls to notifyDexLoad.
+        LocalManagerRegistry.addManager(
+                DexUseManagerLocal.class, DexUseManagerLocal.createInstance(mSystemContext));
+        t.traceEnd();
+
         if (!mRuntimeRestart && !isFirstBootOrUpgrade()) {
             FrameworkStatsLog.write(FrameworkStatsLog.BOOT_TIME_EVENT_ELAPSED_TIME_REPORTED,
                     FrameworkStatsLog
@@ -1513,6 +1530,8 @@ public final class SystemServer implements Dumpable {
 
             t.traceBegin("InstallSystemProviders");
             mActivityManagerService.getContentProviderHelper().installSystemProviders();
+            // Device configuration used to be part of System providers
+            mSystemServiceManager.startService(UPDATABLE_DEVICE_CONFIG_SERVICE_CLASS);
             // Now that SettingsProvider is ready, reactivate SQLiteCompatibilityWalFlags
             SQLiteCompatibilityWalFlags.reset();
             t.traceEnd();
@@ -1764,6 +1783,14 @@ public final class SystemServer implements Dumpable {
             mSystemServiceManager.startService(LocaleManagerService.class);
         } catch (Throwable e) {
             reportWtf("starting LocaleManagerService service", e);
+        }
+        t.traceEnd();
+
+        t.traceBegin("StartGrammarInflectionService");
+        try {
+            mSystemServiceManager.startService(GrammaticalInflectionService.class);
+        } catch (Throwable e) {
+            reportWtf("starting GrammarInflectionService service", e);
         }
         t.traceEnd();
 
@@ -2643,9 +2670,16 @@ public final class SystemServer implements Dumpable {
         }
 
         if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_CREDENTIALS)) {
-            t.traceBegin("StartCredentialManagerService");
-            mSystemServiceManager.startService(CREDENTIAL_MANAGER_SERVICE_CLASS);
-            t.traceEnd();
+            boolean credentialManagerEnabled =
+                    DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_CREDENTIAL,
+                    CredentialManager.DEVICE_CONFIG_ENABLE_CREDENTIAL_MANAGER, true);
+            if (credentialManagerEnabled) {
+                t.traceBegin("StartCredentialManagerService");
+                mSystemServiceManager.startService(CREDENTIAL_MANAGER_SERVICE_CLASS);
+                t.traceEnd();
+            } else {
+                Slog.d(TAG, "CredentialManager disabled.");
+            }
         }
 
         // Translation manager service
@@ -2790,7 +2824,7 @@ public final class SystemServer implements Dumpable {
         t.traceEnd();
 
         t.traceBegin("ArtManagerLocal");
-        LocalManagerRegistry.addManager(ArtManagerLocal.class, new ArtManagerLocal(context));
+        DexOptHelper.initializeArtManagerLocal(context, mPackageManagerService);
         t.traceEnd();
 
         if (context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_UWB)) {

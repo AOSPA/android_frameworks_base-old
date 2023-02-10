@@ -20,9 +20,11 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.Context;
 import android.graphics.Rect;
+import android.media.tv.AdBuffer;
 import android.media.tv.AdResponse;
 import android.media.tv.BroadcastInfoResponse;
 import android.media.tv.TvContentRating;
+import android.media.tv.TvRecordingInfo;
 import android.media.tv.TvTrackInfo;
 import android.media.tv.interactive.TvInteractiveAppService.Session;
 import android.net.Uri;
@@ -83,6 +85,10 @@ public class ITvInteractiveAppSessionWrapper
     private static final int DO_REMOVE_MEDIA_VIEW = 29;
     private static final int DO_NOTIFY_RECORDING_STARTED = 30;
     private static final int DO_NOTIFY_RECORDING_STOPPED = 31;
+    private static final int DO_NOTIFY_AD_BUFFER_CONSUMED = 32;
+    private static final int DO_NOTIFY_TV_MESSAGE = 33;
+    private static final int DO_SEND_RECORDING_INFO = 34;
+    private static final int DO_SEND_RECORDING_INFO_LIST = 35;
 
     private final HandlerCaller mCaller;
     private Session mSessionImpl;
@@ -166,6 +172,14 @@ public class ITvInteractiveAppSessionWrapper
                 mSessionImpl.sendCurrentTvInputId((String) msg.obj);
                 break;
             }
+            case DO_SEND_RECORDING_INFO: {
+                mSessionImpl.sendTvRecordingInfo((TvRecordingInfo) msg.obj);
+                break;
+            }
+            case DO_SEND_RECORDING_INFO_LIST: {
+                mSessionImpl.sendTvRecordingInfoList((List<TvRecordingInfo>) msg.obj);
+                break;
+            }
             case DO_NOTIFY_RECORDING_STARTED: {
                 mSessionImpl.notifyRecordingStarted((String) msg.obj);
                 break;
@@ -198,6 +212,12 @@ public class ITvInteractiveAppSessionWrapper
             }
             case DO_NOTIFY_TRACKS_CHANGED: {
                 mSessionImpl.notifyTracksChanged((List<TvTrackInfo>) msg.obj);
+                break;
+            }
+            case DO_NOTIFY_TV_MESSAGE: {
+                SomeArgs args = (SomeArgs) msg.obj;
+                mSessionImpl.notifyTvMessage((String) args.arg1, (Bundle) args.arg2);
+                args.recycle();
                 break;
             }
             case DO_NOTIFY_VIDEO_AVAILABLE: {
@@ -251,6 +271,10 @@ public class ITvInteractiveAppSessionWrapper
             }
             case DO_REMOVE_MEDIA_VIEW: {
                 mSessionImpl.removeMediaView(true);
+                break;
+            }
+            case DO_NOTIFY_AD_BUFFER_CONSUMED: {
+                mSessionImpl.notifyAdBufferConsumed((AdBuffer) msg.obj);
                 break;
             }
             default: {
@@ -332,6 +356,18 @@ public class ITvInteractiveAppSessionWrapper
     }
 
     @Override
+    public void sendTvRecordingInfo(@Nullable TvRecordingInfo recordingInfo) {
+        mCaller.executeOrSendMessage(
+                mCaller.obtainMessageO(DO_SEND_RECORDING_INFO, recordingInfo));
+    }
+
+    @Override
+    public void sendTvRecordingInfoList(@Nullable List<TvRecordingInfo> recordingInfoList) {
+        mCaller.executeOrSendMessage(
+                mCaller.obtainMessageO(DO_SEND_RECORDING_INFO_LIST, recordingInfoList));
+    }
+
+    @Override
     public void sendSigningResult(@NonNull String signingId, @NonNull byte[] result) {
         mCaller.executeOrSendMessage(
                 mCaller.obtainMessageOO(DO_SEND_SIGNING_RESULT, signingId, result));
@@ -358,6 +394,12 @@ public class ITvInteractiveAppSessionWrapper
     public void notifyTrackSelected(int type, final String trackId) {
         mCaller.executeOrSendMessage(
                 mCaller.obtainMessageOO(DO_NOTIFY_TRACK_SELECTED, type, trackId));
+    }
+
+    @Override
+    public void notifyTvMessage(String type, Bundle data) {
+        mCaller.executeOrSendMessage(
+                mCaller.obtainMessageOO(DO_NOTIFY_TRACK_SELECTED, type, data));
     }
 
     @Override
@@ -422,6 +464,11 @@ public class ITvInteractiveAppSessionWrapper
     @Override
     public void notifyAdResponse(AdResponse response) {
         mCaller.executeOrSendMessage(mCaller.obtainMessageO(DO_NOTIFY_AD_RESPONSE, response));
+    }
+
+    @Override
+    public void notifyAdBufferConsumed(AdBuffer buffer) {
+        mCaller.executeOrSendMessage(mCaller.obtainMessageO(DO_NOTIFY_AD_BUFFER_CONSUMED, buffer));
     }
 
     @Override

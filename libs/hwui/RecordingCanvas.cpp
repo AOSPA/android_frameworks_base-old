@@ -44,6 +44,7 @@
 #include "SkTextBlob.h"
 #include "SkVertices.h"
 #include "VectorDrawable.h"
+#include "include/gpu/GpuTypes.h" // from Skia
 #include "pipeline/skia/AnimatedDrawables.h"
 #include "pipeline/skia/FunctorDrawable.h"
 
@@ -570,7 +571,7 @@ public:
                 GrRecordingContext* directContext = c->recordingContext();
                 mLayerImageInfo =
                         c->imageInfo().makeWH(deviceBounds.width(), deviceBounds.height());
-                mLayerSurface = SkSurface::MakeRenderTarget(directContext, SkBudgeted::kYes,
+                mLayerSurface = SkSurface::MakeRenderTarget(directContext, skgpu::Budgeted::kYes,
                                                             mLayerImageInfo, 0,
                                                             kTopLeft_GrSurfaceOrigin, nullptr);
             }
@@ -605,12 +606,17 @@ public:
 };
 }
 
+static constexpr inline bool is_power_of_two(int value) {
+    return (value & (value - 1)) == 0;
+}
+
 template <typename T, typename... Args>
 void* DisplayListData::push(size_t pod, Args&&... args) {
     size_t skip = SkAlignPtr(sizeof(T) + pod);
     SkASSERT(skip < (1 << 24));
     if (fUsed + skip > fReserved) {
-        static_assert(SkIsPow2(SKLITEDL_PAGE), "This math needs updating for non-pow2.");
+        static_assert(is_power_of_two(SKLITEDL_PAGE),
+                      "This math needs updating for non-pow2.");
         // Next greater multiple of SKLITEDL_PAGE.
         fReserved = (fUsed + skip + SKLITEDL_PAGE) & ~(SKLITEDL_PAGE - 1);
         fBytes.realloc(fReserved);

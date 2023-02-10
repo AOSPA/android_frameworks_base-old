@@ -17,44 +17,43 @@ package com.android.systemui.stylus
 
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import android.hardware.BatteryState
 import android.hardware.input.InputManager
 import android.os.Handler
 import android.testing.AndroidTestingRunner
 import android.view.InputDevice
 import androidx.test.filters.SmallTest
 import com.android.systemui.SysuiTestCase
+import com.android.systemui.flags.FeatureFlags
+import com.android.systemui.flags.Flags
 import com.android.systemui.util.mockito.any
 import com.android.systemui.util.mockito.whenever
 import java.util.concurrent.Executor
 import org.junit.Before
-import org.junit.Ignore
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.Mock
+import org.mockito.Mockito.clearInvocations
 import org.mockito.Mockito.inOrder
 import org.mockito.Mockito.never
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoMoreInteractions
+import org.mockito.Mockito.verifyZeroInteractions
 import org.mockito.MockitoAnnotations
 
 @RunWith(AndroidTestingRunner::class)
 @SmallTest
-@Ignore("b/257936830 until bt APIs")
 class StylusManagerTest : SysuiTestCase() {
     @Mock lateinit var inputManager: InputManager
-
     @Mock lateinit var stylusDevice: InputDevice
-
     @Mock lateinit var btStylusDevice: InputDevice
-
     @Mock lateinit var otherDevice: InputDevice
-
+    @Mock lateinit var batteryState: BatteryState
     @Mock lateinit var bluetoothAdapter: BluetoothAdapter
-
     @Mock lateinit var bluetoothDevice: BluetoothDevice
-
     @Mock lateinit var handler: Handler
+    @Mock lateinit var featureFlags: FeatureFlags
 
     @Mock lateinit var stylusCallback: StylusManager.StylusCallback
 
@@ -75,33 +74,58 @@ class StylusManagerTest : SysuiTestCase() {
             true
         }
 
-        stylusManager = StylusManager(inputManager, bluetoothAdapter, handler, EXECUTOR)
-
-        stylusManager.registerCallback(stylusCallback)
-
-        stylusManager.registerBatteryCallback(stylusBatteryCallback)
+        stylusManager =
+            StylusManager(mContext, inputManager, bluetoothAdapter, handler, EXECUTOR, featureFlags)
 
         whenever(otherDevice.supportsSource(InputDevice.SOURCE_STYLUS)).thenReturn(false)
         whenever(stylusDevice.supportsSource(InputDevice.SOURCE_STYLUS)).thenReturn(true)
         whenever(btStylusDevice.supportsSource(InputDevice.SOURCE_STYLUS)).thenReturn(true)
 
-        // whenever(stylusDevice.bluetoothAddress).thenReturn(null)
-        // whenever(btStylusDevice.bluetoothAddress).thenReturn(STYLUS_BT_ADDRESS)
+        whenever(stylusDevice.bluetoothAddress).thenReturn(null)
+        whenever(btStylusDevice.bluetoothAddress).thenReturn(STYLUS_BT_ADDRESS)
 
         whenever(inputManager.getInputDevice(OTHER_DEVICE_ID)).thenReturn(otherDevice)
         whenever(inputManager.getInputDevice(STYLUS_DEVICE_ID)).thenReturn(stylusDevice)
         whenever(inputManager.getInputDevice(BT_STYLUS_DEVICE_ID)).thenReturn(btStylusDevice)
         whenever(inputManager.inputDeviceIds).thenReturn(intArrayOf(STYLUS_DEVICE_ID))
+        whenever(inputManager.isStylusEverUsed(mContext)).thenReturn(false)
 
         whenever(bluetoothAdapter.getRemoteDevice(STYLUS_BT_ADDRESS)).thenReturn(bluetoothDevice)
         whenever(bluetoothDevice.address).thenReturn(STYLUS_BT_ADDRESS)
+
+        whenever(featureFlags.isEnabled(Flags.TRACK_STYLUS_EVER_USED)).thenReturn(true)
+
+        stylusManager.startListener()
+        stylusManager.registerCallback(stylusCallback)
+        stylusManager.registerBatteryCallback(stylusBatteryCallback)
+        clearInvocations(inputManager)
     }
 
     @Test
-    fun startListener_registersInputDeviceListener() {
+    fun startListener_hasNotStarted_registersInputDeviceListener() {
+        stylusManager =
+            StylusManager(mContext, inputManager, bluetoothAdapter, handler, EXECUTOR, featureFlags)
+
         stylusManager.startListener()
 
         verify(inputManager, times(1)).registerInputDeviceListener(any(), any())
+    }
+
+    @Test
+    fun startListener_hasStarted_doesNothing() {
+        stylusManager.startListener()
+
+        verifyZeroInteractions(inputManager)
+    }
+
+    @Test
+    fun onInputDeviceAdded_hasNotStarted_doesNothing() {
+        stylusManager =
+            StylusManager(mContext, inputManager, bluetoothAdapter, handler, EXECUTOR, featureFlags)
+
+        stylusManager.onInputDeviceAdded(STYLUS_DEVICE_ID)
+
+        verifyZeroInteractions(stylusCallback)
     }
 
     @Test
@@ -117,11 +141,45 @@ class StylusManagerTest : SysuiTestCase() {
     }
 
     @Test
+    fun onInputDeviceAdded_internalStylus_registersBatteryListener() {
+        whenever(stylusDevice.isExternal).thenReturn(false)
+
+        stylusManager.onInputDeviceAdded(STYLUS_DEVICE_ID)
+
+        verify(inputManager, times(1))
+            .addInputDeviceBatteryListener(STYLUS_DEVICE_ID, EXECUTOR, stylusManager)
+    }
+
+    @Test
+    fun onInputDeviceAdded_externalStylus_doesNotRegisterbatteryListener() {
+        whenever(stylusDevice.isExternal).thenReturn(true)
+
+        stylusManager.onInputDeviceAdded(STYLUS_DEVICE_ID)
+
+        verify(inputManager, never())
+            .addInputDeviceBatteryListener(STYLUS_DEVICE_ID, EXECUTOR, stylusManager)
+    }
+
+    @Test
     fun onInputDeviceAdded_stylus_callsCallbacksOnStylusAdded() {
         stylusManager.onInputDeviceAdded(STYLUS_DEVICE_ID)
 
         verify(stylusCallback, times(1)).onStylusAdded(STYLUS_DEVICE_ID)
         verifyNoMoreInteractions(stylusCallback)
+    }
+
+    @Test
+    fun onInputDeviceAdded_btStylus_firstUsed_callsCallbacksOnStylusFirstUsed() {
+        stylusManager.onInputDeviceAdded(BT_STYLUS_DEVICE_ID)
+
+        verify(stylusCallback, times(1)).onStylusFirstUsed()
+    }
+
+    @Test
+    fun onInputDeviceAdded_btStylus_firstUsed_setsFlag() {
+        stylusManager.onInputDeviceAdded(BT_STYLUS_DEVICE_ID)
+
+        verify(inputManager, times(1)).setStylusEverUsed(mContext, true)
     }
 
     @Test
@@ -143,9 +201,19 @@ class StylusManagerTest : SysuiTestCase() {
     }
 
     @Test
+    fun onInputDeviceChanged_hasNotStarted_doesNothing() {
+        stylusManager =
+            StylusManager(mContext, inputManager, bluetoothAdapter, handler, EXECUTOR, featureFlags)
+
+        stylusManager.onInputDeviceChanged(STYLUS_DEVICE_ID)
+
+        verifyZeroInteractions(stylusCallback)
+    }
+
+    @Test
     fun onInputDeviceChanged_multipleRegisteredCallbacks_callsAll() {
         stylusManager.onInputDeviceAdded(STYLUS_DEVICE_ID)
-        // whenever(stylusDevice.bluetoothAddress).thenReturn(STYLUS_BT_ADDRESS)
+        whenever(stylusDevice.bluetoothAddress).thenReturn(STYLUS_BT_ADDRESS)
         stylusManager.registerCallback(otherStylusCallback)
 
         stylusManager.onInputDeviceChanged(STYLUS_DEVICE_ID)
@@ -159,7 +227,7 @@ class StylusManagerTest : SysuiTestCase() {
     @Test
     fun onInputDeviceChanged_stylusNewBtConnection_callsCallbacks() {
         stylusManager.onInputDeviceAdded(STYLUS_DEVICE_ID)
-        // whenever(stylusDevice.bluetoothAddress).thenReturn(STYLUS_BT_ADDRESS)
+        whenever(stylusDevice.bluetoothAddress).thenReturn(STYLUS_BT_ADDRESS)
 
         stylusManager.onInputDeviceChanged(STYLUS_DEVICE_ID)
 
@@ -170,7 +238,7 @@ class StylusManagerTest : SysuiTestCase() {
     @Test
     fun onInputDeviceChanged_stylusLostBtConnection_callsCallbacks() {
         stylusManager.onInputDeviceAdded(BT_STYLUS_DEVICE_ID)
-        // whenever(btStylusDevice.bluetoothAddress).thenReturn(null)
+        whenever(btStylusDevice.bluetoothAddress).thenReturn(null)
 
         stylusManager.onInputDeviceChanged(BT_STYLUS_DEVICE_ID)
 
@@ -198,11 +266,22 @@ class StylusManagerTest : SysuiTestCase() {
     }
 
     @Test
+    fun onInputDeviceRemoved_hasNotStarted_doesNothing() {
+        stylusManager =
+            StylusManager(mContext, inputManager, bluetoothAdapter, handler, EXECUTOR, featureFlags)
+        stylusManager.onInputDeviceAdded(STYLUS_DEVICE_ID)
+
+        stylusManager.onInputDeviceRemoved(STYLUS_DEVICE_ID)
+
+        verifyZeroInteractions(stylusCallback)
+    }
+
+    @Test
     fun onInputDeviceRemoved_multipleRegisteredCallbacks_callsAll() {
         stylusManager.onInputDeviceAdded(STYLUS_DEVICE_ID)
         stylusManager.registerCallback(otherStylusCallback)
 
-        stylusManager.onInputDeviceAdded(STYLUS_DEVICE_ID)
+        stylusManager.onInputDeviceRemoved(STYLUS_DEVICE_ID)
 
         verify(stylusCallback, times(1)).onStylusRemoved(STYLUS_DEVICE_ID)
         verify(otherStylusCallback, times(1)).onStylusRemoved(STYLUS_DEVICE_ID)
@@ -216,6 +295,16 @@ class StylusManagerTest : SysuiTestCase() {
 
         verify(stylusCallback, times(1)).onStylusRemoved(STYLUS_DEVICE_ID)
         verify(stylusCallback, never()).onStylusBluetoothDisconnected(any(), any())
+    }
+
+    @Test
+    fun onInputDeviceRemoved_unregistersBatteryListener() {
+        stylusManager.onInputDeviceAdded(STYLUS_DEVICE_ID)
+
+        stylusManager.onInputDeviceRemoved(STYLUS_DEVICE_ID)
+
+        verify(inputManager, times(1))
+            .removeInputDeviceBatteryListener(STYLUS_DEVICE_ID, stylusManager)
     }
 
     @Test
@@ -324,6 +413,59 @@ class StylusManagerTest : SysuiTestCase() {
 
         verify(stylusBatteryCallback, never())
             .onStylusBluetoothChargingStateChanged(any(), any(), any())
+    }
+
+    @Test
+    fun onBatteryStateChanged_batteryPresent_stylusNeverUsed_updateEverUsedFlag() {
+        whenever(batteryState.isPresent).thenReturn(true)
+
+        stylusManager.onBatteryStateChanged(STYLUS_DEVICE_ID, 1, batteryState)
+
+        verify(inputManager).setStylusEverUsed(mContext, true)
+    }
+
+    @Test
+    fun onBatteryStateChanged_batteryPresent_stylusNeverUsed_executesStylusFirstUsed() {
+        whenever(batteryState.isPresent).thenReturn(true)
+
+        stylusManager.onBatteryStateChanged(STYLUS_DEVICE_ID, 1, batteryState)
+
+        verify(stylusCallback, times(1)).onStylusFirstUsed()
+    }
+
+    @Test
+    fun onBatteryStateChanged_batteryPresent_stylusUsed_doesNotUpdateEverUsedFlag() {
+        whenever(inputManager.isStylusEverUsed(mContext)).thenReturn(true)
+        whenever(batteryState.isPresent).thenReturn(true)
+
+        stylusManager.onBatteryStateChanged(STYLUS_DEVICE_ID, 1, batteryState)
+
+        verify(inputManager, never()).setStylusEverUsed(mContext, true)
+    }
+
+    @Test
+    fun onBatteryStateChanged_batteryNotPresent_doesNotUpdateEverUsedFlag() {
+        whenever(batteryState.isPresent).thenReturn(false)
+
+        stylusManager.onBatteryStateChanged(STYLUS_DEVICE_ID, 1, batteryState)
+
+        verify(inputManager, never())
+            .removeInputDeviceBatteryListener(STYLUS_DEVICE_ID, stylusManager)
+    }
+
+    @Test
+    fun onBatteryStateChanged_hasNotStarted_doesNothing() {
+        stylusManager.onBatteryStateChanged(STYLUS_DEVICE_ID, 1, batteryState)
+
+        verifyZeroInteractions(inputManager)
+    }
+
+    @Test
+    fun onBatteryStateChanged_executesBatteryCallbacks() {
+        stylusManager.onBatteryStateChanged(STYLUS_DEVICE_ID, 1, batteryState)
+
+        verify(stylusBatteryCallback, times(1))
+            .onStylusUsiBatteryStateChanged(STYLUS_DEVICE_ID, 1, batteryState)
     }
 
     companion object {

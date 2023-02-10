@@ -62,7 +62,6 @@ import android.util.Log;
 import android.util.Size;
 import android.view.Display;
 
-import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.ArrayUtils;
 
 import java.lang.ref.WeakReference;
@@ -117,9 +116,16 @@ public final class CameraManager {
      */
     @ChangeId
     @Overridable
-    @EnabledSince(targetSdkVersion = android.os.Build.VERSION_CODES.TIRAMISU)
+    @EnabledSince(targetSdkVersion = android.os.Build.VERSION_CODES.BASE)
     @TestApi
-    public static final long OVERRIDE_FRONT_CAMERA_APP_COMPAT = 250678880L;
+    public static final long OVERRIDE_CAMERA_LANDSCAPE_TO_PORTRAIT = 250678880L;
+
+    /**
+     * Package-level opt in/out for the above.
+     * @hide
+     */
+    public static final String PROPERTY_COMPAT_OVERRIDE_LANDSCAPE_TO_PORTRAIT =
+            "android.camera.PROPERTY_COMPAT_OVERRIDE_LANDSCAPE_TO_PORTRAIT";
 
     /**
      * System property for allowing the above
@@ -611,7 +617,7 @@ public final class CameraManager {
             try {
                 Size displaySize = getDisplaySize();
 
-                boolean overrideToPortrait = shouldOverrideToPortrait();
+                boolean overrideToPortrait = shouldOverrideToPortrait(mContext);
                 CameraMetadataNative info = cameraService.getCameraCharacteristics(cameraId,
                         mContext.getApplicationInfo().targetSdkVersion, overrideToPortrait);
                 try {
@@ -731,7 +737,7 @@ public final class CameraManager {
                         "Camera service is currently unavailable");
                 }
 
-                boolean overrideToPortrait = shouldOverrideToPortrait();
+                boolean overrideToPortrait = shouldOverrideToPortrait(mContext);
                 cameraUser = cameraService.connectDevice(callbacks, cameraId,
                     mContext.getOpPackageName(), mContext.getAttributionTag(), uid,
                     oomScoreOffset, mContext.getApplicationInfo().targetSdkVersion,
@@ -1163,9 +1169,26 @@ public final class CameraManager {
         return CameraManagerGlobal.get().getTorchStrengthLevel(cameraId);
     }
 
-    private static boolean shouldOverrideToPortrait() {
-        return CompatChanges.isChangeEnabled(OVERRIDE_FRONT_CAMERA_APP_COMPAT)
-                && CameraManagerGlobal.sLandscapeToPortrait;
+    /**
+     * @hide
+     */
+    public static boolean shouldOverrideToPortrait(@Nullable Context context) {
+        if (!CameraManagerGlobal.sLandscapeToPortrait) {
+            return false;
+        }
+
+        if (context != null) {
+            PackageManager packageManager = context.getPackageManager();
+
+            try {
+                return packageManager.getProperty(context.getOpPackageName(),
+                            PROPERTY_COMPAT_OVERRIDE_LANDSCAPE_TO_PORTRAIT).getBoolean();
+            } catch (PackageManager.NameNotFoundException e) {
+                // No such property
+            }
+        }
+
+        return CompatChanges.isChangeEnabled(OVERRIDE_CAMERA_LANDSCAPE_TO_PORTRAIT);
     }
 
     /**
@@ -2381,6 +2404,15 @@ public final class CameraManager {
                 final AvailabilityCallback callback = mCallbackMap.keyAt(i);
 
                 postSingleUpdate(callback, executor, id, null /*physicalId*/, status);
+
+                // Send the NOT_PRESENT state for unavailable physical cameras
+                if (isAvailable(status) && mUnavailablePhysicalDevices.containsKey(id)) {
+                    ArrayList<String> unavailableIds = mUnavailablePhysicalDevices.get(id);
+                    for (String unavailableId : unavailableIds) {
+                        postSingleUpdate(callback, executor, id, unavailableId,
+                                ICameraServiceListener.STATUS_NOT_PRESENT);
+                    }
+                }
             }
         } // onStatusChangedLocked
 

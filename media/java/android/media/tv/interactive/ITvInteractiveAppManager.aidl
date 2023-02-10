@@ -17,9 +17,11 @@
 package android.media.tv.interactive;
 
 import android.graphics.Rect;
+import android.media.tv.AdBuffer;
 import android.media.tv.AdResponse;
 import android.media.tv.BroadcastInfoResponse;
 import android.media.tv.TvTrackInfo;
+import android.media.tv.TvRecordingInfo;
 import android.media.tv.interactive.AppLinkInfo;
 import android.media.tv.interactive.ITvInteractiveAppClient;
 import android.media.tv.interactive.ITvInteractiveAppManagerCallback;
@@ -51,6 +53,9 @@ interface ITvInteractiveAppManager {
     void sendCurrentTvInputId(in IBinder sessionToken, in String inputId, int userId);
     void sendSigningResult(in IBinder sessionToken, in String signingId, in byte[] result,
             int userId);
+    void sendTvRecordingInfo(in IBinder sessionToken, in TvRecordingInfo recordingInfo, int userId);
+    void sendTvRecordingInfoList(in IBinder sessionToken,
+            in List<TvRecordingInfo> recordingInfoList, int userId);
     void notifyError(in IBinder sessionToken, in String errMsg, in Bundle params, int userId);
     void createSession(in ITvInteractiveAppClient client, in String iAppServiceId, int type,
             int seq, int userId);
@@ -65,12 +70,14 @@ interface ITvInteractiveAppManager {
     void notifySignalStrength(in IBinder sessionToken, int stength, int userId);
     void notifyRecordingStarted(in IBinder sessionToken, in String recordingId, int userId);
     void notifyRecordingStopped(in IBinder sessionToken, in String recordingId, int userId);
+    void notifyTvMessage(in IBinder sessionToken, in String type, in Bundle data, int userId);
     void setSurface(in IBinder sessionToken, in Surface surface, int userId);
     void dispatchSurfaceChanged(in IBinder sessionToken, int format, int width, int height,
             int userId);
     void notifyBroadcastInfoResponse(in IBinder sessionToken, in BroadcastInfoResponse response,
             int UserId);
     void notifyAdResponse(in IBinder sessionToken, in AdResponse response, int UserId);
+    void notifyAdBufferConsumed(in IBinder sessionToken, in AdBuffer buffer, int userId);
 
     void createMediaView(in IBinder sessionToken, in IBinder windowToken, in Rect frame,
             int userId);

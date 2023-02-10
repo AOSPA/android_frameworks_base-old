@@ -198,9 +198,8 @@ interface IActivityTaskManager {
      * @param taskId The id of the task to set the bounds for.
      * @param bounds The new bounds.
      * @param resizeMode Resize mode defined as {@code ActivityTaskManager#RESIZE_MODE_*} constants.
-     * @return Return true on success. Otherwise false.
      */
-    boolean resizeTask(int taskId, in Rect bounds, int resizeMode);
+    void resizeTask(int taskId, in Rect bounds, int resizeMode);
     void moveRootTaskToDisplay(int taskId, int displayId);
 
     void moveTaskToRootTask(int taskId, int rootTaskId, boolean toTop);
@@ -249,11 +248,6 @@ interface IActivityTaskManager {
     /** Returns an interface enabling the management of window organizers. */
     IWindowOrganizerController getWindowOrganizerController();
 
-    /**
-     * Sets whether we are currently in an interactive split screen resize operation where we
-     * are changing the docked stack size.
-     */
-    void setSplitScreenResizing(boolean resizing);
     boolean supportsLocalVoiceInteraction();
 
     // Get device configuration

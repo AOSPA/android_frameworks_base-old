@@ -67,7 +67,7 @@ class CredentialEntryInfo(
   val credentialTypeDisplayName: String,
   val userName: String,
   val displayName: String?,
-  val icon: Drawable,
+  val icon: Drawable?,
   val lastUsedTimeMillis: Long?,
 ) : EntryInfo(providerId, entryKey, entrySubkey, pendingIntent, fillInIntent)
 
@@ -101,7 +101,7 @@ class ActionEntryInfo(
 ) : EntryInfo(providerId, entryKey, entrySubkey, pendingIntent, fillInIntent)
 
 data class RequestDisplayInfo(
-  val appDomainName: String,
+  val appName: String,
 )
 
 /**

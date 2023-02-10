@@ -97,6 +97,7 @@ import android.view.RemoteAnimationTarget;
 import android.view.SurfaceControl;
 import android.window.ITaskFragmentOrganizer;
 import android.window.ScreenCapture;
+import android.window.TaskFragmentAnimationParams;
 import android.window.TaskFragmentInfo;
 import android.window.TaskFragmentOrganizerToken;
 
@@ -312,6 +313,10 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     @Nullable
     private final IBinder mFragmentToken;
 
+    /** The animation override params for animation running on this TaskFragment. */
+    @NonNull
+    private TaskFragmentAnimationParams mAnimationParams = TaskFragmentAnimationParams.DEFAULT;
+
     /**
      * The bounds of the embedded TaskFragment relative to the parent Task.
      * {@code null} if it is not {@link #mIsEmbedded}
@@ -457,6 +462,15 @@ class TaskFragment extends WindowContainer<WindowContainer> {
     boolean hasTaskFragmentOrganizer(ITaskFragmentOrganizer organizer) {
         return organizer != null && mTaskFragmentOrganizer != null
                 && organizer.asBinder().equals(mTaskFragmentOrganizer.asBinder());
+    }
+
+    void setAnimationParams(@NonNull TaskFragmentAnimationParams animationParams) {
+        mAnimationParams = animationParams;
+    }
+
+    @NonNull
+    TaskFragmentAnimationParams getAnimationParams() {
+        return mAnimationParams;
     }
 
     TaskFragment getAdjacentTaskFragment() {
@@ -933,41 +947,22 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         return getTopNonFinishingActivity(true /* includeOverlays */);
     }
 
-    ActivityRecord getTopNonFinishingActivity(boolean includeOverlays) {
-        return getTopNonFinishingActivity(includeOverlays, true /* includingEmbeddedTask */);
-    }
-
     /**
      * Returns the top-most non-finishing activity, even if the activity is NOT ok to show to
      * the current user.
      * @param includeOverlays whether the task overlay activity should be included.
-     * @param includingEmbeddedTask whether the activity in a task that being embedded from this
-     *                              one should be included.
-     * @see #topRunningActivity(boolean, boolean)
+     * @see #topRunningActivity(boolean)
      */
-    ActivityRecord getTopNonFinishingActivity(boolean includeOverlays,
-            boolean includingEmbeddedTask) {
-        // Split into 4 to avoid object creation due to variable capture.
+    ActivityRecord getTopNonFinishingActivity(boolean includeOverlays) {
+        // Split into 2 to avoid object creation due to variable capture.
         if (includeOverlays) {
-            if (includingEmbeddedTask) {
-                return getActivity((r) -> !r.finishing);
-            }
-            return getActivity((r) -> !r.finishing && r.getTask() == this.getTask());
+            return getActivity((r) -> !r.finishing);
         }
-
-        if (includingEmbeddedTask) {
-            return getActivity((r) -> !r.finishing && !r.isTaskOverlay());
-        }
-        return getActivity(
-                (r) -> !r.finishing && !r.isTaskOverlay() && r.getTask() == this.getTask());
+        return getActivity((r) -> !r.finishing && !r.isTaskOverlay());
     }
 
     ActivityRecord topRunningActivity() {
         return topRunningActivity(false /* focusableOnly */);
-    }
-
-    ActivityRecord topRunningActivity(boolean focusableOnly) {
-        return topRunningActivity(focusableOnly, true /* includingEmbeddedTask */);
     }
 
     /**
@@ -976,20 +971,12 @@ class TaskFragment extends WindowContainer<WindowContainer> {
      *
      * @see ActivityRecord#canBeTopRunning()
      */
-    ActivityRecord topRunningActivity(boolean focusableOnly, boolean includingEmbeddedTask) {
-        // Split into 4 to avoid object creation due to variable capture.
+    ActivityRecord topRunningActivity(boolean focusableOnly) {
+        // Split into 2 to avoid object creation due to variable capture.
         if (focusableOnly) {
-            if (includingEmbeddedTask) {
-                return getActivity((r) -> r.canBeTopRunning() && r.isFocusable());
-            }
-            return getActivity(
-                    (r) -> r.canBeTopRunning() && r.isFocusable() && r.getTask() == this.getTask());
+            return getActivity((r) -> r.canBeTopRunning() && r.isFocusable());
         }
-
-        if (includingEmbeddedTask) {
-            return getActivity(ActivityRecord::canBeTopRunning);
-        }
-        return getActivity((r) -> r.canBeTopRunning() && r.getTask() == this.getTask());
+        return getActivity(ActivityRecord::canBeTopRunning);
     }
 
     int getNonFinishingActivityCount() {
@@ -1497,7 +1484,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                 next.abortAndClearOptionsAnimation();
                 transaction.setLifecycleStateRequest(
                         ResumeActivityItem.obtain(next.app.getReportedProcState(),
-                                dc.isNextTransitionForward()));
+                                dc.isNextTransitionForward(), next.shouldSendCompatFakeFocus()));
                 mAtmService.getLifecycleManager().scheduleTransaction(transaction);
 
                 ProtoLog.d(WM_DEBUG_STATES, "resumeTopActivity: Resumed %s", next);
@@ -2035,9 +2022,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
         }
 
         final Task thisTask = asTask();
-        // Embedded Task's configuration should go with parent TaskFragment, so we don't re-compute
-        // configuration here.
-        if (thisTask != null && !thisTask.isEmbedded()) {
+        if (thisTask != null) {
             thisTask.resolveLeafTaskOnlyOverrideConfigs(newParentConfig,
                     mTmpBounds /* previousBounds */);
         }
@@ -2154,7 +2139,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
 
         final Rect parentBounds = parentConfig.windowConfiguration.getBounds();
         final Rect resolvedBounds = inOutConfig.windowConfiguration.getBounds();
-        if (resolvedBounds == null || resolvedBounds.isEmpty()) {
+        if (resolvedBounds.isEmpty()) {
             mTmpFullBounds.set(parentBounds);
             insideParentBounds = true;
         } else {
@@ -2243,6 +2228,7 @@ class TaskFragment extends WindowContainer<WindowContainer> {
                         : overrideScreenHeightDp;
             }
 
+            // TODO(b/238331848): Consider simplifying logic that computes smallestScreenWidthDp.
             if (inOutConfig.smallestScreenWidthDp
                     == Configuration.SMALLEST_SCREEN_WIDTH_DP_UNDEFINED) {
                 // When entering to or exiting from Pip, the PipTaskOrganizer will set the

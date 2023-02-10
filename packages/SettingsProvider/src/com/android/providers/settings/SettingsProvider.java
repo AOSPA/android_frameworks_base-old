@@ -96,6 +96,7 @@ import android.provider.Settings.Config.SyncDisabledMode;
 import android.provider.Settings.Global;
 import android.provider.Settings.Secure;
 import android.provider.Settings.SetAllResult;
+import android.provider.UpdatableDeviceConfigServiceReadiness;
 import android.provider.settings.validators.SystemSettingsValidators;
 import android.provider.settings.validators.Validator;
 import android.text.TextUtils;
@@ -416,8 +417,14 @@ public class SettingsProvider extends ContentProvider {
             startWatchingUserRestrictionChanges();
         });
         ServiceManager.addService("settings", new SettingsService(this));
-        ServiceManager.addService("device_config", new DeviceConfigService(this));
+        addDeviceConfigServiceIfNeeded();
         return true;
+    }
+
+    private void addDeviceConfigServiceIfNeeded() {
+        if (!UpdatableDeviceConfigServiceReadiness.shouldStartUpdatableService()) {
+            ServiceManager.addService("device_config", new DeviceConfigService(this));
+        }
     }
 
     @Override
@@ -561,6 +568,11 @@ public class SettingsProvider extends ContentProvider {
                 RemoteCallback callback = args.getParcelable(
                         Settings.CALL_METHOD_MONITOR_CALLBACK_KEY);
                 setMonitorCallback(callback);
+                break;
+            }
+
+            case Settings.CALL_METHOD_UNREGISTER_MONITOR_CALLBACK_CONFIG: {
+                clearMonitorCallback();
                 break;
             }
 
@@ -2349,6 +2361,16 @@ public class SettingsProvider extends ContentProvider {
                         + Manifest.permission.MONITOR_DEVICE_CONFIG_ACCESS);
         synchronized (mLock) {
             mConfigMonitorCallback = callback;
+        }
+    }
+
+    private void clearMonitorCallback() {
+        getContext().enforceCallingOrSelfPermission(
+                Manifest.permission.MONITOR_DEVICE_CONFIG_ACCESS,
+                "Permission denial: registering for config access requires: "
+                        + Manifest.permission.MONITOR_DEVICE_CONFIG_ACCESS);
+        synchronized (mLock) {
+            mConfigMonitorCallback = null;
         }
     }
 

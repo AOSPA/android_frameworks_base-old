@@ -16,6 +16,7 @@
 
 package com.android.systemui.media.controls.pipeline
 
+import android.app.BroadcastOptions
 import android.app.Notification
 import android.app.Notification.EXTRA_SUBSTITUTE_APP_NAME
 import android.app.PendingIntent
@@ -45,6 +46,7 @@ import android.os.Process
 import android.os.UserHandle
 import android.provider.Settings
 import android.service.notification.StatusBarNotification
+import android.support.v4.media.MediaMetadataCompat
 import android.text.TextUtils
 import android.util.Log
 import androidx.media.utils.MediaConstants
@@ -660,6 +662,10 @@ class MediaDataManager(
         val currentEntry = mediaEntries.get(packageName)
         val instanceId = currentEntry?.instanceId ?: logger.getNewInstanceId()
         val appUid = currentEntry?.appUid ?: Process.INVALID_UID
+        val isExplicit =
+            desc.extras?.getLong(MediaConstants.METADATA_KEY_IS_EXPLICIT) ==
+                MediaConstants.METADATA_VALUE_ATTRIBUTE_PRESENT &&
+                mediaFlags.isExplicitIndicatorEnabled()
 
         val mediaAction = getResumeMediaAction(resumeAction)
         val lastActive = systemClock.elapsedRealtime()
@@ -689,7 +695,8 @@ class MediaDataManager(
                     hasCheckedForResume = true,
                     lastActive = lastActive,
                     instanceId = instanceId,
-                    appUid = appUid
+                    appUid = appUid,
+                    isExplicit = isExplicit,
                 )
             )
         }
@@ -748,6 +755,15 @@ class MediaDataManager(
         }
         if (song == null) {
             song = HybridGroupManager.resolveTitle(notif)
+        }
+
+        // Explicit Indicator
+        var isExplicit = false
+        if (mediaFlags.isExplicitIndicatorEnabled()) {
+            val mediaMetadataCompat = MediaMetadataCompat.fromMediaMetadata(metadata)
+            isExplicit =
+                mediaMetadataCompat?.getLong(MediaConstants.METADATA_KEY_IS_EXPLICIT) ==
+                    MediaConstants.METADATA_VALUE_ATTRIBUTE_PRESENT
         }
 
         // Artist name
@@ -851,7 +867,8 @@ class MediaDataManager(
                     isClearable = sbn.isClearable(),
                     lastActive = lastActive,
                     instanceId = instanceId,
-                    appUid = appUid
+                    appUid = appUid,
+                    isExplicit = isExplicit,
                 )
             )
         }
@@ -1165,7 +1182,9 @@ class MediaDataManager(
 
     private fun sendPendingIntent(intent: PendingIntent): Boolean {
         return try {
-            intent.send()
+            val options = BroadcastOptions.makeBasic()
+            options.setInteractive(true)
+            intent.send(options.toBundle())
             true
         } catch (e: PendingIntent.CanceledException) {
             Log.d(TAG, "Intent canceled", e)

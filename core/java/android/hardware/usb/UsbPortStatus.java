@@ -20,6 +20,7 @@ import android.Manifest;
 import android.annotation.CheckResult;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.os.Parcel;
@@ -27,6 +28,7 @@ import android.os.Parcelable;
 
 import com.android.internal.annotations.Immutable;
 
+import java.lang.StringBuilder;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
@@ -49,6 +51,13 @@ public final class UsbPortStatus implements Parcelable {
     private final @UsbDataStatus int mUsbDataStatus;
     private final @PowerBrickConnectionStatus int mPowerBrickConnectionStatus;
     private final @NonNull @ComplianceWarning int[] mComplianceWarnings;
+    private final @PlugState int mPlugState;
+    /**
+     * Holds the DisplayPort Alt Mode info for the Port. This field
+     * is null if the device does not support DisplayPort Alt Mode.
+     */
+    private final @Nullable DisplayPortAltModeInfo mDisplayPortAltModeInfo;
+
 
     /**
      * Power role: This USB port does not have a power role.
@@ -219,7 +228,11 @@ public final class UsbPortStatus implements Parcelable {
     public static final int DATA_STATUS_DISABLED_CONTAMINANT = 1 << 2;
 
     /**
-     * USB data is disabled due to docking event.
+     * This flag indicates that some or all data modes are disabled
+     * due to docking event, and the specific sub-statuses viz.,
+     * {@link #DATA_STATUS_DISABLED_DOCK_HOST_MODE},
+     * {@link #DATA_STATUS_DISABLED_DOCK_DEVICE_MODE}
+     * can be checked for individual modes.
      */
     public static final int DATA_STATUS_DISABLED_DOCK = 1 << 3;
 
@@ -233,6 +246,18 @@ public final class UsbPortStatus implements Parcelable {
      * USB data is disabled for debug.
      */
     public static final int DATA_STATUS_DISABLED_DEBUG = 1 << 5;
+
+    /**
+     * USB host mode is disabled due to docking event.
+     * {@link #DATA_STATUS_DISABLED_DOCK} will be set as well.
+     */
+    public static final int DATA_STATUS_DISABLED_DOCK_HOST_MODE = 1 << 6;
+
+    /**
+     * USB device mode is disabled due to docking event.
+     * {@link #DATA_STATUS_DISABLED_DOCK} will be set as well.
+     */
+    public static final int DATA_STATUS_DISABLED_DOCK_DEVICE_MODE = 1 << 7;
 
     /**
      * Unknown whether a power brick is connected.
@@ -284,6 +309,35 @@ public final class UsbPortStatus implements Parcelable {
      */
     public static final int COMPLIANCE_WARNING_MISSING_RP = 4;
 
+    /**
+     * Indicates that the Type-C plug orientation cannot be
+     * determined.
+     */
+    public static final int PLUG_STATE_UNKNOWN = 0;
+
+    /**
+     * Indicates no Type-C plug is inserted into the device.
+     */
+    public static final int PLUG_STATE_UNPLUGGED = 1;
+
+    /**
+     * Indicates a Type-C plug is inserted into the device, but
+     * the orientation cannot be determined.
+     */
+    public static final int PLUG_STATE_PLUGGED_ORIENTATION_UNKNOWN = 2;
+
+    /**
+     * Indicates that the connected plug uses its CC1
+     * pin to manage the Source-to-Sink connection.
+     */
+    public static final int PLUG_STATE_PLUGGED_ORIENTATION_NORMAL = 3;
+
+    /**
+     * Indicates that the connected plug uses its CC2
+     * pin to manage the Source-to-Sink connection.
+     */
+    public static final int PLUG_STATE_PLUGGED_ORIENTATION_FLIPPED = 4;
+
     @IntDef(prefix = { "CONTAMINANT_DETECTION_" }, value = {
             CONTAMINANT_DETECTION_NOT_SUPPORTED,
             CONTAMINANT_DETECTION_DISABLED,
@@ -322,6 +376,16 @@ public final class UsbPortStatus implements Parcelable {
     @Retention(RetentionPolicy.SOURCE)
     @interface ComplianceWarning{}
 
+    @IntDef(prefix = { "PLUG_STATE_" }, value = {
+            PLUG_STATE_UNKNOWN,
+            PLUG_STATE_UNPLUGGED,
+            PLUG_STATE_PLUGGED_ORIENTATION_UNKNOWN,
+            PLUG_STATE_PLUGGED_ORIENTATION_NORMAL,
+            PLUG_STATE_PLUGGED_ORIENTATION_FLIPPED,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    @interface PlugState{}
+
     /** @hide */
     @IntDef(prefix = { "DATA_STATUS_" }, flag = true, value = {
             DATA_STATUS_UNKNOWN,
@@ -329,8 +393,10 @@ public final class UsbPortStatus implements Parcelable {
             DATA_STATUS_DISABLED_OVERHEAT,
             DATA_STATUS_DISABLED_CONTAMINANT,
             DATA_STATUS_DISABLED_DOCK,
+            DATA_STATUS_DISABLED_DOCK_HOST_MODE,
+            DATA_STATUS_DISABLED_DOCK_DEVICE_MODE,
             DATA_STATUS_DISABLED_FORCE,
-            DATA_STATUS_DISABLED_DEBUG
+            DATA_STATUS_DISABLED_DEBUG,
     })
     @Retention(RetentionPolicy.SOURCE)
     @interface UsbDataStatus{}
@@ -350,17 +416,35 @@ public final class UsbPortStatus implements Parcelable {
             int contaminantDetectionStatus, @UsbDataStatus int usbDataStatus,
             boolean powerTransferLimited,
             @PowerBrickConnectionStatus int powerBrickConnectionStatus,
-            @NonNull @ComplianceWarning int[] complianceWarnings) {
+            @NonNull @ComplianceWarning int[] complianceWarnings,
+            int plugState,
+            @Nullable DisplayPortAltModeInfo displayPortAltModeInfo) {
         mCurrentMode = currentMode;
         mCurrentPowerRole = currentPowerRole;
         mCurrentDataRole = currentDataRole;
         mSupportedRoleCombinations = supportedRoleCombinations;
         mContaminantProtectionStatus = contaminantProtectionStatus;
         mContaminantDetectionStatus = contaminantDetectionStatus;
+
+        // Older implementations that only set the DISABLED_DOCK_MODE will have the other two
+        // set at the HAL interface level, so the "dock mode only" state shouldn't be visible here.
+        // But the semantics are ensured here.
+        int disabledDockModes = (usbDataStatus &
+            (DATA_STATUS_DISABLED_DOCK_HOST_MODE | DATA_STATUS_DISABLED_DOCK_DEVICE_MODE));
+        if (disabledDockModes != 0) {
+            // Set DATA_STATUS_DISABLED_DOCK when one of DATA_STATUS_DISABLED_DOCK_*_MODE is set
+            usbDataStatus |= DATA_STATUS_DISABLED_DOCK;
+        } else {
+            // Clear DATA_STATUS_DISABLED_DOCK when none of DATA_STATUS_DISABLED_DOCK_*_MODE is set
+            usbDataStatus &= ~DATA_STATUS_DISABLED_DOCK;
+        }
+
         mUsbDataStatus = usbDataStatus;
         mPowerTransferLimited = powerTransferLimited;
         mPowerBrickConnectionStatus = powerBrickConnectionStatus;
         mComplianceWarnings = complianceWarnings;
+        mPlugState = plugState;
+        mDisplayPortAltModeInfo = displayPortAltModeInfo;
     }
 
     /** @hide */
@@ -372,7 +456,7 @@ public final class UsbPortStatus implements Parcelable {
         this(currentMode, currentPowerRole, currentDataRole, supportedRoleCombinations,
                 contaminantProtectionStatus, contaminantDetectionStatus,
                 usbDataStatus, powerTransferLimited, powerBrickConnectionStatus,
-                new int[] {});
+                new int[] {}, PLUG_STATE_UNKNOWN, null);
     }
 
     /** @hide */
@@ -382,7 +466,7 @@ public final class UsbPortStatus implements Parcelable {
         this(currentMode, currentPowerRole, currentDataRole, supportedRoleCombinations,
                 contaminantProtectionStatus, contaminantDetectionStatus,
                 DATA_STATUS_UNKNOWN, false, POWER_BRICK_STATUS_UNKNOWN,
-                new int[] {});
+                new int[] {}, PLUG_STATE_UNKNOWN, null);
     }
 
     /**
@@ -472,7 +556,8 @@ public final class UsbPortStatus implements Parcelable {
      *         {@link #DATA_STATUS_UNKNOWN}, {@link #DATA_STATUS_ENABLED},
      *         {@link #DATA_STATUS_DISABLED_OVERHEAT}, {@link #DATA_STATUS_DISABLED_CONTAMINANT},
      *         {@link #DATA_STATUS_DISABLED_DOCK}, {@link #DATA_STATUS_DISABLED_FORCE},
-     *         {@link #DATA_STATUS_DISABLED_DEBUG}
+     *         {@link #DATA_STATUS_DISABLED_DEBUG}, {@link #DATA_STATUS_DISABLED_DOCK_HOST_MODE},
+     *         {@link #DATA_STATUS_DISABLED_DOCK_DEVICE_MODE}
      */
     public @UsbDataStatus int getUsbDataStatus() {
         return mUsbDataStatus;
@@ -514,10 +599,34 @@ public final class UsbPortStatus implements Parcelable {
         return mComplianceWarnings;
     }
 
+    /**
+     * Returns the orientation state of the attached cable/adapter.
+     *
+     * @return one of {@link #PLUG_STATE_UNKNOWN},
+     *                {@link #PLUG_STATE_UNPLUGGED},
+     *                {@link #PLUG_STATE_PLUGGED_ORIENTATION_UNKNOWN},
+     *                {@link #PLUG_STATE_PLUGGED_ORIENTATION_NORMAL},
+     *                {@link #PLUG_STATE_PLUGGED_ORIENTATION_FLIPPED},
+     */
+    public @PlugState int getPlugState() {
+        return mPlugState;
+    }
+
+    /**
+     * Returns the DisplayPortInfo of the USB Port, if applicable.
+     *
+     * @return an instance of type DisplayPortInfo
+     *         or null if not applicable.
+     */
+    @Nullable
+    public DisplayPortAltModeInfo getDisplayPortAltModeInfo() {
+        return (mDisplayPortAltModeInfo == null) ? null : mDisplayPortAltModeInfo;
+    }
+
     @NonNull
     @Override
     public String toString() {
-        return "UsbPortStatus{connected=" + isConnected()
+        StringBuilder mString = new StringBuilder("UsbPortStatus{connected=" + isConnected()
                 + ", currentMode=" + UsbPort.modeToString(mCurrentMode)
                 + ", currentPowerRole=" + UsbPort.powerRoleToString(mCurrentPowerRole)
                 + ", currentDataRole=" + UsbPort.dataRoleToString(mCurrentDataRole)
@@ -536,7 +645,12 @@ public final class UsbPortStatus implements Parcelable {
                             .powerBrickConnectionStatusToString(getPowerBrickConnectionStatus())
                 + ", complianceWarnings="
                         + UsbPort.complianceWarningsToString(getComplianceWarnings())
-                + "}";
+                + ", plugState="
+                        + getPlugState()
+                + ", displayPortAltModeInfo="
+                        + mDisplayPortAltModeInfo
+                + "}");
+        return mString.toString();
     }
 
     @Override
@@ -556,6 +670,13 @@ public final class UsbPortStatus implements Parcelable {
         dest.writeBoolean(mPowerTransferLimited);
         dest.writeInt(mPowerBrickConnectionStatus);
         dest.writeIntArray(mComplianceWarnings);
+        dest.writeInt(mPlugState);
+        if (mDisplayPortAltModeInfo == null) {
+            dest.writeBoolean(false);
+        } else {
+            dest.writeBoolean(true);
+            mDisplayPortAltModeInfo.writeToParcel(dest, 0);
+        }
     }
 
     public static final @NonNull Parcelable.Creator<UsbPortStatus> CREATOR =
@@ -572,11 +693,19 @@ public final class UsbPortStatus implements Parcelable {
             boolean powerTransferLimited = in.readBoolean();
             int powerBrickConnectionStatus = in.readInt();
             @ComplianceWarning int[] complianceWarnings = in.createIntArray();
+            int plugState = in.readInt();
+            boolean supportsDisplayPortAltMode = in.readBoolean();
+            DisplayPortAltModeInfo displayPortAltModeInfo;
+            if (supportsDisplayPortAltMode) {
+                displayPortAltModeInfo = DisplayPortAltModeInfo.CREATOR.createFromParcel(in);
+            } else {
+                displayPortAltModeInfo = null;
+            }
             return new UsbPortStatus(currentMode, currentPowerRole, currentDataRole,
                     supportedRoleCombinations, contaminantProtectionStatus,
                     contaminantDetectionStatus, usbDataStatus, powerTransferLimited,
                     powerBrickConnectionStatus,
-                    complianceWarnings);
+                    complianceWarnings, plugState, displayPortAltModeInfo);
         }
 
         @Override
@@ -601,6 +730,8 @@ public final class UsbPortStatus implements Parcelable {
         private @UsbDataStatus int mUsbDataStatus;
         private @PowerBrickConnectionStatus int mPowerBrickConnectionStatus;
         private @ComplianceWarning int[] mComplianceWarnings;
+        private @PlugState int mPlugState;
+        private @Nullable DisplayPortAltModeInfo mDisplayPortAltModeInfo;
 
         public Builder() {
             mCurrentMode = MODE_NONE;
@@ -611,6 +742,8 @@ public final class UsbPortStatus implements Parcelable {
             mUsbDataStatus = DATA_STATUS_UNKNOWN;
             mPowerBrickConnectionStatus = POWER_BRICK_STATUS_UNKNOWN;
             mComplianceWarnings = new int[] {};
+            mPlugState = PLUG_STATE_UNKNOWN;
+            mDisplayPortAltModeInfo = null;
         }
 
         /**
@@ -709,6 +842,28 @@ public final class UsbPortStatus implements Parcelable {
             return this;
         }
 
+        /**
+         * Sets the plug orientation of {@link UsbPortStatus}
+         *
+         * @return Instance of {@link Builder}
+         */
+        @NonNull
+        public Builder setPlugState(int plugState) {
+            mPlugState = plugState;
+            return this;
+        }
+
+        /**
+         * Sets the plug orientation of {@link UsbPortStatus}
+         *
+         * @return Instance of {@link Builder}
+         */
+        @NonNull
+        public Builder setDisplayPortAltModeInfo(
+                @Nullable DisplayPortAltModeInfo displayPortAltModeInfo) {
+            mDisplayPortAltModeInfo = displayPortAltModeInfo;
+            return this;
+        }
 
         /**
          * Creates the {@link UsbPortStatus} object.
@@ -718,7 +873,8 @@ public final class UsbPortStatus implements Parcelable {
             UsbPortStatus status = new UsbPortStatus(mCurrentMode, mCurrentPowerRole,
                     mCurrentDataRole, mSupportedRoleCombinations, mContaminantProtectionStatus,
                     mContaminantDetectionStatus, mUsbDataStatus, mPowerTransferLimited,
-                    mPowerBrickConnectionStatus, mComplianceWarnings);
+                    mPowerBrickConnectionStatus, mComplianceWarnings,
+                    mPlugState, mDisplayPortAltModeInfo);
             return status;
         }
     };

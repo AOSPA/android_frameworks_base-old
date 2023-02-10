@@ -46,10 +46,10 @@ import com.android.systemui.dreams.complication.dagger.ComplicationComponent;
 import com.android.systemui.dreams.dagger.DreamOverlayComponent;
 import com.android.systemui.dreams.touch.DreamOverlayTouchMonitor;
 import com.android.systemui.touch.TouchInsetManager;
+import com.android.systemui.util.concurrency.DelayableExecutor;
 
 import java.util.Arrays;
 import java.util.HashSet;
-import java.util.concurrent.Executor;
 
 import javax.inject.Inject;
 import javax.inject.Named;
@@ -66,10 +66,11 @@ public class DreamOverlayService extends android.service.dreams.DreamOverlayServ
     // The Context is used to construct the hosting constraint layout and child overlay views.
     private final Context mContext;
     // The Executor ensures actions and ui updates happen on the same thread.
-    private final Executor mExecutor;
+    private final DelayableExecutor mExecutor;
     // A controller for the dream overlay container view (which contains both the status bar and the
     // content area).
     private DreamOverlayContainerViewController mDreamOverlayContainerViewController;
+    private final DreamOverlayCallbackController mDreamOverlayCallbackController;
     private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
     @Nullable
     private final ComponentName mLowLightDreamComponent;
@@ -137,8 +138,8 @@ public class DreamOverlayService extends android.service.dreams.DreamOverlayServ
     @Inject
     public DreamOverlayService(
             Context context,
-            @Main Executor executor,
             DreamOverlayLifecycleOwner lifecycleOwner,
+            @Main DelayableExecutor executor,
             WindowManager windowManager,
             ComplicationComponent.Factory complicationComponentFactory,
             com.android.systemui.dreams.dreamcomplication.dagger.ComplicationComponent.Factory
@@ -149,7 +150,8 @@ public class DreamOverlayService extends android.service.dreams.DreamOverlayServ
             UiEventLogger uiEventLogger,
             TouchInsetManager touchInsetManager,
             @Nullable @Named(LowLightDreamModule.LOW_LIGHT_DREAM_COMPONENT)
-                    ComponentName lowLightDreamComponent) {
+                    ComponentName lowLightDreamComponent,
+            DreamOverlayCallbackController dreamOverlayCallbackController) {
         mContext = context;
         mExecutor = executor;
         mWindowManager = windowManager;
@@ -158,6 +160,7 @@ public class DreamOverlayService extends android.service.dreams.DreamOverlayServ
         mKeyguardUpdateMonitor.registerCallback(mKeyguardCallback);
         mStateController = stateController;
         mUiEventLogger = uiEventLogger;
+        mDreamOverlayCallbackController = dreamOverlayCallbackController;
 
         final ViewModelStore viewModelStore = new ViewModelStore();
         final Complication.Host host =
@@ -226,6 +229,7 @@ public class DreamOverlayService extends android.service.dreams.DreamOverlayServ
                     dreamComponent != null && dreamComponent.equals(mLowLightDreamComponent));
             mUiEventLogger.log(DreamOverlayEvent.DREAM_OVERLAY_COMPLETE_START);
 
+            mDreamOverlayCallbackController.onStartDream();
             mStarted = true;
         });
     }
@@ -242,6 +246,7 @@ public class DreamOverlayService extends android.service.dreams.DreamOverlayServ
     public void onWakeUp(@NonNull Runnable onCompletedCallback) {
         mExecutor.execute(() -> {
             if (mDreamOverlayContainerViewController != null) {
+                mDreamOverlayCallbackController.onWakeUp();
                 mDreamOverlayContainerViewController.wakeUp(onCompletedCallback, mExecutor);
             }
         });
@@ -251,6 +256,7 @@ public class DreamOverlayService extends android.service.dreams.DreamOverlayServ
      * Inserts {@link Window} to host the dream overlay into the dream's parent window. Must be
      * called from the main executing thread. The window attributes closely mirror those that are
      * set by the {@link android.service.dreams.DreamService} on the dream Window.
+     *
      * @param layoutParams The {@link android.view.WindowManager.LayoutParams} which allow inserting
      *                     into the dream window.
      */
@@ -297,7 +303,11 @@ public class DreamOverlayService extends android.service.dreams.DreamOverlayServ
 
     private void resetCurrentDreamOverlayLocked() {
         if (mStarted && mWindow != null) {
-            mWindowManager.removeView(mWindow.getDecorView());
+            try {
+                mWindowManager.removeView(mWindow.getDecorView());
+            } catch (IllegalArgumentException e) {
+                Log.e(TAG, "Error removing decor view when resetting overlay", e);
+            }
         }
 
         mStateController.setOverlayActive(false);

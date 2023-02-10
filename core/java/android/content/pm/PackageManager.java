@@ -1355,6 +1355,7 @@ public abstract class PackageManager {
             INSTALL_ENABLE_ROLLBACK,
             INSTALL_ALLOW_DOWNGRADE,
             INSTALL_STAGED,
+            INSTALL_REQUEST_UPDATE_OWNERSHIP,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface InstallFlags {}
@@ -1426,22 +1427,6 @@ public abstract class PackageManager {
      * @hide
      */
     public static final int INSTALL_GRANT_RUNTIME_PERMISSIONS = 0x00000100;
-
-    /**
-     * Flag parameter for {@link #installPackage} to indicate that all restricted
-     * permissions should be whitelisted. If {@link #INSTALL_ALL_USERS}
-     * is set the restricted permissions will be whitelisted for all users, otherwise
-     * only to the owner.
-     *
-     * <p>
-     * <strong>Note: </strong>In retrospect it would have been preferred to use
-     * more inclusive terminology when naming this API. Similar APIs added will
-     * refrain from using the term "whitelist".
-     * </p>
-     *
-     * @hide
-     */
-    public static final int INSTALL_ALL_WHITELIST_RESTRICTED_PERMISSIONS = 0x00400000;
 
     /** {@hide} */
     public static final int INSTALL_FORCE_VOLUME_UUID = 0x00000200;
@@ -1539,11 +1524,42 @@ public abstract class PackageManager {
     public static final int INSTALL_STAGED = 0x00200000;
 
     /**
+     * Flag parameter for {@link #installPackage} to indicate that all restricted
+     * permissions should be allowlisted. If {@link #INSTALL_ALL_USERS}
+     * is set the restricted permissions will be allowlisted for all users, otherwise
+     * only to the owner.
+     *
+     * <p>
+     * <strong>Note: </strong>In retrospect it would have been preferred to use
+     * more inclusive terminology when naming this API. Similar APIs added will
+     * refrain from using the term "whitelist".
+     * </p>
+     *
+     * @hide
+     */
+    public static final int INSTALL_ALL_WHITELIST_RESTRICTED_PERMISSIONS = 0x00400000;
+
+    /**
      * Flag parameter for {@link #installPackage} to indicate that check whether given APEX can be
      * updated should be disabled for this install.
      * @hide
      */
-    public static final int INSTALL_DISABLE_ALLOWED_APEX_UPDATE_CHECK = 0x00400000;
+    public static final int INSTALL_DISABLE_ALLOWED_APEX_UPDATE_CHECK = 0x00800000;
+
+    /**
+     * Flag parameter for {@link #installPackage} to bypass the low targer sdk version block
+     * for this install.
+     *
+     * @hide
+     */
+    public static final int INSTALL_BYPASS_LOW_TARGET_SDK_BLOCK = 0x00800000;
+
+    /**
+     * Flag parameter for {@link PackageInstaller.SessionParams} to indicate that the
+     * update ownership enforcement is requested.
+     * @hide
+     */
+    public static final int INSTALL_REQUEST_UPDATE_OWNERSHIP = 1 << 25;
 
     /** @hide */
     @IntDef(flag = true, value = {
@@ -2233,6 +2249,15 @@ public abstract class PackageManager {
      */
     public static final int INSTALL_FAILED_PRE_APPROVAL_NOT_AVAILABLE = -129;
 
+    /**
+     * Installation return code: this is passed in the {@link PackageInstaller#EXTRA_LEGACY_STATUS}
+     * if the new package declares bad certificate digest for a shared library in the package
+     * manifest.
+     *
+     * @hide
+     */
+    public static final int INSTALL_FAILED_SHARED_LIBRARY_BAD_CERTIFICATE_DIGEST = -130;
+
     /** @hide */
     @IntDef(flag = true, prefix = { "DELETE_" }, value = {
             DELETE_KEEP_DATA,
@@ -2250,6 +2275,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SystemApi
     public static final int DELETE_KEEP_DATA = 0x00000001;
 
     /**
@@ -2258,6 +2284,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SystemApi
     public static final int DELETE_ALL_USERS = 0x00000002;
 
     /**
@@ -2295,6 +2322,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SystemApi
     public static final int DELETE_SUCCEEDED = 1;
 
     /**
@@ -2304,6 +2332,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SystemApi
     public static final int DELETE_FAILED_INTERNAL_ERROR = -1;
 
     /**
@@ -2313,6 +2342,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SystemApi
     public static final int DELETE_FAILED_DEVICE_POLICY_MANAGER = -2;
 
     /**
@@ -2332,9 +2362,11 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @SystemApi
     public static final int DELETE_FAILED_OWNER_BLOCKED = -4;
 
     /** {@hide} */
+    @SystemApi
     public static final int DELETE_FAILED_ABORTED = -5;
 
     /**
@@ -4090,6 +4122,17 @@ public abstract class PackageManager {
     public static final String FEATURE_IPSEC_TUNNELS = "android.software.ipsec_tunnels";
 
     /**
+     * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}: The device has
+     * the requisite kernel support for migrating IPsec tunnels to new source/destination addresses.
+     *
+     * <p>This feature implies that the device supports XFRM Migration (CONFIG_XFRM_MIGRATE) and has
+     * the kernel fixes to support cross-address-family IPsec tunnel migration
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_IPSEC_TUNNEL_MIGRATION =
+            "android.software.ipsec_tunnel_migration";
+
+    /**
      * Feature for {@link #getSystemAvailableFeatures} and
      * {@link #hasSystemFeature}: The device supports a system interface for the user to select
      * and bind device control services provided by applications.
@@ -5336,17 +5379,7 @@ public abstract class PackageManager {
             throws NameNotFoundException;
 
     /**
-     * Return the UID associated with the given package name.
-     * <p>
-     * Note that the same package will have different UIDs under different
-     * {@link UserHandle} on the same device.
-     *
-     * @param packageName The full name (i.e. com.google.apps.contacts) of the
-     *            desired package.
-     * @param userId The user handle identifier to look up the package under.
-     * @return Returns an integer UID who owns the given package name.
-     * @throws NameNotFoundException if no such package is available to the
-     *             caller.
+     * See {@link #getPackageUidAsUser(String, PackageInfoFlags, int)}.
      * @deprecated Use {@link #getPackageUidAsUser(String, PackageInfoFlags, int)} instead.
      * @hide
      */
@@ -5357,9 +5390,22 @@ public abstract class PackageManager {
             int flags, @UserIdInt int userId) throws NameNotFoundException;
 
     /**
-     * See {@link #getPackageUidAsUser(String, int, int)}.
+     * Return the UID associated with the given package name.
+     * <p>
+     * Note that the same package will have different UIDs under different
+     * {@link UserHandle} on the same device.
+     *
+     * @param packageName The full name (i.e. com.google.apps.contacts) of the
+     *            desired package.
+     * @param flags Additional option flags to modify the data returned.
+     * @param userId The user handle identifier to look up the package under.
+     * @return Returns an integer UID who owns the given package name.
+     * @throws NameNotFoundException if no such package is available to the
+     *             caller.
      * @hide
      */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS_FULL)
     public int getPackageUidAsUser(@NonNull String packageName, @NonNull PackageInfoFlags flags,
             @UserIdInt int userId) throws NameNotFoundException {
         throw new UnsupportedOperationException(
@@ -9660,6 +9706,8 @@ public abstract class PackageManager {
             case INSTALL_FAILED_WRONG_INSTALLED_VERSION: return "INSTALL_FAILED_WRONG_INSTALLED_VERSION";
             case INSTALL_FAILED_PROCESS_NOT_DEFINED: return "INSTALL_FAILED_PROCESS_NOT_DEFINED";
             case INSTALL_FAILED_SESSION_INVALID: return "INSTALL_FAILED_SESSION_INVALID";
+            case INSTALL_FAILED_SHARED_LIBRARY_BAD_CERTIFICATE_DIGEST:
+                return "INSTALL_FAILED_SHARED_LIBRARY_BAD_CERTIFICATE_DIGEST";
             default: return Integer.toString(status);
         }
     }
@@ -9801,6 +9849,83 @@ public abstract class PackageManager {
                 mLegacy.packageDeleted(basePackageName, returnCode);
             } catch (RemoteException ignored) {
             }
+        }
+    }
+
+    /**
+     * A parcelable class to pass as an intent extra to the PackageInstaller. When an uninstall is
+     * completed (both successfully or unsuccessfully), the result is sent to the uninstall
+     * initiators.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final class UninstallCompleteCallback implements Parcelable {
+        private IPackageDeleteObserver2 mBinder;
+
+        /** @hide */
+        @IntDef(prefix = { "DELETE_" }, value = {
+                DELETE_SUCCEEDED,
+                DELETE_FAILED_INTERNAL_ERROR,
+                DELETE_FAILED_DEVICE_POLICY_MANAGER,
+                DELETE_FAILED_USER_RESTRICTED,
+                DELETE_FAILED_OWNER_BLOCKED,
+                DELETE_FAILED_ABORTED,
+                DELETE_FAILED_USED_SHARED_LIBRARY,
+                DELETE_FAILED_APP_PINNED,
+        })
+        @Retention(RetentionPolicy.SOURCE)
+        public @interface DeleteStatus{}
+
+        /** @hide */
+        public UninstallCompleteCallback(@NonNull IBinder binder) {
+            mBinder = IPackageDeleteObserver2.Stub.asInterface(binder);
+        }
+
+        /** @hide */
+        private UninstallCompleteCallback(Parcel in) {
+            mBinder = IPackageDeleteObserver2.Stub.asInterface(in.readStrongBinder());
+        }
+
+        public static final @NonNull Parcelable.Creator<UninstallCompleteCallback> CREATOR =
+                new Parcelable.Creator<>() {
+                    public UninstallCompleteCallback createFromParcel(Parcel source) {
+                        return new UninstallCompleteCallback(source);
+                    }
+
+                    public UninstallCompleteCallback[] newArray(int size) {
+                        return new UninstallCompleteCallback[size];
+                    }
+                };
+
+        /**
+         * Called when an uninstallation is completed successfully or unsuccessfully.
+         *
+         * @param packageName The name of the package being uninstalled.
+         * @param resultCode Result code of the operation.
+         * @param errorMessage Error message if any.
+         *
+         * @hide */
+        @SystemApi
+        public void onUninstallComplete(@NonNull String packageName, @DeleteStatus int resultCode,
+                @Nullable String errorMessage) {
+            try {
+                mBinder.onPackageDeleted(packageName, resultCode, errorMessage);
+            } catch (RemoteException e) {
+                // no-op
+            }
+        }
+
+        /** @hide */
+        @Override
+        public int describeContents() {
+            return 0;
+        }
+
+        /** @hide */
+        @Override
+        public void writeToParcel(@NonNull Parcel dest, int flags) {
+            dest.writeStrongBinder(mBinder.asBinder());
         }
     }
 
@@ -10427,9 +10552,7 @@ public abstract class PackageManager {
      * @throws NameNotFoundException if either a given package can not be found on the
      * system, or if the caller is not able to query for details about the source or
      * target packages.
-     * @hide
      */
-    @SystemApi
     @NonNull
     public boolean[] canPackageQuery(@NonNull String sourcePackageName,
             @NonNull String[] targetPackageNames) throws NameNotFoundException {
@@ -10724,5 +10847,46 @@ public abstract class PackageManager {
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
+    }
+
+    /**
+     * Checks if a package is blocked from uninstall for a particular user. A package can be
+     * blocked from being uninstalled by a device owner or profile owner.
+     * See {@link DevicePolicyManager#setUninstallBlocked(ComponentName, String, boolean)}.
+     *
+     * @param packageName Name of the package being uninstalled.
+     * @param user UserHandle who's ability to uninstall a package is being checked.
+     *
+     * @hide
+     */
+    @SystemApi
+    @NonNull
+    public boolean canUserUninstall(@NonNull String packageName, @NonNull UserHandle user){
+        throw new UnsupportedOperationException(
+                "canUserUninstall not implemented in subclass");
+    }
+
+    /**
+     * See {@link android.provider.Settings.Global#SHOW_NEW_APP_INSTALLED_NOTIFICATION_ENABLED}.
+     *
+     * @hide
+     */
+    @SystemApi
+    @NonNull
+    public boolean shouldShowNewAppInstalledNotification() {
+        throw new UnsupportedOperationException(
+                "isShowNewAppInstalledNotificationEnabled not implemented in subclass");
+    }
+
+    /**
+     * Attempt to relinquish the update ownership of the given package. Only the current
+     * update owner of the given package can use this API or a SecurityException will be
+     * thrown.
+     *
+     * @param targetPackage The installed package whose update owner will be changed.
+     */
+    public void relinquishUpdateOwnership(@NonNull String targetPackage) {
+        throw new UnsupportedOperationException(
+                "relinquishUpdateOwnership not implemented in subclass");
     }
 }

@@ -17315,7 +17315,7 @@ public class TelephonyManager {
      * During the setup time, subsequent attempts will return
      * {@link #PURCHASE_PREMIUM_CAPABILITY_RESULT_PENDING_NETWORK_SETUP}.
      * After setup is complete, subsequent attempts will return
-     * {@link #PURCHASE_PREMIUM_CAPABILITY_RESULT_ALREADY_PURCHASED} until the booster expires.
+     * {@link #PURCHASE_PREMIUM_CAPABILITY_RESULT_ALREADY_PURCHASED} until the boost expires.
      * The expiry time is determined by the type or duration of boost purchased from the carrier,
      * provided at {@link CarrierConfigManager#KEY_PREMIUM_CAPABILITY_PURCHASE_URL_STRING}.
      */
@@ -17326,13 +17326,13 @@ public class TelephonyManager {
      * If purchasing premium capabilities is throttled, it will be for the amount of time
      * specified by {@link CarrierConfigManager
      * #KEY_PREMIUM_CAPABILITY_PURCHASE_CONDITION_BACKOFF_HYSTERESIS_TIME_MILLIS_LONG}.
-     * If displaying the network boost notification is throttled, it will be for the amount of time
-     * specified by {@link CarrierConfigManager
+     * If displaying the performance boost notification is throttled, it will be for the amount of
+     * time specified by {@link CarrierConfigManager
      * #KEY_PREMIUM_CAPABILITY_NOTIFICATION_BACKOFF_HYSTERESIS_TIME_MILLIS_LONG}.
-     * If a foreground application requests premium capabilities, the network boost notification
+     * If a foreground application requests premium capabilities, the performance boost notification
      * will be displayed to the user regardless of the throttled status.
-     * We will show the network boost notification to the user up to the daily and monthly maximum
-     * number of times specified by
+     * We will show the performance boost notification to the user up to the daily and monthly
+     * maximum number of times specified by
      * {@link CarrierConfigManager#KEY_PREMIUM_CAPABILITY_MAXIMUM_DAILY_NOTIFICATION_COUNT_INT} and
      * {@link CarrierConfigManager#KEY_PREMIUM_CAPABILITY_MAXIMUM_MONTHLY_NOTIFICATION_COUNT_INT}.
      * Subsequent attempts will return the same error until the request is no longer throttled
@@ -17342,7 +17342,7 @@ public class TelephonyManager {
 
     /**
      * Purchase premium capability failed because it is already purchased and available.
-     * Subsequent attempts will return the same error until the booster expires.
+     * Subsequent attempts will return the same error until the performance boost expires.
      */
     public static final int PURCHASE_PREMIUM_CAPABILITY_RESULT_ALREADY_PURCHASED = 3;
 
@@ -17391,10 +17391,10 @@ public class TelephonyManager {
 
     /**
      * Purchase premium capability failed because we did not receive a response from the user
-     * for the booster notification within the time specified by
+     * for the performance boost notification within the time specified by
      * {@link CarrierConfigManager#KEY_PREMIUM_CAPABILITY_NOTIFICATION_DISPLAY_TIMEOUT_MILLIS_LONG}.
-     * The booster notification will be automatically dismissed and subsequent attempts will be
-     * throttled for the amount of time specified by
+     * The performance boost notification will be automatically dismissed and subsequent attempts
+     * will be throttled for the amount of time specified by
      * {@link CarrierConfigManager
      * #KEY_PREMIUM_CAPABILITY_NOTIFICATION_BACKOFF_HYSTERESIS_TIME_MILLIS_LONG}
      * and return {@link #PURCHASE_PREMIUM_CAPABILITY_RESULT_THROTTLED}.
@@ -17886,12 +17886,12 @@ public class TelephonyManager {
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
-    @IntDef(prefix = {"CELLBROADCAST_RESULT_"}, value = {
-            CELLBROADCAST_RESULT_UNKNOWN,
-            CELLBROADCAST_RESULT_SUCCESS,
-            CELLBROADCAST_RESULT_UNSUPPORTED,
-            CELLBROADCAST_RESULT_FAIL_CONFIG,
-            CELLBROADCAST_RESULT_FAIL_ACTIVATION})
+    @IntDef(prefix = {"CELL_BROADCAST_RESULT_"}, value = {
+            CELL_BROADCAST_RESULT_UNKNOWN,
+            CELL_BROADCAST_RESULT_SUCCESS,
+            CELL_BROADCAST_RESULT_UNSUPPORTED,
+            CELL_BROADCAST_RESULT_FAIL_CONFIG,
+            CELL_BROADCAST_RESULT_FAIL_ACTIVATION})
     public @interface CellBroadcastResult {}
 
     /**
@@ -17899,35 +17899,35 @@ public class TelephonyManager {
      * @hide
      */
     @SystemApi
-    public static final int CELLBROADCAST_RESULT_UNKNOWN = -1;
+    public static final int CELL_BROADCAST_RESULT_UNKNOWN = -1;
 
     /**
      * The cell broadcast request is successful.
      * @hide
      */
     @SystemApi
-    public static final int CELLBROADCAST_RESULT_SUCCESS = 0;
+    public static final int CELL_BROADCAST_RESULT_SUCCESS = 0;
 
     /**
      * The cell broadcast request is not supported.
      * @hide
      */
     @SystemApi
-    public static final int CELLBROADCAST_RESULT_UNSUPPORTED = 1;
+    public static final int CELL_BROADCAST_RESULT_UNSUPPORTED = 1;
 
     /**
      * The cell broadcast request is failed due to the error to set config
      * @hide
      */
     @SystemApi
-    public static final int CELLBROADCAST_RESULT_FAIL_CONFIG = 2;
+    public static final int CELL_BROADCAST_RESULT_FAIL_CONFIG = 2;
 
     /**
      * The cell broadcast request is failed due to the error to set activation
      * @hide
      */
     @SystemApi
-    public static final int CELLBROADCAST_RESULT_FAIL_ACTIVATION = 3;
+    public static final int CELL_BROADCAST_RESULT_FAIL_ACTIVATION = 3;
 
     /**
      * Set reception of cell broadcast messages with the list of the given ranges

@@ -75,6 +75,7 @@ import com.android.server.pm.UserManagerInternal;
 import com.android.server.pm.UserManagerService;
 import com.android.server.pm.permission.PermissionManagerServiceInternal.HotwordDetectionServiceProvider;
 import com.android.server.pm.pkg.AndroidPackage;
+import com.android.server.pm.pkg.PackageState;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -118,7 +119,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
     private final AppOpsManager mAppOpsManager;
 
     private final Context mContext;
-    private final PermissionManagerServiceImpl mPermissionManagerServiceImpl;
+    private final PermissionManagerServiceInterface mPermissionManagerServiceImpl;
 
     @NonNull
     private final AttributionSourceRegistry mAttributionSourceRegistry;
@@ -151,6 +152,8 @@ public class PermissionManagerService extends IPermissionManager.Stub {
 
         mPermissionManagerServiceImpl = new PermissionManagerServiceImpl(context,
                 availableFeatures);
+        //mPermissionManagerServiceImpl = new PermissionManagerServiceLoggingDecorator(
+        //        LocalServices.getService(PermissionManagerServiceInterface.class));
     }
 
     /**
@@ -681,9 +684,9 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         }
 
         @Override
-        public void onPackageAdded(@NonNull AndroidPackage pkg, boolean isInstantApp,
+        public void onPackageAdded(@NonNull PackageState packageState, boolean isInstantApp,
                 @Nullable AndroidPackage oldPkg) {
-            mPermissionManagerServiceImpl.onPackageAdded(pkg, isInstantApp, oldPkg);
+            mPermissionManagerServiceImpl.onPackageAdded(packageState, isInstantApp, oldPkg);
         }
 
         @Override
@@ -714,9 +717,9 @@ public class PermissionManagerService extends IPermissionManager.Stub {
 
         @Override
         public void onPackageUninstalled(@NonNull String packageName, int appId,
-                @Nullable AndroidPackage pkg, @NonNull List<AndroidPackage> sharedUserPkgs,
-                @UserIdInt int userId) {
-            mPermissionManagerServiceImpl.onPackageUninstalled(packageName, appId,
+                @NonNull PackageState packageState, @Nullable AndroidPackage pkg,
+                @NonNull List<AndroidPackage> sharedUserPkgs, @UserIdInt int userId) {
+            mPermissionManagerServiceImpl.onPackageUninstalled(packageName, appId, packageState,
                     pkg, sharedUserPkgs, userId);
         }
 
@@ -754,6 +757,11 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         @Override
         public void onUserRemoved(@UserIdInt int userId) {
             mPermissionManagerServiceImpl.onUserRemoved(userId);
+        }
+        @NonNull
+        @Override
+        public Set<String> getInstalledPermissions(@NonNull String packageName) {
+            return mPermissionManagerServiceImpl.getInstalledPermissions(packageName);
         }
         @NonNull
         @Override

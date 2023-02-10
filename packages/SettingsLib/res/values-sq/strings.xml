@@ -467,8 +467,8 @@
     <string name="power_charging" msgid="6727132649743436802">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="STATE">%2$s</xliff:g>"</string>
     <string name="power_remaining_charging_duration_only" msgid="8085099012811384899">"<xliff:g id="TIME">%1$s</xliff:g> derisa të mbushet"</string>
     <string name="power_charging_duration" msgid="6127154952524919719">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="TIME">%2$s</xliff:g> derisa të mbushet"</string>
-    <string name="power_charging_limited" msgid="6732738149313642521">"<xliff:g id="LEVEL">%1$s</xliff:g> - Karikimi në pauzë"</string>
-    <string name="power_charging_future_paused" msgid="6829683663982987290">"<xliff:g id="LEVEL">%1$s</xliff:g> - Po karikohet deri në <xliff:g id="DOCK_DEFENDER_THRESHOLD">%2$s</xliff:g>"</string>
+    <string name="power_charging_limited" msgid="8202147604844938236">"<xliff:g id="LEVEL">%1$s</xliff:g> - Karikimi u optimizua"</string>
+    <string name="power_charging_future_paused" msgid="4730177778538118032">"<xliff:g id="LEVEL">%1$s</xliff:g> - Karikimi u optimizua"</string>
     <string name="battery_info_status_unknown" msgid="268625384868401114">"I panjohur"</string>
     <string name="battery_info_status_charging" msgid="4279958015430387405">"Po karikohet"</string>
     <string name="battery_info_status_charging_fast" msgid="8027559755902954885">"Karikim i shpejtë"</string>
@@ -564,6 +564,8 @@
     <string name="user_add_user_title" msgid="5457079143694924885">"Të shtohet përdorues i ri?"</string>
     <string name="user_add_user_message_long" msgid="1527434966294733380">"Mund ta ndash këtë pajisje me persona të tjerë duke krijuar përdorues shtesë. Çdo përdorues ka hapësirën e vet, të cilën mund ta personalizojë me aplikacione, me imazhin e sfondit etj. Përdoruesit mund të rregullojnë po ashtu cilësimet e pajisjes, si Wi‑Fi, të cilat ndikojnë te të gjithë.\n\nKur shton një përdorues të ri, ai person duhet të konfigurojë hapësirën e vet.\n\nÇdo përdorues mund t\'i përditësojë aplikacionet për të gjithë përdoruesit e tjerë. Cilësimet e qasshmërisë dhe shërbimet mund të mos transferohen te përdoruesi i ri."</string>
     <string name="user_add_user_message_short" msgid="3295959985795716166">"Kur shton një përdorues të ri, ai person duhet të konfigurojë hapësirën e vet.\n\nÇdo përdorues mund t\'i përditësojë aplikacionet për të gjithë përdoruesit e tjerë."</string>
+    <string name="user_grant_admin_title" msgid="5565796912475193314">"T\'i jepen këtij përdoruesi privilegjet e administratorit?"</string>
+    <string name="user_grant_admin_message" msgid="7925257971286380976">"Si administrator, ai person do të mund të menaxhojë përdoruesit e tjerë, të modifikojë cilësimet e pajisjes dhe ta rivendosë pajisjen në gjendje fabrike."</string>
     <string name="user_setup_dialog_title" msgid="8037342066381939995">"Të konfig. përdoruesi tani?"</string>
     <string name="user_setup_dialog_message" msgid="269931619868102841">"Sigurohu që personi të jetë i gatshëm të marrë pajisjen dhe të caktojë hapësirën e vet"</string>
     <string name="user_setup_profile_dialog_message" msgid="4788197052296962620">"Të konfigurohet tani profili?"</string>
@@ -595,6 +597,8 @@
     <string name="guest_reset_and_restart_dialog_message" msgid="2764425635305200790">"Kjo do të fillojë një sesion të ri për vizitorë dhe do të fshijë të gjitha aplikacionet dhe të dhënat nga sesioni aktual"</string>
     <string name="guest_exit_dialog_title" msgid="1846494656849381804">"Të hiqet modaliteti \"vizitor\"?"</string>
     <string name="guest_exit_dialog_message" msgid="1743218864242719783">"Kjo do të fshijë aplikacionet dhe të dhënat nga sesioni aktual për vizitorë"</string>
+    <string name="grant_admin" msgid="4273077214151417783">"Jepi këtij përdoruesi privilegjet e administratorit"</string>
+    <string name="not_grant_admin" msgid="6985027675930546850">"Mos i jep përdoruesit privilegjet e administratorit"</string>
     <string name="guest_exit_dialog_button" msgid="1736401897067442044">"Dil"</string>
     <string name="guest_exit_dialog_title_non_ephemeral" msgid="7675327443743162986">"Të ruhet aktiviteti i vizitorit?"</string>
     <string name="guest_exit_dialog_message_non_ephemeral" msgid="223385323235719442">"Ruaj aktivitetin nga sesioni aktual ose fshi të gjitha aplikacionet e të dhënat"</string>

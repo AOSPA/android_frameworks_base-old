@@ -170,6 +170,7 @@
 
     <!-- Screen Recording -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.CAPTURE_AUDIO_OUTPUT"/>
 
@@ -178,6 +179,9 @@
 
     <!-- Doze mode temp whitelisting for notification dispatching. -->
     <uses-permission android:name="android.permission.CHANGE_DEVICE_IDLE_TEMP_WHITELIST" />
+
+    <!-- Tag user-initiated PendingIntent invocations as "interactive" when appropriate -->
+    <uses-permission android:name="android.permission.COMPONENT_OPTION_INTERACTIVE" />
 
     <!-- Listen for keyboard attachment / detachment -->
     <uses-permission android:name="android.permission.TABLET_MODE" />
@@ -193,7 +197,7 @@
     <permission android:name="com.android.systemui.permission.FLAGS"
                 android:protectionLevel="signature" />
 
-    <permission android:name="android.permission.ACCESS_KEYGUARD_QUICK_AFFORDANCES"
+    <permission android:name="android.permission.CUSTOMIZE_SYSTEM_UI"
         android:protectionLevel="signature|privileged" />
 
     <!-- Adding Quick Settings tiles -->
@@ -292,7 +296,7 @@
 
     <queries>
         <intent>
-            <action android:name="android.intent.action.NOTES" />
+            <action android:name="android.intent.action.CREATE_NOTE" />
         </intent>
     </queries>
 
@@ -414,10 +418,10 @@
 
         <service android:name=".screenshot.ScreenshotCrossProfileService"
                  android:permission="com.android.systemui.permission.SELF"
-                 android:process=":screenshot_cross_profile"
                  android:exported="false" />
 
-        <service android:name=".screenrecord.RecordingService" />
+        <service android:name=".screenrecord.RecordingService"
+                 android:foregroundServiceType="systemExempted"/>
 
         <receiver android:name=".SysuiRestartReceiver"
             android:exported="false">
@@ -1024,10 +1028,10 @@
         </activity>
 
         <provider
-            android:authorities="com.android.systemui.keyguard.quickaffordance"
-            android:name="com.android.systemui.keyguard.KeyguardQuickAffordanceProvider"
+            android:authorities="com.android.systemui.customization"
+            android:name="com.android.systemui.keyguard.CustomizationProvider"
             android:exported="true"
-            android:permission="android.permission.ACCESS_KEYGUARD_QUICK_AFFORDANCES"
+            android:permission="android.permission.CUSTOMIZE_SYSTEM_UI"
             />
     </application>
 </manifest>

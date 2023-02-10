@@ -467,8 +467,8 @@
     <string name="power_charging" msgid="6727132649743436802">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="STATE">%2$s</xliff:g>"</string>
     <string name="power_remaining_charging_duration_only" msgid="8085099012811384899">"ຍັງເຫຼືອອີກ <xliff:g id="TIME">%1$s</xliff:g> ຈຶ່ງຈະສາກເຕັມ"</string>
     <string name="power_charging_duration" msgid="6127154952524919719">"ຍັງເຫຼືອອີກ <xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="TIME">%2$s</xliff:g> ຈຶ່ງຈະສາກເຕັມ"</string>
-    <string name="power_charging_limited" msgid="6732738149313642521">"<xliff:g id="LEVEL">%1$s</xliff:g> - ຢຸດການສາກໄວ້ຊົ່ວຄາວແລ້ວ"</string>
-    <string name="power_charging_future_paused" msgid="6829683663982987290">"<xliff:g id="LEVEL">%1$s</xliff:g> - ກຳລັງສາກຈົນເຖິງ <xliff:g id="DOCK_DEFENDER_THRESHOLD">%2$s</xliff:g>"</string>
+    <string name="power_charging_limited" msgid="8202147604844938236">"<xliff:g id="LEVEL">%1$s</xliff:g> - ການສາກຖືກປັບໃຫ້ເໝາະສົມແລ້ວ"</string>
+    <string name="power_charging_future_paused" msgid="4730177778538118032">"<xliff:g id="LEVEL">%1$s</xliff:g> - ການສາກຖືກປັບໃຫ້ເໝາະສົມແລ້ວ"</string>
     <string name="battery_info_status_unknown" msgid="268625384868401114">"ບໍ່ຮູ້ຈັກ"</string>
     <string name="battery_info_status_charging" msgid="4279958015430387405">"ກຳລັງສາກໄຟ"</string>
     <string name="battery_info_status_charging_fast" msgid="8027559755902954885">"ກຳລັງສາກໄຟດ່ວນ"</string>
@@ -564,6 +564,8 @@
     <string name="user_add_user_title" msgid="5457079143694924885">"ເພີ່ມຜູ້ໃຊ້ໃໝ່ບໍ?"</string>
     <string name="user_add_user_message_long" msgid="1527434966294733380">"ທ່ານສາມາດໃຊ້ອຸປະກອນນີ້ຮ່ວມກັບຄົນອື່ນໄດ້ໂດຍການສ້າງຜູ້ໃຊ້ເພີ່ມເຕີມ. ຜູ້ໃຊ້ແຕ່ລະຄົນຈະມີພື້ນທີ່ຂອງຕົວເອງ, ເຊິ່ງເຂົາເຈົ້າສາມາດປັບແຕ່ງແອັບ, ຮູບພື້ນຫຼັງ ແລະ ອື່ນໆໄດ້. ຜູ້ໃຊ້ຕ່າງໆ ສາມາດປັບແຕ່ງການຕັ້ງຄ່າອຸປະກອນໄດ້ ເຊັ່ນ: Wi‑Fi ທີ່ມີຜົນກະທົບທຸກຄົນ.\n\nເມື່ອທ່ານເພີ່ມຜູ້ໃຊ້ໃໝ່, ບຸກຄົນນັ້ນຈະຕ້ອງຕັ້ງຄ່າພື້ນທີ່ຂອງເຂົາເຈົ້າກ່ອນ.\n\nຜູ້ໃຊ້ໃດກໍຕາມສາມາດອັບເດດແອັບສຳລັບຜູ້ໃຊ້ຄົນອື່ນທັງໝົດໄດ້. ການຕັ້ງຄ່າການຊ່ວຍເຂົ້າເຖິງອາດບໍ່ຖືກໂອນຍ້າຍໄປໃຫ້ຜູ້ໃຊ້ໃໝ່."</string>
     <string name="user_add_user_message_short" msgid="3295959985795716166">"ເມື່ອ​ທ່ານ​ເພີ່ມ​ຜູ້​ໃຊ້​ໃໝ່, ຜູ້​ໃຊ້​ນັ້ນ​ຈະ​ຕ້ອງ​ຕັ້ງ​ຄ່າ​ພື້ນ​ທີ່​ບ່ອນ​ຈັດ​ເກັບ​ຂໍ້​ມູນ​ຂອງ​ລາວ.\n\nຜູ້​ໃຊ້​ທຸກ​ຄົນ​ສາ​ມາດ​ອັບ​ເດດ​ແອັບສຳ​ລັບ​ຜູ້​ໃຊ້​ຄົນ​ອື່ນ​ທັງ​ໝົດ​ໄດ້."</string>
+    <string name="user_grant_admin_title" msgid="5565796912475193314">"ໃຫ້ສິດທິຜູ້ເບິ່ງແຍງລະບົບແກ່ຜູ້ໃຊ້ນີ້ບໍ?"</string>
+    <string name="user_grant_admin_message" msgid="7925257971286380976">"ຜູ້ເບິ່ງແຍງລະບົບຈະສາມາດຈັດການຜູ້ໃຊ້ອື່ນໆ, ແກ້ໄຂການຕັ້ງຄ່າອຸປະກອນ ແລະ ຣີເຊັດອຸປະກອນເປັນຄ່າຈາກໂຮງງານໄດ້."</string>
     <string name="user_setup_dialog_title" msgid="8037342066381939995">"ຕັ້ງຄ່າຜູ້ໃຊ້ຕອນນີ້ບໍ?"</string>
     <string name="user_setup_dialog_message" msgid="269931619868102841">"ກວດ​ສອບ​ໃຫ້​ແນ່​ໃຈ​ວ່າ​ບຸກ​ຄົນ​ດັ່ງ​ກ່າວ​ສາ​ມາດ​ຮັບ​ອຸ​ປະ​ກອນ​ ແລະ ​ຕັ້ງ​ຄ່າ​ພື້ນ​ທີ່​ຂອງ​ພວກ​ເຂົາ​ໄດ້"</string>
     <string name="user_setup_profile_dialog_message" msgid="4788197052296962620">"ຕັ້ງຄ່າໂປຣໄຟລ໌ດຽວນີ້?"</string>
@@ -595,6 +597,8 @@
     <string name="guest_reset_and_restart_dialog_message" msgid="2764425635305200790">"ນີ້ຈະເລີ່ມໄລຍະເວລາຂອງແຂກໃໝ່ ແລະ ລຶບແອັບ ແລະ ຂໍ້ມູນທັງໝົດອອກຈາກເຊດຊັນປັດຈຸບັນ"</string>
     <string name="guest_exit_dialog_title" msgid="1846494656849381804">"ອອກຈາກໂໝດແຂກບໍ?"</string>
     <string name="guest_exit_dialog_message" msgid="1743218864242719783">"ນີ້ຈະລຶບແອັບ ແລະ ຂໍ້ມູນອອກຈາກເຊດຊັນແຂກປັດຈຸບັນ"</string>
+    <string name="grant_admin" msgid="4273077214151417783">"ໃຫ້ສິດທິຜູ້ເບິ່ງແຍງລະບົບແກ່ຜູ້ໃຊ້ນີ້"</string>
+    <string name="not_grant_admin" msgid="6985027675930546850">"ບໍ່ມອບສິດທິຜູ້ເບິ່ງແຍງລະບົບໃຫ້ແກ່ຜູ້ໃຊ້"</string>
     <string name="guest_exit_dialog_button" msgid="1736401897067442044">"ອອກ"</string>
     <string name="guest_exit_dialog_title_non_ephemeral" msgid="7675327443743162986">"ບັນທຶກການເຄື່ອນໄຫວແຂກບໍ?"</string>
     <string name="guest_exit_dialog_message_non_ephemeral" msgid="223385323235719442">"ທ່ານສາມາດບັນທຶກການເຄື່ອນໄຫວຈາກເຊດຊັນປັດຈຸບັນ ຫຼື ລຶບແອັບ ແລະ ຂໍ້ມູນທັງໝົດໄດ້"</string>

@@ -25,6 +25,7 @@ import static com.android.server.job.JobSchedulerService.sSystemClock;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.job.JobInfo;
+import android.app.job.JobWorkItem;
 import android.content.ComponentName;
 import android.content.Context;
 import android.net.NetworkRequest;
@@ -66,6 +67,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.StringJoiner;
 import java.util.function.Consumer;
@@ -309,6 +311,15 @@ public final class JobStore {
         mJobSet.removeJobsOfUnlistedUsers(keepUserIds);
     }
 
+    /** Note a change in the specified JobStatus that necessitates writing job state to disk. */
+    void touchJob(@NonNull JobStatus jobStatus) {
+        if (!jobStatus.isPersisted()) {
+            return;
+        }
+        mPendingJobWriteUids.put(jobStatus.getUid(), true);
+        maybeWriteStatusToDiskAsync();
+    }
+
     @VisibleForTesting
     public void clear() {
         mJobSet.clear();
@@ -386,8 +397,8 @@ public final class JobStore {
      * @return the JobStatus that matches the provided uId and jobId, or null if none found.
      */
     @Nullable
-    public JobStatus getJobByUidAndJobId(int uid, int jobId) {
-        return mJobSet.get(uid, jobId);
+    public JobStatus getJobByUidAndJobId(int uid, @Nullable String namespace, int jobId) {
+        return mJobSet.get(uid, namespace, jobId);
     }
 
     /**
@@ -429,6 +440,7 @@ public final class JobStore {
     private static final String XML_TAG_PERIODIC = "periodic";
     private static final String XML_TAG_ONEOFF = "one-off";
     private static final String XML_TAG_EXTRAS = "extras";
+    private static final String XML_TAG_JOB_WORK_ITEM = "job-work-item";
 
     private void migrateJobFilesAsync() {
         synchronized (mLock) {
@@ -723,6 +735,7 @@ public final class JobStore {
                     writeConstraintsToXml(out, jobStatus);
                     writeExecutionCriteriaToXml(out, jobStatus);
                     writeBundleToXml(jobStatus.getJob().getExtras(), out);
+                    writeJobWorkItemsToXml(out, jobStatus);
                     out.endTag(null, XML_TAG_JOB);
 
                     numJobs++;
@@ -763,6 +776,9 @@ public final class JobStore {
             out.attribute(null, "class", jobStatus.getServiceComponent().getClassName());
             if (jobStatus.getSourcePackageName() != null) {
                 out.attribute(null, "sourcePackageName", jobStatus.getSourcePackageName());
+            }
+            if (jobStatus.getNamespace() != null) {
+                out.attribute(null, "namespace", jobStatus.getNamespace());
             }
             if (jobStatus.getSourceTag() != null) {
                 out.attribute(null, "sourceTag", jobStatus.getSourceTag());
@@ -816,8 +832,8 @@ public final class JobStore {
         private void writeConstraintsToXml(TypedXmlSerializer out, JobStatus jobStatus)
                 throws IOException {
             out.startTag(null, XML_TAG_PARAMS_CONSTRAINTS);
+            final JobInfo job = jobStatus.getJob();
             if (jobStatus.hasConnectivityConstraint()) {
-                final JobInfo job = jobStatus.getJob();
                 final NetworkRequest network = jobStatus.getJob().getRequiredNetwork();
                 out.attribute(null, "net-capabilities-csv", intArrayToString(
                         network.getCapabilities()));
@@ -838,16 +854,16 @@ public final class JobStore {
                             job.getMinimumNetworkChunkBytes());
                 }
             }
-            if (jobStatus.hasIdleConstraint()) {
+            if (job.isRequireDeviceIdle()) {
                 out.attribute(null, "idle", Boolean.toString(true));
             }
-            if (jobStatus.hasChargingConstraint()) {
+            if (job.isRequireCharging()) {
                 out.attribute(null, "charging", Boolean.toString(true));
             }
-            if (jobStatus.hasBatteryNotLowConstraint()) {
+            if (job.isRequireBatteryNotLow()) {
                 out.attribute(null, "battery-not-low", Boolean.toString(true));
             }
-            if (jobStatus.hasStorageNotLowConstraint()) {
+            if (job.isRequireStorageNotLow()) {
                 out.attribute(null, "storage-not-low", Boolean.toString(true));
             }
             out.endTag(null, XML_TAG_PARAMS_CONSTRAINTS);
@@ -900,6 +916,53 @@ public final class JobStore {
                 out.endTag(null, XML_TAG_PERIODIC);
             } else {
                 out.endTag(null, XML_TAG_ONEOFF);
+            }
+        }
+
+        private void writeJobWorkItemsToXml(@NonNull TypedXmlSerializer out,
+                @NonNull JobStatus jobStatus) throws IOException, XmlPullParserException {
+            // Write executing first since they're technically at the front of the queue.
+            writeJobWorkItemListToXml(out, jobStatus.executingWork);
+            writeJobWorkItemListToXml(out, jobStatus.pendingWork);
+        }
+
+        private void writeJobWorkItemListToXml(@NonNull TypedXmlSerializer out,
+                @Nullable List<JobWorkItem> jobWorkItems)
+                throws IOException, XmlPullParserException {
+            if (jobWorkItems == null) {
+                return;
+            }
+            // Write the items in list order to maintain the enqueue order.
+            final int size = jobWorkItems.size();
+            for (int i = 0; i < size; ++i) {
+                final JobWorkItem item = jobWorkItems.get(i);
+                if (item.getGrants() != null) {
+                    // We currently don't allow persisting jobs when grants are involved.
+                    // TODO(256618122): allow persisting JobWorkItems with grant flags
+                    continue;
+                }
+                if (item.getIntent() != null) {
+                    // Intent.saveToXml() doesn't persist everything, so we shouldn't attempt to
+                    // persist these JobWorkItems at all.
+                    Slog.wtf(TAG, "Encountered JobWorkItem with Intent in persisting list");
+                    continue;
+                }
+                out.startTag(null, XML_TAG_JOB_WORK_ITEM);
+                out.attributeInt(null, "delivery-count", item.getDeliveryCount());
+                if (item.getEstimatedNetworkDownloadBytes() != JobInfo.NETWORK_BYTES_UNKNOWN) {
+                    out.attributeLong(null, "estimated-download-bytes",
+                            item.getEstimatedNetworkDownloadBytes());
+                }
+                if (item.getEstimatedNetworkUploadBytes() != JobInfo.NETWORK_BYTES_UNKNOWN) {
+                    out.attributeLong(null, "estimated-upload-bytes",
+                            item.getEstimatedNetworkUploadBytes());
+                }
+                if (item.getMinimumNetworkChunkBytes() != JobInfo.NETWORK_BYTES_UNKNOWN) {
+                    out.attributeLong(null, "minimum-network-chunk-bytes",
+                            item.getMinimumNetworkChunkBytes());
+                }
+                writeBundleToXml(item.getExtras(), out);
+                out.endTag(null, XML_TAG_JOB_WORK_ITEM);
             }
         }
     };
@@ -970,10 +1033,10 @@ public final class JobStore {
             }
             boolean needFileMigration = false;
             long nowElapsed = sElapsedRealtimeClock.millis();
-            for (File file : files) {
-                final AtomicFile aFile = createJobFile(file);
-                try (FileInputStream fis = aFile.openRead()) {
-                    synchronized (mLock) {
+            synchronized (mLock) {
+                for (File file : files) {
+                    final AtomicFile aFile = createJobFile(file);
+                    try (FileInputStream fis = aFile.openRead()) {
                         jobs = readJobMapImpl(fis, rtcGood, nowElapsed);
                         if (jobs != null) {
                             for (int i = 0; i < jobs.size(); i++) {
@@ -991,33 +1054,35 @@ public final class JobStore {
                                 }
                             }
                         }
+                    } catch (FileNotFoundException e) {
+                        // mJobFileDirectory.listFiles() gave us this file...why can't we find it???
+                        Slog.e(TAG, "Could not find jobs file: " + file.getName());
+                    } catch (XmlPullParserException | IOException e) {
+                        Slog.wtf(TAG, "Error in " + file.getName(), e);
+                    } catch (Exception e) {
+                        // Crashing at this point would result in a boot loop, so live with a
+                        // generic Exception for system stability's sake.
+                        Slog.wtf(TAG, "Unexpected exception", e);
                     }
-                } catch (FileNotFoundException e) {
-                    // mJobFileDirectory.listFiles() gave us this file...why can't we find it???
-                    Slog.e(TAG, "Could not find jobs file: " + file.getName());
-                } catch (XmlPullParserException | IOException e) {
-                    Slog.wtf(TAG, "Error in " + file.getName(), e);
-                } catch (Exception e) {
-                    // Crashing at this point would result in a boot loop, so live with a general
-                    // Exception for system stability's sake.
-                    Slog.wtf(TAG, "Unexpected exception", e);
-                }
-                if (mUseSplitFiles) {
-                    if (!file.getName().startsWith(JOB_FILE_SPLIT_PREFIX)) {
-                        // We're supposed to be using the split file architecture, but we still have
-                        // the old job file around. Fully migrate and remove the old file.
+                    if (mUseSplitFiles) {
+                        if (!file.getName().startsWith(JOB_FILE_SPLIT_PREFIX)) {
+                            // We're supposed to be using the split file architecture,
+                            // but we still have
+                            // the old job file around. Fully migrate and remove the old file.
+                            needFileMigration = true;
+                        }
+                    } else if (file.getName().startsWith(JOB_FILE_SPLIT_PREFIX)) {
+                        // We're supposed to be using the legacy single file architecture,
+                        // but we still have some job split files around. Fully migrate
+                        // and remove the split files.
                         needFileMigration = true;
                     }
-                } else if (file.getName().startsWith(JOB_FILE_SPLIT_PREFIX)) {
-                    // We're supposed to be using the legacy single file architecture, but we still
-                    // have some job split files around. Fully migrate and remove the split files.
-                    needFileMigration = true;
                 }
-            }
-            if (mPersistInfo.countAllJobsLoaded < 0) { // Only set them once.
-                mPersistInfo.countAllJobsLoaded = numJobs;
-                mPersistInfo.countSystemServerJobsLoaded = numSystemJobs;
-                mPersistInfo.countSystemSyncManagerJobsLoaded = numSyncJobs;
+                if (mPersistInfo.countAllJobsLoaded < 0) { // Only set them once.
+                    mPersistInfo.countAllJobsLoaded = numJobs;
+                    mPersistInfo.countSystemServerJobsLoaded = numSystemJobs;
+                    mPersistInfo.countSystemSyncManagerJobsLoaded = numSyncJobs;
+                }
             }
             Slog.i(TAG, "Read " + numJobs + " jobs");
             if (needFileMigration) {
@@ -1135,6 +1200,7 @@ public final class JobStore {
             }
 
             String sourcePackageName = parser.getAttributeValue(null, "sourcePackageName");
+            final String namespace = parser.getAttributeValue(null, "namespace");
             final String sourceTag = parser.getAttributeValue(null, "sourceTag");
 
             int eventType;
@@ -1257,7 +1323,13 @@ public final class JobStore {
                 Slog.e(TAG, "Persisted extras contained invalid data", e);
                 return null;
             }
-            parser.nextTag(); // Consume </extras>
+            eventType = parser.nextTag(); // Consume </extras>
+
+            List<JobWorkItem> jobWorkItems = null;
+            if (eventType == XmlPullParser.START_TAG
+                    && XML_TAG_JOB_WORK_ITEM.equals(parser.getName())) {
+                jobWorkItems = readJobWorkItemsFromXml(parser);
+            }
 
             final JobInfo builtJob;
             try {
@@ -1292,10 +1364,15 @@ public final class JobStore {
                     sourceUserId, nowElapsed);
             JobStatus js = new JobStatus(
                     builtJob, uid, sourcePackageName, sourceUserId,
-                    appBucket, sourceTag,
+                    appBucket, namespace, sourceTag,
                     elapsedRuntimes.first, elapsedRuntimes.second,
                     lastSuccessfulRunTime, lastFailedRunTime,
                     (rtcIsGood) ? null : rtcRuntimes, internalFlags, /* dynamicConstraints */ 0);
+            if (jobWorkItems != null) {
+                for (int i = 0; i < jobWorkItems.size(); ++i) {
+                    js.enqueueWorkLocked(jobWorkItems.get(i));
+                }
+            }
             return js;
         }
 
@@ -1468,6 +1545,64 @@ public final class JobStore {
                     parser.getAttributeLong(null, "deadline", JobStatus.NO_LATEST_RUNTIME);
             return Pair.create(earliestRunTimeRtc, latestRunTimeRtc);
         }
+
+        @NonNull
+        private List<JobWorkItem> readJobWorkItemsFromXml(TypedXmlPullParser parser)
+                throws IOException, XmlPullParserException {
+            List<JobWorkItem> jobWorkItems = new ArrayList<>();
+
+            for (int eventType = parser.getEventType(); eventType != XmlPullParser.END_DOCUMENT;
+                    eventType = parser.next()) {
+                final String tagName = parser.getName();
+                if (!XML_TAG_JOB_WORK_ITEM.equals(tagName)) {
+                    // We're no longer operating with work items.
+                    break;
+                }
+                try {
+                    JobWorkItem jwi = readJobWorkItemFromXml(parser);
+                    if (jwi != null) {
+                        jobWorkItems.add(jwi);
+                    }
+                } catch (Exception e) {
+                    // If there's an issue with one JobWorkItem, drop only the one item and not the
+                    // whole job.
+                    Slog.e(TAG, "Problem with persisted JobWorkItem", e);
+                }
+            }
+
+            return jobWorkItems;
+        }
+
+        @Nullable
+        private JobWorkItem readJobWorkItemFromXml(TypedXmlPullParser parser)
+                throws IOException, XmlPullParserException {
+            JobWorkItem.Builder jwiBuilder = new JobWorkItem.Builder();
+
+            jwiBuilder
+                    .setDeliveryCount(parser.getAttributeInt(null, "delivery-count"))
+                    .setEstimatedNetworkBytes(
+                            parser.getAttributeLong(null,
+                                    "estimated-download-bytes", JobInfo.NETWORK_BYTES_UNKNOWN),
+                            parser.getAttributeLong(null,
+                                    "estimated-upload-bytes", JobInfo.NETWORK_BYTES_UNKNOWN))
+                    .setMinimumNetworkChunkBytes(parser.getAttributeLong(null,
+                            "minimum-network-chunk-bytes", JobInfo.NETWORK_BYTES_UNKNOWN));
+            parser.next();
+            try {
+                final PersistableBundle extras = PersistableBundle.restoreFromXml(parser);
+                jwiBuilder.setExtras(extras);
+            } catch (IllegalArgumentException e) {
+                Slog.e(TAG, "Persisted extras contained invalid data", e);
+                return null;
+            }
+
+            try {
+                return jwiBuilder.build();
+            } catch (Exception e) {
+                Slog.e(TAG, "Invalid JobWorkItem", e);
+                return null;
+            }
+        }
     }
 
     /** Set of all tracked jobs. */
@@ -1592,12 +1727,12 @@ public final class JobStore {
             return jobs != null && jobs.contains(job);
         }
 
-        public JobStatus get(int uid, int jobId) {
+        public JobStatus get(int uid, @Nullable String namespace, int jobId) {
             ArraySet<JobStatus> jobs = mJobs.get(uid);
             if (jobs != null) {
                 for (int i = jobs.size() - 1; i >= 0; i--) {
                     JobStatus job = jobs.valueAt(i);
-                    if (job.getJobId() == jobId) {
+                    if (job.getJobId() == jobId && Objects.equals(namespace, job.getNamespace())) {
                         return job;
                     }
                 }

@@ -41,6 +41,7 @@ import com.android.systemui.common.ui.binder.TextViewBinder
 import com.android.systemui.common.ui.binder.TintedIconViewBinder
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Main
+import com.android.systemui.dump.DumpManager
 import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.statusbar.VibratorHelper
 import com.android.systemui.statusbar.policy.ConfigurationController
@@ -64,47 +65,46 @@ import javax.inject.Inject
  * in the list of notifications until the user dismisses them.
  *
  * Only one chipbar may be shown at a time.
- * TODO(b/245610654): Should we just display whichever chipbar was most recently requested, or do we
- *   need to maintain a priority ordering?
  */
 @SysUISingleton
-open class ChipbarCoordinator @Inject constructor(
-        context: Context,
-        logger: ChipbarLogger,
-        windowManager: WindowManager,
-        @Main mainExecutor: DelayableExecutor,
-        accessibilityManager: AccessibilityManager,
-        configurationController: ConfigurationController,
-        powerManager: PowerManager,
-        private val falsingManager: FalsingManager,
-        private val falsingCollector: FalsingCollector,
-        private val viewUtil: ViewUtil,
-        private val vibratorHelper: VibratorHelper,
-        wakeLockBuilder: WakeLock.Builder,
-        systemClock: SystemClock,
-) : TemporaryViewDisplayController<ChipbarInfo, ChipbarLogger>(
+open class ChipbarCoordinator
+@Inject
+constructor(
+    context: Context,
+    logger: ChipbarLogger,
+    windowManager: WindowManager,
+    @Main mainExecutor: DelayableExecutor,
+    accessibilityManager: AccessibilityManager,
+    configurationController: ConfigurationController,
+    dumpManager: DumpManager,
+    powerManager: PowerManager,
+    private val falsingManager: FalsingManager,
+    private val falsingCollector: FalsingCollector,
+    private val viewUtil: ViewUtil,
+    private val vibratorHelper: VibratorHelper,
+    wakeLockBuilder: WakeLock.Builder,
+    systemClock: SystemClock,
+) :
+    TemporaryViewDisplayController<ChipbarInfo, ChipbarLogger>(
         context,
         logger,
         windowManager,
         mainExecutor,
         accessibilityManager,
         configurationController,
+        dumpManager,
         powerManager,
         R.layout.chipbar,
         wakeLockBuilder,
         systemClock,
-) {
+    ) {
 
     private lateinit var parent: ChipbarRootView
 
-    override val windowLayoutParams = commonWindowLayoutParams.apply {
-        gravity = Gravity.TOP.or(Gravity.CENTER_HORIZONTAL)
-    }
+    override val windowLayoutParams =
+        commonWindowLayoutParams.apply { gravity = Gravity.TOP.or(Gravity.CENTER_HORIZONTAL) }
 
-    override fun updateView(
-        newInfo: ChipbarInfo,
-        currentView: ViewGroup
-    ) {
+    override fun updateView(newInfo: ChipbarInfo, currentView: ViewGroup) {
         logger.logViewUpdate(
             newInfo.windowTitle,
             newInfo.text.loadText(context),
@@ -120,12 +120,13 @@ open class ChipbarCoordinator @Inject constructor(
 
         // Detect falsing touches on the chip.
         parent = currentView.requireViewById(R.id.chipbar_root_view)
-        parent.touchHandler = object : Gefingerpoken {
-            override fun onTouchEvent(ev: MotionEvent?): Boolean {
-                falsingCollector.onTouchEvent(ev)
-                return false
+        parent.touchHandler =
+            object : Gefingerpoken {
+                override fun onTouchEvent(ev: MotionEvent?): Boolean {
+                    falsingCollector.onTouchEvent(ev)
+                    return false
+                }
             }
-        }
 
         // ---- Start icon ----
         val iconView = currentView.requireViewById<CachingIconView>(R.id.start_icon)
@@ -152,10 +153,12 @@ open class ChipbarCoordinator @Inject constructor(
         if (newInfo.endItem is ChipbarEndItem.Button) {
             TextViewBinder.bind(buttonView, newInfo.endItem.text)
 
-            val onClickListener = View.OnClickListener { clickedView ->
-                if (falsingManager.isFalseTap(FalsingManager.LOW_PENALTY)) return@OnClickListener
-                newInfo.endItem.onClickListener.onClick(clickedView)
-            }
+            val onClickListener =
+                View.OnClickListener { clickedView ->
+                    if (falsingManager.isFalseTap(FalsingManager.LOW_PENALTY))
+                        return@OnClickListener
+                    newInfo.endItem.onClickListener.onClick(clickedView)
+                }
 
             buttonView.setOnClickListener(onClickListener)
             buttonView.visibility = View.VISIBLE
@@ -165,21 +168,27 @@ open class ChipbarCoordinator @Inject constructor(
 
         // ---- Overall accessibility ----
         val iconDesc = newInfo.startIcon.icon.contentDescription
-        val loadedIconDesc = if (iconDesc != null) {
-            "${iconDesc.loadContentDescription(context)} "
-        } else {
-            ""
-        }
+        val loadedIconDesc =
+            if (iconDesc != null) {
+                "${iconDesc.loadContentDescription(context)} "
+            } else {
+                ""
+            }
+        val endItemDesc =
+            if (newInfo.endItem is ChipbarEndItem.Loading) {
+                ". ${context.resources.getString(R.string.media_transfer_loading)}."
+            } else {
+                ""
+            }
 
         val chipInnerView = currentView.getInnerView()
-        chipInnerView.contentDescription = "$loadedIconDesc${newInfo.text.loadText(context)}"
+        chipInnerView.contentDescription =
+            "$loadedIconDesc${newInfo.text.loadText(context)}$endItemDesc"
         chipInnerView.accessibilityLiveRegion = ACCESSIBILITY_LIVE_REGION_ASSERTIVE
         maybeGetAccessibilityFocus(newInfo, currentView)
 
         // ---- Haptics ----
-        newInfo.vibrationEffect?.let {
-            vibratorHelper.vibrate(it)
-        }
+        newInfo.vibrationEffect?.let { vibratorHelper.vibrate(it) }
     }
 
     private fun maybeGetAccessibilityFocus(info: ChipbarInfo?, view: ViewGroup) {
@@ -208,7 +217,7 @@ open class ChipbarCoordinator @Inject constructor(
         )
     }
 
-    override fun animateViewOut(view: ViewGroup, onAnimationEnd: Runnable) {
+    override fun animateViewOut(view: ViewGroup, removalReason: String?, onAnimationEnd: Runnable) {
         val innerView = view.getInnerView()
         innerView.accessibilityLiveRegion = ACCESSIBILITY_LIVE_REGION_NONE
         ViewHierarchyAnimator.animateRemoval(
@@ -224,8 +233,6 @@ open class ChipbarCoordinator @Inject constructor(
     private fun ViewGroup.getInnerView(): ViewGroup {
         return requireViewById(R.id.chipbar_inner)
     }
-
-    override fun start() {}
 
     override fun getTouchableRegion(view: View, outRect: Rect) {
         viewUtil.setRectToViewWindowLocation(view, outRect)

@@ -20,6 +20,8 @@ import static android.app.ActivityManager.StopUserOnSwitch;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.PermissionMethod;
+import android.annotation.PermissionName;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager.ProcessCapability;
 import android.app.ActivityManager.RestrictionLevel;
@@ -31,8 +33,6 @@ import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ActivityPresentationInfo;
 import android.content.pm.ApplicationInfo;
-import android.content.pm.PermissionMethod;
-import android.content.pm.PermissionName;
 import android.content.pm.UserInfo;
 import android.net.Uri;
 import android.os.Bundle;
@@ -910,4 +910,19 @@ public abstract class ActivityManagerInternal {
      * Return all client package names of a service.
      */
     public abstract ArraySet<String> getClientPackages(String servicePackageName);
+
+    /**
+     * Retrieve an IUnsafeIntentStrictModeCallback matching the given callingUid.
+     * Returns null no match is found.
+     * @param callingPid The PID mapped with the callback.
+     * @return The callback, if it exists.
+     */
+    public abstract IUnsafeIntentStrictModeCallback getRegisteredStrictModeCallback(
+            int callingPid);
+
+    /**
+     * Unregisters an IUnsafeIntentStrictModeCallback matching the given callingUid.
+     * @param callingPid The PID mapped with the callback.
+     */
+    public abstract void unregisterStrictModeCallback(int callingPid);
 }

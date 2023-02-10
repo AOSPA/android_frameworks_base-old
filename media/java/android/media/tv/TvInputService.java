@@ -913,6 +913,27 @@ public abstract class TvInputService extends Service {
             });
         }
 
+        /**
+         * Notifies the advertisement buffer is consumed.
+         * @hide
+         */
+        public void notifyAdBufferConsumed(AdBuffer buffer) {
+            executeOrPostRunnableOnMainThread(new Runnable() {
+                @MainThread
+                @Override
+                public void run() {
+                    try {
+                        if (DEBUG) Log.d(TAG, "notifyAdBufferConsumed");
+                        if (mSessionCallback != null) {
+                            mSessionCallback.onAdBufferConsumed(buffer);
+                        }
+                    } catch (RemoteException e) {
+                        Log.w(TAG, "error in notifyAdBufferConsumed", e);
+                    }
+                }
+            });
+        }
+
         private void notifyTimeShiftStartPositionChanged(final long timeMs) {
             executeOrPostRunnableOnMainThread(new Runnable() {
                 @MainThread
@@ -1126,6 +1147,13 @@ public abstract class TvInputService extends Service {
          * @param request advertisement request received
          */
         public void onRequestAd(@NonNull AdRequest request) {
+        }
+
+        /**
+         * Called when advertisement buffer is ready.
+         * @hide
+         */
+        public void onAdBuffer(AdBuffer buffer) {
         }
 
         /**
@@ -1753,6 +1781,10 @@ public abstract class TvInputService extends Service {
             onRequestAd(request);
         }
 
+        void notifyAdBuffer(AdBuffer buffer) {
+            onAdBuffer(buffer);
+        }
+
         /**
          * Takes care of dispatching incoming input events and tells whether the event was handled.
          */
@@ -2028,6 +2060,27 @@ public abstract class TvInputService extends Service {
                     }
                 }
             });
+        }
+
+        /**
+         * Informs the application of the raw data from the TV message.
+         * @param type The {@link TvInputManager.TvMessageType} of message that was sent.
+         * @param data The data sent with the message.
+         * @hide
+         */
+        public void notifyTvMessage(@TvInputManager.TvMessageType String type, Bundle data) {
+        }
+
+        /**
+         * Called when the application enables or disables the detection of the specified message
+         * type.
+         * @param type The {@link TvInputManager.TvMessageType} of message that was sent.
+         * @param enabled {@code true} if you want to enable TV message detecting
+         *                {@code false} otherwise.
+         * @hide
+         */
+        public void onSetTvMessageEnabled(@TvInputManager.TvMessageType String type,
+                boolean enabled) {
         }
 
         /**

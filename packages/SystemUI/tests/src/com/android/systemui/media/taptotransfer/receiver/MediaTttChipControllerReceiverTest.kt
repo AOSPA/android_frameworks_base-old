@@ -34,6 +34,7 @@ import androidx.test.filters.SmallTest
 import com.android.internal.logging.testing.UiEventLoggerFake
 import com.android.systemui.R
 import com.android.systemui.SysuiTestCase
+import com.android.systemui.dump.DumpManager
 import com.android.systemui.media.taptotransfer.MediaTttFlags
 import com.android.systemui.media.taptotransfer.common.MediaTttLogger
 import com.android.systemui.statusbar.CommandQueue
@@ -73,6 +74,8 @@ class MediaTttChipControllerReceiverTest : SysuiTestCase() {
     @Mock
     private lateinit var configurationController: ConfigurationController
     @Mock
+    private lateinit var dumpManager: DumpManager
+    @Mock
     private lateinit var mediaTttFlags: MediaTttFlags
     @Mock
     private lateinit var powerManager: PowerManager
@@ -95,6 +98,7 @@ class MediaTttChipControllerReceiverTest : SysuiTestCase() {
     fun setUp() {
         MockitoAnnotations.initMocks(this)
         whenever(mediaTttFlags.isMediaTttEnabled()).thenReturn(true)
+        whenever(mediaTttFlags.isMediaTttReceiverSuccessRippleEnabled()).thenReturn(true)
 
         fakeAppIconDrawable = context.getDrawable(R.drawable.ic_cake)!!
         whenever(packageManager.getApplicationIcon(PACKAGE_NAME)).thenReturn(fakeAppIconDrawable)
@@ -122,6 +126,7 @@ class MediaTttChipControllerReceiverTest : SysuiTestCase() {
             fakeExecutor,
             accessibilityManager,
             configurationController,
+            dumpManager,
             powerManager,
             Handler.getMain(),
             mediaTttFlags,
@@ -150,6 +155,7 @@ class MediaTttChipControllerReceiverTest : SysuiTestCase() {
             FakeExecutor(FakeSystemClock()),
             accessibilityManager,
             configurationController,
+            dumpManager,
             powerManager,
             Handler.getMain(),
             mediaTttFlags,

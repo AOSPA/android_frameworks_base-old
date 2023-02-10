@@ -95,6 +95,9 @@ public class TvPipActionProviderTest extends ShellTestCase {
 
     @Before
     public void setUp() {
+        if (!isTelevision()) {
+            return;
+        }
         MockitoAnnotations.initMocks(this);
         mActionsProvider = new TvPipActionsProvider(mContext, mMockPipMediaController,
                 mMockSystemActionsHandler);
@@ -102,6 +105,7 @@ public class TvPipActionProviderTest extends ShellTestCase {
 
     @Test
     public void defaultSystemActions_regularPip() {
+        assumeTelevision();
         mActionsProvider.updateExpansionEnabled(false);
         assertTrue(checkActionsMatch(mActionsProvider.getActionsList(),
                 new int[]{ACTION_FULLSCREEN, ACTION_CLOSE, ACTION_MOVE}));
@@ -109,6 +113,7 @@ public class TvPipActionProviderTest extends ShellTestCase {
 
     @Test
     public void defaultSystemActions_expandedPip() {
+        assumeTelevision();
         mActionsProvider.updateExpansionEnabled(true);
         assertTrue(checkActionsMatch(mActionsProvider.getActionsList(),
                 new int[]{ACTION_FULLSCREEN, ACTION_CLOSE, ACTION_MOVE, ACTION_EXPAND_COLLAPSE}));
@@ -116,6 +121,7 @@ public class TvPipActionProviderTest extends ShellTestCase {
 
     @Test
     public void expandedPip_enableExpansion_enable() {
+        assumeTelevision();
         // PiP has expanded PiP disabled.
         mActionsProvider.updateExpansionEnabled(false);
 
@@ -129,6 +135,7 @@ public class TvPipActionProviderTest extends ShellTestCase {
 
     @Test
     public void expandedPip_enableExpansion_disable() {
+        assumeTelevision();
         mActionsProvider.updateExpansionEnabled(true);
 
         mActionsProvider.addListener(mMockListener);
@@ -141,6 +148,7 @@ public class TvPipActionProviderTest extends ShellTestCase {
 
     @Test
     public void expandedPip_enableExpansion_AlreadyEnabled() {
+        assumeTelevision();
         mActionsProvider.updateExpansionEnabled(true);
 
         mActionsProvider.addListener(mMockListener);
@@ -152,6 +160,7 @@ public class TvPipActionProviderTest extends ShellTestCase {
 
     @Test
     public void expandedPip_toggleExpansion() {
+        assumeTelevision();
         // PiP has expanded PiP enabled, but is in a collapsed state
         mActionsProvider.updateExpansionEnabled(true);
         mActionsProvider.onPipExpansionToggled(/* expanded= */ false);
@@ -166,6 +175,7 @@ public class TvPipActionProviderTest extends ShellTestCase {
 
     @Test
     public void customActions_added() {
+        assumeTelevision();
         mActionsProvider.updateExpansionEnabled(false);
         mActionsProvider.addListener(mMockListener);
 
@@ -179,6 +189,7 @@ public class TvPipActionProviderTest extends ShellTestCase {
 
     @Test
     public void customActions_replacedMore() {
+        assumeTelevision();
         mActionsProvider.updateExpansionEnabled(false);
         mActionsProvider.setAppActions(createRemoteActions(2), null);
 
@@ -193,6 +204,7 @@ public class TvPipActionProviderTest extends ShellTestCase {
 
     @Test
     public void customActions_replacedLess() {
+        assumeTelevision();
         mActionsProvider.updateExpansionEnabled(false);
         mActionsProvider.setAppActions(createRemoteActions(2), null);
 
@@ -206,6 +218,7 @@ public class TvPipActionProviderTest extends ShellTestCase {
 
     @Test
     public void customCloseAdded() {
+        assumeTelevision();
         mActionsProvider.updateExpansionEnabled(false);
 
         List<RemoteAction> customActions = new ArrayList<>();
@@ -221,6 +234,7 @@ public class TvPipActionProviderTest extends ShellTestCase {
 
     @Test
     public void customClose_matchesOtherCustomAction() {
+        assumeTelevision();
         mActionsProvider.updateExpansionEnabled(false);
 
         List<RemoteAction> customActions = createRemoteActions(2);
@@ -239,6 +253,7 @@ public class TvPipActionProviderTest extends ShellTestCase {
 
     @Test
     public void mediaActions_added_whileCustomActionsExist() {
+        assumeTelevision();
         mActionsProvider.updateExpansionEnabled(false);
         mActionsProvider.setAppActions(createRemoteActions(2), null);
 
@@ -253,6 +268,7 @@ public class TvPipActionProviderTest extends ShellTestCase {
 
     @Test
     public void customActions_removed_whileMediaActionsExist() {
+        assumeTelevision();
         mActionsProvider.updateExpansionEnabled(false);
         mActionsProvider.onMediaActionsChanged(createRemoteActions(2));
         mActionsProvider.setAppActions(createRemoteActions(3), null);
@@ -268,6 +284,7 @@ public class TvPipActionProviderTest extends ShellTestCase {
 
     @Test
     public void customCloseOnly_mediaActionsShowing() {
+        assumeTelevision();
         mActionsProvider.updateExpansionEnabled(false);
         mActionsProvider.onMediaActionsChanged(createRemoteActions(2));
 
@@ -282,6 +299,7 @@ public class TvPipActionProviderTest extends ShellTestCase {
 
     @Test
     public void customActions_showDisabledActions() {
+        assumeTelevision();
         mActionsProvider.updateExpansionEnabled(false);
 
         List<RemoteAction> customActions = createRemoteActions(2);
@@ -295,6 +313,7 @@ public class TvPipActionProviderTest extends ShellTestCase {
 
     @Test
     public void mediaActions_hideDisabledActions() {
+        assumeTelevision();
         mActionsProvider.updateExpansionEnabled(false);
 
         List<RemoteAction> customActions = createRemoteActions(2);

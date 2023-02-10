@@ -45,7 +45,9 @@ import android.util.SparseBooleanArray;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.ArrayUtils;
+import com.android.server.pm.Installer.LegacyDexoptDisabledException;
 import com.android.server.pm.parsing.PackageCacher;
+import com.android.server.pm.parsing.pkg.AndroidPackageUtils;
 import com.android.server.pm.parsing.pkg.PackageImpl;
 import com.android.server.pm.permission.PermissionManagerServiceInternal;
 import com.android.server.pm.pkg.AndroidPackage;
@@ -163,13 +165,16 @@ final class RemovePackageHelper {
         synchronized (mPm.mLock) {
             final AndroidPackage removedPackage = mPm.mPackages.remove(packageName);
             if (removedPackage != null) {
-                cleanPackageDataStructuresLILPw(removedPackage, chatty);
+                // TODO: Use PackageState for isSystem
+                cleanPackageDataStructuresLILPw(removedPackage,
+                        AndroidPackageUtils.isSystem(removedPackage), chatty);
             }
         }
     }
 
     @GuardedBy("mPm.mLock")
-    private void cleanPackageDataStructuresLILPw(AndroidPackage pkg, boolean chatty) {
+    private void cleanPackageDataStructuresLILPw(AndroidPackage pkg, boolean isSystemApp,
+            boolean chatty) {
         mPm.mComponentResolver.removeAllComponents(pkg, chatty);
         mPermissionManager.onPackageRemoved(pkg);
         mPm.getPackageProperty().removeAllProperties(pkg);
@@ -194,7 +199,7 @@ final class RemovePackageHelper {
         }
 
         r = null;
-        if (pkg.isSystem()) {
+        if (isSystemApp) {
             // Only system apps can hold shared libraries.
             final int libraryNamesSize = pkg.getLibraryNames().size();
             for (i = 0; i < libraryNamesSize; i++) {
@@ -230,7 +235,7 @@ final class RemovePackageHelper {
         }
         if (pkg.getStaticSharedLibraryName() != null) {
             if (mSharedLibraries.removeSharedLibrary(pkg.getStaticSharedLibraryName(),
-                    pkg.getStaticSharedLibVersion())) {
+                    pkg.getStaticSharedLibraryVersion())) {
                 if (DEBUG_REMOVE && chatty) {
                     if (r == null) {
                         r = new StringBuilder(256);
@@ -321,7 +326,7 @@ final class RemovePackageHelper {
                     List<AndroidPackage> sharedUserPkgs =
                             sus != null ? sus.getPackages() : Collections.emptyList();
                     mPermissionManager.onPackageUninstalled(packageName, deletedPs.getAppId(),
-                            deletedPkg, sharedUserPkgs, UserHandle.USER_ALL);
+                            deletedPs, deletedPkg, sharedUserPkgs, UserHandle.USER_ALL);
                     // After permissions are handled, check if the shared user can be migrated
                     if (sus != null) {
                         mPm.mSettings.checkAndConvertSharedUserSettingsLPw(sus);
@@ -420,8 +425,11 @@ final class RemovePackageHelper {
             String[] dexCodeInstructionSets = getDexCodeInstructionSets(instructionSets);
             for (String codePath : allCodePaths) {
                 for (String dexCodeInstructionSet : dexCodeInstructionSets) {
+                    // TODO(b/251903639): Call into ART Service.
                     try {
                         mPm.mInstaller.rmdex(codePath, dexCodeInstructionSet);
+                    } catch (LegacyDexoptDisabledException e) {
+                        throw new RuntimeException(e);
                     } catch (Installer.InstallerException ignored) {
                     }
                 }

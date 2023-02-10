@@ -69,6 +69,7 @@ import android.view.Surface;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -93,6 +94,7 @@ public final class CameraAdvancedExtensionSessionImpl extends CameraExtensionSes
 
     private Surface mClientRepeatingRequestSurface;
     private Surface mClientCaptureSurface;
+    private Surface mClientPostviewSurface;
     private CameraCaptureSession mCaptureSession = null;
     private ISessionProcessorImpl mSessionProcessor = null;
     private final InitializeSessionHandler mInitializeHandler;
@@ -173,13 +175,36 @@ public final class CameraAdvancedExtensionSessionImpl extends CameraExtensionSes
             throw new IllegalArgumentException("One or more unsupported output surfaces found!");
         }
 
+        Surface postviewSurface = null;
+        if (burstCaptureSurface != null && config.getPostviewOutputConfiguration() != null) {
+            CameraExtensionUtils.SurfaceInfo burstCaptureSurfaceInfo =
+                    CameraExtensionUtils.querySurface(burstCaptureSurface);
+            Size burstCaptureSurfaceSize =
+                    new Size(burstCaptureSurfaceInfo.mWidth, burstCaptureSurfaceInfo.mHeight);
+            HashMap<Integer, List<Size>> supportedPostviewSizes = new HashMap<>();
+            for (int format : CameraExtensionUtils.SUPPORTED_CAPTURE_OUTPUT_FORMATS) {
+                List<Size> supportedSizesPostview = extensionChars.getPostviewSupportedSizes(
+                        config.getExtension(), burstCaptureSurfaceSize, format);
+                if (supportedSizesPostview != null) {
+                    supportedPostviewSizes.put(format, supportedSizesPostview);
+                }
+            }
+
+            postviewSurface = CameraExtensionUtils.getPostviewSurface(
+                        config.getPostviewOutputConfiguration(), supportedPostviewSizes,
+                        burstCaptureSurfaceInfo.mFormat);
+            if (postviewSurface == null) {
+                throw new IllegalArgumentException("Unsupported output surface for postview!");
+            }
+        }
+
         IAdvancedExtenderImpl extender = CameraExtensionCharacteristics.initializeAdvancedExtension(
                 config.getExtension());
         extender.init(cameraId);
 
         CameraAdvancedExtensionSessionImpl ret = new CameraAdvancedExtensionSessionImpl(clientId,
                 extender, cameraDevice, repeatingRequestSurface, burstCaptureSurface,
-                config.getStateCallback(), config.getExecutor(), sessionId);
+                postviewSurface, config.getStateCallback(), config.getExecutor(), sessionId);
         ret.initialize();
 
         return ret;
@@ -188,6 +213,7 @@ public final class CameraAdvancedExtensionSessionImpl extends CameraExtensionSes
     private CameraAdvancedExtensionSessionImpl(long extensionClientId,
             @NonNull IAdvancedExtenderImpl extender, @NonNull CameraDevice cameraDevice,
             @Nullable Surface repeatingRequestSurface, @Nullable Surface burstCaptureSurface,
+            @Nullable Surface postviewSurface,
             @NonNull CameraExtensionSession.StateCallback callback, @NonNull Executor executor,
             int sessionId) {
         mExtensionClientId = extensionClientId;
@@ -197,6 +223,7 @@ public final class CameraAdvancedExtensionSessionImpl extends CameraExtensionSes
         mExecutor = executor;
         mClientRepeatingRequestSurface = repeatingRequestSurface;
         mClientCaptureSurface = burstCaptureSurface;
+        mClientPostviewSurface = postviewSurface;
         mHandlerThread = new HandlerThread(TAG);
         mHandlerThread.start();
         mHandler = new Handler(mHandlerThread.getLooper());
@@ -216,9 +243,11 @@ public final class CameraAdvancedExtensionSessionImpl extends CameraExtensionSes
 
         OutputSurface previewSurface = initializeParcelable(mClientRepeatingRequestSurface);
         OutputSurface captureSurface = initializeParcelable(mClientCaptureSurface);
+        OutputSurface postviewSurface = initializeParcelable(mClientPostviewSurface);
+
         mSessionProcessor = mAdvancedExtender.getSessionProcessor();
         CameraSessionConfig sessionConfig = mSessionProcessor.initSession(mCameraDevice.getId(),
-                previewSurface, captureSurface);
+                previewSurface, captureSurface, postviewSurface);
         List<CameraOutputConfig> outputConfigs = sessionConfig.outputConfigs;
         ArrayList<OutputConfiguration> outputList = new ArrayList<>();
         for (CameraOutputConfig output : outputConfigs) {
@@ -332,7 +361,7 @@ public final class CameraAdvancedExtensionSessionImpl extends CameraExtensionSes
     }
 
     @Override
-    public Pair<Long, Long> getRealtimeStillCaptureLatency() throws CameraAccessException {
+    public StillCaptureLatency getRealtimeStillCaptureLatency() throws CameraAccessException {
         synchronized (mInterfaceLock) {
             if (!mInitialized) {
                 throw new IllegalStateException("Uninitialized component");
@@ -341,7 +370,7 @@ public final class CameraAdvancedExtensionSessionImpl extends CameraExtensionSes
             try {
                 LatencyPair latency = mSessionProcessor.getRealtimeCaptureLatency();
                 if (latency != null) {
-                    return new Pair<>(latency.first, latency.second);
+                    return new StillCaptureLatency(latency.first, latency.second);
                 }
 
                 return null;
@@ -395,17 +424,15 @@ public final class CameraAdvancedExtensionSessionImpl extends CameraExtensionSes
                 throw new IllegalStateException("Uninitialized component");
             }
 
-            if (request.getTargets().size() != 1) {
-                throw new IllegalArgumentException("Single capture to both preview & still"  +
-                        " capture outputs target is not supported!");
-            }
+            validateCaptureRequestTargets(request);
 
             if ((mClientCaptureSurface != null)  && request.containsTarget(mClientCaptureSurface)) {
                 try {
+                    boolean isPostviewRequested = request.containsTarget(mClientPostviewSurface);
                     mSessionProcessor.setParameters(request);
 
                     seqId = mSessionProcessor.startCapture(new RequestCallbackHandler(request,
-                            executor, listener));
+                            executor, listener), isPostviewRequested);
                 } catch (RemoteException e) {
                     throw new CameraAccessException(CameraAccessException.CAMERA_ERROR, "Failed " +
                             " to submit capture request, extension service failed to respond!");
@@ -425,6 +452,33 @@ public final class CameraAdvancedExtensionSessionImpl extends CameraExtensionSes
         }
 
         return seqId;
+    }
+
+    private void validateCaptureRequestTargets(@NonNull CaptureRequest request) {
+        if (request.getTargets().size() == 1) {
+            boolean containsCaptureTarget =
+                    mClientCaptureSurface != null && request.containsTarget(mClientCaptureSurface);
+            boolean containsRepeatingTarget =
+                    mClientRepeatingRequestSurface != null &&
+                    request.containsTarget(mClientRepeatingRequestSurface);
+
+            if (!containsCaptureTarget && !containsRepeatingTarget) {
+                throw new IllegalArgumentException("Target output combination requested is " +
+                        "not supported!");
+            }
+        }
+
+        if ((request.getTargets().size() == 2) &&
+                (!request.getTargets().containsAll(Arrays.asList(mClientCaptureSurface,
+                mClientPostviewSurface)))) {
+            throw new IllegalArgumentException("Target output combination requested is " +
+                    "not supported!");
+        }
+
+        if (request.getTargets().size() > 2) {
+            throw new IllegalArgumentException("Target output combination requested is " +
+                    "not supported!");
+        }
     }
 
     @Override

@@ -20,6 +20,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.ComponentName;
 import android.content.Context;
+import android.credentials.CreateCredentialException;
 import android.credentials.CreateCredentialRequest;
 import android.credentials.CreateCredentialResponse;
 import android.credentials.CredentialManager;
@@ -27,6 +28,7 @@ import android.credentials.ICreateCredentialCallback;
 import android.credentials.ui.ProviderData;
 import android.credentials.ui.RequestInfo;
 import android.os.RemoteException;
+import android.service.credentials.CallingAppInfo;
 import android.service.credentials.CredentialProviderInfo;
 import android.util.Log;
 
@@ -45,8 +47,8 @@ public final class CreateRequestSession extends RequestSession<CreateCredentialR
     CreateRequestSession(@NonNull Context context, int userId,
             CreateCredentialRequest request,
             ICreateCredentialCallback callback,
-            String callingPackage) {
-        super(context, userId, request, callback, RequestInfo.TYPE_CREATE, callingPackage);
+            CallingAppInfo callingAppInfo) {
+        super(context, userId, request, callback, RequestInfo.TYPE_CREATE, callingAppInfo);
     }
 
     /**
@@ -75,20 +77,56 @@ public final class CreateRequestSession extends RequestSession<CreateCredentialR
         try {
             mClientCallback.onPendingIntent(mCredentialManagerUi.createPendingIntent(
                     RequestInfo.newCreateRequestInfo(
-                            mRequestId, mClientRequest, mIsFirstUiTurn, mClientCallingPackage),
+                            mRequestId, mClientRequest,
+                            mClientAppInfo.getPackageName()),
                     providerDataList));
         } catch (RemoteException e) {
-            Log.i(TAG, "Issue with invoking pending intent: " + e.getMessage());
-            // TODO: Propagate failure
+            respondToClientWithErrorAndFinish(
+                    CreateCredentialException.TYPE_UNKNOWN,
+                    "Unable to invoke selector");
         }
     }
 
-    private void respondToClientAndFinish(CreateCredentialResponse response) {
-        Log.i(TAG, "respondToClientAndFinish");
+    @Override
+    public void onFinalResponseReceived(ComponentName componentName,
+            @Nullable CreateCredentialResponse response) {
+        Log.i(TAG, "onFinalCredentialReceived from: " + componentName.flattenToString());
+        if (response != null) {
+            respondToClientWithResponseAndFinish(response);
+        } else {
+            respondToClientWithErrorAndFinish(CreateCredentialException.TYPE_NO_CREDENTIAL,
+                    "Invalid response");
+        }
+    }
+
+    @Override
+    public void onFinalErrorReceived(ComponentName componentName, String errorType,
+            String message) {
+        respondToClientWithErrorAndFinish(errorType, message);
+    }
+
+    @Override
+    public void onUiCancellation() {
+        respondToClientWithErrorAndFinish(CreateCredentialException.TYPE_USER_CANCELED,
+                "User cancelled the selector");
+    }
+
+    private void respondToClientWithResponseAndFinish(CreateCredentialResponse response) {
+        Log.i(TAG, "respondToClientWithResponseAndFinish");
         try {
             mClientCallback.onResponse(response);
         } catch (RemoteException e) {
-            e.printStackTrace();
+            Log.i(TAG, "Issue while responding to client: " + e.getMessage());
+        }
+        finishSession();
+    }
+
+    private void respondToClientWithErrorAndFinish(String errorType, String errorMsg) {
+        Log.i(TAG, "respondToClientWithErrorAndFinish");
+        try {
+            mClientCallback.onError(errorType, errorMsg);
+        } catch (RemoteException e) {
+            Log.i(TAG, "Issue while responding to client: " + e.getMessage());
         }
         finishSession();
     }
@@ -96,15 +134,18 @@ public final class CreateRequestSession extends RequestSession<CreateCredentialR
     @Override
     public void onProviderStatusChanged(ProviderSession.Status status,
             ComponentName componentName) {
-        super.onProviderStatusChanged(status, componentName);
-    }
-
-    @Override
-    public void onFinalResponseReceived(ComponentName componentName,
-            CreateCredentialResponse response) {
-        Log.i(TAG, "onFinalCredentialReceived from: " + componentName.flattenToString());
-        if (response != null) {
-            respondToClientAndFinish(response);
+        Log.i(TAG, "in onProviderStatusChanged with status: " + status);
+        // If all provider responses have been received, we can either need the UI,
+        // or we need to respond with error. The only other case is the entry being
+        // selected after the UI has been invoked which has a separate code path.
+        if (!isAnyProviderPending()) {
+            if (isUiInvocationNeeded()) {
+                Log.i(TAG, "in onProviderStatusChanged - isUiInvocationNeeded");
+                getProviderDataAndInitiateUi();
+            } else {
+                respondToClientWithErrorAndFinish(CreateCredentialException.TYPE_NO_CREDENTIAL,
+                        "No credentials available");
+            }
         }
     }
 }

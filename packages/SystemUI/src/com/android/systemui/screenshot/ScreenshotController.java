@@ -280,6 +280,7 @@ public class ScreenshotController {
     private final TimeoutHandler mScreenshotHandler;
     private final ActionIntentExecutor mActionExecutor;
     private final UserManager mUserManager;
+    private final WorkProfileMessageController mWorkProfileMessageController;
 
     private final OnBackInvokedCallback mOnBackInvokedCallback = () -> {
         if (DEBUG_INPUT) {
@@ -326,7 +327,8 @@ public class ScreenshotController {
             BroadcastSender broadcastSender,
             ScreenshotNotificationSmartActionsProvider screenshotNotificationSmartActionsProvider,
             ActionIntentExecutor actionExecutor,
-            UserManager userManager
+            UserManager userManager,
+            WorkProfileMessageController workProfileMessageController
     ) {
         mScreenshotSmartActions = screenshotSmartActions;
         mNotificationsController = screenshotNotificationsController;
@@ -358,6 +360,7 @@ public class ScreenshotController {
         mFlags = flags;
         mActionExecutor = actionExecutor;
         mUserManager = userManager;
+        mWorkProfileMessageController = workProfileMessageController;
 
         mAccessibilityManager = AccessibilityManager.getInstance(mContext);
 
@@ -448,6 +451,10 @@ public class ScreenshotController {
 
     // Any cleanup needed when the service is being destroyed.
     void onDestroy() {
+        if (mSaveInBgTask != null) {
+            // just log success/failure for the pre-existing screenshot
+            mSaveInBgTask.setActionsReadyListener(this::logSuccessOnActionsReady);
+        }
         removeWindow();
         releaseMediaPlayer();
         releaseContext();
@@ -679,10 +686,9 @@ public class ScreenshotController {
                         return true;
                     }
                 });
-
         if (mFlags.isEnabled(SCREENSHOT_WORK_PROFILE_POLICY)) {
-            mScreenshotView.badgeScreenshot(
-                    mContext.getPackageManager().getUserBadgeForDensity(owner, 0));
+            mScreenshotView.badgeScreenshot(mContext.getPackageManager().getUserBadgedIcon(
+                    mContext.getDrawable(R.drawable.overlay_badge_background), owner));
         }
         mScreenshotView.setScreenshot(mScreenBitmap, screenInsets);
         if (DEBUG_WINDOW) {
@@ -780,9 +786,9 @@ public class ScreenshotController {
             mLongScreenshotHolder.setLongScreenshot(longScreenshot);
             mLongScreenshotHolder.setTransitionDestinationCallback(
                     (transitionDestination, onTransitionEnd) -> {
-                            mScreenshotView.startLongScreenshotTransition(
-                                    transitionDestination, onTransitionEnd,
-                                    longScreenshot);
+                        mScreenshotView.startLongScreenshotTransition(
+                                transitionDestination, onTransitionEnd,
+                                longScreenshot);
                         // TODO: Do this via ActionIntentExecutor instead.
                         mContext.sendBroadcast(new Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS));
                     }
@@ -1033,10 +1039,8 @@ public class ScreenshotController {
 
     private void doPostAnimation(ScreenshotController.SavedImageData imageData) {
         mScreenshotView.setChipIntents(imageData);
-        if (mFlags.isEnabled(SCREENSHOT_WORK_PROFILE_POLICY)
-                && mUserManager.isManagedProfile(imageData.owner.getIdentifier())) {
-            // TODO: Read app from configuration
-            mScreenshotView.showWorkProfileMessage("Files");
+        if (mFlags.isEnabled(SCREENSHOT_WORK_PROFILE_POLICY)) {
+            mWorkProfileMessageController.onScreenshotTaken(imageData.owner, mScreenshotView);
         }
     }
 

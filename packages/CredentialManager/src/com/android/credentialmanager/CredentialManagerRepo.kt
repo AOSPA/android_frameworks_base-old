@@ -16,14 +16,14 @@
 
 package com.android.credentialmanager
 
-import android.credentials.Credential.TYPE_PASSWORD_CREDENTIAL
 import android.app.PendingIntent
 import android.app.slice.Slice
 import android.app.slice.SliceSpec
 import android.content.Context
 import android.content.Intent
-import android.content.pm.Signature
+import android.content.pm.SigningInfo
 import android.credentials.CreateCredentialRequest
+import android.credentials.Credential.TYPE_PASSWORD_CREDENTIAL
 import android.credentials.GetCredentialOption
 import android.credentials.GetCredentialRequest
 import android.credentials.ui.Constants
@@ -36,17 +36,22 @@ import android.credentials.ui.RequestInfo
 import android.credentials.ui.BaseDialogResult
 import android.credentials.ui.ProviderPendingIntentResponse
 import android.credentials.ui.UserSelectionDialogResult
-import android.graphics.drawable.Icon
+import android.net.Uri
 import android.os.Binder
 import android.os.Bundle
 import android.os.ResultReceiver
 import android.service.credentials.CredentialProviderService
-import android.util.ArraySet
-import com.android.credentialmanager.createflow.CreateCredentialUiState
+import com.android.credentialmanager.createflow.DisabledProviderInfo
+import com.android.credentialmanager.createflow.EnabledProviderInfo
+import com.android.credentialmanager.createflow.RequestDisplayInfo
 import com.android.credentialmanager.getflow.GetCredentialUiState
-import com.android.credentialmanager.jetpack.developer.CreatePasswordRequest.Companion.toBundle
+import com.android.credentialmanager.jetpack.developer.CreatePasswordRequest.Companion.toCredentialDataBundle
 import com.android.credentialmanager.jetpack.developer.CreatePublicKeyCredentialRequest
 import com.android.credentialmanager.jetpack.developer.PublicKeyCredential.Companion.TYPE_PUBLIC_KEY_CREDENTIAL
+import com.android.credentialmanager.jetpack.provider.Action
+import com.android.credentialmanager.jetpack.provider.CreateEntry
+import com.android.credentialmanager.jetpack.provider.CredentialCountInformation
+import com.android.credentialmanager.jetpack.provider.CredentialEntry
 
 // Consider repo per screen, similar to view model?
 class CredentialManagerRepo(
@@ -123,73 +128,63 @@ class CredentialManagerRepo(
     val providerEnabledList = GetFlowUtils.toProviderList(
     // TODO: handle runtime cast error
       providerEnabledList as List<GetCredentialProviderData>, context)
-    val requestDisplayInfo = GetFlowUtils.toRequestDisplayInfo(requestInfo)
+    val requestDisplayInfo = GetFlowUtils.toRequestDisplayInfo(requestInfo, context)
     return GetCredentialUiState(
       providerEnabledList,
       requestDisplayInfo,
     )
   }
 
-  fun createCredentialInitialUiState(): CreateCredentialUiState {
-    val requestDisplayInfo = CreateFlowUtils.toRequestDisplayInfo(requestInfo, context)
+  fun getCreateProviderEnableListInitialUiState(): List<EnabledProviderInfo> {
     val providerEnabledList = CreateFlowUtils.toEnabledProviderList(
       // Handle runtime cast error
-      providerEnabledList as List<CreateCredentialProviderData>, requestDisplayInfo, context)
-    val providerDisabledList = CreateFlowUtils.toDisabledProviderList(
-      // Handle runtime cast error
-      providerDisabledList, context)
-    providerEnabledList.forEach{providerInfo -> providerInfo.createOptions =
-      providerInfo.createOptions.sortedWith(compareBy { it.lastUsedTimeMillis }).reversed()
-    }
-    return CreateFlowUtils.toCreateCredentialUiState(
-      providerEnabledList, providerDisabledList, requestDisplayInfo, false)
+      providerEnabledList as List<CreateCredentialProviderData>, context)
+    return providerEnabledList
   }
 
-  companion object {
-    // TODO: find a way to resolve this static field leak problem
-    lateinit var repo: CredentialManagerRepo
+  fun getCreateProviderDisableListInitialUiState(): List<DisabledProviderInfo>? {
+    return CreateFlowUtils.toDisabledProviderList(
+      // Handle runtime cast error
+      providerDisabledList, context)
+  }
 
-    fun setup(
-      context: Context,
-      intent: Intent,
-    ) {
-      repo = CredentialManagerRepo(context, intent)
-    }
-
-    fun getInstance(): CredentialManagerRepo {
-      return repo
-    }
+  fun getCreateRequestDisplayInfoInitialUiState(): RequestDisplayInfo {
+    return CreateFlowUtils.toRequestDisplayInfo(requestInfo, context)
   }
 
   // TODO: below are prototype functionalities. To be removed for productionization.
   private fun testCreateCredentialEnabledProviderList(): List<CreateCredentialProviderData> {
-    return listOf(
-      CreateCredentialProviderData
-        .Builder("io.enpass.app")
-        .setSaveEntries(
-          listOf<Entry>(
-            newCreateEntry("key1", "subkey-1", "elisa.beckett@gmail.com",
-              20, 7, 27, 10000),
-            newCreateEntry("key1", "subkey-2", "elisa.work@google.com",
-              20, 7, 27, 11000),
-          )
-        )
-        .setRemoteEntry(
-          newRemoteEntry("key2", "subkey-1")
-        )
-        .build(),
-      CreateCredentialProviderData
-        .Builder("com.dashlane")
-        .setSaveEntries(
-          listOf<Entry>(
-            newCreateEntry("key1", "subkey-3", "elisa.beckett@dashlane.com",
-              20, 7, 27, 30000),
-            newCreateEntry("key1", "subkey-4", "elisa.work@dashlane.com",
-              20, 7, 27, 31000),
-          )
-        )
-        .build(),
-    )
+      return listOf(
+          CreateCredentialProviderData
+              .Builder("io.enpass.app")
+              .setSaveEntries(
+                  listOf<Entry>(
+                      newCreateEntry("key1", "subkey-1", "elisa.beckett@gmail.com",
+                          20, 7, 27, 10L,
+                          "Optional footer description"),
+                      newCreateEntry("key1", "subkey-2", "elisa.work@google.com",
+                          20, 7, 27, 12L,
+                      null),
+                  )
+              )
+              .setRemoteEntry(
+                  newRemoteEntry("key2", "subkey-1")
+              )
+              .build(),
+          CreateCredentialProviderData
+              .Builder("com.dashlane")
+              .setSaveEntries(
+                  listOf<Entry>(
+                      newCreateEntry("key1", "subkey-3", "elisa.beckett@dashlane.com",
+                          20, 7, 27, 11L,
+                          null),
+                      newCreateEntry("key1", "subkey-4", "elisa.work@dashlane.com",
+                          20, 7, 27, 14L,
+                          null),
+                  )
+              )
+              .build(),
+      )
   }
 
   private fun testDisabledProviderList(): List<DisabledProviderData>? {
@@ -204,17 +199,21 @@ class CredentialManagerRepo(
       GetCredentialProviderData.Builder("io.enpass.app")
         .setCredentialEntries(
           listOf<Entry>(
+              newGetEntry(
+                  "key1", "subkey-1", TYPE_PASSWORD_CREDENTIAL, "Password",
+                  "elisa.family@outlook.com", null, 3L
+              ),
             newGetEntry(
               "key1", "subkey-1", TYPE_PUBLIC_KEY_CREDENTIAL, "Passkey",
-              "elisa.bakery@gmail.com", "Elisa Beckett", 300L
+              "elisa.bakery@gmail.com", "Elisa Beckett", 0L
             ),
             newGetEntry(
               "key1", "subkey-2", TYPE_PASSWORD_CREDENTIAL, "Password",
-              "elisa.bakery@gmail.com", null, 300L
+              "elisa.bakery@gmail.com", null, 10L
             ),
             newGetEntry(
-              "key1", "subkey-3", TYPE_PASSWORD_CREDENTIAL, "Password",
-              "elisa.family@outlook.com", null, 100L
+              "key1", "subkey-3", TYPE_PUBLIC_KEY_CREDENTIAL, "Passkey",
+              "elisa.family@outlook.com", "Elisa Beckett", 1L
             ),
           )
         ).setAuthenticationEntry(
@@ -237,12 +236,12 @@ class CredentialManagerRepo(
         .setCredentialEntries(
           listOf<Entry>(
             newGetEntry(
-              "key1", "subkey-1", TYPE_PASSWORD_CREDENTIAL, "Password",
-              "elisa.family@outlook.com", null, 600L
+              "key1", "subkey-2", TYPE_PASSWORD_CREDENTIAL, "Password",
+              "elisa.family@outlook.com", null, 4L
             ),
             newGetEntry(
-              "key1", "subkey-2", TYPE_PUBLIC_KEY_CREDENTIAL, "Passkey",
-              "elisa.family@outlook.com", null, 100L
+                  "key1", "subkey-3", TYPE_PASSWORD_CREDENTIAL, "Password",
+                  "elisa.work@outlook.com", null, 11L
             ),
           )
         ).setAuthenticationEntry(
@@ -258,137 +257,106 @@ class CredentialManagerRepo(
     )
   }
 
-  private fun newActionEntry(
-    key: String,
-    subkey: String,
-    credentialType: String,
-    text: String,
-    subtext: String? = null,
-  ): Entry {
-    val slice = Slice.Builder(
-      Entry.CREDENTIAL_MANAGER_ENTRY_URI, SliceSpec(credentialType, 1)
-    ).addText(
-      text, null, listOf(Entry.HINT_ACTION_TITLE)
-    )
-    if (subtext != null) {
-      slice.addText(subtext, null, listOf(Entry.HINT_ACTION_SUBTEXT))
+    private fun newActionEntry(
+            key: String,
+            subkey: String,
+            credentialType: String,
+            text: String,
+            subtext: String? = null,
+    ): Entry {
+        val action = Action(text, subtext, null)
+
+        return Entry(
+                key,
+                subkey,
+                Action.toSlice(action)
+        )
     }
-    return Entry(
-      key,
-      subkey,
-      slice.build()
-    )
-  }
 
-  private fun newAuthenticationEntry(
-    key: String,
-    subkey: String,
-    credentialType: String,
-  ): Entry {
-    val slice = Slice.Builder(
-      Entry.CREDENTIAL_MANAGER_ENTRY_URI, SliceSpec(credentialType, 1)
-    )
-    return Entry(
-      key,
-      subkey,
-      slice.build()
-    )
-  }
-
-  private fun newGetEntry(
-    key: String,
-    subkey: String,
-    credentialType: String,
-    credentialTypeDisplayName: String,
-    userName: String,
-    userDisplayName: String?,
-    lastUsedTimeMillis: Long?,
-  ): Entry {
-    val intent = Intent("com.androidauth.androidvault.CONFIRM_PASSWORD")
-      .setPackage("com.androidauth.androidvault")
-    intent.putExtra("provider_extra_sample", "testprovider")
-
-    val pendingIntent = PendingIntent.getActivity(context, 1,
-      intent, (PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-              or PendingIntent.FLAG_ONE_SHOT))
-
-    val slice = Slice.Builder(
-      Entry.CREDENTIAL_MANAGER_ENTRY_URI, SliceSpec(credentialType, 1)
-    ).addText(
-      credentialTypeDisplayName, null, listOf(Entry.HINT_CREDENTIAL_TYPE_DISPLAY_NAME)
-    ).addText(
-      userName, null, listOf(Entry.HINT_USER_NAME)
-    ).addIcon(
-      Icon.createWithResource(context, R.drawable.ic_passkey),
-      null,
-      listOf(Entry.HINT_PROFILE_ICON))
-    if (userDisplayName != null) {
-      slice.addText(userDisplayName, null, listOf(Entry.HINT_PASSKEY_USER_DISPLAY_NAME))
+    private fun newAuthenticationEntry(
+            key: String,
+            subkey: String,
+            credentialType: String,
+    ): Entry {
+        val slice = Slice.Builder(
+                Uri.EMPTY, SliceSpec(credentialType, 1)
+        )
+        return Entry(
+                key,
+                subkey,
+                slice.build()
+        )
     }
-    if (lastUsedTimeMillis != null) {
-      slice.addLong(lastUsedTimeMillis, null, listOf(Entry.HINT_LAST_USED_TIME_MILLIS))
+
+    private fun newGetEntry(
+            key: String,
+            subkey: String,
+            credentialType: String,
+            credentialTypeDisplayName: String,
+            userName: String,
+            userDisplayName: String?,
+            lastUsedTimeMillis: Long?,
+    ): Entry {
+        val intent = Intent("com.androidauth.androidvault.CONFIRM_PASSWORD")
+                .setPackage("com.androidauth.androidvault")
+        intent.putExtra("provider_extra_sample", "testprovider")
+
+        val pendingIntent = PendingIntent.getActivity(context, 1,
+                intent, (PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                or PendingIntent.FLAG_ONE_SHOT))
+
+        val credentialEntry = CredentialEntry(credentialType, credentialTypeDisplayName, userName,
+                userDisplayName, pendingIntent, lastUsedTimeMillis
+                ?: 0L, null, false)
+
+        return Entry(
+                key,
+                subkey,
+                CredentialEntry.toSlice(credentialEntry),
+                Intent()
+        )
+  }
+
+    private fun newCreateEntry(
+            key: String,
+            subkey: String,
+            providerDisplayName: String,
+            passwordCount: Int,
+            passkeyCount: Int,
+            totalCredentialCount: Int,
+            lastUsedTimeMillis: Long,
+            footerDescription: String?,
+    ): Entry {
+        val intent = Intent("com.androidauth.androidvault.CONFIRM_PASSWORD")
+                .setPackage("com.androidauth.androidvault")
+        intent.putExtra("provider_extra_sample", "testprovider")
+        val pendingIntent = PendingIntent.getActivity(context, 1,
+                intent, (PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                or PendingIntent.FLAG_ONE_SHOT))
+        val createPasswordRequest = android.service.credentials.CreateCredentialRequest(
+                android.service.credentials.CallingAppInfo(
+                        context.applicationInfo.packageName, SigningInfo()),
+                TYPE_PASSWORD_CREDENTIAL,
+                toCredentialDataBundle("beckett-bakert@gmail.com", "password123")
+        )
+        val fillInIntent = Intent().putExtra(
+                CredentialProviderService.EXTRA_CREATE_CREDENTIAL_REQUEST,
+                createPasswordRequest)
+
+        val createEntry = CreateEntry(
+                providerDisplayName, pendingIntent,
+                null, lastUsedTimeMillis,
+                listOf(
+                        CredentialCountInformation.createPasswordCountInformation(passwordCount),
+                        CredentialCountInformation.createPublicKeyCountInformation(passkeyCount),
+                ), footerDescription)
+        return Entry(
+                key,
+                subkey,
+                CreateEntry.toSlice(createEntry),
+                fillInIntent
+        )
     }
-    return Entry(
-      key,
-      subkey,
-      slice.build(),
-      pendingIntent,
-      null
-    )
-  }
-
-  private fun newCreateEntry(
-    key: String,
-    subkey: String,
-    providerDisplayName: String,
-    passwordCount: Int,
-    passkeyCount: Int,
-    totalCredentialCount: Int,
-    lastUsedTimeMillis: Long,
-  ): Entry {
-    val intent = Intent("com.androidauth.androidvault.CONFIRM_PASSWORD")
-      .setPackage("com.androidauth.androidvault")
-    intent.putExtra("provider_extra_sample", "testprovider")
-    val pendingIntent = PendingIntent.getActivity(context, 1,
-      intent, (PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-              or PendingIntent.FLAG_ONE_SHOT))
-    val createPasswordRequest = android.service.credentials.CreateCredentialRequest(
-            android.service.credentials.CallingAppInfo(
-                    context.applicationInfo.packageName, ArraySet<Signature>()),
-            TYPE_PASSWORD_CREDENTIAL,
-            toBundle("beckett-bakert@gmail.com", "password123")
-    )
-    val fillInIntent = Intent().putExtra(CredentialProviderService.EXTRA_CREATE_CREDENTIAL_REQUEST,
-            createPasswordRequest)
-
-    val slice = Slice.Builder(
-      Entry.CREDENTIAL_MANAGER_ENTRY_URI, SliceSpec(Entry.VERSION, 1)
-    ).addText(
-        providerDisplayName, null, listOf(Entry.HINT_USER_PROVIDER_ACCOUNT_NAME))
-      .addIcon(
-        Icon.createWithResource(context, R.drawable.ic_passkey),
-        null,
-        listOf(Entry.HINT_CREDENTIAL_TYPE_ICON))
-      .addIcon(
-        Icon.createWithResource(context, R.drawable.ic_profile),
-        null,
-        listOf(Entry.HINT_PROFILE_ICON))
-      .addInt(
-        passwordCount, null, listOf(Entry.HINT_PASSWORD_COUNT))
-      .addInt(
-        passkeyCount, null, listOf(Entry.HINT_PASSKEY_COUNT))
-      .addInt(
-        totalCredentialCount, null, listOf(Entry.HINT_TOTAL_CREDENTIAL_COUNT))
-      .addLong(lastUsedTimeMillis, null, listOf(Entry.HINT_LAST_USED_TIME_MILLIS))
-      .build()
-    return Entry(
-      key,
-      subkey,
-      slice,
-      pendingIntent,
-      fillInIntent,
-    )
-  }
 
   private fun newRemoteEntry(
     key: String,
@@ -398,7 +366,7 @@ class CredentialManagerRepo(
       key,
       subkey,
       Slice.Builder(
-        Entry.CREDENTIAL_MANAGER_ENTRY_URI, SliceSpec(Entry.VERSION, 1)
+        Uri.EMPTY, SliceSpec("type", 1)
       ).build()
     )
   }
@@ -438,7 +406,7 @@ class CredentialManagerRepo(
             "                     \"residentKey\": \"required\",\n" +
             "                     \"requireResidentKey\": true\n" +
             "                   }}")
-    val credentialData = request.data
+    val credentialData = request.credentialData
     return RequestInfo.newCreateRequestInfo(
       Binder(),
       CreateCredentialRequest(
@@ -448,13 +416,12 @@ class CredentialManagerRepo(
         /*candidateQueryData=*/ Bundle(),
         /*requireSystemProvider=*/ false
       ),
-      /*isFirstUsage=*/false,
-      "tribank"
+      "com.google.android.youtube"
     )
   }
 
   private fun testCreatePasswordRequestInfo(): RequestInfo {
-    val data = toBundle("beckett-bakert@gmail.com", "password123")
+    val data = toCredentialDataBundle("beckett-bakert@gmail.com", "password123")
     return RequestInfo.newCreateRequestInfo(
       Binder(),
       CreateCredentialRequest(
@@ -464,8 +431,7 @@ class CredentialManagerRepo(
         /*candidateQueryData=*/ Bundle(),
         /*requireSystemProvider=*/ false
       ),
-      /*isFirstUsage=*/false,
-      "tribank"
+      "com.google.android.youtube"
     )
   }
 
@@ -479,22 +445,22 @@ class CredentialManagerRepo(
         /*candidateQueryData=*/ Bundle(),
         /*requireSystemProvider=*/ false
       ),
-      /*isFirstUsage=*/false,
-      "tribank"
+      "com.google.android.youtube"
     )
   }
 
   private fun testGetRequestInfo(): RequestInfo {
     return RequestInfo.newGetRequestInfo(
       Binder(),
-      GetCredentialRequest.Builder()
+      GetCredentialRequest.Builder(
+        Bundle()
+      )
         .addGetCredentialOption(
           GetCredentialOption(
             TYPE_PUBLIC_KEY_CREDENTIAL, Bundle(), Bundle(), /*requireSystemProvider=*/ false)
         )
         .build(),
-      /*isFirstUsage=*/false,
-      "tribank.us"
+      "com.google.android.youtube"
     )
   }
 }

@@ -467,8 +467,8 @@
     <string name="power_charging" msgid="6727132649743436802">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="STATE">%2$s</xliff:g>"</string>
     <string name="power_remaining_charging_duration_only" msgid="8085099012811384899">"อีก <xliff:g id="TIME">%1$s</xliff:g>จึงจะเต็ม"</string>
     <string name="power_charging_duration" msgid="6127154952524919719">"<xliff:g id="LEVEL">%1$s</xliff:g> - อีก <xliff:g id="TIME">%2$s</xliff:g> จึงจะเต็ม"</string>
-    <string name="power_charging_limited" msgid="6732738149313642521">"<xliff:g id="LEVEL">%1$s</xliff:g> - หยุดชาร์จชั่วคราว"</string>
-    <string name="power_charging_future_paused" msgid="6829683663982987290">"<xliff:g id="LEVEL">%1$s</xliff:g> - กำลังชาร์จจนถึง <xliff:g id="DOCK_DEFENDER_THRESHOLD">%2$s</xliff:g>"</string>
+    <string name="power_charging_limited" msgid="8202147604844938236">"<xliff:g id="LEVEL">%1$s</xliff:g> - ปรับการชาร์จให้เหมาะสมแล้ว"</string>
+    <string name="power_charging_future_paused" msgid="4730177778538118032">"<xliff:g id="LEVEL">%1$s</xliff:g> - ปรับการชาร์จให้เหมาะสมแล้ว"</string>
     <string name="battery_info_status_unknown" msgid="268625384868401114">"ไม่ทราบ"</string>
     <string name="battery_info_status_charging" msgid="4279958015430387405">"กำลังชาร์จ"</string>
     <string name="battery_info_status_charging_fast" msgid="8027559755902954885">"กำลังชาร์จอย่างเร็ว"</string>
@@ -564,6 +564,8 @@
     <string name="user_add_user_title" msgid="5457079143694924885">"ต้องการเพิ่มผู้ใช้ใหม่ใช่ไหม"</string>
     <string name="user_add_user_message_long" msgid="1527434966294733380">"คุณมีสิทธิ์แชร์อุปกรณ์นี้กับผู้อื่นได้โดยการเพิ่มผู้ใช้ แต่ละคนจะมีพื้นที่ของตนเองซึ่งปรับใช้กับแอป วอลเปเปอร์ และรายการอื่นๆ ได้ อีกทั้งยังปรับการตั้งค่าอุปกรณ์ได้ด้วย เช่น Wi‑Fi ซึ่งจะมีผลกับทุกคน\n\nเมื่อคุณเพิ่มผู้ใช้ใหม่ ผู้ใช้ดังกล่าวจะต้องตั้งค่าพื้นที่ของตน\n\nผู้ใช้ทุกคนมีสิทธิ์อัปเดตแอปให้ผู้ใช้รายอื่น การตั้งค่าและบริการสำหรับการช่วยเหลือพิเศษอาจโอนไปยังผู้ใช้ใหม่ไม่ได้"</string>
     <string name="user_add_user_message_short" msgid="3295959985795716166">"เมื่อคุณเพิ่มผู้ใช้ใหม่ ผู้ใช้ดังกล่าวจะต้องตั้งค่าพื้นที่ของตนเอง\n\nผู้ใช้ทุกคนสามารถอัปเดตแอปสำหรับผู้ใช้รายอื่นได้"</string>
+    <string name="user_grant_admin_title" msgid="5565796912475193314">"ให้สิทธิ์ผู้ดูแลแก่ผู้ใช้ไหม"</string>
+    <string name="user_grant_admin_message" msgid="7925257971286380976">"ผู้ดูแลระบบจะสามารถจัดการผู้ใช้รายอื่น แก้ไขการตั้งค่าอุปกรณ์ และรีเซ็ตอุปกรณ์เป็นค่าเริ่มต้นได้"</string>
     <string name="user_setup_dialog_title" msgid="8037342066381939995">"ตั้งค่าผู้ใช้เลยไหม"</string>
     <string name="user_setup_dialog_message" msgid="269931619868102841">"ตรวจสอบว่าบุคคลดังกล่าวสามารถนำอุปกรณ์ไปตั้งค่าพื้นที่ของตนได้"</string>
     <string name="user_setup_profile_dialog_message" msgid="4788197052296962620">"หากต้องการตั้งค่าโปรไฟล์ทันที"</string>
@@ -595,6 +597,8 @@
     <string name="guest_reset_and_restart_dialog_message" msgid="2764425635305200790">"การดำเนินการนี้จะเริ่มเซสชันผู้ใช้ชั่วคราวใหม่ และจะลบแอปและข้อมูลทั้งหมดจากเซสชันปัจจุบัน"</string>
     <string name="guest_exit_dialog_title" msgid="1846494656849381804">"ออกจากโหมดผู้ใช้ชั่วคราวไหม"</string>
     <string name="guest_exit_dialog_message" msgid="1743218864242719783">"การดำเนินการนี้จะลบแอปและข้อมูลออกจากเซสชันผู้ใช้ชั่วคราวในปัจจุบัน"</string>
+    <string name="grant_admin" msgid="4273077214151417783">"ให้สิทธิ์ของผู้ดูแลระบบแก่ผู้ใช้รายนี้"</string>
+    <string name="not_grant_admin" msgid="6985027675930546850">"ไม่ให้สิทธิ์ของผู้ดูแลระบบแก่ผู้ใช้รายนี้"</string>
     <string name="guest_exit_dialog_button" msgid="1736401897067442044">"ออก"</string>
     <string name="guest_exit_dialog_title_non_ephemeral" msgid="7675327443743162986">"บันทึกกิจกรรมของผู้ใช้ชั่วคราวไหม"</string>
     <string name="guest_exit_dialog_message_non_ephemeral" msgid="223385323235719442">"คุณสามารถบันทึกกิจกรรมจากเซสชันปัจจุบันหรือจะลบแอปและข้อมูลทั้งหมดก็ได้"</string>
