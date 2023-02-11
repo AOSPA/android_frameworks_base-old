@@ -9489,6 +9489,13 @@ public class CarrierConfigManager {
     public static final String KEY_NR_ULTRA_WIDEBAND_ICON_SA_BAND_ARRAY =
             "5g_ultra_wideband_icon_sa_band_array";
 
+    /**
+     * Determines if CS SMS is allowed in C_IWLAN-only mode. True is allowed. False is disallowed.
+     *
+     * @hide
+     */
+    public static final String KEY_CS_SMS_IN_CIWLAN_ONLY_MODE = "cs_sms_in_ciwlan_only_mode";
+
     /** The default value for every variable. */
     private final static PersistableBundle sDefaults;
 
@@ -10118,6 +10125,7 @@ public class CarrierConfigManager {
         sDefaults.putIntArray(KEY_NR_ULTRA_WIDEBAND_ICON_SA_BAND_ARRAY, new int[]{});
         sDefaults.putInt(KEY_NR_ULTRA_WIDEBAND_ICON_SA_BAND_MODE, Integer.MAX_VALUE);
         sDefaults.putIntArray(KEY_NR_ULTRA_WIDEBAND_ICON_NSA_BAND_ARRAY, new int[]{});
+        sDefaults.putBoolean(KEY_CS_SMS_IN_CIWLAN_ONLY_MODE, false);
 
         // Do not modify the priority unless you know what you are doing. This will have significant
         // impacts on the order of data network setup.
