@@ -30,6 +30,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
+import android.media.tv.AdBuffer;
 import android.media.tv.AdRequest;
 import android.media.tv.AdResponse;
 import android.media.tv.BroadcastInfoRequest;
@@ -37,6 +38,7 @@ import android.media.tv.BroadcastInfoResponse;
 import android.media.tv.TvContentRating;
 import android.media.tv.TvInputInfo;
 import android.media.tv.TvInputManager;
+import android.media.tv.TvRecordingInfo;
 import android.media.tv.TvTrackInfo;
 import android.media.tv.TvView;
 import android.media.tv.interactive.TvInteractiveAppView.TvInteractiveAppCallback;
@@ -455,6 +457,24 @@ public abstract class TvInteractiveAppService extends Service {
         }
 
         /**
+         * Receives requested recording info.
+         *
+         * @param recordingInfo The requested recording info. Null if recording not found.
+         * @hide
+         */
+        public void onTvRecordingInfo(@Nullable TvRecordingInfo recordingInfo) {
+        }
+
+        /**
+         * Receives requested recording info.
+         *
+         * @param recordingInfoList The requested recording info list. Null if recording not found.
+         * @hide
+         */
+        public void onTvRecordingInfoList(@Nullable List<TvRecordingInfo> recordingInfoList) {
+        }
+
+        /**
          * Receives started recording's ID.
          *
          * @param recordingId The ID of the recording started. The TV app should provide and
@@ -614,6 +634,21 @@ public abstract class TvInteractiveAppService extends Service {
          * Called when an advertisement response is received.
          */
         public void onAdResponse(@NonNull AdResponse response) {
+        }
+
+        /**
+         * Called when an advertisement buffer is consumed.
+         * @hide
+         */
+        public void onAdBufferConsumed(AdBuffer buffer) {
+
+        }
+
+        /**
+         * Called when a tv message is received
+         * @hide
+         */
+        public void onTvMessage(@NonNull String type, @NonNull Bundle data) {
         }
 
         @Override
@@ -980,6 +1015,71 @@ public abstract class TvInteractiveAppService extends Service {
         }
 
         /**
+         * Sets the recording info for the specified recording
+         *
+         * @hide
+         */
+        @CallSuper
+        public void setTvRecordingInfo(@NonNull String recordingId,
+                @NonNull TvRecordingInfo recordingInfo) {
+            executeOrPostRunnableOnMainThread(() -> {
+                try {
+                    if (DEBUG) {
+                        Log.d(TAG, "setTvRecordingInfo");
+                    }
+                    if (mSessionCallback != null) {
+                        mSessionCallback.onSetTvRecordingInfo(recordingId, recordingInfo);
+                    }
+                } catch (RemoteException e) {
+                    Log.w(TAG, "error in setTvRecordingInfo", e);
+                }
+            });
+        }
+
+        /**
+         * Gets the recording info for the specified recording
+         *
+         * @hide
+         */
+        @CallSuper
+        public void requestTvRecordingInfo(@NonNull String recordingId) {
+            executeOrPostRunnableOnMainThread(() -> {
+                try {
+                    if (DEBUG) {
+                        Log.d(TAG, "requestTvRecordingInfo");
+                    }
+                    if (mSessionCallback != null) {
+                        mSessionCallback.onRequestTvRecordingInfo(recordingId);
+                    }
+                } catch (RemoteException e) {
+                    Log.w(TAG, "error in requestTvRecordingInfo", e);
+                }
+            });
+        }
+
+        /**
+         * Gets the recording info list for the specified recording type
+         *
+         * @hide
+         */
+        @CallSuper
+        public void requestTvRecordingInfoList(@NonNull @TvRecordingInfo.TvRecordingListType
+                int type) {
+            executeOrPostRunnableOnMainThread(() -> {
+                try {
+                    if (DEBUG) {
+                        Log.d(TAG, "requestTvRecordingInfoList");
+                    }
+                    if (mSessionCallback != null) {
+                        mSessionCallback.onRequestTvRecordingInfoList(type);
+                    }
+                } catch (RemoteException e) {
+                    Log.w(TAG, "error in requestTvRecordingInfoList", e);
+                }
+            });
+        }
+
+        /**
          * Requests signing of the given data.
          *
          * <p>This is used when the corresponding server of the broadcast-independent interactive
@@ -1089,6 +1189,14 @@ public abstract class TvInteractiveAppService extends Service {
             onCurrentTvInputId(inputId);
         }
 
+        void sendTvRecordingInfo(@Nullable TvRecordingInfo recordingInfo) {
+            onTvRecordingInfo(recordingInfo);
+        }
+
+        void sendTvRecordingInfoList(@Nullable List<TvRecordingInfo> recordingInfoList) {
+            onTvRecordingInfoList(recordingInfoList);
+        }
+
         void sendSigningResult(String signingId, byte[] result) {
             onSigningResult(signingId, result);
         }
@@ -1187,6 +1295,24 @@ public abstract class TvInteractiveAppService extends Service {
                 Log.d(TAG, "notifyAdResponse (requestId=" + response.getId() + ")");
             }
             onAdResponse(response);
+        }
+
+        void notifyTvMessage(String type, Bundle data) {
+            if (DEBUG) {
+                Log.d(TAG, "notifyTvMessage (type=" + type + ", data= " + data + ")");
+            }
+            onTvMessage(type, data);
+        }
+
+        /**
+         * Calls {@link #onAdBufferConsumed}.
+         */
+        void notifyAdBufferConsumed(AdBuffer buffer) {
+            if (DEBUG) {
+                Log.d(TAG,
+                        "notifyAdBufferConsumed (buffer=" + buffer + ")");
+            }
+            onAdBufferConsumed(buffer);
         }
 
         /**
@@ -1289,6 +1415,33 @@ public abstract class TvInteractiveAppService extends Service {
                 }
             });
         }
+
+
+        /**
+         * Notifies when the advertisement buffer is filled and ready to be read.
+         * @hide
+         */
+        @CallSuper
+        public void notifyAdBuffer(AdBuffer buffer) {
+            executeOrPostRunnableOnMainThread(new Runnable() {
+                @MainThread
+                @Override
+                public void run() {
+                    try {
+                        if (DEBUG) {
+                            Log.d(TAG,
+                                    "notifyAdBuffer(buffer=" + buffer + ")");
+                        }
+                        if (mSessionCallback != null) {
+                            mSessionCallback.onAdBuffer(buffer);
+                        }
+                    } catch (RemoteException e) {
+                        Log.w(TAG, "error in notifyAdBuffer", e);
+                    }
+                }
+            });
+        }
+
 
         /**
          * Takes care of dispatching incoming input events and tells whether the event was handled.

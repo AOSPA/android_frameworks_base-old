@@ -85,6 +85,7 @@ import static android.view.WindowManager.TRANSIT_CHANGE;
 import static android.view.WindowManager.TRANSIT_NONE;
 import static android.view.WindowManager.TRANSIT_OPEN;
 import static android.view.WindowManager.TRANSIT_TO_FRONT;
+import static android.view.inputmethod.ImeTracker.DEBUG_IME_VISIBILITY;
 import static android.window.DisplayAreaOrganizer.FEATURE_IME;
 import static android.window.DisplayAreaOrganizer.FEATURE_ROOT;
 import static android.window.DisplayAreaOrganizer.FEATURE_WINDOWED_MAGNIFICATION;
@@ -140,7 +141,6 @@ import static com.android.server.wm.WindowContainer.AnimationFlags.PARENTS;
 import static com.android.server.wm.WindowContainer.AnimationFlags.TRANSITION;
 import static com.android.server.wm.WindowContainerChildProto.DISPLAY_CONTENT;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_DISPLAY;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_IME_VISIBILITY;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_INPUT_METHOD;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYOUT;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYOUT_REPEATS;
@@ -449,6 +449,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     private final DisplayMetrics mDisplayMetrics = new DisplayMetrics();
     private final DisplayPolicy mDisplayPolicy;
     private final DisplayRotation mDisplayRotation;
+    @Nullable final DisplayRotationCompatPolicy mDisplayRotationCompatPolicy;
     DisplayFrames mDisplayFrames;
 
     private boolean mInTouchMode;
@@ -499,7 +500,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     // Accessed directly by all users.
     private boolean mLayoutNeeded;
     int pendingLayoutChanges;
-    boolean mLayoutAndAssignWindowLayersScheduled;
 
     /**
      * Used to gate application window layout until we have sent the complete configuration.
@@ -530,7 +530,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     /** Remove this display when animation on it has completed. */
     private boolean mDeferredRemoval;
 
-    final DockedTaskDividerController mDividerControllerLocked;
     final PinnedTaskController mPinnedTaskController;
 
     final ArrayList<WindowState> mTapExcludedWindows = new ArrayList<>();
@@ -791,6 +790,12 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
     };
 
+    /**
+     * A lambda function to find the focused window of the given window.
+     *
+     * <p>The lambda returns true if a focused window was found, false otherwise. If a focused
+     * window is found it will be stored in <code>mTmpWindow</code>.
+     */
     private final ToBooleanFunction<WindowState> mFindFocusedWindow = w -> {
         final ActivityRecord focusedApp = mFocusedApp;
         ProtoLog.v(WM_DEBUG_FOCUS, "Looking for focus: %s, flags=%d, canReceive=%b, reason=%s",
@@ -849,12 +854,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             // activity cannot be focused unless it is on the same TaskFragment as the focusedApp's.
             TaskFragment parent = activity.getTaskFragment();
             if (parent != null && parent.isEmbedded()) {
-                Task hostTask = focusedApp.getTask();
-                if (hostTask.isEmbedded()) {
-                    // Use the hosting task if the current task is embedded.
-                    hostTask = hostTask.getParent().asTaskFragment().getTask();
-                }
-                if (activity.isDescendantOf(hostTask)
+                if (activity.getTask() == focusedApp.getTask()
                         && activity.getTaskFragment() != focusedApp.getTaskFragment()) {
                     return false;
                 }
@@ -1108,12 +1108,12 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                 * mDisplayMetrics.densityDpi / DENSITY_DEFAULT;
         isDefaultDisplay = mDisplayId == DEFAULT_DISPLAY;
         mInsetsStateController = new InsetsStateController(this);
+        initializeDisplayBaseInfo();
         mDisplayFrames = new DisplayFrames(mInsetsStateController.getRawInsetsState(),
                 mDisplayInfo, calculateDisplayCutoutForRotation(mDisplayInfo.rotation),
                 calculateRoundedCornersForRotation(mDisplayInfo.rotation),
                 calculatePrivacyIndicatorBoundsForRotation(mDisplayInfo.rotation),
                 calculateDisplayShapeForRotation(mDisplayInfo.rotation));
-        initializeDisplayBaseInfo();
 
         mHoldScreenWakeLock = mWmService.mPowerManager.newWakeLock(
                 PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ON_AFTER_RELEASE,
@@ -1146,7 +1146,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
 
         mDisplayPolicy = new DisplayPolicy(mWmService, this);
-        mDisplayRotation = new DisplayRotation(mWmService, this);
+        mDisplayRotation = new DisplayRotation(mWmService, this, mDisplayInfo.address);
 
         mDeviceStateController = new DeviceStateController(mWmService.mContext, mWmService.mH,
                 newFoldState -> {
@@ -1168,7 +1168,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             mDisplayPolicy.systemReady();
         }
         mWindowCornerRadius = mDisplayPolicy.getWindowCornerRadius();
-        mDividerControllerLocked = new DockedTaskDividerController(this);
         mPinnedTaskController = new PinnedTaskController(mWmService, this);
 
         final Transaction pendingTransaction = getPendingTransaction();
@@ -1178,6 +1177,13 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         // Sets the display content for the children.
         onDisplayChanged(this);
         updateDisplayAreaOrganizers();
+
+        mDisplayRotationCompatPolicy =
+                // Not checking DeviceConfig value here to allow enabling via DeviceConfig
+                // without the need to restart the device.
+                mWmService.mLetterboxConfiguration.isCameraCompatTreatmentEnabled(
+                            /* checkDeviceConfig */ false)
+                        ? new DisplayRotationCompatPolicy(this) : null;
 
         mInputMonitor = new InputMonitor(mWmService, this);
         mInsetsPolicy = new InsetsPolicy(mInsetsStateController, this);
@@ -2601,10 +2607,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
     }
 
-    DockedTaskDividerController getDockedDividerController() {
-        return mDividerControllerLocked;
-    }
-
     PinnedTaskController getPinnedTaskController() {
         return mPinnedTaskController;
     }
@@ -2758,6 +2760,14 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                         "Display id=%d is frozen while keyguard locked, return %d",
                         mDisplayId, getLastOrientation());
                 return getLastOrientation();
+            }
+        }
+
+        if (mDisplayRotationCompatPolicy != null) {
+            int compatOrientation = mDisplayRotationCompatPolicy.getOrientation();
+            if (compatOrientation != SCREEN_ORIENTATION_UNSPECIFIED) {
+                mLastOrientationSource = null;
+                return compatOrientation;
             }
         }
 
@@ -3323,6 +3333,10 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         // on the next traversal if it's removed from RootWindowContainer child list.
         getPendingTransaction().apply();
         mWmService.mWindowPlacerLocked.requestTraversal();
+
+        if (mDisplayRotationCompatPolicy != null) {
+            mDisplayRotationCompatPolicy.dispose();
+        }
     }
 
     /** Returns true if a removal action is still being deferred. */
@@ -3730,6 +3744,14 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     }
 
     /**
+     * @see Display#FLAG_STEAL_TOP_FOCUS_DISABLED
+     * @return True if this display can become the top focused display, false otherwise.
+     */
+    boolean canStealTopFocus() {
+        return (mDisplayInfo.flags & Display.FLAG_STEAL_TOP_FOCUS_DISABLED) == 0;
+    }
+
+    /**
      * Looking for the focused window on this display if the top focused display hasn't been
      * found yet (topFocusedDisplayId is INVALID_DISPLAY) or per-display focused was allowed.
      *
@@ -3741,9 +3763,15 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                     ? findFocusedWindow() : null;
     }
 
+    /**
+     * Find the focused window of this DisplayContent. The search takes the state of the display
+     * content into account
+     * @return The focused window, null if none was found.
+     */
     WindowState findFocusedWindow() {
         mTmpWindow = null;
 
+        // mFindFocusedWindow will populate mTmpWindow with the new focused window when found.
         forAllWindows(mFindFocusedWindow, true /* traverseTopToBottom */);
 
         if (mTmpWindow == null) {
@@ -4478,11 +4506,35 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                             mImeWindowsContainer.getParent().mSurfaceControl));
             updateImeControlTarget(forceUpdateImeParent);
         }
-        // Unfreeze IME insets after the new target updated, in case updateAboveInsetsState may
-        // deliver unrelated IME insets change to the non-IME requester.
-        if (target != null) {
-            target.unfreezeInsetsAfterStartInput();
+    }
+
+    /**
+     * Callback from {@link ImeInsetsSourceProvider#updateClientVisibility} for the system to
+     * judge whether or not to notify the IME insets provider to dispatch this reported IME client
+     * visibility state to the app clients when needed.
+     */
+    boolean onImeInsetsClientVisibilityUpdate() {
+        boolean[] changed = new boolean[1];
+
+        // Unlike the IME layering target or the control target can be updated during the layout
+        // change, the IME input target requires to be changed after gaining the input focus.
+        // In case unfreezing IME insets state may too early during IME focus switching, we unfreeze
+        // when activities going to be visible until the input target changed, or the
+        // activity was the current input target that has to unfreeze after updating the IME
+        // client visibility.
+        final ActivityRecord inputTargetActivity =
+                mImeInputTarget != null ? mImeInputTarget.getActivityRecord() : null;
+        final boolean targetChanged = mImeInputTarget != mLastImeInputTarget;
+        if (targetChanged || inputTargetActivity != null && inputTargetActivity.isVisibleRequested()
+                && inputTargetActivity.mImeInsetsFrozenUntilStartInput) {
+            forAllActivities(r -> {
+                if (r.mImeInsetsFrozenUntilStartInput && r.isVisibleRequested()) {
+                    r.mImeInsetsFrozenUntilStartInput = false;
+                    changed[0] = true;
+                }
+            });
         }
+        return changed[0];
     }
 
     void updateImeControlTarget() {
@@ -5992,6 +6044,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
     }
 
+    @Nullable
     ActivityRecord topRunningActivity() {
         return topRunningActivity(false /* considerKeyguardState */);
     }
@@ -6489,15 +6542,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     @VisibleForTesting void pauseRecording() {
         if (mContentRecorder != null) {
             mContentRecorder.pauseRecording();
-        }
-    }
-
-    /**
-     * The MediaProjection instance is torn down.
-     */
-    @VisibleForTesting void stopMediaProjection() {
-        if (mContentRecorder != null) {
-            mContentRecorder.stopMediaProjection();
         }
     }
 

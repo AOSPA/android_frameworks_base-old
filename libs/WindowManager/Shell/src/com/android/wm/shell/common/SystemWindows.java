@@ -306,7 +306,9 @@ public class SystemWindows {
             }
         }
 
-        protected void attachToParentSurface(IWindow window, SurfaceControl.Builder b) {
+        @Override
+        protected SurfaceControl getParentSurface(IWindow window,
+                WindowManager.LayoutParams attrs) {
             SurfaceControl leash = new SurfaceControl.Builder(new SurfaceSession())
                   .setContainerLayer()
                   .setName("SystemWindowLeash")
@@ -316,7 +318,7 @@ public class SystemWindows {
             synchronized (this) {
                 mLeashForWindow.put(window.asBinder(), leash);
             }
-            b.setParent(leash);
+            return leash;
         }
 
         @Override
@@ -346,7 +348,7 @@ public class SystemWindows {
         public void resized(ClientWindowFrames frames, boolean reportDraw,
                 MergedConfiguration newMergedConfiguration, InsetsState insetsState,
                 boolean forceLayout, boolean alwaysConsumeSystemBars, int displayId, int syncSeqId,
-                int resizeMode) {}
+                boolean dragResizing) {}
 
         @Override
         public void insetsControlChanged(InsetsState insetsState,

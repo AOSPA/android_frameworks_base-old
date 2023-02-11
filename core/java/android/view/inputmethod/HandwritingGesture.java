@@ -82,38 +82,60 @@ public abstract class HandwritingGesture {
     @IntDef({GRANULARITY_CHARACTER, GRANULARITY_WORD})
     @interface Granularity {}
 
-    /** Undefined gesture type. */
+    /**
+     * Undefined gesture type.
+     * @hide
+     */
+    @TestApi
     public static final int GESTURE_TYPE_NONE = 0x0000;
 
     /**
      * Gesture of type {@link SelectGesture} to select an area of text.
+     * @hide
      */
+    @TestApi
     public static final int GESTURE_TYPE_SELECT = 0x0001;
 
     /**
      * Gesture of type {@link InsertGesture} to insert text at a designated point.
+     * @hide
      */
+    @TestApi
     public static final int GESTURE_TYPE_INSERT = 1 << 1;
 
     /**
      * Gesture of type {@link DeleteGesture} to delete an area of text.
+     * @hide
      */
+    @TestApi
     public static final int GESTURE_TYPE_DELETE = 1 << 2;
 
-    /** Gesture of type {@link RemoveSpaceGesture} to remove whitespace from text. */
+    /**
+     * Gesture of type {@link RemoveSpaceGesture} to remove whitespace from text.
+     * @hide
+     */
+    @TestApi
     public static final int GESTURE_TYPE_REMOVE_SPACE = 1 << 3;
 
-    /** Gesture of type {@link JoinOrSplitGesture} to join or split text. */
+    /**
+     * Gesture of type {@link JoinOrSplitGesture} to join or split text.
+     * @hide
+     */
+    @TestApi
     public static final int GESTURE_TYPE_JOIN_OR_SPLIT = 1 << 4;
 
     /**
      * Gesture of type {@link SelectRangeGesture} to select range of text.
+     * @hide
      */
+    @TestApi
     public static final int GESTURE_TYPE_SELECT_RANGE = 1 << 5;
 
     /**
      * Gesture of type {@link DeleteRangeGesture} to delete range of text.
+     * @hide
      */
+    @TestApi
     public static final int GESTURE_TYPE_DELETE_RANGE = 1 << 6;
 
     /**
@@ -159,7 +181,7 @@ public abstract class HandwritingGesture {
      * @hide
      */
     @TestApi
-    public @GestureType int getGestureType() {
+    public final @GestureType int getGestureType() {
         return mType;
     }
 
@@ -173,7 +195,7 @@ public abstract class HandwritingGesture {
      * example 2: join can fail if the gesture is drawn over text but there is no whitespace.
      */
     @Nullable
-    public String getFallbackText() {
+    public final String getFallbackText() {
         return mFallbackText;
     }
 }

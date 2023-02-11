@@ -3875,4 +3875,29 @@ public class ApplicationPackageManager extends PackageManager {
             throw e.rethrowAsRuntimeException();
         }
     }
+
+    @Override
+    public boolean canUserUninstall(String packageName, UserHandle user) {
+        try {
+            return mPM.getBlockUninstallForUser(packageName, user.getIdentifier());
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
+        }
+    }
+
+    @Override
+    public boolean shouldShowNewAppInstalledNotification() {
+        return Settings.Global.getInt(mContext.getContentResolver(),
+                Settings.Global.SHOW_NEW_APP_INSTALLED_NOTIFICATION_ENABLED, 0) == 1;
+    }
+
+    @Override
+    public void relinquishUpdateOwnership(String targetPackage) {
+        Objects.requireNonNull(targetPackage);
+        try {
+            mPM.relinquishUpdateOwnership(targetPackage);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
 }

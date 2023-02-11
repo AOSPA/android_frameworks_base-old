@@ -19,12 +19,15 @@ package com.android.systemui.statusbar.pipeline.mobile.domain.interactor
 import android.telephony.CarrierConfigManager
 import com.android.settingslib.SignalIcon.MobileIconGroup
 import com.android.systemui.dagger.qualifiers.Application
+import com.android.systemui.log.table.TableLogBuffer
 import com.android.systemui.statusbar.pipeline.mobile.data.model.DataConnectionState.Connected
+import com.android.systemui.statusbar.pipeline.mobile.data.model.NetworkNameModel
+import com.android.systemui.statusbar.pipeline.mobile.data.model.ResolvedNetworkType
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConnectionRepository
-import com.android.systemui.util.CarrierConfigTracker
+import com.android.systemui.statusbar.pipeline.shared.data.model.DataActivityModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -32,11 +35,20 @@ import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 
 interface MobileIconInteractor {
+    /** The table log created for this connection */
+    val tableLogBuffer: TableLogBuffer
+
+    /** The current mobile data activity */
+    val activity: Flow<DataActivityModel>
+
     /** Only true if mobile is the default transport but is not validated, otherwise false */
     val isDefaultConnectionFailed: StateFlow<Boolean>
 
     /** True when telephony tells us that the data state is CONNECTED */
     val isDataConnected: StateFlow<Boolean>
+
+    /** True if we consider this connection to be in service, i.e. can make calls */
+    val isInService: StateFlow<Boolean>
 
     // TODO(b/256839546): clarify naming of default vs active
     /** True if we want to consider the data connection enabled */
@@ -48,11 +60,30 @@ interface MobileIconInteractor {
     /** True if the RAT icon should always be displayed and false otherwise. */
     val alwaysShowDataRatIcon: StateFlow<Boolean>
 
+    /** True if the CDMA level should be preferred over the primary level. */
+    val alwaysUseCdmaLevel: StateFlow<Boolean>
+
     /** Observable for RAT type (network type) indicator */
     val networkTypeIconGroup: StateFlow<MobileIconGroup>
 
+    /**
+     * Provider name for this network connection. The name can be one of 3 values:
+     * 1. The default network name, if one is configured
+     * 2. A derived name based off of the intent [ACTION_SERVICE_PROVIDERS_UPDATED]
+     * 3. Or, in the case where the repository sends us the default network name, we check for an
+     * override in [connectionInfo.operatorAlphaShort], a value that is derived from [ServiceState]
+     */
+    val networkName: StateFlow<NetworkNameModel>
+
     /** True if this line of service is emergency-only */
     val isEmergencyOnly: StateFlow<Boolean>
+
+    /**
+     * True if this connection is considered roaming. The roaming bit can come from [ServiceState],
+     * or directly from the telephony manager's CDMA ERI number value. Note that we don't consider a
+     * connection to be roaming while carrier network change is active
+     */
+    val isRoaming: StateFlow<Boolean>
 
     /** Int describing the connection strength. 0-4 OR 1-5. See [numberOfLevels] */
     val level: StateFlow<Int>
@@ -68,6 +99,7 @@ class MobileIconInteractorImpl(
     @Application scope: CoroutineScope,
     defaultSubscriptionHasDataEnabled: StateFlow<Boolean>,
     override val alwaysShowDataRatIcon: StateFlow<Boolean>,
+    override val alwaysUseCdmaLevel: StateFlow<Boolean>,
     defaultMobileIconMapping: StateFlow<Map<String, MobileIconGroup>>,
     defaultMobileIconGroup: StateFlow<MobileIconGroup>,
     override val isDefaultConnectionFailed: StateFlow<Boolean>,
@@ -75,9 +107,29 @@ class MobileIconInteractorImpl(
 ) : MobileIconInteractor {
     private val connectionInfo = connectionRepository.connectionInfo
 
+    override val tableLogBuffer: TableLogBuffer = connectionRepository.tableLogBuffer
+
+    override val activity = connectionInfo.mapLatest { it.dataActivityDirection }
+
     override val isDataEnabled: StateFlow<Boolean> = connectionRepository.dataEnabled
 
     override val isDefaultDataEnabled = defaultSubscriptionHasDataEnabled
+
+    override val networkName =
+        combine(connectionInfo, connectionRepository.networkName) { connection, networkName ->
+                if (
+                    networkName is NetworkNameModel.Default && connection.operatorAlphaShort != null
+                ) {
+                    NetworkNameModel.Derived(connection.operatorAlphaShort)
+                } else {
+                    networkName
+                }
+            }
+            .stateIn(
+                scope,
+                SharingStarted.WhileSubscribed(),
+                connectionRepository.networkName.value
+            )
 
     /** Observable for the current RAT indicator icon ([MobileIconGroup]) */
     override val networkTypeIconGroup: StateFlow<MobileIconGroup> =
@@ -86,7 +138,11 @@ class MobileIconInteractorImpl(
                 defaultMobileIconMapping,
                 defaultMobileIconGroup,
             ) { info, mapping, defaultGroup ->
-                mapping[info.resolvedNetworkType.lookupKey] ?: defaultGroup
+                when (info.resolvedNetworkType) {
+                    is ResolvedNetworkType.CarrierMergedNetworkType ->
+                        info.resolvedNetworkType.iconGroupOverride
+                    else -> mapping[info.resolvedNetworkType.lookupKey] ?: defaultGroup
+                }
             }
             .stateIn(scope, SharingStarted.WhileSubscribed(), defaultMobileIconGroup.value)
 
@@ -95,26 +151,43 @@ class MobileIconInteractorImpl(
             .mapLatest { it.isEmergencyOnly }
             .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
-    override val level: StateFlow<Int> =
-        connectionInfo
-            .mapLatest { connection ->
-                // TODO: incorporate [MobileMappings.Config.alwaysShowCdmaRssi]
-                if (connection.isGsm) {
-                    connection.primaryLevel
+    override val isRoaming: StateFlow<Boolean> =
+        combine(connectionInfo, connectionRepository.cdmaRoaming) { connection, cdmaRoaming ->
+                if (connection.carrierNetworkChangeActive) {
+                    false
+                } else if (connection.isGsm) {
+                    connection.isRoaming
                 } else {
-                    connection.cdmaLevel
+                    cdmaRoaming
+                }
+            }
+            .stateIn(scope, SharingStarted.WhileSubscribed(), false)
+
+    override val level: StateFlow<Int> =
+        combine(connectionInfo, alwaysUseCdmaLevel) { connection, alwaysUseCdmaLevel ->
+                when {
+                    // GSM connections should never use the CDMA level
+                    connection.isGsm -> connection.primaryLevel
+                    alwaysUseCdmaLevel -> connection.cdmaLevel
+                    else -> connection.primaryLevel
                 }
             }
             .stateIn(scope, SharingStarted.WhileSubscribed(), 0)
 
-    /**
-     * This will become variable based on [CarrierConfigManager.KEY_INFLATE_SIGNAL_STRENGTH_BOOL]
-     * once it's wired up inside of [CarrierConfigTracker]
-     */
-    override val numberOfLevels: StateFlow<Int> = MutableStateFlow(4)
+    override val numberOfLevels: StateFlow<Int> =
+        connectionRepository.numberOfLevels.stateIn(
+            scope,
+            SharingStarted.WhileSubscribed(),
+            connectionRepository.numberOfLevels.value,
+        )
 
     override val isDataConnected: StateFlow<Boolean> =
         connectionInfo
             .mapLatest { connection -> connection.dataConnectionState == Connected }
+            .stateIn(scope, SharingStarted.WhileSubscribed(), false)
+
+    override val isInService =
+        connectionRepository.connectionInfo
+            .mapLatest { it.isInService }
             .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 }

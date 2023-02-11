@@ -19,21 +19,43 @@ package com.android.systemui.statusbar.pipeline.mobile.domain.interactor
 import android.telephony.CellSignalStrength
 import com.android.settingslib.SignalIcon
 import com.android.settingslib.mobile.TelephonyIcons
+import com.android.systemui.log.table.TableLogBuffer
+import com.android.systemui.statusbar.pipeline.mobile.data.model.NetworkNameModel
+import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConnectionRepository.Companion.DEFAULT_NUM_LEVELS
+import com.android.systemui.statusbar.pipeline.shared.data.model.DataActivityModel
 import kotlinx.coroutines.flow.MutableStateFlow
 
-class FakeMobileIconInteractor : MobileIconInteractor {
+class FakeMobileIconInteractor(
+    override val tableLogBuffer: TableLogBuffer,
+) : MobileIconInteractor {
     override val alwaysShowDataRatIcon = MutableStateFlow(false)
+
+    override val alwaysUseCdmaLevel = MutableStateFlow(false)
+
+    override val activity =
+        MutableStateFlow(
+            DataActivityModel(
+                hasActivityIn = false,
+                hasActivityOut = false,
+            )
+        )
 
     private val _iconGroup = MutableStateFlow<SignalIcon.MobileIconGroup>(TelephonyIcons.THREE_G)
     override val networkTypeIconGroup = _iconGroup
 
+    override val networkName = MutableStateFlow(NetworkNameModel.Derived("demo mode"))
+
     private val _isEmergencyOnly = MutableStateFlow(false)
     override val isEmergencyOnly = _isEmergencyOnly
+
+    override val isRoaming = MutableStateFlow(false)
 
     private val _isFailedConnection = MutableStateFlow(false)
     override val isDefaultConnectionFailed = _isFailedConnection
 
     override val isDataConnected = MutableStateFlow(true)
+
+    override val isInService = MutableStateFlow(true)
 
     private val _isDataEnabled = MutableStateFlow(true)
     override val isDataEnabled = _isDataEnabled
@@ -44,7 +66,7 @@ class FakeMobileIconInteractor : MobileIconInteractor {
     private val _level = MutableStateFlow(CellSignalStrength.SIGNAL_STRENGTH_NONE_OR_UNKNOWN)
     override val level = _level
 
-    private val _numberOfLevels = MutableStateFlow(4)
+    private val _numberOfLevels = MutableStateFlow(DEFAULT_NUM_LEVELS)
     override val numberOfLevels = _numberOfLevels
 
     fun setIconGroup(group: SignalIcon.MobileIconGroup) {

@@ -29,7 +29,6 @@ import android.app.time.UnixEpochTime;
 import android.app.timedetector.ITimeDetectorService;
 import android.app.timedetector.ManualTimeSuggestion;
 import android.app.timedetector.TelephonyTimeSuggestion;
-import android.app.timedetector.TimePoint;
 import android.content.Context;
 import android.os.Binder;
 import android.os.Handler;
@@ -144,7 +143,7 @@ public final class TimeDetectorService extends ITimeDetectorService.Stub
         return getTimeCapabilitiesAndConfig(userId);
     }
 
-    TimeCapabilitiesAndConfig getTimeCapabilitiesAndConfig(@UserIdInt int userId) {
+    private TimeCapabilitiesAndConfig getTimeCapabilitiesAndConfig(@UserIdInt int userId) {
         enforceManageTimeDetectorPermission();
 
         final long token = mCallerIdentityInjector.clearCallingIdentity();
@@ -164,6 +163,9 @@ public final class TimeDetectorService extends ITimeDetectorService.Stub
         return updateConfiguration(callingUserId, configuration);
     }
 
+    /**
+     * Updates the user's configuration. Exposed for use by {@link TimeDetectorShellCommand}.
+     */
     boolean updateConfiguration(@UserIdInt int userId, @NonNull TimeConfiguration configuration) {
         // Resolve constants like USER_CURRENT to the true user ID as needed.
         int resolvedUserId = ActivityManager.handleIncomingUser(Binder.getCallingPid(),
@@ -257,7 +259,7 @@ public final class TimeDetectorService extends ITimeDetectorService.Stub
         }
     }
 
-    void handleConfigurationInternalChangedOnHandlerThread() {
+    private void handleConfigurationInternalChangedOnHandlerThread() {
         // Configuration has changed, but each user may have a different view of the configuration.
         // It's possible that this will cause unnecessary notifications but that shouldn't be a
         // problem.
@@ -288,6 +290,10 @@ public final class TimeDetectorService extends ITimeDetectorService.Stub
         }
     }
 
+    /**
+     * Sets the system time state. See {@link TimeState} for details. For use by {@link
+     * TimeDetectorShellCommand}.
+     */
     void setTimeState(@NonNull TimeState timeState) {
         enforceManageTimeDetectorPermission();
 
@@ -354,6 +360,9 @@ public final class TimeDetectorService extends ITimeDetectorService.Stub
         }
     }
 
+    /**
+     * Suggests network time with permission checks. For use by {@link TimeDetectorShellCommand}.
+     */
     void suggestNetworkTime(@NonNull NetworkTimeSuggestion timeSignal) {
         enforceSuggestNetworkTimePermission();
         Objects.requireNonNull(timeSignal);
@@ -361,6 +370,54 @@ public final class TimeDetectorService extends ITimeDetectorService.Stub
         mHandler.post(() -> mTimeDetectorStrategy.suggestNetworkTime(timeSignal));
     }
 
+    /**
+     * Clears the cached network time information. For use during tests to simulate when no network
+     * time has been made available. For use by {@link TimeDetectorShellCommand}.
+     *
+     * <p>This operation takes place in the calling thread.
+     */
+    void clearNetworkTime() {
+        enforceSuggestNetworkTimePermission();
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            mTimeDetectorStrategy.clearLatestNetworkSuggestion();
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    @Override
+    public UnixEpochTime latestNetworkTime() {
+        NetworkTimeSuggestion suggestion = getLatestNetworkSuggestion();
+        if (suggestion != null) {
+            return suggestion.getUnixEpochTime();
+        } else {
+            throw new ParcelableException(new DateTimeException("Missing network time fix"));
+        }
+    }
+
+    /**
+     * Returns the latest network suggestion accepted. For use by {@link TimeDetectorShellCommand}.
+     */
+    @Nullable
+    NetworkTimeSuggestion getLatestNetworkSuggestion() {
+        // TODO(b/222295093): Return the latest network time from mTimeDetectorStrategy once we can
+        //  be sure that all uses of NtpTrustedTime results in a suggestion being made to the time
+        //  detector. mNtpTrustedTime can be removed once this happens.
+        NtpTrustedTime.TimeResult ntpResult = mNtpTrustedTime.getCachedTimeResult();
+        if (ntpResult != null) {
+            UnixEpochTime unixEpochTime = new UnixEpochTime(
+                    ntpResult.getElapsedRealtimeMillis(), ntpResult.getTimeMillis());
+            return new NetworkTimeSuggestion(unixEpochTime, ntpResult.getUncertaintyMillis());
+        } else {
+            return null;
+        }
+    }
+
+    /**
+     * Suggests GNSS time with permission checks. For use by {@link TimeDetectorShellCommand}.
+     */
     void suggestGnssTime(@NonNull GnssTimeSuggestion timeSignal) {
         enforceSuggestGnssTimePermission();
         Objects.requireNonNull(timeSignal);
@@ -374,19 +431,6 @@ public final class TimeDetectorService extends ITimeDetectorService.Stub
         Objects.requireNonNull(timeSignal);
 
         mHandler.post(() -> mTimeDetectorStrategy.suggestExternalTime(timeSignal));
-    }
-
-    @Override
-    public TimePoint latestNetworkTime() {
-        // TODO(b/222295093): Return the latest network time from mTimeDetectorStrategy once we can
-        //  be sure that all uses of NtpTrustedTime results in a suggestion being made to the time
-        //  detector. mNtpTrustedTime can be removed once this happens.
-        NtpTrustedTime.TimeResult ntpResult = mNtpTrustedTime.getCachedTimeResult();
-        if (ntpResult != null) {
-            return new TimePoint(ntpResult.getTimeMillis(), ntpResult.getElapsedRealtimeMillis());
-        } else {
-            throw new ParcelableException(new DateTimeException("Missing network time fix"));
-        }
     }
 
     @Override
@@ -421,7 +465,7 @@ public final class TimeDetectorService extends ITimeDetectorService.Stub
     private void enforceSuggestNetworkTimePermission() {
         mContext.enforceCallingPermission(
                 android.Manifest.permission.SET_TIME,
-                "set time");
+                "suggest network time");
     }
 
     private void enforceSuggestGnssTimePermission() {

@@ -24,7 +24,6 @@ import android.credentials.Credential;
 import android.credentials.ui.ProviderData;
 import android.credentials.ui.ProviderPendingIntentResponse;
 import android.service.credentials.CredentialEntry;
-import android.service.credentials.CredentialProviderException;
 import android.service.credentials.CredentialProviderInfo;
 import android.util.Pair;
 
@@ -37,6 +36,8 @@ import java.util.UUID;
  */
 public abstract class ProviderSession<T, R>
         implements RemoteCredentialService.ProviderCallbacks<R> {
+
+    private static final String TAG = "ProviderSession";
     // Key to be used as an entry key for a remote entry
     protected static final String REMOTE_ENTRY_KEY = "remote_entry_key";
 
@@ -50,7 +51,9 @@ public abstract class ProviderSession<T, R>
     @Nullable protected Credential mFinalCredentialResponse;
     @NonNull protected final T mProviderRequest;
     @Nullable protected R mProviderResponse;
+    @NonNull protected Boolean mProviderResponseSet = false;
     @Nullable protected Pair<String, CredentialEntry> mUiRemoteEntry;
+
 
     /**
      * Returns true if the given status reflects that the provider state is ready to be shown
@@ -82,7 +85,8 @@ public abstract class ProviderSession<T, R>
      */
     public static boolean isCompletionStatus(Status status) {
         return status == Status.CREDENTIAL_RECEIVED_FROM_INTENT
-                || status == Status.CREDENTIAL_RECEIVED_FROM_SELECTION;
+                || status == Status.CREDENTIAL_RECEIVED_FROM_SELECTION
+                || status == Status.COMPLETE;
     }
 
     /**
@@ -95,8 +99,12 @@ public abstract class ProviderSession<T, R>
         /** Called when status changes. */
         void onProviderStatusChanged(Status status, ComponentName componentName);
 
-        /** Called when the final credential to be returned to the client has been received. */
+        /** Called when the final credential is received through an entry selection. */
         void onFinalResponseReceived(ComponentName componentName, V response);
+
+        /** Called when an error is received through an entry selection. */
+        void onFinalErrorReceived(ComponentName componentName, String errorType,
+                @Nullable String message);
     }
 
     protected ProviderSession(@NonNull Context context, @NonNull CredentialProviderInfo info,
@@ -124,13 +132,13 @@ public abstract class ProviderSession<T, R>
         CREDENTIAL_RECEIVED_FROM_INTENT,
         PENDING_INTENT_INVOKED,
         CREDENTIAL_RECEIVED_FROM_SELECTION,
-        SAVE_ENTRIES_RECEIVED, CANCELED
+        SAVE_ENTRIES_RECEIVED, CANCELED,
+        COMPLETE
     }
 
     /** Converts exception to a provider session status. */
     @NonNull
-    public static Status toStatus(
-            @CredentialProviderException.CredentialProviderError int errorCode) {
+    public static Status toStatus(int errorCode) {
         // TODO : Add more mappings as more flows are supported
         return Status.CANCELED;
     }
@@ -176,6 +184,16 @@ public abstract class ProviderSession<T, R>
     /** Get the request to be sent to the provider. */
     protected T getProviderRequest() {
         return mProviderRequest;
+    }
+
+    /** Returns whether the provider response is set. */
+    protected Boolean isProviderResponseSet() {
+        return mProviderResponse != null || mProviderResponseSet;
+    }
+
+    protected void invokeCallbackWithError(String errorType, @Nullable String errorMessage) {
+        // TODO: Determine what the error message should be
+        mCallbacks.onFinalErrorReceived(mComponentName, errorType, errorMessage);
     }
 
     /** Update the response state stored with the provider session. */

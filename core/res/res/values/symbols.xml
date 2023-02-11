@@ -283,6 +283,7 @@
   <java-symbol type="attr" name="autofillSaveCustomSubtitleMaxHeight"/>
   <java-symbol type="bool" name="action_bar_embed_tabs" />
   <java-symbol type="bool" name="action_bar_expanded_action_views_exclusive" />
+  <java-symbol type="bool" name="config_audio_csd_enabled_default" />
   <java-symbol type="integer" name="config_audio_notif_vol_default" />
   <java-symbol type="integer" name="config_audio_notif_vol_steps" />
   <java-symbol type="integer" name="config_audio_ring_vol_default" />
@@ -351,7 +352,9 @@
   <java-symbol type="bool" name="config_restartRadioAfterProvisioning" />
   <java-symbol type="bool" name="config_speed_up_audio_on_mt_calls" />
   <java-symbol type="bool" name="config_useFixedVolume" />
+  <java-symbol type="bool" name="config_isMainUserPermanentAdmin"/>
   <java-symbol type="bool" name="config_enableMultiUserUI"/>
+  <java-symbol type="bool" name="config_enableMultipleAdmins"/>
   <java-symbol type="bool" name="config_enableNewAutoSelectNetworkUI"/>
   <java-symbol type="bool" name="config_disableUsbPermissionDialogs"/>
   <java-symbol type="dimen" name="config_highResTaskSnapshotScale" />
@@ -467,7 +470,7 @@
   <java-symbol type="integer" name="config_multiuserMaximumUsers" />
   <java-symbol type="integer" name="config_multiuserMaxRunningUsers" />
   <java-symbol type="bool" name="config_multiuserDelayUserDataLocking" />
-  <java-symbol type="bool" name="config_multiuserUsersOnSecondaryDisplays" />
+  <java-symbol type="bool" name="config_multiuserVisibleBackgroundUsers" />
   <java-symbol type="bool" name="config_enableTimeoutToDockUserWhenDocked" />
   <java-symbol type="integer" name="config_userTypePackageWhitelistMode"/>
   <java-symbol type="xml" name="config_user_types" />
@@ -659,6 +662,10 @@
   <java-symbol type="string" name="contentServiceSync" />
   <java-symbol type="string" name="contentServiceSyncNotificationTitle" />
   <java-symbol type="string" name="contentServiceTooManyDeletesNotificationDesc" />
+  <java-symbol type="string" name="csd_dose_reached_warning" />
+  <java-symbol type="string" name="csd_dose_repeat_warning" />
+  <java-symbol type="string" name="csd_entering_RS2_warning" />
+  <java-symbol type="string" name="csd_momentary_exposure_warning" />
   <java-symbol type="string" name="date_and_time" />
   <java-symbol type="string" name="date_picker_decrement_day_button" />
   <java-symbol type="string" name="date_picker_decrement_month_button" />
@@ -940,7 +947,6 @@
   <java-symbol type="string" name="serviceErased" />
   <java-symbol type="string" name="serviceNotProvisioned" />
   <java-symbol type="string" name="serviceRegistered" />
-  <java-symbol type="string" name="setup_autofill" />
   <java-symbol type="string" name="share" />
   <java-symbol type="string" name="shareactionprovider_share_with" />
   <java-symbol type="string" name="shareactionprovider_share_with_application" />
@@ -1695,6 +1701,8 @@
   <java-symbol type="bool" name="config_lockUiMode" />
   <java-symbol type="bool" name="config_reverseDefaultRotation" />
   <java-symbol type="bool" name="config_perDisplayFocusEnabled" />
+  <java-symbol type="bool" name="config_enableMotionPrediction" />
+  <java-symbol type="integer" name="config_motionPredictionOffsetNanos" />
   <java-symbol type="bool" name="config_showNavigationBar" />
   <java-symbol type="bool" name="config_supportAutoRotation" />
   <java-symbol type="bool" name="config_dockedStackDividerFreeSnapMode" />
@@ -1706,9 +1714,6 @@
   <java-symbol type="fraction" name="docked_stack_divider_fixed_ratio" />
   <java-symbol type="fraction" name="thumbnail_fullscreen_scale" />
   <java-symbol type="integer" name="thumbnail_width_tv" />
-  <java-symbol type="dimen" name="resize_shadow_size" />
-  <java-symbol type="color" name="resize_shadow_start_color" />
-  <java-symbol type="color" name="resize_shadow_end_color" />
   <java-symbol type="dimen" name="navigation_bar_height" />
   <java-symbol type="dimen" name="navigation_bar_height_landscape" />
   <java-symbol type="dimen" name="navigation_bar_width" />
@@ -2274,6 +2279,7 @@
   <java-symbol type="drawable" name="scrubber_control_selector_holo" />
   <java-symbol type="drawable" name="scrubber_progress_horizontal_holo_dark" />
   <java-symbol type="drawable" name="progress_small_material" />
+  <java-symbol type="drawable" name="ic_chevron_end" />
   <java-symbol type="string" name="chooseUsbActivity" />
   <java-symbol type="string" name="ext_media_badremoval_notification_message" />
   <java-symbol type="string" name="ext_media_badremoval_notification_title" />
@@ -3112,6 +3118,10 @@
   <java-symbol type="string" name="language_selection_title" />
   <java-symbol type="string" name="search_language_hint" />
 
+  <!--  Work profile unlaunchable app alert dialog-->
+  <java-symbol type="style" name="AlertDialogWithEmergencyButton"/>
+  <java-symbol type="string" name="work_mode_dialer_off_message" />
+  <java-symbol type="string" name="work_mode_emergency_call_button" />
   <java-symbol type="string" name="work_mode_off_title" />
   <java-symbol type="string" name="work_mode_off_message" />
   <java-symbol type="string" name="work_mode_turn_on" />
@@ -3528,12 +3538,13 @@
 
   <java-symbol type="drawable" name="ic_accessibility_color_inversion" />
   <java-symbol type="drawable" name="ic_accessibility_color_correction" />
+  <java-symbol type="drawable" name="ic_accessibility_hearing_aid" />
   <java-symbol type="drawable" name="ic_accessibility_magnification" />
   <java-symbol type="drawable" name="ic_accessibility_reduce_bright_colors" />
   <java-symbol type="drawable" name="ic_accessibility_one_handed" />
 
+  <java-symbol type="string" name="hearing_aids_feature_name" />
   <java-symbol type="string" name="reduce_bright_colors_feature_name" />
-
   <java-symbol type="string" name="one_handed_mode_feature_name" />
 
   <!-- com.android.internal.widget.RecyclerView -->
@@ -3706,6 +3717,7 @@
   <java-symbol type="string" name="config_defaultTranslationService" />
   <java-symbol type="string" name="config_defaultAppPredictionService" />
   <java-symbol type="string" name="config_defaultContentSuggestionsService" />
+  <java-symbol type="string" name="config_defaultCredentialManagerHybridService" />
   <java-symbol type="string" name="config_defaultSearchUiService" />
   <java-symbol type="string" name="config_defaultSmartspaceService" />
   <java-symbol type="string" name="config_defaultWallpaperEffectsGenerationService" />
@@ -3715,6 +3727,10 @@
   <java-symbol type="string" name="config_defaultSystemCaptionsManagerService" />
   <java-symbol type="string" name="config_defaultAmbientContextDetectionService" />
   <java-symbol type="string" name="config_defaultAmbientContextConsentComponent" />
+  <java-symbol type="string" name="config_defaultWearableSensingConsentComponent" />
+  <java-symbol type="string" name="config_wearableAmbientContextPackageNameExtraKey" />
+  <java-symbol type="string" name="config_wearableAmbientContextEventArrayExtraKey" />
+  <java-symbol type="array" name="config_defaultAmbientContextServices" />
   <java-symbol type="string" name="config_ambientContextPackageNameExtraKey" />
   <java-symbol type="string" name="config_ambientContextEventArrayExtraKey" />
   <java-symbol type="string" name="config_defaultWearableSensingService" />
@@ -4423,10 +4439,13 @@
   <java-symbol type="array" name="config_keep_warming_services" />
   <java-symbol type="string" name="config_display_features" />
   <java-symbol type="array" name="config_device_state_postures" />
+  <java-symbol type="array" name="config_deviceTabletopRotations" />
+  <java-symbol type="bool" name="config_isDisplayHingeAlwaysSeparating" />
 
   <java-symbol type="dimen" name="controls_thumbnail_image_max_height" />
   <java-symbol type="dimen" name="controls_thumbnail_image_max_width" />
 
+  <java-symbol type="bool" name="config_letterboxIsDisplayRotationImmersiveAppCompatPolicyEnabled" />
   <java-symbol type="dimen" name="config_fixedOrientationLetterboxAspectRatio" />
   <java-symbol type="dimen" name="config_letterboxBackgroundWallpaperBlurRadius" />
   <java-symbol type="integer" name="config_letterboxActivityCornersRadius" />
@@ -4435,13 +4454,20 @@
   <java-symbol type="color" name="config_letterboxBackgroundColor" />
   <java-symbol type="dimen" name="config_letterboxHorizontalPositionMultiplier" />
   <java-symbol type="dimen" name="config_letterboxVerticalPositionMultiplier" />
+  <java-symbol type="dimen" name="config_letterboxBookModePositionMultiplier" />
+  <java-symbol type="dimen" name="config_letterboxTabletopModePositionMultiplier" />
   <java-symbol type="bool" name="config_letterboxIsHorizontalReachabilityEnabled" />
   <java-symbol type="bool" name="config_letterboxIsVerticalReachabilityEnabled" />
   <java-symbol type="integer" name="config_letterboxDefaultPositionForHorizontalReachability" />
   <java-symbol type="integer" name="config_letterboxDefaultPositionForVerticalReachability" />
+  <java-symbol type="integer" name="config_letterboxDefaultPositionForBookModeReachability" />
+  <java-symbol type="integer" name="config_letterboxDefaultPositionForTabletopModeReachability" />
+  <java-symbol type="bool" name="config_letterboxIsPolicyForIgnoringRequestedOrientationEnabled" />
   <java-symbol type="bool" name="config_letterboxIsEducationEnabled" />
   <java-symbol type="dimen" name="config_letterboxDefaultMinAspectRatioForUnresizableApps" />
   <java-symbol type="bool" name="config_letterboxIsSplitScreenAspectRatioForUnresizableAppsEnabled" />
+  <java-symbol type="bool" name="config_isCompatFakeFocusEnabled" />
+  <java-symbol type="bool" name="config_isWindowManagerCameraCompatTreatmentEnabled" />
   <java-symbol type="bool" name="config_isCameraCompatControlForStretchedIssuesEnabled" />
 
   <java-symbol type="bool" name="config_hideDisplayCutoutWithDisplayArea" />

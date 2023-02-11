@@ -380,8 +380,8 @@ public final class MediaRouterService extends IMediaRouterService.Stub
 
     // Binder call
     @Override
-    public void enforceMediaContentControlPermission() {
-        mService2.enforceMediaContentControlPermission();
+    public boolean verifyPackageExists(String clientPackageName) {
+        return mService2.verifyPackageExists(clientPackageName);
     }
 
     // Binder call

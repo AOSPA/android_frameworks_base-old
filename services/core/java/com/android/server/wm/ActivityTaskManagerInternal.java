@@ -29,6 +29,7 @@ import android.content.IIntentSender;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.res.CompatibilityInfo;
+import android.content.res.Configuration;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.LocaleList;
@@ -436,8 +437,6 @@ public abstract class ActivityTaskManagerInternal {
             boolean allowInstrumenting, boolean fromHomeKey);
     /** Start home activities on all displays that support system decorations. */
     public abstract boolean startHomeOnAllDisplays(int userId, String reason);
-    /** @return true if the given process is the factory test process. */
-    public abstract boolean isFactoryTestProcess(WindowProcessController wpc);
     public abstract void updateTopComponentForFactoryTest();
     public abstract void handleAppDied(WindowProcessController wpc, boolean restarting,
             Runnable finishInstrumentationCallback);
@@ -622,10 +621,19 @@ public abstract class ActivityTaskManagerInternal {
         @Nullable
         public final LocaleList mLocales;
 
+        /**
+         * Gender for the application, null if app-specific grammatical gender is not set.
+         */
+        @Nullable
+        public final @Configuration.GrammaticalGender
+        Integer mGrammaticalGender;
+
         @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
-        public PackageConfig(Integer nightMode, LocaleList locales) {
+        public PackageConfig(Integer nightMode, LocaleList locales,
+                @Configuration.GrammaticalGender Integer grammaticalGender) {
             mNightMode = nightMode;
             mLocales = locales;
+            mGrammaticalGender = grammaticalGender;
         }
 
         /**
@@ -660,6 +668,13 @@ public abstract class ActivityTaskManagerInternal {
         PackageConfigurationUpdater setLocales(LocaleList locales);
 
         /**
+         * Sets the gender for the current application. This setting is persisted and will
+         * override the system configuration for this application.
+         */
+        PackageConfigurationUpdater setGrammaticalGender(
+                @Configuration.GrammaticalGender int gender);
+
+        /**
          * Commit changes.
          * @return true if the configuration changes were persisted,
          * false if there were no changes, or if erroneous inputs were provided, such as:
@@ -680,11 +695,22 @@ public abstract class ActivityTaskManagerInternal {
 
     /**
      * Registers a callback which can intercept activity starts.
-     * @throws IllegalArgumentException if duplicate ids are provided
+     * @throws IllegalArgumentException if duplicate ids are provided or the provided {@code
+     * callback} is null
+     * @see ActivityInterceptorCallbackRegistry
+     * #registerActivityInterceptorCallback(int, ActivityInterceptorCallback)
      */
     public abstract void registerActivityStartInterceptor(
             @ActivityInterceptorCallback.OrderedId int id,
             ActivityInterceptorCallback callback);
+
+    /**
+     * Unregisters an {@link ActivityInterceptorCallback}.
+     * @throws IllegalArgumentException if id is not registered
+     * @see ActivityInterceptorCallbackRegistry#unregisterActivityInterceptorCallback(int)
+     */
+    public abstract void unregisterActivityStartInterceptor(
+            @ActivityInterceptorCallback.OrderedId int id);
 
     /** Get the most recent task excluding the first running task (the one on the front most). */
     public abstract ActivityManager.RecentTaskInfo getMostRecentTaskFromBackground();

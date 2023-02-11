@@ -802,7 +802,7 @@ public class WindowOrganizerTests extends WindowTestsBase {
         mWm.mAtmService.mWindowOrganizerController.applyTransaction(wct);
 
         assertThat(navigationBarInsetsReceiverTask.mLocalInsetsSourceProviders
-                .valueAt(0).getSource().getType()).isEqualTo(ITYPE_TOP_GENERIC_OVERLAY);
+                .valueAt(0).getSource().getId()).isEqualTo(ITYPE_TOP_GENERIC_OVERLAY);
     }
 
     @Test
@@ -1238,7 +1238,8 @@ public class WindowOrganizerTests extends WindowTestsBase {
         assertTrue(w1.useBLASTSync());
         assertTrue(w2.useBLASTSync());
 
-        w1.immediatelyNotifyBlastSync();
+        // A drawn window can complete the sync state automatically.
+        w1.mWinAnimator.mDrawState = WindowStateAnimator.HAS_DRAWN;
         mWm.mSyncEngine.onSurfacePlacement();
         verify(mockCallback).onTransactionReady(anyInt(), any());
         assertFalse(w1.useBLASTSync());

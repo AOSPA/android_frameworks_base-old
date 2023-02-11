@@ -599,8 +599,11 @@ public class UserManager {
     /**
      * Specifies if a user is disallowed from transferring files over USB.
      *
-     * <p>This restriction can only be set by a device owner, a profile owner on the primary
-     * user or a profile owner of an organization-owned managed profile on the parent profile.
+     * <p>This restriction can only be set by a <a href="https://developers.google.com/android/work/terminology#device_owner_do">
+     * device owner</a> or a <a href="https://developers.google.com/android/work/terminology#profile_owner_po">
+     * profile owner</a> on the primary user's profile or a profile owner of an organization-owned
+     * <a href="https://developers.google.com/android/work/terminology#managed_profile">
+     * managed profile</a> on the parent profile.
      * When it is set by a device owner, it applies globally. When it is set by a profile owner
      * on the primary user or by a profile owner of an organization-owned managed profile on
      * the parent profile, it disables the primary user from transferring files over USB. No other
@@ -1469,6 +1472,21 @@ public class UserManager {
     public static final String DISALLOW_BIOMETRIC = "disallow_biometric";
 
     /**
+     * Specifies whether the user is allowed to modify default apps in settings.
+     *
+     * <p>This restriction can be set by device or profile owner.
+     *
+     * <p>The default value is <code>false</code>.
+     *
+     * <p>Key for user restrictions.
+     * <p>Type: Boolean
+     * @see DevicePolicyManager#addUserRestriction(ComponentName, String)
+     * @see DevicePolicyManager#clearUserRestriction(ComponentName, String)
+     * @see #getUserRestrictions()
+     */
+    public static final String DISALLOW_CONFIG_DEFAULT_APPS = "disallow_config_default_apps";
+
+    /**
      * Application restriction key that is used to indicate the pending arrival
      * of real restrictions for the app.
      *
@@ -1824,6 +1842,15 @@ public class UserManager {
     public static final int REMOVE_RESULT_ERROR_SYSTEM_USER = -4;
 
     /**
+     * A response code from {@link #removeUserWhenPossible(UserHandle, boolean)} indicating that
+     * user being removed is a  {@link UserInfo#FLAG_MAIN}  user and can't be removed because
+     * system property {@link com.android.internal.R.bool.isMainUserPermanentAdmin} is true.
+     * @hide
+     */
+    @SystemApi
+    public static final int REMOVE_RESULT_ERROR_MAIN_USER_PERMANENT_ADMIN = -5;
+
+    /**
      * Possible response codes from {@link #removeUserWhenPossible(UserHandle, boolean)}.
      *
      * @hide
@@ -1835,6 +1862,7 @@ public class UserManager {
             REMOVE_RESULT_ERROR_USER_RESTRICTION,
             REMOVE_RESULT_ERROR_USER_NOT_FOUND,
             REMOVE_RESULT_ERROR_SYSTEM_USER,
+            REMOVE_RESULT_ERROR_MAIN_USER_PERMANENT_ADMIN,
             REMOVE_RESULT_ERROR_UNKNOWN,
     })
     @Retention(RetentionPolicy.SOURCE)
@@ -2092,6 +2120,15 @@ public class UserManager {
     public static boolean isGuestUserAllowEphemeralStateChange() {
         return Resources.getSystem()
                 .getBoolean(com.android.internal.R.bool.config_guestUserAllowEphemeralStateChange);
+    }
+
+    /**
+     * Returns whether multiple admins are enabled on the device
+     * @hide
+     */
+    public static boolean isMultipleAdminEnabled() {
+        return Resources.getSystem()
+                .getBoolean(com.android.internal.R.bool.config_enableMultipleAdmins);
     }
 
     /**
@@ -2912,14 +2949,15 @@ public class UserManager {
     /**
      * @hide
      */
-    public static boolean isUsersOnSecondaryDisplaysEnabled() {
-        return SystemProperties.getBoolean("fw.users_on_secondary_displays",
+    public static boolean isVisibleBackgroundUsersEnabled() {
+        return SystemProperties.getBoolean("fw.visible_bg_users",
                 Resources.getSystem()
-                        .getBoolean(R.bool.config_multiuserUsersOnSecondaryDisplays));
+                        .getBoolean(R.bool.config_multiuserVisibleBackgroundUsers));
     }
 
     /**
-     * Returns whether the device allows users to run (and launch activities) on secondary displays.
+     * Returns whether the device allows (full) users to be started in background visible in a given
+     * display (which would allow them to launch activities in that display).
      *
      * @return {@code false} for most devices, except on automotive builds for vehiches with
      * passenger displays.
@@ -2927,8 +2965,8 @@ public class UserManager {
      * @hide
      */
     @TestApi
-    public boolean isUsersOnSecondaryDisplaysSupported() {
-        return isUsersOnSecondaryDisplaysEnabled();
+    public boolean isVisibleBackgroundUsersSupported() {
+        return isVisibleBackgroundUsersEnabled();
     }
 
     /**
@@ -4102,6 +4140,26 @@ public class UserManager {
     }
 
     /**
+     * Revokes admin privileges from the user, if such a user exists.
+     *
+     * <p>Note that this does not alter the user's pre-existing user restrictions.
+     *
+     * @param userId the id of the user to revoke admin rights from
+     * @hide
+     */
+    @RequiresPermission(allOf = {
+            Manifest.permission.INTERACT_ACROSS_USERS_FULL,
+            Manifest.permission.MANAGE_USERS
+    })
+    public void revokeUserAdmin(@UserIdInt int userId) {
+        try {
+            mService.revokeUserAdmin(userId);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Evicts the user's credential encryption key from memory by stopping and restarting the user.
      *
      * @hide
@@ -5203,8 +5261,9 @@ public class UserManager {
      * @return the {@link RemoveResult} code: {@link #REMOVE_RESULT_REMOVED},
      * {@link #REMOVE_RESULT_DEFERRED}, {@link #REMOVE_RESULT_ALREADY_BEING_REMOVED},
      * {@link #REMOVE_RESULT_ERROR_USER_RESTRICTION}, {@link #REMOVE_RESULT_ERROR_USER_NOT_FOUND},
-     * {@link #REMOVE_RESULT_ERROR_SYSTEM_USER}, or {@link #REMOVE_RESULT_ERROR_UNKNOWN}. All error
-     * codes have negative values.
+     * {@link #REMOVE_RESULT_ERROR_SYSTEM_USER},
+     * {@link #REMOVE_RESULT_ERROR_MAIN_USER_PERMANENT_ADMIN}, or
+     * {@link #REMOVE_RESULT_ERROR_UNKNOWN}. All error codes have negative values.
      *
      * @hide
      */

@@ -37,6 +37,7 @@ import com.android.systemui.common.shared.model.ContentDescription
 import com.android.systemui.common.ui.binder.TintedIconViewBinder
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Main
+import com.android.systemui.dump.DumpManager
 import com.android.systemui.media.taptotransfer.MediaTttFlags
 import com.android.systemui.media.taptotransfer.common.MediaTttIcon
 import com.android.systemui.media.taptotransfer.common.MediaTttLogger
@@ -69,6 +70,7 @@ open class MediaTttChipControllerReceiver @Inject constructor(
         mainExecutor: DelayableExecutor,
         accessibilityManager: AccessibilityManager,
         configurationController: ConfigurationController,
+        dumpManager: DumpManager,
         powerManager: PowerManager,
         @Main private val mainHandler: Handler,
         private val mediaTttFlags: MediaTttFlags,
@@ -83,6 +85,7 @@ open class MediaTttChipControllerReceiver @Inject constructor(
         mainExecutor,
         accessibilityManager,
         configurationController,
+        dumpManager,
         powerManager,
         R.layout.media_ttt_chip_receiver,
         wakeLockBuilder,
@@ -110,6 +113,9 @@ open class MediaTttChipControllerReceiver @Inject constructor(
             )
         }
     }
+
+    private var maxRippleWidth: Float = 0f
+    private var maxRippleHeight: Float = 0f
 
     private fun updateMediaTapToTransferReceiverDisplay(
         @StatusBarManager.MediaTransferReceiverState displayState: Int,
@@ -162,6 +168,7 @@ open class MediaTttChipControllerReceiver @Inject constructor(
     }
 
     override fun start() {
+        super.start()
         if (mediaTttFlags.isMediaTttEnabled()) {
             commandQueue.addCallback(commandQueueCallbacks)
         }
@@ -212,7 +219,7 @@ open class MediaTttChipControllerReceiver @Inject constructor(
         expandRipple(view.requireViewById(R.id.ripple))
     }
 
-    override fun animateViewOut(view: ViewGroup, onAnimationEnd: Runnable) {
+    override fun animateViewOut(view: ViewGroup, removalReason: String?, onAnimationEnd: Runnable) {
         val appIconView = view.getAppIconView()
         appIconView.animate()
                 .translationYBy(getTranslationAmount().toFloat())
@@ -222,7 +229,14 @@ open class MediaTttChipControllerReceiver @Inject constructor(
                 .alpha(0f)
                 .setDuration(ICON_ALPHA_ANIM_DURATION)
                 .start()
-        (view.requireViewById(R.id.ripple) as ReceiverChipRippleView).collapseRipple(onAnimationEnd)
+
+        val rippleView: ReceiverChipRippleView = view.requireViewById(R.id.ripple)
+        if (removalReason == ChipStateReceiver.TRANSFER_TO_RECEIVER_SUCCEEDED.name &&
+                mediaTttFlags.isMediaTttReceiverSuccessRippleEnabled()) {
+            expandRippleToFull(rippleView, onAnimationEnd)
+        } else {
+            rippleView.collapseRipple(onAnimationEnd)
+        }
     }
 
     override fun getTouchableRegion(view: View, outRect: Rect) {
@@ -267,12 +281,19 @@ open class MediaTttChipControllerReceiver @Inject constructor(
         })
     }
 
-    private fun layoutRipple(rippleView: ReceiverChipRippleView) {
+    private fun layoutRipple(rippleView: ReceiverChipRippleView, isFullScreen: Boolean = false) {
         val windowBounds = windowManager.currentWindowMetrics.bounds
         val height = windowBounds.height().toFloat()
         val width = windowBounds.width().toFloat()
 
-        rippleView.setMaxSize(width / 2f, height / 2f)
+        if (isFullScreen) {
+            maxRippleHeight = height * 2f
+            maxRippleWidth = width * 2f
+        } else {
+            maxRippleHeight = height / 2f
+            maxRippleWidth = width / 2f
+        }
+        rippleView.setMaxSize(maxRippleWidth, maxRippleHeight)
         // Center the ripple on the bottom of the screen in the middle.
         rippleView.setCenter(width * 0.5f, height)
         val color = Utils.getColorAttrDefaultColor(context, R.attr.wallpaperTextColorAccent)
@@ -281,6 +302,11 @@ open class MediaTttChipControllerReceiver @Inject constructor(
 
     private fun View.getAppIconView(): CachingIconView {
         return this.requireViewById(R.id.app_icon)
+    }
+
+    private fun expandRippleToFull(rippleView: ReceiverChipRippleView, onAnimationEnd: Runnable?) {
+        layoutRipple(rippleView, true)
+        rippleView.expandToFull(maxRippleHeight, onAnimationEnd)
     }
 }
 

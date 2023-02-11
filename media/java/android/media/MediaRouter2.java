@@ -26,7 +26,6 @@ import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.content.Context;
-import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -209,18 +208,14 @@ public final class MediaRouter2 {
                 IMediaRouterService.Stub.asInterface(
                         ServiceManager.getService(Context.MEDIA_ROUTER_SERVICE));
         try {
-            // SecurityException will be thrown if there's no permission.
-            serviceBinder.enforceMediaContentControlPermission();
+            // verifyPackageExists throws SecurityException if the caller doesn't hold
+            // MEDIA_CONTENT_CONTROL permission.
+            if (!serviceBinder.verifyPackageExists(clientPackageName)) {
+                Log.e(TAG, "Package " + clientPackageName + " not found. Ignoring.");
+                return null;
+            }
         } catch (RemoteException e) {
             e.rethrowFromSystemServer();
-        }
-
-        PackageManager pm = context.getPackageManager();
-        try {
-            pm.getPackageInfo(clientPackageName, 0);
-        } catch (PackageManager.NameNotFoundException ex) {
-            Log.e(TAG, "Package " + clientPackageName + " not found. Ignoring.");
-            return null;
         }
 
         synchronized (sSystemRouterLock) {

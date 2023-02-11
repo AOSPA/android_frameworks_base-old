@@ -39,6 +39,7 @@ import static android.provider.DeviceConfig.NAMESPACE_PACKAGE_MANAGER_SERVICE;
 
 import static com.android.internal.annotations.VisibleForTesting.Visibility;
 import static com.android.internal.util.FrameworkStatsLog.BOOT_TIME_EVENT_DURATION__EVENT__OTA_PACKAGE_MANAGER_INIT_TIME;
+import static com.android.server.pm.DexOptHelper.useArtService;
 import static com.android.server.pm.InstructionSets.getDexCodeInstructionSet;
 import static com.android.server.pm.InstructionSets.getPreferredInstructionSet;
 import static com.android.server.pm.PackageManagerServiceUtils.compareSignatures;
@@ -199,10 +200,12 @@ import com.android.server.art.DexUseManagerLocal;
 import com.android.server.compat.CompatChange;
 import com.android.server.compat.PlatformCompat;
 import com.android.server.pm.Installer.InstallerException;
+import com.android.server.pm.Installer.LegacyDexoptDisabledException;
 import com.android.server.pm.Settings.VersionInfo;
 import com.android.server.pm.dex.ArtManagerService;
 import com.android.server.pm.dex.ArtUtils;
 import com.android.server.pm.dex.DexManager;
+import com.android.server.pm.dex.DynamicCodeLogger;
 import com.android.server.pm.dex.ViewCompiler;
 import com.android.server.pm.local.PackageManagerLocalImpl;
 import com.android.server.pm.parsing.PackageInfoUtils;
@@ -500,13 +503,22 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
     private static final String PROPERTY_KNOWN_DIGESTERS_LIST = "known_digesters_list";
 
     /**
-     * Whether of not requesting the approval before committing sessions is available.
+     * Whether or not requesting the approval before committing sessions is available.
      *
      * Flag type: {@code boolean}
      * Namespace: NAMESPACE_PACKAGE_MANAGER_SERVICE
      */
     private static final String PROPERTY_IS_PRE_APPROVAL_REQUEST_AVAILABLE =
             "is_preapproval_available";
+
+    /**
+     * Whether or not the update ownership enforcement is available.
+     *
+     * Flag type: {@code boolean}
+     * Namespace: NAMESPACE_PACKAGE_MANAGER_SERVICE
+     */
+    private static final String PROPERTY_IS_UPDATE_OWNERSHIP_ENFORCEMENT_AVAILABLE =
+            "is_update_ownership_enforcement_available";
 
     /**
      * The default response for package verification timeout.
@@ -783,6 +795,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
     // DexManager handles the usage of dex files (e.g. secondary files, whether or not a package
     // is used by other apps).
     private final DexManager mDexManager;
+    private final DynamicCodeLogger mDynamicCodeLogger;
 
     final ViewCompiler mViewCompiler;
 
@@ -1107,8 +1120,9 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
     @Deprecated
     @NonNull
     public Computer snapshotComputer(boolean allowLiveComputer) {
+        var isHoldingPackageLock = Thread.holdsLock(mLock);
         if (allowLiveComputer) {
-            if (Thread.holdsLock(mLock)) {
+            if (isHoldingPackageLock) {
                 // If the current thread holds mLock then it may have modified state but not
                 // yet invalidated the snapshot.  Always give the thread the live computer.
                 return mLiveComputer;
@@ -1120,6 +1134,15 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
 
         if (oldSnapshot != null && oldSnapshot.getVersion() == pendingVersion) {
             return oldSnapshot.use();
+        }
+
+        if (isHoldingPackageLock) {
+            // If the current thread holds mLock then it already has exclusive write access to the
+            // two snapshot fields, and we can just go ahead and rebuild the snapshot.
+            @SuppressWarnings("GuardedBy")
+            var newSnapshot = rebuildSnapshot(oldSnapshot, pendingVersion);
+            sSnapshot.set(newSnapshot);
+            return newSnapshot.use();
         }
 
         synchronized (mSnapshotLock) {
@@ -1139,7 +1162,11 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                 // Fetch version one last time to ensure that the rebuilt snapshot matches
                 // the latest invalidation, which could have come in between entering the
                 // SnapshotLock and mLock sync blocks.
+                rebuildSnapshot = sSnapshot.get();
                 rebuildVersion = sSnapshotPendingVersion.get();
+                if (rebuildSnapshot != null && rebuildSnapshot.getVersion() == rebuildVersion) {
+                    return rebuildSnapshot.use();
+                }
 
                 // Build the snapshot for this version
                 var newSnapshot = rebuildSnapshot(rebuildSnapshot, rebuildVersion);
@@ -1149,7 +1176,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         }
     }
 
-    @GuardedBy({ "mLock", "mSnapshotLock"})
+    @GuardedBy("mLock")
     private Computer rebuildSnapshot(@Nullable Computer oldSnapshot, int newVersion) {
         var now = SystemClock.currentTimeMicro();
         var hits = oldSnapshot == null ? -1 : oldSnapshot.getUsed();
@@ -1506,7 +1533,8 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                 (i, pm) -> new PackageDexOptimizer(i.getInstaller(), i.getInstallLock(),
                         i.getContext(), "*dexopt*"),
                 (i, pm) -> new DexManager(i.getContext(), i.getPackageDexOptimizer(),
-                        i.getInstaller(), i.getInstallLock()),
+                        i.getInstaller(), i.getInstallLock(), i.getDynamicCodeLogger()),
+                (i, pm) -> new DynamicCodeLogger(i.getInstaller()),
                 (i, pm) -> new ArtManagerService(i.getContext(), i.getInstaller(),
                         i.getInstallLock()),
                 (i, pm) -> ApexManager.getInstance(),
@@ -1576,7 +1604,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                     Slog.e(TAG, "Failed to find package " + packageName);
                     return;
                 }
-                final String newSeInfo = SELinuxMMAC.getSeInfo(pkg, sharedUser,
+                final String newSeInfo = SELinuxMMAC.getSeInfo(packageState, pkg, sharedUser,
                         m.mInjector.getCompatibility());
 
                 if (!newSeInfo.equals(oldSeInfo)) {
@@ -1599,8 +1627,6 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         ServiceManager.addService("package", iPackageManager);
         final PackageManagerNative pmn = new PackageManagerNative(m);
         ServiceManager.addService("package_native", pmn);
-        LocalManagerRegistry.addManager(PackageManagerLocal.class,
-                new PackageManagerLocalImpl(m));
         return m;
     }
 
@@ -1690,6 +1716,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         mDefaultAppProvider = testParams.defaultAppProvider;
         mLegacyPermissionManager = testParams.legacyPermissionManagerInternal;
         mDexManager = testParams.dexManager;
+        mDynamicCodeLogger = testParams.dynamicCodeLogger;
         mFactoryTest = testParams.factoryTest;
         mIncrementalManager = testParams.incrementalManager;
         mInstallerService = testParams.installerService;
@@ -1800,6 +1827,8 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
 
         // Expose private service for system components to use.
         LocalServices.addService(PackageManagerInternal.class, new PackageManagerInternalImpl());
+        LocalManagerRegistry.addManager(PackageManagerLocal.class,
+                new PackageManagerLocalImpl(this));
         LocalServices.addService(TestUtilityService.class, this);
         mTestUtilityService = LocalServices.getService(TestUtilityService.class);
         mUserManager = injector.getUserManagerService();
@@ -1867,6 +1896,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
 
         mPackageDexOptimizer = injector.getPackageDexOptimizer();
         mDexManager = injector.getDexManager();
+        mDynamicCodeLogger = injector.getDynamicCodeLogger();
         mBackgroundDexOptService = injector.getBackgroundDexOptService();
         mArtManagerService = injector.getArtManagerService();
         mMoveCallbacks = new MovePackageHelper.MoveCallbacks(FgThread.get().getLooper());
@@ -1908,7 +1938,8 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         mPreferredActivityHelper = new PreferredActivityHelper(this);
         mResolveIntentHelper = new ResolveIntentHelper(mContext, mPreferredActivityHelper,
                 injector.getCompatibility(), mUserManager, mDomainVerificationManager,
-                mUserNeedsBadging, () -> mResolveInfo, () -> mInstantAppInstallerActivity);
+                mUserNeedsBadging, () -> mResolveInfo, () -> mInstantAppInstallerActivity,
+                injector.getBackgroundHandler());
         mDexOptHelper = new DexOptHelper(this);
         mSuspendPackageHelper = new SuspendPackageHelper(this, mInjector, mBroadcastHelper,
                 mProtectedPackages);
@@ -2067,6 +2098,14 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
             mInitAppsHelper.initNonSystemApps(packageParser, userIds, startTime);
             packageParser.close();
 
+            mRequiredVerifierPackages = getRequiredButNotReallyRequiredVerifiersLPr(computer);
+            mRequiredInstallerPackage = getRequiredInstallerLPr(computer);
+            mRequiredUninstallerPackage = getRequiredUninstallerLPr(computer);
+
+            // PermissionController hosts default permission granting and role management, so it's a
+            // critical part of the core system.
+            mRequiredPermissionControllerPackage = getRequiredPermissionControllerLPr(computer);
+
             // Resolve the storage manager.
             mStorageManagerPackage = getStorageManagerPackageName(computer);
 
@@ -2107,16 +2146,19 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                 // the rest of the commands above) because there's precious little we
                 // can do about it. A settings error is reported, though.
                 final List<String> changedAbiCodePath =
-                        ScanPackageUtils.applyAdjustedAbiToSharedUser(
-                                setting, null /*scannedPackage*/,
+                        ScanPackageUtils.applyAdjustedAbiToSharedUser(setting,
+                                null /*scannedPackage*/,
                                 mInjector.getAbiHelper().getAdjustedAbiForSharedUser(
                                         setting.getPackageStates(), null /*scannedPackage*/));
-                if (changedAbiCodePath != null && changedAbiCodePath.size() > 0) {
+                if (!useArtService() && // Skip for ART Service since it has its own dex file GC.
+                        changedAbiCodePath != null && changedAbiCodePath.size() > 0) {
                     for (int i = changedAbiCodePath.size() - 1; i >= 0; --i) {
                         final String codePathString = changedAbiCodePath.get(i);
                         try {
                             mInstaller.rmdex(codePathString,
                                     getDexCodeInstructionSet(getPreferredInstructionSet()));
+                        } catch (LegacyDexoptDisabledException e) {
+                            throw new RuntimeException(e);
                         } catch (InstallerException ignored) {
                         }
                     }
@@ -2212,10 +2254,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
             EventLog.writeEvent(EventLogTags.BOOT_PROGRESS_PMS_READY,
                     SystemClock.uptimeMillis());
 
-            mRequiredVerifierPackages = getRequiredButNotReallyRequiredVerifiersLPr(computer);
             mOptionalVerifierPackage = getOptionalVerifierLPr(computer);
-            mRequiredInstallerPackage = getRequiredInstallerLPr(computer);
-            mRequiredUninstallerPackage = getRequiredUninstallerLPr(computer);
             ComponentName intentFilterVerifierComponent =
                     getIntentFilterVerifierComponentNameLPr(computer);
             ComponentName domainVerificationAgent =
@@ -2233,10 +2272,6 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                     PackageManager.SYSTEM_SHARED_LIBRARY_SHARED,
                     SharedLibraryInfo.VERSION_UNDEFINED);
 
-            // PermissionController hosts default permission granting and role management, so it's a
-            // critical part of the core system.
-            mRequiredPermissionControllerPackage = getRequiredPermissionControllerLPr(computer);
-
             mSettings.setPermissionControllerVersion(
                     computer.getPackageInfo(mRequiredPermissionControllerPackage, 0,
                             UserHandle.USER_SYSTEM).getLongVersionCode());
@@ -2245,20 +2280,19 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
             mRequiredSdkSandboxPackage = getRequiredSdkSandboxPackageName(computer);
 
             // Initialize InstantAppRegistry's Instant App list for all users.
-            for (AndroidPackage pkg : mPackages.values()) {
-                if (pkg.isSystem()) {
-                    continue;
+            forEachPackageState(computer, packageState -> {
+                var pkg = packageState.getAndroidPackage();
+                if (pkg == null || packageState.isSystem()) {
+                    return;
                 }
                 for (int userId : userIds) {
-                    final PackageStateInternal ps =
-                            computer.getPackageStateInternal(pkg.getPackageName());
-                    if (ps == null || !ps.getUserStateOrDefault(userId).isInstantApp()
-                            || !ps.getUserStateOrDefault(userId).isInstalled()) {
+                    if (!packageState.getUserStateOrDefault(userId).isInstantApp()
+                            || !packageState.getUserStateOrDefault(userId).isInstalled()) {
                         continue;
                     }
-                    mInstantAppRegistry.addInstantApp(userId, ps.getAppId());
+                    mInstantAppRegistry.addInstantApp(userId, packageState.getAppId());
                 }
-            }
+            });
 
             mInstallerService = mInjector.getPackageInstallerService();
             final ComponentName instantAppResolverComponent = getInstantAppResolver(computer);
@@ -2291,6 +2325,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                         .getList());
             }
             mDexManager.load(userPackages);
+            mDynamicCodeLogger.load(userPackages);
             if (mIsUpgrade) {
                 FrameworkStatsLog.write(
                         FrameworkStatsLog.BOOT_TIME_EVENT_DURATION_REPORTED,
@@ -2902,7 +2937,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
     static void renameStaticSharedLibraryPackage(ParsedPackage parsedPackage) {
         // Derive the new package synthetic package name
         parsedPackage.setPackageName(toStaticSharedLibraryPackageName(
-                parsedPackage.getPackageName(), parsedPackage.getStaticSharedLibVersion()));
+                parsedPackage.getPackageName(), parsedPackage.getStaticSharedLibraryVersion()));
     }
 
     private static String toStaticSharedLibraryPackageName(
@@ -2952,7 +2987,12 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
     }
 
     public void updatePackagesIfNeeded() {
-        mDexOptHelper.performPackageDexOptUpgradeIfNeeded();
+        // TODO(b/251903639): Call into ART Service.
+        try {
+            mDexOptHelper.performPackageDexOptUpgradeIfNeeded();
+        } catch (LegacyDexoptDisabledException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private void notifyPackageUseInternal(String packageName, int reason) {
@@ -2970,9 +3010,14 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         return mDexManager;
     }
 
+    /*package*/ DynamicCodeLogger getDynamicCodeLogger() {
+        return mDynamicCodeLogger;
+    }
+
     public void shutdown() {
         mCompilerStats.writeNow();
         mDexManager.writePackageDexUsageNow();
+        mDynamicCodeLogger.writeNow();
         PackageWatchdog.getInstance(mContext).writeNow();
 
         synchronized (mLock) {
@@ -3709,7 +3754,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         PackageStateInternal packageState = computer.getPackageStateInternal(componentPkgName);
         if (packageState == null || packageState.getPkg() == null
                 || (!packageState.isSystem()
-                && !packageState.getTransientState().isUpdatedSystemApp())) {
+                && !packageState.isUpdatedSystemApp())) {
             throw new SecurityException(
                     "Changing the label is not allowed for " + componentName);
         }
@@ -3911,7 +3956,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
             final AndroidPackage deletedPkg = pkgSetting.getPkg();
             final boolean isSystemStub = (deletedPkg != null)
                     && deletedPkg.isStub()
-                    && deletedPkg.isSystem();
+                    && pkgSetting.isSystem();
             if (isSystemStub
                     && (newState == PackageManager.COMPONENT_ENABLED_STATE_DEFAULT
                     || newState == PackageManager.COMPONENT_ENABLED_STATE_ENABLED)) {
@@ -4267,10 +4312,20 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                     }
                 });
 
-        mBackgroundDexOptService.systemReady();
+        // TODO(b/251903639): Call into ART Service.
+        try {
+            mBackgroundDexOptService.systemReady();
+        } catch (LegacyDexoptDisabledException e) {
+            throw new RuntimeException(e);
+        }
 
         // Prune unused static shared libraries which have been cached a period of time
         schedulePruneUnusedStaticSharedLibraries(false /* delay */);
+
+        DexUseManagerLocal dexUseManager = DexOptHelper.getDexUseManagerLocal();
+        if (dexUseManager != null) {
+            dexUseManager.systemReady();
+        }
     }
 
     //TODO: b/111402650
@@ -4616,7 +4671,8 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
 
             final Computer snapshot = snapshotComputer();
             final AndroidPackage pkg = snapshot.getPackage(packageName);
-            try (PackageFreezer ignored = freezePackage(packageName, "clearApplicationProfileData")) {
+            try (PackageFreezer ignored =
+                            freezePackage(packageName, "clearApplicationProfileData")) {
                 synchronized (mInstallLock) {
                     mAppDataHelper.clearAppProfilesLIF(pkg);
                 }
@@ -4798,9 +4854,14 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                 throw new IllegalArgumentException("Unknown package: " + packageName);
             }
 
+            // TODO(b/251903639): Call into ART Service.
             synchronized (mInstallLock) {
                 Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "dump profiles");
-                mArtManagerService.dumpProfiles(pkg, dumpClassesAndMethods);
+                try {
+                    mArtManagerService.dumpProfiles(pkg, dumpClassesAndMethods);
+                } catch (LegacyDexoptDisabledException e) {
+                    throw new RuntimeException(e);
+                }
                 Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
             }
         }
@@ -5498,20 +5559,40 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
          */
         @Override
         public void reconcileSecondaryDexFiles(String packageName) {
+            if (useArtService()) {
+                // ART Service currently relies on a GC to find stale oat files, including secondary
+                // dex files. Hence it doesn't use this call for anything.
+                return;
+            }
+
             final Computer snapshot = snapshotComputer();
             if (snapshot.getInstantAppPackageName(Binder.getCallingUid()) != null) {
                 return;
             } else if (snapshot.isInstantAppInternal(
-                    packageName, UserHandle.getCallingUserId(), Process.SYSTEM_UID)) {
+                               packageName, UserHandle.getCallingUserId(), Process.SYSTEM_UID)) {
                 return;
             }
-            mDexManager.reconcileSecondaryDexFiles(packageName);
+            try {
+                mDexManager.reconcileSecondaryDexFiles(packageName);
+            } catch (LegacyDexoptDisabledException e) {
+                throw new RuntimeException(e);
+            }
         }
 
         @Override
         public void registerDexModule(String packageName, String dexModulePath,
                 boolean isSharedModule,
                 IDexModuleRegisterCallback callback) {
+            if (useArtService()) {
+                // ART Service currently doesn't support this explicit dexopting and instead relies
+                // on background dexopt for secondary dex files. This API is problematic since it
+                // doesn't provide the correct classloader context.
+                Slog.i(TAG,
+                        "Ignored unsupported registerDexModule call for " + dexModulePath + " in "
+                                + packageName);
+                return;
+            }
+
             int userId = UserHandle.getCallingUserId();
             ApplicationInfo ai = snapshot().getApplicationInfo(packageName, /*flags*/ 0, userId);
             DexManager.RegisterDexModuleResult result;
@@ -5521,7 +5602,12 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                                 " calling user. package=" + packageName + ", user=" + userId);
                 result = new DexManager.RegisterDexModuleResult(false, "Package not installed");
             } else {
-                result = mDexManager.registerDexModule(ai, dexModulePath, isSharedModule, userId);
+                try {
+                    result = mDexManager.registerDexModule(
+                            ai, dexModulePath, isSharedModule, userId);
+                } catch (LegacyDexoptDisabledException e) {
+                    throw new RuntimeException(e);
+                }
             }
 
             if (callback != null) {
@@ -5963,6 +6049,42 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         }
 
         @Override
+        public void relinquishUpdateOwnership(String targetPackage) {
+            final int callingUid = Binder.getCallingUid();
+            final int callingUserId = UserHandle.getUserId(callingUid);
+            final Computer snapshot = snapshotComputer();
+
+            final PackageStateInternal targetPackageState =
+                    snapshot.getPackageStateForInstalledAndFiltered(targetPackage, callingUid,
+                            callingUserId);
+            if (targetPackageState == null) {
+                throw new IllegalArgumentException("Unknown target package: " + targetPackage);
+            }
+
+            final String targetUpdateOwnerPackageName =
+                    targetPackageState.getInstallSource().mUpdateOwnerPackageName;
+            final PackageStateInternal targetUpdateOwnerPkgSetting =
+                    targetUpdateOwnerPackageName == null ? null
+                            : snapshot.getPackageStateInternal(targetUpdateOwnerPackageName);
+
+            if (targetUpdateOwnerPkgSetting == null) {
+                return;
+            }
+
+            final int callingAppId = UserHandle.getAppId(callingUid);
+            final int targetUpdateOwnerAppId = targetUpdateOwnerPkgSetting.getAppId();
+            if (callingAppId != Process.SYSTEM_UID
+                    && callingAppId != Process.SHELL_UID
+                    && callingAppId != targetUpdateOwnerAppId) {
+                throw new SecurityException("Caller is not the current update owner.");
+            }
+
+            commitPackageStateMutation(null /* initialState */, targetPackage,
+                    state -> state.setUpdateOwner(null /* updateOwnerPackageName */));
+            scheduleWriteSettings();
+        }
+
+        @Override
         public boolean setInstantAppCookie(String packageName, byte[] cookie, int userId) {
             if (HIDE_EPHEMERAL_APIS) {
                 return true;
@@ -6296,6 +6418,12 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
             return mDexManager;
         }
 
+        @NonNull
+        @Override
+        public DynamicCodeLogger getDynamicCodeLogger() {
+            return mDynamicCodeLogger;
+        }
+
         @Override
         public boolean isPlatformSigned(String packageName) {
             PackageStateInternal packageState = snapshot().getPackageStateInternal(packageName);
@@ -6433,7 +6561,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
             }
 
             AndroidPackage pkg = packageState.getPkg();
-            return pkg != null && pkg.isSystem() && pkg.isPersistent();
+            return pkg != null && packageState.isSystem() && pkg.isPersistent();
         }
 
         @Override
@@ -6461,7 +6589,7 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
             List<String> targetPackages = new ArrayList<>();
             PackageManagerService.this.forEachPackageState(snapshot(), packageState -> {
                 final AndroidPackage pkg = packageState.getPkg();
-                if (pkg != null && !pkg.isOverlay()) {
+                if (pkg != null && !pkg.isResourceOverlay()) {
                     targetPackages.add(pkg.getPackageName());
                 }
             });
@@ -6992,11 +7120,11 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         if (packageState == null || packageState.getPkg() == null) {
             return false;
         }
-        return AndroidPackageUtils.canHaveOatDir(packageState.getPkg(),
-                packageState.getTransientState().isUpdatedSystemApp());
+        return AndroidPackageUtils.canHaveOatDir(packageState, packageState.getPkg());
     }
 
-    long deleteOatArtifactsOfPackage(@NonNull Computer snapshot, String packageName) {
+    long deleteOatArtifactsOfPackage(@NonNull Computer snapshot, String packageName)
+            throws LegacyDexoptDisabledException {
         PackageManagerServiceUtils.enforceSystemOrRootOrShell(
                 "Only the system or shell can delete oat artifacts");
 
@@ -7081,6 +7209,16 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         try {
             return DeviceConfig.getBoolean(NAMESPACE_PACKAGE_MANAGER_SERVICE,
                     PROPERTY_IS_PRE_APPROVAL_REQUEST_AVAILABLE, true /* defaultValue */);
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    static boolean isUpdateOwnershipEnforcementAvailable() {
+        final long token = Binder.clearCallingIdentity();
+        try {
+            return DeviceConfig.getBoolean(NAMESPACE_PACKAGE_MANAGER_SERVICE,
+                    PROPERTY_IS_UPDATE_OWNERSHIP_ENFORCEMENT_AVAILABLE, false /* defaultValue */);
         } finally {
             Binder.restoreCallingIdentity(token);
         }

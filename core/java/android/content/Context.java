@@ -26,6 +26,8 @@ import android.annotation.DrawableRes;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.PermissionMethod;
+import android.annotation.PermissionName;
 import android.annotation.RequiresPermission;
 import android.annotation.StringDef;
 import android.annotation.StringRes;
@@ -40,6 +42,7 @@ import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.BroadcastOptions;
 import android.app.GameManager;
+import android.app.GrammaticalInflectionManager;
 import android.app.IApplicationThread;
 import android.app.IServiceConnection;
 import android.app.VrManager;
@@ -52,8 +55,6 @@ import android.compat.annotation.EnabledSince;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
-import android.content.pm.PermissionMethod;
-import android.content.pm.PermissionName;
 import android.content.res.AssetManager;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
@@ -109,6 +110,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
+import java.util.function.IntConsumer;
 
 /**
  * Interface to global information about an application environment.  This is
@@ -276,7 +278,8 @@ public abstract class Context {
             BIND_IMPORTANT,
             BIND_ADJUST_WITH_ACTIVITY,
             BIND_NOT_PERCEPTIBLE,
-            BIND_INCLUDE_CAPABILITIES
+            BIND_INCLUDE_CAPABILITIES,
+            BIND_SHARED_ISOLATED_PROCESS
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface BindServiceFlags {}
@@ -392,6 +395,27 @@ public abstract class Context {
      * {@link android.os.Build.VERSION_CODES#R}, BIND_INCLUDE_CAPABILITIES is implicit.
      */
     public static final int BIND_INCLUDE_CAPABILITIES = 0x000001000;
+
+    /**
+     * Flag for {@link #bindIsolatedService}: Bind the service into a shared isolated process.
+     * Specifying this flag allows multiple isolated services to be running in a single shared
+     * isolated process.
+     *
+     * The shared isolated process instance is identified by the <var>instanceName</var>
+     * parameter in {@link #bindIsolatedService(Intent, int, String, Executor, ServiceConnection)}.
+     *
+     * Subsequent calls to {@link #bindIsolatedService} with the same <var>instanceName</var>
+     * will cause the isolated service to be co-located in the same shared isolated process.
+     *
+     * Note that the shared isolated process is scoped to the calling app; once created, only
+     * the calling app can bind additional isolated services into the shared process. However,
+     * the services themselves can come from different APKs and therefore different vendors.
+     *
+     * Only services that set the {@link android.R.attr#allowSharedIsolatedProcess} attribute
+     * to {@code true} are allowed to be bound into a shared isolated process.
+     *
+     */
+    public static final int BIND_SHARED_ISOLATED_PROCESS = 0x00002000;
 
     /***********    Public flags above this line ***********/
     /***********    Hidden flags below this line ***********/
@@ -2327,7 +2351,8 @@ public abstract class Context {
     @SystemApi
     public void sendBroadcastMultiplePermissions(@NonNull Intent intent,
             @NonNull String[] receiverPermissions, @Nullable BroadcastOptions options) {
-       sendBroadcastMultiplePermissions(intent, receiverPermissions, options.toBundle());
+        sendBroadcastMultiplePermissions(intent, receiverPermissions,
+                (options == null ? null : options.toBundle()));
     }
 
     /**
@@ -3955,6 +3980,8 @@ public abstract class Context {
             CREDENTIAL_SERVICE,
             DEVICE_LOCK_SERVICE,
             VIRTUALIZATION_SERVICE,
+            GRAMMATICAL_INFLECTION_SERVICE,
+
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ServiceName {}
@@ -5766,7 +5793,6 @@ public abstract class Context {
      *
      * @see #getSystemService(String)
      * @see android.content.om.OverlayManager
-     * @hide
      */
     public static final String OVERLAY_SERVICE = "overlay";
 
@@ -6150,6 +6176,14 @@ public abstract class Context {
      */
     @SystemApi
     public static final String VIRTUALIZATION_SERVICE = "virtualization";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link GrammaticalInflectionManager}.
+     *
+     * @see #getSystemService(String)
+     */
+    public static final String GRAMMATICAL_INFLECTION_SERVICE = "grammatical_inflection";
 
     /**
      * Determine whether the given permission is allowed for a particular
@@ -6825,6 +6859,26 @@ public abstract class Context {
             @CreatePackageOptions int flags) throws PackageManager.NameNotFoundException;
 
     /**
+     * Creates a context given an {@link android.content.pm.ApplicationInfo}.
+     *
+     * Context created is for an sdk library that is being loaded in sdk sandbox.
+     *
+     * @param sdkInfo information regarding the sdk library being loaded.
+     *
+     * @throws PackageManager.NameNotFoundException if there is no application with
+     * the given package name.
+     * @throws SecurityException if caller is not a SdkSandbox process.
+     *
+     * @hide
+     */
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    @NonNull
+    public Context createContextForSdkInSandbox(@NonNull ApplicationInfo sdkInfo,
+            @CreatePackageOptions int flags) throws PackageManager.NameNotFoundException {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
+
+    /**
      * Return a new Context object for the given split name. The new Context has a ClassLoader and
      * Resources object that can access the split's and all of its dependencies' code/resources.
      * Each call to this method returns a new instance of a Context object;
@@ -6920,6 +6974,10 @@ public abstract class Context {
      * capabilities and functionality (by passing
      * {@link android.companion.virtual.VirtualDeviceManager#DEVICE_ID_DEFAULT}. Similarly,
      * applications running on the default device may access the functionality of virtual devices.
+     * </p>
+     * <p>
+     * Note that the newly created instance will be associated with the same display as the parent
+     * Context, regardless of the device ID passed here.
      * </p>
      * @param deviceId The ID of the device to associate with this context.
      * @return A context associated with the given device ID.
@@ -7256,16 +7314,114 @@ public abstract class Context {
     public abstract void updateDisplay(int displayId);
 
     /**
-     * Get the device ID this context is associated with. Applications can use this method to
+     * Updates the device ID association of this Context. Since a Context created with
+     * {@link #createDeviceContext} cannot change its device association, this method must
+     * not be called for instances created with {@link #createDeviceContext}.
+     *<p>
+     * Note that updating the deviceId of the Context will not update its associated display.
+     *</p>
+     * @param deviceId The new device ID to assign to this Context.
+     * @throws UnsupportedOperationException if the method is called on an instance that was
+     *         created with {@link Context#createDeviceContext(int)}
+     * @throws IllegalArgumentException if the given device ID is not a valid ID of the default
+     *         device or a virtual device.
+     *
+     * @see #isDeviceContext()
+     * @see #createDeviceContext(int)
+     * @hide
+     */
+    public void updateDeviceId(int deviceId) {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
+
+    /**
+     * Gets the device ID this context is associated with. Applications can use this method to
      * determine whether they are running on a virtual device and identify that device.
      *
      * The device ID of the host device is
      * {@link android.companion.virtual.VirtualDeviceManager#DEVICE_ID_DEFAULT}
      *
+     * <p>
+     * If the underlying device ID is changed by the system, for example, when an
+     * {@link Activity} is moved to a different virtual device, applications can register to listen
+     * to changes by calling
+     * {@link Context#registerDeviceIdChangeListener(Executor, IntConsumer)}.
+     * </p>
+     *
+     * <p>
+     * This method will only return a reliable value for this instance if
+     * {@link Context#isDeviceContext()} is {@code true}. The system can assign an arbitrary device
+     * id value for Contexts not logically associated with a device.
+     * </p>
+     *
      * @return the ID of the device this context is associated with.
+     * @see #isDeviceContext()
      * @see #createDeviceContext(int)
+     * @see #registerDeviceIdChangeListener(Executor, IntConsumer)
      */
     public int getDeviceId() {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
+
+    /**
+     * Indicates whether the value of {@link Context#getDeviceId()} can be relied upon for
+     * this instance. It will return {@code true} for Contexts created by
+     * {@link Context#createDeviceContext(int)}, as well as for UI and Display Contexts.
+     * <p>
+     * Contexts created with {@link Context#createDeviceContext(int)} will have an explicit
+     * device association, which will never change. UI Contexts and Display Contexts are
+     * already associated with a display, so if the device association is not explicitly
+     * given, {@link Context#getDeviceId()} will return the ID of the device associated with
+     * the associated display. The system can assign an arbitrary device id value for Contexts not
+     * logically associated with a device.
+     * </p>
+     *
+     * @return {@code true} if {@link Context#getDeviceId()} is reliable, {@code false} otherwise.
+     *
+     * @see #createDeviceContext(int)
+     * @see #getDeviceId()}
+     * @see #createDisplayContext(Display)
+     * @see #isUiContext()
+     */
+
+    public boolean isDeviceContext() {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
+
+    /**
+     * Adds a new device ID changed listener to the {@code Context}, which will be called when
+     * the device association is changed by the system.
+     * <p>
+     * The callback can be called when an app is moved to a different device and the {@code Context}
+     * is not explicily associated with a specific device.
+     * </p>
+     * <p> When an application receives a device id update callback, this Context is guaranteed to
+     * also have an updated display ID(if any) and {@link Configuration}.
+     * <p/>
+     * @param executor The Executor on whose thread to execute the callbacks of the {@code listener}
+     *                 object.
+     * @param listener The listener {@code IntConsumer} to call which will receive the updated
+     *                 device ID.
+     *
+     * @see Context#isDeviceContext()
+     * @see Context#getDeviceId()
+     * @see Context#createDeviceContext(int)
+     */
+    public void registerDeviceIdChangeListener(@NonNull @CallbackExecutor Executor executor,
+            @NonNull IntConsumer listener) {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
+
+    /**
+     * Removes a device ID changed listener from the Context. It's a no-op if
+     * the listener is not already registered.
+     *
+     * @param listener The {@code Consumer} to remove.
+     *
+     * @see #getDeviceId()
+     * @see #registerDeviceIdChangeListener(Executor, IntConsumer)
+     */
+    public void unregisterDeviceIdChangeListener(@NonNull IntConsumer listener) {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
     }
 
@@ -7357,6 +7513,18 @@ public abstract class Context {
      * @hide
      */
     public IApplicationThread getIApplicationThread() {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
+
+    /**
+     * Get the binder object associated with the IApplicationThread of this Context.
+     *
+     * This can be used by a mainline module to uniquely identify a specific app process.
+     * @hide
+     */
+    @NonNull
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    public IBinder getIApplicationThreadBinder() {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
     }
 

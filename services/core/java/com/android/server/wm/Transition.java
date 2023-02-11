@@ -647,6 +647,7 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
                 t.setCornerRadius(targetLeash, 0);
                 t.setShadowRadius(targetLeash, 0);
                 t.setMatrix(targetLeash, 1, 0, 0, 1);
+                t.setAlpha(targetLeash, 1);
                 // The bounds sent to the transition is always a real bounds. This means we lose
                 // information about "null" bounds (inheriting from parent). Core will fix-up
                 // non-organized window surface bounds; however, since Core can't touch organized
@@ -786,7 +787,7 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
                                 && mTransientLaunches != null) {
                             // If transition is transient, then snapshots are taken at end of
                             // transition.
-                            mController.mTaskSnapshotController.recordTaskSnapshot(
+                            mController.mTaskSnapshotController.recordSnapshot(
                                     task, false /* allowSnapshotHome */);
                         }
                         ar.commitVisibility(false /* visible */, false /* performLayout */,
@@ -1051,7 +1052,7 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
                 final ActivityRecord ar = mParticipants.valueAt(i).asActivityRecord();
                 if (ar == null || ar.isVisibleRequested() || ar.getTask() == null
                         || ar.getTask().isVisibleRequested()) continue;
-                mController.mTaskSnapshotController.recordTaskSnapshot(
+                mController.mTaskSnapshotController.recordSnapshot(
                         ar.getTask(), false /* allowSnapshotHome */);
             }
         }
@@ -1725,13 +1726,26 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
             }
 
             if (activityRecord != null || (taskFragment != null && taskFragment.isEmbedded())) {
-                // Set background color to Task theme color for activity and embedded TaskFragment
-                // in case we want to show background during the animation.
-                final Task parentTask = activityRecord != null
-                        ? activityRecord.getTask()
-                        : taskFragment.getTask();
-                final int backgroundColor = ColorUtils.setAlphaComponent(
-                        parentTask.getTaskDescription().getBackgroundColor(), 255);
+                final int backgroundColor;
+                final TaskFragment organizedTf = activityRecord != null
+                        ? activityRecord.getOrganizedTaskFragment()
+                        : taskFragment.getOrganizedTaskFragment();
+                if (organizedTf != null && organizedTf.getAnimationParams()
+                        .getAnimationBackgroundColor() != 0) {
+                    // This window is embedded and has an animation background color set on the
+                    // TaskFragment. Pass this color with this window, so the handler can use it as
+                    // the animation background color if needed,
+                    backgroundColor = organizedTf.getAnimationParams()
+                            .getAnimationBackgroundColor();
+                } else {
+                    // Set background color to Task theme color for activity and embedded
+                    // TaskFragment in case we want to show background during the animation.
+                    final Task parentTask = activityRecord != null
+                            ? activityRecord.getTask()
+                            : taskFragment.getTask();
+                    backgroundColor = ColorUtils.setAlphaComponent(
+                            parentTask.getTaskDescription().getBackgroundColor(), 255);
+                }
                 change.setBackgroundColor(backgroundColor);
             }
 

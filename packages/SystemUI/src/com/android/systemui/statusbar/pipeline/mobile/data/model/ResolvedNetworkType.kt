@@ -17,7 +17,8 @@
 package com.android.systemui.statusbar.pipeline.mobile.data.model
 
 import android.telephony.Annotation.NetworkType
-import android.telephony.TelephonyManager.NETWORK_TYPE_UNKNOWN
+import com.android.settingslib.SignalIcon
+import com.android.settingslib.mobile.TelephonyIcons
 import com.android.systemui.statusbar.pipeline.mobile.util.MobileMappingsProxy
 
 /**
@@ -26,21 +27,25 @@ import com.android.systemui.statusbar.pipeline.mobile.util.MobileMappingsProxy
  * methods on [MobileMappingsProxy] to generate an icon lookup key.
  */
 sealed interface ResolvedNetworkType {
-    @NetworkType val type: Int
     val lookupKey: String
 
     object UnknownNetworkType : ResolvedNetworkType {
-        override val type: Int = NETWORK_TYPE_UNKNOWN
         override val lookupKey: String = "unknown"
     }
 
     data class DefaultNetworkType(
-        @NetworkType override val type: Int,
         override val lookupKey: String,
     ) : ResolvedNetworkType
 
     data class OverrideNetworkType(
-        @NetworkType override val type: Int,
         override val lookupKey: String,
     ) : ResolvedNetworkType
+
+    /** Represents the carrier merged network. See [CarrierMergedConnectionRepository]. */
+    object CarrierMergedNetworkType : ResolvedNetworkType {
+        // Effectively unused since [iconGroupOverride] is used instead.
+        override val lookupKey: String = "cwf"
+
+        val iconGroupOverride: SignalIcon.MobileIconGroup = TelephonyIcons.CARRIER_MERGED_WIFI
+    }
 }

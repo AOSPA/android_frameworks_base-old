@@ -46,10 +46,16 @@ import static android.hardware.usb.UsbPortStatus.DATA_STATUS_DISABLED_CONTAMINAN
 import static android.hardware.usb.UsbPortStatus.DATA_STATUS_DISABLED_DOCK;
 import static android.hardware.usb.UsbPortStatus.DATA_STATUS_DISABLED_FORCE;
 import static android.hardware.usb.UsbPortStatus.DATA_STATUS_DISABLED_DEBUG;
+import static android.hardware.usb.UsbPortStatus.DATA_STATUS_DISABLED_DOCK_HOST_MODE;
+import static android.hardware.usb.UsbPortStatus.DATA_STATUS_DISABLED_DOCK_DEVICE_MODE;
 import static android.hardware.usb.UsbPortStatus.COMPLIANCE_WARNING_DEBUG_ACCESSORY;
 import static android.hardware.usb.UsbPortStatus.COMPLIANCE_WARNING_BC_1_2;
 import static android.hardware.usb.UsbPortStatus.COMPLIANCE_WARNING_MISSING_RP;
 import static android.hardware.usb.UsbPortStatus.COMPLIANCE_WARNING_OTHER;
+import static android.hardware.usb.DisplayPortAltModeInfo.DISPLAYPORT_ALT_MODE_STATUS_UNKNOWN;
+import static android.hardware.usb.DisplayPortAltModeInfo.DISPLAYPORT_ALT_MODE_STATUS_NOT_CAPABLE;
+import static android.hardware.usb.DisplayPortAltModeInfo.DISPLAYPORT_ALT_MODE_STATUS_CAPABLE;
+import static android.hardware.usb.DisplayPortAltModeInfo.DISPLAYPORT_ALT_MODE_STATUS_ENABLED;
 
 import android.Manifest;
 import android.annotation.CallbackExecutor;
@@ -88,6 +94,7 @@ public final class UsbPort {
     private final boolean mSupportsEnableContaminantPresenceProtection;
     private final boolean mSupportsEnableContaminantPresenceDetection;
     private final boolean mSupportsComplianceWarnings;
+    private final @AltModeType int mSupportedAltModes;
 
     private static final int NUM_DATA_ROLES = Constants.PortDataRole.NUM_DATA_ROLES;
     /**
@@ -250,6 +257,18 @@ public final class UsbPort {
     @Retention(RetentionPolicy.SOURCE)
     @interface EnableUsbDataWhileDockedStatus{}
 
+    /**
+     * Indicates that the Alt Mode being described is DisplayPort.
+     */
+    public static final int FLAG_ALT_MODE_TYPE_DISPLAYPORT = 1 << 0;
+
+    /** @hide */
+    @IntDef(prefix = { "FLAG_ALT_MODE_TYPE_" }, flag = true, value = {
+        FLAG_ALT_MODE_TYPE_DISPLAYPORT,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface AltModeType {}
+
     /** @hide */
     public UsbPort(@NonNull UsbManager usbManager, @NonNull String id, int supportedModes,
             int supportedContaminantProtectionModes,
@@ -258,7 +277,7 @@ public final class UsbPort {
         this(usbManager, id, supportedModes, supportedContaminantProtectionModes,
                 supportsEnableContaminantPresenceProtection,
                 supportsEnableContaminantPresenceDetection,
-                false);
+                false, 0);
     }
 
     /** @hide */
@@ -266,7 +285,8 @@ public final class UsbPort {
             int supportedContaminantProtectionModes,
             boolean supportsEnableContaminantPresenceProtection,
             boolean supportsEnableContaminantPresenceDetection,
-            boolean supportsComplianceWarnings) {
+            boolean supportsComplianceWarnings,
+            int supportedAltModes) {
         Objects.requireNonNull(id);
         Preconditions.checkFlagsArgument(supportedModes,
                 MODE_DFP | MODE_UFP | MODE_AUDIO_ACCESSORY | MODE_DEBUG_ACCESSORY);
@@ -280,6 +300,7 @@ public final class UsbPort {
         mSupportsEnableContaminantPresenceDetection =
                 supportsEnableContaminantPresenceDetection;
         mSupportsComplianceWarnings = supportsComplianceWarnings;
+        mSupportedAltModes = supportedAltModes;
     }
 
     /**
@@ -362,6 +383,27 @@ public final class UsbPort {
     public boolean supportsComplianceWarnings() {
         return mSupportsComplianceWarnings;
     }
+
+    /**
+     * Returns all Alt Modes supported by the port.
+     *
+     * @hide
+     */
+    public @AltModeType int getSupportedAltModesMask() {
+        return mSupportedAltModes;
+    }
+
+    /**
+     * Returns whether all Alt Mode types in a given mask are supported
+     * by the port.
+     *
+     * @return true if all given Alt Modes are supported, false otherwise.
+     *
+     */
+    public boolean isAltModeSupported(@AltModeType int typeMask) {
+        return (mSupportedAltModes & typeMask) == typeMask;
+    }
+
 
     /**
      * Sets the desired role combination of the port.
@@ -676,6 +718,15 @@ public final class UsbPort {
             statusString.append("disabled-debug, ");
         }
 
+        if ((usbDataStatus & DATA_STATUS_DISABLED_DOCK_HOST_MODE) ==
+            DATA_STATUS_DISABLED_DOCK_HOST_MODE) {
+            statusString.append("disabled-host-dock, ");
+        }
+
+        if ((usbDataStatus & DATA_STATUS_DISABLED_DOCK_DEVICE_MODE) ==
+            DATA_STATUS_DISABLED_DOCK_DEVICE_MODE) {
+            statusString.append("disabled-device-dock, ");
+        }
         return statusString.toString().replaceAll(", $", "");
     }
 
@@ -747,6 +798,22 @@ public final class UsbPort {
 
         complianceWarningString.append("]");
         return complianceWarningString.toString().replaceAll(", ]$", "]");
+    }
+
+    /** @hide */
+    public static String dpAltModeStatusToString(int dpAltModeStatus) {
+        switch (dpAltModeStatus) {
+            case DISPLAYPORT_ALT_MODE_STATUS_UNKNOWN:
+                return "Unknown";
+            case DISPLAYPORT_ALT_MODE_STATUS_NOT_CAPABLE:
+                return "Not Capable";
+            case DISPLAYPORT_ALT_MODE_STATUS_CAPABLE:
+                return "Capable";
+            case DISPLAYPORT_ALT_MODE_STATUS_ENABLED:
+                return "Enabled";
+            default:
+                return Integer.toString(dpAltModeStatus);
+        }
     }
 
     /** @hide */

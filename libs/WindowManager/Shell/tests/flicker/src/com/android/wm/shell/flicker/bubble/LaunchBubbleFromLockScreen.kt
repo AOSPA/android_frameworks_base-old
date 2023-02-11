@@ -26,6 +26,9 @@ import androidx.test.uiautomator.Until
 import com.android.server.wm.flicker.FlickerBuilder
 import com.android.server.wm.flicker.FlickerTest
 import com.android.server.wm.flicker.junit.FlickerParametersRunnerFactory
+import com.android.server.wm.flicker.navBarLayerIsVisibleAtEnd
+import com.android.server.wm.flicker.navBarLayerPositionAtEnd
+import org.junit.Assume
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
@@ -91,6 +94,20 @@ class LaunchBubbleFromLockScreen(flicker: FlickerTest) : BaseBubbleScreen(flicke
         flicker.assertLayersEnd { this.isVisible(testApp) }
     }
 
+    @Postsubmit
+    @Test
+    fun navBarLayerIsVisibleAtEnd() {
+        Assume.assumeFalse(flicker.scenario.isTablet)
+        flicker.navBarLayerIsVisibleAtEnd()
+    }
+
+    @Postsubmit
+    @Test
+    fun navBarLayerPositionAtEnd() {
+        Assume.assumeFalse(flicker.scenario.isTablet)
+        flicker.navBarLayerPositionAtEnd()
+    }
+
     /** {@inheritDoc} */
     @FlakyTest
     @Test
@@ -98,55 +115,26 @@ class LaunchBubbleFromLockScreen(flicker: FlickerTest) : BaseBubbleScreen(flicke
         super.visibleLayersShownMoreThanOneConsecutiveEntry()
 
     /** {@inheritDoc} */
-    @FlakyTest(bugId = 206753786)
+    @Postsubmit
     @Test
-    override fun navBarLayerIsVisibleAtStartAndEnd() = super.navBarLayerIsVisibleAtStartAndEnd()
-
-    /** {@inheritDoc} */
-    @FlakyTest(bugId = 206753786)
-    @Test
-    override fun navBarLayerPositionAtStartAndEnd() = super.navBarLayerPositionAtStartAndEnd()
-
-    /** {@inheritDoc} */
-    @FlakyTest(bugId = 206753786)
-    @Test
-    override fun navBarWindowIsAlwaysVisible() = super.navBarWindowIsAlwaysVisible()
-
-    /** {@inheritDoc} */
-    @FlakyTest(bugId = 242088970)
-    @Test
-    override fun taskBarLayerIsVisibleAtStartAndEnd() = super.taskBarLayerIsVisibleAtStartAndEnd()
+    override fun navBarLayerIsVisibleAtStartAndEnd() {
+        Assume.assumeTrue(flicker.scenario.isGesturalNavigation)
+        super.navBarLayerIsVisibleAtStartAndEnd()
+    }
 
     /** {@inheritDoc} */
     @Postsubmit
     @Test
-    override fun taskBarWindowIsAlwaysVisible() = super.taskBarWindowIsAlwaysVisible()
+    override fun navBarLayerPositionAtStartAndEnd() {
+        Assume.assumeTrue(flicker.scenario.isGesturalNavigation)
+        super.navBarLayerPositionAtStartAndEnd()
+    }
 
     /** {@inheritDoc} */
-    @FlakyTest(bugId = 242088970)
+    @Postsubmit
     @Test
-    override fun statusBarLayerIsVisibleAtStartAndEnd() =
-        super.statusBarLayerIsVisibleAtStartAndEnd()
-
-    /** {@inheritDoc} */
-    @FlakyTest(bugId = 242088970)
-    @Test
-    override fun statusBarLayerPositionAtStartAndEnd() = super.statusBarLayerPositionAtStartAndEnd()
-
-    /** {@inheritDoc} */
-    @FlakyTest(bugId = 242088970)
-    @Test
-    override fun statusBarWindowIsAlwaysVisible() = super.statusBarWindowIsAlwaysVisible()
-
-    /** {@inheritDoc} */
-    @FlakyTest(bugId = 242088970)
-    @Test
-    override fun visibleWindowsShownMoreThanOneConsecutiveEntry() =
-        super.visibleWindowsShownMoreThanOneConsecutiveEntry()
-
-    @FlakyTest(bugId = 251217773)
-    @Test
-    override fun entireScreenCovered() {
-        super.entireScreenCovered()
+    override fun navBarWindowIsAlwaysVisible() {
+        Assume.assumeTrue(flicker.scenario.isGesturalNavigation)
+        super.navBarWindowIsAlwaysVisible()
     }
 }

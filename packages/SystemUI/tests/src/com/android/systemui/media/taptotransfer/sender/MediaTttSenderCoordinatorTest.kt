@@ -38,6 +38,7 @@ import com.android.systemui.R
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.classifier.FalsingCollector
 import com.android.systemui.common.shared.model.Text.Companion.loadText
+import com.android.systemui.dump.DumpManager
 import com.android.systemui.media.taptotransfer.MediaTttFlags
 import com.android.systemui.media.taptotransfer.common.MediaTttLogger
 import com.android.systemui.plugins.FalsingManager
@@ -81,6 +82,7 @@ class MediaTttSenderCoordinatorTest : SysuiTestCase() {
     @Mock private lateinit var applicationInfo: ApplicationInfo
     @Mock private lateinit var commandQueue: CommandQueue
     @Mock private lateinit var configurationController: ConfigurationController
+    @Mock private lateinit var dumpManager: DumpManager
     @Mock private lateinit var falsingManager: FalsingManager
     @Mock private lateinit var falsingCollector: FalsingCollector
     @Mock private lateinit var chipbarLogger: ChipbarLogger
@@ -137,6 +139,7 @@ class MediaTttSenderCoordinatorTest : SysuiTestCase() {
                 fakeExecutor,
                 accessibilityManager,
                 configurationController,
+                dumpManager,
                 powerManager,
                 falsingManager,
                 falsingCollector,
@@ -203,6 +206,21 @@ class MediaTttSenderCoordinatorTest : SysuiTestCase() {
     }
 
     @Test
+    fun commandQueueCallback_almostCloseToStartCast_deviceNameBlank_showsDefaultDeviceName() {
+        commandQueueCallback.updateMediaTapToTransferSenderDisplay(
+            StatusBarManager.MEDIA_TRANSFER_SENDER_STATE_ALMOST_CLOSE_TO_START_CAST,
+            routeInfoWithBlankDeviceName,
+            null,
+        )
+
+        val chipbarView = getChipbarView()
+        assertThat(chipbarView.getChipText())
+            .contains(context.getString(R.string.media_ttt_default_device_type))
+        assertThat(chipbarView.getChipText())
+            .isNotEqualTo(ChipStateSender.ALMOST_CLOSE_TO_START_CAST.getExpectedStateText())
+    }
+
+    @Test
     fun commandQueueCallback_almostCloseToEndCast_triggersCorrectChip() {
         commandQueueCallback.updateMediaTapToTransferSenderDisplay(
             StatusBarManager.MEDIA_TRANSFER_SENDER_STATE_ALMOST_CLOSE_TO_END_CAST,
@@ -242,6 +260,21 @@ class MediaTttSenderCoordinatorTest : SysuiTestCase() {
         assertThat(uiEventLoggerFake.eventId(0))
             .isEqualTo(MediaTttSenderUiEvents.MEDIA_TTT_SENDER_TRANSFER_TO_RECEIVER_TRIGGERED.id)
         verify(vibratorHelper).vibrate(any<VibrationEffect>())
+    }
+
+    @Test
+    fun commandQueueCallback_transferToReceiverTriggered_deviceNameBlank_showsDefaultDeviceName() {
+        commandQueueCallback.updateMediaTapToTransferSenderDisplay(
+            StatusBarManager.MEDIA_TRANSFER_SENDER_STATE_TRANSFER_TO_RECEIVER_TRIGGERED,
+            routeInfoWithBlankDeviceName,
+            null,
+        )
+
+        val chipbarView = getChipbarView()
+        assertThat(chipbarView.getChipText())
+            .contains(context.getString(R.string.media_ttt_default_device_type))
+        assertThat(chipbarView.getChipText())
+            .isNotEqualTo(ChipStateSender.TRANSFER_TO_RECEIVER_TRIGGERED.getExpectedStateText())
     }
 
     @Test
@@ -931,11 +964,18 @@ class MediaTttSenderCoordinatorTest : SysuiTestCase() {
 
 private const val APP_NAME = "Fake app name"
 private const val OTHER_DEVICE_NAME = "My Tablet"
+private const val BLANK_DEVICE_NAME = " "
 private const val PACKAGE_NAME = "com.android.systemui"
 private const val TIMEOUT = 10000
 
 private val routeInfo =
     MediaRoute2Info.Builder("id", OTHER_DEVICE_NAME)
+        .addFeature("feature")
+        .setClientPackageName(PACKAGE_NAME)
+        .build()
+
+private val routeInfoWithBlankDeviceName =
+    MediaRoute2Info.Builder("id", BLANK_DEVICE_NAME)
         .addFeature("feature")
         .setClientPackageName(PACKAGE_NAME)
         .build()

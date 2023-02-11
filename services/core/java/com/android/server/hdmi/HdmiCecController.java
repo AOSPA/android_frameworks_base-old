@@ -19,16 +19,16 @@ package com.android.server.hdmi;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.hardware.hdmi.HdmiPortInfo;
-import android.hardware.tv.cec.CecMessage;
-import android.hardware.tv.cec.IHdmiCec;
-import android.hardware.tv.cec.IHdmiCecCallback;
 import android.hardware.tv.cec.V1_0.HotplugEvent;
 import android.hardware.tv.cec.V1_0.IHdmiCec.getPhysicalAddressCallback;
 import android.hardware.tv.cec.V1_0.OptionKey;
 import android.hardware.tv.cec.V1_0.Result;
 import android.hardware.tv.cec.V1_0.SendMessageResult;
-import android.hardware.tv.hdmi.IHdmi;
-import android.hardware.tv.hdmi.IHdmiCallback;
+import android.hardware.tv.hdmi.cec.CecMessage;
+import android.hardware.tv.hdmi.cec.IHdmiCec;
+import android.hardware.tv.hdmi.cec.IHdmiCecCallback;
+import android.hardware.tv.hdmi.connection.IHdmiConnection;
+import android.hardware.tv.hdmi.connection.IHdmiConnectionCallback;
 import android.icu.util.IllformedLocaleException;
 import android.icu.util.ULocale;
 import android.os.Binder;
@@ -70,6 +70,10 @@ import java.util.function.Predicate;
  * <p>It can be created only by {@link HdmiCecController#create}
  *
  * <p>Declared as package-private, accessed by {@link HdmiControlService} only.
+ *
+ * <p>Also manages HDMI HAL methods that are shared between CEC and eARC. To make eARC
+ * fully independent of the presence of a CEC HAL, we should split this class into HdmiCecController
+ * and HdmiController TODO(b/255751565).
  */
 final class HdmiCecController {
     private static final String TAG = "HdmiCecController";
@@ -180,7 +184,7 @@ final class HdmiCecController {
         if (controller != null) {
             return controller;
         }
-        HdmiLogger.warning("Unable to use CEC and HDMI AIDL HALs");
+        HdmiLogger.warning("Unable to use CEC and HDMI Connection AIDL HALs");
 
         controller = createWithNativeWrapper(service, new NativeWrapperImpl11(), atomWriter);
         if (controller != null) {
@@ -410,6 +414,31 @@ final class HdmiCecController {
         assertRunOnServiceThread();
         HdmiLogger.debug("enableSystemCecControl: %b", enabled);
         mNativeWrapperImpl.enableSystemCecControl(enabled);
+    }
+
+    /**
+     * Configures the type of HDP signal that the driver and HAL use for actions other than eARC,
+     * such as signaling EDID updates.
+     */
+    @ServiceThreadOnly
+    void setHpdSignalType(@Constants.HpdSignalType int signal, int portId) {
+        assertRunOnServiceThread();
+        // Stub.
+        // TODO: bind to native.
+        // TODO: handle error return values here, with logging.
+    }
+
+    /**
+     * Gets the type of the HDP signal that the driver and HAL use for actions other than eARC,
+     * such as signaling EDID updates.
+     */
+    @ServiceThreadOnly
+    @Constants.HpdSignalType
+    int getHpdSignalType(int portId) {
+        assertRunOnServiceThread();
+        // Stub.
+        // TODO: bind to native.
+        return Constants.HDMI_HPD_TYPE_PHYSICAL;
     }
 
     /**
@@ -882,14 +911,14 @@ final class HdmiCecController {
     private static final class NativeWrapperImplAidl
             implements NativeWrapper, IBinder.DeathRecipient {
         private IHdmiCec mHdmiCec;
-        private IHdmi mHdmi;
+        private IHdmiConnection mHdmiConnection;
         @Nullable private HdmiCecCallback mCallback;
 
         private final Object mLock = new Object();
 
         @Override
         public String nativeInit() {
-            return connectToHal() ? mHdmiCec.toString() + " " + mHdmi.toString() : null;
+            return connectToHal() ? mHdmiCec.toString() + " " + mHdmiConnection.toString() : null;
         }
 
         boolean connectToHal() {
@@ -906,15 +935,15 @@ final class HdmiCecController {
                 HdmiLogger.error("Couldn't link to death : ", e);
             }
 
-            mHdmi =
-                    IHdmi.Stub.asInterface(
-                            ServiceManager.getService(IHdmi.DESCRIPTOR + "/default"));
-            if (mHdmi == null) {
-                HdmiLogger.error("Could not initialize HDMI AIDL HAL");
+            mHdmiConnection =
+                    IHdmiConnection.Stub.asInterface(
+                            ServiceManager.getService(IHdmiConnection.DESCRIPTOR + "/default"));
+            if (mHdmiConnection == null) {
+                HdmiLogger.error("Could not initialize HDMI Connection AIDL HAL");
                 return false;
             }
             try {
-                mHdmi.asBinder().linkToDeath(this, 0);
+                mHdmiConnection.asBinder().linkToDeath(this, 0);
             } catch (RemoteException e) {
                 HdmiLogger.error("Couldn't link to death : ", e);
             }
@@ -925,8 +954,8 @@ final class HdmiCecController {
         public void binderDied() {
             // One of the services died, try to reconnect to both.
             mHdmiCec.asBinder().unlinkToDeath(this, 0);
-            mHdmi.asBinder().unlinkToDeath(this, 0);
-            HdmiLogger.error("HDMI or CEC service died, reconnecting");
+            mHdmiConnection.asBinder().unlinkToDeath(this, 0);
+            HdmiLogger.error("HDMI Connection or CEC service died, reconnecting");
             connectToHal();
             // Reconnect the callback
             if (mCallback != null) {
@@ -945,7 +974,7 @@ final class HdmiCecController {
             }
             try {
                 // Create an AIDL callback that can callback onHotplugEvent
-                mHdmi.setCallback(new HdmiCallbackAidl(callback));
+                mHdmiConnection.setCallback(new HdmiConnectionCallbackAidl(callback));
             } catch (RemoteException e) {
                 HdmiLogger.error("Couldn't initialise tv.hdmi callback : ", e);
             }
@@ -1062,10 +1091,11 @@ final class HdmiCecController {
         @Override
         public HdmiPortInfo[] nativeGetPortInfos() {
             try {
-                android.hardware.tv.hdmi.HdmiPortInfo[] hdmiPortInfos = mHdmi.getPortInfo();
+                android.hardware.tv.hdmi.connection.HdmiPortInfo[] hdmiPortInfos =
+                        mHdmiConnection.getPortInfo();
                 HdmiPortInfo[] hdmiPortInfo = new HdmiPortInfo[hdmiPortInfos.length];
                 int i = 0;
-                for (android.hardware.tv.hdmi.HdmiPortInfo portInfo : hdmiPortInfos) {
+                for (android.hardware.tv.hdmi.connection.HdmiPortInfo portInfo : hdmiPortInfos) {
                     hdmiPortInfo[i] =
                             new HdmiPortInfo(
                                     portInfo.portId,
@@ -1073,7 +1103,8 @@ final class HdmiCecController {
                                     portInfo.physicalAddress,
                                     portInfo.cecSupported,
                                     false,
-                                    portInfo.arcSupported);
+                                    portInfo.arcSupported,
+                                    false);
                     i++;
                 }
                 return hdmiPortInfo;
@@ -1086,7 +1117,7 @@ final class HdmiCecController {
         @Override
         public boolean nativeIsConnected(int port) {
             try {
-                return mHdmi.isConnected(port);
+                return mHdmiConnection.isConnected(port);
             } catch (RemoteException e) {
                 HdmiLogger.error("Failed to get connection info : ", e);
                 return false;
@@ -1234,7 +1265,8 @@ final class HdmiCecController {
                             portInfo.physicalAddress,
                             portInfo.cecSupported,
                             false,
-                            portInfo.arcSupported);
+                            portInfo.arcSupported,
+                            false);
                     i++;
                 }
                 return hdmiPortInfo;
@@ -1415,7 +1447,8 @@ final class HdmiCecController {
                             portInfo.physicalAddress,
                             portInfo.cecSupported,
                             false,
-                            portInfo.arcSupported);
+                            portInfo.arcSupported,
+                            false);
                     i++;
                 }
                 return hdmiPortInfo;
@@ -1592,10 +1625,10 @@ final class HdmiCecController {
         }
     }
 
-    private static final class HdmiCallbackAidl extends IHdmiCallback.Stub {
+    private static final class HdmiConnectionCallbackAidl extends IHdmiConnectionCallback.Stub {
         private final HdmiCecCallback mHdmiCecCallback;
 
-        HdmiCallbackAidl(HdmiCecCallback hdmiCecCallback) {
+        HdmiConnectionCallbackAidl(HdmiCecCallback hdmiCecCallback) {
             mHdmiCecCallback = hdmiCecCallback;
         }
 
@@ -1606,12 +1639,12 @@ final class HdmiCecController {
 
         @Override
         public synchronized String getInterfaceHash() throws android.os.RemoteException {
-            return IHdmiCallback.Stub.HASH;
+            return IHdmiConnectionCallback.Stub.HASH;
         }
 
         @Override
         public int getInterfaceVersion() throws android.os.RemoteException {
-            return IHdmiCallback.Stub.VERSION;
+            return IHdmiConnectionCallback.Stub.VERSION;
         }
     }
 

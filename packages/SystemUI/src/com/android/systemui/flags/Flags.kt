@@ -85,8 +85,7 @@ object Flags {
     // TODO(b/259559750): Tracking Bug
     val SEMI_STABLE_SORT = releasedFlag(115, "semi_stable_sort")
 
-    @JvmField
-    val USE_ROUNDNESS_SOURCETYPES = unreleasedFlag(116, "use_roundness_sourcetype", teamfood = true)
+    @JvmField val USE_ROUNDNESS_SOURCETYPES = releasedFlag(116, "use_roundness_sourcetype")
 
     // TODO(b/259217907)
     @JvmField
@@ -103,6 +102,11 @@ object Flags {
     // TODO(b/257315550): Tracking Bug
     val NO_HUN_FOR_OLD_WHEN = unreleasedFlag(118, "no_hun_for_old_when", teamfood = true)
 
+    // TODO(b/260335638): Tracking Bug
+    @JvmField
+    val NOTIFICATION_INLINE_REPLY_ANIMATION =
+        unreleasedFlag(174148361, "notification_inline_reply_animation", teamfood = true)
+
     val FILTER_UNSEEN_NOTIFS_ON_KEYGUARD =
         unreleasedFlag(254647461, "filter_unseen_notifs_on_keyguard", teamfood = true)
 
@@ -110,8 +114,6 @@ object Flags {
     // ** Flag retired **
     // public static final BooleanFlag KEYGUARD_LAYOUT =
     //         new BooleanFlag(200, true);
-    // TODO(b/254512713): Tracking Bug
-    @JvmField val LOCKSCREEN_ANIMATIONS = releasedFlag(201, "lockscreen_animations")
 
     // TODO(b/254512750): Tracking Bug
     val NEW_UNLOCK_SWIPE_ANIMATION = releasedFlag(202, "new_unlock_swipe_animation")
@@ -161,7 +163,7 @@ object Flags {
     // TODO(b/255618149): Tracking Bug
     @JvmField
     val CUSTOMIZABLE_LOCK_SCREEN_QUICK_AFFORDANCES =
-        unreleasedFlag(216, "customizable_lock_screen_quick_affordances", teamfood = false)
+        unreleasedFlag(216, "customizable_lock_screen_quick_affordances", teamfood = true)
 
     /** Shows chipbar UI whenever the device is unlocked by ActiveUnlock (watch). */
     // TODO(b/256513609): Tracking Bug
@@ -191,6 +193,23 @@ object Flags {
     // TODO(b/244313043): Tracking bug
     @JvmField val BIOMETRICS_ANIMATION_REVAMP = unreleasedFlag(221, "biometrics_animation_revamp")
 
+    // TODO(b/262780002): Tracking Bug
+    @JvmField
+    val REVAMPED_WALLPAPER_UI = unreleasedFlag(222, "revamped_wallpaper_ui", teamfood = false)
+
+    /** A different path for unocclusion transitions back to keyguard */
+    // TODO(b/262859270): Tracking Bug
+    @JvmField
+    val UNOCCLUSION_TRANSITION = unreleasedFlag(223, "unocclusion_transition", teamfood = false)
+
+    // flag for controlling auto pin confirmation and material u shapes in bouncer
+    @JvmField
+    val AUTO_PIN_CONFIRMATION =
+        unreleasedFlag(224, "auto_pin_confirmation", "auto_pin_confirmation")
+
+    // TODO(b/262859270): Tracking Bug
+    @JvmField val FALSING_OFF_FOR_UNFOLDED = releasedFlag(225, "falsing_off_for_unfolded")
+
     // 300 - power menu
     // TODO(b/254512600): Tracking Bug
     @JvmField val POWER_MENU_LITE = releasedFlag(300, "power_menu_lite")
@@ -201,6 +220,10 @@ object Flags {
     val SMARTSPACE_SHARED_ELEMENT_TRANSITION_ENABLED =
         releasedFlag(401, "smartspace_shared_element_transition_enabled")
     val SMARTSPACE = resourceBooleanFlag(402, R.bool.flag_smartspace, "smartspace")
+
+    // TODO(b/258517050): Clean up after the feature is launched.
+    @JvmField
+    val SMARTSPACE_DATE_WEATHER_DECOUPLED = unreleasedFlag(403, "smartspace_date_weather_decoupled")
 
     // 500 - quick settings
 
@@ -238,10 +261,11 @@ object Flags {
 
     // TODO(b/256614751): Tracking Bug
     val NEW_STATUS_BAR_MOBILE_ICONS_BACKEND =
-        unreleasedFlag(608, "new_status_bar_mobile_icons_backend")
+        unreleasedFlag(608, "new_status_bar_mobile_icons_backend", teamfood = true)
 
     // TODO(b/256613548): Tracking Bug
-    val NEW_STATUS_BAR_WIFI_ICON_BACKEND = unreleasedFlag(609, "new_status_bar_wifi_icon_backend")
+    val NEW_STATUS_BAR_WIFI_ICON_BACKEND =
+        unreleasedFlag(609, "new_status_bar_wifi_icon_backend", teamfood = true)
 
     // TODO(b/256623670): Tracking Bug
     @JvmField
@@ -280,7 +304,7 @@ object Flags {
 
     // 900 - media
     // TODO(b/254512697): Tracking Bug
-    val MEDIA_TAP_TO_TRANSFER = unreleasedFlag(900, "media_tap_to_transfer", teamfood = true)
+    val MEDIA_TAP_TO_TRANSFER = releasedFlag(900, "media_tap_to_transfer")
 
     // TODO(b/254512502): Tracking Bug
     val MEDIA_SESSION_ACTIONS = unreleasedFlag(901, "media_session_actions")
@@ -306,11 +330,21 @@ object Flags {
     // TODO(b/261734857): Tracking Bug
     @JvmField val UMO_TURBULENCE_NOISE = unreleasedFlag(909, "umo_turbulence_noise")
 
+    // TODO(b/263272731): Tracking Bug
+    val MEDIA_TTT_RECEIVER_SUCCESS_RIPPLE =
+        unreleasedFlag(910, "media_ttt_receiver_success_ripple", teamfood = true)
+
+    // TODO(b/263512203): Tracking Bug
+    val MEDIA_EXPLICIT_INDICATOR = unreleasedFlag(911, "media_explicit_indicator", teamfood = true)
+
     // 1000 - dock
     val SIMULATE_DOCK_THROUGH_CHARGING = releasedFlag(1000, "simulate_dock_through_charging")
 
     // TODO(b/254512758): Tracking Bug
     @JvmField val ROUNDED_BOX_RIPPLE = releasedFlag(1002, "rounded_box_ripple")
+
+    // TODO(b/265045965): Tracking Bug
+    val SHOW_LOWLIGHT_ON_DIRECT_BOOT = releasedFlag(1003, "show_lowlight_on_direct_boot")
 
     // 1100 - windowing
     @Keep
@@ -398,10 +432,16 @@ object Flags {
     val WM_ENABLE_PREDICTIVE_BACK_SYSUI =
         unreleasedFlag(1204, "persist.wm.debug.predictive_back_sysui_enable", teamfood = true)
 
-    // 1300 - screenshots
-    // TODO(b/254512719): Tracking Bug
-    @JvmField val SCREENSHOT_REQUEST_PROCESSOR = releasedFlag(1300, "screenshot_request_processor")
+    // TODO(b/255697805): Tracking Bug
+    @JvmField
+    val TRACKPAD_GESTURE_BACK = unreleasedFlag(1205, "trackpad_gesture_back", teamfood = false)
 
+    // TODO(b/263826204): Tracking Bug
+    @JvmField
+    val WM_ENABLE_PREDICTIVE_BACK_BOUNCER_ANIM =
+        unreleasedFlag(1206, "persist.wm.debug.predictive_back_bouncer_anim", teamfood = true)
+
+    // 1300 - screenshots
     // TODO(b/254513155): Tracking Bug
     @JvmField
     val SCREENSHOT_WORK_PROFILE_POLICY =
@@ -413,7 +453,7 @@ object Flags {
 
     // TODO(b/261979569): Tracking Bug
     val QUICK_TAP_FLOW_FRAMEWORK =
-            unreleasedFlag(1401, "quick_tap_flow_framework", teamfood = false)
+        unreleasedFlag(1401, "quick_tap_flow_framework", teamfood = false)
 
     // 1500 - chooser
     // TODO(b/254512507): Tracking Bug
@@ -438,11 +478,11 @@ object Flags {
     @JvmField val NOTE_TASKS = unreleasedFlag(1900, "keycode_flag")
 
     // 2000 - device controls
-    @Keep @JvmField val USE_APP_PANELS = unreleasedFlag(2000, "use_app_panels", teamfood = true)
+    @Keep @JvmField val USE_APP_PANELS = releasedFlag(2000, "use_app_panels", teamfood = true)
 
     @JvmField
     val APP_PANELS_ALL_APPS_ALLOWED =
-        unreleasedFlag(2001, "app_panels_all_apps_allowed", teamfood = true)
+        releasedFlag(2001, "app_panels_all_apps_allowed", teamfood = true)
 
     // 2100 - Falsing Manager
     @JvmField val FALSING_FOR_LONG_TAPS = releasedFlag(2100, "falsing_for_long_taps")

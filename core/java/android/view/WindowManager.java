@@ -814,6 +814,182 @@ public interface WindowManager extends ViewManager {
     }
 
     /**
+     * Activity level {@link android.content.pm.PackageManager.Property PackageManager
+     * .Property} for an app to inform the system that the activity can be opted-in or opted-out
+     * from the compatibility treatment that avoids {@link
+     * android.app.Activity#setRequestedOrientation} loops. The loop can be trigerred by
+     * ignoreRequestedOrientation display setting enabled on the device or by the landscape natural
+     * orientation of the device.
+     *
+     * <p>The treatment is disabled by default but device manufacturers can enable the treatment
+     * using their discretion to improve display compatibility.
+     *
+     * <p>With this property set to {@code true}, the system could ignore {@link
+     * android.app.Activity#setRequestedOrientation} call from an app if one of the following
+     * conditions are true:
+     * <ul>
+     *     <li>Activity is relaunching due to the previous {@link
+     *     android.app.Activity#setRequestedOrientation} call.
+     *     <li>Camera compatibility force rotation treatment is active for the package.
+     * </ul>
+     *
+     * <p>Setting this property to {@code false} informs the system that the activity must be
+     * opted-out from the compatibility treatment even if the device manufacturer has opted the app
+     * into the treatment.
+     *
+     * <p><b>Syntax:</b>
+     * <pre>
+     * &lt;activity&gt;
+     *   &lt;property
+     *     android:name="android.window.PROPERTY_COMPAT_IGNORE_REQUESTED_ORIENTATION"
+     *     android:value="true|false"/&gt;
+     * &lt;/activity&gt;
+     * </pre>
+     *
+     * @hide
+     */
+    // TODO(b/263984287): Make this public API.
+    String PROPERTY_COMPAT_IGNORE_REQUESTED_ORIENTATION =
+            "android.window.PROPERTY_COMPAT_IGNORE_REQUESTED_ORIENTATION";
+
+    /**
+     * Activity level {@link android.content.pm.PackageManager.Property PackageManager
+     * .Property} for an app to inform the system that the activity should be excluded from the
+     * camera compatibility force rotation treatment.
+     *
+     * <p>The camera compatibility treatment aligns orientations of portrait app window and natural
+     * orientation of the device and set opposite to natural orientation for a landscape app
+     * window. Mismatch between them can lead to camera issues like sideways or stretched
+     * viewfinder since this is one of the strongest assumptions that apps make when they implement
+     * camera previews. Since app and natural display orientations aren't guaranteed to match, the
+     * rotation can cause letterboxing. The forced rotation is triggered as soon as app opens to
+     * camera and is removed once camera is closed.
+     *
+     * <p>The camera compatibility can be enabled by device manufacturers on the displays that have
+     * ignoreOrientationRequest display setting enabled (enables compatibility mode for fixed
+     * orientation, see <a href="https://developer.android.com/guide/practices/enhanced-letterboxing">Enhanced letterboxing</a>
+     * for more details).
+     *
+     * <p>With this property set to {@code true} or unset, the system may apply the force rotation
+     * treatment to fixed orientation activities. Device manufacturers can exclude packages from the
+     * treatment using their discretion to improve display compatibility.
+     *
+     * <p>With this property set to {@code false}, the system will not apply the force rotation
+     * treatment.
+     *
+     * <p><b>Syntax:</b>
+     * <pre>
+     * &lt;activity&gt;
+     *   &lt;property
+     *     android:name="android.window.PROPERTY_CAMERA_COMPAT_ALLOW_FORCE_ROTATION"
+     *     android:value="true|false"/&gt;
+     * &lt;/activity&gt;
+     * </pre>
+     *
+     * @hide
+     */
+    // TODO(b/263984287): Make this public API.
+    String PROPERTY_CAMERA_COMPAT_ALLOW_FORCE_ROTATION =
+            "android.window.PROPERTY_CAMERA_COMPAT_ALLOW_FORCE_ROTATION";
+
+    /**
+     * Activity level {@link android.content.pm.PackageManager.Property PackageManager
+     * .Property} for an app to inform the system that the activity should be excluded
+     * from the activity "refresh" after the camera compatibility force rotation treatment.
+     *
+     * <p>The camera compatibility treatment aligns orientations of portrait app window and natural
+     * orientation of the device and set opposite to natural orientation for a landscape app
+     * window. Mismatch between them can lead to camera issues like sideways or stretched
+     * viewfinder since this is one of the strongest assumptions that apps make when they implement
+     * camera previews. Since app and natural display orientations aren't guaranteed to match, the
+     * rotation can cause letterboxing. The forced rotation is triggered as soon as app opens to
+     * camera and is removed once camera is closed.
+     *
+     * <p>Force rotation is followed by the "Refresh" of the activity by going through "resumed ->
+     * ... -> stopped -> ... -> resumed" cycle (by default) or "resumed -> paused -> resumed" cycle
+     * (if overridden, see {@link #PROPERTY_CAMERA_COMPAT_ENABLE_REFRESH_VIA_PAUSE} for context).
+     * This allows to clear cached values in apps (e.g. display or camera rotation) that influence
+     * camera preview and can lead to sideways or stretching issues persisting even after force
+     * rotation.
+     *
+     * <p>The camera compatibility can be enabled by device manufacturers on the displays that have
+     * ignoreOrientationRequest display setting enabled (enables compatibility mode for fixed
+     * orientation, see <a href="https://developer.android.com/guide/practices/enhanced-letterboxing">Enhanced letterboxing</a>
+     * for more details).
+     *
+     * <p>With this property set to {@code true} or unset, the system may "refresh" activity after
+     * the force rotation treatment. Device manufacturers can exclude packages from the "refresh"
+     * using their discretion to improve display compatibility.
+     *
+     * <p>With this property set to {@code false}, the system will not "refresh" activity after the
+     * force rotation treatment.
+     *
+     * <p><b>Syntax:</b>
+     * <pre>
+     * &lt;activity&gt;
+     *   &lt;property
+     *     android:name="android.window.PROPERTY_CAMERA_COMPAT_ALLOW_REFRESH"
+     *     android:value="true|false"/&gt;
+     * &lt;/activity&gt;
+     * </pre>
+     *
+     * @hide
+     */
+    // TODO(b/263984287): Make this public API.
+    String PROPERTY_CAMERA_COMPAT_ALLOW_REFRESH =
+            "android.window.PROPERTY_CAMERA_COMPAT_ALLOW_REFRESH";
+
+    /**
+     * Activity level {@link android.content.pm.PackageManager.Property PackageManager
+     * .Property} for an app to inform the system that the activity should be or shouldn't be
+     * "refreshed" after the camera compatibility force rotation treatment using "paused ->
+     * resumed" cycle rather than "stopped -> resumed".
+     *
+     * <p>The camera compatibility treatment aligns orientations of portrait app window and natural
+     * orientation of the device and set opposite to natural orientation for a landscape app
+     * window. Mismatch between them can lead to camera issues like sideways or stretched
+     * viewfinder since this is one of the strongest assumptions that apps make when they implement
+     * camera previews. Since app and natural display orientations aren't guaranteed to match, the
+     * rotation can cause letterboxing. The forced rotation is triggered as soon as app opens to
+     * camera and is removed once camera is closed.
+     *
+     * <p>Force rotation is followed by the "Refresh" of the activity by going through "resumed ->
+     * ... -> stopped -> ... -> resumed" cycle (by default) or "resumed -> paused -> resumed" cycle
+     * (if overridden by device manufacturers or using this property). This allows to clear cached
+     * values in apps (e.g., display or camera rotation) that influence camera preview and can lead
+     * to sideways or stretching issues persisting even after force rotation.
+     *
+     * <p>The camera compatibility can be enabled by device manufacturers on the displays that have
+     * ignoreOrientationRequest display setting enabled (enables compatibility mode for fixed
+     * orientation, see <a href="https://developer.android.com/guide/practices/enhanced-letterboxing">Enhanced letterboxing</a>
+     * for more details).
+     *
+     * <p>Device manufacturers can override packages to "refresh" via "resumed -> paused -> resumed"
+     * cycle using their discretion to improve display compatibility.
+     *
+     * <p>With this property set to {@code true}, the system will "refresh" activity after the
+     * force rotation treatment using "resumed -> paused -> resumed" cycle.
+     *
+     * <p>With this property set to {@code false}, the system will not "refresh" activity after the
+     * force rotation treatment using "resumed -> paused -> resumed" cycle even if the device
+     * manufacturer adds the corresponding override.
+     *
+     * <p><b>Syntax:</b>
+     * <pre>
+     * &lt;activity&gt;
+     *   &lt;property
+     *     android:name="android.window.PROPERTY_CAMERA_COMPAT_ENABLE_REFRESH_VIA_PAUSE"
+     *     android:value="true|false"/&gt;
+     * &lt;/activity&gt;
+     * </pre>
+     *
+     * @hide
+     */
+    // TODO(b/263984287): Make this public API.
+    String PROPERTY_CAMERA_COMPAT_ENABLE_REFRESH_VIA_PAUSE =
+            "android.window.PROPERTY_CAMERA_COMPAT_ENABLE_REFRESH_VIA_PAUSE";
+
+    /**
      * @hide
      */
     public static final String PARCEL_KEY_SHORTCUTS_ARRAY = "shortcuts_array";
@@ -4759,10 +4935,10 @@ public interface WindowManager extends ViewManager {
             }
             if (providedInsets != null) {
                 sb.append(System.lineSeparator());
-                sb.append(" providedInsets=");
+                sb.append(prefix).append("  providedInsets:");
                 for (int i = 0; i < providedInsets.length; ++i) {
-                    if (i > 0) sb.append(' ');
-                    sb.append((providedInsets[i]));
+                    sb.append(System.lineSeparator());
+                    sb.append(prefix).append("    ").append(providedInsets[i]);
                 }
             }
             if (insetsRoundedCornerFrame) {
@@ -4771,10 +4947,12 @@ public interface WindowManager extends ViewManager {
             }
             if (paramsForRotation != null && paramsForRotation.length != 0) {
                 sb.append(System.lineSeparator());
-                sb.append(prefix).append("  paramsForRotation=");
+                sb.append(prefix).append("  paramsForRotation:");
                 for (int i = 0; i < paramsForRotation.length; ++i) {
-                    if (i > 0) sb.append(' ');
-                    sb.append(paramsForRotation[i].toString());
+                    // Additional prefix needed for the beginning of the params of the new rotation.
+                    sb.append(System.lineSeparator()).append(prefix).append("    ");
+                    sb.append(Surface.rotationToString(i)).append("=");
+                    sb.append(paramsForRotation[i].toString(prefix + "    "));
                 }
             }
 

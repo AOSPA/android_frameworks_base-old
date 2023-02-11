@@ -427,9 +427,6 @@ class Task extends TaskFragment {
     // This number will be assigned when we evaluate OOM scores for all visible tasks.
     int mLayerRank = LAYER_RANK_INVISIBLE;
 
-    /** Helper object used for updating override configuration. */
-    private Configuration mTmpConfig = new Configuration();
-
     /* Unique identifier for this task. */
     final int mTaskId;
     /* User for which this task was created. */
@@ -474,7 +471,6 @@ class Task extends TaskFragment {
 
     // Whether the task is currently being drag-resized
     private boolean mDragResizing;
-    private int mDragResizeMode;
 
     // This represents the last resolved activity values for this task
     // NOTE: This value needs to be persisted with each task
@@ -622,6 +618,8 @@ class Task extends TaskFragment {
     ActivityRecord mChildPipActivity;
 
     boolean mLastSurfaceShowing = true;
+
+    boolean mAlignActivityLocaleWithTask = false;
 
     private Task(ActivityTaskManagerService atmService, int _taskId, Intent _intent,
             Intent _affinityIntent, String _affinity, String _rootAffinity,
@@ -804,16 +802,11 @@ class Task extends TaskFragment {
 
             Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "resizeTask_" + mTaskId);
 
-            boolean updatedConfig = false;
-            mTmpConfig.setTo(getResolvedOverrideConfiguration());
-            if (setBounds(bounds) != BOUNDS_CHANGE_NONE) {
-                updatedConfig = !mTmpConfig.equals(getResolvedOverrideConfiguration());
-            }
             // This variable holds information whether the configuration didn't change in a
             // significant way and the activity was kept the way it was. If it's false, it means
             // the activity had to be relaunched due to configuration change.
             boolean kept = true;
-            if (updatedConfig) {
+            if (setBounds(bounds, forced) != BOUNDS_CHANGE_NONE) {
                 final ActivityRecord r = topRunningActivityLocked();
                 if (r != null) {
                     kept = r.ensureActivityConfiguration(0 /* globalChanges */,
@@ -830,8 +823,6 @@ class Task extends TaskFragment {
                     }
                 }
             }
-            resize(kept, forced);
-
             saveLaunchingStateIfNeeded();
 
             Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
@@ -2701,12 +2692,6 @@ class Task extends TaskFragment {
         return canSpecifyOrientation() && getDisplayArea().canSpecifyOrientation(orientation);
     }
 
-    void resize(boolean relayout, boolean forced) {
-        if (setBounds(getRequestedOverrideBounds(), forced) != BOUNDS_CHANGE_NONE && relayout) {
-            getDisplayContent().layoutAndAssignWindowLayersIfNeeded();
-        }
-    }
-
     @Override
     void onDisplayChanged(DisplayContent dc) {
         final boolean isRootTask = isRootTask();
@@ -2825,11 +2810,6 @@ class Task extends TaskFragment {
         }
 
         final Task rootTask = getRootTask();
-        final DisplayContent displayContent = rootTask.getDisplayContent();
-        // It doesn't matter if we in particular are part of the resize, since we couldn't have
-        // a DimLayer anyway if we weren't visible.
-        final boolean dockedResizing = displayContent != null
-                && displayContent.mDividerControllerLocked.isResizing();
         if (inFreeformWindowingMode()) {
             boolean[] foundTop = { false };
             forAllActivities(a -> { getMaxVisibleBounds(a, out, foundTop); });
@@ -2840,18 +2820,10 @@ class Task extends TaskFragment {
 
         if (!matchParentBounds()) {
             // When minimizing the root docked task when going home, we don't adjust the task bounds
-            // so we need to intersect the task bounds with the root task bounds here.
-            //
-            // If we are Docked Resizing with snap points, the task bounds could be smaller than the
-            // root task bounds and so we don't even want to use them. Even if the app should not be
-            // resized the Dim should keep up with the divider.
-            if (dockedResizing) {
-                rootTask.getBounds(out);
-            } else {
-                rootTask.getBounds(mTmpRect);
-                mTmpRect.intersect(getBounds());
-                out.set(mTmpRect);
-            }
+            // so we need to intersect the task bounds with the root task bounds here..
+            rootTask.getBounds(mTmpRect);
+            mTmpRect.intersect(getBounds());
+            out.set(mTmpRect);
         } else {
             out.set(getBounds());
         }
@@ -2882,26 +2854,21 @@ class Task extends TaskFragment {
         }
     }
 
-    void setDragResizing(boolean dragResizing, int dragResizeMode) {
+    void setDragResizing(boolean dragResizing) {
         if (mDragResizing != dragResizing) {
-            // No need to check if the mode is allowed if it's leaving dragResize
+            // No need to check if allowed if it's leaving dragResize
             if (dragResizing
-                    && !DragResizeMode.isModeAllowedForRootTask(getRootTask(), dragResizeMode)) {
-                throw new IllegalArgumentException("Drag resize mode not allow for root task id="
-                        + getRootTaskId() + " dragResizeMode=" + dragResizeMode);
+                    && !(getRootTask().getWindowingMode() == WINDOWING_MODE_FREEFORM)) {
+                throw new IllegalArgumentException("Drag resize not allow for root task id="
+                        + getRootTaskId());
             }
             mDragResizing = dragResizing;
-            mDragResizeMode = dragResizeMode;
             resetDragResizingChangeReported();
         }
     }
 
     boolean isDragResizing() {
         return mDragResizing;
-    }
-
-    int getDragResizeMode() {
-        return mDragResizeMode;
     }
 
     void adjustBoundsForDisplayChangeIfNeeded(final DisplayContent displayContent) {
@@ -2987,9 +2954,8 @@ class Task extends TaskFragment {
                 // Found it. This activity on top of the given activity on the same TaskFragment.
                 return true;
             }
-            if (isSelfOrNonEmbeddedTask(parent.asTask())) {
-                // Found it. This activity is the direct child of a leaf Task without being
-                // embedded.
+            if (parent != null && parent.asTask() != null) {
+                // Found it. This activity is the direct child of a leaf Task.
                 return true;
             }
             // The candidate activity is being embedded. Checking if the bounds of the containing
@@ -3000,7 +2966,7 @@ class Task extends TaskFragment {
                     // Not occluding the grandparent.
                     break;
                 }
-                if (isSelfOrNonEmbeddedTask(grandParent.asTask())) {
+                if (grandParent.asTask() != null) {
                     // Found it. The activity occludes its parent TaskFragment and the parent
                     // TaskFragment also occludes its parent all the way up.
                     return true;
@@ -3011,13 +2977,6 @@ class Task extends TaskFragment {
             return false;
         });
         return top != activity ? top : null;
-    }
-
-    private boolean isSelfOrNonEmbeddedTask(Task task) {
-        if (task == this) {
-            return true;
-        }
-        return task != null && !task.isEmbedded();
     }
 
     @Override
@@ -3464,12 +3423,39 @@ class Task extends TaskFragment {
 
         if (info.topActivityInfo != null
                 && task.effectiveUid != info.topActivityInfo.applicationInfo.uid) {
-            info.topActivity = null;
-            info.topActivityInfo = null;
+            // Making a copy to prevent eliminating the info in the original ActivityRecord.
+            info.topActivityInfo = new ActivityInfo(info.topActivityInfo);
+            info.topActivityInfo.applicationInfo =
+                    new ApplicationInfo(info.topActivityInfo.applicationInfo);
+
+            // Strip the sensitive info.
+            info.topActivity = new ComponentName("", "");
+            info.topActivityInfo.packageName = "";
+            info.topActivityInfo.taskAffinity = "";
+            info.topActivityInfo.processName = "";
+            info.topActivityInfo.name = "";
+            info.topActivityInfo.parentActivityName = "";
+            info.topActivityInfo.targetActivity = "";
+            info.topActivityInfo.splitName = "";
+            info.topActivityInfo.applicationInfo.className = "";
+            info.topActivityInfo.applicationInfo.credentialProtectedDataDir = "";
+            info.topActivityInfo.applicationInfo.dataDir = "";
+            info.topActivityInfo.applicationInfo.deviceProtectedDataDir = "";
+            info.topActivityInfo.applicationInfo.manageSpaceActivityName = "";
+            info.topActivityInfo.applicationInfo.nativeLibraryDir = "";
+            info.topActivityInfo.applicationInfo.nativeLibraryRootDir = "";
+            info.topActivityInfo.applicationInfo.processName = "";
+            info.topActivityInfo.applicationInfo.publicSourceDir = "";
+            info.topActivityInfo.applicationInfo.scanPublicSourceDir = "";
+            info.topActivityInfo.applicationInfo.scanSourceDir = "";
+            info.topActivityInfo.applicationInfo.sourceDir = "";
+            info.topActivityInfo.applicationInfo.taskAffinity = "";
+            info.topActivityInfo.applicationInfo.name = "";
+            info.topActivityInfo.applicationInfo.packageName = "";
         }
 
         if (task.effectiveUid != baseActivityUid) {
-            info.baseActivity = null;
+            info.baseActivity = new ComponentName("", "");
         }
     }
 
@@ -4805,14 +4791,6 @@ class Task extends TaskFragment {
         }
     }
 
-    /**
-     * Returns true if this root task should be resized to match the bounds specified by
-     * {@link ActivityOptions#setLaunchBounds} when launching an activity into the root task.
-     */
-    boolean shouldResizeRootTaskWithLaunchBounds() {
-        return inPinnedWindowingMode();
-    }
-
     void checkTranslucentActivityWaiting(ActivityRecord top) {
         if (mTranslucentActivityWaiting != top) {
             mUndrawnActivitiesBelowTopTranslucent.clear();
@@ -5101,14 +5079,6 @@ class Task extends TaskFragment {
                 // window manager to keep the previous window it had previously
                 // created, if it still had one.
                 Task baseTask = r.getTask();
-                if (baseTask.isEmbedded()) {
-                    // If the task is embedded in a task fragment, there may have an existing
-                    // starting window in the parent task. This allows the embedded activities
-                    // to share the starting window and make sure that the window can have top
-                    // z-order by transferring to the top activity.
-                    baseTask = baseTask.getParent().asTaskFragment().getTask();
-                }
-
                 final ActivityRecord prev = baseTask.getActivity(
                         a -> a.mStartingData != null && a.showToCurrentUser());
                 mWmService.mStartingSurfaceController.showStartingWindow(r, prev, newTask,
@@ -5646,29 +5616,6 @@ class Task extends TaskFragment {
             mRootWindowContainer.resumeFocusedTasksTopActivities();
         }
         return true;
-    }
-
-    // TODO: Can only be called from special methods in ActivityTaskSupervisor.
-    // Need to consolidate those calls points into this resize method so anyone can call directly.
-    void resize(Rect displayedBounds, boolean preserveWindows, boolean deferResume) {
-        Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "task.resize_" + getRootTaskId());
-        mAtmService.deferWindowLayout();
-        try {
-            // TODO: Why not just set this on the root task directly vs. on each tasks?
-            // Update override configurations of all tasks in the root task.
-            forAllTasks(task -> {
-                if (task.isResizeable()) {
-                    task.setBounds(displayedBounds);
-                }
-            }, true /* traverseTopToBottom */);
-
-            if (!deferResume) {
-                ensureVisibleActivitiesConfiguration(topRunningActivity(), preserveWindows);
-            }
-        } finally {
-            mAtmService.continueWindowLayout();
-            Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
-        }
     }
 
     boolean willActivityBeVisible(IBinder token) {
@@ -6335,6 +6282,11 @@ class Task extends TaskFragment {
             return this;
         }
 
+        Builder setRemoveWithTaskOrganizer(boolean removeWithTaskOrganizer) {
+            mRemoveWithTaskOrganizer = removeWithTaskOrganizer;
+            return this;
+        }
+
         private Builder setUserId(int userId) {
             mUserId = userId;
             return this;
@@ -6532,7 +6484,7 @@ class Task extends TaskFragment {
             mCallingPackage = mActivityInfo.packageName;
             mResizeMode = mActivityInfo.resizeMode;
             mSupportsPictureInPicture = mActivityInfo.supportsPictureInPicture();
-            if (mActivityOptions != null) {
+            if (!mRemoveWithTaskOrganizer && mActivityOptions != null) {
                 mRemoveWithTaskOrganizer = mActivityOptions.getRemoveWithTaskOranizer();
             }
 

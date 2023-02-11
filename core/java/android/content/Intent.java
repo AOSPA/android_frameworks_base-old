@@ -66,6 +66,7 @@ import android.provider.DocumentsContract;
 import android.provider.DocumentsProvider;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
+import android.service.chooser.ChooserAction;
 import android.telecom.PhoneAccount;
 import android.telecom.TelecomManager;
 import android.text.TextUtils;
@@ -1814,8 +1815,8 @@ public class Intent implements Parcelable, Cloneable {
      * Package manager install result code.  @hide because result codes are not
      * yet ready to be exposed.
      */
-    public static final String EXTRA_INSTALL_RESULT
-            = "android.intent.extra.INSTALL_RESULT";
+    @SystemApi
+    public static final String EXTRA_INSTALL_RESULT = "android.intent.extra.INSTALL_RESULT";
 
     /**
      * Activity Action: Launch application uninstaller.
@@ -1841,6 +1842,7 @@ public class Intent implements Parcelable, Cloneable {
      * Specify whether the package should be uninstalled for all users.
      * @hide because these should not be part of normal application flow.
      */
+    @SystemApi
     public static final String EXTRA_UNINSTALL_ALL_USERS
             = "android.intent.extra.UNINSTALL_ALL_USERS";
 
@@ -5836,6 +5838,25 @@ public class Intent implements Parcelable, Cloneable {
      */
     public static final String EXTRA_CHOOSER_REFINEMENT_INTENT_SENDER
             = "android.intent.extra.CHOOSER_REFINEMENT_INTENT_SENDER";
+
+    /**
+     * A Parcelable[] of {@link ChooserAction} objects to provide the Android Sharesheet with
+     * app-specific actions to be presented to the user when invoking {@link #ACTION_CHOOSER}.
+     * @hide
+     */
+    public static final String EXTRA_CHOOSER_CUSTOM_ACTIONS =
+            "android.intent.extra.EXTRA_CHOOSER_CUSTOM_ACTIONS";
+
+    /**
+     * Optional argument to be used with {@link #ACTION_CHOOSER}.
+     * A {@link android.app.PendingIntent} to be sent when the user wants to do payload reselection
+     * in the sharesheet.
+     * A reselection action allows the user to return to the source app to change the content being
+     * shared.
+     * @hide
+     */
+    public static final String EXTRA_CHOOSER_PAYLOAD_RESELECTION_ACTION =
+            "android.intent.extra.EXTRA_CHOOSER_PAYLOAD_RESELECTION_ACTION";
 
     /**
      * An {@code ArrayList} of {@code String} annotations describing content for
@@ -11592,7 +11613,7 @@ public class Intent implements Parcelable, Cloneable {
     private void toUriInner(StringBuilder uri, String scheme, String defAction,
             String defPackage, int flags) {
         if (scheme != null) {
-            uri.append("scheme=").append(scheme).append(';');
+            uri.append("scheme=").append(Uri.encode(scheme)).append(';');
         }
         if (mAction != null && !mAction.equals(defAction)) {
             uri.append("action=").append(Uri.encode(mAction)).append(';');

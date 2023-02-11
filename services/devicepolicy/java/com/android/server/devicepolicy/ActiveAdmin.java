@@ -34,6 +34,8 @@ import android.annotation.Nullable;
 import android.app.admin.DeviceAdminInfo;
 import android.app.admin.DevicePolicyManager;
 import android.app.admin.FactoryResetProtectionPolicy;
+import android.app.admin.ManagedSubscriptionsPolicy;
+import android.app.admin.PackagePolicy;
 import android.app.admin.PasswordPolicy;
 import android.app.admin.PreferentialNetworkServiceConfig;
 import android.app.admin.WifiSsidPolicy;
@@ -157,6 +159,9 @@ class ActiveAdmin {
     private static final String TAG_SSID_ALLOWLIST = "ssid-allowlist";
     private static final String TAG_SSID_DENYLIST = "ssid-denylist";
     private static final String TAG_SSID = "ssid";
+    private static final String TAG_CROSS_PROFILE_CALLER_ID_POLICY = "caller-id-policy";
+    private static final String TAG_CROSS_PROFILE_CONTACTS_SEARCH_POLICY = "contacts-policy";
+    private static final String TAG_PACKAGE_POLICY_PACKAGE_NAMES = "package-policy-packages";
     private static final String TAG_PREFERENTIAL_NETWORK_SERVICE_CONFIGS =
             "preferential_network_service_configs";
     private static final String TAG_PREFERENTIAL_NETWORK_SERVICE_CONFIG =
@@ -164,9 +169,12 @@ class ActiveAdmin {
     private static final String TAG_PROTECTED_PACKAGES = "protected_packages";
     private static final String TAG_SUSPENDED_PACKAGES = "suspended-packages";
     private static final String TAG_MTE_POLICY = "mte-policy";
+    private static final String TAG_MANAGED_SUBSCRIPTIONS_POLICY = "managed_subscriptions_policy";
     private static final String ATTR_VALUE = "value";
     private static final String ATTR_LAST_NETWORK_LOGGING_NOTIFICATION = "last-notification";
     private static final String ATTR_NUM_NETWORK_LOGGING_NOTIFICATIONS = "num-notifications";
+    private static final String ATTR_PACKAGE_POLICY_MODE = "package-policy-type";
+
 
     DeviceAdminInfo info;
 
@@ -266,6 +274,9 @@ class ActiveAdmin {
     // Wi-Fi SSID restriction policy.
     WifiSsidPolicy mWifiSsidPolicy;
 
+    // Managed subscriptions policy.
+    ManagedSubscriptionsPolicy mManagedSubscriptionsPolicy;
+
     // TODO: review implementation decisions with frameworks team
     boolean specifiesGlobalProxy = false;
     String globalProxySpec = null;
@@ -314,6 +325,12 @@ class ActiveAdmin {
     long mProfileMaximumTimeOffMillis = 0;
     // Time by which the profile should be turned on according to System.currentTimeMillis().
     long mProfileOffDeadline = 0;
+
+    // The package policy for Cross Profile Contacts Search
+    PackagePolicy mManagedProfileCallerIdAccess = null;
+
+    // The package policy for Cross Profile Contacts Search
+    PackagePolicy mManagedProfileContactsAccess = null;
 
     public String mAlwaysOnVpnPackage;
     public boolean mAlwaysOnVpnLockdown;
@@ -626,6 +643,27 @@ class ActiveAdmin {
         if (mtePolicy != DevicePolicyManager.MTE_NOT_CONTROLLED_BY_POLICY) {
             writeAttributeValueToXml(out, TAG_MTE_POLICY, mtePolicy);
         }
+        writePackagePolicy(out, TAG_CROSS_PROFILE_CALLER_ID_POLICY,
+                mManagedProfileCallerIdAccess);
+        writePackagePolicy(out, TAG_CROSS_PROFILE_CONTACTS_SEARCH_POLICY,
+                mManagedProfileContactsAccess);
+        if (mManagedSubscriptionsPolicy != null) {
+            out.startTag(null, TAG_MANAGED_SUBSCRIPTIONS_POLICY);
+            mManagedSubscriptionsPolicy.saveToXml(out);
+            out.endTag(null, TAG_MANAGED_SUBSCRIPTIONS_POLICY);
+        }
+    }
+
+    private void writePackagePolicy(TypedXmlSerializer out, String tag,
+            PackagePolicy packagePolicy) throws IOException {
+        if (packagePolicy == null) {
+            return;
+        }
+        out.startTag(null, tag);
+        out.attributeInt(null, ATTR_PACKAGE_POLICY_MODE, packagePolicy.getPolicyType());
+        writePackageListToXml(out, TAG_PACKAGE_POLICY_PACKAGE_NAMES,
+                new ArrayList<>(packagePolicy.getPackageNames()));
+        out.endTag(null, tag);
     }
 
     private List<String> ssidsToStrings(Set<WifiSsid> ssids) {
@@ -914,11 +952,25 @@ class ActiveAdmin {
                 }
             } else if (TAG_MTE_POLICY.equals(tag)) {
                 mtePolicy = parser.getAttributeInt(null, ATTR_VALUE);
+            } else if (TAG_CROSS_PROFILE_CALLER_ID_POLICY.equals(tag)) {
+                mManagedProfileCallerIdAccess = readPackagePolicy(parser);
+            } else if (TAG_CROSS_PROFILE_CONTACTS_SEARCH_POLICY.equals(tag)) {
+                mManagedProfileContactsAccess = readPackagePolicy(parser);
+            } else if (TAG_MANAGED_SUBSCRIPTIONS_POLICY.equals(tag)) {
+                mManagedSubscriptionsPolicy = ManagedSubscriptionsPolicy.readFromXml(parser);
             } else {
                 Slogf.w(LOG_TAG, "Unknown admin tag: %s", tag);
                 XmlUtils.skipCurrentTag(parser);
             }
         }
+    }
+
+    private PackagePolicy readPackagePolicy(TypedXmlPullParser parser)
+            throws XmlPullParserException, IOException {
+        int policy = parser.getAttributeInt(null, ATTR_PACKAGE_POLICY_MODE);
+        Set<String> packageNames = new ArraySet<>(
+                readPackageList(parser, TAG_PACKAGE_POLICY_PACKAGE_NAMES));
+        return new PackagePolicy(policy, packageNames);
     }
 
     private List<WifiSsid> readWifiSsids(TypedXmlPullParser parser, String tag)
@@ -1106,6 +1158,21 @@ class ActiveAdmin {
                 key -> UserRestrictionsUtils.isGlobal(adminType, key));
     }
 
+    void dumpPackagePolicy(IndentingPrintWriter pw, String name, PackagePolicy policy) {
+        pw.print(name);
+        pw.println(":");
+        if (policy != null) {
+            pw.increaseIndent();
+            pw.print("policyType=");
+            pw.println(policy.getPolicyType());
+            pw.println("packageNames:");
+            pw.increaseIndent();
+            policy.getPackageNames().forEach(item -> pw.println(item));
+            pw.decreaseIndent();
+            pw.decreaseIndent();
+        }
+    }
+
     void dump(IndentingPrintWriter pw) {
         pw.print("uid=");
         pw.println(getUid());
@@ -1258,6 +1325,13 @@ class ActiveAdmin {
         pw.print("defaultEnabledRestrictionsAlreadySet=");
         pw.println(defaultEnabledRestrictionsAlreadySet);
 
+
+        dumpPackagePolicy(pw, "managedProfileCallerIdPolicy",
+                mManagedProfileCallerIdAccess);
+
+        dumpPackagePolicy(pw, "managedProfileContactsPolicy",
+                mManagedProfileContactsAccess);
+
         pw.print("isParent=");
         pw.println(isParent);
 
@@ -1349,5 +1423,16 @@ class ActiveAdmin {
 
         pw.print("mtePolicy=");
         pw.println(mtePolicy);
+
+        pw.print("accountTypesWithManagementDisabled=");
+        pw.println(accountTypesWithManagementDisabled);
+
+        if (mManagedSubscriptionsPolicy != null) {
+            pw.println("mManagedSubscriptionsPolicy:");
+            pw.increaseIndent();
+            pw.print("mPolicyType=");
+            mManagedSubscriptionsPolicy.getPolicyType();
+            pw.decreaseIndent();
+        }
     }
 }

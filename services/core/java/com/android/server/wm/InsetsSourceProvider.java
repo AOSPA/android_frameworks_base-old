@@ -33,7 +33,6 @@ import static com.android.server.wm.InsetsSourceProviderProto.SEAMLESS_ROTATING;
 import static com.android.server.wm.InsetsSourceProviderProto.SERVER_VISIBLE;
 import static com.android.server.wm.InsetsSourceProviderProto.SOURCE;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_INSETS_CONTROL;
-import static com.android.server.wm.WindowManagerService.H.LAYOUT_AND_ASSIGN_WINDOW_LAYERS_IF_NEEDED;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -45,7 +44,6 @@ import android.util.proto.ProtoOutputStream;
 import android.view.InsetsFrameProvider;
 import android.view.InsetsSource;
 import android.view.InsetsSourceControl;
-import android.view.InsetsState;
 import android.view.SurfaceControl;
 import android.view.SurfaceControl.Transaction;
 import android.view.WindowInsets;
@@ -121,14 +119,14 @@ abstract class InsetsSourceProvider {
 
     InsetsSourceProvider(InsetsSource source, InsetsStateController stateController,
             DisplayContent displayContent) {
-        mClientVisible = InsetsState.getDefaultVisibility(source.getType());
+        mClientVisible = (WindowInsets.Type.defaultVisible() & source.getType()) != 0;
         mSource = source;
         mDisplayContent = displayContent;
         mStateController = stateController;
         mFakeControl = new InsetsSourceControl(
-                source.getType(), null /* leash */, false /* initialVisible */, new Point(),
-                Insets.NONE);
-        mControllable = InsetsPolicy.isInsetsTypeControllable(source.getType());
+                source.getId(), source.getType(), null /* leash */, false /* initialVisible */,
+                new Point(), Insets.NONE);
+        mControllable = (InsetsPolicy.CONTROLLABLE_TYPES & source.getType()) != 0;
     }
 
     InsetsSource getSource() {
@@ -166,11 +164,11 @@ abstract class InsetsSourceProvider {
             // TODO: Ideally, we should wait for the animation to finish so previous window can
             // animate-out as new one animates-in.
             mWindowContainer.cancelAnimation();
-            mWindowContainer.getProvidedInsetsSources().remove(mSource.getType());
+            mWindowContainer.getProvidedInsetsSources().remove(mSource.getId());
             mSeamlessRotating = false;
         }
         ProtoLog.d(WM_DEBUG_WINDOW_INSETS, "InsetsSource setWin %s for type %s",
-                windowContainer, InsetsState.typeToString(mSource.getType()));
+                windowContainer, WindowInsets.Type.toString(mSource.getType()));
         mWindowContainer = windowContainer;
         // TODO: remove the frame provider for non-WindowState container.
         mFrameProvider = frameProvider;
@@ -182,7 +180,7 @@ abstract class InsetsSourceProvider {
             mSource.setInsetsRoundedCornerFrame(false);
             mSourceFrame.setEmpty();
         } else {
-            mWindowContainer.getProvidedInsetsSources().put(mSource.getType(), mSource);
+            mWindowContainer.getProvidedInsetsSources().put(mSource.getId(), mSource);
             if (mControllable) {
                 mWindowContainer.setControllableInsetProvider(this);
                 if (mPendingControlTarget != null) {
@@ -284,7 +282,7 @@ abstract class InsetsSourceProvider {
     InsetsSource createSimulatedSource(DisplayFrames displayFrames, Rect frame) {
         // Don't copy visible frame because it might not be calculated in the provided display
         // frames and it is not significant for this usage.
-        final InsetsSource source = new InsetsSource(mSource.getType());
+        final InsetsSource source = new InsetsSource(mSource.getId(), mSource.getType());
         source.setVisible(mSource.isVisible());
         mTmpRect.set(frame);
         if (mFrameProvider != null) {
@@ -454,13 +452,12 @@ abstract class InsetsSourceProvider {
         if (target == null) {
             // Cancelling the animation will invoke onAnimationCancelled, resetting all the fields.
             mWindowContainer.cancelAnimation();
-            setClientVisible(InsetsState.getDefaultVisibility(mSource.getType()));
+            setClientVisible((WindowInsets.Type.defaultVisible() & mSource.getType()) != 0);
             return;
         }
         final Point surfacePosition = getWindowFrameSurfacePosition();
         mAdapter = new ControlAdapter(surfacePosition);
-        final int type = getSource().getType();
-        if (type == ITYPE_IME) {
+        if (mSource.getType() == WindowInsets.Type.ime()) {
             setClientVisible(target.isRequestedVisible(WindowInsets.Type.ime()));
         }
         final Transaction t = mDisplayContent.getSyncTransaction();
@@ -474,8 +471,8 @@ abstract class InsetsSourceProvider {
         final SurfaceControl leash = mAdapter.mCapturedLeash;
         mControlTarget = target;
         updateVisibility();
-        mControl = new InsetsSourceControl(type, leash, mClientVisible, surfacePosition,
-                mInsetsHint);
+        mControl = new InsetsSourceControl(mSource.getId(), mSource.getType(), leash,
+                mClientVisible, surfacePosition, mInsetsHint);
 
         ProtoLog.d(WM_DEBUG_WINDOW_INSETS,
                 "InsetsSource Control %s for target %s", mControl, mControlTarget);
@@ -493,8 +490,7 @@ abstract class InsetsSourceProvider {
     }
 
     boolean updateClientVisibility(InsetsControlTarget caller) {
-        final boolean requestedVisible =
-                caller.isRequestedVisible(InsetsState.toPublicType(mSource.getType()));
+        final boolean requestedVisible = caller.isRequestedVisible(mSource.getType());
         if (caller != mControlTarget || requestedVisible == mClientVisible) {
             return false;
         }
@@ -511,12 +507,10 @@ abstract class InsetsSourceProvider {
             return;
         }
         mClientVisible = clientVisible;
-        if (!mDisplayContent.mLayoutAndAssignWindowLayersScheduled) {
-            mDisplayContent.mLayoutAndAssignWindowLayersScheduled = true;
-            mDisplayContent.mWmService.mH.obtainMessage(
-                    LAYOUT_AND_ASSIGN_WINDOW_LAYERS_IF_NEEDED, mDisplayContent).sendToTarget();
-        }
         updateVisibility();
+        // The visibility change needs a traversal to apply.
+        mDisplayContent.setLayoutNeeded();
+        mDisplayContent.mWmService.mWindowPlacerLocked.requestTraversal();
     }
 
     @VisibleForTesting
@@ -530,7 +524,7 @@ abstract class InsetsSourceProvider {
         mSource.setVisible(mServerVisible && (isMirroredSource() || mClientVisible));
         ProtoLog.d(WM_DEBUG_WINDOW_INSETS,
                 "InsetsSource updateVisibility for %s, serverVisible: %s clientVisible: %s",
-                InsetsState.typeToString(mSource.getType()),
+                WindowInsets.Type.toString(mSource.getType()),
                 mServerVisible, mClientVisible);
     }
 
@@ -560,9 +554,9 @@ abstract class InsetsSourceProvider {
                 // The surface transaction of preparing leash is not applied yet. We don't send it
                 // to the client in case that the client applies its transaction sooner than ours
                 // that we could unexpectedly overwrite the surface state.
-                return new InsetsSourceControl(mControl.getType(), null /* leash */,
-                        mControl.isInitiallyVisible(), mControl.getSurfacePosition(),
-                        mControl.getInsetsHint());
+                return new InsetsSourceControl(mControl.getId(), mControl.getType(),
+                        null /* leash */, mControl.isInitiallyVisible(),
+                        mControl.getSurfacePosition(), mControl.getInsetsHint());
             }
             return mControl;
         }
@@ -673,7 +667,7 @@ abstract class InsetsSourceProvider {
         public void startAnimation(SurfaceControl animationLeash, Transaction t,
                 @AnimationType int type, @NonNull OnAnimationFinishedCallback finishCallback) {
             // TODO(b/166736352): Check if we still need to control the IME visibility here.
-            if (mSource.getType() == ITYPE_IME) {
+            if (mSource.getType() == WindowInsets.Type.ime()) {
                 // TODO: use 0 alpha and remove t.hide() once b/138459974 is fixed.
                 t.setAlpha(animationLeash, 1 /* alpha */);
                 t.hide(animationLeash);
@@ -698,7 +692,7 @@ abstract class InsetsSourceProvider {
                 mControl = null;
                 mControlTarget = null;
                 mAdapter = null;
-                setClientVisible(InsetsState.getDefaultVisibility(mSource.getType()));
+                setClientVisible((WindowInsets.Type.defaultVisible() & mSource.getType()) != 0);
                 ProtoLog.i(WM_DEBUG_WINDOW_INSETS,
                         "ControlAdapter onAnimationCancelled mSource: %s mControlTarget: %s",
                         mSource, mControlTarget);

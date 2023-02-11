@@ -78,13 +78,6 @@ public class FeatureFlagUtils {
     public static final String SETTINGS_APP_ALLOW_DARK_THEME_ACTIVATION_AT_BEDTIME =
             "settings_app_allow_dark_theme_activation_at_bedtime";
 
-    /**
-     * Hide back key in the Settings two pane design.
-     * @hide
-     */
-    public static final String SETTINGS_HIDE_SECOND_LAYER_PAGE_NAVIGATE_UP_BUTTON_IN_TWO_PANE =
-            "settings_hide_second_layer_page_navigate_up_button_in_two_pane";
-
     /** @hide */
     public static final String SETTINGS_AUTO_TEXT_WRAPPING = "settings_auto_text_wrapping";
 
@@ -144,6 +137,37 @@ public class FeatureFlagUtils {
      */
     public static final String SETTINGS_BIOMETRICS2_ENROLLMENT = "settings_biometrics2_enrollment";
 
+    /** Flag to enable/disable entire page in Accessibility -> Hearing aids
+     *  @hide
+     */
+    public static final String SETTINGS_ACCESSIBILITY_HEARING_AID_PAGE =
+            "settings_accessibility_hearing_aid_page";
+
+    /**
+     * Flag to enable/disable preferring the AccessibilityMenu service in the system.
+     * @hide
+     */
+    public static final String SETTINGS_PREFER_ACCESSIBILITY_MENU_IN_SYSTEM =
+            "settings_prefer_accessibility_menu_in_system";
+
+    /** Flag to enable/disable audio routing change
+     *  @hide
+     */
+    public static final String SETTINGS_AUDIO_ROUTING = "settings_audio_routing";
+
+    /** Flag to enable/disable flash alerts
+     *  @hide
+     */
+    public static final String SETTINGS_FLASH_ALERTS = "settings_flash_alerts";
+
+    /**
+     * Flag to disable/enable showing udfps enroll view in settings. If it's disabled, udfps enroll
+     * view is shown in system ui.
+     * @hide
+     */
+    public static final String SETTINGS_SHOW_UDFPS_ENROLL_IN_SETTINGS =
+            "settings_show_udfps_enroll_in_settings";
+
     private static final Map<String, String> DEFAULT_FLAGS;
 
     static {
@@ -171,7 +195,6 @@ public class FeatureFlagUtils {
         DEFAULT_FLAGS.put(SETTINGS_VOLUME_PANEL_IN_SYSTEMUI, "false");
         DEFAULT_FLAGS.put(SETTINGS_ENABLE_MONITOR_PHANTOM_PROCS, "true");
         DEFAULT_FLAGS.put(SETTINGS_APP_ALLOW_DARK_THEME_ACTIVATION_AT_BEDTIME, "true");
-        DEFAULT_FLAGS.put(SETTINGS_HIDE_SECOND_LAYER_PAGE_NAVIGATE_UP_BUTTON_IN_TWO_PANE, "true");
         DEFAULT_FLAGS.put(SETTINGS_AUTO_TEXT_WRAPPING, "false");
         DEFAULT_FLAGS.put(SETTINGS_NEW_KEYBOARD_UI, "false");
         DEFAULT_FLAGS.put(SETTINGS_NEW_KEYBOARD_SHORTCUT, "false");
@@ -182,6 +205,11 @@ public class FeatureFlagUtils {
         DEFAULT_FLAGS.put(SETTINGS_ADB_METRICS_WRITER, "false");
         DEFAULT_FLAGS.put(SETTINGS_SHOW_STYLUS_PREFERENCES, "false");
         DEFAULT_FLAGS.put(SETTINGS_BIOMETRICS2_ENROLLMENT, "false");
+        DEFAULT_FLAGS.put(SETTINGS_ACCESSIBILITY_HEARING_AID_PAGE, "false");
+        DEFAULT_FLAGS.put(SETTINGS_PREFER_ACCESSIBILITY_MENU_IN_SYSTEM, "false");
+        DEFAULT_FLAGS.put(SETTINGS_AUDIO_ROUTING, "false");
+        DEFAULT_FLAGS.put(SETTINGS_FLASH_ALERTS, "false");
+        DEFAULT_FLAGS.put(SETTINGS_SHOW_UDFPS_ENROLL_IN_SETTINGS, "false");
     }
 
     private static final Set<String> PERSISTENT_FLAGS;
@@ -192,7 +220,6 @@ public class FeatureFlagUtils {
         PERSISTENT_FLAGS.add(SETTINGS_SUPPORT_LARGE_SCREEN);
         PERSISTENT_FLAGS.add(SETTINGS_ENABLE_MONITOR_PHANTOM_PROCS);
         PERSISTENT_FLAGS.add(SETTINGS_APP_ALLOW_DARK_THEME_ACTIVATION_AT_BEDTIME);
-        PERSISTENT_FLAGS.add(SETTINGS_HIDE_SECOND_LAYER_PAGE_NAVIGATE_UP_BUTTON_IN_TWO_PANE);
         PERSISTENT_FLAGS.add(SETTINGS_PROVIDER_MODEL);
         PERSISTENT_FLAGS.add(SETTINGS_AUTO_TEXT_WRAPPING);
         PERSISTENT_FLAGS.add(SETTINGS_NEW_KEYBOARD_UI);
@@ -201,6 +228,7 @@ public class FeatureFlagUtils {
         PERSISTENT_FLAGS.add(SETTINGS_NEW_KEYBOARD_TRACKPAD);
         PERSISTENT_FLAGS.add(SETTINGS_NEW_KEYBOARD_TRACKPAD_GESTURE);
         PERSISTENT_FLAGS.add(SETTINGS_ENABLE_SPA);
+        PERSISTENT_FLAGS.add(SETTINGS_PREFER_ACCESSIBILITY_MENU_IN_SYSTEM);
     }
 
     /**

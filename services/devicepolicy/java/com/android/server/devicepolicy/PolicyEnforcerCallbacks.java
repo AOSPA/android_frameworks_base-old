@@ -19,19 +19,24 @@ package com.android.server.devicepolicy;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.admin.DevicePolicyManager;
+import android.app.admin.PolicyUpdatesReceiver;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.content.pm.PackageManagerInternal;
 import android.os.Binder;
+import android.os.Bundle;
 import android.os.UserHandle;
 import android.permission.AdminPermissionControlParams;
 import android.permission.PermissionControllerManager;
 import android.provider.Settings;
 
+import com.android.server.LocalServices;
 import com.android.server.utils.Slogf;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -53,14 +58,17 @@ final class PolicyEnforcerCallbacks {
 
     static boolean setPermissionGrantState(
             @Nullable Integer grantState, @NonNull Context context, int userId,
-            @NonNull String[] args) {
+            @NonNull Bundle args) {
         return Boolean.TRUE.equals(Binder.withCleanCallingIdentity(() -> {
-            if (args == null || args.length < 2) {
+            if (args == null
+                    || !args.containsKey(PolicyUpdatesReceiver.EXTRA_PACKAGE_NAME)
+                    || !args.containsKey(PolicyUpdatesReceiver.EXTRA_PERMISSION_NAME)) {
                 throw new IllegalArgumentException("Package name and permission name must be "
-                        + "provided as arguments");
+                        + "provided as arguments.");
             }
-            String packageName = args[0];
-            String permissionName = args[1];
+
+            String packageName = args.getString(PolicyUpdatesReceiver.EXTRA_PACKAGE_NAME);
+            String permissionName = args.getString(PolicyUpdatesReceiver.EXTRA_PERMISSION_NAME);
             Objects.requireNonNull(packageName);
             Objects.requireNonNull(permissionName);
             Objects.requireNonNull(context);
@@ -131,5 +139,15 @@ final class PolicyEnforcerCallbacks {
             }
             return mValue.get();
         }
+    }
+
+    static boolean setUserControlDisabledPackages(
+            @Nullable Set<String> packages, int userId) {
+        Binder.withCleanCallingIdentity(() ->
+                LocalServices.getService(PackageManagerInternal.class)
+                        .setOwnerProtectedPackages(
+                                userId,
+                                packages == null ? null : packages.stream().toList()));
+        return true;
     }
 }
