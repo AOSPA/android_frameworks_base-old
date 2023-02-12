@@ -43,4 +43,7 @@
          protected. -->
     <bool name="flag_battery_shield_icon">false</bool>
 
+    <!-- Whether to show unlock ripple animation -->
+    <bool name="flag_unlock_ripple_animation">true</bool>
+
 </resources>
