@@ -39,6 +39,7 @@ import com.android.internal.policy.IKeyguardDismissCallback;
 interface IActivityClientController {
     oneway void activityIdle(in IBinder token, in Configuration config, in boolean stopProfiling);
     oneway void activityResumed(in IBinder token, in boolean handleSplashScreenExit);
+    oneway void activityRefreshed(in IBinder token);
     /**
      * This call is not one-way because {@link #activityPaused()) is not one-way, or
      * the top-resumed-lost could be reported after activity paused.
@@ -170,4 +171,10 @@ interface IActivityClientController {
      */
     oneway void requestCompatCameraControl(in IBinder token, boolean showControl,
             boolean transformationApplied, in ICompatCameraControlCallback callback);
+
+    /**
+     * If set, any activity launch in the same task will be overridden to the locale of activity
+     * that started the task.
+     */
+    void enableTaskLocaleOverride(in IBinder token);
 }

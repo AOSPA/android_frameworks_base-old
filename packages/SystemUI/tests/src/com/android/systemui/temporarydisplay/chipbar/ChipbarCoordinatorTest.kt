@@ -36,6 +36,7 @@ import com.android.systemui.common.shared.model.ContentDescription.Companion.loa
 import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.common.shared.model.Text
 import com.android.systemui.common.shared.model.TintedIcon
+import com.android.systemui.dump.DumpManager
 import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.statusbar.VibratorHelper
 import com.android.systemui.statusbar.policy.ConfigurationController
@@ -66,6 +67,7 @@ class ChipbarCoordinatorTest : SysuiTestCase() {
     @Mock private lateinit var logger: ChipbarLogger
     @Mock private lateinit var accessibilityManager: AccessibilityManager
     @Mock private lateinit var configurationController: ConfigurationController
+    @Mock private lateinit var dumpManager: DumpManager
     @Mock private lateinit var powerManager: PowerManager
     @Mock private lateinit var windowManager: WindowManager
     @Mock private lateinit var falsingManager: FalsingManager
@@ -100,6 +102,7 @@ class ChipbarCoordinatorTest : SysuiTestCase() {
                 fakeExecutor,
                 accessibilityManager,
                 configurationController,
+                dumpManager,
                 powerManager,
                 falsingManager,
                 falsingCollector,
@@ -121,7 +124,7 @@ class ChipbarCoordinatorTest : SysuiTestCase() {
             )
         )
 
-        val contentDescView = getChipbarView().requireViewById<ViewGroup>(R.id.chipbar_inner)
+        val contentDescView = getChipbarView().getInnerView()
         assertThat(contentDescView.contentDescription.toString()).contains("loadedCD")
         assertThat(contentDescView.contentDescription.toString()).contains("text")
     }
@@ -136,8 +139,40 @@ class ChipbarCoordinatorTest : SysuiTestCase() {
             )
         )
 
-        val contentDescView = getChipbarView().requireViewById<ViewGroup>(R.id.chipbar_inner)
+        val contentDescView = getChipbarView().getInnerView()
         assertThat(contentDescView.contentDescription.toString()).isEqualTo("text")
+    }
+
+    @Test
+    fun displayView_contentDescription_endIsLoading() {
+        underTest.displayView(
+            createChipbarInfo(
+                Icon.Resource(R.drawable.ic_cake, ContentDescription.Loaded("loadedCD")),
+                Text.Loaded("text"),
+                endItem = ChipbarEndItem.Loading,
+            )
+        )
+
+        val contentDescView = getChipbarView().getInnerView()
+        val loadingDesc = context.resources.getString(R.string.media_transfer_loading)
+        assertThat(contentDescView.contentDescription.toString()).contains("text")
+        assertThat(contentDescView.contentDescription.toString()).contains(loadingDesc)
+    }
+
+    @Test
+    fun displayView_contentDescription_endNotLoading() {
+        underTest.displayView(
+            createChipbarInfo(
+                Icon.Resource(R.drawable.ic_cake, ContentDescription.Loaded("loadedCD")),
+                Text.Loaded("text"),
+                endItem = ChipbarEndItem.Error,
+            )
+        )
+
+        val contentDescView = getChipbarView().getInnerView()
+        val loadingDesc = context.resources.getString(R.string.media_transfer_loading)
+        assertThat(contentDescView.contentDescription.toString()).contains("text")
+        assertThat(contentDescView.contentDescription.toString()).doesNotContain(loadingDesc)
     }
 
     @Test
@@ -413,6 +448,8 @@ class ChipbarCoordinatorTest : SysuiTestCase() {
             priority = ViewPriority.NORMAL,
         )
     }
+
+    private fun ViewGroup.getInnerView() = this.requireViewById<ViewGroup>(R.id.chipbar_inner)
 
     private fun ViewGroup.getStartIconView() = this.requireViewById<ImageView>(R.id.start_icon)
 

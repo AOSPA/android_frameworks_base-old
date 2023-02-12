@@ -27,6 +27,8 @@ import android.os.Binder;
 import android.os.Build;
 import android.telephony.emergency.EmergencyNumber;
 import android.telephony.ims.ImsReasonInfo;
+import android.telephony.ims.MediaQualityStatus;
+import android.telephony.ims.MediaThreshold;
 import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -103,6 +105,10 @@ public class TelephonyCallback {
 
     /**
      * Event for changes to the network service state (cellular).
+     *
+     * <p>Requires {@link Manifest.permission#ACCESS_FINE_LOCATION} or {@link
+     * Manifest.permission#ACCESS_COARSE_LOCATION} depending on the accuracy of the location info
+     * listeners want to get.
      *
      * @hide
      * @see ServiceStateListener#onServiceStateChanged
@@ -483,8 +489,9 @@ public class TelephonyCallback {
      * <p>Requires permission {@link android.Manifest.permission#READ_PRECISE_PHONE_STATE} or
      * the calling app has carrier privileges (see {@link TelephonyManager#hasCarrierPrivileges}).
      *
-     * <p>Also requires the {@link Manifest.permission#ACCESS_FINE_LOCATION} permission, regardless
-     * of whether the calling app has carrier privileges.
+     * <p>Requires the {@link Manifest.permission#ACCESS_FINE_LOCATION} permission in case that
+     * listener want to get location info in {@link CellIdentity} regardless of whether the calling
+     * app has carrier privileges.
      *
      * @hide
      * @see RegistrationFailedListener#onRegistrationFailed
@@ -502,8 +509,9 @@ public class TelephonyCallback {
      * <p>Requires permission {@link android.Manifest.permission#READ_PRECISE_PHONE_STATE} or
      * the calling app has carrier privileges (see {@link TelephonyManager#hasCarrierPrivileges}).
      *
-     * <p>Also requires the {@link Manifest.permission#ACCESS_FINE_LOCATION} permission, regardless
-     * of whether the calling app has carrier privileges.
+     * <p>Requires the {@link Manifest.permission#ACCESS_FINE_LOCATION} permission in case that
+     * listener want to get {@link BarringInfo} which includes location info in {@link CellIdentity}
+     * regardless of whether the calling app has carrier privileges.
      *
      * @hide
      * @see BarringInfoListener#onBarringInfoChanged
@@ -592,6 +600,19 @@ public class TelephonyCallback {
     public static final int EVENT_TRIGGER_NOTIFY_ANBR = 38;
 
     /**
+     * Event for changes to the media quality status
+     *
+     * <p>Requires permission {@link android.Manifest.permission#READ_PRECISE_PHONE_STATE}
+     *
+     * @see MediaQualityStatusChangedListener#onMediaQualityStatusChanged
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(Manifest.permission.READ_PRECISE_PHONE_STATE)
+    public static final int EVENT_MEDIA_QUALITY_STATUS_CHANGED = 39;
+
+    /**
      * @hide
      */
     @IntDef(prefix = {"EVENT_"}, value = {
@@ -632,7 +653,8 @@ public class TelephonyCallback {
             EVENT_ALLOWED_NETWORK_TYPE_LIST_CHANGED,
             EVENT_LEGACY_CALL_STATE_CHANGED,
             EVENT_LINK_CAPACITY_ESTIMATE_CHANGED,
-            EVENT_TRIGGER_NOTIFY_ANBR
+            EVENT_TRIGGER_NOTIFY_ANBR,
+            EVENT_MEDIA_QUALITY_STATUS_CHANGED
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface TelephonyEvent {
@@ -675,10 +697,8 @@ public class TelephonyCallback {
          * Only apps holding the {@link Manifest.permission#ACCESS_FINE_LOCATION} permission will
          * receive all the information in {@link ServiceState}, otherwise the cellIdentity
          * will be null if apps only holding the {@link Manifest.permission#ACCESS_COARSE_LOCATION}
-         * permission.
-         * Network operator name in long/short alphanumeric format and numeric id will be null if
-         * apps holding neither {@link android.Manifest.permission#ACCESS_FINE_LOCATION} nor
-         * {@link android.Manifest.permission#ACCESS_COARSE_LOCATION}.
+         * permission. Network operator name in long/short alphanumeric format and numeric id will
+         * be null if apps holding neither {@link android.Manifest.permission#ACCESS_FINE_LOCATION}
          *
          * @see ServiceState#STATE_EMERGENCY_ONLY
          * @see ServiceState#STATE_IN_SERVICE
@@ -1268,6 +1288,9 @@ public class TelephonyCallback {
          * {@link android.Manifest.permission#READ_PRECISE_PHONE_STATE} and
          * {@link android.Manifest.permission#ACCESS_FINE_LOCATION}.
          *
+         * If the calling app doesn't have {@link android.Manifest.permission#ACCESS_FINE_LOCATION},
+         * it will receive {@link CellIdentity} without location-sensitive information included.
+         *
          * @param cellIdentity        the CellIdentity, which must include the globally unique
          *                            identifier
          *                            for the cell (for example, all components of the CGI or ECGI).
@@ -1446,6 +1469,10 @@ public class TelephonyCallback {
          * {@link android.Manifest.permission#READ_PRECISE_PHONE_STATE} and
          * {@link android.Manifest.permission#ACCESS_FINE_LOCATION}.
          *
+         * If the calling app doesn't have {@link android.Manifest.permission#ACCESS_FINE_LOCATION},
+         * it will receive {@link BarringInfo} including {@link CellIdentity} without
+         * location-sensitive information included.
+         *
          * @param barringInfo for all services on the current cell.
          * @see android.telephony.BarringInfo
          */
@@ -1514,6 +1541,30 @@ public class TelephonyCallback {
         @RequiresPermission(Manifest.permission.READ_PRECISE_PHONE_STATE)
         void onLinkCapacityEstimateChanged(
                 @NonNull List<LinkCapacityEstimate> linkCapacityEstimateList);
+    }
+
+    /**
+     * Interface for media quality status changed listener.
+     *
+     * @hide
+     */
+    @SystemApi
+    public interface MediaQualityStatusChangedListener {
+        /**
+         * Callback invoked when the media quality status of IMS call changes. This call back
+         * means current media quality status crosses at least one of threshold values in {@link
+         * MediaThreshold}. Listener needs to get quality information & check whether it crossed
+         * listener's threshold.
+         *
+         * <p/> Currently thresholds for this indication can be configurable by CARRIER_CONFIG
+         * {@link CarrierConfigManager#KEY_VOICE_RTP_THRESHOLDS_PACKET_LOSS_RATE_INT}
+         * {@link CarrierConfigManager#KEY_VOICE_RTP_THRESHOLDS_INACTIVITY_TIME_IN_MILLIS_INT}
+         * {@link CarrierConfigManager#KEY_VOICE_RTP_THRESHOLDS_JITTER_INT}
+         *
+         * @param mediaQualityStatus The media quality status currently measured.
+         */
+        @RequiresPermission(Manifest.permission.READ_PRECISE_PHONE_STATE)
+        void onMediaQualityStatusChanged(@NonNull MediaQualityStatus mediaQualityStatus);
     }
 
     /**
@@ -1872,6 +1923,17 @@ public class TelephonyCallback {
             Binder.withCleanCallingIdentity(
                     () -> mExecutor.execute(() -> listener.onLinkCapacityEstimateChanged(
                             linkCapacityEstimateList)));
+        }
+
+        public void onMediaQualityStatusChanged(
+                MediaQualityStatus mediaQualityStatus) {
+            MediaQualityStatusChangedListener listener =
+                    (MediaQualityStatusChangedListener) mTelephonyCallbackWeakRef.get();
+            if (listener == null) return;
+
+            Binder.withCleanCallingIdentity(
+                    () -> mExecutor.execute(() -> listener.onMediaQualityStatusChanged(
+                            mediaQualityStatus)));
         }
     }
 }

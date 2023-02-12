@@ -232,6 +232,8 @@
     <string name="screenshot_scroll_label">Capture more</string>
     <!-- Content description indicating that tapping a button will dismiss the screenshots UI [CHAR LIMIT=NONE] -->
     <string name="screenshot_dismiss_description">Dismiss screenshot</string>
+    <!-- Content description indicating that tapping a button will dismiss the work profile first run dialog [CHAR LIMIT=NONE] -->
+    <string name="screenshot_dismiss_work_profile">Dismiss work profile message</string>
     <!-- Content description indicating that the view is a preview of the screenshot that was just taken [CHAR LIMIT=NONE] -->
     <string name="screenshot_preview_description">Screenshot preview</string>
     <!-- Content description for the top boundary of the screenshot being cropped, with the current position as a percentage. [CHAR LIMIT=NONE] -->
@@ -243,7 +245,9 @@
     <!-- Content description for the right boundary of the screenshot being cropped, with the current position as a percentage. [CHAR LIMIT=NONE] -->
     <string name="screenshot_right_boundary_pct">Right boundary <xliff:g id="percent" example="50">%1$d</xliff:g> percent</string>
     <!-- Notification displayed when a screenshot is saved in a work profile. [CHAR LIMIT=NONE] -->
-    <string name="screenshot_work_profile_notification" translatable="false">Work screenshots are saved in the work <xliff:g id="app" example="Files">%1$s</xliff:g> app</string>
+    <string name="screenshot_work_profile_notification">Work screenshots are saved in the <xliff:g id="app" example="Work Files">%1$s</xliff:g> app</string>
+    <!-- Default name referring to the app on the device that lets the user browse stored files. [CHAR LIMIT=NONE] -->
+    <string name="screenshot_default_files_app_name">Files</string>
 
     <!-- Notification title displayed for screen recording [CHAR LIMIT=50]-->
     <string name="screenrecord_name">Screen Recorder</string>
@@ -2310,13 +2314,13 @@
     <string name="accessibility_floating_button_docking_tooltip">Move button to the edge to hide it temporarily</string>
     <!-- Text for the undo action button of the message view of the accessibility floating menu to perform undo operation. [CHAR LIMIT=30]-->
     <string name="accessibility_floating_button_undo">Undo</string>
-
+    <!-- Text for the message view with undo action of the accessibility floating menu to show which feature shortcut was removed. [CHAR LIMIT=30]-->
+    <string name="accessibility_floating_button_undo_message_label_text"><xliff:g id="feature name" example="Magnification">%s</xliff:g> shortcut removed</string>
     <!-- Text for the message view with undo action of the accessibility floating menu to show how many features shortcuts were removed. [CHAR LIMIT=30]-->
-    <string name="accessibility_floating_button_undo_message_text">{count, plural,
-        =1 {{label} shortcut removed}
+    <string name="accessibility_floating_button_undo_message_number_text">{count, plural,
+        =1 {# shortcut removed}
         other {# shortcuts removed}
     }</string>
-
     <!-- Action in accessibility menu to move the accessibility floating button to the top left of the screen. [CHAR LIMIT=30] -->
     <string name="accessibility_floating_button_action_move_top_left">Move top left</string>
     <!-- Action in accessibility menu to move the accessibility floating button to the top right of the screen. [CHAR LIMIT=30] -->
@@ -2470,11 +2474,15 @@
     <!-- Text to ask the user to move their device closer to a different device (deviceName) in order to play media on the different device. [CHAR LIMIT=75] -->
     <string name="media_move_closer_to_start_cast">Move closer to play on <xliff:g id="deviceName" example="My Tablet">%1$s</xliff:g></string>
     <!-- Text to ask the user to move their device closer to a different device (deviceName) in order to transfer media from the different device and back onto the current device. [CHAR LIMIT=75] -->
-    <string name="media_move_closer_to_end_cast">Move closer to <xliff:g id="deviceName" example="My Tablet">%1$s</xliff:g> to play here</string>
+    <string name="media_move_closer_to_end_cast">To play here, move closer to <xliff:g id="deviceName" example="tablet">%1$s</xliff:g></string>
     <!-- Text informing the user that their media is now playing on a different device (deviceName). [CHAR LIMIT=50] -->
     <string name="media_transfer_playing_different_device">Playing on <xliff:g id="deviceName" example="My Tablet">%1$s</xliff:g></string>
-    <!-- Text informing the user that the media transfer has failed because something went wrong. [CHAR LIsMIT=50] -->
+    <!-- Text informing the user that the media transfer has failed because something went wrong. [CHAR LIMIT=50] -->
     <string name="media_transfer_failed">Something went wrong. Try again.</string>
+    <!-- Text to indicate that a media transfer is currently in-progress, aka loading. [CHAR LIMIT=NONE] -->
+    <string name="media_transfer_loading">Loading</string>
+    <!-- Default name of the device. [CHAR LIMIT=30] -->
+    <string name="media_ttt_default_device_type">tablet</string>
 
     <!-- Error message indicating that a control timed out while waiting for an update [CHAR_LIMIT=30] -->
     <string name="controls_error_timeout">Inactive, check app</string>
@@ -2523,6 +2531,8 @@
     <string name="media_output_dialog_volume_percentage"><xliff:g id="percentage" example="10">%1$d</xliff:g>%%</string>
     <!-- Title for Speakers and Displays group. [CHAR LIMIT=NONE] -->
     <string name="media_output_group_title_speakers_and_displays">Speakers &amp; Displays</string>
+    <!-- Title for Suggested Devices group. [CHAR LIMIT=NONE] -->
+    <string name="media_output_group_title_suggested_device">Suggested Devices</string>
 
     <!-- Media Output Broadcast Dialog -->
     <!-- Title for Broadcast First Notify Dialog [CHAR LIMIT=60] -->
@@ -2835,12 +2845,6 @@
     <string name="keyguard_affordance_enablement_dialog_action_template">Open <xliff:g id="appName" example="Wallet">%1$s</xliff:g></string>
 
     <!--
-    Template for a message shown right before a list of instructions that tell the user what to do
-    in order to enable a shortcut to a specific app. [CHAR LIMIT=NONE]
-    -->
-    <string name="keyguard_affordance_enablement_dialog_message">To add the <xliff:g id="appName" example="Wallet">%1$s</xliff:g> app as a shortcut, make sure</string>
-
-    <!--
     Requirement for the wallet app to be available for the user to use. This is shown as part of a
     bulleted list of requirements. When all requirements are met, the app can be accessed through a
     shortcut button on the lock screen. [CHAR LIMIT=NONE].
@@ -2876,10 +2880,10 @@
     <string name="keyguard_affordance_enablement_dialog_home_instruction_2">&#8226; At least one device is available</string>
 
     <!--
-    Error message shown when a button should be pressed and held to activate it, usually shown when
-    the user attempted to tap the button or held it for too short a time. [CHAR LIMIT=32].
+    Error message shown when a shortcut must be pressed and held to activate it, usually shown when
+    the user tried to tap the shortcut or held it for too short a time. [CHAR LIMIT=32].
     -->
-    <string name="keyguard_affordance_press_too_short">Press and hold to activate</string>
+    <string name="keyguard_affordance_press_too_short">Touch &amp; hold shortcut</string>
 
     <!-- Text for education page of cancel button to hide the page. [CHAR_LIMIT=NONE] -->
     <string name="rear_display_bottom_sheet_cancel">Cancel</string>
@@ -2898,6 +2902,9 @@
     <!-- Text for education page content description for unfolded animation. [CHAR_LIMIT=NONE] -->
     <string name="rear_display_accessibility_unfolded_animation">Foldable device being flipped around</string>
 
-    <!-- Title for notification of low stylus battery. [CHAR_LIMIT=NONE] -->
-    <string name="stylus_battery_low">Stylus battery low</string>
+    <!-- Title for notification of low stylus battery with percentage. "percentage" is
+        the value of the battery capacity remaining [CHAR LIMIT=none]-->
+    <string name="stylus_battery_low_percentage"><xliff:g id="percentage" example="16%">%s</xliff:g> battery remaining</string>
+    <!-- Subtitle for the notification sent when a stylus battery is low. [CHAR LIMIT=none]-->
+    <string name="stylus_battery_low_subtitle">Connect your stylus to a charger</string>
 </resources>

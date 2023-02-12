@@ -1015,6 +1015,8 @@ public class Activity extends ContextThemeWrapper
 
     private ComponentCallbacksController mCallbacksController;
 
+    @Nullable private IVoiceInteractionManagerService mVoiceInteractionManagerService;
+
     private final WindowControllerCallback mWindowControllerCallback =
             new WindowControllerCallback() {
         /**
@@ -1624,18 +1626,17 @@ public class Activity extends ContextThemeWrapper
 
     private void notifyVoiceInteractionManagerServiceActivityEvent(
             @VoiceInteractionSession.VoiceInteractionActivityEventType int type) {
-
-        final IVoiceInteractionManagerService service =
-                IVoiceInteractionManagerService.Stub.asInterface(
-                        ServiceManager.getService(Context.VOICE_INTERACTION_MANAGER_SERVICE));
-        if (service == null) {
-            Log.w(TAG, "notifyVoiceInteractionManagerServiceActivityEvent: Can not get "
-                    + "VoiceInteractionManagerService");
-            return;
+        if (mVoiceInteractionManagerService == null) {
+            mVoiceInteractionManagerService = IVoiceInteractionManagerService.Stub.asInterface(
+                    ServiceManager.getService(Context.VOICE_INTERACTION_MANAGER_SERVICE));
+            if (mVoiceInteractionManagerService == null) {
+                Log.w(TAG, "notifyVoiceInteractionManagerServiceActivityEvent: Can not get "
+                        + "VoiceInteractionManagerService");
+                return;
+            }
         }
-
         try {
-            service.notifyActivityEventChanged(mToken, type);
+            mVoiceInteractionManagerService.notifyActivityEventChanged(mToken, type);
         } catch (RemoteException e) {
             // Empty
         }
@@ -2760,6 +2761,7 @@ public class Activity extends ContextThemeWrapper
             getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(mDefaultBackCallback);
             mDefaultBackCallback = null;
         }
+
         if (mCallbacksController != null) {
             mCallbacksController.clearCallbacks();
         }
@@ -8337,6 +8339,7 @@ public class Activity extends ContextThemeWrapper
         attachBaseContext(context);
 
         mFragments.attachHost(null /*parent*/);
+        mActivityInfo = info;
 
         mWindow = new PhoneWindow(this, window, activityConfigCallback);
         mWindow.setWindowControllerCallback(mWindowControllerCallback);
@@ -8361,7 +8364,6 @@ public class Activity extends ContextThemeWrapper
         mIntent = intent;
         mReferrer = referrer;
         mComponent = intent.getComponent();
-        mActivityInfo = info;
         mTitle = title;
         mParent = parent;
         mEmbeddedID = id;
@@ -9081,6 +9083,25 @@ public class Activity extends ContextThemeWrapper
         }
         mUiTranslationController.updateUiTranslationState(
                 state, sourceSpec, targetSpec, viewIds, uiTranslationSpec);
+    }
+
+    /**
+     * If set, any activity launch in the same task will be overridden to the locale of activity
+     * that started the task.
+     *
+     * <p>Currently, Android supports per app languages, and system apps are able to start
+     * activities of another package on the same task, which may cause users to set different
+     * languages in different apps and display two different languages in one app.</p>
+     *
+     * <p>The <a href="https://developer.android.com/guide/topics/large-screens/activity-embedding">
+     * activity embedding feature</a> will align the locale with root activity automatically, but
+     * it doesn't land on the phone yet. If activity embedding land on the phone in the future,
+     * please consider adapting activity embedding directly.</p>
+     *
+     * @hide
+     */
+    public void enableTaskLocaleOverride() {
+        ActivityClient.getInstance().enableTaskLocaleOverride(mToken);
     }
 
     class HostCallbacks extends FragmentHostCallback<Activity> {

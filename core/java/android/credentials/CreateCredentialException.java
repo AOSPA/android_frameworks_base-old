@@ -32,46 +32,83 @@ import java.util.concurrent.Executor;
  * Activity, CancellationSignal, Executor, OutcomeReceiver)} operation.
  */
 public class CreateCredentialException extends Exception {
+    /**
+     * The error type value for when the given operation failed due to an unknown reason.
+     */
+    @NonNull
+    public static final String TYPE_UNKNOWN =
+            "android.credentials.CreateCredentialException.TYPE_UNKNOWN";
+
+    /**
+     * The error type value for when no credential is available for the given {@link
+     * CredentialManager#executeCreateCredential(CreateCredentialRequest, Activity,
+     * CancellationSignal, Executor, OutcomeReceiver)} request.
+     */
+    @NonNull
+    public static final String TYPE_NO_CREDENTIAL =
+            "android.credentials.CreateCredentialException.TYPE_NO_CREDENTIAL";
+    /**
+     * The error type value for when the user intentionally cancelled the request.
+     *
+     * <p>This is a strong indicator that your app should refrain from making the same api call for
+     * a certain amount of time to provide a better user experience.
+     */
+    @NonNull
+    public static final String TYPE_USER_CANCELED =
+            "android.credentials.CreateCredentialException.TYPE_USER_CANCELED";
+    /**
+     * The error type value for when the given operation failed due to internal interruption.
+     * Retrying the same operation should fix the error.
+     */
+    @NonNull
+    public static final String TYPE_INTERRUPTED =
+            "android.credentials.CreateCredentialException.TYPE_INTERRUPTED";
 
     @NonNull
-    public final String errorType;
+    private final String mType;
 
-    /**
-     * Constructs a {@link CreateCredentialException}.
-     *
-     * @throws IllegalArgumentException If errorType is empty.
-     */
-    public CreateCredentialException(@NonNull String errorType, @Nullable String message) {
-        this(errorType, message, null);
+    /** Returns the specific exception type. */
+    @NonNull
+    public String getType() {
+        return mType;
     }
 
     /**
      * Constructs a {@link CreateCredentialException}.
      *
-     * @throws IllegalArgumentException If errorType is empty.
+     * @throws IllegalArgumentException If type is empty.
+     */
+    public CreateCredentialException(@NonNull String type, @Nullable String message) {
+        this(type, message, null);
+    }
+
+    /**
+     * Constructs a {@link CreateCredentialException}.
+     *
+     * @throws IllegalArgumentException If type is empty.
      */
     public CreateCredentialException(
-            @NonNull String errorType, @Nullable String message, @Nullable Throwable cause) {
+            @NonNull String type, @Nullable String message, @Nullable Throwable cause) {
         super(message, cause);
-        this.errorType = Preconditions.checkStringNotEmpty(errorType,
-                "errorType must not be empty");
+        this.mType = Preconditions.checkStringNotEmpty(type,
+                "type must not be empty");
     }
 
     /**
      * Constructs a {@link CreateCredentialException}.
      *
-     * @throws IllegalArgumentException If errorType is empty.
+     * @throws IllegalArgumentException If type is empty.
      */
-    public CreateCredentialException(@NonNull String errorType, @Nullable Throwable cause) {
-        this(errorType, null, cause);
+    public CreateCredentialException(@NonNull String type, @Nullable Throwable cause) {
+        this(type, null, cause);
     }
 
     /**
      * Constructs a {@link CreateCredentialException}.
      *
-     * @throws IllegalArgumentException If errorType is empty.
+     * @throws IllegalArgumentException If type is empty.
      */
-    public CreateCredentialException(@NonNull String errorType) {
-        this(errorType, null, null);
+    public CreateCredentialException(@NonNull String type) {
+        this(type, null, null);
     }
 }

@@ -410,4 +410,8 @@ public final class WindowManagerImpl implements WindowManager {
         }
         return null;
     }
+
+    IBinder getDefaultToken() {
+        return mDefaultToken;
+    }
 }

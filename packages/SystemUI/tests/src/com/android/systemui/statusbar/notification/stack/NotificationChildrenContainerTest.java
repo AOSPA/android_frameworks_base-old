@@ -26,13 +26,17 @@ import androidx.test.filters.SmallTest;
 
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.statusbar.notification.LegacySourceType;
+import com.android.systemui.statusbar.notification.SourceType;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.row.NotificationTestHelper;
+import com.android.systemui.statusbar.notification.row.wrapper.NotificationHeaderViewWrapper;
 
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+
+import java.util.List;
 
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
@@ -184,5 +188,58 @@ public class NotificationChildrenContainerTest extends SysuiTestCase {
         Assert.assertEquals(1f, row1.getBottomRoundness(), /* delta = */ 0f);
         Assert.assertEquals(1f, row2.getTopRoundness(), /* delta = */ 0f);
         Assert.assertEquals(1f, row2.getBottomRoundness(), /* delta = */ 0f);
+    }
+
+    @Test
+    public void applyRoundnessAndInvalidate_should_be_immediately_applied_on_last_child_legacy() {
+        mChildrenContainer.useRoundnessSourceTypes(false);
+        List<ExpandableNotificationRow> children = mChildrenContainer.getAttachedChildren();
+        ExpandableNotificationRow notificationRow = children.get(children.size() - 1);
+        Assert.assertEquals(0f, mChildrenContainer.getBottomRoundness(), 0.001f);
+        Assert.assertEquals(0f, notificationRow.getBottomRoundness(), 0.001f);
+
+        mChildrenContainer.requestBottomRoundness(1f, SourceType.from(""), false);
+
+        Assert.assertEquals(1f, mChildrenContainer.getBottomRoundness(), 0.001f);
+        Assert.assertEquals(1f, notificationRow.getBottomRoundness(), 0.001f);
+    }
+
+    @Test
+    public void applyRoundnessAndInvalidate_should_be_immediately_applied_on_last_child() {
+        mChildrenContainer.useRoundnessSourceTypes(true);
+        List<ExpandableNotificationRow> children = mChildrenContainer.getAttachedChildren();
+        ExpandableNotificationRow notificationRow = children.get(children.size() - 1);
+        Assert.assertEquals(0f, mChildrenContainer.getBottomRoundness(), 0.001f);
+        Assert.assertEquals(0f, notificationRow.getBottomRoundness(), 0.001f);
+
+        mChildrenContainer.requestBottomRoundness(1f, SourceType.from(""), false);
+
+        Assert.assertEquals(1f, mChildrenContainer.getBottomRoundness(), 0.001f);
+        Assert.assertEquals(1f, notificationRow.getBottomRoundness(), 0.001f);
+    }
+
+    @Test
+    public void applyRoundnessAndInvalidate_should_be_immediately_applied_on_header() {
+        mChildrenContainer.useRoundnessSourceTypes(true);
+
+        NotificationHeaderViewWrapper header = mChildrenContainer.getNotificationHeaderWrapper();
+        Assert.assertEquals(0f, header.getTopRoundness(), 0.001f);
+
+        mChildrenContainer.requestTopRoundness(1f, SourceType.from(""), false);
+
+        Assert.assertEquals(1f, header.getTopRoundness(), 0.001f);
+    }
+
+    @Test
+    public void applyRoundnessAndInvalidate_should_be_immediately_applied_on_headerLowPriority() {
+        mChildrenContainer.useRoundnessSourceTypes(true);
+        mChildrenContainer.setIsLowPriority(true);
+
+        NotificationHeaderViewWrapper header = mChildrenContainer.getNotificationHeaderWrapper();
+        Assert.assertEquals(0f, header.getTopRoundness(), 0.001f);
+
+        mChildrenContainer.requestTopRoundness(1f, SourceType.from(""), false);
+
+        Assert.assertEquals(1f, header.getTopRoundness(), 0.001f);
     }
 }

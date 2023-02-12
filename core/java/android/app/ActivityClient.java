@@ -59,6 +59,15 @@ public class ActivityClient {
         }
     }
 
+    /** Reports {@link android.app.servertransaction.RefreshCallbackItem} is executed. */
+    public void activityRefreshed(IBinder token) {
+        try {
+            getActivityClientController().activityRefreshed(token);
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        }
+    }
+
     /**
      * Reports after {@link Activity#onTopResumedActivityChanged(boolean)} is called for losing the
      * top most position.
@@ -549,6 +558,14 @@ public class ActivityClient {
     void reportSplashScreenAttached(IBinder token) {
         try {
             getActivityClientController().splashScreenAttached(token);
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        }
+    }
+
+    void enableTaskLocaleOverride(IBinder token) {
+        try {
+            getActivityClientController().enableTaskLocaleOverride(token);
         } catch (RemoteException e) {
             e.rethrowFromSystemServer();
         }

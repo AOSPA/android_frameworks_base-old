@@ -16,6 +16,8 @@
 
 package com.android.server.locales;
 
+import static android.content.res.Configuration.GRAMMATICAL_GENDER_NOT_SPECIFIED;
+
 import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertTrue;
 
@@ -87,6 +89,7 @@ public class SystemAppUpdateTrackerTest {
             /* initiatingPackageName = */ null, /* initiatingPackageSigningInfo = */ null,
             /* originatingPackageName = */ null,
             /* installingPackageName = */ DEFAULT_INSTALLER_PACKAGE_NAME,
+            /* updateOwnerPackageName = */ null,
             /* packageSource = */ PackageInstaller.PACKAGE_SOURCE_UNSPECIFIED);
 
     @Mock
@@ -137,7 +140,7 @@ public class SystemAppUpdateTrackerTest {
 
         AppUpdateTracker appUpdateTracker = mock(AppUpdateTracker.class);
         mPackageMonitor = new LocaleManagerServicePackageMonitor(mockLocaleManagerBackupHelper,
-                mSystemAppUpdateTracker, appUpdateTracker);
+                mSystemAppUpdateTracker, appUpdateTracker, mLocaleManagerService);
     }
 
     @After
@@ -168,7 +171,8 @@ public class SystemAppUpdateTrackerTest {
             /* isUpdatedSystemApp = */ true))
             .when(mMockPackageManager).getApplicationInfo(eq(DEFAULT_PACKAGE_NAME_1), any());
         doReturn(new ActivityTaskManagerInternal.PackageConfig(/* nightMode = */ 0,
-                DEFAULT_LOCALES)).when(mMockActivityTaskManager)
+                        DEFAULT_LOCALES, GRAMMATICAL_GENDER_NOT_SPECIFIED))
+                .when(mMockActivityTaskManager)
                 .getApplicationConfig(anyString(), anyInt());
 
         mPackageMonitor.onPackageUpdateFinished(DEFAULT_PACKAGE_NAME_1,
@@ -186,7 +190,8 @@ public class SystemAppUpdateTrackerTest {
             /* isUpdatedSystemApp = */ true))
             .when(mMockPackageManager).getApplicationInfo(eq(DEFAULT_PACKAGE_NAME_1), any());
         doReturn(new ActivityTaskManagerInternal.PackageConfig(/* nightMode = */ 0,
-                DEFAULT_LOCALES)).when(mMockActivityTaskManager)
+                        DEFAULT_LOCALES, GRAMMATICAL_GENDER_NOT_SPECIFIED))
+                .when(mMockActivityTaskManager)
                 .getApplicationConfig(anyString(), anyInt());
 
         // first update

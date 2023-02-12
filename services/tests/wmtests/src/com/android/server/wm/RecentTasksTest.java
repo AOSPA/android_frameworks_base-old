@@ -804,19 +804,6 @@ public class RecentTasksTest extends WindowTestsBase {
     }
 
     @Test
-    public void testVisibleEmbeddedTask_expectNotVisible() {
-        Task task = createTaskBuilder(".Task")
-                .setFlags(FLAG_ACTIVITY_NEW_TASK)
-                .build();
-        doReturn(true).when(task).isEmbedded();
-        mRecentTasks.add(task);
-
-        assertThat(mCallbacksRecorder.mAdded).hasSize(1);
-        assertFalse("embedded task should not be visible recents",
-                mRecentTasks.isVisibleRecentTask(task));
-    }
-
-    @Test
     public void testVisibleTask_displayCanNotShowTaskFromRecents_expectNotVisible() {
         final DisplayContent displayContent = addNewDisplayContentAt(DisplayContent.POSITION_TOP);
         doReturn(false).when(displayContent).canShowTasksInHostDeviceRecents();
@@ -1222,10 +1209,11 @@ public class RecentTasksTest extends WindowTestsBase {
     @Test
     public void testCreateRecentTaskInfo_detachedTask() {
         final Task task = createTaskBuilder(".Task").build();
+        final ComponentName componentName = getUniqueComponentName();
         new ActivityBuilder(mSupervisor.mService)
                 .setTask(task)
                 .setUid(NOBODY_UID)
-                .setComponent(getUniqueComponentName())
+                .setComponent(componentName)
                 .build();
         final TaskDisplayArea tda = task.getDisplayArea();
 
@@ -1240,9 +1228,9 @@ public class RecentTasksTest extends WindowTestsBase {
         info = mRecentTasks.createRecentTaskInfo(task, true /* stripExtras */,
                 false /* getTasksAllowed */);
 
-        assertTrue(info.topActivity == null);
-        assertTrue(info.topActivityInfo == null);
-        assertTrue(info.baseActivity == null);
+        assertFalse(info.topActivity.equals(componentName));
+        assertFalse(info.topActivityInfo.packageName.equals(componentName.getPackageName()));
+        assertFalse(info.baseActivity.equals(componentName));
 
         // The task can be put in split screen even if it is not attached now.
         task.removeImmediately();

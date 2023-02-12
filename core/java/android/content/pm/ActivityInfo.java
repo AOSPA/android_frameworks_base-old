@@ -39,6 +39,7 @@ import android.os.Parcelable;
 import android.os.UserHandle;
 import android.util.ArraySet;
 import android.util.Printer;
+import android.window.OnBackInvokedCallback;
 
 import com.android.internal.util.Parcelling;
 
@@ -624,7 +625,7 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
      * See {@link android.R.attr#inheritShowWhenLocked}.
      * @hide
      */
-    public static final int FLAG_INHERIT_SHOW_WHEN_LOCKED = 0x1;
+    public static final int FLAG_INHERIT_SHOW_WHEN_LOCKED = 1 << 0;
 
     /**
      * Bit in {@link #privateFlags} indicating whether a home sound effect should be played if the
@@ -632,13 +633,34 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
      * Set from the {@link android.R.attr#playHomeTransitionSound} attribute.
      * @hide
      */
-    public static final int PRIVATE_FLAG_HOME_TRANSITION_SOUND = 0x2;
+    public static final int PRIVATE_FLAG_HOME_TRANSITION_SOUND = 1 << 1;
+
+    /**
+     * Bit in {@link #privateFlags} indicating {@link android.view.KeyEvent#KEYCODE_BACK} related
+     * events will be replaced by a call to {@link OnBackInvokedCallback#onBackInvoked()} on the
+     * focused window.
+     * @hide
+     * @see android.R.styleable.AndroidManifestActivity_enableOnBackInvokedCallback
+     */
+    public static final int PRIVATE_FLAG_ENABLE_ON_BACK_INVOKED_CALLBACK = 1 << 2;
+
+    /**
+     * Bit in {@link #privateFlags} indicating {@link android.view.KeyEvent#KEYCODE_BACK} related
+     * events will be forwarded to the Activity and its dialogs and views and
+     * the {@link android.app.Activity#onBackPressed()}, {@link android.app.Dialog#onBackPressed}
+     * will be called.
+     * @hide
+     * @see android.R.styleable.AndroidManifestActivity_enableOnBackInvokedCallback
+     */
+    public static final int PRIVATE_FLAG_DISABLE_ON_BACK_INVOKED_CALLBACK = 1 << 3;
 
     /**
      * Options that have been set in the activity declaration in the manifest.
      * These include:
      * {@link #FLAG_INHERIT_SHOW_WHEN_LOCKED},
      * {@link #PRIVATE_FLAG_HOME_TRANSITION_SOUND}.
+     * {@link #PRIVATE_FLAG_ENABLE_ON_BACK_INVOKED_CALLBACK}
+     * {@link #PRIVATE_FLAG_DISABLE_ON_BACK_INVOKED_CALLBACK}
      * @hide
      */
     public int privateFlags;
@@ -807,6 +829,7 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
             CONFIG_LAYOUT_DIRECTION,
             CONFIG_COLOR_MODE,
             CONFIG_FONT_SCALE,
+            CONFIG_GRAMMATICAL_GENDER,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface Config {}
@@ -917,6 +940,12 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
     public static final int CONFIG_COLOR_MODE = 0x4000;
     /**
      * Bit in {@link #configChanges} that indicates that the activity
+     * can itself handle the change to gender. Set from the
+     * {@link android.R.attr#configChanges} attribute.
+     */
+    public static final int CONFIG_GRAMMATICAL_GENDER = 0x8000;
+    /**
+     * Bit in {@link #configChanges} that indicates that the activity
      * can itself handle asset path changes.  Set from the {@link android.R.attr#configChanges}
      * attribute. This is not a core resource configuration, but a higher-level value, so its
      * constant starts at the high bits.
@@ -946,7 +975,6 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
      * not a core resource configuration, but a higher-level value, so its
      * constant starts at the high bits.
      */
-
     public static final int CONFIG_FONT_WEIGHT_ADJUSTMENT = 0x10000000;
 
     /** @hide
@@ -1038,6 +1066,19 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
     public @interface SizeChangesSupportMode {}
 
     /**
+     * This change id enables compat policy that ignores app requested orientation in
+     * response to an app calling {@link android.app.Activity#setRequestedOrientation}. See
+     * com.android.server.wm.LetterboxUiController#shouldIgnoreRequestedOrientation for
+     * details.
+     * @hide
+     */
+    @ChangeId
+    @Overridable
+    @Disabled
+    public static final long OVERRIDE_ENABLE_COMPAT_IGNORE_REQUESTED_ORIENTATION =
+            254631730L; // buganizer id
+
+    /**
      * This change id forces the packages it is applied to never have Display API sandboxing
      * applied for a letterbox or SCM activity. The Display APIs will continue to provide
      * DisplayArea bounds.
@@ -1059,6 +1100,41 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
     @Disabled
     @TestApi
     public static final long ALWAYS_SANDBOX_DISPLAY_APIS = 185004937L; // buganizer id
+
+    /**
+     * This change id excludes the packages it is applied to from the camera compat force rotation
+     * treatment. See com.android.server.wm.DisplayRotationCompatPolicy for context.
+     * @hide
+     */
+    @ChangeId
+    @Overridable
+    @Disabled
+    public static final long OVERRIDE_CAMERA_COMPAT_DISABLE_FORCE_ROTATION =
+            263959004L; // buganizer id
+
+    /**
+     * This change id excludes the packages it is applied to from activity refresh after camera
+     * compat force rotation treatment. See com.android.server.wm.DisplayRotationCompatPolicy for
+     * context.
+     * @hide
+     */
+    @ChangeId
+    @Overridable
+    @Disabled
+    public static final long OVERRIDE_CAMERA_COMPAT_DISABLE_REFRESH = 264304459L; // buganizer id
+
+    /**
+     * This change id makes the packages it is applied to do activity refresh after camera compat
+     * force rotation treatment using "resumed -> paused -> resumed" cycle rather than "resumed ->
+     * ... -> stopped -> ... -> resumed" cycle. See
+     * com.android.server.wm.DisplayRotationCompatPolicy for context.
+     * @hide
+     */
+    @ChangeId
+    @Overridable
+    @Disabled
+    public static final long OVERRIDE_CAMERA_COMPAT_ENABLE_REFRESH_VIA_PAUSE =
+            264301586L; // buganizer id
 
     /**
      * This change id is the gatekeeper for all treatments that force a given min aspect ratio.
@@ -1145,6 +1221,17 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
     @Overridable
     @TestApi
     public static final long OVERRIDE_MIN_ASPECT_RATIO_EXCLUDE_PORTRAIT_FULLSCREEN = 218959984L;
+
+    /**
+     * Enables sending fake focus for unfocused apps in splitscreen. Some game engines
+     * wait to get focus before drawing the content of the app so fake focus helps them to avoid
+     * staying blacked out when they are resumed and do not have focus yet.
+     * @hide
+     */
+    @ChangeId
+    @Disabled
+    @Overridable
+    public static final long OVERRIDE_ENABLE_COMPAT_FAKE_FOCUS = 263259275L;
 
     /**
      * Compares activity window layout min width/height with require space for multi window to
@@ -1610,6 +1697,32 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
      */
     public boolean shouldCheckMinWidthHeightForMultiWindow() {
         return isChangeEnabled(CHECK_MIN_WIDTH_HEIGHT_FOR_MULTI_WINDOW);
+    }
+
+    /**
+     * Returns whether the activity will set the
+     * {@link R.styleable.AndroidManifestActivity_enableOnBackInvokedCallback} attribute.
+     *
+     * @hide
+     */
+    public boolean hasOnBackInvokedCallbackEnabled() {
+        return (privateFlags & (PRIVATE_FLAG_ENABLE_ON_BACK_INVOKED_CALLBACK
+                | PRIVATE_FLAG_DISABLE_ON_BACK_INVOKED_CALLBACK)) != 0;
+    }
+
+    /**
+     * Returns whether the activity will use the {@link android.window.OnBackInvokedCallback}
+     * navigation system instead of the {@link android.view.KeyEvent#KEYCODE_BACK} and related
+     * callbacks.
+     *
+     * Valid when the {@link R.styleable.AndroidManifestActivity_enableOnBackInvokedCallback}
+     * attribute has been set, or it won't indicate if the activity should use the
+     * navigation system and the {@link hasOnBackInvokedCallbackEnabled} will return false.
+     * @hide
+     */
+    public boolean isOnBackInvokedCallbackEnabled() {
+        return hasOnBackInvokedCallbackEnabled()
+                && (privateFlags & PRIVATE_FLAG_ENABLE_ON_BACK_INVOKED_CALLBACK) != 0;
     }
 
     public void dump(Printer pw, String prefix) {

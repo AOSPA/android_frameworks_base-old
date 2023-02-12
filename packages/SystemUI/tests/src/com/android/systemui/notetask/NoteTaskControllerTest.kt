@@ -24,7 +24,7 @@ import android.os.UserManager
 import android.test.suitebuilder.annotation.SmallTest
 import androidx.test.runner.AndroidJUnit4
 import com.android.systemui.SysuiTestCase
-import com.android.systemui.notetask.NoteTaskIntentResolver.Companion.NOTES_ACTION
+import com.android.systemui.notetask.NoteTaskIntentResolver.Companion.ACTION_CREATE_NOTE
 import com.android.systemui.notetask.shortcut.CreateNoteTaskShortcutActivity
 import com.android.systemui.util.mockito.argumentCaptor
 import com.android.systemui.util.mockito.eq
@@ -50,7 +50,7 @@ import org.mockito.MockitoAnnotations
 @RunWith(AndroidJUnit4::class)
 internal class NoteTaskControllerTest : SysuiTestCase() {
 
-    private val notesIntent = Intent(NOTES_ACTION)
+    private val notesIntent = Intent(ACTION_CREATE_NOTE)
 
     @Mock lateinit var context: Context
     @Mock lateinit var packageManager: PackageManager
@@ -93,7 +93,7 @@ internal class NoteTaskControllerTest : SysuiTestCase() {
         createNoteTaskController().showNoteTask(isInMultiWindowMode = false)
 
         verify(context).startActivity(notesIntent)
-        verify(bubbles, never()).showAppBubble(notesIntent)
+        verify(bubbles, never()).showOrHideAppBubble(notesIntent)
     }
 
     @Test
@@ -102,7 +102,7 @@ internal class NoteTaskControllerTest : SysuiTestCase() {
 
         createNoteTaskController().showNoteTask(isInMultiWindowMode = false)
 
-        verify(bubbles).showAppBubble(notesIntent)
+        verify(bubbles).showOrHideAppBubble(notesIntent)
         verify(context, never()).startActivity(notesIntent)
     }
 
@@ -113,7 +113,7 @@ internal class NoteTaskControllerTest : SysuiTestCase() {
         createNoteTaskController().showNoteTask(isInMultiWindowMode = true)
 
         verify(context).startActivity(notesIntent)
-        verify(bubbles, never()).showAppBubble(notesIntent)
+        verify(bubbles, never()).showOrHideAppBubble(notesIntent)
     }
 
     @Test
@@ -123,7 +123,7 @@ internal class NoteTaskControllerTest : SysuiTestCase() {
         createNoteTaskController().showNoteTask(isInMultiWindowMode = false)
 
         verify(context, never()).startActivity(notesIntent)
-        verify(bubbles, never()).showAppBubble(notesIntent)
+        verify(bubbles, never()).showOrHideAppBubble(notesIntent)
     }
 
     @Test
@@ -133,7 +133,7 @@ internal class NoteTaskControllerTest : SysuiTestCase() {
         createNoteTaskController().showNoteTask(isInMultiWindowMode = false)
 
         verify(context, never()).startActivity(notesIntent)
-        verify(bubbles, never()).showAppBubble(notesIntent)
+        verify(bubbles, never()).showOrHideAppBubble(notesIntent)
     }
 
     @Test
@@ -143,7 +143,7 @@ internal class NoteTaskControllerTest : SysuiTestCase() {
         createNoteTaskController().showNoteTask(isInMultiWindowMode = false)
 
         verify(context, never()).startActivity(notesIntent)
-        verify(bubbles, never()).showAppBubble(notesIntent)
+        verify(bubbles, never()).showOrHideAppBubble(notesIntent)
     }
 
     @Test
@@ -153,7 +153,7 @@ internal class NoteTaskControllerTest : SysuiTestCase() {
         createNoteTaskController().showNoteTask(isInMultiWindowMode = false)
 
         verify(context, never()).startActivity(notesIntent)
-        verify(bubbles, never()).showAppBubble(notesIntent)
+        verify(bubbles, never()).showOrHideAppBubble(notesIntent)
     }
 
     @Test
@@ -161,7 +161,7 @@ internal class NoteTaskControllerTest : SysuiTestCase() {
         createNoteTaskController(isEnabled = false).showNoteTask()
 
         verify(context, never()).startActivity(notesIntent)
-        verify(bubbles, never()).showAppBubble(notesIntent)
+        verify(bubbles, never()).showOrHideAppBubble(notesIntent)
     }
 
     @Test
@@ -171,7 +171,7 @@ internal class NoteTaskControllerTest : SysuiTestCase() {
         createNoteTaskController().showNoteTask(isInMultiWindowMode = false)
 
         verify(context, never()).startActivity(notesIntent)
-        verify(bubbles, never()).showAppBubble(notesIntent)
+        verify(bubbles, never()).showOrHideAppBubble(notesIntent)
     }
     // endregion
 

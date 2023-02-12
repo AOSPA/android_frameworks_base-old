@@ -17,8 +17,10 @@
 package android.media.tv.interactive;
 
 import android.graphics.Rect;
+import android.media.tv.AdBuffer;
 import android.media.tv.AdRequest;
 import android.media.tv.BroadcastInfoRequest;
+import android.media.tv.TvRecordingInfo;
 import android.media.tv.interactive.ITvInteractiveAppSession;
 import android.net.Uri;
 import android.os.Bundle;
@@ -36,6 +38,7 @@ oneway interface ITvInteractiveAppSessionCallback {
     void onSessionStateChanged(int state, int err);
     void onBiInteractiveAppCreated(in Uri biIAppUri, in String biIAppId);
     void onTeletextAppStateChanged(int state);
+    void onAdBuffer(in AdBuffer buffer);
     void onCommandRequest(in String cmdType, in Bundle parameters);
     void onSetVideoBounds(in Rect rect);
     void onRequestCurrentChannelUri();
@@ -45,6 +48,9 @@ oneway interface ITvInteractiveAppSessionCallback {
     void onRequestCurrentTvInputId();
     void onRequestStartRecording(in Uri programUri);
     void onRequestStopRecording(in String recordingId);
+    void onSetTvRecordingInfo(in String recordingId, in TvRecordingInfo recordingInfo);
+    void onRequestTvRecordingInfo(in String recordingId);
+    void onRequestTvRecordingInfoList(in int type);
     void onRequestSigning(in String id, in String algorithm, in String alias, in byte[] data);
     void onAdRequest(in AdRequest request);
 }

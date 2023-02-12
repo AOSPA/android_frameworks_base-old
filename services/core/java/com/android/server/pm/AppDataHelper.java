@@ -18,11 +18,13 @@ package com.android.server.pm;
 
 import static android.os.Trace.TRACE_TAG_PACKAGE_MANAGER;
 
+import static com.android.server.pm.DexOptHelper.useArtService;
 import static com.android.server.pm.PackageManagerService.TAG;
 import static com.android.server.pm.PackageManagerServiceUtils.logCriticalInfo;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.UserIdInt;
 import android.content.pm.PackageManager;
 import android.content.pm.UserInfo;
 import android.os.CreateAppDataArgs;
@@ -44,9 +46,11 @@ import android.util.TimingsTraceLog;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.Preconditions;
 import com.android.server.SystemServerInitThreadPool;
+import com.android.server.pm.Installer.LegacyDexoptDisabledException;
 import com.android.server.pm.dex.ArtManagerService;
 import com.android.server.pm.parsing.pkg.AndroidPackageUtils;
 import com.android.server.pm.pkg.AndroidPackage;
+import com.android.server.pm.pkg.PackageState;
 import com.android.server.pm.pkg.PackageStateInternal;
 import com.android.server.pm.pkg.SELinuxUtil;
 
@@ -179,13 +183,13 @@ public class AppDataHelper {
     }
 
     private void prepareAppDataAndMigrate(@NonNull Installer.Batch batch,
-            @NonNull AndroidPackage pkg, int userId, @StorageManager.StorageFlags int flags,
-            boolean maybeMigrateAppData) {
+            @NonNull PackageState packageState, @NonNull AndroidPackage pkg, @UserIdInt int userId,
+            @StorageManager.StorageFlags int flags, boolean maybeMigrateAppData) {
         prepareAppData(batch, pkg, Process.INVALID_UID, userId, flags).thenRun(() -> {
             // Note: this code block is executed with the Installer lock
             // already held, since it's invoked as a side-effect of
             // executeBatchLI()
-            if (maybeMigrateAppData && maybeMigrateAppDataLIF(pkg, userId)) {
+            if (maybeMigrateAppData && maybeMigrateAppDataLIF(packageState, pkg, userId)) {
                 // We may have just shuffled around app data directories, so
                 // prepare them one more time
                 final Installer.Batch batchInner = new Installer.Batch();
@@ -240,33 +244,39 @@ public class AppDataHelper {
                 }
             }
 
-            // Prepare the application profiles only for upgrades and
-            // first boot (so that we don't repeat the same operation at
-            // each boot).
-            //
-            // We only have to cover the upgrade and first boot here
-            // because for app installs we prepare the profiles before
-            // invoking dexopt (in installPackageLI).
-            //
-            // We also have to cover non system users because we do not
-            // call the usual install package methods for them.
-            //
-            // NOTE: in order to speed up first boot time we only create
-            // the current profile and do not update the content of the
-            // reference profile. A system image should already be
-            // configured with the right profile keys and the profiles
-            // for the speed-profile prebuilds should already be copied.
-            // That's done in #performDexOptUpgrade.
-            //
-            // TODO(calin, mathieuc): We should use .dm files for
-            // prebuilds profiles instead of manually copying them in
-            // #performDexOptUpgrade. When we do that we should have a
-            // more granular check here and only update the existing
-            // profiles.
-            if (mPm.isDeviceUpgrading() || mPm.isFirstBoot()
-                    || (userId != UserHandle.USER_SYSTEM)) {
-                mArtManagerService.prepareAppProfiles(pkg, userId,
-                        /* updateReferenceProfileContent= */ false);
+            if (!useArtService()) { // ART Service handles this on demand instead.
+                // Prepare the application profiles only for upgrades and
+                // first boot (so that we don't repeat the same operation at
+                // each boot).
+                //
+                // We only have to cover the upgrade and first boot here
+                // because for app installs we prepare the profiles before
+                // invoking dexopt (in installPackageLI).
+                //
+                // We also have to cover non system users because we do not
+                // call the usual install package methods for them.
+                //
+                // NOTE: in order to speed up first boot time we only create
+                // the current profile and do not update the content of the
+                // reference profile. A system image should already be
+                // configured with the right profile keys and the profiles
+                // for the speed-profile prebuilds should already be copied.
+                // That's done in #performDexOptUpgrade.
+                //
+                // TODO(calin, mathieuc): We should use .dm files for
+                // prebuilds profiles instead of manually copying them in
+                // #performDexOptUpgrade. When we do that we should have a
+                // more granular check here and only update the existing
+                // profiles.
+                if (mPm.isDeviceUpgrading() || mPm.isFirstBoot()
+                        || (userId != UserHandle.USER_SYSTEM)) {
+                    try {
+                        mArtManagerService.prepareAppProfiles(pkg, userId,
+                                /* updateReferenceProfileContent= */ false);
+                    } catch (LegacyDexoptDisabledException e2) {
+                        throw new RuntimeException(e2);
+                    }
+                }
             }
 
             if ((flags & StorageManager.FLAG_STORAGE_CE) != 0 && ceDataInode != -1) {
@@ -320,8 +330,9 @@ public class AppDataHelper {
      * CE/DE data to match the {@code defaultToDeviceProtectedStorage} flag
      * requested by the app.
      */
-    private boolean maybeMigrateAppDataLIF(AndroidPackage pkg, int userId) {
-        if (pkg.isSystem() && !StorageManager.isFileEncrypted()
+    private boolean maybeMigrateAppDataLIF(@NonNull PackageState packageState,
+            @NonNull AndroidPackage pkg, @UserIdInt int userId) {
+        if (packageState.isSystem() && !StorageManager.isFileEncrypted()
                 && PackageManager.APPLY_DEFAULT_TO_DEVICE_PROTECTED_STORAGE) {
             final int storageTarget = pkg.isDefaultToDeviceProtectedStorage()
                     ? StorageManager.FLAG_STORAGE_DE : StorageManager.FLAG_STORAGE_CE;
@@ -454,7 +465,7 @@ public class AppDataHelper {
             }
 
             if (ps.getUserStateOrDefault(userId).isInstalled()) {
-                prepareAppDataAndMigrate(batch, ps.getPkg(), userId, flags, migrateAppData);
+                prepareAppDataAndMigrate(batch, ps, ps.getPkg(), userId, flags, migrateAppData);
                 preparedCount++;
             }
         }
@@ -529,8 +540,8 @@ public class AppDataHelper {
                         && packageStateInternal.getUserStateOrDefault(
                                 UserHandle.USER_SYSTEM).isInstalled()) {
                     AndroidPackage pkg = packageStateInternal.getPkg();
-                    prepareAppDataAndMigrate(batch, pkg, UserHandle.USER_SYSTEM, storageFlags,
-                            true /* maybeMigrateAppData */);
+                    prepareAppDataAndMigrate(batch, packageStateInternal, pkg,
+                            UserHandle.USER_SYSTEM, storageFlags, true /* maybeMigrateAppData */);
                     count++;
                 }
             }
@@ -575,7 +586,12 @@ public class AppDataHelper {
             Slog.wtf(TAG, "Package was null!", new Throwable());
             return;
         }
-        mArtManagerService.clearAppProfiles(pkg);
+        // TODO(b/251903639): Call into ART Service.
+        try {
+            mArtManagerService.clearAppProfiles(pkg);
+        } catch (LegacyDexoptDisabledException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public void destroyAppDataLIF(AndroidPackage pkg, int userId, int flags) {
@@ -600,6 +616,7 @@ public class AppDataHelper {
                 Slog.w(TAG, String.valueOf(e));
             }
             mPm.getDexManager().notifyPackageDataDestroyed(pkg.getPackageName(), userId);
+            mPm.getDynamicCodeLogger().notifyPackageDataDestroyed(pkg.getPackageName(), userId);
         }
     }
 
@@ -612,8 +629,11 @@ public class AppDataHelper {
     }
 
     private void destroyAppProfilesLeafLIF(AndroidPackage pkg) {
+        // TODO(b/251903639): Call into ART Service.
         try {
             mInstaller.destroyAppProfiles(pkg.getPackageName());
+        } catch (LegacyDexoptDisabledException e) {
+            throw new RuntimeException(e);
         } catch (Installer.InstallerException e) {
             Slog.w(TAG, String.valueOf(e));
         }

@@ -27,6 +27,7 @@ import static android.view.Surface.ROTATION_0;
 import static android.view.Surface.ROTATION_270;
 import static android.view.Surface.ROTATION_90;
 import static android.view.WindowInsets.Type.ime;
+import static android.view.WindowInsets.Type.navigationBars;
 import static android.view.WindowInsets.Type.statusBars;
 import static android.view.WindowManager.LayoutParams.FIRST_SUB_WINDOW;
 import static android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
@@ -44,6 +45,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_SUB_PANEL;
 import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
+import static android.view.WindowManager.LayoutParams.TYPE_SECURE_SYSTEM_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
@@ -276,12 +278,9 @@ public class WindowStateTests extends WindowTestsBase {
         assertFalse(imeWindow.canBeImeTarget());
 
         // Simulate the window is in split screen root task.
-        final DockedTaskDividerController controller =
-                mDisplayContent.getDockedDividerController();
         final Task rootTask = createTask(mDisplayContent,
                 WINDOWING_MODE_MULTI_WINDOW, ACTIVITY_TYPE_STANDARD);
         spyOn(appWindow);
-        spyOn(controller);
         spyOn(rootTask);
         rootTask.setFocusable(false);
         doReturn(rootTask).when(appWindow).getRootTask();
@@ -775,7 +774,7 @@ public class WindowStateTests extends WindowTestsBase {
                     anyBoolean() /* reportDraw */, any() /* mergedConfig */,
                     any() /* insetsState */, anyBoolean() /* forceLayout */,
                     anyBoolean() /* alwaysConsumeSystemBars */, anyInt() /* displayId */,
-                    anyInt() /* seqId */, anyInt() /* resizeMode */);
+                    anyInt() /* seqId */, anyBoolean() /* dragResizing */);
         } catch (RemoteException ignored) {
         }
         win.reportResized();
@@ -982,6 +981,19 @@ public class WindowStateTests extends WindowTestsBase {
         assertFalse(sameTokenWindow.needsRelativeLayeringToIme());
     }
 
+    @UseTestDisplay(addWindows = {W_ACTIVITY, W_INPUT_METHOD})
+    @Test
+    public void testNeedsRelativeLayeringToIme_systemDialog() {
+        WindowState systemDialogWindow = createWindow(null, TYPE_SECURE_SYSTEM_OVERLAY,
+                mDisplayContent,
+                "SystemDialog", true);
+        mDisplayContent.setImeLayeringTarget(mAppWindow);
+        mAppWindow.getRootTask().setWindowingMode(WINDOWING_MODE_MULTI_WINDOW);
+        makeWindowVisible(mImeWindow);
+        systemDialogWindow.mAttrs.flags |= FLAG_ALT_FOCUSABLE_IM;
+        assertTrue(systemDialogWindow.needsRelativeLayeringToIme());
+    }
+
     @Test
     public void testSetFreezeInsetsState() {
         final WindowState app = createWindow(null, TYPE_APPLICATION, "app");
@@ -1017,7 +1029,7 @@ public class WindowStateTests extends WindowTestsBase {
     @SetupWindows(addWindows = { W_INPUT_METHOD, W_ACTIVITY })
     @Test
     public void testImeAlwaysReceivesVisibleNavigationBarInsets() {
-        final InsetsSource navSource = new InsetsSource(ITYPE_NAVIGATION_BAR);
+        final InsetsSource navSource = new InsetsSource(ITYPE_NAVIGATION_BAR, navigationBars());
         mImeWindow.mAboveInsetsState.addSource(navSource);
         mAppWindow.mAboveInsetsState.addSource(navSource);
 

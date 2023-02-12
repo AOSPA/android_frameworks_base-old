@@ -24,6 +24,7 @@ import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 import static android.view.InsetsState.ITYPE_BOTTOM_GENERIC_OVERLAY;
 import static android.view.InsetsState.ITYPE_TOP_GENERIC_OVERLAY;
+import static android.view.WindowInsets.Type.systemOverlays;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
 import static android.view.WindowManager.TRANSIT_CLOSE;
@@ -54,6 +55,8 @@ import static com.android.server.wm.WindowContainer.AnimationFlags.PARENTS;
 import static com.android.server.wm.WindowContainer.AnimationFlags.TRANSITION;
 import static com.android.server.wm.WindowContainer.POSITION_BOTTOM;
 import static com.android.server.wm.WindowContainer.POSITION_TOP;
+
+import static com.google.common.truth.Truth.assertThat;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -656,6 +659,111 @@ public class WindowContainerTests extends WindowTestsBase {
         visibleUnspecifiedRootChild.setFillsParent(true);
         assertEquals(SCREEN_ORIENTATION_PORTRAIT, visibleUnspecifiedRootChild.getOrientation());
         assertEquals(SCREEN_ORIENTATION_PORTRAIT, root.getOrientation());
+    }
+
+    @Test
+    public void testSetVisibleRequested() {
+        final TestWindowContainer root = spy(new TestWindowContainerBuilder(mWm).setLayer(
+                0).build());
+        assertThat(root.isVisibleRequested()).isFalse();
+        final TestWindowContainerListener listener = new TestWindowContainerListener();
+        root.registerWindowContainerListener(listener);
+
+        assertThat(root.setVisibleRequested(/* isVisible= */ false)).isFalse();
+        assertThat(root.isVisibleRequested()).isFalse();
+
+        assertThat(root.setVisibleRequested(/* isVisible= */ true)).isTrue();
+        assertThat(root.isVisibleRequested()).isTrue();
+        assertThat(listener.mIsVisibleRequested).isTrue();
+    }
+
+    @Test
+    public void testSetVisibleRequested_childRequestsVisible() {
+        final TestWindowContainer root = spy(new TestWindowContainerBuilder(mWm).setLayer(
+                0).build());
+        final TestWindowContainer child1 = root.addChildWindow();
+        assertThat(child1.isVisibleRequested()).isFalse();
+        final TestWindowContainerListener listener = new TestWindowContainerListener();
+        root.registerWindowContainerListener(listener);
+
+        // Hidden root and child request hidden.
+        assertThat(root.setVisibleRequested(/* isVisible= */ false)).isFalse();
+        assertThat(listener.mIsVisibleRequested).isFalse();
+        assertThat(child1.isVisibleRequested()).isFalse();
+
+        // Child requests to be visible, so child and root request visible.
+        assertThat(child1.setVisibleRequested(/* isVisible= */ true)).isTrue();
+        assertThat(root.isVisibleRequested()).isTrue();
+        assertThat(listener.mIsVisibleRequested).isTrue();
+        assertThat(child1.isVisibleRequested()).isTrue();
+        // Visible request didn't change.
+        assertThat(child1.setVisibleRequested(/* isVisible= */ true)).isFalse();
+        verify(root, times(2)).onChildVisibleRequestedChanged(child1);
+    }
+
+    @Test
+    public void testSetVisibleRequested_childRequestsHidden() {
+        final TestWindowContainer root = spy(new TestWindowContainerBuilder(mWm).setLayer(
+                0).build());
+        final TestWindowContainer child1 = root.addChildWindow();
+        assertThat(child1.isVisibleRequested()).isFalse();
+        final TestWindowContainerListener listener = new TestWindowContainerListener();
+        root.registerWindowContainerListener(listener);
+
+        // Root and child requests visible.
+        assertThat(root.setVisibleRequested(/* isVisible= */ true)).isTrue();
+        assertThat(listener.mIsVisibleRequested).isTrue();
+        assertThat(child1.setVisibleRequested(/* isVisible= */ true)).isTrue();
+        assertThat(child1.isVisibleRequested()).isTrue();
+
+        // Child requests hidden, so child and root request hidden.
+        assertThat(child1.setVisibleRequested(/* isVisible= */ false)).isTrue();
+        assertThat(root.isVisibleRequested()).isFalse();
+        assertThat(listener.mIsVisibleRequested).isFalse();
+        assertThat(child1.isVisibleRequested()).isFalse();
+        // Visible request didn't change.
+        assertThat(child1.setVisibleRequested(/* isVisible= */ false)).isFalse();
+        verify(root, times(3)).onChildVisibleRequestedChanged(child1);
+    }
+
+    @Test
+    public void testOnChildVisibleRequestedChanged_bothVisible() {
+        final TestWindowContainer root = spy(new TestWindowContainerBuilder(mWm).setLayer(
+                0).build());
+        final TestWindowContainer child1 = root.addChildWindow();
+
+        // Child and root request visible.
+        assertThat(root.setVisibleRequested(/* isVisible= */ true)).isTrue();
+        assertThat(child1.setVisibleRequested(/* isVisible= */ true)).isTrue();
+
+        // Visible request already updated on root when child requested.
+        assertThat(root.onChildVisibleRequestedChanged(child1)).isFalse();
+    }
+
+    @Test
+    public void testOnChildVisibleRequestedChanged_childVisible() {
+        final TestWindowContainer root = spy(new TestWindowContainerBuilder(mWm).setLayer(
+                0).build());
+        final TestWindowContainer child1 = root.addChildWindow();
+
+        assertThat(root.setVisibleRequested(/* isVisible= */ false)).isFalse();
+        assertThat(child1.setVisibleRequested(/* isVisible= */ true)).isTrue();
+
+        // Visible request already updated on root when child requested.
+        assertThat(root.onChildVisibleRequestedChanged(child1)).isFalse();
+    }
+
+    @Test
+    public void testOnChildVisibleRequestedChanged_childHidden() {
+        final TestWindowContainer root = spy(new TestWindowContainerBuilder(mWm).setLayer(
+                0).build());
+        final TestWindowContainer child1 = root.addChildWindow();
+
+        assertThat(root.setVisibleRequested(/* isVisible= */ false)).isFalse();
+        assertThat(child1.setVisibleRequested(/* isVisible= */ false)).isFalse();
+
+        // Visible request did not change.
+        assertThat(root.onChildVisibleRequestedChanged(child1)).isFalse();
     }
 
     @Test
@@ -1336,11 +1444,11 @@ public class WindowContainerTests extends WindowTestsBase {
                 new int[]{ITYPE_BOTTOM_GENERIC_OVERLAY});
 
         InsetsSource genericOverlayInsetsProvider1Source = new InsetsSource(
-                ITYPE_TOP_GENERIC_OVERLAY);
+                ITYPE_TOP_GENERIC_OVERLAY, systemOverlays());
         genericOverlayInsetsProvider1Source.setFrame(genericOverlayInsetsRect1);
         genericOverlayInsetsProvider1Source.setVisible(true);
         InsetsSource genericOverlayInsetsProvider2Source = new InsetsSource(
-                ITYPE_BOTTOM_GENERIC_OVERLAY);
+                ITYPE_BOTTOM_GENERIC_OVERLAY, systemOverlays());
         genericOverlayInsetsProvider2Source.setFrame(genericOverlayInsetsRect2);
         genericOverlayInsetsProvider2Source.setVisible(true);
 
@@ -1655,6 +1763,7 @@ public class WindowContainerTests extends WindowTestsBase {
     private static class TestWindowContainerListener implements WindowContainerListener {
         private Configuration mConfiguration = new Configuration();
         private DisplayContent mDisplayContent;
+        private boolean mIsVisibleRequested;
 
         @Override
         public void onRequestedOverrideConfigurationChanged(Configuration overrideConfiguration) {
@@ -1664,6 +1773,11 @@ public class WindowContainerTests extends WindowTestsBase {
         @Override
         public void onDisplayChanged(DisplayContent dc) {
             mDisplayContent = dc;
+        }
+
+        @Override
+        public void onVisibleRequestedChanged(boolean isVisibleRequested) {
+            mIsVisibleRequested = isVisibleRequested;
         }
     }
 }

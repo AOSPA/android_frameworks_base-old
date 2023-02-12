@@ -50,11 +50,17 @@ import java.util.concurrent.Executor;
 @SystemService(Context.CREDENTIAL_SERVICE)
 public final class CredentialManager {
     private static final String TAG = "CredentialManager";
-    private static final String DEVICE_CONFIG_ENABLE_CREDENTIAL_MANAGER =
-            "enable_credential_manager";
 
     private final Context mContext;
     private final ICredentialManager mService;
+
+    /**
+     * Flag to enable and disable Credential Manager.
+     *
+     * @hide
+     */
+    public static final String DEVICE_CONFIG_ENABLE_CREDENTIAL_MANAGER =
+            "enable_credential_manager";
 
     /**
      * @hide instantiated by ContextImpl.
@@ -270,9 +276,22 @@ public final class CredentialManager {
      *
      * @hide
      */
-    public static boolean isServiceEnabled() {
+    public static boolean isServiceEnabled(Context context) {
+        if (context == null) {
+	    return false;
+        }
+        CredentialManager credentialManager =
+                (CredentialManager) context.getSystemService(Context.CREDENTIAL_SERVICE);
+        if (credentialManager != null) {
+            return credentialManager.isServiceEnabled();
+        }
+        return false;
+    }
+
+    private boolean isServiceEnabled() {
         return DeviceConfig.getBoolean(
-                DeviceConfig.NAMESPACE_CREDENTIAL, DEVICE_CONFIG_ENABLE_CREDENTIAL_MANAGER, true);
+                DeviceConfig.NAMESPACE_CREDENTIAL, DEVICE_CONFIG_ENABLE_CREDENTIAL_MANAGER,
+                true);
     }
 
     private static class GetCredentialTransport extends IGetCredentialCallback.Stub {

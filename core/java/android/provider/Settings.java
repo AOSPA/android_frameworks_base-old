@@ -17,10 +17,13 @@
 package android.provider;
 
 import android.Manifest;
+import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
 import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.PermissionMethod;
+import android.annotation.PermissionName;
 import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
@@ -47,7 +50,6 @@ import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
-import android.content.pm.PermissionName;
 import android.content.pm.ResolveInfo;
 import android.content.res.Configuration;
 import android.content.res.Resources;
@@ -87,6 +89,7 @@ import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.Log;
 import android.util.MemoryIntArray;
+import android.util.Slog;
 import android.view.Display;
 import android.view.MotionEvent;
 import android.view.ViewConfiguration;
@@ -112,6 +115,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.Executor;
+
 /**
  * The Settings provider contains global system-level device preferences.
  */
@@ -220,6 +225,7 @@ public final class Settings {
      * @hide
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    @SystemApi
     public static final String ACTION_USER_SETTINGS =
             "android.settings.USER_SETTINGS";
 
@@ -1072,6 +1078,17 @@ public final class Settings {
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_APP_LOCALE_SETTINGS =
             "android.settings.APP_LOCALE_SETTINGS";
+
+    /**
+     * Activity Action: Show settings to allow configuration of regional preferences
+     * <p>
+     * Input: Nothing
+     * <p>
+     * Output: Nothing.
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_REGIONAL_PREFERENCES_SETTINGS =
+            "android.settings.REGIONAL_PREFERENCES_SETTINGS";
 
     /**
      * Activity Action: Show settings to allow configuration of lockscreen.
@@ -2496,6 +2513,7 @@ public final class Settings {
      *
      * @hide
      */
+    @SystemApi
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_SHOW_RESTRICTED_SETTING_DIALOG =
             "android.settings.SHOW_RESTRICTED_SETTING_DIALOG";
@@ -2718,6 +2736,10 @@ public final class Settings {
     /** @hide - Private call() method to register monitor callback for 'configuration' table */
     public static final String CALL_METHOD_REGISTER_MONITOR_CALLBACK_CONFIG =
             "REGISTER_MONITOR_CALLBACK_config";
+
+    /** @hide - Private call() method to unregister monitor callback for 'configuration' table */
+    public static final String CALL_METHOD_UNREGISTER_MONITOR_CALLBACK_CONFIG =
+            "UNREGISTER_MONITOR_CALLBACK_config";
 
     /** @hide - String argument extra to the config monitor callback */
     public static final String EXTRA_MONITOR_CALLBACK_TYPE = "monitor_callback_type";
@@ -5589,6 +5611,19 @@ public final class Settings {
         public static final String DESKTOP_MODE = "desktop_mode";
 
         /**
+         * The information of locale preference. This records user's preference to avoid
+         * unsynchronized and existing locale preference in
+         * {@link Locale#getDefault(Locale.Category)}.
+         *
+         * <p><b>Note:</b> The format follow the
+         * <a href="https://www.rfc-editor.org/rfc/bcp/bcp47.txt">IETF BCP47 expression</a>
+         *
+         * E.g. : und-u-ca-gregorian-hc-h23
+         * @hide
+         */
+        public static final String LOCALE_PREFERENCES = "locale_preferences";
+
+        /**
          * IMPORTANT: If you add a new public settings you also have to add it to
          * PUBLIC_SETTINGS below. If the new setting is hidden you have to add
          * it to PRIVATE_SETTINGS below. Also add a validator that can validate
@@ -5716,6 +5751,7 @@ public final class Settings {
             PRIVATE_SETTINGS.add(DISPLAY_COLOR_MODE);
             PRIVATE_SETTINGS.add(DISPLAY_COLOR_MODE_VENDOR_HINT);
             PRIVATE_SETTINGS.add(DESKTOP_MODE);
+            PRIVATE_SETTINGS.add(LOCALE_PREFERENCES);
             PRIVATE_SETTINGS.add(CALL_CONNECTED_TONE_ENABLED);
         }
 
@@ -9962,11 +9998,10 @@ public final class Settings {
                 "fingerprint_side_fps_auth_downtime";
 
         /**
-         * Whether or not a SFPS device is required to be interactive for auth to unlock the device.
+         * Whether or not a SFPS device is enabling the performant auth setting.
          * @hide
          */
-        public static final String SFPS_REQUIRE_SCREEN_ON_TO_AUTH_ENABLED =
-                "sfps_require_screen_on_to_auth_enabled";
+        public static final String SFPS_PERFORMANT_AUTH_ENABLED = "sfps_performant_auth_enabled";
 
         /**
          * Whether or not debugging is enabled.
@@ -15174,6 +15209,15 @@ public final class Settings {
                 "low_power_mode_suggestion_params";
 
         /**
+         * Whether low power mode reminder is enabled. If this value is 0, the device will not
+         * receive low power notification.
+         *
+         * @hide
+         */
+        public static final String LOW_POWER_MODE_REMINDER_ENABLED =
+                "low_power_mode_reminder_enabled";
+
+        /**
          * If not 0, the activity manager will aggressively finish activities and
          * processes as soon as they are no longer needed.  If 0, the normal
          * extended lifetime is used.
@@ -18087,6 +18131,14 @@ public final class Settings {
              * @hide
              */
             public static final int EARLY_UPDATES_STATUS_ABORTED = 4;
+
+            /**
+             * Whether dynamic color theming (e.g. Material You) is enabled for apps which support
+             * it.
+             *
+             * @hide
+             */
+            public static final String DYNAMIC_COLOR_THEME_ENABLED = "dynamic_color_theme_enabled";
         }
     }
 
@@ -18401,16 +18453,41 @@ public final class Settings {
         }
 
         /**
-         * Register callback for monitoring Config table.
+         * Setter callback for monitoring Config table.
          *
-         * @param callback callback to register
+         * @param executor the {@link Executor} on which to invoke the callback
+         * @param callback callback to set
          *
          * @hide
          */
+        @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
         @RequiresPermission(Manifest.permission.MONITOR_DEVICE_CONFIG_ACCESS)
-        public static void registerMonitorCallback(@NonNull ContentResolver resolver,
-                @NonNull RemoteCallback callback) {
-            registerMonitorCallbackAsUser(resolver, resolver.getUserId(), callback);
+        public static void setMonitorCallback(
+                @NonNull ContentResolver resolver,
+                @NonNull @CallbackExecutor Executor executor,
+                @NonNull DeviceConfig.MonitorCallback callback) {
+            setMonitorCallbackAsUser(executor, resolver, resolver.getUserId(), callback);
+        }
+
+        /**
+         * Clear callback for monitoring Config table.
+         * this may only be used to clear callback function registered by
+         * {@link Config#setMonitorCallback}
+         * @hide
+         */
+        @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+        @RequiresPermission(Manifest.permission.MONITOR_DEVICE_CONFIG_ACCESS)
+        public static void clearMonitorCallback(@NonNull ContentResolver resolver) {
+            try {
+                Bundle arg = new Bundle();
+                arg.putInt(CALL_METHOD_USER_KEY, resolver.getUserId());
+                IContentProvider cp = sProviderHolder.getProvider(resolver);
+                cp.call(resolver.getAttributionSource(),
+                        sProviderHolder.mUri.getAuthority(),
+                        CALL_METHOD_UNREGISTER_MONITOR_CALLBACK_CONFIG, null, arg);
+            } catch (RemoteException e) {
+                Log.w(TAG, "Can't clear config monitor callback", e);
+            }
         }
 
 
@@ -18457,6 +18534,8 @@ public final class Settings {
          * @see #checkCallingPermission
          * @hide
          */
+        @PermissionMethod(orSelf = true)
+        @PackageManager.PermissionResult
         public static int checkCallingOrSelfPermission(@NonNull @PermissionName String permission) {
             return ActivityThread.currentApplication()
                .getApplicationContext().checkCallingOrSelfPermission(permission);
@@ -18477,19 +18556,23 @@ public final class Settings {
             }
         }
 
-        private static void registerMonitorCallbackAsUser(
+        private static void setMonitorCallbackAsUser(
+                @NonNull @CallbackExecutor Executor executor,
                 @NonNull ContentResolver resolver, @UserIdInt int userHandle,
-                @NonNull RemoteCallback callback) {
+                @NonNull DeviceConfig.MonitorCallback callback) {
             try {
                 Bundle arg = new Bundle();
                 arg.putInt(CALL_METHOD_USER_KEY, userHandle);
-                arg.putParcelable(CALL_METHOD_MONITOR_CALLBACK_KEY, callback);
+                arg.putParcelable(CALL_METHOD_MONITOR_CALLBACK_KEY,
+                        new RemoteCallback(result -> {
+                            handleMonitorCallback(result, executor, callback);
+                        }));
                 IContentProvider cp = sProviderHolder.getProvider(resolver);
                 cp.call(resolver.getAttributionSource(),
                         sProviderHolder.mUri.getAuthority(),
                         CALL_METHOD_REGISTER_MONITOR_CALLBACK_CONFIG, null, arg);
             } catch (RemoteException e) {
-                Log.w(TAG, "Can't register config monitor callback", e);
+                Log.w(TAG, "Can't set config monitor callback", e);
             }
         }
 
@@ -18497,6 +18580,32 @@ public final class Settings {
         public static void clearProviderForTest() {
             sProviderHolder.clearProviderForTest();
             sNameValueCache.clearGenerationTrackerForTest();
+        }
+
+        private static void handleMonitorCallback(
+                Bundle result,
+                @NonNull @CallbackExecutor Executor executor,
+                DeviceConfig.MonitorCallback monitorCallback) {
+            String callbackType = result.getString(EXTRA_MONITOR_CALLBACK_TYPE, "");
+            switch (callbackType) {
+                case EXTRA_NAMESPACE_UPDATED_CALLBACK:
+                    String updatedNamespace = result.getString(EXTRA_NAMESPACE);
+                    if (updatedNamespace != null) {
+                        executor.execute(() -> monitorCallback.onNamespaceUpdate(updatedNamespace));
+                    }
+                    break;
+                case EXTRA_ACCESS_CALLBACK:
+                    String callingPackage = result.getString(EXTRA_CALLING_PACKAGE, null);
+                    String namespace = result.getString(EXTRA_NAMESPACE, null);
+                    if (namespace != null && callingPackage != null) {
+                        executor.execute(() ->
+                                monitorCallback.onDeviceConfigAccess(callingPackage, namespace));
+                    }
+                    break;
+                default:
+                    Slog.w(TAG, "Unrecognized DeviceConfig callback");
+                    break;
+            }
         }
 
         private static String createCompositeName(@NonNull String namespace, @NonNull String name) {

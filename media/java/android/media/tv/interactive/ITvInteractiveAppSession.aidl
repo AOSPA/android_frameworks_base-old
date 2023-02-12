@@ -19,9 +19,11 @@ package android.media.tv.interactive;
 import android.graphics.Rect;
 import android.media.tv.BroadcastInfoResponse;
 import android.net.Uri;
+import android.media.tv.AdBuffer;
 import android.media.tv.AdResponse;
 import android.media.tv.BroadcastInfoResponse;
 import android.media.tv.TvTrackInfo;
+import android.media.tv.TvRecordingInfo;
 import android.os.Bundle;
 import android.view.Surface;
 
@@ -43,6 +45,8 @@ oneway interface ITvInteractiveAppSession {
     void sendTrackInfoList(in List<TvTrackInfo> tracks);
     void sendCurrentTvInputId(in String inputId);
     void sendSigningResult(in String signingId, in byte[] result);
+    void sendTvRecordingInfo(in TvRecordingInfo recordingInfo);
+    void sendTvRecordingInfoList(in List<TvRecordingInfo> recordingInfoList);
     void notifyError(in String errMsg, in Bundle params);
     void release();
     void notifyTuned(in Uri channelUri);
@@ -55,10 +59,12 @@ oneway interface ITvInteractiveAppSession {
     void notifySignalStrength(int strength);
     void notifyRecordingStarted(in String recordingId);
     void notifyRecordingStopped(in String recordingId);
+    void notifyTvMessage(in String type, in Bundle data);
     void setSurface(in Surface surface);
     void dispatchSurfaceChanged(int format, int width, int height);
     void notifyBroadcastInfoResponse(in BroadcastInfoResponse response);
     void notifyAdResponse(in AdResponse response);
+    void notifyAdBufferConsumed(in AdBuffer buffer);
 
     void createMediaView(in IBinder windowToken, in Rect frame);
     void relayoutMediaView(in Rect frame);

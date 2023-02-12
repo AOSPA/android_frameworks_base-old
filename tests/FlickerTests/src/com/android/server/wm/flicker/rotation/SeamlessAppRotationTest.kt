@@ -16,11 +16,10 @@
 
 package com.android.server.wm.flicker.rotation
 
-import android.platform.test.annotations.FlakyTest
 import android.platform.test.annotations.IwTest
 import android.platform.test.annotations.Presubmit
-import android.platform.test.annotations.RequiresDevice
 import android.view.WindowManager
+import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerBuilder
 import com.android.server.wm.flicker.FlickerTest
 import com.android.server.wm.flicker.FlickerTestFactory
@@ -201,11 +200,6 @@ open class SeamlessAppRotationTest(flicker: FlickerTest) : RotationTransition(fl
         flicker.assertEventLog { this.focusDoesNotChange() }
     }
 
-    /** {@inheritDoc} */
-    @FlakyTest
-    @Test
-    override fun navBarLayerPositionAtStartAndEnd() = super.navBarLayerPositionAtStartAndEnd()
-
     @Test
     @IwTest(focusArea = "framework")
     override fun cujCompleted() {
@@ -224,6 +218,7 @@ open class SeamlessAppRotationTest(flicker: FlickerTest) : RotationTransition(fl
         runAndIgnoreAssumptionViolation { appLayerAlwaysVisible() }
         runAndIgnoreAssumptionViolation { navBarLayerIsVisibleAtStartAndEnd() }
         runAndIgnoreAssumptionViolation { navBarWindowIsAlwaysVisible() }
+        runAndIgnoreAssumptionViolation { navBarLayerPositionAtStartAndEnd() }
         runAndIgnoreAssumptionViolation { taskBarLayerIsVisibleAtStartAndEnd() }
         runAndIgnoreAssumptionViolation { taskBarWindowIsAlwaysVisible() }
     }
@@ -234,7 +229,11 @@ open class SeamlessAppRotationTest(flicker: FlickerTest) : RotationTransition(fl
                 getConfigValue<Boolean>(ActivityOptions.SeamlessRotation.EXTRA_STARVE_UI_THREAD)
                     ?: false
 
-        private fun createConfig(sourceConfig: FlickerTest, starveUiThread: Boolean): FlickerTest {
+        @JvmStatic
+        protected fun createConfig(
+            sourceConfig: FlickerTest,
+            starveUiThread: Boolean
+        ): FlickerTest {
             val originalScenario = sourceConfig.initialize("createConfig")
             val nameExt = if (starveUiThread) "_BUSY_UI_THREAD" else ""
             val newConfig =
@@ -253,7 +252,7 @@ open class SeamlessAppRotationTest(flicker: FlickerTest) : RotationTransition(fl
          * from [FlickerTestFactory.rotationTests], but adding a flag (
          * [ActivityOptions.SeamlessRotation.EXTRA_STARVE_UI_THREAD]) to indicate if the app should
          * starve the UI thread of not
-        */
+         */
         @Parameterized.Parameters(name = "{0}")
         @JvmStatic
         fun getParams(): Collection<FlickerTest> {

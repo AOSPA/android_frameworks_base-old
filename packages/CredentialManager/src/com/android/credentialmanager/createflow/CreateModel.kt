@@ -22,7 +22,7 @@ import android.graphics.drawable.Drawable
 
 open class ProviderInfo(
   val icon: Drawable,
-  val name: String,
+  val id: String,
   val displayName: String,
 )
 
@@ -55,11 +55,12 @@ class CreateOptionInfo(
   pendingIntent: PendingIntent?,
   fillInIntent: Intent?,
   val userProviderDisplayName: String?,
-  val profileIcon: Drawable,
+  val profileIcon: Drawable?,
   val passwordCount: Int?,
   val passkeyCount: Int?,
   val totalCredentialCount: Int?,
   val lastUsedTimeMillis: Long?,
+  val footerDescription: String?,
 ) : EntryInfo(providerId, entryKey, entrySubkey, pendingIntent, fillInIntent)
 
 class RemoteInfo(
@@ -74,7 +75,7 @@ data class RequestDisplayInfo(
   val title: String,
   val subtitle: String?,
   val type: String,
-  val appDomainName: String,
+  val appName: String,
   val typeIcon: Drawable,
 )
 

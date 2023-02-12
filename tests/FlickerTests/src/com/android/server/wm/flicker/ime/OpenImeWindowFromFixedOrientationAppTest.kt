@@ -16,9 +16,9 @@
 
 package com.android.server.wm.flicker.ime
 
-import android.platform.test.annotations.Postsubmit
+import android.platform.test.annotations.FlakyTest
 import android.platform.test.annotations.Presubmit
-import android.platform.test.annotations.RequiresDevice
+import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.BaseTest
 import com.android.server.wm.flicker.FlickerBuilder
 import com.android.server.wm.flicker.FlickerTest
@@ -68,25 +68,11 @@ class OpenImeWindowFromFixedOrientationAppTest(flicker: FlickerTest) : BaseTest(
         teardown { imeTestApp.exit(wmHelper) }
     }
 
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun navBarLayerIsVisibleAtStartAndEnd() = super.navBarLayerIsVisibleAtStartAndEnd()
-
-    @Postsubmit
-    @Test
-    override fun navBarLayerPositionAtStartAndEnd() = super.navBarLayerPositionAtStartAndEnd()
-
-    /** {@inheritDoc} */
-    @Postsubmit
-    @Test
-    override fun taskBarLayerIsVisibleAtStartAndEnd() = super.taskBarLayerIsVisibleAtStartAndEnd()
-
     @Presubmit @Test fun imeWindowBecomesVisible() = flicker.imeWindowBecomesVisible()
 
     @Presubmit @Test fun imeLayerBecomesVisible() = flicker.imeLayerBecomesVisible()
 
-    @Postsubmit
+    @FlakyTest(bugId = 240918620)
     @Test
     fun snapshotStartingWindowLayerCoversExactlyOnApp() {
         Assume.assumeFalse(isShellTransitionsEnabled)

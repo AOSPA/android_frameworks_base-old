@@ -2739,12 +2739,26 @@ static jint android_media_AudioSystem_setDevicesRoleForStrategy(JNIEnv *env, job
 }
 
 static jint android_media_AudioSystem_removeDevicesRoleForStrategy(JNIEnv *env, jobject thiz,
-                                                                   jint strategy, jint role) {
+                                                                   jint strategy, jint role,
+                                                                   jintArray jDeviceTypes,
+                                                                   jobjectArray jDeviceAddresses) {
+    AudioDeviceTypeAddrVector nDevices;
+    jint results = getVectorOfAudioDeviceTypeAddr(env, jDeviceTypes, jDeviceAddresses, nDevices);
+    if (results != NO_ERROR) {
+        return results;
+    }
+    int status = check_AudioSystem_Command(
+            AudioSystem::removeDevicesRoleForStrategy((product_strategy_t)strategy,
+                                                      (device_role_t)role, nDevices));
+    return (jint)status;
+}
+
+static jint android_media_AudioSystem_clearDevicesRoleForStrategy(JNIEnv *env, jobject thiz,
+                                                                  jint strategy, jint role) {
     return (jint)
-            check_AudioSystem_Command(AudioSystem::removeDevicesRoleForStrategy((product_strategy_t)
-                                                                                        strategy,
-                                                                                (device_role_t)
-                                                                                        role),
+            check_AudioSystem_Command(AudioSystem::clearDevicesRoleForStrategy((product_strategy_t)
+                                                                                       strategy,
+                                                                               (device_role_t)role),
                                       {NAME_NOT_FOUND});
 }
 
@@ -3201,6 +3215,30 @@ static jint android_media_AudioSystem_clearPreferredMixerAttributes(JNIEnv *env,
     return nativeToJavaStatus(status);
 }
 
+static jboolean android_media_AudioSystem_supportsBluetoothVariableLatency(JNIEnv *env,
+                                                                           jobject thiz) {
+    bool supports;
+    if (AudioSystem::supportsBluetoothVariableLatency(&supports) != NO_ERROR) {
+        supports = false;
+    }
+    return supports;
+}
+
+static int android_media_AudioSystem_setBluetoothVariableLatencyEnabled(JNIEnv *env, jobject thiz,
+                                                                        jboolean enabled) {
+    return (jint)check_AudioSystem_Command(
+            AudioSystem::setBluetoothVariableLatencyEnabled(enabled));
+}
+
+static jboolean android_media_AudioSystem_isBluetoothVariableLatencyEnabled(JNIEnv *env,
+                                                                            jobject thiz) {
+    bool enabled;
+    if (AudioSystem::isBluetoothVariableLatencyEnabled(&enabled) != NO_ERROR) {
+        enabled = false;
+    }
+    return enabled;
+}
+
 // ----------------------------------------------------------------------------
 
 static const JNINativeMethod gMethods[] =
@@ -3317,8 +3355,10 @@ static const JNINativeMethod gMethods[] =
           (void *)android_media_AudioSystem_isCallScreeningModeSupported},
          {"setDevicesRoleForStrategy", "(II[I[Ljava/lang/String;)I",
           (void *)android_media_AudioSystem_setDevicesRoleForStrategy},
-         {"removeDevicesRoleForStrategy", "(II)I",
+         {"removeDevicesRoleForStrategy", "(II[I[Ljava/lang/String;)I",
           (void *)android_media_AudioSystem_removeDevicesRoleForStrategy},
+         {"clearDevicesRoleForStrategy", "(II)I",
+          (void *)android_media_AudioSystem_clearDevicesRoleForStrategy},
          {"getDevicesForRoleAndStrategy", "(IILjava/util/List;)I",
           (void *)android_media_AudioSystem_getDevicesForRoleAndStrategy},
          {"setDevicesRoleForCapturePreset", "(II[I[Ljava/lang/String;)I",
@@ -3364,7 +3404,13 @@ static const JNINativeMethod gMethods[] =
          {"getPreferredMixerAttributes", "(Landroid/media/AudioAttributes;ILjava/util/List;)I",
           (void *)android_media_AudioSystem_getPreferredMixerAttributes},
          {"clearPreferredMixerAttributes", "(Landroid/media/AudioAttributes;II)I",
-          (void *)android_media_AudioSystem_clearPreferredMixerAttributes}};
+          (void *)android_media_AudioSystem_clearPreferredMixerAttributes},
+         {"supportsBluetoothVariableLatency", "()Z",
+          (void *)android_media_AudioSystem_supportsBluetoothVariableLatency},
+         {"setBluetoothVariableLatencyEnabled", "(Z)I",
+          (void *)android_media_AudioSystem_setBluetoothVariableLatencyEnabled},
+         {"isBluetoothVariableLatencyEnabled", "()Z",
+          (void *)android_media_AudioSystem_isBluetoothVariableLatencyEnabled}};
 
 static const JNINativeMethod gEventHandlerMethods[] = {
     {"native_setup",

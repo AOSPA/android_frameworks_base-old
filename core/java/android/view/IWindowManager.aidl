@@ -65,6 +65,8 @@ import android.view.WindowManager;
 import android.view.SurfaceControl;
 import android.view.displayhash.DisplayHash;
 import android.view.displayhash.VerifiedDisplayHash;
+import android.window.AddToSurfaceSyncGroupResult;
+import android.window.ISurfaceSyncGroupCompletedListener;
 import android.window.ITaskFpsCallback;
 import android.window.ScreenCapture;
 
@@ -457,12 +459,6 @@ interface IWindowManager
     int getDockedStackSide();
 
     /**
-     * Sets the region the user can touch the divider. This region will be excluded from the region
-     * which is used to cause a focus switch when dispatching touch.
-     */
-    void setDockedTaskDividerTouchRegion(in Rect touchableRegion);
-
-    /**
      * Registers a listener that will be called when the pinned task state changes.
      */
     void registerPinnedTaskListener(int displayId, IPinnedTaskListener listener);
@@ -727,8 +723,7 @@ interface IWindowManager
      *
      * @return {@code true} if system bars are always consumed.
      */
-    boolean getWindowInsets(in WindowManager.LayoutParams attrs, int displayId,
-            out InsetsState outInsetsState);
+    boolean getWindowInsets(int displayId, in IBinder token, out InsetsState outInsetsState);
 
     /**
      * Returns a list of {@link android.view.DisplayInfo} for the logical display. This is not
@@ -991,4 +986,18 @@ interface IWindowManager
      * @return {@code true} if the key will be handled globally.
      */
     boolean isGlobalKey(int keyCode);
+
+    /**
+     * Create or add to a SurfaceSyncGroup in WindowManager. WindowManager maintains some
+     * SurfaceSyncGroups to ensure multiple processes can sync with each other without sharing
+     * SurfaceControls
+     */
+    boolean addToSurfaceSyncGroup(in IBinder syncGroupToken, boolean parentSyncGroupMerge,
+                in @nullable ISurfaceSyncGroupCompletedListener completedListener,
+                out AddToSurfaceSyncGroupResult addToSurfaceSyncGroupResult);
+
+    /**
+     * Mark a SurfaceSyncGroup stored in WindowManager as ready.
+     */
+    oneway void markSurfaceSyncGroupReady(in IBinder syncGroupToken);
 }

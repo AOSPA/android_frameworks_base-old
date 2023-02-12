@@ -113,6 +113,7 @@ import com.android.server.LocalManagerRegistry;
 import com.android.server.LocalServices;
 import com.android.server.SystemConfig;
 import com.android.server.art.ArtManagerLocal;
+import com.android.server.pm.Installer.LegacyDexoptDisabledException;
 import com.android.server.pm.PackageManagerShellCommandDataLoader.Metadata;
 import com.android.server.pm.permission.LegacyPermissionManagerInternal;
 import com.android.server.pm.permission.PermissionAllowlist;
@@ -171,6 +172,11 @@ class PackageManagerShellCommand extends ShellCommand {
         SUPPORTED_PERMISSION_FLAGS.put("revoke-when-requested",
                 FLAG_PERMISSION_REVOKE_WHEN_REQUESTED);
     }
+    // For backward compatibility. DO NOT add new commands here. New ART Service commands should be
+    // added under the "art" namespace.
+    private static final Set<String> ART_SERVICE_COMMANDS = Set.of("compile",
+            "reconcile-secondary-dex-files", "force-dex-opt", "bg-dexopt-job",
+            "cancel-bg-dexopt-job", "delete-dexopt", "dump-profiles", "snapshot-profile", "art");
 
     final IPackageManager mInterface;
     final LegacyPermissionManagerInternal mLegacyPermissionManager;
@@ -249,22 +255,6 @@ class PackageManagerShellCommand extends ShellCommand {
                     return runMovePackage();
                 case "move-primary-storage":
                     return runMovePrimaryStorage();
-                case "compile":
-                    return runCompile();
-                case "reconcile-secondary-dex-files":
-                    return runreconcileSecondaryDexFiles();
-                case "force-dex-opt":
-                    return runForceDexOpt();
-                case "bg-dexopt-job":
-                    return runBgDexOpt();
-                case "cancel-bg-dexopt-job":
-                    return cancelBgDexOptJob();
-                case "delete-dexopt":
-                    return runDeleteDexOpt();
-                case "dump-profiles":
-                    return runDumpProfiles();
-                case "snapshot-profile":
-                    return runSnapshotProfile();
                 case "uninstall":
                     return runUninstall();
                 case "clear":
@@ -354,9 +344,19 @@ class PackageManagerShellCommand extends ShellCommand {
                     return runBypassAllowedApexUpdateCheck();
                 case "set-silent-updates-policy":
                     return runSetSilentUpdatesPolicy();
-                case "art":
-                    return runArtSubCommand();
                 default: {
+                    if (ART_SERVICE_COMMANDS.contains(cmd)) {
+                        if (DexOptHelper.useArtService()) {
+                            return runArtServiceCommand();
+                        } else {
+                            try {
+                                return runLegacyDexoptCommand(cmd);
+                            } catch (LegacyDexoptDisabledException e) {
+                                throw new RuntimeException(e);
+                            }
+                        }
+                    }
+
                     Boolean domainVerificationResult =
                             mDomainVerificationShell.runCommand(this, cmd);
                     if (domainVerificationResult != null) {
@@ -380,10 +380,37 @@ class PackageManagerShellCommand extends ShellCommand {
             }
         } catch (RemoteException e) {
             pw.println("Remote exception: " + e);
-        } catch (ManagerNotFoundException e) {
-            pw.println(e);
         }
         return -1;
+    }
+
+    private int runLegacyDexoptCommand(@NonNull String cmd)
+            throws RemoteException, LegacyDexoptDisabledException {
+        Installer.checkLegacyDexoptDisabled();
+        switch (cmd) {
+            case "compile":
+                return runCompile();
+            case "reconcile-secondary-dex-files":
+                return runreconcileSecondaryDexFiles();
+            case "force-dex-opt":
+                return runForceDexOpt();
+            case "bg-dexopt-job":
+                return runBgDexOpt();
+            case "cancel-bg-dexopt-job":
+                return cancelBgDexOptJob();
+            case "delete-dexopt":
+                return runDeleteDexOpt();
+            case "dump-profiles":
+                return runDumpProfiles();
+            case "snapshot-profile":
+                return runSnapshotProfile();
+            case "art":
+                getOutPrintWriter().println("ART Service not enabled");
+                return -1;
+            default:
+                // Can't happen.
+                throw new IllegalArgumentException();
+        }
     }
 
     /**
@@ -1953,52 +1980,62 @@ class PackageManagerShellCommand extends ShellCommand {
     }
 
     private int runBgDexOpt() throws RemoteException {
-        String opt = getNextOption();
+        // TODO(b/251903639): Call into ART Service.
+        try {
+            String opt = getNextOption();
 
-        if (opt == null) {
-            List<String> packageNames = new ArrayList<>();
-            String arg;
-            while ((arg = getNextArg()) != null) {
-                packageNames.add(arg);
-            }
-            if (!BackgroundDexOptService.getService().runBackgroundDexoptJob(
-                    packageNames.isEmpty() ? null : packageNames)) {
-                getOutPrintWriter().println("Failure");
-                return -1;
-            }
-        } else {
-            String extraArg = getNextArg();
-            if (extraArg != null) {
-                getErrPrintWriter().println("Invalid argument: " + extraArg);
-                return -1;
-            }
-
-            switch (opt) {
-                case "--cancel":
-                    return cancelBgDexOptJob();
-
-                case "--disable":
-                    BackgroundDexOptService.getService().setDisableJobSchedulerJobs(true);
-                    break;
-
-                case "--enable":
-                    BackgroundDexOptService.getService().setDisableJobSchedulerJobs(false);
-                    break;
-
-                default:
-                    getErrPrintWriter().println("Unknown option: " + opt);
+            if (opt == null) {
+                List<String> packageNames = new ArrayList<>();
+                String arg;
+                while ((arg = getNextArg()) != null) {
+                    packageNames.add(arg);
+                }
+                if (!BackgroundDexOptService.getService().runBackgroundDexoptJob(
+                            packageNames.isEmpty() ? null : packageNames)) {
+                    getOutPrintWriter().println("Failure");
                     return -1;
-            }
-        }
+                }
+            } else {
+                String extraArg = getNextArg();
+                if (extraArg != null) {
+                    getErrPrintWriter().println("Invalid argument: " + extraArg);
+                    return -1;
+                }
 
-        getOutPrintWriter().println("Success");
-        return 0;
+                switch (opt) {
+                    case "--cancel":
+                        return cancelBgDexOptJob();
+
+                    case "--disable":
+                        BackgroundDexOptService.getService().setDisableJobSchedulerJobs(true);
+                        break;
+
+                    case "--enable":
+                        BackgroundDexOptService.getService().setDisableJobSchedulerJobs(false);
+                        break;
+
+                    default:
+                        getErrPrintWriter().println("Unknown option: " + opt);
+                        return -1;
+                }
+            }
+
+            getOutPrintWriter().println("Success");
+            return 0;
+        } catch (LegacyDexoptDisabledException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private int cancelBgDexOptJob() throws RemoteException {
-        BackgroundDexOptService.getService().cancelBackgroundDexoptJob();
-        getOutPrintWriter().println("Success");
-        return 0;
+        // TODO(b/251903639): Call into ART Service.
+        try {
+            BackgroundDexOptService.getService().cancelBackgroundDexoptJob();
+            getOutPrintWriter().println("Success");
+            return 0;
+        } catch (LegacyDexoptDisabledException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private int runDeleteDexOpt() throws RemoteException {
@@ -2008,8 +2045,8 @@ class PackageManagerShellCommand extends ShellCommand {
             pw.println("Error: no package name");
             return 1;
         }
-        long freedBytes = LocalServices.getService(
-                PackageManagerInternal.class).deleteOatArtifactsOfPackage(packageName);
+        long freedBytes = LocalServices.getService(PackageManagerInternal.class)
+                                  .deleteOatArtifactsOfPackage(packageName);
         if (freedBytes < 0) {
             pw.println("Error: delete failed");
             return 1;
@@ -2273,7 +2310,7 @@ class PackageManagerShellCommand extends ShellCommand {
             if (abandonSession) {
                 try {
                     doAbandonSession(sessionId, false /*logSuccess*/);
-                } catch (Exception ignore) {
+                } catch (RuntimeException ignore) {
                 }
             }
         }
@@ -3012,6 +3049,10 @@ class PackageManagerShellCommand extends ShellCommand {
             case UserManager.REMOVE_RESULT_ALREADY_BEING_REMOVED:
                 getOutPrintWriter().printf("Success: user %d is already being removed\n", userId);
                 return 0;
+            case UserManager.REMOVE_RESULT_ERROR_MAIN_USER_PERMANENT_ADMIN:
+                getOutPrintWriter().printf("Error: user %d is a permanent admin main user\n",
+                        userId);
+                return 1;
             default:
                 getErrPrintWriter().printf("Error: couldn't remove or mark ephemeral user id %d\n",
                         userId);
@@ -3196,6 +3237,15 @@ class PackageManagerShellCommand extends ShellCommand {
                 case "--install-reason":
                     sessionParams.installReason = Integer.parseInt(getNextArg());
                     break;
+                case "--update-ownership":
+                    if (params.installerPackageName == null) {
+                        // Enabling update ownership enforcement needs an installer. Since the
+                        // default installer is null when using adb install, that effectively
+                        // disable this enforcement.
+                        params.installerPackageName = "com.android.shell";
+                    }
+                    sessionParams.installFlags |= PackageManager.INSTALL_REQUEST_UPDATE_OWNERSHIP;
+                    break;
                 case "--force-uuid":
                     sessionParams.installFlags |= PackageManager.INSTALL_FORCE_VOLUME_UUID;
                     sessionParams.volumeUuid = getNextArg();
@@ -3242,6 +3292,10 @@ class PackageManagerShellCommand extends ShellCommand {
                     break;
                 case "--skip-enable":
                     sessionParams.setKeepApplicationEnabledSetting();
+                    break;
+                case "--bypass-low-target-sdk-block":
+                    sessionParams.installFlags |=
+                            PackageManager.INSTALL_BYPASS_LOW_TARGET_SDK_BLOCK;
                     break;
                 default:
                     throw new IllegalArgumentException("Unknown option " + opt);
@@ -3464,17 +3518,18 @@ class PackageManagerShellCommand extends ShellCommand {
         return 1;
     }
 
-    private int runArtSubCommand() throws ManagerNotFoundException {
-        // Remove the first arg "art" and forward to ART module.
-        String[] args = getAllArgs();
-        args = Arrays.copyOfRange(args, 1, args.length);
+    private int runArtServiceCommand() {
         try (var in = ParcelFileDescriptor.dup(getInFileDescriptor());
                 var out = ParcelFileDescriptor.dup(getOutFileDescriptor());
                 var err = ParcelFileDescriptor.dup(getErrFileDescriptor())) {
             return LocalManagerRegistry.getManagerOrThrow(ArtManagerLocal.class)
-                    .handleShellCommand(getTarget(), in, out, err, args);
+                    .handleShellCommand(getTarget(), in, out, err, getAllArgs());
         } catch (IOException e) {
             throw new IllegalStateException(e);
+        } catch (ManagerNotFoundException e) {
+            PrintWriter epw = getErrPrintWriter();
+            epw.println("ART Service is not ready. Please try again later");
+            return -1;
         }
     }
 
@@ -4080,6 +4135,7 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("      --install-reason: indicates why the app is being installed:");
         pw.println("          0=unknown, 1=admin policy, 2=device restore,");
         pw.println("          3=device setup, 4=user request");
+        pw.println("      --update-ownership: request the update ownership enforcement");
         pw.println("      --force-uuid: force install on to disk volume with given UUID");
         pw.println("      --apex: install an .apex file, not an .apk");
         pw.println("      --staged-ready-timeout: By default, staged sessions wait "
@@ -4103,7 +4159,7 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("       [--referrer URI] [--abi ABI_NAME] [--force-sdk]");
         pw.println("       [--preload] [--instant] [--full] [--dont-kill]");
         pw.println("       [--force-uuid internal|UUID] [--pkg PACKAGE] [--apex] [-S BYTES]");
-        pw.println("       [--multi-package] [--staged]");
+        pw.println("       [--multi-package] [--staged] [--update-ownership]");
         pw.println("    Like \"install\", but starts an install session.  Use \"install-write\"");
         pw.println("    to push data into the session, and \"install-commit\" to finish.");
         pw.println("");
@@ -4242,6 +4298,76 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("");
         pw.println("  get-max-running-users");
         pw.println("");
+        pw.println("  set-home-activity [--user USER_ID] TARGET-COMPONENT");
+        pw.println("    Set the default home activity (aka launcher).");
+        pw.println("    TARGET-COMPONENT can be a package name (com.package.my) or a full");
+        pw.println("    component (com.package.my/component.name). However, only the package name");
+        pw.println("    matters: the actual component used will be determined automatically from");
+        pw.println("    the package.");
+        pw.println("");
+        pw.println("  set-installer PACKAGE INSTALLER");
+        pw.println("    Set installer package name");
+        pw.println("");
+        pw.println("  get-instantapp-resolver");
+        pw.println(
+                "    Return the name of the component that is the current instant app installer.");
+        pw.println("");
+        pw.println("  set-harmful-app-warning [--user <USER_ID>] <PACKAGE> [<WARNING>]");
+        pw.println("    Mark the app as harmful with the given warning message.");
+        pw.println("");
+        pw.println("  get-harmful-app-warning [--user <USER_ID>] <PACKAGE>");
+        pw.println("    Return the harmful app warning message for the given app, if present");
+        pw.println();
+        pw.println("  uninstall-system-updates [<PACKAGE>]");
+        pw.println("    Removes updates to the given system application and falls back to its");
+        pw.println("    /system version. Does nothing if the given package is not a system app.");
+        pw.println("    If no package is specified, removes updates to all system applications.");
+        pw.println("");
+        pw.println("  get-moduleinfo [--all | --installed] [module-name]");
+        pw.println("    Displays module info. If module-name is specified only that info is shown");
+        pw.println("    By default, without any argument only installed modules are shown.");
+        pw.println("      --all: show all module info");
+        pw.println("      --installed: show only installed modules");
+        pw.println("");
+        pw.println("  log-visibility [--enable|--disable] <PACKAGE>");
+        pw.println("    Turns on debug logging when visibility is blocked for the given package.");
+        pw.println("      --enable: turn on debug logging (default)");
+        pw.println("      --disable: turn off debug logging");
+        pw.println("");
+        pw.println("  set-silent-updates-policy [--allow-unlimited-silent-updates <INSTALLER>]");
+        pw.println("                            [--throttle-time <SECONDS>] [--reset]");
+        pw.println("    Sets the policies of the silent updates.");
+        pw.println("      --allow-unlimited-silent-updates: allows unlimited silent updated");
+        pw.println("        installation requests from the installer without the throttle time.");
+        pw.println("      --throttle-time: update the silent updates throttle time in seconds.");
+        pw.println("      --reset: restore the installer and throttle time to the default, and");
+        pw.println("        clear tracks of silent updates in the system.");
+        pw.println("");
+        if (DexOptHelper.useArtService()) {
+            printArtServiceHelp();
+        } else {
+            printLegacyDexoptHelp();
+        }
+        pw.println("");
+        mDomainVerificationShell.printHelp(pw);
+        pw.println("");
+        Intent.printIntentArgsHelp(pw, "");
+    }
+
+    private void printArtServiceHelp() {
+        final var ipw = new IndentingPrintWriter(getOutPrintWriter(), "  " /* singleIndent */);
+        ipw.increaseIndent();
+        try {
+            LocalManagerRegistry.getManagerOrThrow(ArtManagerLocal.class)
+                    .printShellCommandHelp(ipw);
+        } catch (ManagerNotFoundException e) {
+            ipw.println("ART Service is not ready. Please try again later");
+        }
+        ipw.decreaseIndent();
+    }
+
+    private void printLegacyDexoptHelp() {
+        final PrintWriter pw = getOutPrintWriter();
         pw.println("  compile [-m MODE | -r REASON] [-f] [-c] [--split SPLIT_NAME]");
         pw.println("          [--reset] [--check-prof (true | false)] (-a | TARGET-PACKAGE)");
         pw.println("    Trigger compilation of TARGET-PACKAGE or all packages if \"-a\".  Options are:");
@@ -4314,57 +4440,6 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("    " + ART_PROFILE_SNAPSHOT_DEBUG_LOCATION
                 + "TARGET-PACKAGE[-code-path].prof");
         pw.println("    If TARGET-PACKAGE=android it will take a snapshot of the boot image");
-        pw.println("");
-        pw.println("  set-home-activity [--user USER_ID] TARGET-COMPONENT");
-        pw.println("    Set the default home activity (aka launcher).");
-        pw.println("    TARGET-COMPONENT can be a package name (com.package.my) or a full");
-        pw.println("    component (com.package.my/component.name). However, only the package name");
-        pw.println("    matters: the actual component used will be determined automatically from");
-        pw.println("    the package.");
-        pw.println("");
-        pw.println("  set-installer PACKAGE INSTALLER");
-        pw.println("    Set installer package name");
-        pw.println("");
-        pw.println("  get-instantapp-resolver");
-        pw.println("    Return the name of the component that is the current instant app installer.");
-        pw.println("");
-        pw.println("  set-harmful-app-warning [--user <USER_ID>] <PACKAGE> [<WARNING>]");
-        pw.println("    Mark the app as harmful with the given warning message.");
-        pw.println("");
-        pw.println("  get-harmful-app-warning [--user <USER_ID>] <PACKAGE>");
-        pw.println("    Return the harmful app warning message for the given app, if present");
-        pw.println();
-        pw.println("  uninstall-system-updates [<PACKAGE>]");
-        pw.println("    Removes updates to the given system application and falls back to its");
-        pw.println("    /system version. Does nothing if the given package is not a system app.");
-        pw.println("    If no package is specified, removes updates to all system applications.");
-        pw.println("");
-        pw.println("  get-moduleinfo [--all | --installed] [module-name]");
-        pw.println("    Displays module info. If module-name is specified only that info is shown");
-        pw.println("    By default, without any argument only installed modules are shown.");
-        pw.println("      --all: show all module info");
-        pw.println("      --installed: show only installed modules");
-        pw.println("");
-        pw.println("  log-visibility [--enable|--disable] <PACKAGE>");
-        pw.println("    Turns on debug logging when visibility is blocked for the given package.");
-        pw.println("      --enable: turn on debug logging (default)");
-        pw.println("      --disable: turn off debug logging");
-        pw.println("");
-        pw.println("  set-silent-updates-policy [--allow-unlimited-silent-updates <INSTALLER>]");
-        pw.println("                            [--throttle-time <SECONDS>] [--reset]");
-        pw.println("    Sets the policies of the silent updates.");
-        pw.println("      --allow-unlimited-silent-updates: allows unlimited silent updated");
-        pw.println("        installation requests from the installer without the throttle time.");
-        pw.println("      --throttle-time: update the silent updates throttle time in seconds.");
-        pw.println("      --reset: restore the installer and throttle time to the default, and");
-        pw.println("        clear tracks of silent updates in the system.");
-        pw.println("");
-        pw.println("  art [<SUB-COMMANDS>]");
-        pw.println("    Invokes ART services commands. (Run `pm art help` for details.)");
-        pw.println("");
-        mDomainVerificationShell.printHelp(pw);
-        pw.println("");
-        Intent.printIntentArgsHelp(pw , "");
     }
 
     private static class LocalIntentReceiver {

@@ -86,6 +86,7 @@ import static com.android.server.wm.WindowManagerPolicyProto.ROTATION_MODE;
 import static com.android.server.wm.WindowManagerPolicyProto.SCREEN_ON_FULLY;
 import static com.android.server.wm.WindowManagerPolicyProto.WINDOW_MANAGER_DRAW_COMPLETE;
 
+import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
@@ -200,6 +201,7 @@ import com.android.internal.policy.PhoneWindow;
 import com.android.internal.policy.TransitionAnimation;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.util.ArrayUtils;
+import com.android.server.AccessibilityManagerInternal;
 import com.android.server.ExtconStateObserver;
 import com.android.server.ExtconUEventObserver;
 import com.android.server.GestureLauncherService;
@@ -404,6 +406,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     Vibrator mVibrator; // Vibrator for giving feedback of orientation changes
     SearchManager mSearchManager;
     AccessibilityManager mAccessibilityManager;
+    AccessibilityManagerInternal mAccessibilityManagerInternal;
     BurnInProtectionHelper mBurnInProtectionHelper;
     private DisplayFoldController mDisplayFoldController;
     AppOpsManager mAppOpsManager;
@@ -617,7 +620,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private final com.android.internal.policy.LogDecelerateInterpolator mLogDecelerateInterpolator
             = new LogDecelerateInterpolator(100, 0);
 
-    private boolean mPerDisplayFocusEnabled = false;
     private volatile int mTopFocusedDisplayId = INVALID_DISPLAY;
 
     private int mPowerButtonSuppressionDelayMillis = POWER_BUTTON_SUPPRESSION_DELAY_DEFAULT_MILLIS;
@@ -868,6 +870,15 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
     }
 
+    AccessibilityManagerInternal getAccessibilityManagerInternal() {
+        synchronized (mServiceAcquireLock) {
+            if (mAccessibilityManagerInternal == null) {
+                mAccessibilityManagerInternal =
+                        LocalServices.getService(AccessibilityManagerInternal.class);
+            }
+            return mAccessibilityManagerInternal;
+        }
+    }
 
     // returns true if the key was handled and should not be passed to the user
     private boolean backKeyPress() {
@@ -1072,13 +1083,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             return;
         }
 
-        // Don't dream if the user isn't user zero.
-        // TODO(b/261907079): Move this check to DreamManagerService#canStartDreamingInternal().
-        if (ActivityManager.getCurrentUser() != UserHandle.USER_SYSTEM) {
-            noDreamAction.run();
-            return;
-        }
-
         final DreamManagerInternal dreamManagerInternal = getDreamManagerInternal();
         if (dreamManagerInternal == null || !dreamManagerInternal.canStartDreaming(isScreenOn)) {
             noDreamAction.run();
@@ -1107,10 +1111,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         // a tendency to hit the power button immediately when they pick up their device, and we
         // don't want to put the device back to sleep in those cases.
         final PowerManager.WakeData lastWakeUp = mPowerManagerInternal.getLastWakeup();
-        if (lastWakeUp != null && lastWakeUp.wakeReason == PowerManager.WAKE_REASON_GESTURE) {
-            final int gestureDelayMillis = Settings.Global.getInt(mContext.getContentResolver(),
-                    Settings.Global.POWER_BUTTON_SUPPRESSION_DELAY_AFTER_GESTURE_WAKE,
-                    POWER_BUTTON_SUPPRESSION_DELAY_DEFAULT_MILLIS);
+        if (lastWakeUp != null && (lastWakeUp.wakeReason == PowerManager.WAKE_REASON_GESTURE
+                || lastWakeUp.wakeReason == PowerManager.WAKE_REASON_LIFT
+                || lastWakeUp.wakeReason == PowerManager.WAKE_REASON_BIOMETRIC)) {
             final long now = SystemClock.uptimeMillis();
             if (mPowerButtonSuppressionDelayMillis > 0
                     && (now < lastWakeUp.wakeTime + mPowerButtonSuppressionDelayMillis)) {
@@ -1734,6 +1737,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         startActivityAsUser(intent, UserHandle.CURRENT);
     }
 
+    private void launchAllAppsViaA11y() {
+        getAccessibilityManagerInternal().performSystemAction(
+                AccessibilityService.GLOBAL_ACTION_ACCESSIBILITY_ALL_APPS);
+    }
+
     private void toggleNotificationPanel() {
         IStatusBarService statusBarService = getStatusBarService();
         if (isUserSetupComplete() && statusBarService != null) {
@@ -2140,9 +2148,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
         mHandleVolumeKeysInWM = mContext.getResources().getBoolean(
                 com.android.internal.R.bool.config_handleVolumeKeysInWindowManager);
-
-        mPerDisplayFocusEnabled = mContext.getResources().getBoolean(
-                com.android.internal.R.bool.config_perDisplayFocusEnabled);
 
         mWakeUpToLastStateTimeout = mContext.getResources().getInteger(
                 com.android.internal.R.integer.config_wakeUpToLastStateTimeoutMillis);
@@ -2604,6 +2609,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
             mStylusButtonsDisabled = Settings.Secure.getIntForUser(resolver,
                     Secure.STYLUS_BUTTONS_DISABLED, 0, UserHandle.USER_CURRENT) == 1;
+            mInputManagerInternal.setStylusButtonMotionEventsEnabled(!mStylusButtonsDisabled);
         }
         if (updateRotation) {
             updateRotation(true);
@@ -3165,7 +3171,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                         mPendingCapsLockToggle = false;
                     } else if (mPendingMetaAction) {
                         if (!canceled) {
-                            // TODO: launch all apps here.
+                            launchAllAppsViaA11y();
                         }
                         mPendingMetaAction = false;
                     }
@@ -4311,11 +4317,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             case KeyEvent.KEYCODE_DEMO_APP_2:
             case KeyEvent.KEYCODE_DEMO_APP_3:
             case KeyEvent.KEYCODE_DEMO_APP_4: {
-                // TODO(b/254604589): Dispatch KeyEvent to System UI.
-                if (!mStylusButtonsDisabled) {
-                    sendSystemKeyToStatusBarAsync(keyCode);
-                }
-
                 // Just drop if keys are not intercepted for direct key.
                 result &= ~ACTION_PASS_TO_USER;
                 break;
@@ -4324,7 +4325,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             case KeyEvent.KEYCODE_STYLUS_BUTTON_SECONDARY:
             case KeyEvent.KEYCODE_STYLUS_BUTTON_TERTIARY:
             case KeyEvent.KEYCODE_STYLUS_BUTTON_TAIL: {
-                // TODO(go/android-stylus-buttons): Handle stylus button presses.
+                if (!mStylusButtonsDisabled) {
+                    sendSystemKeyToStatusBarAsync(keyCode);
+                }
                 result &= ~ACTION_PASS_TO_USER;
                 break;
             }
@@ -4339,23 +4342,20 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             wakeUpFromWakeKey(event);
         }
 
-        if ((result & ACTION_PASS_TO_USER) != 0 && !mPerDisplayFocusEnabled
-                && displayId != INVALID_DISPLAY && displayId != mTopFocusedDisplayId) {
-            // If the key event is targeted to a specific display, then the user is interacting with
-            // that display. Therefore, give focus to the display that the user is interacting with,
-            // unless that display maintains its own focus.
-            Display display = mDisplayManager.getDisplay(displayId);
-            if ((display.getFlags() & Display.FLAG_OWN_FOCUS) == 0) {
-                // An event is targeting a non-focused display. Move the display to top so that
-                // it can become the focused display to interact with the user.
-                // This should be done asynchronously, once the focus logic is fully moved to input
-                // from windowmanager. Currently, we need to ensure the setInputWindows completes,
-                // which would force the focus event to be queued before the current key event.
-                // TODO(b/70668286): post call to 'moveDisplayToTop' to mHandler instead
-                Log.i(TAG, "Moving non-focused display " + displayId + " to top "
-                        + "because a key is targeting it");
-                mWindowManagerFuncs.moveDisplayToTop(displayId);
-            }
+        // If the key event is targeted to a specific display, then the user is interacting with
+        // that display. Therefore, try to give focus to the display that the user is interacting
+        // with.
+        if ((result & ACTION_PASS_TO_USER) != 0 && displayId != INVALID_DISPLAY
+                && displayId != mTopFocusedDisplayId) {
+            // An event is targeting a non-focused display. Move the display to top so that
+            // it can become the focused display to interact with the user.
+            // This should be done asynchronously, once the focus logic is fully moved to input
+            // from windowmanager. Currently, we need to ensure the setInputWindows completes,
+            // which would force the focus event to be queued before the current key event.
+            // TODO(b/70668286): post call to 'moveDisplayToTop' to mHandler instead
+            Log.i(TAG, "Moving non-focused display " + displayId + " to top "
+                    + "because a key is targeting it");
+            mWindowManagerFuncs.moveDisplayToTopIfAllowed(displayId);
         }
 
         return result;

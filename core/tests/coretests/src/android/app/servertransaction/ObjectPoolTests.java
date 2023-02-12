@@ -98,15 +98,15 @@ public class ObjectPoolTests {
 
     @Test
     public void testRecycleConfigurationChangeItem() {
-        ConfigurationChangeItem emptyItem = ConfigurationChangeItem.obtain(null);
-        ConfigurationChangeItem item = ConfigurationChangeItem.obtain(config());
+        ConfigurationChangeItem emptyItem = ConfigurationChangeItem.obtain(null, 0);
+        ConfigurationChangeItem item = ConfigurationChangeItem.obtain(config(), 1);
         assertNotSame(item, emptyItem);
         assertFalse(item.equals(emptyItem));
 
         item.recycle();
         assertEquals(item, emptyItem);
 
-        ConfigurationChangeItem item2 = ConfigurationChangeItem.obtain(config());
+        ConfigurationChangeItem item2 = ConfigurationChangeItem.obtain(config(), 1);
         assertSame(item, item2);
         assertFalse(item2.equals(emptyItem));
     }
@@ -147,6 +147,7 @@ public class ObjectPoolTests {
         persistableBundle.putInt("k", 4);
         IBinder assistToken = new Binder();
         IBinder shareableActivityToken = new Binder();
+        int deviceId = 3;
 
         Supplier<LaunchActivityItem> itemSupplier = () -> new LaunchActivityItemBuilder()
                 .setIntent(intent).setIdent(ident).setInfo(activityInfo).setCurConfig(config())
@@ -155,7 +156,7 @@ public class ObjectPoolTests {
                 .setPendingResults(resultInfoList()).setPendingNewIntents(referrerIntentList())
                 .setIsForward(true).setAssistToken(assistToken)
                 .setShareableActivityToken(shareableActivityToken)
-                .setTaskFragmentToken(new Binder()).build();
+                .setTaskFragmentToken(new Binder()).setDeviceId(deviceId).build();
 
         LaunchActivityItem emptyItem = new LaunchActivityItemBuilder().build();
         LaunchActivityItem item = itemSupplier.get();
@@ -236,15 +237,15 @@ public class ObjectPoolTests {
 
     @Test
     public void testRecycleResumeActivityItem() {
-        ResumeActivityItem emptyItem = ResumeActivityItem.obtain(false);
-        ResumeActivityItem item = ResumeActivityItem.obtain(3, true);
+        ResumeActivityItem emptyItem = ResumeActivityItem.obtain(false, false);
+        ResumeActivityItem item = ResumeActivityItem.obtain(3, true, false);
         assertNotSame(item, emptyItem);
         assertFalse(item.equals(emptyItem));
 
         item.recycle();
         assertEquals(item, emptyItem);
 
-        ResumeActivityItem item2 = ResumeActivityItem.obtain(2, true);
+        ResumeActivityItem item2 = ResumeActivityItem.obtain(2, true, false);
         assertSame(item, item2);
         assertFalse(item2.equals(emptyItem));
     }

@@ -66,8 +66,8 @@ interface KeyguardTransitionRepository {
     }
 
     /**
-     * Begin a transition from one state to another. Will not start if another transition is in
-     * progress.
+     * Begin a transition from one state to another. Transitions are interruptible, and will issue a
+     * [TransitionStep] with state = [TransitionState.CANCELED] before beginning the next one.
      */
     fun startTransition(info: TransitionInfo): UUID?
 
@@ -131,11 +131,18 @@ class KeyguardTransitionRepositoryImpl @Inject constructor() : KeyguardTransitio
     }
 
     override fun startTransition(info: TransitionInfo): UUID? {
-        if (lastStep.transitionState != TransitionState.FINISHED) {
-            Log.i(TAG, "Transition still active: $lastStep, canceling")
+        if (lastStep.from == info.from && lastStep.to == info.to) {
+            Log.i(TAG, "Duplicate call to start the transition, rejecting: $info")
+            return null
         }
+        val startingValue =
+            if (lastStep.transitionState != TransitionState.FINISHED) {
+                Log.i(TAG, "Transition still active: $lastStep, canceling")
+                lastStep.value
+            } else {
+                0f
+            }
 
-        val startingValue = 1f - lastStep.value
         lastAnimator?.cancel()
         lastAnimator = info.animator
 

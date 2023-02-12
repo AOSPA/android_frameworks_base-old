@@ -20,6 +20,8 @@ import static android.app.ActivityManager.START_SUCCESS;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.view.Display.DEFAULT_DISPLAY;
+import static android.window.TaskFragmentOperation.OP_TYPE_REPARENT_ACTIVITY_TO_TASK_FRAGMENT;
+import static android.window.TaskFragmentOperation.OP_TYPE_START_ACTIVITY_IN_TASK_FRAGMENT;
 import static android.window.TaskFragmentOrganizer.KEY_ERROR_CALLBACK_OP_TYPE;
 import static android.window.TaskFragmentOrganizer.KEY_ERROR_CALLBACK_TASK_FRAGMENT_INFO;
 import static android.window.TaskFragmentOrganizer.KEY_ERROR_CALLBACK_THROWABLE;
@@ -31,8 +33,6 @@ import static android.window.TaskFragmentTransaction.TYPE_TASK_FRAGMENT_ERROR;
 import static android.window.TaskFragmentTransaction.TYPE_TASK_FRAGMENT_INFO_CHANGED;
 import static android.window.TaskFragmentTransaction.TYPE_TASK_FRAGMENT_PARENT_INFO_CHANGED;
 import static android.window.TaskFragmentTransaction.TYPE_TASK_FRAGMENT_VANISHED;
-import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_REPARENT_ACTIVITY_TO_TASK_FRAGMENT;
-import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_START_ACTIVITY_IN_TASK_FRAGMENT;
 
 import static androidx.window.extensions.embedding.SplitContainer.getFinishPrimaryWithSecondaryBehavior;
 import static androidx.window.extensions.embedding.SplitContainer.getFinishSecondaryWithPrimaryBehavior;
@@ -65,7 +65,9 @@ import android.util.Pair;
 import android.util.Size;
 import android.util.SparseArray;
 import android.view.WindowMetrics;
+import android.window.TaskFragmentAnimationParams;
 import android.window.TaskFragmentInfo;
+import android.window.TaskFragmentOperation;
 import android.window.TaskFragmentParentInfo;
 import android.window.TaskFragmentTransaction;
 import android.window.WindowContainerTransaction;
@@ -74,8 +76,11 @@ import androidx.annotation.GuardedBy;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.window.common.CommonFoldingFeature;
+import androidx.window.common.DeviceStateManagerFoldingFeatureProducer;
 import androidx.window.common.EmptyLifecycleCallbacksAdapter;
-import androidx.window.extensions.WindowExtensionsProvider;
+import androidx.window.extensions.WindowExtensionsImpl;
+import androidx.window.extensions.core.util.function.Consumer;
+import androidx.window.extensions.core.util.function.Function;
 import androidx.window.extensions.embedding.TransactionManager.TransactionRecord;
 import androidx.window.extensions.layout.WindowLayoutComponentImpl;
 
@@ -86,7 +91,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Executor;
-import java.util.function.Consumer;
 
 /**
  * Main controller class that manages split states and presentation.
@@ -112,7 +116,7 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
     /**
      * A developer-defined {@link SplitAttributes} calculator to compute the current
      * {@link SplitAttributes} with the current device and window states.
-     * It is registered via {@link #setSplitAttributesCalculator(SplitAttributesCalculator)}
+     * It is registered via {@link #setSplitAttributesCalculator(Function)}
      * and unregistered via {@link #clearSplitAttributesCalculator()}.
      * This is called when:
      * <ul>
@@ -125,7 +129,7 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
      */
     @GuardedBy("mLock")
     @Nullable
-    private SplitAttributesCalculator mSplitAttributesCalculator;
+    private Function<SplitAttributesCalculatorParams, SplitAttributes> mSplitAttributesCalculator;
 
     /**
      * Map from Task id to {@link TaskContainer} which contains all TaskFragment and split pair info
@@ -138,25 +142,19 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
     final SparseArray<TaskContainer> mTaskContainers = new SparseArray<>();
 
     /** Callback to Jetpack to notify about changes to split states. */
+    @GuardedBy("mLock")
     @Nullable
     private Consumer<List<SplitInfo>> mEmbeddingCallback;
     private final List<SplitInfo> mLastReportedSplitStates = new ArrayList<>();
     private final Handler mHandler;
     final Object mLock = new Object();
     private final ActivityStartMonitor mActivityStartMonitor;
-    @NonNull
-    final WindowLayoutComponentImpl mWindowLayoutComponent;
 
-    public SplitController() {
-        this((WindowLayoutComponentImpl) Objects.requireNonNull(WindowExtensionsProvider
-                .getWindowExtensions().getWindowLayoutComponent()));
-    }
-
-    @VisibleForTesting
-    SplitController(@NonNull WindowLayoutComponentImpl windowLayoutComponent) {
+    public SplitController(@NonNull WindowLayoutComponentImpl windowLayoutComponent,
+            @NonNull DeviceStateManagerFoldingFeatureProducer foldingFeatureProducer) {
         final MainThreadExecutor executor = new MainThreadExecutor();
         mHandler = executor.mHandler;
-        mPresenter = new SplitPresenter(executor, this);
+        mPresenter = new SplitPresenter(executor, windowLayoutComponent, this);
         mTransactionManager = new TransactionManager(mPresenter);
         final ActivityThread activityThread = ActivityThread.currentActivityThread();
         final Application application = activityThread.getApplication();
@@ -167,11 +165,11 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
 
         mActivityStartMonitor = new ActivityStartMonitor();
         instrumentation.addMonitor(mActivityStartMonitor);
-        mWindowLayoutComponent = windowLayoutComponent;
-        mWindowLayoutComponent.addFoldingStateChangedCallback(new FoldingFeatureListener());
+        foldingFeatureProducer.addDataChangedCallback(new FoldingFeatureListener());
     }
 
-    private class FoldingFeatureListener implements Consumer<List<CommonFoldingFeature>> {
+    private class FoldingFeatureListener
+            implements java.util.function.Consumer<List<CommonFoldingFeature>> {
         @Override
         public void accept(List<CommonFoldingFeature> foldingFeatures) {
             synchronized (mLock) {
@@ -212,7 +210,8 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
     }
 
     @Override
-    public void setSplitAttributesCalculator(@NonNull SplitAttributesCalculator calculator) {
+    public void setSplitAttributesCalculator(
+            @NonNull Function<SplitAttributesCalculatorParams, SplitAttributes> calculator) {
         synchronized (mLock) {
             mSplitAttributesCalculator = calculator;
         }
@@ -227,7 +226,7 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
 
     @GuardedBy("mLock")
     @Nullable
-    SplitAttributesCalculator getSplitAttributesCalculator() {
+    Function<SplitAttributesCalculatorParams, SplitAttributes> getSplitAttributesCalculator() {
         return mSplitAttributesCalculator;
     }
 
@@ -240,9 +239,22 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
 
     /**
      * Registers the split organizer callback to notify about changes to active splits.
+     * @deprecated Use {@link #setSplitInfoCallback(Consumer)} starting with
+     * {@link WindowExtensionsImpl#getVendorApiLevel()} 2.
      */
+    @Deprecated
     @Override
-    public void setSplitInfoCallback(@NonNull Consumer<List<SplitInfo>> callback) {
+    public void setSplitInfoCallback(
+            @NonNull java.util.function.Consumer<List<SplitInfo>> callback) {
+        Consumer<List<SplitInfo>> oemConsumer = callback::accept;
+        setSplitInfoCallback(oemConsumer);
+    }
+
+    /**
+     * Registers the split organizer callback to notify about changes to active splits.
+     * @since {@link WindowExtensionsImpl#getVendorApiLevel()} 2
+     */
+    public void setSplitInfoCallback(Consumer<List<SplitInfo>> callback) {
         synchronized (mLock) {
             mEmbeddingCallback = callback;
             updateCallbackIfNecessary();
@@ -581,11 +593,11 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
     @GuardedBy("mLock")
     void onTaskFragmentError(@NonNull WindowContainerTransaction wct,
             @Nullable IBinder errorCallbackToken, @Nullable TaskFragmentInfo taskFragmentInfo,
-            int opType, @NonNull Throwable exception) {
+            @TaskFragmentOperation.OperationType int opType, @NonNull Throwable exception) {
         Log.e(TAG, "onTaskFragmentError=" + exception.getMessage());
         switch (opType) {
-            case HIERARCHY_OP_TYPE_START_ACTIVITY_IN_TASK_FRAGMENT:
-            case HIERARCHY_OP_TYPE_REPARENT_ACTIVITY_TO_TASK_FRAGMENT: {
+            case OP_TYPE_START_ACTIVITY_IN_TASK_FRAGMENT:
+            case OP_TYPE_REPARENT_ACTIVITY_TO_TASK_FRAGMENT: {
                 final TaskFragmentContainer container;
                 if (taskFragmentInfo != null) {
                     container = getContainer(taskFragmentInfo.getFragmentToken());
@@ -1157,6 +1169,8 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
                 taskId);
         mPresenter.createTaskFragment(wct, expandedContainer.getTaskFragmentToken(),
                 activityInTask.getActivityToken(), new Rect(), WINDOWING_MODE_UNDEFINED);
+        mPresenter.updateAnimationParams(wct, expandedContainer.getTaskFragmentToken(),
+                TaskFragmentAnimationParams.DEFAULT);
         return expandedContainer;
     }
 
@@ -1494,7 +1508,7 @@ public class SplitController implements JetpackTaskFragmentOrganizer.TaskFragmen
      * Returns the active split that has the provided containers as primary and secondary or as
      * secondary and primary, if available.
      */
-    @VisibleForTesting
+    @GuardedBy("mLock")
     @Nullable
     SplitContainer getActiveSplitForContainers(
             @NonNull TaskFragmentContainer firstContainer,

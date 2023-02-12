@@ -55,13 +55,6 @@ public interface WindowManagerPolicyConstants {
     int PRESENCE_INTERNAL = 1 << 0;
     int PRESENCE_EXTERNAL = 1 << 1;
 
-    // Alternate bars position values
-    int ALT_BAR_UNKNOWN = -1;
-    int ALT_BAR_LEFT = 1 << 0;
-    int ALT_BAR_RIGHT = 1 << 1;
-    int ALT_BAR_BOTTOM = 1 << 2;
-    int ALT_BAR_TOP = 1 << 3;
-
     // Navigation bar position values
     int NAV_BAR_INVALID = -1;
     int NAV_BAR_LEFT = 1 << 0;
@@ -169,6 +162,9 @@ public interface WindowManagerPolicyConstants {
             case PowerManager.WAKE_REASON_POWER_BUTTON:
             case PowerManager.WAKE_REASON_PLUGGED_IN:
             case PowerManager.WAKE_REASON_GESTURE:
+            case PowerManager.WAKE_REASON_TAP:
+            case PowerManager.WAKE_REASON_LIFT:
+            case PowerManager.WAKE_REASON_BIOMETRIC:
             case PowerManager.WAKE_REASON_CAMERA_LAUNCH:
             case PowerManager.WAKE_REASON_WAKE_KEY:
             case PowerManager.WAKE_REASON_WAKE_MOTION:

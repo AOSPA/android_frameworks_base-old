@@ -467,8 +467,8 @@
     <string name="power_charging" msgid="6727132649743436802">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="STATE">%2$s</xliff:g>"</string>
     <string name="power_remaining_charging_duration_only" msgid="8085099012811384899">"<xliff:g id="TIME">%1$s</xliff:g> guztiz kargatu arte"</string>
     <string name="power_charging_duration" msgid="6127154952524919719">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="TIME">%2$s</xliff:g> guztiz kargatu arte"</string>
-    <string name="power_charging_limited" msgid="6732738149313642521">"<xliff:g id="LEVEL">%1$s</xliff:g> - Kargatze-prozesua pausatuta dago"</string>
-    <string name="power_charging_future_paused" msgid="6829683663982987290">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="DOCK_DEFENDER_THRESHOLD">%2$s</xliff:g> arte kargatzen"</string>
+    <string name="power_charging_limited" msgid="8202147604844938236">"<xliff:g id="LEVEL">%1$s</xliff:g> - Kargatze optimizatua"</string>
+    <string name="power_charging_future_paused" msgid="4730177778538118032">"<xliff:g id="LEVEL">%1$s</xliff:g> - Kargatze optimizatua"</string>
     <string name="battery_info_status_unknown" msgid="268625384868401114">"Ezezaguna"</string>
     <string name="battery_info_status_charging" msgid="4279958015430387405">"Kargatzen"</string>
     <string name="battery_info_status_charging_fast" msgid="8027559755902954885">"Bizkor kargatzen"</string>
@@ -564,6 +564,8 @@
     <string name="user_add_user_title" msgid="5457079143694924885">"Beste erabiltzaile bat gehitu nahi duzu?"</string>
     <string name="user_add_user_message_long" msgid="1527434966294733380">"Gailu hau beste pertsona batzuekin partekatzeko, sortu erabiltzaile gehiago. Erabiltzaile bakoitzak bere eremua izango du eta, bertan, aplikazioak, horma-papera eta antzekoak pertsonalizatu ahal izango ditu. Horrez gain, agian erabiltzaile guztiei eragingo dieten ezarpen batzuk ere doi daitezke; adibidez, wifi-konexioarena.\n\nErabiltzaile bat gehitzen duzunean, pertsona horrek berak konfiguratu beharko du bere eremua.\n\nEdozein erabiltzailek egunera ditzake beste erabiltzaile guztien aplikazioak. Baliteke erabilerraztasun-ezarpenak eta -zerbitzuak ez transferitzea erabiltzaile berriei."</string>
     <string name="user_add_user_message_short" msgid="3295959985795716166">"Erabiltzaile bat gehitzen duzunean, erabiltzaile horrek bere eremua konfiguratu beharko du.\n\nEdozein erabiltzailek egunera ditzake beste erabiltzaile guztien aplikazioak."</string>
+    <string name="user_grant_admin_title" msgid="5565796912475193314">"Administratzaile-baimenak eman nahi dizkiozu erabiltzaileari?"</string>
+    <string name="user_grant_admin_message" msgid="7925257971286380976">"Administratzaile-baimenak ematen badizkiozu, hauek egin ahalko ditu: beste erabiltzaile batzuk kudeatu, gailuaren ezarpenak aldatu eta gailuaren jatorrizko datuak berrezarri."</string>
     <string name="user_setup_dialog_title" msgid="8037342066381939995">"Erabiltzailea konfiguratu?"</string>
     <string name="user_setup_dialog_message" msgid="269931619868102841">"Ziurtatu pertsona horrek gailua hartu eta bere eremua konfigura dezakeela"</string>
     <string name="user_setup_profile_dialog_message" msgid="4788197052296962620">"Profila konfiguratu?"</string>
@@ -595,6 +597,8 @@
     <string name="guest_reset_and_restart_dialog_message" msgid="2764425635305200790">"Gonbidatuentzako saio berri bat abiaraziko da, eta saio honetako aplikazio eta datu guztiak ezabatuko"</string>
     <string name="guest_exit_dialog_title" msgid="1846494656849381804">"Gonbidatu modutik irten nahi duzu?"</string>
     <string name="guest_exit_dialog_message" msgid="1743218864242719783">"Gonbidatuentzako saio honetako aplikazioak eta datuak ezabatuko dira"</string>
+    <string name="grant_admin" msgid="4273077214151417783">"Eman administratzaile-baimenak erabiltzaileari"</string>
+    <string name="not_grant_admin" msgid="6985027675930546850">"Ez eman administratzaile-baimenik erabiltzaileari"</string>
     <string name="guest_exit_dialog_button" msgid="1736401897067442044">"Irten"</string>
     <string name="guest_exit_dialog_title_non_ephemeral" msgid="7675327443743162986">"Gonbidatuaren jarduerak gorde nahi dituzu?"</string>
     <string name="guest_exit_dialog_message_non_ephemeral" msgid="223385323235719442">"Saio honetako jarduerak gorde ditzakezu, edo aplikazio eta datu guztiak ezabatu"</string>

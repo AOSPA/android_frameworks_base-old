@@ -385,7 +385,7 @@ public class ActivityStarterTests extends WindowTestsBase {
         doReturn(null).when(mMockPackageManager).resolveIntent(any(), any(), anyLong(), anyLong(),
                 anyInt(), anyBoolean(), anyInt());
         doReturn(null).when(mMockPackageManager).resolveIntentExported(any(), any(),
-                anyLong(), anyLong(), anyInt(), anyBoolean(), anyInt());
+                anyLong(), anyLong(), anyInt(), anyBoolean(), anyInt(), anyInt());
         doReturn(new ComponentName("", "")).when(mMockPackageManager).getSystemUiServiceComponent();
 
         // Never review permissions
@@ -1753,7 +1753,7 @@ public class ActivityStarterTests extends WindowTestsBase {
             TaskFragment inTaskFragment) {
         starter.startActivityInner(target, source, null /* voiceSession */,
                 null /* voiceInteractor */, 0 /* startFlags */,
-                options, inTask, inTaskFragment, false /* restrictedBgActivity */,
-                null /* intentGrants */);
+                options, inTask, inTaskFragment,
+                BackgroundActivityStartController.BAL_ALLOW_DEFAULT, null /* intentGrants */);
     }
 }

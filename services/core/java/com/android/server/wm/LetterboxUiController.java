@@ -17,10 +17,19 @@
 package com.android.server.wm;
 
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
+import static android.content.pm.ActivityInfo.OVERRIDE_CAMERA_COMPAT_DISABLE_FORCE_ROTATION;
+import static android.content.pm.ActivityInfo.OVERRIDE_CAMERA_COMPAT_DISABLE_REFRESH;
+import static android.content.pm.ActivityInfo.OVERRIDE_CAMERA_COMPAT_ENABLE_REFRESH_VIA_PAUSE;
+import static android.content.pm.ActivityInfo.OVERRIDE_ENABLE_COMPAT_IGNORE_REQUESTED_ORIENTATION;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+import static android.content.pm.ActivityInfo.screenOrientationToString;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
 import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER;
+import static android.view.WindowManager.PROPERTY_CAMERA_COMPAT_ALLOW_FORCE_ROTATION;
+import static android.view.WindowManager.PROPERTY_CAMERA_COMPAT_ALLOW_REFRESH;
+import static android.view.WindowManager.PROPERTY_CAMERA_COMPAT_ENABLE_REFRESH_VIA_PAUSE;
+import static android.view.WindowManager.PROPERTY_COMPAT_IGNORE_REQUESTED_ORIENTATION;
 
 import static com.android.internal.util.FrameworkStatsLog.APP_COMPAT_STATE_CHANGED__LETTERBOX_POSITION__BOTTOM;
 import static com.android.internal.util.FrameworkStatsLog.APP_COMPAT_STATE_CHANGED__LETTERBOX_POSITION__CENTER;
@@ -55,6 +64,8 @@ import static com.android.server.wm.LetterboxConfiguration.letterboxBackgroundTy
 
 import android.annotation.Nullable;
 import android.app.ActivityManager.TaskDescription;
+import android.content.pm.ActivityInfo.ScreenOrientation;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Color;
@@ -74,12 +85,14 @@ import com.android.internal.statusbar.LetterboxDetails;
 import com.android.server.wm.LetterboxConfiguration.LetterboxBackgroundType;
 
 import java.io.PrintWriter;
+import java.util.function.BooleanSupplier;
 
 /** Controls behaviour of the letterbox UI for {@link mActivityRecord}. */
 // TODO(b/185262487): Improve test coverage of this class. Parts of it are tested in
 // SizeCompatTests and LetterboxTests but not all.
 // TODO(b/185264020): Consider making LetterboxUiController applicable to any level of the
 // hierarchy in addition to ActivityRecord (Task, DisplayArea, ...).
+// TODO(b/263021211): Consider renaming to more generic CompatUIController.
 final class LetterboxUiController {
 
     private static final String TAG = TAG_WITH_CLASS_NAME ? "LetterboxUiController" : TAG_ATM;
@@ -125,12 +138,76 @@ final class LetterboxUiController {
     @Nullable
     private Letterbox mLetterbox;
 
+    @Nullable
+    private final Boolean mBooleanPropertyCameraCompatAllowForceRotation;
+
+    @Nullable
+    private final Boolean mBooleanPropertyCameraCompatAllowRefresh;
+
+    @Nullable
+    private final Boolean mBooleanPropertyCameraCompatEnableRefreshViaPause;
+
+    // Whether activity "refresh" was requested but not finished in
+    // ActivityRecord#activityResumedLocked following the camera compat force rotation in
+    // DisplayRotationCompatPolicy.
+    private boolean mIsRefreshAfterRotationRequested;
+
+    @Nullable
+    private final Boolean mBooleanPropertyIgnoreRequestedOrientation;
+
+    private boolean mIsRelauchingAfterRequestedOrientationChanged;
+
     LetterboxUiController(WindowManagerService wmService, ActivityRecord activityRecord) {
         mLetterboxConfiguration = wmService.mLetterboxConfiguration;
         // Given activityRecord may not be fully constructed since LetterboxUiController
         // is created in its constructor. It shouldn't be used in this constructor but it's safe
         // to use it after since controller is only used in ActivityRecord.
         mActivityRecord = activityRecord;
+
+        PackageManager packageManager = wmService.mContext.getPackageManager();
+        mBooleanPropertyIgnoreRequestedOrientation =
+                readComponentProperty(packageManager, mActivityRecord.packageName,
+                        mLetterboxConfiguration::isPolicyForIgnoringRequestedOrientationEnabled,
+                        PROPERTY_COMPAT_IGNORE_REQUESTED_ORIENTATION);
+        mBooleanPropertyCameraCompatAllowForceRotation =
+                readComponentProperty(packageManager, mActivityRecord.packageName,
+                        () -> mLetterboxConfiguration.isCameraCompatTreatmentEnabled(
+                                /* checkDeviceConfig */ true),
+                        PROPERTY_CAMERA_COMPAT_ALLOW_FORCE_ROTATION);
+        mBooleanPropertyCameraCompatAllowRefresh =
+                readComponentProperty(packageManager, mActivityRecord.packageName,
+                        () -> mLetterboxConfiguration.isCameraCompatTreatmentEnabled(
+                                /* checkDeviceConfig */ true),
+                        PROPERTY_CAMERA_COMPAT_ALLOW_REFRESH);
+        mBooleanPropertyCameraCompatEnableRefreshViaPause =
+                readComponentProperty(packageManager, mActivityRecord.packageName,
+                        () -> mLetterboxConfiguration.isCameraCompatTreatmentEnabled(
+                                /* checkDeviceConfig */ true),
+                        PROPERTY_CAMERA_COMPAT_ENABLE_REFRESH_VIA_PAUSE);
+    }
+
+    /**
+     * Reads a {@link Boolean} component property fot a given {@code packageName} and a {@code
+     * propertyName}. Returns {@code null} if {@code gatingCondition} is {@code false} or if the
+     * property isn't specified for the package.
+     *
+     * <p>Return value is {@link Boolean} rather than {@code boolean} so we can know when the
+     * property is unset. Particularly, when this returns {@code null}, {@link
+     * #shouldEnableWithOverrideAndProperty} will check the value of override for the final
+     * decision.
+     */
+    @Nullable
+    private static Boolean readComponentProperty(PackageManager packageManager, String packageName,
+            BooleanSupplier gatingCondition, String propertyName) {
+        if (!gatingCondition.getAsBoolean()) {
+            return null;
+        }
+        try {
+            return packageManager.getProperty(propertyName, packageName).getBoolean();
+        } catch (PackageManager.NameNotFoundException e) {
+            // No such property name.
+        }
+        return null;
     }
 
     /** Cleans up {@link Letterbox} if it exists.*/
@@ -145,6 +222,183 @@ final class LetterboxUiController {
         if (mLetterbox != null) {
             mLetterbox.onMovedToDisplay(displayId);
         }
+    }
+
+    /**
+     * Whether should ignore app requested orientation in response to an app
+     * calling {@link android.app.Activity#setRequestedOrientation}.
+     *
+     * <p>This is needed to avoid getting into {@link android.app.Activity#setRequestedOrientation}
+     * loop when {@link DisplayContent#getIgnoreOrientationRequest} is enabled or device has
+     * landscape natural orientation which app developers don't expect. For example, the loop can
+     * look like this:
+     * <ol>
+     *     <li>App sets default orientation to "unspecified" at runtime
+     *     <li>App requests to "portrait" after checking some condition (e.g. display rotation).
+     *     <li>(2) leads to fullscreen -> letterboxed bounds change and activity relaunch because
+     *     app can't handle the corresponding config changes.
+     *     <li>Loop goes back to (1)
+     * </ol>
+     *
+     * <p>This treatment is enabled when the following conditions are met:
+     * <ul>
+     *     <li>Flag gating the treatment is enabled
+     *     <li>Opt-out component property isn't enabled
+     *     <li>Opt-in component property or per-app override are enabled
+     *     <li>Activity is relaunched after {@link android.app.Activity#setRequestedOrientation}
+     *     call from an app or camera compat force rotation treatment is active for the activity.
+     * </ul>
+     */
+    boolean shouldIgnoreRequestedOrientation(@ScreenOrientation int requestedOrientation) {
+        if (!shouldEnableWithOverrideAndProperty(
+                /* gatingCondition */ mLetterboxConfiguration
+                        ::isPolicyForIgnoringRequestedOrientationEnabled,
+                OVERRIDE_ENABLE_COMPAT_IGNORE_REQUESTED_ORIENTATION,
+                mBooleanPropertyIgnoreRequestedOrientation)) {
+            return false;
+        }
+        if (mIsRelauchingAfterRequestedOrientationChanged) {
+            Slog.w(TAG, "Ignoring orientation update to "
+                    + screenOrientationToString(requestedOrientation)
+                    + " due to relaunching after setRequestedOrientation for " + mActivityRecord);
+            return true;
+        }
+        DisplayContent displayContent = mActivityRecord.mDisplayContent;
+        if (displayContent == null) {
+            return false;
+        }
+        if (displayContent.mDisplayRotationCompatPolicy != null
+                && displayContent.mDisplayRotationCompatPolicy
+                        .isTreatmentEnabledForActivity(mActivityRecord)) {
+            Slog.w(TAG, "Ignoring orientation update to "
+                    + screenOrientationToString(requestedOrientation)
+                    + " due to camera compat treatment for " + mActivityRecord);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Sets whether an activity is relaunching after the app has called {@link
+     * android.app.Activity#setRequestedOrientation}.
+     */
+    void setRelauchingAfterRequestedOrientationChanged(boolean isRelaunching) {
+        mIsRelauchingAfterRequestedOrientationChanged = isRelaunching;
+    }
+
+    /**
+     * Whether activity "refresh" was requested but not finished in {@link #activityResumedLocked}
+     * following the camera compat force rotation in {@link DisplayRotationCompatPolicy}.
+     */
+    boolean isRefreshAfterRotationRequested() {
+        return mIsRefreshAfterRotationRequested;
+    }
+
+    void setIsRefreshAfterRotationRequested(boolean isRequested) {
+        mIsRefreshAfterRotationRequested = isRequested;
+    }
+
+    /**
+     * Whether activity is eligible for activity "refresh" after camera compat force rotation
+     * treatment. See {@link DisplayRotationCompatPolicy} for context.
+     *
+     * <p>This treatment is enabled when the following conditions are met:
+     * <ul>
+     *     <li>Flag gating the camera compat treatment is enabled.
+     *     <li>Activity isn't opted out by the device manufacturer with override or by the app
+     *     developers with the component property.
+     * </ul>
+     */
+    boolean shouldRefreshActivityForCameraCompat() {
+        return shouldEnableWithOptOutOverrideAndProperty(
+                /* gatingCondition */ () -> mLetterboxConfiguration
+                        .isCameraCompatTreatmentEnabled(/* checkDeviceConfig */ true),
+                OVERRIDE_CAMERA_COMPAT_DISABLE_REFRESH,
+                mBooleanPropertyCameraCompatAllowRefresh);
+    }
+
+    /**
+     * Whether activity should be "refreshed" after the camera compat force rotation treatment
+     * using the "resumed -> paused -> resumed" cycle rather than the "resumed -> ... -> stopped
+     * -> ... -> resumed" cycle. See {@link DisplayRotationCompatPolicy} for context.
+     *
+     * <p>This treatment is enabled when the following conditions are met:
+     * <ul>
+     *     <li>Flag gating the camera compat treatment is enabled.
+     *     <li>Activity "refresh" via "resumed -> paused -> resumed" cycle isn't disabled with the
+     *     component property by the app developers.
+     *     <li>Activity "refresh" via "resumed -> paused -> resumed" cycle is enabled by the device
+     *     manufacturer with override / by the app developers with the component property.
+     * </ul>
+     */
+    boolean shouldRefreshActivityViaPauseForCameraCompat() {
+        return shouldEnableWithOverrideAndProperty(
+                /* gatingCondition */ () -> mLetterboxConfiguration
+                        .isCameraCompatTreatmentEnabled(/* checkDeviceConfig */ true),
+                OVERRIDE_CAMERA_COMPAT_ENABLE_REFRESH_VIA_PAUSE,
+                mBooleanPropertyCameraCompatEnableRefreshViaPause);
+    }
+
+    /**
+     * Whether activity is eligible for camera compat force rotation treatment. See {@link
+     * DisplayRotationCompatPolicy} for context.
+     *
+     * <p>This treatment is enabled when the following conditions are met:
+     * <ul>
+     *     <li>Flag gating the camera compat treatment is enabled.
+     *     <li>Activity isn't opted out by the device manufacturer with override or by the app
+     *     developers with the component property.
+     * </ul>
+     */
+    boolean shouldForceRotateForCameraCompat() {
+        return shouldEnableWithOptOutOverrideAndProperty(
+                /* gatingCondition */ () -> mLetterboxConfiguration
+                        .isCameraCompatTreatmentEnabled(/* checkDeviceConfig */ true),
+                OVERRIDE_CAMERA_COMPAT_DISABLE_FORCE_ROTATION,
+                mBooleanPropertyCameraCompatAllowForceRotation);
+    }
+
+    /**
+     * Returns {@code true} when the following conditions are met:
+     * <ul>
+     *     <li>{@code gatingCondition} isn't {@code false}
+     *     <li>OEM didn't opt out with a {@code overrideChangeId} override
+     *     <li>App developers didn't opt out with a component {@code property}
+     * </ul>
+     *
+     * <p>This is used for the treatments that are enabled based with the heuristic but can be
+     * disabled on per-app basis by OEMs or app developers.
+     */
+    private boolean shouldEnableWithOptOutOverrideAndProperty(BooleanSupplier gatingCondition,
+            long overrideChangeId, Boolean property) {
+        if (!gatingCondition.getAsBoolean()) {
+            return false;
+        }
+        return !Boolean.FALSE.equals(property)
+                && !mActivityRecord.info.isChangeEnabled(overrideChangeId);
+    }
+
+    /**
+     * Returns {@code true} when the following conditions are met:
+     * <ul>
+     *     <li>{@code gatingCondition} isn't {@code false}
+     *     <li>App developers didn't opt out with a component {@code property}
+     *     <li>App developers opted in with a component {@code property} or an OEM opted in with a
+     *     component {@code property}
+     * </ul>
+     *
+     * <p>This is used for the treatments that are enabled only on per-app basis.
+     */
+    private boolean shouldEnableWithOverrideAndProperty(BooleanSupplier gatingCondition,
+            long overrideChangeId, Boolean property) {
+        if (!gatingCondition.getAsBoolean()) {
+            return false;
+        }
+        if (Boolean.FALSE.equals(property)) {
+            return false;
+        }
+        return Boolean.TRUE.equals(property)
+                || mActivityRecord.info.isChangeEnabled(overrideChangeId);
     }
 
     boolean hasWallpaperBackgroundForLetterbox() {
@@ -275,30 +529,62 @@ final class LetterboxUiController {
                 && mActivityRecord.fillsParent();
     }
 
+    // Check if we are in the given pose and in fullscreen mode.
+    // Note that we check the task rather than the parent as with ActivityEmbedding the parent might
+    // be a TaskFragment, and its windowing mode is always MULTI_WINDOW, even if the task is
+    // actually fullscreen.
+    private boolean isDisplayFullScreenAndInPosture(DeviceStateController.FoldState state,
+            boolean isTabletop) {
+        Task task = mActivityRecord.getTask();
+        return mActivityRecord.mDisplayContent != null
+                && mActivityRecord.mDisplayContent.getDisplayRotation().isDeviceInPosture(state,
+                    isTabletop)
+                && task != null
+                && task.getWindowingMode() == WINDOWING_MODE_FULLSCREEN;
+    }
+
+    // Note that we check the task rather than the parent as with ActivityEmbedding the parent might
+    // be a TaskFragment, and its windowing mode is always MULTI_WINDOW, even if the task is
+    // actually fullscreen.
+    private boolean isDisplayFullScreenAndSeparatingHinge() {
+        Task task = mActivityRecord.getTask();
+        return mActivityRecord.mDisplayContent != null
+                && mActivityRecord.mDisplayContent.getDisplayRotation().isDisplaySeparatingHinge()
+                && task != null
+                && task.getWindowingMode() == WINDOWING_MODE_FULLSCREEN;
+    }
+
+
     float getHorizontalPositionMultiplier(Configuration parentConfiguration) {
         // Don't check resolved configuration because it may not be updated yet during
         // configuration change.
+        boolean bookMode = isDisplayFullScreenAndInPosture(
+                DeviceStateController.FoldState.HALF_FOLDED, false /* isTabletop */);
         return isHorizontalReachabilityEnabled(parentConfiguration)
                 // Using the last global dynamic position to avoid "jumps" when moving
                 // between apps or activities.
-                ? mLetterboxConfiguration.getHorizontalMultiplierForReachability()
-                : mLetterboxConfiguration.getLetterboxHorizontalPositionMultiplier();
+                ? mLetterboxConfiguration.getHorizontalMultiplierForReachability(bookMode)
+                : mLetterboxConfiguration.getLetterboxHorizontalPositionMultiplier(bookMode);
     }
 
     float getVerticalPositionMultiplier(Configuration parentConfiguration) {
         // Don't check resolved configuration because it may not be updated yet during
         // configuration change.
+        boolean tabletopMode = isDisplayFullScreenAndInPosture(
+                DeviceStateController.FoldState.HALF_FOLDED, true /* isTabletop */);
         return isVerticalReachabilityEnabled(parentConfiguration)
                 // Using the last global dynamic position to avoid "jumps" when moving
                 // between apps or activities.
-                ? mLetterboxConfiguration.getVerticalMultiplierForReachability()
-                : mLetterboxConfiguration.getLetterboxVerticalPositionMultiplier();
+                ? mLetterboxConfiguration.getVerticalMultiplierForReachability(tabletopMode)
+                : mLetterboxConfiguration.getLetterboxVerticalPositionMultiplier(tabletopMode);
     }
 
     float getFixedOrientationLetterboxAspectRatio() {
-        return mActivityRecord.shouldCreateCompatDisplayInsets()
-                ? getDefaultMinAspectRatioForUnresizableApps()
-                : mLetterboxConfiguration.getFixedOrientationLetterboxAspectRatio();
+        return isDisplayFullScreenAndSeparatingHinge()
+                ? getSplitScreenAspectRatio()
+                : mActivityRecord.shouldCreateCompatDisplayInsets()
+                    ? getDefaultMinAspectRatioForUnresizableApps()
+                    : mLetterboxConfiguration.getFixedOrientationLetterboxAspectRatio();
     }
 
     private float getDefaultMinAspectRatioForUnresizableApps() {
@@ -351,11 +637,13 @@ final class LetterboxUiController {
             return;
         }
 
+        boolean isInFullScreenBookMode = isDisplayFullScreenAndSeparatingHinge();
         int letterboxPositionForHorizontalReachability = mLetterboxConfiguration
-                .getLetterboxPositionForHorizontalReachability();
+                .getLetterboxPositionForHorizontalReachability(isInFullScreenBookMode);
         if (mLetterbox.getInnerFrame().left > x) {
             // Moving to the next stop on the left side of the app window: right > center > left.
-            mLetterboxConfiguration.movePositionForHorizontalReachabilityToNextLeftStop();
+            mLetterboxConfiguration.movePositionForHorizontalReachabilityToNextLeftStop(
+                    isInFullScreenBookMode);
             int changeToLog =
                     letterboxPositionForHorizontalReachability
                             == LETTERBOX_HORIZONTAL_REACHABILITY_POSITION_CENTER
@@ -364,7 +652,8 @@ final class LetterboxUiController {
             logLetterboxPositionChange(changeToLog);
         } else if (mLetterbox.getInnerFrame().right < x) {
             // Moving to the next stop on the right side of the app window: left > center > right.
-            mLetterboxConfiguration.movePositionForHorizontalReachabilityToNextRightStop();
+            mLetterboxConfiguration.movePositionForHorizontalReachabilityToNextRightStop(
+                    isInFullScreenBookMode);
             int changeToLog =
                     letterboxPositionForHorizontalReachability
                             == LETTERBOX_HORIZONTAL_REACHABILITY_POSITION_CENTER
@@ -388,11 +677,13 @@ final class LetterboxUiController {
             // Only react to clicks at the top and bottom of the letterboxed app window.
             return;
         }
+        boolean isInFullScreenTabletopMode = isDisplayFullScreenAndSeparatingHinge();
         int letterboxPositionForVerticalReachability = mLetterboxConfiguration
-                .getLetterboxPositionForVerticalReachability();
+                .getLetterboxPositionForVerticalReachability(isInFullScreenTabletopMode);
         if (mLetterbox.getInnerFrame().top > y) {
             // Moving to the next stop on the top side of the app window: bottom > center > top.
-            mLetterboxConfiguration.movePositionForVerticalReachabilityToNextTopStop();
+            mLetterboxConfiguration.movePositionForVerticalReachabilityToNextTopStop(
+                    isInFullScreenTabletopMode);
             int changeToLog =
                     letterboxPositionForVerticalReachability
                             == LETTERBOX_VERTICAL_REACHABILITY_POSITION_CENTER
@@ -401,7 +692,8 @@ final class LetterboxUiController {
             logLetterboxPositionChange(changeToLog);
         } else if (mLetterbox.getInnerFrame().bottom < y) {
             // Moving to the next stop on the bottom side of the app window: top > center > bottom.
-            mLetterboxConfiguration.movePositionForVerticalReachabilityToNextBottomStop();
+            mLetterboxConfiguration.movePositionForVerticalReachabilityToNextBottomStop(
+                    isInFullScreenTabletopMode);
             int changeToLog =
                     letterboxPositionForVerticalReachability
                             == LETTERBOX_VERTICAL_REACHABILITY_POSITION_CENTER
@@ -712,10 +1004,10 @@ final class LetterboxUiController {
                 + getVerticalPositionMultiplier(mActivityRecord.getParent().getConfiguration()));
         pw.println(prefix + "  letterboxPositionForHorizontalReachability="
                 + LetterboxConfiguration.letterboxHorizontalReachabilityPositionToString(
-                    mLetterboxConfiguration.getLetterboxPositionForHorizontalReachability()));
+                mLetterboxConfiguration.getLetterboxPositionForHorizontalReachability(false)));
         pw.println(prefix + "  letterboxPositionForVerticalReachability="
                 + LetterboxConfiguration.letterboxVerticalReachabilityPositionToString(
-                    mLetterboxConfiguration.getLetterboxPositionForVerticalReachability()));
+                mLetterboxConfiguration.getLetterboxPositionForVerticalReachability(false)));
         pw.println(prefix + "  fixedOrientationLetterboxAspectRatio="
                 + mLetterboxConfiguration.getFixedOrientationLetterboxAspectRatio());
         pw.println(prefix + "  defaultMinAspectRatioForUnresizableApps="
@@ -780,14 +1072,20 @@ final class LetterboxUiController {
         int positionToLog = APP_COMPAT_STATE_CHANGED__LETTERBOX_POSITION__UNKNOWN_POSITION;
         if (isHorizontalReachabilityEnabled()) {
             int letterboxPositionForHorizontalReachability = getLetterboxConfiguration()
-                    .getLetterboxPositionForHorizontalReachability();
+                    .getLetterboxPositionForHorizontalReachability(
+                            isDisplayFullScreenAndInPosture(
+                                    DeviceStateController.FoldState.HALF_FOLDED,
+                                    false /* isTabletop */));
             positionToLog = letterboxHorizontalReachabilityPositionToLetterboxPosition(
-                            letterboxPositionForHorizontalReachability);
+                    letterboxPositionForHorizontalReachability);
         } else if (isVerticalReachabilityEnabled()) {
             int letterboxPositionForVerticalReachability = getLetterboxConfiguration()
-                    .getLetterboxPositionForVerticalReachability();
+                    .getLetterboxPositionForVerticalReachability(
+                            isDisplayFullScreenAndInPosture(
+                                    DeviceStateController.FoldState.HALF_FOLDED,
+                                    true /* isTabletop */));
             positionToLog = letterboxVerticalReachabilityPositionToLetterboxPosition(
-                            letterboxPositionForVerticalReachability);
+                    letterboxPositionForVerticalReachability);
         }
         return positionToLog;
     }

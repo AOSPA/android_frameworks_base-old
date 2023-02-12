@@ -26,6 +26,9 @@ import static android.content.pm.Checksum.TYPE_WHOLE_MERKLE_ROOT_4K_SHA256;
 import static android.content.pm.Checksum.TYPE_WHOLE_SHA1;
 import static android.content.pm.Checksum.TYPE_WHOLE_SHA256;
 import static android.content.pm.Checksum.TYPE_WHOLE_SHA512;
+import static android.content.pm.PackageInfo.INSTALL_LOCATION_AUTO;
+import static android.content.pm.PackageInfo.INSTALL_LOCATION_INTERNAL_ONLY;
+import static android.content.pm.PackageInfo.INSTALL_LOCATION_PREFER_EXTERNAL;
 
 import android.Manifest;
 import android.annotation.CallbackExecutor;
@@ -41,20 +44,29 @@ import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.app.ActivityManager;
+import android.app.ActivityThread;
 import android.app.AppGlobals;
 import android.compat.annotation.UnsupportedAppUsage;
+import android.content.IIntentReceiver;
+import android.content.IIntentSender;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.content.pm.PackageManager.DeleteFlags;
 import android.content.pm.PackageManager.InstallReason;
 import android.content.pm.PackageManager.InstallScenario;
+import android.content.pm.parsing.ApkLiteParseUtils;
+import android.content.pm.parsing.PackageLite;
+import android.content.pm.parsing.result.ParseResult;
+import android.content.pm.parsing.result.ParseTypeImpl;
 import android.graphics.Bitmap;
 import android.icu.util.ULocale;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.FileBridge;
 import android.os.Handler;
 import android.os.HandlerExecutor;
+import android.os.IBinder;
 import android.os.Parcel;
 import android.os.ParcelFileDescriptor;
 import android.os.Parcelable;
@@ -70,12 +82,14 @@ import android.text.TextUtils;
 import android.util.ArraySet;
 import android.util.ExceptionUtils;
 
+import com.android.internal.content.InstallLocationUtils;
 import com.android.internal.util.DataClass;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
 import com.android.internal.util.function.pooled.PooledLambda;
 
 import java.io.Closeable;
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -172,10 +186,22 @@ public class PackageInstaller {
     public static final String ACTION_SESSION_UPDATED =
             "android.content.pm.action.SESSION_UPDATED";
 
-    /** {@hide} */
+    /**
+     * Intent action to indicate that user action is required for current install. This action can
+     * be used only by system apps.
+     *
+     * @hide
+     */
+    @SystemApi
     public static final String ACTION_CONFIRM_INSTALL = "android.content.pm.action.CONFIRM_INSTALL";
 
-    /** @hide */
+    /**
+     * Activity Action: Intent sent to the installer when a session for requesting
+     * user pre-approval, and user needs to confirm the installation.
+     *
+     * @hide
+     */
+    @SystemApi
     public static final String ACTION_CONFIRM_PRE_APPROVAL =
             "android.content.pm.action.CONFIRM_PRE_APPROVAL";
 
@@ -205,8 +231,8 @@ public class PackageInstaller {
      * {@link #STATUS_PENDING_USER_ACTION}, {@link #STATUS_SUCCESS},
      * {@link #STATUS_FAILURE}, {@link #STATUS_FAILURE_ABORTED},
      * {@link #STATUS_FAILURE_BLOCKED}, {@link #STATUS_FAILURE_CONFLICT},
-     * {@link #STATUS_FAILURE_INCOMPATIBLE}, {@link #STATUS_FAILURE_INVALID}, or
-     * {@link #STATUS_FAILURE_STORAGE}.
+     * {@link #STATUS_FAILURE_INCOMPATIBLE}, {@link #STATUS_FAILURE_INVALID},
+     * {@link #STATUS_FAILURE_STORAGE}, or {@link #STATUS_FAILURE_TIMEOUT}.
      * <p>
      * More information about a status may be available through additional
      * extras; see the individual status documentation for details.
@@ -272,11 +298,23 @@ public class PackageInstaller {
     @Deprecated
     public static final String EXTRA_PACKAGE_NAMES = "android.content.pm.extra.PACKAGE_NAMES";
 
-    /** {@hide} */
+    /**
+     * The status as used internally in the package manager. Refer to {@link PackageManager} for
+     * a list of all valid legacy statuses.
+     *
+     * @hide
+     */
+    @SystemApi
     public static final String EXTRA_LEGACY_STATUS = "android.content.pm.extra.LEGACY_STATUS";
     /** {@hide} */
     public static final String EXTRA_LEGACY_BUNDLE = "android.content.pm.extra.LEGACY_BUNDLE";
-    /** {@hide} */
+    /**
+     * The callback to execute once an uninstall is completed (used for both successful and
+     * unsuccessful uninstalls).
+     *
+     * @hide
+     */
+    @SystemApi
     public static final String EXTRA_CALLBACK = "android.content.pm.extra.CALLBACK";
 
     /**
@@ -291,6 +329,17 @@ public class PackageInstaller {
      */
     @SystemApi
     public static final String EXTRA_DATA_LOADER_TYPE = "android.content.pm.extra.DATA_LOADER_TYPE";
+
+    /**
+     * Path to the validated base APK for this session, which may point at an
+     * APK inside the session (when the session defines the base), or it may
+     * point at the existing base APK (when adding splits to an existing app).
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_RESOLVED_BASE_PATH =
+            "android.content.pm.extra.RESOLVED_BASE_PATH";
 
     /**
      * Streaming installation pending.
@@ -397,6 +446,13 @@ public class PackageInstaller {
     public static final int STATUS_FAILURE_INCOMPATIBLE = 7;
 
     /**
+     * The operation failed because it didn't complete within the specified timeout.
+     *
+     * @see #EXTRA_STATUS_MESSAGE
+     */
+    public static final int STATUS_FAILURE_TIMEOUT = 8;
+
+    /**
      * Default value, non-streaming installation session.
      *
      * @see #EXTRA_DATA_LOADER_TYPE
@@ -499,6 +555,46 @@ public class PackageInstaller {
     })
     @Retention(RetentionPolicy.SOURCE)
     @interface PackageSourceType{}
+
+    /**
+     * Indicate the user intervention is required when the installer attempts to commit the session.
+     * This is the default case.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int REASON_CONFIRM_PACKAGE_CHANGE = 0;
+
+    /**
+     * Indicate the user intervention is required because the update ownership enforcement is
+     * enabled, and the update owner will change.
+     *
+     * @see PackageInstaller.SessionParams#setRequestUpdateOwnership
+     * @see InstallSourceInfo#getUpdateOwnerPackageName
+     * @hide
+     */
+    @SystemApi
+    public static final int REASON_OWNERSHIP_CHANGED = 1;
+
+    /**
+     * Indicate the user intervention is required because the update ownership enforcement is
+     * enabled, and remind the update owner will retain.
+     *
+     * @see PackageInstaller.SessionParams#setRequestUpdateOwnership
+     * @see InstallSourceInfo#getUpdateOwnerPackageName
+     * @hide
+     */
+    @SystemApi
+    public static final int REASON_REMIND_OWNERSHIP = 2;
+
+    /** @hide */
+    @IntDef(prefix = { "REASON_" }, value = {
+            REASON_CONFIRM_PACKAGE_CHANGE,
+            REASON_OWNERSHIP_CHANGED,
+            REASON_REMIND_OWNERSHIP,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface UserActionReason {}
 
     /** Default set of checksums - includes all available checksums.
      * @see Session#requestChecksums  */
@@ -796,8 +892,6 @@ public class PackageInstaller {
      * @param statusReceiver Where to deliver the result of the operation indicated by the extra
      *                       {@link #EXTRA_STATUS}. Refer to the individual status codes
      *                       on how to handle them.
-     *
-     * @hide
      */
     @RequiresPermission(anyOf = {
             Manifest.permission.DELETE_PACKAGES,
@@ -928,6 +1022,61 @@ public class PackageInstaller {
         try {
             mInstaller.waitForInstallConstraints(
                     mInstallerPackageName, packageNames, constraints, callback, timeoutMillis);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Commit the session when all constraints are satisfied. This is a convenient method to
+     * combine {@link #waitForInstallConstraints(List, InstallConstraints, IntentSender, long)}
+     * and {@link Session#commit(IntentSender)}.
+     * <p>
+     * Once this method is called, the session is sealed and no additional mutations
+     * may be performed on the session. In the case of timeout, you may commit the
+     * session again using this method or {@link Session#commit(IntentSender)} for retries.
+     *
+     * @param statusReceiver Called when the state of the session changes. Intents
+     *                       sent to this receiver contain {@link #EXTRA_STATUS}.
+     *                       Refer to the individual status codes on how to handle them.
+     * @param constraints The requirements to satisfy before committing the session.
+     * @param timeoutMillis The maximum time to wait, in milliseconds until the
+     *                      constraints are satisfied. The caller will be notified via
+     *                      {@code statusReceiver} if timeout happens before commit.
+     */
+    public void commitSessionAfterInstallConstraintsAreMet(int sessionId,
+            @NonNull IntentSender statusReceiver, @NonNull InstallConstraints constraints,
+            @DurationMillisLong long timeoutMillis) {
+        try {
+            var session = mInstaller.openSession(sessionId);
+            session.seal();
+            var packageNames = session.fetchPackageNames();
+            var intentSender = new IntentSender((IIntentSender) new IIntentSender.Stub() {
+                @Override
+                public void send(int code, Intent intent, String resolvedType,
+                        IBinder allowlistToken, IIntentReceiver finishedReceiver,
+                        String requiredPermission, Bundle options)  {
+                    var result = intent.getParcelableExtra(
+                            PackageInstaller.EXTRA_INSTALL_CONSTRAINTS_RESULT,
+                            InstallConstraintsResult.class);
+                    try {
+                        if (result.isAllConstraintsSatisfied()) {
+                            session.commit(statusReceiver, false);
+                        } else {
+                            // timeout
+                            final Intent fillIn = new Intent();
+                            fillIn.putExtra(PackageInstaller.EXTRA_SESSION_ID, sessionId);
+                            fillIn.putExtra(PackageInstaller.EXTRA_STATUS, STATUS_FAILURE_TIMEOUT);
+                            fillIn.putExtra(PackageInstaller.EXTRA_STATUS_MESSAGE,
+                                    "Install constraints not satisfied within timeout");
+                            statusReceiver.sendIntent(
+                                    ActivityThread.currentApplication(), 0, fillIn, null, null);
+                        }
+                    } catch (Exception ignore) {
+                    }
+                }
+            });
+            waitForInstallConstraints(packageNames, constraints, intentSender, timeoutMillis);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1868,6 +2017,115 @@ public class PackageInstaller {
                 throw e.rethrowFromSystemServer();
             }
         }
+
+        /**
+         * @return {@code true} if the installer requested the update ownership enforcement
+         * for the packages in this session.
+         *
+         * @see PackageInstaller.SessionParams#setRequestUpdateOwnership
+         */
+        public boolean isRequestUpdateOwnership() {
+            try {
+                return mSession.isRequestUpdateOwnership();
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+    }
+
+    /**
+     * Parse a single APK or a directory of APKs to get install relevant information about
+     * the package wrapped in {@link InstallInfo}.
+     * @throws PackageParsingException if the package source file(s) provided is(are) not valid,
+     * or the parser isn't able to parse the supplied source(s).
+     * @hide
+     */
+    @SystemApi
+    @NonNull
+    public InstallInfo getInstallInfo(@NonNull File file, int flags)
+            throws PackageParsingException {
+        final ParseTypeImpl input = ParseTypeImpl.forDefaultParsing();
+        final ParseResult<PackageLite> result = ApkLiteParseUtils.parsePackageLite(
+                input.reset(), file, flags);
+        if (result.isError()) {
+            throw new PackageParsingException(result.getErrorCode(), result.getErrorMessage());
+        }
+        return new InstallInfo(result);
+    }
+
+    // (b/239722738) This class serves as a bridge between the PackageLite class, which
+    // is a hidden class, and the consumers of this class. (e.g. InstallInstalling.java)
+    // This is a part of an effort to remove dependency on hidden APIs and use SystemAPIs or
+    // public APIs.
+    /**
+     * Install related details from an APK or a folder of APK(s).
+     *
+     * @hide
+     */
+    @SystemApi
+    public static class InstallInfo {
+
+        /** @hide */
+        @IntDef(prefix = { "INSTALL_LOCATION_" }, value = {
+                INSTALL_LOCATION_AUTO,
+                INSTALL_LOCATION_INTERNAL_ONLY,
+                INSTALL_LOCATION_PREFER_EXTERNAL
+        })
+        @Retention(RetentionPolicy.SOURCE)
+        public @interface InstallLocation{}
+
+        private PackageLite mPkg;
+
+        InstallInfo(ParseResult<PackageLite> result) {
+            mPkg = result.getResult();
+        }
+
+        /**
+         * See {@link PackageLite#getPackageName()}
+         */
+        @NonNull
+        public String getPackageName() {
+            return mPkg.getPackageName();
+        }
+
+        /**
+         * @return The default install location defined by an application in
+         * {@link android.R.attr#installLocation} attribute.
+         */
+        public @InstallLocation int getInstallLocation() {
+            return mPkg.getInstallLocation();
+        }
+
+        /**
+         * @param params {@link SessionParams} of the installation
+         * @return Total disk space occupied by an application after installation.
+         * Includes the size of the raw APKs, possibly unpacked resources, raw dex metadata files,
+         * and all relevant native code.
+         * @throws IOException when size of native binaries cannot be calculated.
+         */
+        public long calculateInstalledSize(@NonNull SessionParams params) throws IOException {
+            return InstallLocationUtils.calculateInstalledSize(mPkg, params.abiOverride);
+        }
+    }
+
+    /**
+     * Generic exception class for using with parsing operations.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static class PackageParsingException extends Exception {
+        private final int mErrorCode;
+
+        /** {@hide} */
+        public PackageParsingException(int errorCode, @Nullable String detailedMessage) {
+            super(detailedMessage);
+            mErrorCode = errorCode;
+        }
+
+        public int getErrorCode() {
+            return mErrorCode;
+        }
     }
 
     /**
@@ -2431,9 +2689,7 @@ public class PackageInstaller {
          * By default this is the app that created the {@link PackageInstaller} object.
          *
          * @param installerPackageName name of the installer package
-         * {@hide}
          */
-        @TestApi
         public void setInstallerPackageName(@Nullable String installerPackageName) {
             this.installerPackageName = installerPackageName;
         }
@@ -2537,9 +2793,18 @@ public class PackageInstaller {
          *              Android S ({@link android.os.Build.VERSION_CODES#S API 31})</li>
          *          </ul>
          *     </li>
-         *     <li>The installer is the {@link InstallSourceInfo#getInstallingPackageName()
-         *     installer of record} of an existing version of the app (in other words, this install
-         *     session is an app update) or the installer is updating itself.</li>
+         *     <li>The installer is:
+         *         <ul>
+         *             <li>The {@link InstallSourceInfo#getUpdateOwnerPackageName() update owner}
+         *             of an existing version of the app (in other words, this install session is
+         *             an app update) if the update ownership enforcement is enabled.</li>
+         *             <li>The {@link InstallSourceInfo#getInstallingPackageName() installer of
+         *             record} of an existing version of the app (in other words, this install
+         *             session is an app update) if the update ownership enforcement isn't
+         *             enabled.</li>
+         *             <li>Updating itself.</li>
+         *         </ul>
+         *     </li>>
          *     <li>The installer declares the
          *     {@link android.Manifest.permission#UPDATE_PACKAGES_WITHOUT_USER_ACTION
          *     UPDATE_PACKAGES_WITHOUT_USER_ACTION} permission.</li>
@@ -2576,6 +2841,30 @@ public class PackageInstaller {
          */
         public void setKeepApplicationEnabledSetting() {
             this.keepApplicationEnabledSetting = true;
+        }
+
+        /**
+         * Optionally indicate whether the package being installed needs the update ownership
+         * enforcement. Once the update ownership enforcement is enabled, the other installers
+         * will need the user action to update the package even if the installers have been
+         * granted the {@link android.Manifest.permission#INSTALL_PACKAGES INSTALL_PACKAGES}
+         * permission. Default to {@code false}.
+         *
+         * The update ownership enforcement can only be enabled on initial installation. Set
+         * this to {@code true} on package update indicates the installer package wants to be
+         * the update owner if the update ownership enforcement has enabled.
+         *
+         * Note: To enable the update ownership enforcement, the installer must have the
+         * {@link android.Manifest.permission#ENFORCE_UPDATE_OWNERSHIP ENFORCE_UPDATE_OWNERSHIP}
+         * permission.
+         */
+        @RequiresPermission(Manifest.permission.ENFORCE_UPDATE_OWNERSHIP)
+        public void setRequestUpdateOwnership(boolean enable) {
+            if (enable) {
+                this.installFlags |= PackageManager.INSTALL_REQUEST_UPDATE_OWNERSHIP;
+            } else {
+                this.installFlags &= ~PackageManager.INSTALL_REQUEST_UPDATE_OWNERSHIP;
+            }
         }
 
         /** {@hide} */
@@ -2852,6 +3141,9 @@ public class PackageInstaller {
         /** @hide */
         public boolean keepApplicationEnabledSetting;
 
+        /** @hide */
+        public int pendingUserActionReason;
+
         /** {@hide} */
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public SessionInfo() {
@@ -2906,6 +3198,7 @@ public class PackageInstaller {
             installerUid = source.readInt();
             packageSource = source.readInt();
             keepApplicationEnabledSetting = source.readBoolean();
+            pendingUserActionReason = source.readInt();
         }
 
         /**
@@ -3430,8 +3723,6 @@ public class PackageInstaller {
 
         /**
          * Returns the Uid of the owner of the session.
-         *
-         * @hide
          */
         public int getInstallerUid() {
             return installerUid;
@@ -3443,6 +3734,32 @@ public class PackageInstaller {
          */
         public boolean isKeepApplicationEnabledSetting() {
             return keepApplicationEnabledSetting;
+        }
+
+        /**
+         * Returns whether this session has requested user pre-approval.
+         */
+        public @NonNull boolean getIsPreApprovalRequested() {
+            return isPreapprovalRequested;
+        }
+
+        /**
+         * @return {@code true} if the installer requested the update ownership enforcement
+         * for the packages in this session.
+         *
+         * @see PackageInstaller.SessionParams#setRequestUpdateOwnership
+         */
+        public boolean isRequestUpdateOwnership() {
+            return (installFlags & PackageManager.INSTALL_REQUEST_UPDATE_OWNERSHIP) != 0;
+        }
+
+        /**
+         * Return the reason for requiring the user action.
+         * @hide
+         */
+        @SystemApi
+        public @UserActionReason int getPendingUserActionReason() {
+            return pendingUserActionReason;
         }
 
         @Override
@@ -3495,6 +3812,7 @@ public class PackageInstaller {
             dest.writeInt(installerUid);
             dest.writeInt(packageSource);
             dest.writeBoolean(keepApplicationEnabledSetting);
+            dest.writeInt(pendingUserActionReason);
         }
 
         public static final Parcelable.Creator<SessionInfo>

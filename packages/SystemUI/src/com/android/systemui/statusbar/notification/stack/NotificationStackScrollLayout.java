@@ -146,7 +146,8 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     private static final int DELAY_BEFORE_SHADE_CLOSE = 200;
     private boolean mShadeNeedsToClose = false;
 
-    private static final float RUBBER_BAND_FACTOR_NORMAL = 0.35f;
+    @VisibleForTesting
+    static final float RUBBER_BAND_FACTOR_NORMAL = 0.35f;
     private static final float RUBBER_BAND_FACTOR_AFTER_EXPAND = 0.15f;
     private static final float RUBBER_BAND_FACTOR_ON_PANEL_EXPAND = 0.21f;
     /**
@@ -1326,8 +1327,11 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
      * @param listenerNeedsAnimation does the listener need to animate?
      */
     private void updateStackPosition(boolean listenerNeedsAnimation) {
+        float topOverscrollAmount = mShouldUseSplitNotificationShade
+                ? getCurrentOverScrollAmount(true /* top */) : 0f;
         final float endTopPosition = mTopPadding + mExtraTopInsetForFullShadeTransition
                 + mAmbientState.getOverExpansion()
+                + topOverscrollAmount
                 - getCurrentOverScrollAmount(false /* top */);
         float fraction = mAmbientState.getExpansionFraction();
         // If we are on quick settings, we need to quickly hide it to show the bouncer to avoid an
@@ -1807,9 +1811,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     @Override
     @ShadeViewRefactor(RefactorComponent.COORDINATOR)
     public WindowInsets onApplyWindowInsets(WindowInsets insets) {
-        mBottomInset = insets.getSystemWindowInsetBottom()
-                + insets.getInsets(WindowInsets.Type.ime()).bottom;
-
+        mBottomInset = insets.getInsets(WindowInsets.Type.ime()).bottom;
         mWaterfallTopInset = 0;
         final DisplayCutout cutout = insets.getDisplayCutout();
         if (cutout != null) {
@@ -2258,7 +2260,11 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
 
     @ShadeViewRefactor(RefactorComponent.COORDINATOR)
     private int getImeInset() {
-        return Math.max(0, mBottomInset - (getRootView().getHeight() - getHeight()));
+        // The NotificationStackScrollLayout does not extend all the way to the bottom of the
+        // display. Therefore, subtract that space from the mBottomInset, in order to only include
+        // the portion of the bottom inset that actually overlaps the NotificationStackScrollLayout.
+        return Math.max(0, mBottomInset
+                - (getRootView().getHeight() - getHeight() - getLocationOnScreen()[1]));
     }
 
     /**
@@ -2613,8 +2619,10 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
             float bottomAmount = getCurrentOverScrollAmount(false);
             if (velocityY < 0 && topAmount > 0) {
                 setOwnScrollY(mOwnScrollY - (int) topAmount);
-                mDontReportNextOverScroll = true;
-                setOverScrollAmount(0, true, false);
+                if (!mShouldUseSplitNotificationShade) {
+                    mDontReportNextOverScroll = true;
+                    setOverScrollAmount(0, true, false);
+                }
                 mMaxOverScroll = Math.abs(velocityY) / 1000f * getRubberBandFactor(true /* onTop */)
                         * mOverflingDistance + topAmount;
             } else if (velocityY > 0 && bottomAmount > 0) {
@@ -2648,6 +2656,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         float topOverScroll = getCurrentOverScrollAmount(true);
         return mScrolledToTopOnFirstDown
                 && !mExpandedInThisMotion
+                && !mShouldUseSplitNotificationShade
                 && (initialVelocity > mMinimumVelocity
                 || (topOverScroll > mMinTopOverScrollToEscape && initialVelocity > 0));
     }
@@ -2713,7 +2722,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
             return RUBBER_BAND_FACTOR_AFTER_EXPAND;
         } else if (mIsExpansionChanging || mPanelTracking) {
             return RUBBER_BAND_FACTOR_ON_PANEL_EXPAND;
-        } else if (mScrolledToTopOnFirstDown) {
+        } else if (mScrolledToTopOnFirstDown && !mShouldUseSplitNotificationShade) {
             return 1.0f;
         }
         return RUBBER_BAND_FACTOR_NORMAL;
@@ -2963,12 +2972,19 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
             childInGroup = (ExpandableNotificationRow) requestedView;
             requestedView = requestedRow = childInGroup.getNotificationParent();
         }
-        int position = 0;
+        final float scrimTopPadding = mAmbientState.isOnKeyguard() ? 0 : mMinimumPaddings;
+        int position = (int) scrimTopPadding;
+        int visibleIndex = -1;
+        ExpandableView lastVisibleChild = null;
         for (int i = 0; i < getChildCount(); i++) {
             ExpandableView child = getChildAtIndex(i);
             boolean notGone = child.getVisibility() != View.GONE;
+            if (notGone) visibleIndex++;
             if (notGone && !child.hasNoContentHeight()) {
-                if (position != 0) {
+                if (position != scrimTopPadding) {
+                    if (lastVisibleChild != null) {
+                        position += calculateGapHeight(lastVisibleChild, child, visibleIndex);
+                    }
                     position += mPaddingBetweenElements;
                 }
             }
@@ -2980,6 +2996,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
             }
             if (notGone) {
                 position += getIntrinsicHeight(child);
+                lastVisibleChild = child;
             }
         }
         return 0;
@@ -5705,7 +5722,8 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         }
     }
 
-    private void updateSplitNotificationShade() {
+    @VisibleForTesting
+    void updateSplitNotificationShade() {
         boolean split = LargeScreenUtils.shouldUseSplitNotificationShade(getResources());
         if (split != mShouldUseSplitNotificationShade) {
             mShouldUseSplitNotificationShade = split;

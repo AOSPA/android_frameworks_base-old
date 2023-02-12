@@ -25,6 +25,7 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
+import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.UserHandleAware;
@@ -33,6 +34,7 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.companion.utils.FeatureUtils;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -81,6 +83,7 @@ import java.util.function.Consumer;
  * @see CompanionDeviceManager#associate
  * @see AssociationRequest
  */
+@SuppressLint("LongLogTag")
 @SystemService(Context.COMPANION_DEVICE_SERVICE)
 public final class CompanionDeviceManager {
 
@@ -659,9 +662,7 @@ public final class CompanionDeviceManager {
      * @return the associations list
      * @see #addOnAssociationsChangedListener(Executor, OnAssociationsChangedListener)
      * @see #removeOnAssociationsChangedListener(OnAssociationsChangedListener)
-     * @hide
      */
-    @SystemApi
     @UserHandleAware
     @RequiresPermission(android.Manifest.permission.MANAGE_COMPANION_DEVICES)
     public @NonNull List<AssociationInfo> getAllAssociations() {
@@ -675,10 +676,7 @@ public final class CompanionDeviceManager {
 
     /**
      * Listener for any changes to {@link AssociationInfo}.
-     *
-     * @hide
      */
-    @SystemApi
     public interface OnAssociationsChangedListener {
         /**
          * Invoked when a change occurs to any of the associations for the user (including adding
@@ -693,9 +691,7 @@ public final class CompanionDeviceManager {
      * Register listener for any changes to {@link AssociationInfo}.
      *
      * @see #getAllAssociations()
-     * @hide
      */
-    @SystemApi
     @UserHandleAware
     @RequiresPermission(android.Manifest.permission.MANAGE_COMPANION_DEVICES)
     public void addOnAssociationsChangedListener(
@@ -717,9 +713,7 @@ public final class CompanionDeviceManager {
      * Unregister listener for any changes to {@link AssociationInfo}.
      *
      * @see #getAllAssociations()
-     * @hide
      */
-    @SystemApi
     @UserHandleAware
     @RequiresPermission(android.Manifest.permission.MANAGE_COMPANION_DEVICES)
     public void removeOnAssociationsChangedListener(
@@ -876,8 +870,12 @@ public final class CompanionDeviceManager {
 
     /** {@hide} */
     @RequiresPermission(android.Manifest.permission.DELIVER_COMPANION_MESSAGES)
-    public final void attachSystemDataTransport(int associationId, @NonNull InputStream in,
+    public void attachSystemDataTransport(int associationId, @NonNull InputStream in,
             @NonNull OutputStream out) throws DeviceNotAssociatedException {
+        if (!FeatureUtils.isPermSyncEnabled()) {
+            Log.e(LOG_TAG, "Calling attachSystemDataTransport, but perm sync is disabled.");
+            return;
+        }
         synchronized (mTransports) {
             if (mTransports.contains(associationId)) {
                 detachSystemDataTransport(associationId);
@@ -895,8 +893,12 @@ public final class CompanionDeviceManager {
 
     /** {@hide} */
     @RequiresPermission(android.Manifest.permission.DELIVER_COMPANION_MESSAGES)
-    public final void detachSystemDataTransport(int associationId)
+    public void detachSystemDataTransport(int associationId)
             throws DeviceNotAssociatedException {
+        if (!FeatureUtils.isPermSyncEnabled()) {
+            Log.e(LOG_TAG, "Calling detachSystemDataTransport, but perm sync is disabled.");
+            return;
+        }
         synchronized (mTransports) {
             final Transport transport = mTransports.get(associationId);
             if (transport != null) {
@@ -1004,6 +1006,11 @@ public final class CompanionDeviceManager {
     @Nullable
     public IntentSender buildPermissionTransferUserConsentIntent(int associationId)
             throws DeviceNotAssociatedException {
+        if (!FeatureUtils.isPermSyncEnabled()) {
+            Log.e(LOG_TAG, "Calling buildPermissionTransferUserConsentIntent,"
+                    + " but perm sync is disabled.");
+            return null;
+        }
         try {
             PendingIntent pendingIntent = mService.buildPermissionTransferUserConsentIntent(
                     mContext.getOpPackageName(),
@@ -1036,6 +1043,10 @@ public final class CompanionDeviceManager {
     @Deprecated
     @UserHandleAware
     public void startSystemDataTransfer(int associationId) throws DeviceNotAssociatedException {
+        if (!FeatureUtils.isPermSyncEnabled()) {
+            Log.e(LOG_TAG, "Calling startSystemDataTransfer, but perm sync is disabled.");
+            return;
+        }
         try {
             mService.startSystemDataTransfer(mContext.getOpPackageName(), mContext.getUserId(),
                     associationId, null);

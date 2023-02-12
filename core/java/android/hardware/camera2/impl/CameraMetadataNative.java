@@ -1037,6 +1037,19 @@ public class CameraMetadataNative implements Parcelable {
         return fixedFaceRectangles;
     }
 
+    private boolean setLensShadingMap(LensShadingMap lensShadingMap) {
+        if (lensShadingMap == null) {
+            return false;
+        }
+        float[] lsmArray = new float[lensShadingMap.getGainFactorCount()];
+        lensShadingMap.copyGainFactors(lsmArray, 0);
+        setBase(CaptureResult.STATISTICS_LENS_SHADING_MAP, lsmArray);
+
+        Size s = new Size(lensShadingMap.getRowCount(), lensShadingMap.getColumnCount());
+        setBase(CameraCharacteristics.LENS_INFO_SHADING_MAP_SIZE, s);
+        return true;
+    }
+
     private LensShadingMap getLensShadingMap() {
         float[] lsmArray = getBase(CaptureResult.STATISTICS_LENS_SHADING_MAP);
         Size s = get(CameraCharacteristics.LENS_INFO_SHADING_MAP_SIZE);
@@ -1461,6 +1474,23 @@ public class CameraMetadataNative implements Parcelable {
         return ret;
     }
 
+    private boolean isCroppedRawSupported() {
+        boolean ret = false;
+
+        long[] streamUseCases =
+                getBase(CameraCharacteristics.SCALER_AVAILABLE_STREAM_USE_CASES);
+        if (streamUseCases == null) {
+            return false;
+        }
+        for (long useCase : streamUseCases) {
+            if (useCase == CameraMetadata.SCALER_AVAILABLE_STREAM_USE_CASES_CROPPED_RAW) {
+                return true;
+            }
+        }
+
+        return ret;
+    }
+
     private MandatoryStreamCombination[] getMandatoryStreamCombinationsHelper(
             int mandatoryStreamsType) {
         int[] capabilities = getBase(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES);
@@ -1472,7 +1502,8 @@ public class CameraMetadataNative implements Parcelable {
         int hwLevel = getBase(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL);
         MandatoryStreamCombination.Builder build = new MandatoryStreamCombination.Builder(
                 mCameraId, hwLevel, mDisplaySize, caps, getStreamConfigurationMap(),
-                getStreamConfigurationMapMaximumResolution(), isPreviewStabilizationSupported());
+                getStreamConfigurationMapMaximumResolution(), isPreviewStabilizationSupported(),
+                isCroppedRawSupported());
 
         List<MandatoryStreamCombination> combs = null;
         switch (mandatoryStreamsType) {
@@ -1898,6 +1929,13 @@ public class CameraMetadataNative implements Parcelable {
                 metadata.setAERegions(value);
             }
         });
+        sSetCommandMap.put(CaptureResult.STATISTICS_LENS_SHADING_CORRECTION_MAP.getNativeKey(),
+                new SetCommand() {
+                    @Override
+                    public <T> void setValue(CameraMetadataNative metadata, T value) {
+                        metadata.setLensShadingMap((LensShadingMap) value);
+                    }
+                });
     }
 
     private boolean setAvailableFormats(int[] value) {

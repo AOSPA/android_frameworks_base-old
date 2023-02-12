@@ -35,6 +35,7 @@ import android.content.pm.InstallSourceInfo;
 import android.content.pm.ModuleInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.PackageManagerInternal;
 import android.content.pm.ParceledListSlice;
 import android.content.pm.SharedLibraryInfo;
 import android.content.pm.Signature;
@@ -76,6 +77,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 /**
@@ -127,6 +129,7 @@ public class BinaryTransparencyService extends SystemService {
     private String mVbmetaDigest;
     // the system time (in ms) the last measurement was taken
     private long mMeasurementsLastRecordedMs;
+    private PackageManagerInternal mPackageManagerInternal;
 
     /**
      * Guards whether or not measurements of MBA to be performed. When this change is enabled,
@@ -273,7 +276,7 @@ public class BinaryTransparencyService extends SystemService {
                     String[] signerDigestHexStrings = computePackageSignerSha256Digests(
                             packageInfo.signingInfo);
 
-                    // log to Westworld
+                    // log to statsd
                     FrameworkStatsLog.write(FrameworkStatsLog.APEX_INFO_GATHERED,
                                             packageInfo.packageName,
                                             packageInfo.getLongVersionCode(),
@@ -528,27 +531,30 @@ public class BinaryTransparencyService extends SystemService {
                         pw.println("|--> Pre-installed package install location: "
                                 + origPackageFilepath);
 
-                        if (useSha256) {
-                            String sha256Digest = PackageUtils.computeSha256DigestForLargeFile(
-                                    origPackageFilepath, PackageUtils.createLargeFileBuffer());
-                            pw.println("|--> Pre-installed package SHA-256 digest: "
-                                    + sha256Digest);
-                        }
+                        if (!origPackageFilepath.equals(APEX_PRELOAD_LOCATION_ERROR)) {
+                            if (useSha256) {
+                                String sha256Digest = PackageUtils.computeSha256DigestForLargeFile(
+                                        origPackageFilepath, PackageUtils.createLargeFileBuffer());
+                                pw.println("|--> Pre-installed package SHA-256 digest: "
+                                        + sha256Digest);
+                            }
 
-
-                        Map<Integer, byte[]> contentDigests = computeApkContentDigest(
-                                origPackageFilepath);
-                        if (contentDigests == null) {
-                            pw.println("ERROR: Failed to compute package content digest for "
-                                    + origPackageFilepath);
-                        } else {
-                            for (Map.Entry<Integer, byte[]> entry : contentDigests.entrySet()) {
-                                Integer algorithmId = entry.getKey();
-                                byte[] contentDigest = entry.getValue();
-                                pw.println("|--> Pre-installed package content digest: "
-                                        + HexEncoding.encodeToString(contentDigest, false));
-                                pw.println("|--> Pre-installed package content digest algorithm: "
-                                        + translateContentDigestAlgorithmIdToString(algorithmId));
+                            Map<Integer, byte[]> contentDigests = computeApkContentDigest(
+                                    origPackageFilepath);
+                            if (contentDigests == null) {
+                                pw.println("|--> ERROR: Failed to compute package content digest "
+                                        + "for " + origPackageFilepath);
+                            } else {
+                                for (Map.Entry<Integer, byte[]> entry : contentDigests.entrySet()) {
+                                    Integer algorithmId = entry.getKey();
+                                    byte[] contentDigest = entry.getValue();
+                                    pw.println("|--> Pre-installed package content digest: "
+                                            + HexEncoding.encodeToString(contentDigest, false));
+                                    pw.println("|--> Pre-installed package content digest "
+                                            + "algorithm: "
+                                            + translateContentDigestAlgorithmIdToString(
+                                                    algorithmId));
+                                }
                             }
                         }
                     }
@@ -862,6 +868,7 @@ public class BinaryTransparencyService extends SystemService {
                     boolean printLibraries = false;
                     boolean useSha256 = false;
                     boolean printHeaders = true;
+                    boolean preloadsOnly = false;
                     String opt;
                     while ((opt = getNextOption()) != null) {
                         switch (opt) {
@@ -879,6 +886,9 @@ public class BinaryTransparencyService extends SystemService {
                             case "--no-headers":
                                 printHeaders = false;
                                 break;
+                            case "--preloads-only":
+                                preloadsOnly = true;
+                                break;
                             default:
                                 pw.println("ERROR: Unknown option: " + opt);
                                 return 1;
@@ -886,7 +896,47 @@ public class BinaryTransparencyService extends SystemService {
                     }
 
                     if (!verbose && printHeaders) {
-                        printHeadersHelper("MBA", useSha256, pw);
+                        if (preloadsOnly) {
+                            printHeadersHelper("Preload", useSha256, pw);
+                        } else {
+                            printHeadersHelper("MBA", useSha256, pw);
+                        }
+                    }
+
+                    PackageManager pm = mContext.getPackageManager();
+                    for (PackageInfo packageInfo : pm.getInstalledPackages(
+                            PackageManager.PackageInfoFlags.of(PackageManager.MATCH_FACTORY_ONLY
+                            | PackageManager.GET_SIGNING_CERTIFICATES))) {
+                        if (packageInfo.signingInfo == null) {
+                            PackageInfo origPackageInfo = packageInfo;
+                            try {
+                                pm.getPackageInfo(packageInfo.packageName,
+                                        PackageManager.PackageInfoFlags.of(PackageManager.MATCH_ALL
+                                                | PackageManager.GET_SIGNING_CERTIFICATES));
+                            } catch (PackageManager.NameNotFoundException e) {
+                                Slog.e(TAG, "Failed to obtain an updated PackageInfo of "
+                                        + origPackageInfo.packageName);
+                                packageInfo = origPackageInfo;
+                            }
+                        }
+
+                        if (verbose && printHeaders) {
+                            printHeadersHelper("Preload", useSha256, pw);
+                        }
+                        pw.print(packageInfo.packageName + ",");
+                        pw.print(packageInfo.getLongVersionCode() + ",");
+                        printPackageMeasurements(packageInfo, useSha256, pw);
+
+                        if (verbose) {
+                            printAppDetails(packageInfo, printLibraries, pw);
+                            printPackageInstallationInfo(packageInfo, useSha256, pw);
+                            printPackageSignerDetails(packageInfo.signingInfo, pw);
+                            pw.println("");
+                        }
+                    }
+
+                    if (preloadsOnly) {
+                        return 0;
                     }
                     for (PackageInfo packageInfo : getNewlyInstalledMbas()) {
                         if (verbose && printHeaders) {
@@ -902,25 +952,6 @@ public class BinaryTransparencyService extends SystemService {
                             printPackageSignerDetails(packageInfo.signingInfo, pw);
                             pw.println("");
                         }
-                    }
-                    return 0;
-                }
-
-                // TODO(b/259347186): add option handling full file-based SHA256 digest
-                private int printAllPreloads() {
-                    final PrintWriter pw = getOutPrintWriter();
-
-                    PackageManager pm = mContext.getPackageManager();
-                    if (pm == null) {
-                        Slog.e(TAG, "Failed to obtain PackageManager.");
-                        return -1;
-                    }
-                    List<PackageInfo> factoryApps = pm.getInstalledPackages(
-                            PackageManager.PackageInfoFlags.of(PackageManager.MATCH_FACTORY_ONLY));
-
-                    pw.println("Preload Info [Format: package_name]");
-                    for (PackageInfo packageInfo : factoryApps) {
-                        pw.println(packageInfo.packageName);
                     }
                     return 0;
                 }
@@ -949,8 +980,6 @@ public class BinaryTransparencyService extends SystemService {
                                     return printAllModules();
                                 case "mba_info":
                                     return printAllMbas();
-                                case "preload_info":
-                                    return printAllPreloads();
                                 default:
                                     pw.println(String.format("ERROR: Unknown info type '%s'",
                                             infoType));
@@ -978,7 +1007,7 @@ public class BinaryTransparencyService extends SystemService {
                                + "APEX hashes. WARNING: This can be a very slow and CPU-intensive "
                                + "computation.");
                     pw.println("      -v: lists more verbose information about each APEX.");
-                    pw.println("      --no-headers: does not print the header if specified");
+                    pw.println("      --no-headers: does not print the header if specified.");
                     pw.println("");
                     pw.println("  get module_info [-o] [-v] [--no-headers]");
                     pw.println("    Print information about installed modules on device.");
@@ -986,9 +1015,9 @@ public class BinaryTransparencyService extends SystemService {
                                + "module hashes. WARNING: This can be a very slow and "
                                + "CPU-intensive computation.");
                     pw.println("      -v: lists more verbose information about each module.");
-                    pw.println("      --no-headers: does not print the header if specified");
+                    pw.println("      --no-headers: does not print the header if specified.");
                     pw.println("");
-                    pw.println("  get mba_info [-o] [-v] [-l] [--no-headers]");
+                    pw.println("  get mba_info [-o] [-v] [-l] [--no-headers] [--preloads-only]");
                     pw.println("    Print information about installed mobile bundle apps "
                                + "(MBAs on device).");
                     pw.println("      -o: also uses the old digest scheme (SHA256) to compute "
@@ -997,7 +1026,9 @@ public class BinaryTransparencyService extends SystemService {
                     pw.println("      -v: lists more verbose information about each app.");
                     pw.println("      -l: lists shared library info. (This option only works "
                                + "when -v option is also specified)");
-                    pw.println("      --no-headers: does not print the header if specified");
+                    pw.println("      --no-headers: does not print the header if specified.");
+                    pw.println("      --preloads-only: lists only preloaded apps. This options can "
+                               + "also be combined with others.");
                     pw.println("");
                 }
 
@@ -1016,6 +1047,7 @@ public class BinaryTransparencyService extends SystemService {
         mServiceImpl = new BinaryTransparencyServiceImpl();
         mVbmetaDigest = VBMETA_DIGEST_UNINITIALIZED;
         mMeasurementsLastRecordedMs = 0;
+        mPackageManagerInternal = LocalServices.getService(PackageManagerInternal.class);
     }
 
     /**
@@ -1030,6 +1062,38 @@ public class BinaryTransparencyService extends SystemService {
         } catch (Throwable t) {
             Slog.e(TAG, "Failed to start BinaryTransparencyService.", t);
         }
+
+        // register a package observer to detect updates to preloads
+        mPackageManagerInternal.getPackageList(new PackageManagerInternal.PackageListObserver() {
+            @Override
+            public void onPackageAdded(String packageName, int uid) {
+
+            }
+
+            @Override
+            public void onPackageChanged(String packageName, int uid) {
+                // check if the updated package is a preloaded app.
+                PackageManager pm = mContext.getPackageManager();
+                try {
+                    pm.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(
+                            PackageManager.MATCH_FACTORY_ONLY));
+                } catch (PackageManager.NameNotFoundException e) {
+                    // this means that this package is not a preloaded app
+                    return;
+                }
+
+                Slog.d(TAG, "Preload " + packageName + " was updated. Scheduling measurement...");
+                UpdateMeasurementsJobService.scheduleBinaryMeasurements(mContext,
+                        BinaryTransparencyService.this);
+            }
+
+            @Override
+            public void onPackageRemoved(String packageName, int uid) {
+
+            }
+        });
+
+        // TODO(b/264428429): Register observer for updates to APEXs.
     }
 
     /**
@@ -1059,6 +1123,8 @@ public class BinaryTransparencyService extends SystemService {
      * JobService to measure all covered binaries and record result to Westworld.
      */
     public static class UpdateMeasurementsJobService extends JobService {
+        private static AtomicBoolean sScheduled = new AtomicBoolean();
+        private static long sTimeLastRanMs = 0;
         private static final int DO_BINARY_MEASUREMENTS_JOB_ID =
                 UpdateMeasurementsJobService.class.hashCode();
 
@@ -1085,6 +1151,8 @@ public class BinaryTransparencyService extends SystemService {
                     Slog.e(TAG, "Taking binary measurements was interrupted.", e);
                     return;
                 }
+                sTimeLastRanMs = System.currentTimeMillis();
+                sScheduled.set(false);
                 jobFinished(params, false);
             }).start();
 
@@ -1105,16 +1173,33 @@ public class BinaryTransparencyService extends SystemService {
                 return;
             }
 
+            if (sScheduled.get()) {
+                Slog.d(TAG, "A measurement job has already been scheduled.");
+                return;
+            }
+
+            long minWaitingPeriodMs = 0;
+            if (sTimeLastRanMs != 0) {
+                minWaitingPeriodMs = RECORD_MEASUREMENTS_COOLDOWN_MS
+                        - (System.currentTimeMillis() - sTimeLastRanMs);
+                // bound the range of minWaitingPeriodMs in the case where > 24h has elapsed
+                minWaitingPeriodMs = Math.max(0,
+                        Math.min(minWaitingPeriodMs, RECORD_MEASUREMENTS_COOLDOWN_MS));
+                Slog.d(TAG, "Scheduling the next measurement to be done at least "
+                        + minWaitingPeriodMs + "ms from now.");
+            }
+
             final JobInfo jobInfo = new JobInfo.Builder(DO_BINARY_MEASUREMENTS_JOB_ID,
                     new ComponentName(context, UpdateMeasurementsJobService.class))
                     .setRequiresDeviceIdle(true)
                     .setRequiresCharging(true)
-                    .setPeriodic(RECORD_MEASUREMENTS_COOLDOWN_MS)
+                    .setMinimumLatency(minWaitingPeriodMs)
                     .build();
             if (jobScheduler.schedule(jobInfo) != JobScheduler.RESULT_SUCCESS) {
                 Slog.e(TAG, "Failed to schedule job to measure binaries.");
                 return;
             }
+            sScheduled.set(true);
             Slog.d(TAG, TextUtils.formatSimple(
                     "Job %d to measure binaries was scheduled successfully.",
                     DO_BINARY_MEASUREMENTS_JOB_ID));

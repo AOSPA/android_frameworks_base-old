@@ -57,6 +57,7 @@ import android.hardware.input.VirtualNavigationTouchpad;
 import android.hardware.input.VirtualNavigationTouchpadConfig;
 import android.hardware.input.VirtualTouchscreen;
 import android.hardware.input.VirtualTouchscreenConfig;
+import android.media.AudioManager;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.Handler;
@@ -257,6 +258,26 @@ public final class VirtualDeviceManager {
     }
 
     /**
+     * Checks whether the passed {@code deviceId} is a valid virtual device ID or not.
+     * {@link VirtualDeviceManager#DEVICE_ID_DEFAULT} is not valid as it is the ID of the default
+     * device which is not a virtual device. {@code deviceId} must correspond to a virtual device
+     * created by {@link VirtualDeviceManager#createVirtualDevice(int, VirtualDeviceParams)}.
+     *
+     * @hide
+     */
+    public boolean isValidVirtualDeviceId(int deviceId) {
+        if (mService == null) {
+            Log.w(TAG, "Failed to retrieve virtual devices; no virtual device manager service.");
+            return false;
+        }
+        try {
+            return mService.isValidVirtualDeviceId(deviceId);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Returns device-specific audio session id for audio playback.
      *
      * @param deviceId - id of the virtual audio device
@@ -269,9 +290,14 @@ public final class VirtualDeviceManager {
      * @hide
      */
     public int getAudioPlaybackSessionId(int deviceId) {
-        //TODO - Return session id rerouted to VirtualAudioDevice if the VirtualAudioDevice
-        //is configured to operate in context-aware mode.
-        return AUDIO_SESSION_ID_GENERATE;
+        if (mService == null) {
+            return AUDIO_SESSION_ID_GENERATE;
+        }
+        try {
+            return mService.getAudioPlaybackSessionId(deviceId);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     /**
@@ -287,9 +313,30 @@ public final class VirtualDeviceManager {
      * @hide
      */
     public int getAudioRecordingSessionId(int deviceId) {
-        //TODO - Return session id corresponding to VirtualAudioDevice injection if the
-        // VirtualAudioDevice is configured to operate in context-aware mode.
-        return AUDIO_SESSION_ID_GENERATE;
+        if (mService == null) {
+            return AUDIO_SESSION_ID_GENERATE;
+        }
+        try {
+            return mService.getAudioRecordingSessionId(deviceId);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Requests sound effect to be played on virtual device.
+     *
+     * @see android.media.AudioManager#playSoundEffect(int)
+     *
+     * @param deviceId - id of the virtual audio device
+     * @param effectType the type of sound effect
+     * @hide
+     */
+    public void playSoundEffect(int deviceId, @AudioManager.SystemSoundEffect int effectType) {
+        //TODO - handle requests to play sound effects by custom callbacks or SoundPool asociated
+        // with device session id.
+        // For now, this is intentionally left empty and effectively disables sound effects for
+        // virtual devices with custom device audio policy.
     }
 
     /**
@@ -748,13 +795,11 @@ public final class VirtualDeviceManager {
             final Point size = new Point();
             display.getDisplay().getSize(size);
             VirtualTouchscreenConfig touchscreenConfig =
-                    new VirtualTouchscreenConfig.Builder()
+                    new VirtualTouchscreenConfig.Builder(size.x, size.y)
                             .setVendorId(vendorId)
                             .setProductId(productId)
                             .setInputDeviceName(inputDeviceName)
                             .setAssociatedDisplayId(display.getDisplay().getDisplayId())
-                            .setWidthInPixels(size.x)
-                            .setHeightInPixels(size.y)
                             .build();
             return createVirtualTouchscreen(touchscreenConfig);
         }
@@ -906,16 +951,16 @@ public final class VirtualDeviceManager {
          * when matching the provided IntentFilter and calls the callback with the intercepted
          * intent.
          *
-         * @param executor The executor where the interceptor is executed on.
          * @param interceptorFilter The filter to match intents intended for interception.
+         * @param executor The executor where the interceptor is executed on.
          * @param interceptorCallback The callback called when an intent matching interceptorFilter
          * is intercepted.
          * @see #unregisterIntentInterceptor(IntentInterceptorCallback)
          */
         @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)
         public void registerIntentInterceptor(
-                @CallbackExecutor @NonNull Executor executor,
                 @NonNull IntentFilter interceptorFilter,
+                @CallbackExecutor @NonNull Executor executor,
                 @NonNull IntentInterceptorCallback interceptorCallback) {
             Objects.requireNonNull(executor);
             Objects.requireNonNull(interceptorFilter);

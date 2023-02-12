@@ -55,8 +55,11 @@ public class ProxyManager {
     private SparseArray<ProxyAccessibilityServiceConnection> mProxyA11yServiceConnections =
             new SparseArray<>();
 
-    ProxyManager(Object lock) {
+    private AccessibilityWindowManager mA11yWindowManager;
+
+    ProxyManager(Object lock, AccessibilityWindowManager awm) {
         mLock = lock;
+        mA11yWindowManager = awm;
     }
 
     /**
@@ -99,6 +102,7 @@ public class ProxyManager {
                     }
                 };
         client.asBinder().linkToDeath(deathRecipient, 0);
+
         // Notify apps that the service state has changed.
         // A11yManager#A11yServicesStateChangeListener
         synchronized (mLock) {
@@ -122,6 +126,7 @@ public class ProxyManager {
                 return true;
             }
         }
+        mA11yWindowManager.stopTrackingDisplayProxy(displayId);
         return false;
     }
 
@@ -227,6 +232,17 @@ public class ProxyManager {
             if ((proxyBinder != null) && (proxyInterface != null)) {
                 interfaces.add(proxyInterface);
             }
+        }
+    }
+
+    /**
+     * Clears all proxy caches.
+     */
+    public void clearCacheLocked() {
+        for (int i = 0; i < mProxyA11yServiceConnections.size(); i++) {
+            final ProxyAccessibilityServiceConnection proxy =
+                    mProxyA11yServiceConnections.valueAt(i);
+            proxy.notifyClearAccessibilityNodeInfoCache();
         }
     }
 }

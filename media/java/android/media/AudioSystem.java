@@ -2086,12 +2086,46 @@ public class AudioSystem
 
     /**
      * @hide
+     * Remove device as role for product strategy.
+     * @param strategy the id of the strategy to configure
+     * @param role the role of the devices
+     * @param devices the list of devices to be removed as role for the given strategy
+     * @return {@link #SUCCESS} if successfully set
+     */
+    public static int removeDevicesRoleForStrategy(
+            int strategy, int role, @NonNull List<AudioDeviceAttributes> devices) {
+        if (devices.isEmpty()) {
+            return BAD_VALUE;
+        }
+        int[] types = new int[devices.size()];
+        String[] addresses = new String[devices.size()];
+        for (int i = 0; i < devices.size(); ++i) {
+            types[i] = devices.get(i).getInternalType();
+            addresses[i] = devices.get(i).getAddress();
+        }
+        return removeDevicesRoleForStrategy(strategy, role, types, addresses);
+    }
+
+    /**
+     * @hide
      * Remove devices as role for the strategy
+     * @param strategy the id of the strategy to configure
+     * @param role the role of the devices
+     * @param types all device types
+     * @param addresses all device addresses
+     * @return {@link #SUCCESS} if successfully removed
+     */
+    public static native int removeDevicesRoleForStrategy(
+            int strategy, int role, @NonNull int[] types, @NonNull String[] addresses);
+
+    /**
+     * @hide
+     * Remove all devices as role for the strategy
      * @param strategy the id of the strategy to configure
      * @param role the role of the devices
      * @return {@link #SUCCESS} if successfully removed
      */
-    public static native int removeDevicesRoleForStrategy(int strategy, int role);
+    public static native int clearDevicesRoleForStrategy(int strategy, int role);
 
     /**
      * @hide
@@ -2499,4 +2533,30 @@ public class AudioSystem
      */
     public static native int clearPreferredMixerAttributes(
             @NonNull AudioAttributes attributes, int portId, int uid);
+
+
+    /**
+     * Requests if the implementation supports controlling the latency modes
+     * over the Bluetooth A2DP or LE Audio links.
+     *
+     * @return true if supported, false otherwise
+     *
+     * @hide
+     */
+    public static native boolean supportsBluetoothVariableLatency();
+
+    /**
+     * Enables or disables the variable Bluetooth latency control mechanism in the
+     * audio framework and the audio HAL. This does not apply to the latency mode control
+     * on the spatializer output as this is a built-in feature.
+     *
+     * @hide
+     */
+    public static native int setBluetoothVariableLatencyEnabled(boolean enabled);
+
+    /**
+     * Indicates if the variable Bluetooth latency control mechanism is enabled or disabled.
+     * @hide
+     */
+    public static native boolean isBluetoothVariableLatencyEnabled();
 }

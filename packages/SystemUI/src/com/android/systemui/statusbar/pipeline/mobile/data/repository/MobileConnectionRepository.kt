@@ -17,11 +17,11 @@
 package com.android.systemui.statusbar.pipeline.mobile.data.repository
 
 import android.telephony.SubscriptionInfo
-import android.telephony.SubscriptionManager
 import android.telephony.TelephonyCallback
 import android.telephony.TelephonyManager
+import com.android.systemui.log.table.TableLogBuffer
 import com.android.systemui.statusbar.pipeline.mobile.data.model.MobileConnectionModel
-import kotlinx.coroutines.flow.Flow
+import com.android.systemui.statusbar.pipeline.mobile.data.model.NetworkNameModel
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -38,16 +38,38 @@ import kotlinx.coroutines.flow.StateFlow
 interface MobileConnectionRepository {
     /** The subscriptionId that this connection represents */
     val subId: Int
+
+    /**
+     * The table log buffer created for this connection. Will have the name "MobileConnectionLog
+     * [subId]"
+     */
+    val tableLogBuffer: TableLogBuffer
+
     /**
      * A flow that aggregates all necessary callbacks from [TelephonyCallback] into a single
      * listener + model.
      */
-    val connectionInfo: Flow<MobileConnectionModel>
+    val connectionInfo: StateFlow<MobileConnectionModel>
+
+    /** The total number of levels. Used with [SignalDrawable]. */
+    val numberOfLevels: StateFlow<Int>
+
     /** Observable tracking [TelephonyManager.isDataConnectionAllowed] */
     val dataEnabled: StateFlow<Boolean>
+
     /**
-     * True if this connection represents the default subscription per
-     * [SubscriptionManager.getDefaultDataSubscriptionId]
+     * See [TelephonyManager.getCdmaEnhancedRoamingIndicatorDisplayNumber]. This bit only matters if
+     * the connection type is CDMA.
+     *
+     * True if the Enhanced Roaming Indicator (ERI) display number is not [TelephonyManager.ERI_OFF]
      */
-    val isDefaultDataSubscription: StateFlow<Boolean>
+    val cdmaRoaming: StateFlow<Boolean>
+
+    /** The service provider name for this network connection, or the default name */
+    val networkName: StateFlow<NetworkNameModel>
+
+    companion object {
+        /** The default number of levels to use for [numberOfLevels]. */
+        const val DEFAULT_NUM_LEVELS = 4
+    }
 }

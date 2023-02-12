@@ -31,7 +31,6 @@ import android.app.ActivityThread;
 import android.compat.annotation.ChangeId;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
-import android.content.pm.PackageManager;
 import android.hardware.BatteryState;
 import android.hardware.SensorManager;
 import android.hardware.lights.Light;
@@ -120,6 +119,12 @@ public final class InputManager {
     @GuardedBy("mBatteryListenersLock")
     private IInputDeviceBatteryListener mInputDeviceBatteryListener;
 
+    private final Object mKeyboardBacklightListenerLock = new Object();
+    @GuardedBy("mKeyboardBacklightListenerLock")
+    private List<KeyboardBacklightListenerDelegate> mKeyboardBacklightListeners;
+    @GuardedBy("mKeyboardBacklightListenerLock")
+    private IKeyboardBacklightListener mKeyboardBacklightListener;
+
     private InputDeviceSensorManager mInputDeviceSensorManager;
     /**
      * Broadcast Action: Query available keyboard layouts.
@@ -167,6 +172,14 @@ public final class InputManager {
      * The <code>android:keyboardLayout</code> attribute refers to a
      * <a href="http://source.android.com/tech/input/key-character-map-files.html">
      * key character map</a> resource that defines the keyboard layout.
+     * The <code>android:keyboardLocale</code> attribute specifies a comma separated list of BCP 47
+     * language tags depicting the locales supported by the keyboard layout. This attribute is
+     * optional and will be used for auto layout selection for external physical keyboards.
+     * The <code>android:keyboardLayoutType</code> attribute specifies the layoutType for the
+     * keyboard layout. This can be either empty or one of the following supported layout types:
+     * qwerty, qwertz, azerty, dvorak, colemak, workman, extended, turkish_q, turkish_f. This
+     * attribute is optional and will be used for auto layout selection for external physical
+     * keyboards.
      * </p>
      */
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
@@ -703,6 +716,30 @@ public final class InputManager {
             res.add(kl.getDescriptor());
         }
         return res;
+    }
+
+    /**
+     * Returns the layout type of the queried layout
+     * <p>
+     * The input manager consults the built-in keyboard layouts as well as all keyboard layouts
+     * advertised by applications using a {@link #ACTION_QUERY_KEYBOARD_LAYOUTS} broadcast receiver.
+     * </p>
+     *
+     * @param layoutDescriptor The layout descriptor of the queried layout
+     * @return layout type of the queried layout
+     *
+     * @hide
+     */
+    @TestApi
+    @NonNull
+    public String getKeyboardLayoutTypeForLayoutDescriptor(@NonNull String layoutDescriptor) {
+        KeyboardLayout[] layouts = getKeyboardLayouts();
+        for (KeyboardLayout kl : layouts) {
+            if (layoutDescriptor.equals(kl.getDescriptor())) {
+                return kl.getLayoutType();
+            }
+        }
+        return "";
     }
 
     /**
@@ -2034,11 +2071,6 @@ public final class InputManager {
      */
     @RequiresPermission(Manifest.permission.WRITE_SECURE_SETTINGS)
     public void setStylusEverUsed(@NonNull Context context, boolean stylusEverUsed) {
-        if (context.checkCallingPermission(Manifest.permission.WRITE_SECURE_SETTINGS)
-                != PackageManager.PERMISSION_GRANTED) {
-            throw new SecurityException("You need WRITE_SECURE_SETTINGS permission "
-                + "to set stylus ever used.");
-        }
         Settings.Global.putInt(context.getContentResolver(),
                 Settings.Global.STYLUS_EVER_USED, stylusEverUsed ? 1 : 0);
     }
@@ -2255,6 +2287,74 @@ public final class InputManager {
     }
 
     /**
+     * Registers a Keyboard backlight change listener to be notified about {@link
+     * KeyboardBacklightState} changes for connected keyboard devices.
+     *
+     * @param executor an executor on which the callback will be called
+     * @param listener the {@link KeyboardBacklightListener}
+     * @hide
+     * @see #unregisterKeyboardBacklightListener(KeyboardBacklightListener)
+     * @throws IllegalArgumentException if {@code listener} has already been registered previously.
+     * @throws NullPointerException if {@code listener} or {@code executor} is null.
+     */
+    @RequiresPermission(Manifest.permission.MONITOR_KEYBOARD_BACKLIGHT)
+    public void registerKeyboardBacklightListener(@NonNull Executor executor,
+            @NonNull KeyboardBacklightListener listener) throws IllegalArgumentException {
+        Objects.requireNonNull(executor, "executor should not be null");
+        Objects.requireNonNull(listener, "listener should not be null");
+
+        synchronized (mKeyboardBacklightListenerLock) {
+            if (mKeyboardBacklightListener == null) {
+                mKeyboardBacklightListeners = new ArrayList<>();
+                mKeyboardBacklightListener = new LocalKeyboardBacklightListener();
+
+                try {
+                    mIm.registerKeyboardBacklightListener(mKeyboardBacklightListener);
+                } catch (RemoteException e) {
+                    throw e.rethrowFromSystemServer();
+                }
+            }
+            for (KeyboardBacklightListenerDelegate delegate : mKeyboardBacklightListeners) {
+                if (delegate.mListener == listener) {
+                    throw new IllegalArgumentException("Listener has already been registered!");
+                }
+            }
+            KeyboardBacklightListenerDelegate delegate =
+                    new KeyboardBacklightListenerDelegate(listener, executor);
+            mKeyboardBacklightListeners.add(delegate);
+        }
+    }
+
+    /**
+     * Unregisters a previously added Keyboard backlight change listener.
+     *
+     * @param listener the {@link KeyboardBacklightListener}
+     * @see #registerKeyboardBacklightListener(Executor, KeyboardBacklightListener)
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.MONITOR_KEYBOARD_BACKLIGHT)
+    public void unregisterKeyboardBacklightListener(
+            @NonNull KeyboardBacklightListener listener) {
+        Objects.requireNonNull(listener, "listener should not be null");
+
+        synchronized (mKeyboardBacklightListenerLock) {
+            if (mKeyboardBacklightListeners == null) {
+                return;
+            }
+            mKeyboardBacklightListeners.removeIf((delegate) -> delegate.mListener == listener);
+            if (mKeyboardBacklightListeners.isEmpty()) {
+                try {
+                    mIm.unregisterKeyboardBacklightListener(mKeyboardBacklightListener);
+                } catch (RemoteException e) {
+                    throw e.rethrowFromSystemServer();
+                }
+                mKeyboardBacklightListeners = null;
+                mKeyboardBacklightListener = null;
+            }
+        }
+    }
+
+    /**
      * A callback used to be notified about battery state changes for an input device. The
      * {@link #onBatteryStateChanged(int, long, BatteryState)} method will be called once after the
      * listener is successfully registered to provide the initial battery state of the device.
@@ -2345,6 +2445,27 @@ public final class InputManager {
          * {@link SystemClock#uptimeMillis} time base.
          */
         void onTabletModeChanged(long whenNanos, boolean inTabletMode);
+    }
+
+    /**
+     * A callback used to be notified about keyboard backlight state changes for keyboard device.
+     * The {@link #onKeyboardBacklightChanged(int, KeyboardBacklightState, boolean)} method
+     * will be called once after the listener is successfully registered to provide the initial
+     * keyboard backlight state of the device.
+     * @see #registerKeyboardBacklightListener(Executor, KeyboardBacklightListener)
+     * @see #unregisterKeyboardBacklightListener(KeyboardBacklightListener)
+     * @hide
+     */
+    public interface KeyboardBacklightListener {
+        /**
+         * Called when the keyboard backlight brightness level changes.
+         * @param deviceId the keyboard for which the backlight brightness changed.
+         * @param state the new keyboard backlight state, never null.
+         * @param isTriggeredByKeyPress whether brightness change was triggered by the user
+         *                              pressing up/down key on the keyboard.
+         */
+        void onKeyboardBacklightChanged(
+                int deviceId, @NonNull KeyboardBacklightState state, boolean isTriggeredByKeyPress);
     }
 
     private final class TabletModeChangedListener extends ITabletModeChangedListener.Stub {
@@ -2451,6 +2572,61 @@ public final class InputManager {
                 entry.mInputDeviceBatteryState = state;
                 for (InputDeviceBatteryListenerDelegate delegate : entry.mDelegates) {
                     delegate.notifyBatteryStateChanged(entry.mInputDeviceBatteryState);
+                }
+            }
+        }
+    }
+
+    // Implementation of the android.hardware.input.KeyboardBacklightState interface used to report
+    // the keyboard backlight state via the KeyboardBacklightListener interfaces.
+    private static final class LocalKeyboardBacklightState extends KeyboardBacklightState {
+
+        private final int mBrightnessLevel;
+        private final int mMaxBrightnessLevel;
+
+        LocalKeyboardBacklightState(int brightnesslevel, int maxBrightnessLevel) {
+            mBrightnessLevel = brightnesslevel;
+            mMaxBrightnessLevel = maxBrightnessLevel;
+        }
+
+        @Override
+        public int getBrightnessLevel() {
+            return mBrightnessLevel;
+        }
+
+        @Override
+        public int getMaxBrightnessLevel() {
+            return mMaxBrightnessLevel;
+        }
+    }
+
+    private static final class KeyboardBacklightListenerDelegate {
+        final KeyboardBacklightListener mListener;
+        final Executor mExecutor;
+
+        KeyboardBacklightListenerDelegate(KeyboardBacklightListener listener, Executor executor) {
+            mListener = listener;
+            mExecutor = executor;
+        }
+
+        void notifyKeyboardBacklightChange(int deviceId, IKeyboardBacklightState state,
+                boolean isTriggeredByKeyPress) {
+            mExecutor.execute(() ->
+                    mListener.onKeyboardBacklightChanged(deviceId,
+                            new LocalKeyboardBacklightState(state.brightnessLevel,
+                                    state.maxBrightnessLevel), isTriggeredByKeyPress));
+        }
+    }
+
+    private class LocalKeyboardBacklightListener extends IKeyboardBacklightListener.Stub {
+
+        @Override
+        public void onBrightnessChanged(int deviceId, IKeyboardBacklightState state,
+                boolean isTriggeredByKeyPress) {
+            synchronized (mKeyboardBacklightListenerLock) {
+                if (mKeyboardBacklightListeners == null) return;
+                for (KeyboardBacklightListenerDelegate delegate : mKeyboardBacklightListeners) {
+                    delegate.notifyKeyboardBacklightChange(deviceId, state, isTriggeredByKeyPress);
                 }
             }
         }
