@@ -33,6 +33,24 @@
       "message": "But get\u0027s a boolean value here, not sure if this is intentional?",
       "revId": "aa6c3ab88fcb8df4b1594071524135d2a9e70a7d",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "a0c94482_6130ef64",
+        "filename": "services/core/java/com/android/server/pm/InstallPackageHelper.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 1712,
+      "author": {
+        "id": 1000840
+      },
+      "writtenOn": "2023-02-12T12:48:33Z",
+      "side": 1,
+      "message": "This is no problem.\nBecause https://github.com/AOSPA/android_frameworks_base/blob/topaz/core/java/android/os/SystemProperties.java#L201",
+      "parentUuid": "01066ca9_05a5d244",
+      "revId": "aa6c3ab88fcb8df4b1594071524135d2a9e70a7d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
