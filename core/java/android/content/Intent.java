@@ -3599,17 +3599,6 @@ public class Intent implements Parcelable, Cloneable {
     public static final String ACTION_MEDIA_BUTTON = "android.intent.action.MEDIA_BUTTON";
 
     /**
-     * Broadcast action: Launch System output switcher. Includes a single extra field,
-     * {@link #EXTRA_PACKAGE_NAME}, which specifies the package name of the calling app
-     * so that the system can get the corresponding MediaSession for the output switcher.
-     *
-     * @see #EXTRA_PACKAGE_NAME
-     */
-    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
-    public static final String ACTION_SHOW_OUTPUT_SWITCHER =
-            "android.intent.action.SHOW_OUTPUT_SWITCHER";
-
-    /**
      * Broadcast Action:  The "Camera Button" was pressed.  Includes a single
      * extra field, {@link #EXTRA_KEY_EVENT}, containing the key event that
      * caused the broadcast.
@@ -5842,10 +5831,9 @@ public class Intent implements Parcelable, Cloneable {
     /**
      * A Parcelable[] of {@link ChooserAction} objects to provide the Android Sharesheet with
      * app-specific actions to be presented to the user when invoking {@link #ACTION_CHOOSER}.
-     * @hide
      */
     public static final String EXTRA_CHOOSER_CUSTOM_ACTIONS =
-            "android.intent.extra.EXTRA_CHOOSER_CUSTOM_ACTIONS";
+            "android.intent.extra.CHOOSER_CUSTOM_ACTIONS";
 
     /**
      * Optional argument to be used with {@link #ACTION_CHOOSER}.
@@ -5856,7 +5844,7 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      */
     public static final String EXTRA_CHOOSER_PAYLOAD_RESELECTION_ACTION =
-            "android.intent.extra.EXTRA_CHOOSER_PAYLOAD_RESELECTION_ACTION";
+            "android.intent.extra.CHOOSER_PAYLOAD_RESELECTION_ACTION";
 
     /**
      * An {@code ArrayList} of {@code String} annotations describing content for

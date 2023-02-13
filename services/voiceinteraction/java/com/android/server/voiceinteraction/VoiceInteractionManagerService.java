@@ -72,6 +72,7 @@ import android.os.Trace;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.service.voice.IMicrophoneHotwordDetectionVoiceInteractionCallback;
+import android.service.voice.IVisualQueryDetectionVoiceInteractionCallback;
 import android.service.voice.IVoiceInteractionSession;
 import android.service.voice.VoiceInteractionManagerInternal;
 import android.service.voice.VoiceInteractionService;
@@ -330,6 +331,12 @@ public class VoiceInteractionManagerService extends SystemService {
         @GuardedBy("this")
         private boolean mTemporarilyDisabled;
 
+        /** The start value of showSessionId */
+        private static final int SHOW_SESSION_START_ID = 0;
+
+        @GuardedBy("this")
+        private int mShowSessionId = SHOW_SESSION_START_ID;
+
         private final boolean mEnableService;
         // TODO(b/226201975): remove reference once RoleService supports pre-created users
         private final RoleObserver mRoleObserver;
@@ -346,6 +353,24 @@ public class VoiceInteractionManagerService extends SystemService {
                     Slog.d(TAG, "switchImplementation for user stop.");
                     switchImplementationIfNeededLocked(true);
                 }
+            }
+        }
+
+        int getNextShowSessionId() {
+            synchronized (this) {
+                // Reset the showSessionId to SHOW_SESSION_START_ID to avoid the value exceeds
+                // Integer.MAX_VALUE
+                if (mShowSessionId == Integer.MAX_VALUE - 1) {
+                    mShowSessionId = SHOW_SESSION_START_ID;
+                }
+                mShowSessionId++;
+                return mShowSessionId;
+            }
+        }
+
+        int getShowSessionId() {
+            synchronized (this) {
+                return mShowSessionId;
             }
         }
 
@@ -1307,6 +1332,46 @@ public class VoiceInteractionManagerService extends SystemService {
                 final long caller = Binder.clearCallingIdentity();
                 try {
                     mImpl.shutdownHotwordDetectionServiceLocked();
+                } finally {
+                    Binder.restoreCallingIdentity(caller);
+                }
+            }
+        }
+
+        @Override
+        public void startPerceiving(
+                IVisualQueryDetectionVoiceInteractionCallback callback)
+                throws RemoteException {
+            enforceCallingPermission(Manifest.permission.RECORD_AUDIO);
+            enforceCallingPermission(Manifest.permission.CAMERA);
+            synchronized (this) {
+                enforceIsCurrentVoiceInteractionService();
+
+                if (mImpl == null) {
+                    Slog.w(TAG, "startPerceiving without running voice interaction service");
+                    return;
+                }
+                final long caller = Binder.clearCallingIdentity();
+                try {
+                    mImpl.startPerceivingLocked(callback);
+                } finally {
+                    Binder.restoreCallingIdentity(caller);
+                }
+            }
+        }
+
+        @Override
+        public void stopPerceiving() throws RemoteException {
+            synchronized (this) {
+                enforceIsCurrentVoiceInteractionService();
+
+                if (mImpl == null) {
+                    Slog.w(TAG, "stopPerceiving without running voice interaction service");
+                    return;
+                }
+                final long caller = Binder.clearCallingIdentity();
+                try {
+                    mImpl.stopPerceivingLocked();
                 } finally {
                     Binder.restoreCallingIdentity(caller);
                 }

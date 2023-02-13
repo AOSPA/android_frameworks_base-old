@@ -948,6 +948,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     // task and directly above this ActivityRecord. This field is updated whenever a new activity
     // is launched from this ActivityRecord. Touches are always allowed within the same uid.
     int mAllowedTouchUid;
+    // Whether client has requested a scene transition when exiting.
+    final boolean mHasSceneTransition;
 
     // Whether the ActivityEmbedding is enabled on the app.
     private final boolean mAppActivityEmbeddingSplitsEnabled;
@@ -2110,6 +2112,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
         if (options != null) {
             setOptions(options);
+            // The result receiver is the transition receiver, which will handle the shared element
+            // exit transition.
+            mHasSceneTransition = options.getAnimationType() == ANIM_SCENE_TRANSITION
+                    && options.getResultReceiver() != null;
             final PendingIntent usageReport = options.getUsageTimeReport();
             if (usageReport != null) {
                 appTimeTracker = new AppTimeTracker(usageReport);
@@ -2122,6 +2128,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             mHandoverLaunchDisplayId = options.getLaunchDisplayId();
             mLaunchCookie = options.getLaunchCookie();
             mLaunchRootTask = options.getLaunchRootTask();
+        } else {
+            mHasSceneTransition = false;
         }
 
         mPersistentState = persistentState;
@@ -5281,9 +5289,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             transferStartingWindowFromHiddenAboveTokenIfNeeded();
         }
 
-        // If in a transition, defer commits for activities that are going invisible
-        if (!visible && inTransition()) {
-            if (mTransitionController.inPlayingTransition(this)
+        // Defer committing visibility until transition starts.
+        if (inTransition()) {
+            if (!visible && mTransitionController.inPlayingTransition(this)
                     && mTransitionController.isCollecting(this)) {
                 mTransitionChangeFlags |= FLAG_IS_OCCLUDED;
             }
@@ -5530,6 +5538,17 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             } finally {
                 SurfaceControl.closeTransaction();
             }
+        }
+    }
+
+    /** Updates draw state and shows drawn windows. */
+    void commitFinishDrawing(SurfaceControl.Transaction t) {
+        boolean committed = false;
+        for (int i = mChildren.size() - 1; i >= 0; i--) {
+            committed |= mChildren.get(i).commitFinishDrawing(t);
+        }
+        if (committed) {
+            requestUpdateWallpaperIfNeeded();
         }
     }
 
@@ -9493,6 +9512,15 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         if (mAtmService.mSuppressResizeConfigChanges && preserveWindow) {
             configChangeFlags = 0;
             return;
+        }
+        if (!preserveWindow) {
+            // If the activity is the IME input target, ensure storing the last IME shown state
+            // before relaunching it for restoring the IME visibility once its new window focused.
+            final InputTarget imeInputTarget = mDisplayContent.getImeInputTarget();
+            mLastImeShown = imeInputTarget != null && imeInputTarget.getWindowState() != null
+                    && imeInputTarget.getWindowState().mActivityRecord == this
+                    && mDisplayContent.mInputMethodWindow != null
+                    && mDisplayContent.mInputMethodWindow.isVisible();
         }
         // Do not waiting for translucent activity if it is going to relaunch.
         final Task rootTask = getRootTask();

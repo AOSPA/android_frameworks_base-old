@@ -77,11 +77,6 @@ public class LockPatternUtils {
     private static final boolean FRP_CREDENTIAL_ENABLED = true;
 
     /**
-     * The key to identify when the lock pattern enabled flag is being accessed for legacy reasons.
-     */
-    public static final String LEGACY_LOCK_PATTERN_ENABLED = "legacy_lock_pattern_enabled";
-
-    /**
      * The interval of the countdown for showing progress of the lockout.
      */
     public static final long FAILED_ATTEMPT_COUNTDOWN_INTERVAL_MS = 1000L;
@@ -624,12 +619,11 @@ public class LockPatternUtils {
         }
         boolean disabledByDefault = mContext.getResources().getBoolean(
                 com.android.internal.R.bool.config_disableLockscreenByDefault);
-        boolean isSystemUser = UserManager.isSplitSystemUser() && userId == UserHandle.USER_SYSTEM;
         UserInfo userInfo = getUserManager().getUserInfo(userId);
         boolean isDemoUser = UserManager.isDeviceInDemoMode(mContext) && userInfo != null
                 && userInfo.isDemo();
         return getBoolean(DISABLE_LOCKSCREEN_KEY, false, userId)
-                || (disabledByDefault && !isSystemUser)
+                || disabledByDefault
                 || isDemoUser;
     }
 
@@ -961,19 +955,6 @@ public class LockPatternUtils {
     public boolean isLockPatternEnabled(int userId) {
         int type = getCredentialTypeForUser(userId);
         return type == CREDENTIAL_TYPE_PATTERN;
-    }
-
-    @Deprecated
-    public boolean isLegacyLockPatternEnabled(int userId) {
-        // Note: this value should default to {@code true} to avoid any reset that might result.
-        // We must use a special key to read this value, since it will by default return the value
-        // based on the new logic.
-        return getBoolean(LEGACY_LOCK_PATTERN_ENABLED, true, userId);
-    }
-
-    @Deprecated
-    public void setLegacyLockPatternEnabled(int userId) {
-        setBoolean(Settings.Secure.LOCK_PATTERN_ENABLED, true, userId);
     }
 
     /**

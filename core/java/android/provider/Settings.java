@@ -603,6 +603,8 @@ public final class Settings {
      * Output: When a package data uri is passed as input, the activity result is set to
      * {@link android.app.Activity#RESULT_OK} if the permission was granted to the app. Otherwise,
      * the result is set to {@link android.app.Activity#RESULT_CANCELED}.
+     *
+     * @hide
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_MANAGE_APP_LONG_RUNNING_JOBS =
@@ -6151,7 +6153,6 @@ public final class Settings {
             MOVED_TO_GLOBAL.add(Settings.Global.ADB_ENABLED);
             MOVED_TO_GLOBAL.add(Settings.Global.ASSISTED_GPS_ENABLED);
             MOVED_TO_GLOBAL.add(Settings.Global.BLUETOOTH_ON);
-            MOVED_TO_GLOBAL.add(Settings.Global.BUGREPORT_IN_POWER_MENU);
             MOVED_TO_GLOBAL.add(Settings.Global.CDMA_CELL_BROADCAST_SMS);
             MOVED_TO_GLOBAL.add(Settings.Global.CDMA_ROAMING_MODE);
             MOVED_TO_GLOBAL.add(Settings.Global.CDMA_SUBSCRIPTION_MODE);
@@ -6773,12 +6774,24 @@ public final class Settings {
         /**
          * When the user has enable the option to have a "bug report" command
          * in the power menu.
-         * @deprecated Use {@link android.provider.Settings.Global#BUGREPORT_IN_POWER_MENU} instead
          * @hide
          */
-        @Deprecated
         @Readable
         public static final String BUGREPORT_IN_POWER_MENU = "bugreport_in_power_menu";
+
+        /**
+         * The package name for the custom bugreport handler app. This app must be bugreport
+         * allow-listed. This is currently used only by Power Menu short press.
+         * @hide
+         */
+        public static final String CUSTOM_BUGREPORT_HANDLER_APP = "custom_bugreport_handler_app";
+
+        /**
+         * The user id for the custom bugreport handler app. This is currently used only by Power
+         * Menu short press.
+         * @hide
+         */
+        public static final String CUSTOM_BUGREPORT_HANDLER_USER = "custom_bugreport_handler_user";
 
         /**
          * @deprecated Use {@link android.provider.Settings.Global#ADB_ENABLED} instead
@@ -8670,6 +8683,12 @@ public final class Settings {
         public static final String BACKUP_AUTO_RESTORE = "backup_auto_restore";
 
         /**
+         * Controls whether framework backup scheduling is enabled.
+         * @hide
+         */
+        public static final String BACKUP_SCHEDULING_ENABLED = "backup_scheduling_enabled";
+
+        /**
          * Indicates whether settings backup has been fully provisioned.
          * Type: int ( 0 = unprovisioned, 1 = fully provisioned )
          * @hide
@@ -9412,12 +9431,28 @@ public final class Settings {
         public static final int DOCK_SETUP_PROMPTED = 3;
 
         /**
+         * Indicates that the user has started dock setup but never finished it.
+         * One of the possible states for {@link #DOCK_SETUP_STATE}.
+         *
+         * @hide
+         */
+        public static final int DOCK_SETUP_INCOMPLETE = 4;
+
+        /**
          * Indicates that the user has completed dock setup.
          * One of the possible states for {@link #DOCK_SETUP_STATE}.
          *
          * @hide
          */
         public static final int DOCK_SETUP_COMPLETED = 10;
+
+        /**
+         * Indicates that dock setup timed out before the user could complete it.
+         * One of the possible states for {@link #DOCK_SETUP_STATE}.
+         *
+         * @hide
+         */
+        public static final int DOCK_SETUP_TIMED_OUT = 11;
 
         /** @hide */
         @Retention(RetentionPolicy.SOURCE)
@@ -9426,7 +9461,9 @@ public final class Settings {
                 DOCK_SETUP_STARTED,
                 DOCK_SETUP_PAUSED,
                 DOCK_SETUP_PROMPTED,
-                DOCK_SETUP_COMPLETED
+                DOCK_SETUP_INCOMPLETE,
+                DOCK_SETUP_COMPLETED,
+                DOCK_SETUP_TIMED_OUT
         })
         public @interface DockSetupState {
         }
@@ -9999,9 +10036,11 @@ public final class Settings {
 
         /**
          * Whether or not a SFPS device is enabling the performant auth setting.
+         * The "_V2" suffix was added to re-introduce the default behavior for
+         * users. See b/265264294 fore more details.
          * @hide
          */
-        public static final String SFPS_PERFORMANT_AUTH_ENABLED = "sfps_performant_auth_enabled";
+        public static final String SFPS_PERFORMANT_AUTH_ENABLED = "sfps_performant_auth_enabled_v2";
 
         /**
          * Whether or not debugging is enabled.
@@ -11705,26 +11744,32 @@ public final class Settings {
         /**
          * When the user has enable the option to have a "bug report" command
          * in the power menu.
+         * @deprecated Use {@link android.provider.Settings.Secure#BUGREPORT_IN_POWER_MENU} instead
          * @hide
          */
+        @Deprecated
         @Readable
         public static final String BUGREPORT_IN_POWER_MENU = "bugreport_in_power_menu";
 
         /**
          * The package name for the custom bugreport handler app. This app must be whitelisted.
          * This is currently used only by Power Menu short press.
-         *
+         * @deprecated Use {@link android.provider.Settings.Secure#CUSTOM_BUGREPORT_HANDLER_APP}
+         * instead
          * @hide
          */
+        @Deprecated
         @Readable
         public static final String CUSTOM_BUGREPORT_HANDLER_APP = "custom_bugreport_handler_app";
 
         /**
          * The user id for the custom bugreport handler app. This is currently used only by Power
          * Menu short press.
-         *
+         * @deprecated Use {@link android.provider.Settings.Secure#CUSTOM_BUGREPORT_HANDLER_USER}
+         * instead
          * @hide
          */
+        @Deprecated
         @Readable
         public static final String CUSTOM_BUGREPORT_HANDLER_USER = "custom_bugreport_handler_user";
 
@@ -15727,8 +15772,13 @@ public final class Settings {
         public static final String NETWORK_SCORING_PROVISIONED = "network_scoring_provisioned";
 
         /**
-         * Indicates whether the user wants to be prompted for password to decrypt the device on
-         * boot. This only matters if the storage is encrypted.
+         * On devices that use full-disk encryption, indicates whether the primary user's lockscreen
+         * credential is required to decrypt the device on boot.
+         * <p>
+         * This setting does not do anything on devices that use file-based encryption.  With
+         * file-based encryption, the device boots without a credential being needed, but the
+         * lockscreen credential is required to unlock credential-encrypted storage.  All devices
+         * that launched with Android 10 or higher use file-based encryption.
          * <p>
          * Type: int (0 for false, 1 for true)
          *
@@ -16355,6 +16405,9 @@ public final class Settings {
             MOVED_TO_SECURE.add(Global.CHARGING_SOUNDS_ENABLED);
             MOVED_TO_SECURE.add(Global.CHARGING_VIBRATION_ENABLED);
             MOVED_TO_SECURE.add(Global.NOTIFICATION_BUBBLES);
+            MOVED_TO_SECURE.add(Global.BUGREPORT_IN_POWER_MENU);
+            MOVED_TO_SECURE.add(Global.CUSTOM_BUGREPORT_HANDLER_APP);
+            MOVED_TO_SECURE.add(Global.CUSTOM_BUGREPORT_HANDLER_USER);
         }
 
         // Certain settings have been moved from global to the per-user system namespace
@@ -17961,6 +18014,28 @@ public final class Settings {
              * @hide
              */
             public static final String OEM_SETUP_VERSION = "oem_setup_version";
+
+            /**
+             * The key to indicate to Setup Wizard if OEM setup is completed in Wear Services.
+             * @hide
+             */
+            public static final String OEM_SETUP_COMPLETED_STATUS = "oem_setup_completed_status";
+
+             /**
+              * Constant provided to Setup Wizard to inform about failure of OEM setup in Wear
+              * Services. The value should be provided with setting name {@link
+              * #OEM_SETUP_COMPLETED_STATUS}.
+              * @hide
+              */
+            public static final int OEM_SETUP_COMPLETED_FAILURE = 0;
+
+            /**
+             * Constant provided to Setup Wizard to inform about successful completion of OEM setup
+             * in Wear Services. The value should be provided with setting name {@link
+             * #OEM_SETUP_COMPLETED_STATUS}.
+             * @hide
+             */
+            public static final int OEM_SETUP_COMPLETED_SUCCESS = 1;
 
             /**
              * Controls the gestures feature.

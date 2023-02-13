@@ -17,6 +17,8 @@
 package com.android.systemui.statusbar.phone;
 
 import static com.android.systemui.flags.Flags.MODERN_BOUNCER;
+import static com.android.systemui.keyguard.shared.constants.KeyguardBouncerConstants.EXPANSION_HIDDEN;
+import static com.android.systemui.keyguard.shared.constants.KeyguardBouncerConstants.EXPANSION_VISIBLE;
 
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -58,6 +60,7 @@ import com.android.systemui.keyguard.data.BouncerView;
 import com.android.systemui.keyguard.data.BouncerViewDelegate;
 import com.android.systemui.keyguard.domain.interactor.AlternateBouncerInteractor;
 import com.android.systemui.keyguard.domain.interactor.PrimaryBouncerCallbackInteractor;
+import com.android.systemui.keyguard.domain.interactor.PrimaryBouncerCallbackInteractor.PrimaryBouncerExpansionCallback;
 import com.android.systemui.keyguard.domain.interactor.PrimaryBouncerInteractor;
 import com.android.systemui.navigationbar.NavigationModeController;
 import com.android.systemui.plugins.ActivityStarter.OnDismissAction;
@@ -124,7 +127,8 @@ public class StatusBarKeyguardViewManagerTest_Old extends SysuiTestCase {
     @Mock private BouncerViewDelegate mBouncerViewDelegate;
 
     private StatusBarKeyguardViewManager mStatusBarKeyguardViewManager;
-    private KeyguardBouncer.PrimaryBouncerExpansionCallback mBouncerExpansionCallback;
+    private PrimaryBouncerCallbackInteractor.PrimaryBouncerExpansionCallback
+            mBouncerExpansionCallback;
     private FakeKeyguardStateController mKeyguardStateController =
             spy(new FakeKeyguardStateController());
 
@@ -139,7 +143,7 @@ public class StatusBarKeyguardViewManagerTest_Old extends SysuiTestCase {
         MockitoAnnotations.initMocks(this);
         when(mKeyguardBouncerFactory.create(
                 any(ViewGroup.class),
-                any(KeyguardBouncer.PrimaryBouncerExpansionCallback.class)))
+                any(PrimaryBouncerExpansionCallback.class)))
                 .thenReturn(mPrimaryBouncer);
         when(mCentralSurfaces.getBouncerContainer()).thenReturn(mContainer);
         when(mContainer.findViewById(anyInt())).thenReturn(mKeyguardMessageArea);
@@ -187,8 +191,8 @@ public class StatusBarKeyguardViewManagerTest_Old extends SysuiTestCase {
                 mNotificationContainer,
                 mBypassController);
         mStatusBarKeyguardViewManager.show(null);
-        ArgumentCaptor<KeyguardBouncer.PrimaryBouncerExpansionCallback> callbackArgumentCaptor =
-                ArgumentCaptor.forClass(KeyguardBouncer.PrimaryBouncerExpansionCallback.class);
+        ArgumentCaptor<PrimaryBouncerExpansionCallback> callbackArgumentCaptor =
+                ArgumentCaptor.forClass(PrimaryBouncerExpansionCallback.class);
         verify(mKeyguardBouncerFactory).create(any(ViewGroup.class),
                 callbackArgumentCaptor.capture());
         mBouncerExpansionCallback = callbackArgumentCaptor.getValue();
@@ -261,7 +265,7 @@ public class StatusBarKeyguardViewManagerTest_Old extends SysuiTestCase {
         when(mPrimaryBouncer.inTransit()).thenReturn(true);
 
         mStatusBarKeyguardViewManager.onPanelExpansionChanged(EXPANSION_EVENT);
-        verify(mPrimaryBouncer).setExpansion(eq(KeyguardBouncer.EXPANSION_HIDDEN));
+        verify(mPrimaryBouncer).setExpansion(eq(EXPANSION_HIDDEN));
     }
 
     @Test
@@ -289,7 +293,7 @@ public class StatusBarKeyguardViewManagerTest_Old extends SysuiTestCase {
                 .thenReturn(BiometricUnlockController.MODE_WAKE_AND_UNLOCK);
         mStatusBarKeyguardViewManager.onPanelExpansionChanged(
                 expansionEvent(
-                        /* fraction= */ KeyguardBouncer.EXPANSION_VISIBLE,
+                        /* fraction= */ EXPANSION_VISIBLE,
                         /* expanded= */ true,
                         /* tracking= */ false));
         verify(mPrimaryBouncer, never()).setExpansion(anyFloat());
@@ -306,7 +310,7 @@ public class StatusBarKeyguardViewManagerTest_Old extends SysuiTestCase {
                 .thenReturn(BiometricUnlockController.MODE_DISMISS_BOUNCER);
         mStatusBarKeyguardViewManager.onPanelExpansionChanged(
                 expansionEvent(
-                        /* fraction= */ KeyguardBouncer.EXPANSION_VISIBLE,
+                        /* fraction= */ EXPANSION_VISIBLE,
                         /* expanded= */ true,
                         /* tracking= */ false));
         verify(mPrimaryBouncer, never()).setExpansion(anyFloat());
@@ -317,7 +321,7 @@ public class StatusBarKeyguardViewManagerTest_Old extends SysuiTestCase {
         when(mKeyguardStateController.isOccluded()).thenReturn(true);
         mStatusBarKeyguardViewManager.onPanelExpansionChanged(
                 expansionEvent(
-                        /* fraction= */ KeyguardBouncer.EXPANSION_VISIBLE,
+                        /* fraction= */ EXPANSION_VISIBLE,
                         /* expanded= */ true,
                         /* tracking= */ false));
         verify(mPrimaryBouncer, never()).setExpansion(anyFloat());
@@ -334,7 +338,7 @@ public class StatusBarKeyguardViewManagerTest_Old extends SysuiTestCase {
                 .thenReturn(BiometricUnlockController.MODE_SHOW_BOUNCER);
         mStatusBarKeyguardViewManager.onPanelExpansionChanged(
                 expansionEvent(
-                        /* fraction= */ KeyguardBouncer.EXPANSION_VISIBLE,
+                        /* fraction= */ EXPANSION_VISIBLE,
                         /* expanded= */ true,
                         /* tracking= */ false));
         verify(mPrimaryBouncer, never()).setExpansion(anyFloat());
@@ -345,7 +349,7 @@ public class StatusBarKeyguardViewManagerTest_Old extends SysuiTestCase {
         when(mStatusBarStateController.getState()).thenReturn(StatusBarState.SHADE_LOCKED);
         mStatusBarKeyguardViewManager.onPanelExpansionChanged(
                 expansionEvent(
-                        /* fraction= */ KeyguardBouncer.EXPANSION_VISIBLE,
+                        /* fraction= */ EXPANSION_VISIBLE,
                         /* expanded= */ true,
                         /* tracking= */ false));
         verify(mPrimaryBouncer, never()).setExpansion(anyFloat());

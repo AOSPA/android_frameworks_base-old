@@ -661,7 +661,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     dispatchMediaKeyRepeatWithWakeLock((KeyEvent)msg.obj);
                     break;
                 case MSG_DISPATCH_SHOW_RECENTS:
-                    showRecentApps(false);
+                    showRecents();
                     break;
                 case MSG_DISPATCH_SHOW_GLOBAL_ACTIONS:
                     showGlobalActionsInternal();
@@ -717,7 +717,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     handleRingerChordGesture();
                     break;
                 case MSG_SCREENSHOT_CHORD:
-                    handleScreenShot(msg.arg1, msg.arg2);
+                    handleScreenShot(msg.arg1);
                     break;
             }
         }
@@ -1534,9 +1534,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 || mShortPressOnStemPrimaryBehavior != SHORT_PRESS_PRIMARY_NOTHING;
     }
 
-    private void interceptScreenshotChord(int type, int source, long pressDelay) {
+    private void interceptScreenshotChord(int source, long pressDelay) {
         mHandler.removeMessages(MSG_SCREENSHOT_CHORD);
-        mHandler.sendMessageDelayed(mHandler.obtainMessage(MSG_SCREENSHOT_CHORD, type, source),
+        mHandler.sendMessageDelayed(mHandler.obtainMessage(MSG_SCREENSHOT_CHORD, source),
                 pressDelay);
     }
 
@@ -1606,9 +1606,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
     };
 
-    private void handleScreenShot(@WindowManager.ScreenshotType int type,
-            @WindowManager.ScreenshotSource int source) {
-        mDefaultDisplayPolicy.takeScreenshot(type, source);
+    private void handleScreenShot(@WindowManager.ScreenshotSource int source) {
+        mDefaultDisplayPolicy.takeScreenshot(TAKE_SCREENSHOT_FULLSCREEN, source);
     }
 
     @Override
@@ -2244,7 +2243,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                         @Override
                         void execute() {
                             mPowerKeyHandled = true;
-                            interceptScreenshotChord(TAKE_SCREENSHOT_FULLSCREEN,
+                            interceptScreenshotChord(
                                     SCREENSHOT_KEY_CHORD, getScreenshotChordLongPressDelay());
                         }
                         @Override
@@ -2926,7 +2925,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 break;
             case KeyEvent.KEYCODE_RECENT_APPS:
                 if (down && repeatCount == 0) {
-                    showRecentApps(false /* triggeredFromAltTab */);
+                    showRecents();
                 }
                 return key_consumed;
             case KeyEvent.KEYCODE_APP_SWITCH:
@@ -2972,8 +2971,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 break;
             case KeyEvent.KEYCODE_S:
                 if (down && event.isMetaPressed() && event.isCtrlPressed() && repeatCount == 0) {
-                    interceptScreenshotChord(
-                            TAKE_SCREENSHOT_FULLSCREEN, SCREENSHOT_KEY_OTHER, 0 /*pressDelay*/);
+                    interceptScreenshotChord(SCREENSHOT_KEY_OTHER, 0 /*pressDelay*/);
                     return key_consumed;
                 }
                 break;
@@ -3110,21 +3108,22 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 }
                 break;
             case KeyEvent.KEYCODE_TAB:
-                if (down && event.isMetaPressed()) {
-                    if (!keyguardOn && isUserSetupComplete()) {
-                        showRecentApps(false);
-                        return key_consumed;
-                    }
-                } else if (down && repeatCount == 0) {
-                    // Display task switcher for ALT-TAB.
-                    if (mRecentAppsHeldModifiers == 0 && !keyguardOn && isUserSetupComplete()) {
-                        final int shiftlessModifiers =
-                                event.getModifiers() & ~KeyEvent.META_SHIFT_MASK;
-                        if (KeyEvent.metaStateHasModifiers(
-                                shiftlessModifiers, KeyEvent.META_ALT_ON)) {
-                            mRecentAppsHeldModifiers = shiftlessModifiers;
-                            showRecentApps(true);
+                if (down) {
+                    if (event.isMetaPressed()) {
+                        if (!keyguardOn && isUserSetupComplete()) {
+                            showRecents();
                             return key_consumed;
+                        }
+                    } else {
+                        // Display task switcher for ALT-TAB.
+                        if (mRecentAppsHeldModifiers == 0 && !keyguardOn && isUserSetupComplete()) {
+                            final int modifiers = event.getModifiers();
+                            if (KeyEvent.metaStateHasModifiers(modifiers, KeyEvent.META_ALT_ON)) {
+                                mRecentAppsHeldModifiers = modifiers;
+                                showRecentsFromAltTab(KeyEvent.metaStateHasModifiers(modifiers,
+                                        KeyEvent.META_SHIFT_ON));
+                                return key_consumed;
+                            }
                         }
                     }
                 }
@@ -3417,8 +3416,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 break;
             case KeyEvent.KEYCODE_SYSRQ:
                 if (down && repeatCount == 0) {
-                    interceptScreenshotChord(
-                            TAKE_SCREENSHOT_FULLSCREEN, SCREENSHOT_KEY_OTHER, 0 /*pressDelay*/);
+                    interceptScreenshotChord(SCREENSHOT_KEY_OTHER, 0 /*pressDelay*/);
                 }
                 return true;
         }
@@ -3662,11 +3660,19 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mHandler.obtainMessage(MSG_DISPATCH_SHOW_RECENTS).sendToTarget();
     }
 
-    private void showRecentApps(boolean triggeredFromAltTab) {
+    private void showRecents() {
         mPreloadedRecentApps = false; // preloading no longer needs to be canceled
         StatusBarManagerInternal statusbar = getStatusBarManagerInternal();
         if (statusbar != null) {
-            statusbar.showRecentApps(triggeredFromAltTab);
+            statusbar.showRecentApps(false /* triggeredFromAltTab */, false /* forward */);
+        }
+    }
+
+    private void showRecentsFromAltTab(boolean forward) {
+        mPreloadedRecentApps = false; // preloading no longer needs to be canceled
+        StatusBarManagerInternal statusbar = getStatusBarManagerInternal();
+        if (statusbar != null) {
+            statusbar.showRecentApps(true /* triggeredFromAltTab */, forward);
         }
     }
 
@@ -4325,7 +4331,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             case KeyEvent.KEYCODE_STYLUS_BUTTON_SECONDARY:
             case KeyEvent.KEYCODE_STYLUS_BUTTON_TERTIARY:
             case KeyEvent.KEYCODE_STYLUS_BUTTON_TAIL: {
-                if (!mStylusButtonsDisabled) {
+                if (down && !mStylusButtonsDisabled) {
                     sendSystemKeyToStatusBarAsync(keyCode);
                 }
                 result &= ~ACTION_PASS_TO_USER;
@@ -4353,7 +4359,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             // from windowmanager. Currently, we need to ensure the setInputWindows completes,
             // which would force the focus event to be queued before the current key event.
             // TODO(b/70668286): post call to 'moveDisplayToTop' to mHandler instead
-            Log.i(TAG, "Moving non-focused display " + displayId + " to top "
+            Log.i(TAG, "Attempting to move non-focused display " + displayId + " to top "
                     + "because a key is targeting it");
             mWindowManagerFuncs.moveDisplayToTopIfAllowed(displayId);
         }

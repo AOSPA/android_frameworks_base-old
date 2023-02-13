@@ -1142,6 +1142,16 @@ public abstract class BatteryStats {
                 @BatteryConsumer.ProcessState int processState);
 
 
+
+        /**
+         * Returns the battery consumption (in microcoulombs) of UID's camera usage, derived from
+         * on-device power measurement data.
+         * Will return {@link #POWER_DATA_UNAVAILABLE} if data is unavailable.
+         *
+         * {@hide}
+         */
+        public abstract long getCameraEnergyConsumptionUC();
+
         /**
          * Returns the battery consumption (in microcoulombs) used by this uid for each
          * {@link android.hardware.power.stats.EnergyConsumer.ordinal} of (custom) energy consumer
@@ -2894,6 +2904,15 @@ public abstract class BatteryStats {
     public abstract long getMobileRadioEnergyConsumptionUC();
 
     /**
+     * Returns the battery consumption (in microcoulombs) of the phone calls, derived from on device
+     * power measurement data.
+     * Will return {@link #POWER_DATA_UNAVAILABLE} if data is unavailable.
+     *
+     * {@hide}
+     */
+    public abstract long getPhoneEnergyConsumptionUC();
+
+    /**
      * Returns the battery consumption (in microcoulombs) of the screen while on, derived from on
      * device power measurement data.
      * Will return {@link #POWER_DATA_UNAVAILABLE} if data is unavailable.
@@ -2919,6 +2938,15 @@ public abstract class BatteryStats {
      * {@hide}
      */
     public abstract long getWifiEnergyConsumptionUC();
+
+    /**
+     * Returns the battery consumption (in microcoulombs) of camera, derived from on
+     * device power measurement data.
+     * Will return {@link #POWER_DATA_UNAVAILABLE} if data is unavailable.
+     *
+     * {@hide}
+     */
+    public abstract long getCameraEnergyConsumptionUC();
 
     /**
      * Returns the battery consumption (in microcoulombs) that each

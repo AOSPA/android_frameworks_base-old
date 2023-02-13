@@ -65,7 +65,6 @@ import android.util.Log;
 import android.view.WindowManager.LayoutParams;
 
 import com.android.internal.R;
-import com.android.internal.os.RoSystemProperties;
 import com.android.internal.util.FrameworkStatsLog;
 
 import java.io.IOException;
@@ -321,6 +320,24 @@ public class UserManager {
      * @see #getUserRestrictions()
      */
     public static final String DISALLOW_WIFI_TETHERING = "no_wifi_tethering";
+
+    /**
+     * Specifies if a user is disallowed from being granted admin privileges.
+     *
+     * <p>This restriction limits ability of other admin users to grant admin
+     * privileges to selected user.
+     *
+     * <p>This restriction has no effect in a mode that does not allow multiple admins.
+     *
+     * <p>The default value is <code>false</code>.
+     *
+     * <p>Key for user restrictions.
+     * <p>Type: Boolean
+     * @see DevicePolicyManager#addUserRestriction(ComponentName, String)
+     * @see DevicePolicyManager#clearUserRestriction(ComponentName, String)
+     * @see #getUserRestrictions()
+     */
+    public static final String DISALLOW_GRANT_ADMIN = "no_grant_admin";
 
     /**
      * Specifies if users are disallowed from sharing Wi-Fi for admin configured networks.
@@ -2090,17 +2107,6 @@ public class UserManager {
         return getMaxSupportedUsers() > 1
                 && SystemProperties.getBoolean("fw.show_multiuserui",
                 Resources.getSystem().getBoolean(R.bool.config_enableMultiUserUI));
-    }
-
-    /**
-     * @hide
-     * @return Whether the device is running with split system user. It means the system user and
-     * primary user are two separate users. Previously system user and primary user are combined as
-     * a single owner user.  see @link {android.os.UserHandle#USER_OWNER}
-     */
-    @TestApi
-    public static boolean isSplitSystemUser() {
-        return RoSystemProperties.FW_SYSTEM_USER_SPLIT;
     }
 
     /**
@@ -5666,6 +5672,40 @@ public class UserManager {
 
         try {
             return mService.someUserHasAccount(accountName, accountType);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Sets the user who should be in the foreground when boot completes. This should be called
+     * during boot, and the provided user must be a full user (i.e. not a profile).
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(anyOf = {Manifest.permission.MANAGE_USERS,
+            Manifest.permission.CREATE_USERS})
+    public void setBootUser(@NonNull UserHandle bootUser) {
+        try {
+            mService.setBootUser(bootUser.getIdentifier());
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns the user who should be in the foreground when boot completes.
+     *
+     * @hide
+     */
+    @TestApi
+    @RequiresPermission(anyOf = {Manifest.permission.MANAGE_USERS,
+            Manifest.permission.CREATE_USERS})
+    @SuppressWarnings("[AndroidFrameworkContextUserId]")
+    public @NonNull UserHandle getBootUser() {
+        try {
+            return UserHandle.of(mService.getBootUser());
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }

@@ -766,7 +766,7 @@ public class ComputerEngine implements Computer {
              */
             crossProfileResults = mCrossProfileIntentResolverEngine.resolveIntent(this, intent,
                     resolvedType, userId, flags, pkgName, hasNonNegativePriorityResult,
-                    mSettings::getPackage);
+                    resolveForStart, mSettings::getPackage);
             if (intent.hasWebURI() || !crossProfileResults.isEmpty()) sortResult = true;
         } else {
             final PackageStateInternal setting =
@@ -791,7 +791,7 @@ public class ComputerEngine implements Computer {
              */
             crossProfileResults = mCrossProfileIntentResolverEngine.resolveIntent(this, intent,
                     resolvedType, userId, flags, pkgName, false,
-                    mSettings::getPackage);
+                    resolveForStart, mSettings::getPackage);
         }
 
         /*
@@ -1755,6 +1755,7 @@ public class ComputerEngine implements Computer {
         forwardingResolveInfo.isDefault = true;
         forwardingResolveInfo.filter = new IntentFilter(filter.getIntentFilter());
         forwardingResolveInfo.targetUserId = targetUserId;
+        forwardingResolveInfo.userHandle = UserHandle.of(sourceUserId);
         return forwardingResolveInfo;
     }
 

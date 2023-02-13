@@ -183,9 +183,11 @@ import android.app.AppOpsManagerInternal.CheckOpsDelegate;
 import android.app.ApplicationErrorReport;
 import android.app.ApplicationExitInfo;
 import android.app.ApplicationThreadConstants;
+import android.app.BackgroundStartPrivileges;
 import android.app.BroadcastOptions;
 import android.app.ComponentOptions;
 import android.app.ContentProviderHolder;
+import android.app.ForegroundServiceDelegationOptions;
 import android.app.IActivityController;
 import android.app.IActivityManager;
 import android.app.IApplicationThread;
@@ -1463,6 +1465,9 @@ public class ActivityManagerService extends IActivityManager.Stub
     private boolean mWaitForDebugger = false;
 
     @GuardedBy("this")
+    private boolean mSuspendUponWait = false;
+
+    @GuardedBy("this")
     private boolean mDebugTransient = false;
 
     @GuardedBy("this")
@@ -1622,8 +1627,6 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     // Encapsulates the global setting "hidden_api_blacklist_exemptions"
     final HiddenApiSettings mHiddenApiBlacklist;
-
-    final SdkSandboxSettings mSdkSandboxSettings;
 
     private final PlatformCompat mPlatformCompat;
 
@@ -2341,53 +2344,6 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
     }
 
-    /**
-     * Handles settings related to the enforcement of SDK sandbox restrictions.
-     */
-    static class SdkSandboxSettings implements DeviceConfig.OnPropertiesChangedListener {
-
-        private final Context mContext;
-        private final Object mLock = new Object();
-
-        @GuardedBy("mLock")
-        private boolean mEnforceBroadcastReceiverRestrictions;
-
-        /**
-         * Property to enforce broadcast receiver restrictions for SDK sandbox processes. If the
-         * value of this property is {@code true}, the restrictions will be enforced.
-         */
-        public static final String ENFORCE_BROADCAST_RECEIVER_RESTRICTIONS =
-                "enforce_broadcast_receiver_restrictions";
-
-        SdkSandboxSettings(Context context) {
-            mContext = context;
-        }
-
-        void registerObserver() {
-            synchronized (mLock) {
-                mEnforceBroadcastReceiverRestrictions = DeviceConfig.getBoolean(
-                        DeviceConfig.NAMESPACE_SDK_SANDBOX,
-                        ENFORCE_BROADCAST_RECEIVER_RESTRICTIONS, false);
-                DeviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_SDK_SANDBOX,
-                        mContext.getMainExecutor(), this);
-            }
-        }
-
-        @Override
-        public void onPropertiesChanged(DeviceConfig.Properties properties) {
-            synchronized (mLock) {
-                mEnforceBroadcastReceiverRestrictions = properties.getBoolean(
-                        ENFORCE_BROADCAST_RECEIVER_RESTRICTIONS, false);
-            }
-        }
-
-        boolean isBroadcastReceiverRestrictionsEnforced() {
-            synchronized (mLock) {
-                return mEnforceBroadcastReceiverRestrictions;
-            }
-        }
-    }
-
     AppOpsManager getAppOpsManager() {
         if (mAppOpsManager == null) {
             mAppOpsManager = mContext.getSystemService(AppOpsManager.class);
@@ -2431,7 +2387,6 @@ public class ActivityManagerService extends IActivityManager.Stub
         mProcStartHandlerThread = null;
         mProcStartHandler = null;
         mHiddenApiBlacklist = null;
-        mSdkSandboxSettings = null;
         mFactoryTest = FACTORY_TEST_OFF;
         mUgmInternal = LocalServices.getService(UriGrantsManagerInternal.class);
         mInternal = new LocalService();
@@ -2557,7 +2512,6 @@ public class ActivityManagerService extends IActivityManager.Stub
         mTaskSupervisor = mActivityTaskManager.mTaskSupervisor;
 
         mHiddenApiBlacklist = new HiddenApiSettings(mHandler, mContext);
-        mSdkSandboxSettings = new SdkSandboxSettings(mContext);
 
         Watchdog.getInstance().addMonitor(this);
         Watchdog.getInstance().addThread(mHandler);
@@ -4058,8 +4012,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                                 null /* resultData */, null /* resultExtras */,
                                 isInstantApp ? permission.ACCESS_INSTANT_APPS : null,
                                 null /* bOptions */, false /* serialized */, false /* sticky */,
-                                resolvedUserId, false /* allowBackgroundActivityStarts */,
-                                null /* backgroundActivityStartsToken */, visibilityAllowList);
+                                resolvedUserId, BackgroundStartPrivileges.NONE,
+                                visibilityAllowList);
                     }
 
                     if (observer != null) {
@@ -4606,8 +4560,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 null /* requiredPermissions */, null /* excludedPermissions */,
                 null /* excludedPackages */, OP_NONE, null /* bOptions */, false /* ordered */,
                 false /* sticky */, MY_PID, SYSTEM_UID, Binder.getCallingUid(),
-                Binder.getCallingPid(), userId, false /* allowBackgroundActivityStarts */,
-                null /* backgroundActivityStartsToken */,
+                Binder.getCallingPid(), userId, BackgroundStartPrivileges.NONE,
                 broadcastAllowList, null /* filterExtrasForReceiver */);
     }
 
@@ -5097,9 +5050,15 @@ public class ActivityManagerService extends IActivityManager.Stub
         try {
             int testMode = ApplicationThreadConstants.DEBUG_OFF;
             if (mDebugApp != null && mDebugApp.equals(processName)) {
-                testMode = mWaitForDebugger
-                    ? ApplicationThreadConstants.DEBUG_WAIT
-                    : ApplicationThreadConstants.DEBUG_ON;
+                if (mWaitForDebugger) {
+                    if (mSuspendUponWait) {
+                        testMode = ApplicationThreadConstants.DEBUG_SUSPEND;
+                    } else {
+                        testMode = ApplicationThreadConstants.DEBUG_WAIT;
+                    }
+                } else {
+                    testMode = ApplicationThreadConstants.DEBUG_ON;
+                }
                 app.setDebugging(true);
                 if (mDebugTransient) {
                     mDebugApp = mOrigDebugApp;
@@ -6772,6 +6731,10 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @Override
     public void appNotResponding(final String reason) {
+        appNotResponding(reason, /*isContinuousAnr*/ false);
+    }
+
+    public void appNotResponding(final String reason, boolean isContinuousAnr) {
         TimeoutRecord timeoutRecord = TimeoutRecord.forApp("App requested: " + reason);
         final int callingPid = Binder.getCallingPid();
 
@@ -6784,7 +6747,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
 
             mAnrHelper.appNotResponding(app, null, app.info, null, null, false,
-                    null, timeoutRecord);
+                    null, timeoutRecord, isContinuousAnr);
         }
     }
 
@@ -7247,6 +7210,11 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     public void setDebugApp(String packageName, boolean waitForDebugger,
             boolean persistent) {
+        setDebugApp(packageName, waitForDebugger, persistent, false);
+    }
+
+    private void setDebugApp(String packageName, boolean waitForDebugger,
+            boolean persistent, boolean suspendUponWait) {
         enforceCallingPermission(android.Manifest.permission.SET_DEBUG_APP,
                 "setDebugApp()");
 
@@ -7272,6 +7240,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
                 mDebugApp = packageName;
                 mWaitForDebugger = waitForDebugger;
+                mSuspendUponWait = suspendUponWait;
                 mDebugTransient = !persistent;
                 if (packageName != null) {
                     forceStopPackageLocked(packageName, -1, false, false, true, true,
@@ -7506,11 +7475,12 @@ public class ActivityManagerService extends IActivityManager.Stub
         if (shareDescription != null) {
             triggerShellBugreport.putExtra(EXTRA_DESCRIPTION, shareDescription);
         }
-        UserHandle callingUser = Binder.getCallingUserHandle();
         final long identity = Binder.clearCallingIdentity();
         try {
             // Send broadcast to shell to trigger bugreport using Bugreport API
-            mContext.sendBroadcastAsUser(triggerShellBugreport, callingUser);
+            // Always start the shell process on the current user to ensure that
+            // the foreground user can see all bugreport notifications.
+            mContext.sendBroadcastAsUser(triggerShellBugreport, getCurrentUser().getUserHandle());
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -7582,7 +7552,10 @@ public class ActivityManagerService extends IActivityManager.Stub
      */
     @Override
     public boolean launchBugReportHandlerApp() {
-        if (!BugReportHandlerUtil.isBugReportHandlerEnabled(mContext)) {
+
+        Context currentUserContext = mContext.createContextAsUser(getCurrentUser().getUserHandle(),
+                /* flags= */ 0);
+        if (!BugReportHandlerUtil.isBugReportHandlerEnabled(currentUserContext)) {
             return false;
         }
 
@@ -7591,7 +7564,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         enforceCallingPermission(android.Manifest.permission.DUMP,
                 "launchBugReportHandlerApp");
 
-        return BugReportHandlerUtil.launchBugReportHandlerApp(mContext);
+        return BugReportHandlerUtil.launchBugReportHandlerApp(currentUserContext);
     }
 
     /**
@@ -8364,7 +8337,6 @@ public class ActivityManagerService extends IActivityManager.Stub
         final boolean alwaysFinishActivities =
                 Settings.Global.getInt(resolver, ALWAYS_FINISH_ACTIVITIES, 0) != 0;
         mHiddenApiBlacklist.registerObserver();
-        mSdkSandboxSettings.registerObserver();
         mPlatformCompat.registerContentObserver();
 
         mAppProfiler.retrieveSettings();
@@ -8535,10 +8507,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             // Enable home activity for system user, so that the system can always boot. We don't
             // do this when the system user is not setup since the setup wizard should be the one
             // to handle home activity in this case.
-            if (UserManager.isSplitSystemUser() &&
-                    Settings.Secure.getIntForUser(mContext.getContentResolver(),
-                         Settings.Secure.USER_SETUP_COMPLETE, 0, currentUserId) != 0
-                    || SystemProperties.getBoolean(SYSTEM_USER_HOME_NEEDED, false)) {
+            if (SystemProperties.getBoolean(SYSTEM_USER_HOME_NEEDED, false)) {
                 t.traceBegin("enableHomeActivity");
                 ComponentName cName = new ComponentName(mContext, SystemUserHomeActivity.class);
                 try {
@@ -13631,16 +13600,6 @@ public class ActivityManagerService extends IActivityManager.Stub
             String callerFeatureId, String receiverId, IIntentReceiver receiver,
             IntentFilter filter, String permission, int userId, int flags) {
         enforceNotIsolatedCaller("registerReceiver");
-
-        // Allow Sandbox process to register only unexported receivers.
-        boolean unexported = (flags & Context.RECEIVER_NOT_EXPORTED) != 0;
-        if (mSdkSandboxSettings.isBroadcastReceiverRestrictionsEnforced()
-                && Process.isSdkSandboxUid(Binder.getCallingUid())
-                && !unexported) {
-            throw new SecurityException("SDK sandbox process not allowed to call "
-                + "registerReceiver");
-        }
-
         ArrayList<Intent> stickyIntents = null;
         ProcessRecord callerApp = null;
         final boolean visibleToInstantApps
@@ -13701,6 +13660,20 @@ public class ActivityManagerService extends IActivityManager.Stub
                         onlyProtectedBroadcasts = false;
                         Slog.w(TAG, "Remote exception", e);
                     }
+                }
+            }
+
+            if (Process.isSdkSandboxUid(Binder.getCallingUid())) {
+                SdkSandboxManagerLocal sdkSandboxManagerLocal =
+                        LocalManagerRegistry.getManager(SdkSandboxManagerLocal.class);
+                if (sdkSandboxManagerLocal == null) {
+                    throw new IllegalStateException("SdkSandboxManagerLocal not found when checking"
+                            + " whether SDK sandbox uid can register to broadcast receivers.");
+                }
+                if (!sdkSandboxManagerLocal.canRegisterBroadcastReceiver(
+                        /*IntentFilter=*/ filter, flags, onlyProtectedBroadcasts)) {
+                    throw new SecurityException("SDK sandbox not allowed to register receiver"
+                            + " with the given IntentFilter");
                 }
             }
 
@@ -13868,8 +13841,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                     BroadcastQueue queue = broadcastQueueForIntent(intent);
                     BroadcastRecord r = new BroadcastRecord(queue, intent, null,
                             null, null, -1, -1, false, null, null, null, null, OP_NONE, null,
-                            receivers, null, null, 0, null, null, false, true, true, -1, false,
-                            null, false /* only PRE_BOOT_COMPLETED should be exempt, no stickies */,
+                            receivers, null, null, 0, null, null, false, true, true, -1,
+                            BackgroundStartPrivileges.NONE,
+                            false /* only PRE_BOOT_COMPLETED should be exempt, no stickies */,
                             null /* filterExtrasForReceiver */);
                     queue.enqueueBroadcastLocked(r);
                 }
@@ -14146,8 +14120,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 resolvedType, null, resultTo, resultCode, resultData, resultExtras,
                 requiredPermissions, excludedPermissions, excludedPackages, appOp, bOptions,
                 ordered, sticky, callingPid, callingUid, realCallingUid, realCallingPid, userId,
-                false /* allowBackgroundActivityStarts */,
-                null /* tokenNeededForBackgroundActivityStarts */,
+                BackgroundStartPrivileges.NONE,
                 null /* broadcastAllowList */, null /* filterExtrasForReceiver */);
     }
 
@@ -14159,8 +14132,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             String[] excludedPermissions, String[] excludedPackages, int appOp, Bundle bOptions,
             boolean ordered, boolean sticky, int callingPid, int callingUid,
             int realCallingUid, int realCallingPid, int userId,
-            boolean allowBackgroundActivityStarts,
-            @Nullable IBinder backgroundActivityStartsToken,
+            BackgroundStartPrivileges backgroundStartPrivileges,
             @Nullable int[] broadcastAllowList,
             @Nullable BiFunction<Integer, Bundle, Bundle> filterExtrasForReceiver) {
         final int cookie = BroadcastQueue.traceBegin("broadcastIntentLockedTraced");
@@ -14168,7 +14140,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 intent, resolvedType, resultToApp, resultTo, resultCode, resultData, resultExtras,
                 requiredPermissions, excludedPermissions, excludedPackages, appOp, bOptions,
                 ordered, sticky, callingPid, callingUid, realCallingUid, realCallingPid, userId,
-                allowBackgroundActivityStarts, backgroundActivityStartsToken, broadcastAllowList,
+                backgroundStartPrivileges, broadcastAllowList,
                 filterExtrasForReceiver);
         BroadcastQueue.traceEnd(cookie);
         return res;
@@ -14182,8 +14154,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             String[] excludedPermissions, String[] excludedPackages, int appOp, Bundle bOptions,
             boolean ordered, boolean sticky, int callingPid, int callingUid,
             int realCallingUid, int realCallingPid, int userId,
-            boolean allowBackgroundActivityStarts,
-            @Nullable IBinder backgroundActivityStartsToken,
+            BackgroundStartPrivileges backgroundStartPrivileges,
             @Nullable int[] broadcastAllowList,
             @Nullable BiFunction<Integer, Bundle, Bundle> filterExtrasForReceiver) {
         // Ensure all internal loopers are registered for idle checks
@@ -14304,9 +14275,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                     Slog.w(TAG, msg);
                     throw new SecurityException(msg);
                 } else {
-                    allowBackgroundActivityStarts = true;
                     // We set the token to null since if it wasn't for it we'd allow anyway here
-                    backgroundActivityStartsToken = null;
+                    backgroundStartPrivileges = BackgroundStartPrivileges.ALLOW_BAL;
                 }
             }
 
@@ -14825,8 +14795,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                     callerFeatureId, callingPid, callingUid, callerInstantApp, resolvedType,
                     requiredPermissions, excludedPermissions, excludedPackages, appOp, brOptions,
                     registeredReceivers, resultToApp, resultTo, resultCode, resultData,
-                    resultExtras, ordered, sticky, false, userId, allowBackgroundActivityStarts,
-                    backgroundActivityStartsToken, timeoutExempt, filterExtrasForReceiver);
+                    resultExtras, ordered, sticky, false, userId,
+                    backgroundStartPrivileges, timeoutExempt, filterExtrasForReceiver);
             if (DEBUG_BROADCAST) Slog.v(TAG_BROADCAST, "Enqueueing parallel broadcast " + r);
             queue.enqueueBroadcastLocked(r);
             registeredReceivers = null;
@@ -14919,8 +14889,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                     callerFeatureId, callingPid, callingUid, callerInstantApp, resolvedType,
                     requiredPermissions, excludedPermissions, excludedPackages, appOp, brOptions,
                     receivers, resultToApp, resultTo, resultCode, resultData, resultExtras,
-                    ordered, sticky, false, userId, allowBackgroundActivityStarts,
-                    backgroundActivityStartsToken, timeoutExempt, filterExtrasForReceiver);
+                    ordered, sticky, false, userId,
+                    backgroundStartPrivileges, timeoutExempt, filterExtrasForReceiver);
 
             if (DEBUG_BROADCAST) Slog.v(TAG_BROADCAST, "Enqueueing ordered broadcast " + r);
             queue.enqueueBroadcastLocked(r);
@@ -15065,7 +15035,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         intent, resolvedType, resultToApp, resultTo, resultCode, resultData,
                         resultExtras, requiredPermissions, excludedPermissions, excludedPackages,
                         appOp, bOptions, serialized, sticky, callingPid, callingUid, callingUid,
-                        callingPid, userId, false, null, null, null);
+                        callingPid, userId, BackgroundStartPrivileges.NONE, null, null);
             } finally {
                 Binder.restoreCallingIdentity(origId);
             }
@@ -15077,8 +15047,9 @@ public class ActivityManagerService extends IActivityManager.Stub
             int realCallingUid, int realCallingPid, Intent intent, String resolvedType,
             ProcessRecord resultToApp, IIntentReceiver resultTo, int resultCode,
             String resultData, Bundle resultExtras, String requiredPermission, Bundle bOptions,
-            boolean serialized, boolean sticky, int userId, boolean allowBackgroundActivityStarts,
-            @Nullable IBinder backgroundActivityStartsToken, @Nullable int[] broadcastAllowList) {
+            boolean serialized, boolean sticky, int userId,
+            BackgroundStartPrivileges backgroundStartPrivileges,
+            @Nullable int[] broadcastAllowList) {
         synchronized(this) {
             intent = verifyBroadcastLocked(intent);
 
@@ -15089,8 +15060,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                 return broadcastIntentLocked(null, packageName, featureId, intent, resolvedType,
                         resultToApp, resultTo, resultCode, resultData, resultExtras,
                         requiredPermissions, null, null, OP_NONE, bOptions, serialized, sticky, -1,
-                        uid, realCallingUid, realCallingPid, userId, allowBackgroundActivityStarts,
-                        backgroundActivityStartsToken, broadcastAllowList,
+                        uid, realCallingUid, realCallingPid, userId,
+                        backgroundStartPrivileges, broadcastAllowList,
                         null /* filterExtrasForReceiver */);
             } finally {
                 Binder.restoreCallingIdentity(origId);
@@ -17465,6 +17436,11 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         @Override
+        public Pair<Integer, Integer> getCurrentAndTargetUserIds() {
+            return mUserController.getCurrentAndTargetUserIds();
+        }
+
+        @Override
         public int getCurrentUserId() {
             return mUserController.getCurrentUserId();
         }
@@ -17682,16 +17658,16 @@ public class ActivityManagerService extends IActivityManager.Stub
                 IApplicationThread resultToThread, IIntentReceiver resultTo, int resultCode,
                 String resultData, Bundle resultExtras, String requiredPermission, Bundle bOptions,
                 boolean serialized, boolean sticky, int userId,
-                boolean allowBackgroundActivityStarts,
-                @Nullable IBinder backgroundActivityStartsToken,
+                BackgroundStartPrivileges backgroundStartPrivileges,
                 @Nullable int[] broadcastAllowList) {
             synchronized (ActivityManagerService.this) {
                 final ProcessRecord resultToApp = getRecordForAppLOSP(resultToThread);
                 return ActivityManagerService.this.broadcastIntentInPackage(packageName, featureId,
                         uid, realCallingUid, realCallingPid, intent, resolvedType, resultToApp,
                         resultTo, resultCode, resultData, resultExtras, requiredPermission,
-                        bOptions, serialized, sticky, userId, allowBackgroundActivityStarts,
-                        backgroundActivityStartsToken, broadcastAllowList);
+                        bOptions, serialized, sticky, userId,
+                        backgroundStartPrivileges,
+                        broadcastAllowList);
             }
         }
 
@@ -17717,8 +17693,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                             null /*excludedPermissions*/, null /*excludedPackages*/,
                             AppOpsManager.OP_NONE, bOptions /*options*/, serialized,
                             false /*sticky*/, callingPid, callingUid, callingUid, callingPid,
-                            userId, false /*allowBackgroundStarts*/,
-                            null /*tokenNeededForBackgroundActivityStarts*/,
+                            userId, BackgroundStartPrivileges.NONE,
                             appIdAllowList, filterExtrasForReceiver);
                 } finally {
                     Binder.restoreCallingIdentity(origId);
@@ -17745,8 +17720,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         @Override
         public ComponentName startServiceInPackage(int uid, Intent service, String resolvedType,
                 boolean fgRequired, String callingPackage, @Nullable String callingFeatureId,
-                int userId, boolean allowBackgroundActivityStarts,
-                @Nullable IBinder backgroundActivityStartsToken)
+                int userId, BackgroundStartPrivileges backgroundStartPrivileges)
                 throws TransactionTooLargeException {
             if (DEBUG_SERVICE) {
                 Slog.v(TAG_SERVICE,
@@ -17763,8 +17737,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                 synchronized (ActivityManagerService.this) {
                     res = mServices.startServiceLocked(null, service,
                             resolvedType, -1, uid, fgRequired, callingPackage,
-                            callingFeatureId, userId, allowBackgroundActivityStarts,
-                            backgroundActivityStartsToken);
+                            callingFeatureId, userId,
+                            backgroundStartPrivileges);
                 }
             } finally {
                 Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
@@ -17984,6 +17958,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                 synchronized (wmLock) {
                     if ((startFlags & ActivityManager.START_FLAG_DEBUG) != 0) {
                         setDebugApp(aInfo.processName, true, false);
+                    }
+
+                    if ((startFlags & ActivityManager.START_FLAG_DEBUG_SUSPEND) != 0) {
+                        setDebugApp(aInfo.processName, true, false, true);
                     }
 
                     if ((startFlags & ActivityManager.START_FLAG_NATIVE_DEBUGGING) != 0) {
@@ -18495,7 +18473,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                     }
                 }
                 mAnrHelper.appNotResponding(proc, activityShortComponentName, aInfo,
-                        parentShortComponentName, parentProcess, aboveSystem, null, timeoutRecord);
+                        parentShortComponentName, parentProcess, aboveSystem, null, timeoutRecord,
+                        /*isContinuousAnr*/ true);
             }
 
             return true;
@@ -18719,10 +18698,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                 for (int i = delegates.size() - 1; i >= 0; i--) {
                     final ForegroundServiceDelegationOptions options = delegates.get(i);
                     if (isStart) {
-                        ((ActivityManagerLocal) mInternal).startForegroundServiceDelegate(options,
+                        mInternal.startForegroundServiceDelegate(options,
                                 null /* connection */);
                     } else {
-                        ((ActivityManagerLocal) mInternal).stopForegroundServiceDelegate(options);
+                        mInternal.stopForegroundServiceDelegate(options);
                     }
                 }
             }

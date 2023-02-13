@@ -5876,6 +5876,11 @@ public class WindowManagerService extends IWindowManager.Stub
             if (displayContent != null && displayContent.hasAccess(Binder.getCallingUid())) {
                 return displayContent.getInitialDisplayDensity();
             }
+
+            DisplayInfo info = mDisplayManagerInternal.getDisplayInfo(displayId);
+            if (info != null && info.hasAccess(Binder.getCallingUid())) {
+                return info.logicalDensityDpi;
+            }
         }
         return -1;
     }
@@ -5922,6 +5927,11 @@ public class WindowManagerService extends IWindowManager.Stub
                 final DisplayContent displayContent = mRoot.getDisplayContent(displayId);
                 if (displayContent != null) {
                     displayContent.setForcedDensity(density, targetUserId);
+                } else {
+                    DisplayInfo info = mDisplayManagerInternal.getDisplayInfo(displayId);
+                    if (info != null) {
+                        mDisplayWindowSettings.setForcedDensity(info, density, userId);
+                    }
                 }
             }
         } finally {
@@ -5946,6 +5956,12 @@ public class WindowManagerService extends IWindowManager.Stub
                 if (displayContent != null) {
                     displayContent.setForcedDensity(displayContent.getInitialDisplayDensity(),
                             callingUserId);
+                } else {
+                    DisplayInfo info = mDisplayManagerInternal.getDisplayInfo(displayId);
+                    if (info != null) {
+                        mDisplayWindowSettings.setForcedDensity(info, info.logicalDensityDpi,
+                                userId);
+                    }
                 }
             }
         } finally {
@@ -9207,6 +9223,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
     boolean shouldRestoreImeVisibility(IBinder imeTargetWindowToken) {
         final Task imeTargetWindowTask;
+        boolean hadRequestedShowIme = false;
         synchronized (mGlobalLock) {
             final WindowState imeTargetWindow = mWindowMap.get(imeTargetWindowToken);
             if (imeTargetWindow == null) {
@@ -9216,11 +9233,14 @@ public class WindowManagerService extends IWindowManager.Stub
             if (imeTargetWindowTask == null) {
                 return false;
             }
+            if (imeTargetWindow.mActivityRecord != null) {
+                hadRequestedShowIme = imeTargetWindow.mActivityRecord.mLastImeShown;
+            }
         }
         final TaskSnapshot snapshot = getTaskSnapshot(imeTargetWindowTask.mTaskId,
                 imeTargetWindowTask.mUserId, false /* isLowResolution */,
                 false /* restoreFromDisk */);
-        return snapshot != null && snapshot.hasImeSurface();
+        return snapshot != null && snapshot.hasImeSurface() || hadRequestedShowIme;
     }
 
     @Override
