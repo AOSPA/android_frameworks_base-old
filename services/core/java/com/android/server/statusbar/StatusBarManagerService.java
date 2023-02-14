@@ -455,10 +455,10 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
         }
 
         @Override
-        public void showRecentApps(boolean triggeredFromAltTab) {
+        public void showRecentApps(boolean triggeredFromAltTab, boolean forward) {
             if (mBar != null) {
                 try {
-                    mBar.showRecentApps(triggeredFromAltTab);
+                    mBar.showRecentApps(triggeredFromAltTab, forward);
                 } catch (RemoteException ex) {}
             }
         }
@@ -743,6 +743,16 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
                 try {
                     mBar.enterStageSplitFromRunningApp(leftOrTop);
                 } catch (RemoteException ex) { }
+            }
+        }
+
+        @Override
+        public void showMediaOutputSwitcher(String packageName) {
+            if (mBar != null) {
+                try {
+                    mBar.showMediaOutputSwitcher(packageName);
+                } catch (RemoteException ex) {
+                }
             }
         }
     };

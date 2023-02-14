@@ -527,7 +527,9 @@ open class PrivacyDotViewController @Inject constructor(
 
     private val systemStatusAnimationCallback: SystemStatusAnimationCallback =
             object : SystemStatusAnimationCallback {
-        override fun onSystemStatusAnimationTransitionToPersistentDot(): Animator? {
+        override fun onSystemStatusAnimationTransitionToPersistentDot(
+            contentDescr: String?
+        ): Animator? {
             synchronized(lock) {
                 nextViewState = nextViewState.copy(systemPrivacyEventIsActive = true)
             }

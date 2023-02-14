@@ -112,6 +112,8 @@ import android.app.ActivityManagerInternal.ServiceNotificationPolicy;
 import android.app.ActivityThread;
 import android.app.AppGlobals;
 import android.app.AppOpsManager;
+import android.app.BackgroundStartPrivileges;
+import android.app.ForegroundServiceDelegationOptions;
 import android.app.ForegroundServiceStartNotAllowedException;
 import android.app.ForegroundServiceTypePolicy;
 import android.app.ForegroundServiceTypePolicy.ForegroundServicePolicyCheckCode;
@@ -770,13 +772,13 @@ public final class ActiveServices {
             @Nullable String callingFeatureId, final int userId)
             throws TransactionTooLargeException {
         return startServiceLocked(caller, service, resolvedType, callingPid, callingUid, fgRequired,
-                callingPackage, callingFeatureId, userId, false, null);
+                callingPackage, callingFeatureId, userId, BackgroundStartPrivileges.NONE);
     }
 
     ComponentName startServiceLocked(IApplicationThread caller, Intent service, String resolvedType,
             int callingPid, int callingUid, boolean fgRequired,
             String callingPackage, @Nullable String callingFeatureId, final int userId,
-            boolean allowBackgroundActivityStarts, @Nullable IBinder backgroundActivityStartsToken)
+            BackgroundStartPrivileges backgroundStartPrivileges)
             throws TransactionTooLargeException {
         if (DEBUG_DELAYED_STARTS) Slog.v(TAG_SERVICE, "startService: " + service
                 + " type=" + resolvedType + " args=" + service.getExtras());
@@ -814,7 +816,7 @@ public final class ActiveServices {
         // the timeout)
         ServiceRecord r = res.record;
         setFgsRestrictionLocked(callingPackage, callingPid, callingUid, service, r, userId,
-                allowBackgroundActivityStarts, false /* isBindService */);
+                backgroundStartPrivileges, false /* isBindService */);
 
         if (!mAm.mUserController.exists(r.userId)) {
             Slog.w(TAG, "Trying to start service with non-existent user! " + r.userId);
@@ -931,8 +933,8 @@ public final class ActiveServices {
         // The package could be frozen (meaning it's doing surgery), defer the actual
         // start until the package is unfrozen.
         if (deferServiceBringupIfFrozenLocked(r, service, callingPackage, callingFeatureId,
-                callingUid, callingPid, fgRequired, callerFg, userId, allowBackgroundActivityStarts,
-                backgroundActivityStartsToken, false, null)) {
+                callingUid, callingPid, fgRequired, callerFg, userId,
+                backgroundStartPrivileges, false, null)) {
             return null;
         }
 
@@ -953,8 +955,8 @@ public final class ActiveServices {
         final ComponentName realResult =
                 startServiceInnerLocked(r, service, callingUid, callingPid,
                         getCallingProcessNameLocked(callingUid, callingPid, callingPackage),
-                        fgRequired, callerFg, allowBackgroundActivityStarts,
-                        backgroundActivityStartsToken);
+                        fgRequired, callerFg,
+                        backgroundStartPrivileges);
         if (res.aliasComponent != null
                 && !realResult.getPackageName().startsWith("!")
                 && !realResult.getPackageName().startsWith("?")) {
@@ -974,8 +976,9 @@ public final class ActiveServices {
 
     private ComponentName startServiceInnerLocked(ServiceRecord r, Intent service,
             int callingUid, int callingPid, String callingProcessName, boolean fgRequired,
-            boolean callerFg, boolean allowBackgroundActivityStarts,
-            @Nullable IBinder backgroundActivityStartsToken) throws TransactionTooLargeException {
+            boolean callerFg,
+            BackgroundStartPrivileges backgroundStartPrivileges)
+            throws TransactionTooLargeException {
         NeededUriGrants neededGrants = mAm.mUgmInternal.checkGrantUriPermissionFromIntent(
                 service, callingUid, r.packageName, r.userId);
         if (unscheduleServiceRestartLocked(r, callingUid, false)) {
@@ -1068,8 +1071,8 @@ public final class ActiveServices {
                         "Not potential delay (user " + r.userId + " not started): " + r);
             }
         }
-        if (allowBackgroundActivityStarts) {
-            r.allowBgActivityStartsOnServiceStart(backgroundActivityStartsToken);
+        if (backgroundStartPrivileges.allowsAny()) {
+            r.allowBgActivityStartsOnServiceStart(backgroundStartPrivileges);
         }
         ComponentName cmp = startServiceInnerLocked(smap, service, r, callerFg, addToStarting,
                 callingUid, callingProcessName, wasStartRequested);
@@ -1177,7 +1180,7 @@ public final class ActiveServices {
     private boolean deferServiceBringupIfFrozenLocked(ServiceRecord s, Intent serviceIntent,
             String callingPackage, @Nullable String callingFeatureId,
             int callingUid, int callingPid, boolean fgRequired, boolean callerFg, int userId,
-            boolean allowBackgroundActivityStarts, @Nullable IBinder backgroundActivityStartsToken,
+            BackgroundStartPrivileges backgroundStartPrivileges,
             boolean isBinding, IServiceConnection connection) {
         final PackageManagerInternal pm = mAm.getPackageManagerInternal();
         final boolean frozen = pm.isPackageFrozen(s.packageName, callingUid, s.userId);
@@ -1225,7 +1228,7 @@ public final class ActiveServices {
                         try {
                             startServiceInnerLocked(s, serviceIntent, callingUid, callingPid,
                                     callingProcessName, fgRequired, callerFg,
-                                    allowBackgroundActivityStarts, backgroundActivityStartsToken);
+                                    backgroundStartPrivileges);
                         } catch (TransactionTooLargeException e) {
                             /* ignore - local call */
                         }
@@ -1975,6 +1978,12 @@ public final class ActiveServices {
                     ignoreForeground = true;
                 }
 
+                // Whether FGS-BG-start restriction is enabled for this service.
+                final boolean isBgFgsRestrictionEnabledForService = isBgFgsRestrictionEnabled(r);
+
+                // Whether to extend the SHORT_SERVICE time out.
+                boolean extendShortServiceTimeout = false;
+
                 int fgsTypeCheckCode = FGS_TYPE_POLICY_CHECK_UNKNOWN;
                 if (!ignoreForeground) {
                     if (foregroundServiceType == FOREGROUND_SERVICE_TYPE_SHORT_SERVICE
@@ -1990,41 +1999,77 @@ public final class ActiveServices {
                                 "startForeground(SHORT_SERVICE) called on a service that's not"
                                 + " started.");
                     }
-                    // If the service is already an FGS, and the type is changing, then we
-                    // may need to do some extra work here.
-                    if (r.isForeground && (r.foregroundServiceType != foregroundServiceType)) {
-                        // TODO(short-service): Consider transitions:
-                        //   A. Short -> other types:
-                        //     Apply the BG restriction again. Don't just allow it.
-                        //     i.e. unless the app is in a situation where it's allowed to start
-                        //     a FGS, this transition shouldn't be allowed.
-                        //     ... But think about it more, there may be a case this should be
-                        //     allowed.
-                        //
-                        //     If the transition is allowed, stop the timeout.
-                        //     If the transition is _not_ allowed... keep the timeout?
-                        //
-                        //   B. Short -> Short:
-                        //     Allowed, but the timeout won't reset. The original timeout is used.
-                        //   C. Other -> short:
-                        //     This should always be allowed.
-                        //     A timeout should start.
 
-                        // For now, let's just disallow transition from / to SHORT_SERVICE.
-                        final boolean isNewTypeShortFgs =
-                                foregroundServiceType == FOREGROUND_SERVICE_TYPE_SHORT_SERVICE;
-                        if (r.isShortFgs() != isNewTypeShortFgs) {
-                            // TODO(short-service): We should (probably) allow it.
-                            throw new IllegalArgumentException(
-                                    "setForeground(): Changing foreground service type from / to "
-                                    + " SHORT_SERVICE is now allowed");
+                    // Side note: If a valid short-service (which has to be "started"), happens to
+                    // also be bound, then we still _will_ apply a timeout, because it still has
+                    // to be stopped.
+
+                    // Calling startForeground on a SHORT_SERVICE will require some additional
+                    // checks.
+                    // A) SHORT_SERVICE -> another type.
+                    //    - This should be allowed only when the app could start another FGS.
+                    //    - When succeed, the timeout should stop.
+                    // B) SHORT_SERVICE -> SHORT_SERVICE
+                    //    - If the app could start an FGS, then this would extend the timeout.
+                    //    - Otherwise, it's basically a no-op.
+                    //    - If it's already timed out, we also throw.
+                    // Also,
+                    // C) another type -> SHORT_SERVICE
+                    //    - This will always be allowed.
+                    //    - Timeout will start.
+
+                    final boolean isOldTypeShortFgs = r.isShortFgs();
+                    final boolean isNewTypeShortFgs =
+                            foregroundServiceType == FOREGROUND_SERVICE_TYPE_SHORT_SERVICE;
+                    final boolean isOldTypeShortFgsAndTimedOut = r.shouldTriggerShortFgsTimeout();
+
+                    if (isOldTypeShortFgs || isNewTypeShortFgs) {
+                        if (DEBUG_SHORT_SERVICE) {
+                            Slog.i(TAG_SERVICE, String.format(
+                                    "FGS type changing from %x%s to %x: %s",
+                                    r.foregroundServiceType,
+                                    (isOldTypeShortFgsAndTimedOut ? "(timed out short FGS)" : ""),
+                                    foregroundServiceStartType,
+                                    r.toString()));
                         }
                     }
 
-                    // If a valid short-service (which has to be "started"), happens to
-                    // also be bound, then we still _will_ apply a timeout, because it still has
-                    // to be stopped.
-                    if (r.mStartForegroundCount == 0) {
+                    if (r.isForeground && isOldTypeShortFgs) {
+                        // If we get here, that means startForeground(SHORT_SERVICE) is called again
+                        // on a SHORT_SERVICE FGS.
+
+                        // See if the app could start an FGS or not.
+                        r.mAllowStartForeground = REASON_DENIED;
+                        setFgsRestrictionLocked(r.serviceInfo.packageName, r.app.getPid(),
+                                r.appInfo.uid, r.intent.getIntent(), r, r.userId,
+                                BackgroundStartPrivileges.NONE,
+                                false /* isBindService */);
+
+                        final boolean fgsStartAllowed =
+                                !isBgFgsRestrictionEnabledForService
+                                        || (r.mAllowStartForeground != REASON_DENIED);
+
+                        if (fgsStartAllowed) {
+                            if (isNewTypeShortFgs) {
+                                // Only in this case, we extend the SHORT_SERVICE time out.
+                                extendShortServiceTimeout = true;
+                                if (DEBUG_SHORT_SERVICE) {
+                                    Slog.i(TAG_SERVICE, "Extending SHORT_SERVICE time out: " + r);
+                                }
+                            } else {
+                                // FGS type is changing from SHORT_SERVICE to another type when
+                                // an app is allowed to start FGS, so this will succeed.
+                                // The timeout will stop -- we actually don't cancel the handler
+                                // events, but they'll be ignored if the service type is not
+                                // SHORT_SERVICE.
+                                // TODO(short-service) Let's actaully cancel the handler events.
+                            }
+                        } else {
+                            // We catch this case later, in the
+                            // "if (r.mAllowStartForeground == REASON_DENIED...)" block below.
+                        }
+
+                    } else if (r.mStartForegroundCount == 0) {
                         /*
                         If the service was started with startService(), not
                         startForegroundService(), and if startForeground() isn't called within
@@ -2044,7 +2089,7 @@ public final class ActiveServices {
                                 resetFgsRestrictionLocked(r);
                                 setFgsRestrictionLocked(r.serviceInfo.packageName, r.app.getPid(),
                                         r.appInfo.uid, r.intent.getIntent(), r, r.userId,
-                                        false /* allowBackgroundActivityStarts */,
+                                        BackgroundStartPrivileges.NONE,
                                         false /* isBindService */);
                                 final String temp = "startForegroundDelayMs:" + delayMs;
                                 if (r.mInfoAllowStartForeground != null) {
@@ -2064,9 +2109,10 @@ public final class ActiveServices {
                         // started. Check for app state again.
                         setFgsRestrictionLocked(r.serviceInfo.packageName, r.app.getPid(),
                                 r.appInfo.uid, r.intent.getIntent(), r, r.userId,
-                                false /* allowBackgroundActivityStarts */,
+                                BackgroundStartPrivileges.NONE,
                                 false /* isBindService */);
                     }
+
                     // If the foreground service is not started from TOP process, do not allow it to
                     // have while-in-use location/camera/microphone access.
                     if (!r.mAllowWhileInUsePermissionInFgs) {
@@ -2076,10 +2122,12 @@ public final class ActiveServices {
                                         + r.shortInstanceName);
                     }
                     logFgsBackgroundStart(r);
-                    if (r.mAllowStartForeground == REASON_DENIED && isBgFgsRestrictionEnabled(r)) {
+                    if (r.mAllowStartForeground == REASON_DENIED
+                            && isBgFgsRestrictionEnabledForService) {
                         final String msg = "Service.startForeground() not allowed due to "
                                 + "mAllowStartForeground false: service "
-                                + r.shortInstanceName;
+                                + r.shortInstanceName
+                                + (isOldTypeShortFgs ? " (Called on SHORT_SERVICE)" : "");
                         Slog.w(TAG, msg);
                         showFgsBgRestrictedNotificationLocked(r);
                         updateServiceForegroundLocked(psr, true);
@@ -2216,11 +2264,8 @@ public final class ActiveServices {
                     mAm.notifyPackageUse(r.serviceInfo.packageName,
                             PackageManager.NOTIFY_PACKAGE_USE_FOREGROUND_SERVICE);
 
-                    // Note, we'll get here if setForeground(SHORT_SERVICE) is called on a
-                    // already short-fgs.
-                    // In that case, because ShortFgsInfo is already set, this method
-                    // will be noop.
-                    maybeStartShortFgsTimeoutAndUpdateShortFgsInfoLocked(r);
+                    maybeStartShortFgsTimeoutAndUpdateShortFgsInfoLocked(r,
+                            extendShortServiceTimeout);
                 } else {
                     if (DEBUG_FOREGROUND_SERVICE) {
                         Slog.d(TAG, "Suppressing startForeground() for FAS " + r);
@@ -3017,17 +3062,21 @@ public final class ActiveServices {
     /**
      * If {@code sr} is of a short-fgs, start a short-FGS timeout.
      */
-    private void maybeStartShortFgsTimeoutAndUpdateShortFgsInfoLocked(ServiceRecord sr) {
+    private void maybeStartShortFgsTimeoutAndUpdateShortFgsInfoLocked(ServiceRecord sr,
+            boolean extendTimeout) {
         if (!sr.isShortFgs()) {
             return;
         }
         if (DEBUG_SHORT_SERVICE) {
             Slog.i(TAG_SERVICE, "Short FGS started: " + sr);
         }
-        if (sr.hasShortFgsInfo()) {
-            sr.getShortFgsInfo().update();
-        } else {
+
+        if (extendTimeout || !sr.hasShortFgsInfo()) {
             sr.setShortFgsInfo(SystemClock.uptimeMillis());
+        } else {
+            // We only (potentially) update the start command, start count, but not the timeout
+            // time.
+            sr.getShortFgsInfo().update();
         }
         unscheduleShortFgsTimeoutLocked(sr); // Do it just in case
 
@@ -3338,7 +3387,8 @@ public final class ActiveServices {
         // The package could be frozen (meaning it's doing surgery), defer the actual
         // binding until the package is unfrozen.
         boolean packageFrozen = deferServiceBringupIfFrozenLocked(s, service, callingPackage, null,
-                callingUid, callingPid, false, callerFg, userId, false, null, true, connection);
+                callingUid, callingPid, false, callerFg, userId, BackgroundStartPrivileges.NONE,
+                true, connection);
 
         // If permissions need a review before any of the app components can run,
         // we schedule binding to the service but do not start its process, then
@@ -3463,7 +3513,7 @@ public final class ActiveServices {
                 }
             }
             setFgsRestrictionLocked(callingPackage, callingPid, callingUid, service, s, userId,
-                    false /* allowBackgroundActivityStarts */, true /* isBindService */);
+                    BackgroundStartPrivileges.NONE, true /* isBindService */);
 
             if (s.app != null) {
                 ProcessServiceRecord servicePsr = s.app.mServices;
@@ -7251,7 +7301,7 @@ public final class ActiveServices {
      */
     private void setFgsRestrictionLocked(String callingPackage,
             int callingPid, int callingUid, Intent intent, ServiceRecord r, int userId,
-            boolean allowBackgroundActivityStarts, boolean isBindService) {
+            BackgroundStartPrivileges backgroundStartPrivileges, boolean isBindService) {
         r.mLastSetFgsRestrictionTime = SystemClock.elapsedRealtime();
         // Check DeviceConfig flag.
         if (!mAm.mConstants.mFlagBackgroundFgsStartRestrictionEnabled) {
@@ -7261,7 +7311,7 @@ public final class ActiveServices {
         if (!r.mAllowWhileInUsePermissionInFgs
                 || (r.mAllowStartForeground == REASON_DENIED)) {
             final @ReasonCode int allowWhileInUse = shouldAllowFgsWhileInUsePermissionLocked(
-                    callingPackage, callingPid, callingUid, r, allowBackgroundActivityStarts,
+                    callingPackage, callingPid, callingUid, r, backgroundStartPrivileges,
                     isBindService);
             if (!r.mAllowWhileInUsePermissionInFgs) {
                 r.mAllowWhileInUsePermissionInFgs = (allowWhileInUse != REASON_DENIED);
@@ -7269,7 +7319,7 @@ public final class ActiveServices {
             if (r.mAllowStartForeground == REASON_DENIED) {
                 r.mAllowStartForeground = shouldAllowFgsStartForegroundWithBindingCheckLocked(
                         allowWhileInUse, callingPackage, callingPid, callingUid, intent, r,
-                        userId, isBindService);
+                        backgroundStartPrivileges, isBindService);
             }
         }
     }
@@ -7289,10 +7339,10 @@ public final class ActiveServices {
         }
         final @ReasonCode int allowWhileInUse = shouldAllowFgsWhileInUsePermissionLocked(
                 callingPackage, callingPid, callingUid, null /* serviceRecord */,
-                false /* allowBackgroundActivityStarts */, false);
+                BackgroundStartPrivileges.NONE, false);
         @ReasonCode int allowStartFgs = shouldAllowFgsStartForegroundNoBindingCheckLocked(
                 allowWhileInUse, callingPid, callingUid, callingPackage, null /* targetService */,
-                false /* isBindService */);
+                BackgroundStartPrivileges.NONE);
 
         if (allowStartFgs == REASON_DENIED) {
             if (canBindingClientStartFgsLocked(callingUid) != null) {
@@ -7312,7 +7362,7 @@ public final class ActiveServices {
      */
     private @ReasonCode int shouldAllowFgsWhileInUsePermissionLocked(String callingPackage,
             int callingPid, int callingUid, @Nullable ServiceRecord targetService,
-            boolean allowBackgroundActivityStarts, boolean isBindService) {
+            BackgroundStartPrivileges backgroundStartPrivileges, boolean isBindService) {
         int ret = REASON_DENIED;
 
         final int uidState = mAm.getUidStateLocked(callingUid);
@@ -7333,7 +7383,7 @@ public final class ActiveServices {
 
         if (ret == REASON_DENIED) {
             // Is the allow activity background start flag on?
-            if (allowBackgroundActivityStarts) {
+            if (backgroundStartPrivileges.allowsBackgroundActivityStarts()) {
                 ret = REASON_START_ACTIVITY_FLAG;
             }
         }
@@ -7466,12 +7516,13 @@ public final class ActiveServices {
                                         shouldAllowFgsWhileInUsePermissionLocked(
                                                 clientPackageName,
                                                 clientPid, clientUid, null /* serviceRecord */,
-                                                false /* allowBackgroundActivityStarts */, false);
+                                                BackgroundStartPrivileges.NONE, false);
                                 final @ReasonCode int allowStartFgs =
                                         shouldAllowFgsStartForegroundNoBindingCheckLocked(
                                                 allowWhileInUse2,
                                                 clientPid, clientUid, clientPackageName,
-                                                null /* targetService */, false);
+                                                null /* targetService */,
+                                                BackgroundStartPrivileges.NONE);
                                 if (allowStartFgs != REASON_DENIED) {
                                     return new Pair<>(allowStartFgs, clientPackageName);
                                 } else {
@@ -7503,11 +7554,12 @@ public final class ActiveServices {
      */
     private @ReasonCode int shouldAllowFgsStartForegroundWithBindingCheckLocked(
             @ReasonCode int allowWhileInUse, String callingPackage, int callingPid,
-            int callingUid, Intent intent, ServiceRecord r, int userId, boolean isBindService) {
+            int callingUid, Intent intent, ServiceRecord r,
+            BackgroundStartPrivileges backgroundStartPrivileges, boolean isBindService) {
         ActivityManagerService.FgsTempAllowListItem tempAllowListReason =
                 r.mInfoTempFgsAllowListReason = mAm.isAllowlistedForFgsStartLOSP(callingUid);
         int ret = shouldAllowFgsStartForegroundNoBindingCheckLocked(allowWhileInUse, callingPid,
-                callingUid, callingPackage, r, isBindService);
+                callingUid, callingPackage, r, backgroundStartPrivileges);
 
         String bindFromPackage = null;
         if (ret == REASON_DENIED) {
@@ -7553,7 +7605,8 @@ public final class ActiveServices {
 
     private @ReasonCode int shouldAllowFgsStartForegroundNoBindingCheckLocked(
             @ReasonCode int allowWhileInUse, int callingPid, int callingUid, String callingPackage,
-            @Nullable ServiceRecord targetService, boolean isBindService) {
+            @Nullable ServiceRecord targetService,
+            BackgroundStartPrivileges backgroundStartPrivileges) {
         int ret = allowWhileInUse;
 
         if (ret == REASON_DENIED) {
@@ -7597,6 +7650,12 @@ public final class ActiveServices {
             if (mAm.checkPermission(START_FOREGROUND_SERVICES_FROM_BACKGROUND, callingPid,
                     callingUid) == PERMISSION_GRANTED) {
                 ret = REASON_BACKGROUND_FGS_PERMISSION;
+            }
+        }
+
+        if (ret == REASON_DENIED) {
+            if (backgroundStartPrivileges.allowsBackgroundFgsStarts()) {
+                ret = REASON_START_ACTIVITY_FLAG;
             }
         }
 
@@ -7684,6 +7743,7 @@ public final class ActiveServices {
                 ret = REASON_OPT_OUT_REQUESTED;
             }
         }
+
         return ret;
     }
 
@@ -7744,7 +7804,8 @@ public final class ActiveServices {
         if (!r.mLoggedInfoAllowStartForeground) {
             final String msg = "Background started FGS: "
                     + ((r.mAllowStartForeground != REASON_DENIED) ? "Allowed " : "Disallowed ")
-                    + r.mInfoAllowStartForeground;
+                    + r.mInfoAllowStartForeground
+                    + (r.isShortFgs() ? " (Called on SHORT_SERVICE)" : "");
             if (r.mAllowStartForeground != REASON_DENIED) {
                 if (ActivityManagerUtils.shouldSamplePackageForAtom(r.packageName,
                         mAm.mConstants.mFgsStartAllowedLogSampleRate)) {
@@ -7847,7 +7908,7 @@ public final class ActiveServices {
             String callingPackage) {
         return shouldAllowFgsWhileInUsePermissionLocked(callingPackage, callingPid, callingUid,
                 /* targetService */ null,
-                /* allowBackgroundActivityStarts */ false, false)
+                BackgroundStartPrivileges.NONE, false)
                 != REASON_DENIED;
     }
 
@@ -7954,7 +8015,7 @@ public final class ActiveServices {
         r.mFgsEnterTime = SystemClock.uptimeMillis();
         r.foregroundServiceType = options.mForegroundServiceTypes;
         setFgsRestrictionLocked(callingPackage, callingPid, callingUid, intent, r, userId,
-                false, false);
+                BackgroundStartPrivileges.NONE, false);
         final ProcessServiceRecord psr = callerApp.mServices;
         final boolean newService = psr.startService(r);
         // updateOomAdj.

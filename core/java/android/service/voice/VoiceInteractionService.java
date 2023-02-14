@@ -17,6 +17,7 @@
 package android.service.voice;
 
 import android.Manifest;
+import android.annotation.CallbackExecutor;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
@@ -58,7 +59,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
-
+import java.util.concurrent.Executor;
 /**
  * Top-level service of the current global voice interactor, which is providing
  * support for hotwording, the back-end of a {@link android.app.VoiceInteractor}, etc.
@@ -92,6 +93,20 @@ public class VoiceInteractionService extends Service {
      * android.R.styleable#VoiceInteractionService voice-interaction-service}&gt;</code> tag.
      */
     public static final String SERVICE_META_DATA = "android.voice_interaction";
+
+    /**
+     * Bundle key used to specify the id when the system prepares to show session. It increases for
+     * each request.
+     * <p>
+     * Type: int
+     * </p>
+     * @see #showSession(Bundle, int)
+     * @see #onPrepareToShowSession(Bundle, int)
+     * @see #onShowSessionFailed(Bundle)
+     * @see VoiceInteractionSession#onShow(Bundle, int)
+     * @see VoiceInteractionSession#show(Bundle, int)
+     */
+    public static final String KEY_SHOW_SESSION_ID = "android.service.voice.SHOW_SESSION_ID";
 
     /**
      * For apps targeting Build.VERSION_CODES.TRAMISU and above, implementors of this
@@ -160,9 +175,25 @@ public class VoiceInteractionService extends Service {
                             voiceActions,
                             callback));
         }
+
+        @Override
+        public void prepareToShowSession(Bundle args, int flags) {
+            Handler.getMain().executeOrSendMessage(PooledLambda.obtainMessage(
+                    VoiceInteractionService::onPrepareToShowSession,
+                    VoiceInteractionService.this, args, flags));
+        }
+
+        @Override
+        public void showSessionFailed(@NonNull Bundle args) {
+            Handler.getMain().executeOrSendMessage(PooledLambda.obtainMessage(
+                    VoiceInteractionService::onShowSessionFailed,
+                    VoiceInteractionService.this, args));
+        }
     };
 
     IVoiceInteractionManagerService mSystemService;
+
+    private VisualQueryDetector mActiveVisualQueryDetector;
 
     private final Object mLock = new Object();
 
@@ -181,6 +212,34 @@ public class VoiceInteractionService extends Service {
      * on top of the lock screen.</p>
      */
     public void onLaunchVoiceAssistFromKeyguard() {
+    }
+
+    /**
+     * Notify the interactor when the system prepares to show session. The system is going to
+     * bind the session service.
+     *
+     * @param args  The arguments that were supplied to {@link #showSession(Bundle, int)}.
+     *              It always includes {@link #KEY_SHOW_SESSION_ID}.
+     * @param flags The show flags originally provided to {@link #showSession(Bundle, int)}.
+     * @see #showSession(Bundle, int)
+     * @see #onShowSessionFailed(Bundle)
+     * @see VoiceInteractionSession#onShow(Bundle, int)
+     * @see VoiceInteractionSession#show(Bundle, int)
+     */
+    public void onPrepareToShowSession(@NonNull Bundle args, int flags) {
+    }
+
+    /**
+     * Called when the show session failed. E.g. When the system bound the session service failed.
+     *
+     * @param args Additional info about the show session attempt that failed. For now, includes
+     *             {@link #KEY_SHOW_SESSION_ID}.
+     * @see #showSession(Bundle, int)
+     * @see #onPrepareToShowSession(Bundle, int)
+     * @see VoiceInteractionSession#onShow(Bundle, int)
+     * @see VoiceInteractionSession#show(Bundle, int)
+     */
+    public void onShowSessionFailed(@NonNull Bundle args) {
     }
 
     /**
@@ -544,6 +603,85 @@ public class VoiceInteractionService extends Service {
     }
 
     /**
+     * Creates a {@link VisualQueryDetector} and initializes the application's
+     * {@link VisualQueryDetectionService} using {@code options} and {@code sharedMemory}.
+     *
+     * <p>To be able to call this, you need to set android:visualQueryDetectionService in the
+     * android.voice_interaction metadata file to a valid visual query detection service, and set
+     * android:isolatedProcess="true" in the service's declaration. Otherwise, this throws an
+     * {@link IllegalStateException}.
+     *
+     * <p>Using this has a noticeable impact on battery, since the microphone is kept open
+     * for the lifetime of the recognition {@link VisualQueryDetector#startRecognition() session}.
+     *
+     * @param options Application configuration data to be provided to the
+     * {@link VisualQueryDetectionService}. PersistableBundle does not allow any remotable objects
+     * or other contents that can be used to communicate with other processes.
+     * @param sharedMemory The unrestricted data blob to be provided to the
+     * {@link VisualQueryDetectionService}. Use this to provide models or other such data to the
+     * sandboxed process.
+     * @param callback The callback to notify of detection events.
+     * @return An instanece of {@link VisualQueryDetector}.
+     * @throws UnsupportedOperationException if only single detector is supported. Multiple detector
+     * is only available for apps targeting {@link Build.VERSION_CODES#TIRAMISU} and above.
+     * @throws IllegalStateException when there is an existing {@link VisualQueryDetector}, or when
+     * there is a non-trusted hotword detector running.
+     *
+     * @hide
+     */
+    // TODO: add MANAGE_HOTWORD_DETECTION permission to protect this API and update java doc.
+    @SystemApi
+    @NonNull
+    public final VisualQueryDetector createVisualQueryDetector(
+            @Nullable PersistableBundle options,
+            @Nullable SharedMemory sharedMemory,
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull VisualQueryDetector.Callback callback) {
+        Objects.requireNonNull(executor);
+        Objects.requireNonNull(callback);
+
+        if (mSystemService == null) {
+            throw new IllegalStateException("Not available until onReady() is called");
+        }
+        synchronized (mLock) {
+            if (!CompatChanges.isChangeEnabled(MULTIPLE_ACTIVE_HOTWORD_DETECTORS)) {
+                throw new UnsupportedOperationException("VisualQueryDetector is only available if "
+                        + "multiple detectors are allowed");
+            } else {
+                if (mActiveVisualQueryDetector != null) {
+                    throw new IllegalStateException(
+                                "There is already an active VisualQueryDetector. "
+                                        + "It must be destroyed to create a new one.");
+                }
+                for (HotwordDetector detector : mActiveDetectors) {
+                    if (!detector.isUsingSandboxedDetectionService()) {
+                        throw new IllegalStateException(
+                                "It disallows to create trusted and non-trusted detectors "
+                                        + "at the same time.");
+                    }
+                }
+            }
+
+            VisualQueryDetector visualQueryDetector =
+                    new VisualQueryDetector(mSystemService, executor, callback);
+            HotwordDetector visualQueryDetectorInitializationDelegate =
+                    visualQueryDetector.getInitializationDelegate();
+            mActiveDetectors.add(visualQueryDetectorInitializationDelegate);
+
+            try {
+                visualQueryDetector.registerOnDestroyListener(this::onHotwordDetectorDestroyed);
+                visualQueryDetector.initialize(options, sharedMemory);
+            } catch (Exception e) {
+                mActiveDetectors.remove(visualQueryDetectorInitializationDelegate);
+                visualQueryDetector.destroy();
+                throw e;
+            }
+            mActiveVisualQueryDetector = visualQueryDetector;
+            return visualQueryDetector;
+        }
+    }
+
+    /**
      * Creates an {@link KeyphraseModelManager} to use for enrolling voice models outside of the
      * pre-bundled system voice models.
      * @hide
@@ -598,6 +736,10 @@ public class VoiceInteractionService extends Service {
 
     private void onHotwordDetectorDestroyed(@NonNull HotwordDetector detector) {
         synchronized (mLock) {
+            if (mActiveVisualQueryDetector != null
+                    && detector == mActiveVisualQueryDetector.getInitializationDelegate()) {
+                mActiveVisualQueryDetector = null;
+            }
             mActiveDetectors.remove(detector);
             shutdownHotwordDetectionServiceIfRequiredLocked();
         }

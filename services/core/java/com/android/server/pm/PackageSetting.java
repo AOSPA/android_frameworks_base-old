@@ -1219,7 +1219,7 @@ public class PackageSetting extends SettingBase implements PackageStateInternal 
 
     @NonNull
     @Override
-    public List<SharedLibrary> getUsesLibraries() {
+    public List<SharedLibrary> getSharedLibraryDependencies() {
         return (List<SharedLibrary>) (List<?>) pkgState.getUsesLibraryInfos();
     }
 
@@ -1260,6 +1260,12 @@ public class PackageSetting extends SettingBase implements PackageStateInternal 
     @Override
     public boolean isApkInUpdatedApex() {
         return pkgState.isApkInUpdatedApex();
+    }
+
+    @Nullable
+    @Override
+    public String getApexModuleName() {
+        return pkgState.getApexModuleName();
     }
 
     public PackageSetting setDomainSetId(@NonNull UUID domainSetId) {
@@ -1314,6 +1320,11 @@ public class PackageSetting extends SettingBase implements PackageStateInternal 
     public PackageSetting setUsesStaticLibrariesVersions(long[] usesStaticLibrariesVersions) {
         this.usesStaticLibrariesVersions = usesStaticLibrariesVersions;
         onChanged();
+        return this;
+    }
+
+    public PackageSetting setApexModuleName(@Nullable String apexModuleName) {
+        pkgState.setApexModuleName(apexModuleName);
         return this;
     }
 

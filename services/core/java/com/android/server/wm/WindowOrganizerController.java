@@ -318,6 +318,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                     transition = mTransitionController.createTransition(type);
                 }
                 transition.start();
+                transition.mLogger.mStartWCT = wct;
                 applyTransaction(wct, -1 /*syncId*/, transition, caller);
                 if (needsSetReady) {
                     transition.setAllReady();
@@ -1932,6 +1933,8 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
         ownerTask.addChild(taskFragment, position);
         taskFragment.setWindowingMode(creationParams.getWindowingMode());
         taskFragment.setBounds(creationParams.getInitialBounds());
+        // Record the initial relative embedded bounds.
+        taskFragment.updateRelativeEmbeddedBounds();
         mLaunchTaskFragments.put(creationParams.getFragmentToken(), taskFragment);
 
         if (transition != null) transition.collectExistenceChange(taskFragment);

@@ -10244,6 +10244,27 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         return mContext.getSystemService(AutofillManager.class);
     }
 
+    /**
+     * Check whether current activity / package is in denylist.If it's in the denylist,
+     * then the views marked as not important for autofill are not eligible for autofill.
+     */
+    final boolean isActivityDeniedForAutofillForUnimportantView() {
+        final AutofillManager afm = getAutofillManager();
+        // keep behavior same with denylist feature not enabled
+        if (afm == null) return true;
+        return afm.isActivityDeniedForAutofillForUnimportantView();
+    }
+
+    /**
+     * Check whether current view matches autofillable heuristics
+     */
+    final boolean isMatchingAutofillableHeuristics() {
+        final AutofillManager afm = getAutofillManager();
+        // keep default behavior
+        if (afm == null) return false;
+        return afm.isMatchingAutofillableHeuristics(this);
+    }
+
     private boolean isAutofillable() {
         if (getAutofillType() == AUTOFILL_TYPE_NONE) return false;
 
@@ -10252,6 +10273,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 && isCredential()) return false;
 
         if (!isImportantForAutofill()) {
+            // If view matches heuristics and is not denied, it will be treated same as view that's
+            // important for autofill
+            if (isMatchingAutofillableHeuristics()
+                    && !isActivityDeniedForAutofillForUnimportantView()) {
+                return getAutofillViewId() > LAST_APP_AUTOFILL_ID;
+            }
             // View is not important for "regular" autofill, so we must check if Augmented Autofill
             // is enabled for the activity
             final AutofillOptions options = mContext.getAutofillOptions();
@@ -25801,6 +25828,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @param selected true if the view must be selected, false otherwise
      */
     public void setSelected(boolean selected) {
+        setSelected(selected, true);
+    }
+
+    void setSelected(boolean selected, boolean sendAccessibilityEvent) {
         //noinspection DoubleNegation
         if (((mPrivateFlags & PFLAG_SELECTED) != 0) != selected) {
             mPrivateFlags = (mPrivateFlags & ~PFLAG_SELECTED) | (selected ? PFLAG_SELECTED : 0);
@@ -25808,11 +25839,13 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             invalidate(true);
             refreshDrawableState();
             dispatchSetSelected(selected);
-            if (selected) {
-                sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_SELECTED);
-            } else {
-                notifyViewAccessibilityStateChangedIfNeeded(
-                        AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED);
+            if (sendAccessibilityEvent) {
+                if (selected) {
+                    sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_SELECTED);
+                } else {
+                    notifyViewAccessibilityStateChangedIfNeeded(
+                            AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED);
+                }
             }
         }
     }

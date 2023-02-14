@@ -39,7 +39,7 @@ public interface StatusBarManagerInternal {
 
     void cancelPreloadRecentApps();
 
-    void showRecentApps(boolean triggeredFromAltTab);
+    void showRecentApps(boolean triggeredFromAltTab, boolean forward);
 
     void hideRecentApps(boolean triggeredFromAltTab, boolean triggeredFromHomeKey);
 
@@ -217,4 +217,12 @@ public interface StatusBarManagerInternal {
      * @see com.android.internal.statusbar.IStatusBar#enterStageSplitFromRunningApp
      */
     void enterStageSplitFromRunningApp(boolean leftOrTop);
+
+    /**
+     * Shows the media output switcher dialog.
+     *
+     * @param packageName of the session for which the output switcher is shown.
+     * @see com.android.internal.statusbar.IStatusBar#showMediaOutputSwitcher
+     */
+    void showMediaOutputSwitcher(String packageName);
 }

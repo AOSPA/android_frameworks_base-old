@@ -14,7 +14,6 @@
 #include "SkColorSpace.h"
 #include "SkEncodedImageFormat.h"
 #include "SkImageInfo.h"
-#include "SkMath.h"
 #include "SkPaint.h"
 #include "SkPixelRef.h"
 #include "SkRect.h"
@@ -34,6 +33,7 @@
 #include <fcntl.h>
 #include <memory>
 #include <stdio.h>
+#include <stdint.h>
 #include <sys/stat.h>
 
 jfieldID gOptions_justBoundsFieldID;
@@ -142,7 +142,7 @@ public:
         }
 
         const size_t size = info.computeByteSize(bitmap->rowBytes());
-        if (size > SK_MaxS32) {
+        if (size > INT32_MAX) {
             ALOGW("bitmap is too large");
             return false;
         }

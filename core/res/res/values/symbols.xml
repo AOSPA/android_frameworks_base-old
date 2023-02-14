@@ -1684,6 +1684,7 @@
   <java-symbol type="attr" name="dialogTitleDecorLayout" />
   <java-symbol type="attr" name="dialogTitleIconsDecorLayout" />
   <java-symbol type="bool" name="config_allowAllRotations" />
+  <java-symbol type="bool" name="config_useCurrentRotationOnRotationLockChange"/>
   <java-symbol type="bool" name="config_annoy_dianne" />
   <java-symbol type="bool" name="config_startDreamImmediatelyOnDock" />
   <java-symbol type="bool" name="config_carDockEnablesAccelerometer" />
@@ -2673,7 +2674,7 @@
   <java-symbol type="array" name="config_face_acquire_vendor_biometricprompt_ignorelist" />
   <java-symbol type="bool" name="config_faceAuthSupportsSelfIllumination" />
   <java-symbol type="bool" name="config_faceAuthDismissesKeyguard" />
-  <java-symbol type="bool" name="config_requireScreenOnToAuthEnabled" />
+  <java-symbol type="bool" name="config_performantAuthDefault" />
 
   <!-- Face config -->
   <java-symbol type="integer" name="config_faceMaxTemplatesPerUser" />
@@ -3497,6 +3498,7 @@
   <java-symbol type="string" name="color_correction_feature_name" />
   <java-symbol type="string" name="reduce_bright_colors_feature_name" />
   <java-symbol type="string" name="config_defaultAccessibilityService" />
+  <java-symbol type="string" name="config_defaultAccessibilityNotificationSound" />
   <java-symbol type="string" name="accessibility_shortcut_spoken_feedback" />
 
   <java-symbol type="string" name="accessibility_select_shortcut_menu_title" />
@@ -3840,6 +3842,7 @@
   <java-symbol type="id" name="messaging_group_icon_container" />
   <java-symbol type="id" name="messaging_group_sending_progress" />
   <java-symbol type="id" name="messaging_group_sending_progress_container" />
+  <java-symbol type="bool" name="config_supportsSeamlessRefreshRateSwitching" />
 
   <java-symbol type="integer" name="config_stableDeviceDisplayWidth" />
   <java-symbol type="integer" name="config_stableDeviceDisplayHeight" />

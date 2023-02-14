@@ -201,27 +201,6 @@ public class SizeCompatTests extends WindowTestsBase {
     }
 
     @Test
-    public void testNotApplyStrategyToTranslucentActivitiesWithDifferentUid() {
-        mWm.mLetterboxConfiguration.setTranslucentLetterboxingOverrideEnabled(true);
-        setUpDisplaySizeWithApp(2000, 1000);
-        prepareUnresizable(mActivity, 1.5f /* maxAspect */, SCREEN_ORIENTATION_PORTRAIT);
-        mActivity.info.setMinAspectRatio(1.2f);
-        mActivity.mDisplayContent.setIgnoreOrientationRequest(true /* ignoreOrientationRequest */);
-        // Translucent Activity
-        final ActivityRecord translucentActivity = new ActivityBuilder(mAtm)
-                .setScreenOrientation(SCREEN_ORIENTATION_LANDSCAPE)
-                .setMinAspectRatio(1.1f)
-                .setMaxAspectRatio(3f)
-                .build();
-        doReturn(false).when(translucentActivity).fillsParent();
-        mTask.addChild(translucentActivity);
-        // We check bounds
-        final Rect opaqueBounds = mActivity.getConfiguration().windowConfiguration.getBounds();
-        final Rect translucentRequestedBounds = translucentActivity.getRequestedOverrideBounds();
-        assertNotEquals(opaqueBounds, translucentRequestedBounds);
-    }
-
-    @Test
     public void testApplyStrategyToMultipleTranslucentActivities() {
         mWm.mLetterboxConfiguration.setTranslucentLetterboxingOverrideEnabled(true);
         setUpDisplaySizeWithApp(2000, 1000);
@@ -295,6 +274,15 @@ public class SizeCompatTests extends WindowTestsBase {
 
         assertEquals(RESTARTING_PROCESS, mActivity.getState());
         assertNotEquals(originalOverrideBounds, mActivity.getBounds());
+
+        // Even if the state is changed (e.g. a floating activity on top is finished and make it
+        // resume), the restart procedure should recover the state and continue to kill the process.
+        mActivity.setState(RESUMED, "anyStateChange");
+        doReturn(true).when(mSupervisor).hasScheduledRestartTimeouts(mActivity);
+        mAtm.mActivityClientController.activityStopped(mActivity.token, null /* icicle */,
+                null /* persistentState */, null /* description */);
+        assertEquals(RESTARTING_PROCESS, mActivity.getState());
+        verify(mSupervisor).removeRestartTimeouts(mActivity);
     }
 
     @Test

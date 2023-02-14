@@ -86,8 +86,13 @@ import android.view.accessibility.AccessibilityNodeProvider;
 import android.view.accessibility.AccessibilityWindowInfo;
 import android.view.inputmethod.InlineSuggestionsRequest;
 import android.view.inputmethod.InputMethodManager;
+import android.widget.CheckBox;
+import android.widget.DatePicker;
 import android.widget.EditText;
+import android.widget.RadioGroup;
+import android.widget.Spinner;
 import android.widget.TextView;
+import android.widget.TimePicker;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.logging.MetricsLogger;
@@ -657,6 +662,23 @@ public final class AutofillManager {
 
     private final boolean mIsFillDialogEnabled;
 
+    // Indicate whether trigger fill request on unimportant views is enabled
+    private boolean mIsTriggerFillRequestOnUnimportantViewEnabled = false;
+
+    // A set containing all non-autofillable ime actions passed by flag
+    private Set<String> mNonAutofillableImeActionIdSet = new ArraySet<>();
+
+    // If a package is fully denied, then all views that marked as not
+    // important for autofill will not trigger fill request
+    private boolean mIsPackageFullyDeniedForAutofillForUnimportantView = false;
+
+    // If a package is partially denied, autofill manager will check whether
+    // current activity is in deny set to decide whether to trigger fill request
+    private boolean mIsPackagePartiallyDeniedForAutofillForUnimportantView = false;
+
+    // A deny set read from device config
+    private Set<String> mDeniedActivitiySet = new ArraySet<>();
+
     // Indicates whether called the showAutofillDialog() method.
     private boolean mShowAutofillDialogCalled = false;
 
@@ -816,7 +838,132 @@ public final class AutofillManager {
             sDebug = (mOptions.loggingLevel & FLAG_ADD_CLIENT_DEBUG) != 0;
             sVerbose = (mOptions.loggingLevel & FLAG_ADD_CLIENT_VERBOSE) != 0;
         }
+
+        mIsTriggerFillRequestOnUnimportantViewEnabled =
+            AutofillFeatureFlags.isTriggerFillRequestOnUnimportantViewEnabled();
+
+        mNonAutofillableImeActionIdSet =
+            AutofillFeatureFlags.getNonAutofillableImeActionIdSetFromFlag();
+
+        final String denyListString = AutofillFeatureFlags.getDenylistStringFromFlag();
+
+        final String packageName = mContext.getPackageName();
+
+        mIsPackageFullyDeniedForAutofillForUnimportantView =
+            isPackageFullyDeniedForAutofillForUnimportantView(denyListString, packageName);
+
+        mIsPackagePartiallyDeniedForAutofillForUnimportantView =
+            isPackagePartiallyDeniedForAutofillForUnimportantView(denyListString, packageName);
+
+        if (mIsPackagePartiallyDeniedForAutofillForUnimportantView) {
+            setDeniedActivitySetWithDenyList(denyListString, packageName);
+        }
     }
+
+    private boolean isPackageFullyDeniedForAutofillForUnimportantView(
+            @NonNull String denyListString, @NonNull String packageName) {
+        // If "PackageName:;" is in the string, then it means the package name is in denylist
+        // and there are no activities specified under it. That means the package is fully
+        // denied for autofill
+        return denyListString.indexOf(packageName + ":;") != -1;
+    }
+
+    private boolean isPackagePartiallyDeniedForAutofillForUnimportantView(
+            @NonNull String denyListString, @NonNull String packageName) {
+        // This check happens after checking package is not fully denied. If "PackageName:" instead
+        // is in denylist, then it means there are specific activities to be denied. So the package
+        // is partially denied for autofill
+        return denyListString.indexOf(packageName + ":") != -1;
+    }
+
+    /**
+     * Get the denied activitiy names under specified package from denylist and set it in field
+     * mDeniedActivitiySet
+     *
+     * If using parameter as the example below, the denied activity set would be set to
+     * Set{Activity1,Activity2}.
+     *
+     * @param denyListString Denylist that is got from device config. For example,
+     *        "Package1:Activity1,Activity2;Package2:;"
+     * @param packageName Specify to extract activities under which package.For example,
+     *        "Package1:;"
+     */
+    private void setDeniedActivitySetWithDenyList(
+            @NonNull String denyListString, @NonNull String packageName) {
+        // 1. Get the index of where the Package name starts
+        final int packageInStringIndex = denyListString.indexOf(packageName + ":");
+
+        // 2. Get the ";" index after this index of package
+        final int firstNextSemicolonIndex = denyListString.indexOf(";", packageInStringIndex);
+
+        // 3. Get the activity names substring between the indexes
+        final int activityStringStartIndex = packageInStringIndex + packageName.length() + 1;
+        if (activityStringStartIndex < firstNextSemicolonIndex) {
+            Log.e(TAG, "Failed to get denied activity names from denylist because it's wrongly "
+                    + "formatted");
+        }
+        final String activitySubstring =
+                denyListString.substring(activityStringStartIndex, firstNextSemicolonIndex);
+
+        // 4. Split the activity name substring
+        final String[] activityStringArray = activitySubstring.split(",");
+
+        // 5. Set the denied activity set
+        mDeniedActivitiySet = new ArraySet<>(Arrays.asList(activityStringArray));
+
+        return;
+    }
+
+    /**
+     * Check whether autofill is denied for current activity or package. Used when a view is marked
+     * as not important for autofill, if current activity or package is denied, then the view won't
+     * trigger fill request.
+     *
+     * @hide
+     */
+    public final boolean isActivityDeniedForAutofillForUnimportantView() {
+        if (mIsPackageFullyDeniedForAutofillForUnimportantView) {
+            return true;
+        }
+        if (mIsPackagePartiallyDeniedForAutofillForUnimportantView) {
+            final AutofillClient client = getClient();
+            if (client == null) {
+                return false;
+            }
+            final ComponentName clientActivity = client.autofillClientGetComponentName();
+            if (mDeniedActivitiySet.contains(clientActivity.flattenToShortString())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Check whether view matches autofill-able heuristics
+     *
+     * @hide
+     */
+    public final boolean isMatchingAutofillableHeuristics(@NonNull View view) {
+        if (!mIsTriggerFillRequestOnUnimportantViewEnabled) {
+            return false;
+        }
+        if (view instanceof EditText) {
+            final int actionId = ((EditText) view).getImeOptions();
+            if (mNonAutofillableImeActionIdSet.contains(String.valueOf(actionId))) {
+                return false;
+            }
+            return true;
+        }
+        if (view instanceof CheckBox
+                || view instanceof Spinner
+                || view instanceof DatePicker
+                || view instanceof TimePicker
+                || view instanceof RadioGroup) {
+            return true;
+        }
+        return false;
+    }
+
 
     /**
      * @hide
@@ -1088,6 +1235,42 @@ public final class AutofillManager {
     }
 
     /**
+     * Called when the virtual views are ready to the user for autofill.
+     *
+     * This method is used to notify autofill system the views are ready to the user. And then
+     * Autofill can do initialization if needed before the user starts to input. For example, do
+     * a pre-fill request for the
+     * <a href="/reference/android/service/autofill/Dataset.html#FillDialogUI">fill dialog</a>.
+     *
+     * @param view the host view that holds a virtual view hierarchy.
+     * @param infos extra information for the virtual views. The key is virtual id which represents
+     *             the virtual view in the host view.
+     *
+     * @throws IllegalArgumentException if the {@code infos} was empty
+     */
+    public void notifyVirtualViewsReady(
+            @NonNull View view, @NonNull SparseArray<VirtualViewFillInfo> infos) {
+        Objects.requireNonNull(infos);
+        if (infos.size() == 0) {
+            throw new IllegalArgumentException("No VirtualViewInfo found");
+        }
+        if (AutofillFeatureFlags.isFillDialogDisabledForCredentialManager()
+                && view.isCredential()) {
+            if (sDebug) {
+                Log.d(TAG, "Ignoring Fill Dialog request since important for credMan:"
+                        + view.getAutofillId().toString());
+            }
+            return;
+        }
+        for (int i = 0; i < infos.size(); i++) {
+            final VirtualViewFillInfo info = infos.valueAt(i);
+            final int virtualId = infos.indexOfKey(i);
+            notifyViewReadyInner(getAutofillId(view, virtualId),
+                    (info == null) ? null : info.getAutofillHints());
+        }
+    }
+
+    /**
      * The {@link AutofillFeatureFlags#DEVICE_CONFIG_AUTOFILL_DIALOG_ENABLED} is {@code true} or
      * the view have the allowed autofill hints, performs a fill request to know there is any field
      * supported fill dialog.
@@ -1098,15 +1281,19 @@ public final class AutofillManager {
         if (sDebug) {
             Log.d(TAG, "notifyViewEnteredForFillDialog:" + v.getAutofillId());
         }
-        if (!hasAutofillFeature()) {
-            return;
-        }
         if (AutofillFeatureFlags.isFillDialogDisabledForCredentialManager()
                 && v.isCredential()) {
             if (sDebug) {
                 Log.d(TAG, "Ignoring Fill Dialog request since important for credMan:"
                         + v.getAutofillId().toString());
             }
+            return;
+        }
+        notifyViewReadyInner(v.getAutofillId(), v.getAutofillHints());
+    }
+
+    private void notifyViewReadyInner(AutofillId id, String[] autofillHints) {
+        if (!hasAutofillFeature()) {
             return;
         }
 
@@ -1116,7 +1303,7 @@ public final class AutofillManager {
                 // different pages but in the same Activity. We need to reset the
                 // mIsFillRequested flag to allow asking for a new FillRequest when
                 // user switches to other page
-                mTrackedViews.checkViewState(v.getAutofillId());
+                mTrackedViews.checkViewState(id);
             }
         }
 
@@ -1126,9 +1313,9 @@ public final class AutofillManager {
         }
 
         if (mIsFillDialogEnabled
-                || ArrayUtils.containsAny(v.getAutofillHints(), mFillDialogEnabledHints)) {
+                || ArrayUtils.containsAny(autofillHints, mFillDialogEnabledHints)) {
             if (sDebug) {
-                Log.d(TAG, "Trigger fill request at view entered");
+                Log.d(TAG, "Trigger fill request when the view is ready.");
             }
 
             int flags = FLAG_SUPPORTS_FILL_DIALOG;

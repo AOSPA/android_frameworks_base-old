@@ -146,6 +146,7 @@ import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInterac
 import com.android.systemui.keyguard.shared.model.TransitionState;
 import com.android.systemui.keyguard.shared.model.TransitionStep;
 import com.android.systemui.keyguard.ui.viewmodel.DreamingToLockscreenTransitionViewModel;
+import com.android.systemui.keyguard.ui.viewmodel.GoneToDreamingTransitionViewModel;
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardBottomAreaViewModel;
 import com.android.systemui.keyguard.ui.viewmodel.LockscreenToDreamingTransitionViewModel;
 import com.android.systemui.keyguard.ui.viewmodel.LockscreenToOccludedTransitionViewModel;
@@ -455,6 +456,7 @@ public final class NotificationPanelViewController implements Dumpable {
     private float mDownY;
     private int mDisplayTopInset = 0; // in pixels
     private int mDisplayRightInset = 0; // in pixels
+    private int mDisplayLeftInset = 0; // in pixels
     private int mLargeScreenShadeHeaderHeight;
     private int mSplitShadeNotificationsScrimMarginBottom;
 
@@ -698,6 +700,7 @@ public final class NotificationPanelViewController implements Dumpable {
     private DreamingToLockscreenTransitionViewModel mDreamingToLockscreenTransitionViewModel;
     private OccludedToLockscreenTransitionViewModel mOccludedToLockscreenTransitionViewModel;
     private LockscreenToDreamingTransitionViewModel mLockscreenToDreamingTransitionViewModel;
+    private GoneToDreamingTransitionViewModel mGoneToDreamingTransitionViewModel;
     private LockscreenToOccludedTransitionViewModel mLockscreenToOccludedTransitionViewModel;
 
     private KeyguardTransitionInteractor mKeyguardTransitionInteractor;
@@ -706,6 +709,7 @@ public final class NotificationPanelViewController implements Dumpable {
     private int mDreamingToLockscreenTransitionTranslationY;
     private int mOccludedToLockscreenTransitionTranslationY;
     private int mLockscreenToDreamingTransitionTranslationY;
+    private int mGoneToDreamingTransitionTranslationY;
     private int mLockscreenToOccludedTransitionTranslationY;
     private boolean mUnocclusionTransitionFlagEnabled = false;
 
@@ -718,7 +722,7 @@ public final class NotificationPanelViewController implements Dumpable {
         updatePanelExpansionAndVisibility();
     };
     private final Runnable mMaybeHideExpandedRunnable = () -> {
-        if (getExpansionFraction() == 0.0f) {
+        if (getExpandedFraction() == 0.0f) {
             postToView(mHideExpandedRunnable);
         }
     };
@@ -736,6 +740,12 @@ public final class NotificationPanelViewController implements Dumpable {
             };
 
     private final Consumer<TransitionStep> mLockscreenToDreamingTransition =
+            (TransitionStep step) -> {
+                mIsOcclusionTransitionRunning =
+                    step.getTransitionState() == TransitionState.RUNNING;
+            };
+
+    private final Consumer<TransitionStep> mGoneToDreamingTransition =
             (TransitionStep step) -> {
                 mIsOcclusionTransitionRunning =
                     step.getTransitionState() == TransitionState.RUNNING;
@@ -819,6 +829,7 @@ public final class NotificationPanelViewController implements Dumpable {
             DreamingToLockscreenTransitionViewModel dreamingToLockscreenTransitionViewModel,
             OccludedToLockscreenTransitionViewModel occludedToLockscreenTransitionViewModel,
             LockscreenToDreamingTransitionViewModel lockscreenToDreamingTransitionViewModel,
+            GoneToDreamingTransitionViewModel goneToDreamingTransitionViewModel,
             LockscreenToOccludedTransitionViewModel lockscreenToOccludedTransitionViewModel,
             @Main CoroutineDispatcher mainDispatcher,
             KeyguardTransitionInteractor keyguardTransitionInteractor,
@@ -841,6 +852,7 @@ public final class NotificationPanelViewController implements Dumpable {
         mDreamingToLockscreenTransitionViewModel = dreamingToLockscreenTransitionViewModel;
         mOccludedToLockscreenTransitionViewModel = occludedToLockscreenTransitionViewModel;
         mLockscreenToDreamingTransitionViewModel = lockscreenToDreamingTransitionViewModel;
+        mGoneToDreamingTransitionViewModel = goneToDreamingTransitionViewModel;
         mLockscreenToOccludedTransitionViewModel = lockscreenToOccludedTransitionViewModel;
         mKeyguardTransitionInteractor = keyguardTransitionInteractor;
         mView.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
@@ -1180,6 +1192,17 @@ public final class NotificationPanelViewController implements Dumpable {
                     setTransitionY(mNotificationStackScrollLayoutController),
                     mMainDispatcher);
 
+            // Gone->Dreaming
+            collectFlow(mView, mKeyguardTransitionInteractor.getGoneToDreamingTransition(),
+                    mGoneToDreamingTransition, mMainDispatcher);
+            collectFlow(mView, mGoneToDreamingTransitionViewModel.getLockscreenAlpha(),
+                    setTransitionAlpha(mNotificationStackScrollLayoutController),
+                    mMainDispatcher);
+            collectFlow(mView, mGoneToDreamingTransitionViewModel.lockscreenTranslationY(
+                    mGoneToDreamingTransitionTranslationY),
+                    setTransitionY(mNotificationStackScrollLayoutController),
+                    mMainDispatcher);
+
             // Lockscreen->Occluded
             collectFlow(mView, mKeyguardTransitionInteractor.getLockscreenToOccludedTransition(),
                     mLockscreenToOccludedTransition, mMainDispatcher);
@@ -1231,6 +1254,8 @@ public final class NotificationPanelViewController implements Dumpable {
                 R.dimen.occluded_to_lockscreen_transition_lockscreen_translation_y);
         mLockscreenToDreamingTransitionTranslationY = mResources.getDimensionPixelSize(
                 R.dimen.lockscreen_to_dreaming_transition_lockscreen_translation_y);
+        mGoneToDreamingTransitionTranslationY = mResources.getDimensionPixelSize(
+                R.dimen.gone_to_dreaming_transition_lockscreen_translation_y);
         mLockscreenToOccludedTransitionTranslationY = mResources.getDimensionPixelSize(
                 R.dimen.lockscreen_to_occluded_transition_lockscreen_translation_y);
     }
@@ -2999,7 +3024,7 @@ public final class NotificationPanelViewController implements Dumpable {
             // left bounds can ignore insets, it should always reach the edge of the screen
             return 0;
         } else {
-            return mNotificationStackScrollLayoutController.getLeft();
+            return mNotificationStackScrollLayoutController.getLeft() + mDisplayLeftInset;
         }
     }
 
@@ -3007,7 +3032,7 @@ public final class NotificationPanelViewController implements Dumpable {
         if (mIsFullWidth) {
             return mView.getRight() + mDisplayRightInset;
         } else {
-            return mNotificationStackScrollLayoutController.getRight();
+            return mNotificationStackScrollLayoutController.getRight() + mDisplayLeftInset;
         }
     }
 
@@ -3131,14 +3156,30 @@ public final class NotificationPanelViewController implements Dumpable {
 
         // Convert global clipping coordinates to local ones,
         // relative to NotificationStackScrollLayout
-        int nsslLeft = left - mNotificationStackScrollLayoutController.getLeft();
-        int nsslRight = right - mNotificationStackScrollLayoutController.getLeft();
+        int nsslLeft = calculateNsslLeft(left);
+        int nsslRight = calculateNsslRight(right);
         int nsslTop = getNotificationsClippingTopBounds(top);
         int nsslBottom = bottom - mNotificationStackScrollLayoutController.getTop();
         int bottomRadius = mSplitShadeEnabled ? radius : 0;
         int topRadius = mSplitShadeEnabled && mExpandingFromHeadsUp ? 0 : radius;
         mNotificationStackScrollLayoutController.setRoundedClippingBounds(
                 nsslLeft, nsslTop, nsslRight, nsslBottom, topRadius, bottomRadius);
+    }
+
+    private int calculateNsslLeft(int nsslLeftAbsolute) {
+        int left = nsslLeftAbsolute - mNotificationStackScrollLayoutController.getLeft();
+        if (mIsFullWidth) {
+            return left;
+        }
+        return left - mDisplayLeftInset;
+    }
+
+    private int calculateNsslRight(int nsslRightAbsolute) {
+        int right = nsslRightAbsolute - mNotificationStackScrollLayoutController.getLeft();
+        if (mIsFullWidth) {
+            return right;
+        }
+        return right - mDisplayLeftInset;
     }
 
     private int getNotificationsClippingTopBounds(int qsTop) {
@@ -4538,6 +4579,7 @@ public final class NotificationPanelViewController implements Dumpable {
         ipw.print("mDownY="); ipw.println(mDownY);
         ipw.print("mDisplayTopInset="); ipw.println(mDisplayTopInset);
         ipw.print("mDisplayRightInset="); ipw.println(mDisplayRightInset);
+        ipw.print("mDisplayLeftInset="); ipw.println(mDisplayLeftInset);
         ipw.print("mLargeScreenShadeHeaderHeight="); ipw.println(mLargeScreenShadeHeaderHeight);
         ipw.print("mSplitShadeNotificationsScrimMarginBottom=");
         ipw.println(mSplitShadeNotificationsScrimMarginBottom);
@@ -5439,10 +5481,6 @@ public final class NotificationPanelViewController implements Dumpable {
                 InteractionJankMonitor.CUJ_NOTIFICATION_SHADE_EXPAND_COLLAPSE);
     }
 
-    private float getExpansionFraction() {
-        return mExpandedFraction;
-    }
-
     private ShadeExpansionStateManager getShadeExpansionStateManager() {
         return mShadeExpansionStateManager;
     }
@@ -5919,6 +5957,7 @@ public final class NotificationPanelViewController implements Dumpable {
         Insets combinedInsets = insets.getInsetsIgnoringVisibility(insetTypes);
         mDisplayTopInset = combinedInsets.top;
         mDisplayRightInset = combinedInsets.right;
+        mDisplayLeftInset = combinedInsets.left;
 
         mNavigationBarBottomHeight = insets.getStableInsetBottom();
         updateMaxHeadsUpTranslation();

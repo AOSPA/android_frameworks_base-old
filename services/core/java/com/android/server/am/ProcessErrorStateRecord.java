@@ -278,7 +278,8 @@ class ProcessErrorStateRecord {
     void appNotResponding(String activityShortComponentName, ApplicationInfo aInfo,
             String parentShortComponentName, WindowProcessController parentProcess,
             boolean aboveSystem, TimeoutRecord timeoutRecord,
-            ExecutorService auxiliaryTaskExecutor, boolean onlyDumpSelf) {
+            ExecutorService auxiliaryTaskExecutor, boolean onlyDumpSelf,
+            boolean isContinuousAnr) {
         String annotation = timeoutRecord.mReason;
         AnrLatencyTracker latencyTracker = timeoutRecord.mLatencyTracker;
         Future<?> updateCpuStatsNowFirstCall = null;
@@ -554,7 +555,7 @@ class ProcessErrorStateRecord {
                                  + " ANR, delay "+delay+" ms  ");
                 mApp.mService.mAnrHelper.deferAppNotResponding(mApp, activityShortComponentName,
                       aInfo, parentShortComponentName, parentProcess,
-                      aboveSystem, auxiliaryTaskExecutor, timeoutRecord, delay);
+                      aboveSystem, auxiliaryTaskExecutor, timeoutRecord, delay, isContinuousAnr);
                 synchronized (mProcLock) {
                     setDefered(true);
                     setNotResponding(false);
@@ -696,7 +697,8 @@ class ProcessErrorStateRecord {
                 // Bring up the infamous App Not Responding dialog
                 Message msg = Message.obtain();
                 msg.what = ActivityManagerService.SHOW_NOT_RESPONDING_UI_MSG;
-                msg.obj = new AppNotRespondingDialog.Data(mApp, aInfo, aboveSystem);
+                msg.obj = new AppNotRespondingDialog.Data(mApp, aInfo, aboveSystem,
+                        isContinuousAnr);
 
                 mService.mUiHandler.sendMessageDelayed(msg, anrDialogDelayMs);
             }

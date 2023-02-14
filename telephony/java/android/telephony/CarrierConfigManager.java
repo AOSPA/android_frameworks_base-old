@@ -1854,8 +1854,6 @@ public class CarrierConfigManager {
      * Instead, each sim carrier should have a single country code, apply per carrier based iso
      * code as an override. The overridden value can be read from
      * {@link TelephonyManager#getSimCountryIso()} and {@link SubscriptionInfo#getCountryIso()}
-     *
-     * @hide
      */
     public static final String KEY_SIM_COUNTRY_ISO_OVERRIDE_STRING =
             "sim_country_iso_override_string";
@@ -7140,7 +7138,7 @@ public class CarrierConfigManager {
          * Retry SMS over IMS after this Timer expires
          */
         public static final String KEY_SMS_OVER_IMS_SEND_RETRY_DELAY_MILLIS_INT =
-                KEY_PREFIX + "sms_rover_ims_send_retry_delay_millis_int";
+                KEY_PREFIX + "sms_over_ims_send_retry_delay_millis_int";
 
         /**
          * TR1 Timer Value in milliseconds,

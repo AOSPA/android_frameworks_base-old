@@ -189,13 +189,14 @@ public final class BackgroundDexOptService {
         void onPackagesUpdated(ArraySet<String> updatedPackages);
     }
 
-    public BackgroundDexOptService(
-            Context context, DexManager dexManager, PackageManagerService pm) {
+    public BackgroundDexOptService(Context context, DexManager dexManager, PackageManagerService pm)
+            throws LegacyDexoptDisabledException {
         this(new Injector(context, dexManager, pm));
     }
 
     @VisibleForTesting
-    public BackgroundDexOptService(Injector injector) {
+    public BackgroundDexOptService(Injector injector) throws LegacyDexoptDisabledException {
+        Installer.checkLegacyDexoptDisabled();
         mInjector = injector;
         mDexOptHelper = mInjector.getDexOptHelper();
         LocalServices.addService(BackgroundDexOptService.class, this);
@@ -405,11 +406,15 @@ public final class BackgroundDexOptService {
                                     new TimingsTraceAndSlog(TAG, Trace.TRACE_TAG_PACKAGE_MANAGER);
                             tr.traceBegin("jobExecution");
                             boolean completed = false;
+                            boolean fatalError = false;
                             try {
                                 completed = runIdleOptimization(
                                         pm, pkgs, params.getJobId() == JOB_POST_BOOT_UPDATE);
                             } catch (LegacyDexoptDisabledException e) {
                                 Slog.wtf(TAG, e);
+                            } catch (RuntimeException e) {
+                                fatalError = true;
+                                throw e;
                             } finally { // Those cleanup should be done always.
                                 tr.traceEnd();
                                 Slog.i(TAG,
@@ -422,12 +427,10 @@ public final class BackgroundDexOptService {
                                     if (completed) {
                                         markPostBootUpdateCompleted(params);
                                     }
-                                    // Reschedule when cancelled
-                                    job.jobFinished(params, !completed);
-                                } else {
-                                    // Periodic job
-                                    job.jobFinished(params, false /* reschedule */);
                                 }
+                                // Reschedule when cancelled. No need to reschedule when failed with
+                                // fatal error because it's likely to fail again.
+                                job.jobFinished(params, !completed && !fatalError);
                                 markDexOptCompleted();
                             }
                         }));

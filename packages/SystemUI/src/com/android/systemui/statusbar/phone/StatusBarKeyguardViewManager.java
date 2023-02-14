@@ -18,6 +18,7 @@ package com.android.systemui.statusbar.phone;
 
 import static android.view.WindowInsets.Type.navigationBars;
 
+import static com.android.systemui.keyguard.shared.constants.KeyguardBouncerConstants.EXPANSION_HIDDEN;
 import static com.android.systemui.plugins.ActivityStarter.OnDismissAction;
 import static com.android.systemui.statusbar.phone.BiometricUnlockController.MODE_WAKE_AND_UNLOCK;
 import static com.android.systemui.statusbar.phone.BiometricUnlockController.MODE_WAKE_AND_UNLOCK_PULSING;
@@ -36,7 +37,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewRootImpl;
 import android.view.WindowManagerGlobal;
-import android.window.OnBackInvokedCallback;
+import android.window.BackEvent;
+import android.window.OnBackAnimationCallback;
 import android.window.OnBackInvokedDispatcher;
 
 import androidx.annotation.NonNull;
@@ -60,6 +62,7 @@ import com.android.systemui.flags.Flags;
 import com.android.systemui.keyguard.data.BouncerView;
 import com.android.systemui.keyguard.domain.interactor.AlternateBouncerInteractor;
 import com.android.systemui.keyguard.domain.interactor.PrimaryBouncerCallbackInteractor;
+import com.android.systemui.keyguard.domain.interactor.PrimaryBouncerCallbackInteractor.PrimaryBouncerExpansionCallback;
 import com.android.systemui.keyguard.domain.interactor.PrimaryBouncerInteractor;
 import com.android.systemui.navigationbar.NavigationBarView;
 import com.android.systemui.navigationbar.NavigationModeController;
@@ -76,7 +79,6 @@ import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.RemoteInputController;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
-import com.android.systemui.statusbar.phone.KeyguardBouncer.PrimaryBouncerExpansionCallback;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.unfold.FoldAodAnimationController;
@@ -184,8 +186,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
                         isVisible && mDreamOverlayStateController.isOverlayActive());
 
                 if (!isVisible) {
-                    mCentralSurfaces.setPrimaryBouncerHiddenFraction(
-                            KeyguardBouncer.EXPANSION_HIDDEN);
+                    mCentralSurfaces.setPrimaryBouncerHiddenFraction(EXPANSION_HIDDEN);
                 }
 
                 /* Register predictive back callback when keyguard becomes visible, and unregister
@@ -198,11 +199,38 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
             }
     };
 
-    private final OnBackInvokedCallback mOnBackInvokedCallback = () -> {
-        if (DEBUG) {
-            Log.d(TAG, "onBackInvokedCallback() called, invoking onBackPressed()");
+    private final OnBackAnimationCallback mOnBackInvokedCallback = new OnBackAnimationCallback() {
+        @Override
+        public void onBackInvoked() {
+            if (DEBUG) {
+                Log.d(TAG, "onBackInvokedCallback() called, invoking onBackPressed()");
+            }
+            onBackPressed();
+            if (shouldPlayBackAnimation()) {
+                mPrimaryBouncerView.getDelegate().getBackCallback().onBackInvoked();
+            }
         }
-        onBackPressed();
+
+        @Override
+        public void onBackProgressed(BackEvent event) {
+            if (shouldPlayBackAnimation()) {
+                mPrimaryBouncerView.getDelegate().getBackCallback().onBackProgressed(event);
+            }
+        }
+
+        @Override
+        public void onBackCancelled() {
+            if (shouldPlayBackAnimation()) {
+                mPrimaryBouncerView.getDelegate().getBackCallback().onBackCancelled();
+            }
+        }
+
+        @Override
+        public void onBackStarted(BackEvent event) {
+            if (shouldPlayBackAnimation()) {
+                mPrimaryBouncerView.getDelegate().getBackCallback().onBackStarted(event);
+            }
+        }
     };
     private boolean mIsBackCallbackRegistered = false;
 
@@ -256,6 +284,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
     private boolean mIsModernBouncerEnabled;
     private boolean mIsModernAlternateBouncerEnabled;
     private boolean mIsUnoccludeTransitionFlagEnabled;
+    private boolean mIsBackAnimationEnabled;
 
     private OnDismissAction mAfterKeyguardGoneAction;
     private Runnable mKeyguardGoneCancelAction;
@@ -337,6 +366,8 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         mIsModernAlternateBouncerEnabled = featureFlags.isEnabled(Flags.MODERN_ALTERNATE_BOUNCER);
         mAlternateBouncerInteractor = alternateBouncerInteractor;
         mIsUnoccludeTransitionFlagEnabled = featureFlags.isEnabled(Flags.UNOCCLUSION_TRANSITION);
+        mIsBackAnimationEnabled =
+                featureFlags.isEnabled(Flags.WM_ENABLE_PREDICTIVE_BACK_BOUNCER_ANIM);
     }
 
     @Override
@@ -472,6 +503,11 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         }
     }
 
+    private boolean shouldPlayBackAnimation() {
+        // Suppress back animation when bouncer shouldn't be dismissed on back invocation.
+        return !needsFullscreenBouncer() && mIsBackAnimationEnabled;
+    }
+
     @Override
     public void onDensityOrFontScaleChanged() {
         hideBouncer(true /* destroyView */);
@@ -485,7 +521,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
                         || mNotificationPanelViewController.isExpanding());
 
         final boolean isUserTrackingStarted =
-                event.getFraction() != KeyguardBouncer.EXPANSION_HIDDEN && event.getTracking();
+                event.getFraction() != EXPANSION_HIDDEN && event.getTracking();
 
         return mKeyguardStateController.isShowing()
                 && !primaryBouncerIsOrWillBeShowing()
@@ -535,9 +571,9 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
             }
         } else {
             if (mPrimaryBouncer != null) {
-                mPrimaryBouncer.setExpansion(KeyguardBouncer.EXPANSION_HIDDEN);
+                mPrimaryBouncer.setExpansion(EXPANSION_HIDDEN);
             } else {
-                mPrimaryBouncerInteractor.setPanelExpansion(KeyguardBouncer.EXPANSION_HIDDEN);
+                mPrimaryBouncerInteractor.setPanelExpansion(EXPANSION_HIDDEN);
             }
         }
     }

@@ -17,6 +17,8 @@
 package com.android.systemui.statusbar.phone;
 
 import static com.android.keyguard.KeyguardSecurityModel.SecurityMode;
+import static com.android.systemui.keyguard.shared.constants.KeyguardBouncerConstants.EXPANSION_HIDDEN;
+import static com.android.systemui.keyguard.shared.constants.KeyguardBouncerConstants.EXPANSION_VISIBLE;
 import static com.android.systemui.plugins.ActivityStarter.OnDismissAction;
 
 import android.content.Context;
@@ -24,8 +26,6 @@ import android.content.res.ColorStateList;
 import android.hardware.biometrics.BiometricSourceType;
 import android.os.Handler;
 import android.os.Trace;
-import android.os.UserHandle;
-import android.os.UserManager;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
@@ -44,6 +44,8 @@ import com.android.systemui.DejankUtils;
 import com.android.systemui.classifier.FalsingCollector;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.keyguard.DismissCallbackRegistry;
+import com.android.systemui.keyguard.domain.interactor.PrimaryBouncerCallbackInteractor.KeyguardResetCallback;
+import com.android.systemui.keyguard.domain.interactor.PrimaryBouncerCallbackInteractor.PrimaryBouncerExpansionCallback;
 import com.android.systemui.shared.system.SysUiStatsLog;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.ListenerSet;
@@ -64,14 +66,6 @@ public class KeyguardBouncer {
     private static final String TAG = "PrimaryKeyguardBouncer";
     static final long BOUNCER_FACE_DELAY = 1200;
     public static final float ALPHA_EXPANSION_THRESHOLD = 0.95f;
-    /**
-     * Values for the bouncer expansion represented as the panel expansion.
-     * Panel expansion 1f = panel fully showing = bouncer fully hidden
-     * Panel expansion 0f = panel fully hiding = bouncer fully showing
-     */
-    public static final float EXPANSION_HIDDEN = 1f;
-    public static final float EXPANSION_VISIBLE = 0f;
-
     protected final Context mContext;
     protected final ViewMediatorCallback mCallback;
     protected final ViewGroup mContainer;
@@ -181,11 +175,6 @@ public class KeyguardBouncer {
      */
     public void show(boolean resetSecuritySelection, boolean isScrimmed) {
         final int keyguardUserId = KeyguardUpdateMonitor.getCurrentUser();
-        if (keyguardUserId == UserHandle.USER_SYSTEM && UserManager.isSplitSystemUser()) {
-            // In split system user mode, we never unlock system user.
-            return;
-        }
-
         try {
             Trace.beginSection("KeyguardBouncer#show");
 
@@ -216,9 +205,7 @@ public class KeyguardBouncer {
             }
 
             final int activeUserId = KeyguardUpdateMonitor.getCurrentUser();
-            final boolean isSystemUser =
-                UserManager.isSplitSystemUser() && activeUserId == UserHandle.USER_SYSTEM;
-            final boolean allowDismissKeyguard = !isSystemUser && activeUserId == keyguardUserId;
+            final boolean allowDismissKeyguard = activeUserId == keyguardUserId;
 
             // If allowed, try to dismiss the Keyguard. If no security auth (password/pin/pattern)
             // is set, this will dismiss the whole Keyguard. Otherwise, show the bouncer.
@@ -662,56 +649,6 @@ public class KeyguardBouncer {
      */
     public void removeBouncerExpansionCallback(PrimaryBouncerExpansionCallback callback) {
         mExpansionCallbacks.remove(callback);
-    }
-
-    /**
-     * Callback updated when the primary bouncer's show and hide states change.
-     */
-    public interface PrimaryBouncerExpansionCallback {
-        /**
-         * Invoked when the bouncer expansion reaches {@link KeyguardBouncer#EXPANSION_VISIBLE}.
-         * This is NOT called each time the bouncer is shown, but rather only when the fully
-         * shown amount has changed based on the panel expansion. The bouncer's visibility
-         * can still change when the expansion amount hasn't changed.
-         * See {@link KeyguardBouncer#isShowing()} for the checks for the bouncer showing state.
-         */
-        default void onFullyShown() {
-        }
-
-        /**
-         * Invoked when the bouncer is starting to transition to a hidden state.
-         */
-        default void onStartingToHide() {
-        }
-
-        /**
-         * Invoked when the bouncer is starting to transition to a visible state.
-         */
-        default void onStartingToShow() {
-        }
-
-        /**
-         * Invoked when the bouncer expansion reaches {@link KeyguardBouncer#EXPANSION_HIDDEN}.
-         */
-        default void onFullyHidden() {
-        }
-
-        /**
-         * From 0f {@link KeyguardBouncer#EXPANSION_VISIBLE} when fully visible
-         * to 1f {@link KeyguardBouncer#EXPANSION_HIDDEN} when fully hidden
-         */
-        default void onExpansionChanged(float bouncerHideAmount) {}
-
-        /**
-         * Invoked when visibility of KeyguardBouncer has changed.
-         * Note the bouncer expansion can be {@link KeyguardBouncer#EXPANSION_VISIBLE}, but the
-         * view's visibility can be {@link View.INVISIBLE}.
-         */
-        default void onVisibilityChanged(boolean isVisible) {}
-    }
-
-    public interface KeyguardResetCallback {
-        void onKeyguardReset();
     }
 
     /** Create a {@link KeyguardBouncer} once a container and bouncer callback are available. */
