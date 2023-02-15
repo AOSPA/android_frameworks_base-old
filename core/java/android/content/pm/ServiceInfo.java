@@ -331,8 +331,7 @@ public class ServiceInfo extends ComponentInfo
      * Messaging use cases which host local server to relay messages across devices.
      */
     @RequiresPermission(
-            value = Manifest.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING,
-            conditional = true
+            value = Manifest.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING
     )
     public static final int FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING = 1 << 9;
 
@@ -360,32 +359,66 @@ public class ServiceInfo extends ComponentInfo
      * </p>
      */
     @RequiresPermission(
-            value = Manifest.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED,
-            conditional = true
+            value = Manifest.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED
     )
     public static final int FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED = 1 << 10;
 
     /**
-     * Foreground service type corresponding to {@code shortService} in
-     * the {@link android.R.attr#foregroundServiceType} attribute.
+     * A foreground service type for "short-lived" services, which corresponds to
+     * {@code shortService} in the {@link android.R.attr#foregroundServiceType} attribute in the
+     * manifest.
      *
-     * TODO Implement it
+     * <p>Unlike other foreground service types, this type is not associated with a specific use
+     * case, and it will not require any special permissions
+     * (besides {@link Manifest.permission#FOREGROUND_SERVICE}).
      *
-     * TODO Expand the javadoc
+     * However, this type has the following restrictions.
      *
-     * This type is not associated with specific use cases unlike other types, but this has
-     * unique restrictions.
      * <ul>
-     *     <li>Has a timeout
-     *     <li>Cannot start other foreground services from this
      *     <li>
+     *         The type has a 1 minute timeout.
+     *         A foreground service of this type must be stopped within the timeout by
+     *         {@link android.app.Service#stopSelf),
+     *         or {@link android.content.Context#stopService).
+     *         {@link android.app.Service#stopForeground) will also work, which will demote the
+     *         service to a "background" service, which will soon be stopped by the system.
+     *
+     *         <p>The system will <em>not</em> automatically stop it.
+     *
+     *         <p>If the service isn't stopped within the timeout,
+     *         {@link android.app.Service#onTimeout(int)} will be called.
+     *         If the service is still not stopped after the callback,
+     *         the app will be declared an ANR.
+     *
+     *     <li>
+     *         A foreground service of this type cannot be made "sticky"
+     *         (see {@link android.app.Service#START_STICKY}). That is, if an app is killed
+     *         due to a crash or out-of memory while it's running a short foregorund-service,
+     *         the system will not restart the service.
+     *     <li>
+     *         Other foreground services cannot be started from short foreground services.
+     *         Unlike other foreground service types, when an app is running in the background
+     *         while only having a "short" foreground service, it's not allowed to start
+     *         other foreground services, due to the restriction describe here:
+     *         <a href="/guide/components/foreground-services#background-start-restrictions>
+     *             Restrictions on background starts
+     *         </a>
      * </ul>
      *
-     * @see Service#onTimeout
-     *
-     * @hide
+     * @see android.app.Service#onTimeout(int)
      */
     public static final int FOREGROUND_SERVICE_TYPE_SHORT_SERVICE = 1 << 11;
+
+    /**
+     * Constant corresponding to {@code fileManagement} in
+     * the {@link android.R.attr#foregroundServiceType} attribute.
+     * The file management use case which manages files/directories, often involving file I/O
+     * across the file system.
+     */
+    @RequiresPermission(
+            value = Manifest.permission.FOREGROUND_SERVICE_FILE_MANAGEMENT
+    )
+    public static final int FOREGROUND_SERVICE_TYPE_FILE_MANAGEMENT = 1 << 12;
 
     /**
      * Constant corresponding to {@code specialUse} in
@@ -433,8 +466,7 @@ public class ServiceInfo extends ComponentInfo
      * </pre>
      */
     @RequiresPermission(
-            value = Manifest.permission.FOREGROUND_SERVICE_SPECIAL_USE,
-            conditional = true
+            value = Manifest.permission.FOREGROUND_SERVICE_SPECIAL_USE
     )
     public static final int FOREGROUND_SERVICE_TYPE_SPECIAL_USE = 1 << 30;
 
@@ -471,7 +503,8 @@ public class ServiceInfo extends ComponentInfo
             FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING,
             FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED,
             FOREGROUND_SERVICE_TYPE_SHORT_SERVICE,
-            FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+            FOREGROUND_SERVICE_TYPE_FILE_MANAGEMENT,
+            FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ForegroundServiceType {}
@@ -555,6 +588,8 @@ public class ServiceInfo extends ComponentInfo
                 return "systemExempted";
             case FOREGROUND_SERVICE_TYPE_SHORT_SERVICE:
                 return "shortService";
+            case FOREGROUND_SERVICE_TYPE_FILE_MANAGEMENT:
+                return "fileManagement";
             case FOREGROUND_SERVICE_TYPE_SPECIAL_USE:
                 return "specialUse";
             default:

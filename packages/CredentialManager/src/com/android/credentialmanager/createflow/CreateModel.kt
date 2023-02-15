@@ -77,6 +77,7 @@ data class RequestDisplayInfo(
   val type: String,
   val appDomainName: String,
   val typeIcon: Drawable,
+  val isFirstUsage: Boolean,
 )
 
 /**
@@ -95,4 +96,5 @@ enum class CreateScreenState {
   CREATION_OPTION_SELECTION,
   MORE_OPTIONS_SELECTION,
   MORE_OPTIONS_ROW_INTRO,
+  EXTERNAL_ONLY_SELECTION,
 }

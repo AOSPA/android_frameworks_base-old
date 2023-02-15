@@ -43,6 +43,7 @@ import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_SET_COMPANION_TASK_FRAGMENT;
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_SET_LAUNCH_ADJACENT_FLAG_ROOT;
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_SET_LAUNCH_ROOT;
+import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_SET_REPARENT_LEAF_TASK_IF_RELAUNCH;
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_START_ACTIVITY_IN_TASK_FRAGMENT;
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_START_SHORTCUT;
 
@@ -147,7 +148,8 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
     @VisibleForTesting
     final ArrayMap<IBinder, TaskFragment> mLaunchTaskFragments = new ArrayMap<>();
 
-    private final Rect mTmpBounds = new Rect();
+    private final Rect mTmpBounds0 = new Rect();
+    private final Rect mTmpBounds1 = new Rect();
 
     WindowOrganizerController(ActivityTaskManagerService atm) {
         mService = atm;
@@ -306,7 +308,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                                         nextTransition.setAllReady();
                                     }
                                 });
-                        return nextTransition;
+                        return nextTransition.getToken();
                     }
                     transition = mTransitionController.createTransition(type);
                 }
@@ -315,7 +317,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                 if (needsSetReady) {
                     transition.setAllReady();
                 }
-                return transition;
+                return transition.getToken();
             }
         } finally {
             Binder.restoreCallingIdentity(ident);
@@ -796,14 +798,15 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
         // When the TaskFragment is resized, we may want to create a change transition for it, for
         // which we want to defer the surface update until we determine whether or not to start
         // change transition.
-        mTmpBounds.set(taskFragment.getBounds());
+        mTmpBounds0.set(taskFragment.getBounds());
+        mTmpBounds1.set(taskFragment.getRelativeEmbeddedBounds());
         taskFragment.deferOrganizedTaskFragmentSurfaceUpdate();
         final int effects = applyChanges(taskFragment, c, errorCallbackToken);
-        if (taskFragment.shouldStartChangeTransition(mTmpBounds)) {
-            taskFragment.initializeChangeTransition(mTmpBounds);
+        taskFragment.updateRelativeEmbeddedBounds();
+        if (taskFragment.shouldStartChangeTransition(mTmpBounds0, mTmpBounds1)) {
+            taskFragment.initializeChangeTransition(mTmpBounds0);
         }
         taskFragment.continueOrganizedTaskFragmentSurfaceUpdate();
-        mTmpBounds.set(0, 0, 0, 0);
         return effects;
     }
 
@@ -1233,7 +1236,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                 WindowContainer.fromBinder(hop.getContainer())
                         .removeLocalInsetsSourceProvider(hop.getInsetsTypes());
                 break;
-            case HIERARCHY_OP_TYPE_SET_ALWAYS_ON_TOP:
+            case HIERARCHY_OP_TYPE_SET_ALWAYS_ON_TOP: {
                 final WindowContainer container = WindowContainer.fromBinder(hop.getContainer());
                 if (container == null || container.asDisplayArea() == null
                         || !container.isAttached()) {
@@ -1244,7 +1247,26 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                 container.setAlwaysOnTop(hop.isAlwaysOnTop());
                 effects |= TRANSACT_EFFECTS_LIFECYCLE;
                 break;
-
+            }
+            case HIERARCHY_OP_TYPE_SET_REPARENT_LEAF_TASK_IF_RELAUNCH: {
+                final WindowContainer container = WindowContainer.fromBinder(hop.getContainer());
+                final Task task = container != null ? container.asTask() : null;
+                if (task == null || !task.isAttached()) {
+                    Slog.e(TAG, "Attempt to operate on unknown or detached container: "
+                            + container);
+                    break;
+                }
+                if (!task.mCreatedByOrganizer) {
+                    throw new UnsupportedOperationException(
+                            "Cannot set reparent leaf task flag on non-organized task : " + task);
+                }
+                if (!task.isRootTask()) {
+                    throw new UnsupportedOperationException(
+                            "Cannot set reparent leaf task flag on non-root task : " + task);
+                }
+                task.setReparentLeafTaskIfRelaunch(hop.isReparentLeafTaskIfRelaunch());
+                break;
+            }
         }
         return effects;
     }
@@ -1887,7 +1909,18 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
         // actions.
         taskFragment.setTaskFragmentOrganizer(creationParams.getOrganizer(),
                 ownerActivity.getUid(), ownerActivity.info.processName);
-        ownerTask.addChild(taskFragment, POSITION_TOP);
+        final int position;
+        if (creationParams.getPairedPrimaryFragmentToken() != null) {
+            // When there is a paired primary TaskFragment, we want to place the new TaskFragment
+            // right above the paired one to make sure there is no other window in between.
+            final TaskFragment pairedPrimaryTaskFragment = getTaskFragment(
+                    creationParams.getPairedPrimaryFragmentToken());
+            final int pairedPosition = ownerTask.mChildren.indexOf(pairedPrimaryTaskFragment);
+            position = pairedPosition != -1 ? pairedPosition + 1 : POSITION_TOP;
+        } else {
+            position = POSITION_TOP;
+        }
+        ownerTask.addChild(taskFragment, position);
         taskFragment.setWindowingMode(creationParams.getWindowingMode());
         taskFragment.setBounds(creationParams.getInitialBounds());
         mLaunchTaskFragments.put(creationParams.getFragmentToken(), taskFragment);

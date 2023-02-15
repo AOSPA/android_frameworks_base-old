@@ -53,7 +53,9 @@ import static android.content.pm.ActivityInfo.LAUNCH_SINGLE_TOP;
 import static android.content.pm.ActivityInfo.launchModeToString;
 import static android.os.Process.INVALID_UID;
 import static android.view.Display.DEFAULT_DISPLAY;
+import static android.view.WindowManager.TRANSIT_NONE;
 import static android.view.WindowManager.TRANSIT_OPEN;
+import static android.view.WindowManager.TRANSIT_TO_FRONT;
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_START_ACTIVITY_IN_TASK_FRAGMENT;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_CONFIGURATION;
@@ -78,7 +80,6 @@ import static com.android.server.wm.Task.REPARENT_MOVE_ROOT_TASK_TO_FRONT;
 import static com.android.server.wm.TaskFragment.EMBEDDING_ALLOWED;
 import static com.android.server.wm.TaskFragment.EMBEDDING_DISALLOWED_MIN_DIMENSION_VIOLATION;
 import static com.android.server.wm.TaskFragment.EMBEDDING_DISALLOWED_NEW_TASK;
-import static com.android.server.wm.TaskFragment.EMBEDDING_DISALLOWED_NEW_TASK_FRAGMENT;
 import static com.android.server.wm.TaskFragment.EMBEDDING_DISALLOWED_UNTRUSTED_HOST;
 import static com.android.server.wm.WindowContainer.POSITION_TOP;
 
@@ -2144,6 +2145,11 @@ class ActivityStarter {
                 if (actuallyMoved) {
                     // Only record if the activity actually moved.
                     mMovedToTopActivity = act;
+                    if (mNoAnimation) {
+                        act.mDisplayContent.prepareAppTransition(TRANSIT_NONE);
+                    } else {
+                        act.mDisplayContent.prepareAppTransition(TRANSIT_TO_FRONT);
+                    }
                 }
                 act.updateOptionsLocked(mOptions);
                 deliverNewIntent(act, intentGrants);
@@ -2635,7 +2641,7 @@ class ActivityStarter {
                     // If the activity is visible in multi-windowing mode, it may already be on
                     // the top (visible to user but not the global top), then the result code
                     // should be START_DELIVERED_TO_TOP instead of START_TASK_TO_FRONT.
-                    final boolean wasTopOfVisibleRootTask = intentActivity.mVisibleRequested
+                    final boolean wasTopOfVisibleRootTask = intentActivity.isVisibleRequested()
                             && intentActivity.inMultiWindowMode()
                             && intentActivity == mTargetRootTask.topRunningActivity();
                     // We only want to move to the front, if we aren't going to launch on a
@@ -2799,11 +2805,6 @@ class ActivityStarter {
             }
             case EMBEDDING_DISALLOWED_UNTRUSTED_HOST: {
                 errMsg = "The app:" + mCallingUid + "is not trusted to " + mStartActivity;
-                break;
-            }
-            case EMBEDDING_DISALLOWED_NEW_TASK_FRAGMENT: {
-                errMsg = "Cannot embed activity across TaskFragments for result, resultTo: "
-                        + mStartActivity.resultTo;
                 break;
             }
             default:

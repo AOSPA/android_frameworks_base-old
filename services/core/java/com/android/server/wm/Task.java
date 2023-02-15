@@ -502,6 +502,12 @@ class Task extends TaskFragment {
      */
     boolean mInRemoveTask;
 
+    /**
+     * When set, disassociate the leaf task if relaunched and reparented it to TDA as root task if
+     * possible.
+     */
+    boolean mReparentLeafTaskIfRelaunch;
+
     private final AnimatingActivityRegistry mAnimatingActivityRegistry =
             new AnimatingActivityRegistry();
 
@@ -1592,15 +1598,22 @@ class Task extends TaskFragment {
                 removeChild(r, reason);
             });
         } else {
+            final ArrayList<ActivityRecord> finishingActivities = new ArrayList<>();
+            forAllActivities(r -> {
+                if (r.finishing || (excludingTaskOverlay && r.isTaskOverlay())) {
+                    return;
+                }
+                finishingActivities.add(r);
+            });
+
             // Finish or destroy apps from the bottom to ensure that all the other activity have
             // been finished and the top task in another task gets resumed when a top activity is
             // removed. Otherwise, the next top activity could be started while the top activity
             // is removed, which is not necessary since the next top activity is on the same Task
             // and should also be removed.
-            forAllActivities((r) -> {
-                if (r.finishing || (excludingTaskOverlay && r.isTaskOverlay())) {
-                    return;
-                }
+            for (int i = finishingActivities.size() - 1; i >= 0; i--) {
+                final ActivityRecord r = finishingActivities.get(i);
+
                 // Prevent the transition from being executed too early if the top activity is
                 // resumed but the mVisibleRequested of any other activity is true, the transition
                 // should wait until next activity resumed.
@@ -1610,7 +1623,7 @@ class Task extends TaskFragment {
                 } else {
                     r.destroyIfPossible(reason);
                 }
-            }, false /* traverseTopToBottom */);
+            }
         }
     }
 
@@ -2168,7 +2181,7 @@ class Task extends TaskFragment {
     }
 
     private boolean shouldStartChangeTransition(int prevWinMode, @NonNull Rect prevBounds) {
-        if (!isLeafTask() || !canStartChangeTransition()) {
+        if (!(isLeafTask() || mCreatedByOrganizer) || !canStartChangeTransition()) {
             return false;
         }
         final int newWinMode = getWindowingMode();
@@ -2456,7 +2469,7 @@ class Task extends TaskFragment {
 
         final String myReason = reason + " adjustFocusToNextFocusableTask";
         final ActivityRecord top = focusableTask.topRunningActivity();
-        if (focusableTask.isActivityTypeHome() && (top == null || !top.mVisibleRequested)) {
+        if (focusableTask.isActivityTypeHome() && (top == null || !top.isVisibleRequested())) {
             // If we will be focusing on the root home task next and its current top activity isn't
             // visible, then use the move the root home task to top to make the activity visible.
             focusableTask.getDisplayArea().moveHomeActivityToTop(myReason);
@@ -2769,7 +2782,7 @@ class Task extends TaskFragment {
      */
     private static void getMaxVisibleBounds(ActivityRecord token, Rect out, boolean[] foundTop) {
         // skip hidden (or about to hide) apps
-        if (token.mIsExiting || !token.isClientVisible() || !token.mVisibleRequested) {
+        if (token.mIsExiting || !token.isClientVisible() || !token.isVisibleRequested()) {
             return;
         }
         final WindowState win = token.findMainWindow();
@@ -3078,7 +3091,7 @@ class Task extends TaskFragment {
      * this activity.
      */
     ActivityRecord getTopVisibleActivity() {
-        return getActivity((r) -> !r.mIsExiting && r.isClientVisible() && r.mVisibleRequested);
+        return getActivity((r) -> !r.mIsExiting && r.isClientVisible() && r.isVisibleRequested());
     }
 
     /**
@@ -5730,7 +5743,7 @@ class Task extends TaskFragment {
         forAllActivities(r -> {
             if (!r.info.packageName.equals(packageName)) return;
             r.forceNewConfig = true;
-            if (starting != null && r == starting && r.mVisibleRequested) {
+            if (starting != null && r == starting && r.isVisibleRequested()) {
                 r.startFreezingScreenLocked(CONFIG_SCREEN_LAYOUT);
             }
         });
@@ -6078,6 +6091,12 @@ class Task extends TaskFragment {
     void dispatchTaskInfoChangedIfNeeded(boolean force) {
         if (isOrganized()) {
             mAtmService.mTaskOrganizerController.onTaskInfoChanged(this, force);
+        }
+    }
+
+    void setReparentLeafTaskIfRelaunch(boolean reparentLeafTaskIfRelaunch) {
+        if (isOrganized()) {
+            mReparentLeafTaskIfRelaunch = reparentLeafTaskIfRelaunch;
         }
     }
 

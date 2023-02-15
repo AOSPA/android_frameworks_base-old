@@ -458,7 +458,9 @@ public class MediaControlPanel {
         if (mMediaViewHolder == null) {
             return;
         }
-        Trace.beginSection("MediaControlPanel#bindPlayer<" + key + ">");
+        if (Trace.isEnabled()) {
+            Trace.traceBegin(Trace.TRACE_TAG_APP, "MediaControlPanel#bindPlayer<" + key + ">");
+        }
         mKey = key;
         mMediaData = data;
         MediaSession.Token token = data.getToken();
@@ -938,19 +940,9 @@ public class MediaControlPanel {
         if (mIsSeekBarEnabled) {
             return ConstraintSet.VISIBLE;
         }
-        // If disabled and "neighbours" are visible, set progress bar to INVISIBLE instead of GONE
-        // so layout weights still work.
-        return areAnyExpandedBottomActionsVisible() ? ConstraintSet.INVISIBLE : ConstraintSet.GONE;
-    }
-
-    private boolean areAnyExpandedBottomActionsVisible() {
-        ConstraintSet expandedSet = mMediaViewController.getExpandedLayout();
-        for (int id : MediaViewHolder.Companion.getExpandedBottomActionIds()) {
-            if (expandedSet.getVisibility(id) == ConstraintSet.VISIBLE) {
-                return true;
-            }
-        }
-        return false;
+        // Set progress bar to INVISIBLE to keep the positions of text and buttons similar to the
+        // original positions when seekbar is enabled.
+        return ConstraintSet.INVISIBLE;
     }
 
     private void setGenericButton(
@@ -1179,8 +1171,10 @@ public class MediaControlPanel {
             return;
         }
 
-        Trace.beginSection(
-                "MediaControlPanel#bindRecommendation<" + data.getPackageName() + ">");
+        if (Trace.isEnabled()) {
+            Trace.traceBegin(Trace.TRACE_TAG_APP,
+                    "MediaControlPanel#bindRecommendation<" + data.getPackageName() + ">");
+        }
 
         mRecommendationData = data;
         mSmartspaceId = SmallHash.hash(data.getTargetId());

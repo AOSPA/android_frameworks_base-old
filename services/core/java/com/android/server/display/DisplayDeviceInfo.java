@@ -23,6 +23,7 @@ import android.view.Display;
 import android.view.DisplayAddress;
 import android.view.DisplayCutout;
 import android.view.DisplayEventReceiver;
+import android.view.DisplayShape;
 import android.view.RoundedCorners;
 import android.view.Surface;
 
@@ -144,7 +145,7 @@ final class DisplayDeviceInfo {
     /**
      * Flag: Indicates that the display should always be unlocked. Only valid on virtual displays
      * that aren't in the default display group.
-     * @see #FLAG_OWN_DISPLAY_GROUP
+     * @see #FLAG_OWN_DISPLAY_GROUP and #FLAG_DEVICE_DISPLAY_GROUP
      * @hide
      */
     public static final int FLAG_ALWAYS_UNLOCKED = 1 << 15;
@@ -156,6 +157,27 @@ final class DisplayDeviceInfo {
      * @hide
      */
     public static final int FLAG_TOUCH_FEEDBACK_DISABLED = 1 << 16;
+
+    /**
+     * Flag: Indicates that the display maintains its own focus and touch mode.
+     *
+     * This flag is similar to {@link com.android.internal.R.bool.config_perDisplayFocusEnabled} in
+     * behavior, but only applies to the specific display instead of system-wide to all displays.
+     *
+     * Note: The display must be trusted in order to have its own focus.
+     *
+     * @see #FLAG_TRUSTED
+     * @hide
+     */
+    public static final int FLAG_OWN_FOCUS = 1 << 17;
+
+    /**
+     * Flag: indicates that the display should not be a part of the default {@link DisplayGroup} and
+     * instead be part of a {@link DisplayGroup} associated with the Virtual Device.
+     *
+     * @hide
+     */
+    public static final int FLAG_DEVICE_DISPLAY_GROUP = 1 << 18;
 
     /**
      * Touch attachment: Display does not receive touch.
@@ -221,6 +243,12 @@ final class DisplayDeviceInfo {
      * The active mode of the display.
      */
     public int modeId;
+
+    /**
+     * The render frame rate this display is scheduled at.
+     * @see android.view.DisplayInfo#renderFrameRate for more details.
+     */
+    public float renderFrameRate;
 
     /**
      * The default mode of the display.
@@ -301,6 +329,11 @@ final class DisplayDeviceInfo {
      * The {@link RoundedCorners} if present or {@code null} otherwise.
      */
     public RoundedCorners roundedCorners;
+
+    /**
+     * The {@link RoundedCorners} if present or {@code null} otherwise.
+     */
+    public DisplayShape displayShape;
 
     /**
      * The touch attachment, per {@link DisplayViewport#touch}.
@@ -412,6 +445,7 @@ final class DisplayDeviceInfo {
                 || width != other.width
                 || height != other.height
                 || modeId != other.modeId
+                || renderFrameRate != other.renderFrameRate
                 || defaultModeId != other.defaultModeId
                 || !Arrays.equals(supportedModes, other.supportedModes)
                 || !Arrays.equals(supportedColorModes, other.supportedColorModes)
@@ -438,7 +472,8 @@ final class DisplayDeviceInfo {
                 || !BrightnessSynchronizer.floatEquals(brightnessDefault,
                 other.brightnessDefault)
                 || !Objects.equals(roundedCorners, other.roundedCorners)
-                || installOrientation != other.installOrientation) {
+                || installOrientation != other.installOrientation
+                || !Objects.equals(displayShape, other.displayShape)) {
             diff |= DIFF_OTHER;
         }
         return diff;
@@ -455,6 +490,7 @@ final class DisplayDeviceInfo {
         width = other.width;
         height = other.height;
         modeId = other.modeId;
+        renderFrameRate = other.renderFrameRate;
         defaultModeId = other.defaultModeId;
         supportedModes = other.supportedModes;
         colorMode = other.colorMode;
@@ -484,6 +520,7 @@ final class DisplayDeviceInfo {
         brightnessDefault = other.brightnessDefault;
         roundedCorners = other.roundedCorners;
         installOrientation = other.installOrientation;
+        displayShape = other.displayShape;
     }
 
     // For debugging purposes
@@ -494,6 +531,7 @@ final class DisplayDeviceInfo {
         sb.append(name).append("\": uniqueId=\"").append(uniqueId).append("\", ");
         sb.append(width).append(" x ").append(height);
         sb.append(", modeId ").append(modeId);
+        sb.append(", renderFrameRate ").append(renderFrameRate);
         sb.append(", defaultModeId ").append(defaultModeId);
         sb.append(", supportedModes ").append(Arrays.toString(supportedModes));
         sb.append(", colorMode ").append(colorMode);
@@ -533,6 +571,9 @@ final class DisplayDeviceInfo {
         }
         sb.append(flagsToString(flags));
         sb.append(", installOrientation ").append(installOrientation);
+        if (displayShape != null) {
+            sb.append(", displayShape ").append(displayShape);
+        }
         sb.append("}");
         return sb.toString();
     }
@@ -584,8 +625,29 @@ final class DisplayDeviceInfo {
         if ((flags & FLAG_CAN_SHOW_WITH_INSECURE_KEYGUARD) != 0) {
             msg.append(", FLAG_CAN_SHOW_WITH_INSECURE_KEYGUARD");
         }
+        if ((flags & FLAG_DESTROY_CONTENT_ON_REMOVAL) != 0) {
+            msg.append(", FLAG_DESTROY_CONTENT_ON_REMOVAL");
+        }
         if ((flags & FLAG_MASK_DISPLAY_CUTOUT) != 0) {
             msg.append(", FLAG_MASK_DISPLAY_CUTOUT");
+        }
+        if ((flags & FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS) != 0) {
+            msg.append(", FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS");
+        }
+        if ((flags & FLAG_TRUSTED) != 0) {
+            msg.append(", FLAG_TRUSTED");
+        }
+        if ((flags & FLAG_OWN_DISPLAY_GROUP) != 0) {
+            msg.append(", FLAG_OWN_DISPLAY_GROUP");
+        }
+        if ((flags & FLAG_ALWAYS_UNLOCKED) != 0) {
+            msg.append(", FLAG_ALWAYS_UNLOCKED");
+        }
+        if ((flags & FLAG_TOUCH_FEEDBACK_DISABLED) != 0) {
+            msg.append(", FLAG_TOUCH_FEEDBACK_DISABLED");
+        }
+        if ((flags & FLAG_OWN_FOCUS) != 0) {
+            msg.append(", FLAG_OWN_FOCUS");
         }
         return msg.toString();
     }

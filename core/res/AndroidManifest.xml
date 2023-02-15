@@ -298,6 +298,7 @@
 
     <protected-broadcast android:name="android.hardware.usb.action.USB_STATE" />
     <protected-broadcast android:name="android.hardware.usb.action.USB_PORT_CHANGED" />
+    <protected-broadcast android:name="android.hardware.usb.action.USB_PORT_COMPLIANCE_CHANGED" />
     <protected-broadcast android:name="android.hardware.usb.action.USB_ACCESSORY_ATTACHED" />
     <protected-broadcast android:name="android.hardware.usb.action.USB_ACCESSORY_DETACHED" />
     <protected-broadcast android:name="android.hardware.usb.action.USB_ACCESSORY_HANDSHAKE" />
@@ -3365,7 +3366,9 @@
          <p>Protection level: normal
          -->
     <permission android:name="android.permission.REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND"
-        android:protectionLevel="normal"/>
+                android:label="@string/permlab_startForegroundServicesFromBackground"
+                android:description="@string/permdesc_startForegroundServicesFromBackground"
+                android:protectionLevel="normal"/>
 
     <!-- Allows a companion app to use data in the background.
          <p>Protection level: normal
@@ -3381,6 +3384,8 @@
          <p>Protection level: normal
      -->
     <permission android:name="android.permission.REQUEST_COMPANION_PROFILE_WATCH"
+                android:label="@string/permlab_companionProfileWatch"
+                android:description="@string/permdesc_companionProfileWatch"
                 android:protectionLevel="normal" />
 
     <!-- Allows application to request to be associated with a virtual display capable of streaming
@@ -4663,6 +4668,8 @@
          <p>Protection level: appop
      -->
     <permission android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:label="@string/permlab_schedule_exact_alarm"
+        android:description="@string/permdesc_schedule_exact_alarm"
         android:protectionLevel="normal|appop"/>
 
     <!-- Allows apps to use exact alarms just like with {@link
@@ -4688,6 +4695,8 @@
          lower standby bucket.
     -->
     <permission android:name="android.permission.USE_EXACT_ALARM"
+                android:label="@string/permlab_use_exact_alarm"
+                android:description="@string/permdesc_use_exact_alarm"
                 android:protectionLevel="normal"/>
 
     <!-- Allows an application to query tablet mode state and monitor changes
@@ -4952,11 +4961,15 @@
          of their associated companion device
          -->
     <permission android:name="android.permission.REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE"
+                android:label="@string/permlab_observeCompanionDevicePresence"
+                android:description="@string/permdesc_observeCompanionDevicePresence"
                 android:protectionLevel="normal" />
 
     <!-- Allows an application to deliver companion messages to system
          -->
     <permission android:name="android.permission.DELIVER_COMPANION_MESSAGES"
+                android:label="@string/permlab_deliverCompanionMessages"
+                android:description="@string/permdesc_deliverCompanionMessages"
                 android:protectionLevel="normal" />
 
     <!-- Allows an application to create new companion device associations.
@@ -6324,13 +6337,22 @@
         android:protectionLevel="normal|instant" />
 
     <!-- Allows a regular application to use {@link android.app.Service#startForeground
+         Service.startForeground} with the type "fileManagement".
+         <p>Protection level: normal|instant
+    -->
+    <permission android:name="android.permission.FOREGROUND_SERVICE_FILE_MANAGEMENT"
+        android:description="@string/permdesc_foregroundServiceFileManagement"
+        android:label="@string/permlab_foregroundServiceFileManagement"
+        android:protectionLevel="normal|instant" />
+
+    <!-- Allows a regular application to use {@link android.app.Service#startForeground
          Service.startForeground} with the type "specialUse".
-         <p>Protection level: signature|appop|instant
+         <p>Protection level: normal|appop|instant
     -->
     <permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"
         android:description="@string/permdesc_foregroundServiceSpecialUse"
         android:label="@string/permlab_foregroundServiceSpecialUse"
-        android:protectionLevel="signature|appop|instant" />
+        android:protectionLevel="normal|appop|instant" />
 
     <!-- @SystemApi Allows to access all app shortcuts.
          @hide -->
@@ -6793,6 +6815,14 @@
          @hide -->
     <permission android:name="android.permission.HANDLE_QUERY_PACKAGE_RESTART"
                 android:protectionLevel="signature" />
+
+    <!-- Allows low-level access to re-mapping modifier keys.
+         <p>Not for use by third-party applications.
+         @hide
+         @TestApi -->
+    <permission android:name="android.permission.REMAP_MODIFIER_KEYS"
+                android:protectionLevel="signature" />
+
     <uses-permission android:name="android.permission.HANDLE_QUERY_PACKAGE_RESTART" />
 
     <!-- Allows financed device kiosk apps to perform actions on the Device Lock service
@@ -7327,6 +7357,10 @@
 
         <service android:name="com.android.server.profcollect.ProfcollectForwardingService$ProfcollectBGJobService"
                  android:permission="android.permission.BIND_JOB_SERVICE" >
+        </service>
+
+        <service android:name="com.android.server.pm.GentleUpdateHelper$Service"
+            android:permission="android.permission.BIND_JOB_SERVICE" >
         </service>
 
         <service

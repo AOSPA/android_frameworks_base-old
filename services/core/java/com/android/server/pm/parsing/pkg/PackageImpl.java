@@ -462,10 +462,6 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     @DataClass.ParcelWith(ForInternedString.class)
     protected String secondaryNativeLibraryDir;
 
-    @Nullable
-    @DataClass.ParcelWith(ForInternedString.class)
-    protected String seInfo;
-
     /**
      * This is an appId, the uid if the userId is == USER_SYSTEM
      */
@@ -1336,6 +1332,11 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     @Override
     public long getStaticSharedLibVersion() {
         return staticSharedLibVersion;
+    }
+
+    @Override
+    public UUID getStorageUuid() {
+        return mStorageUuid;
     }
 
     @Override
@@ -2905,12 +2906,6 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     }
 
     @Override
-    public PackageImpl setSeInfo(@Nullable String seInfo) {
-        this.seInfo = TextUtils.safeIntern(seInfo);
-        return this;
-    }
-
-    @Override
     public PackageImpl setSplitCodePaths(@Nullable String[] splitCodePaths) {
         this.splitCodePaths = splitCodePaths;
         if (splitCodePaths != null) {
@@ -2993,7 +2988,6 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
         appInfo.primaryCpuAbi = primaryCpuAbi;
         appInfo.secondaryCpuAbi = secondaryCpuAbi;
         appInfo.secondaryNativeLibraryDir = secondaryNativeLibraryDir;
-        appInfo.seInfo = seInfo;
         appInfo.seInfoUser = SELinuxUtil.COMPLETE_STR;
         appInfo.uid = uid;
         return appInfo;
@@ -3147,7 +3141,6 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
         sForInternedString.parcel(this.primaryCpuAbi, dest, flags);
         sForInternedString.parcel(this.secondaryCpuAbi, dest, flags);
         dest.writeString(this.secondaryNativeLibraryDir);
-        dest.writeString(this.seInfo);
         dest.writeInt(this.uid);
         dest.writeLong(this.mBooleans);
         dest.writeLong(this.mBooleans2);
@@ -3307,7 +3300,6 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
         this.primaryCpuAbi = sForInternedString.unparcel(in);
         this.secondaryCpuAbi = sForInternedString.unparcel(in);
         this.secondaryNativeLibraryDir = in.readString();
-        this.seInfo = in.readString();
         this.uid = in.readInt();
         this.mBooleans = in.readLong();
         this.mBooleans2 = in.readLong();
@@ -3375,12 +3367,6 @@ public class PackageImpl implements ParsedPackage, AndroidPackageInternal,
     @Override
     public String getSecondaryNativeLibraryDir() {
         return secondaryNativeLibraryDir;
-    }
-
-    @Nullable
-    @Override
-    public String getSeInfo() {
-        return seInfo;
     }
 
     @Override

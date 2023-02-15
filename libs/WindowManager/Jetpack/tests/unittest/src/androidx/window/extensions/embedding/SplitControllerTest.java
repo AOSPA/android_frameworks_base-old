@@ -169,7 +169,7 @@ public class SplitControllerTest {
         final TaskContainer taskContainer = createTestTaskContainer();
         // tf1 has no running activity so is not active.
         final TaskFragmentContainer tf1 = new TaskFragmentContainer(null /* activity */,
-                new Intent(), taskContainer, mSplitController);
+                new Intent(), taskContainer, mSplitController, null /* pairedPrimaryContainer */);
         // tf2 has running activity so is active.
         final TaskFragmentContainer tf2 = mock(TaskFragmentContainer.class);
         doReturn(1).when(tf2).getRunningActivityCount();
@@ -242,6 +242,14 @@ public class SplitControllerTest {
 
         assertTrue(tf.hasActivity(mActivity.getActivityToken()));
 
+        // When the activity is not finishing, do not clear the record.
+        doReturn(false).when(mActivity).isFinishing();
+        mSplitController.onActivityDestroyed(mActivity);
+
+        assertTrue(tf.hasActivity(mActivity.getActivityToken()));
+
+        // Clear the record when the activity is finishing and destroyed.
+        doReturn(true).when(mActivity).isFinishing();
         mSplitController.onActivityDestroyed(mActivity);
 
         assertFalse(tf.hasActivity(mActivity.getActivityToken()));
@@ -367,7 +375,7 @@ public class SplitControllerTest {
         final Intent intent = new Intent();
         final TaskContainer taskContainer = createTestTaskContainer();
         final TaskFragmentContainer container = new TaskFragmentContainer(null /* activity */,
-                intent, taskContainer, mSplitController);
+                intent, taskContainer, mSplitController, null /* pairedPrimaryContainer */);
         final SplitController.ActivityStartMonitor monitor =
                 mSplitController.getActivityStartMonitor();
 
@@ -601,7 +609,7 @@ public class SplitControllerTest {
                 false /* isOnReparent */);
 
         assertFalse(result);
-        verify(mSplitController, never()).newContainer(any(), any(), any(), anyInt());
+        verify(mSplitController, never()).newContainer(any(), any(), any(), anyInt(), any());
     }
 
     @Test
@@ -763,7 +771,7 @@ public class SplitControllerTest {
                 false /* isOnReparent */);
 
         assertTrue(result);
-        verify(mSplitController, never()).newContainer(any(), any(), any(), anyInt());
+        verify(mSplitController, never()).newContainer(any(), any(), any(), anyInt(), any());
         verify(mSplitController, never()).registerSplit(any(), any(), any(), any(), any(), any());
     }
 
@@ -805,7 +813,7 @@ public class SplitControllerTest {
                 false /* isOnReparent */);
 
         assertTrue(result);
-        verify(mSplitController, never()).newContainer(any(), any(), any(), anyInt());
+        verify(mSplitController, never()).newContainer(any(), any(), any(), anyInt(), any());
         verify(mSplitController, never()).registerSplit(any(), any(), any(), any(), any(), any());
     }
 

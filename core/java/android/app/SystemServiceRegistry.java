@@ -51,6 +51,8 @@ import android.app.usage.StorageStatsManager;
 import android.app.usage.UsageStatsManager;
 import android.app.wallpapereffectsgeneration.IWallpaperEffectsGenerationManager;
 import android.app.wallpapereffectsgeneration.WallpaperEffectsGenerationManager;
+import android.app.wearable.IWearableSensingManager;
+import android.app.wearable.WearableSensingManager;
 import android.apphibernation.AppHibernationManager;
 import android.appwidget.AppWidgetManager;
 import android.bluetooth.BluetoothFrameworkInitializer;
@@ -58,6 +60,7 @@ import android.companion.CompanionDeviceManager;
 import android.companion.ICompanionDeviceManager;
 import android.companion.virtual.IVirtualDeviceManager;
 import android.companion.virtual.VirtualDeviceManager;
+import android.compat.Compatibility;
 import android.content.ClipboardManager;
 import android.content.ContentCaptureOptions;
 import android.content.Context;
@@ -1092,7 +1095,10 @@ public final class SystemServiceRegistry {
                 new CachedServiceFetcher<OverlayManager>() {
             @Override
             public OverlayManager createService(ContextImpl ctx) throws ServiceNotFoundException {
-                IBinder b = ServiceManager.getServiceOrThrow(Context.OVERLAY_SERVICE);
+                final IBinder b =
+                        (Compatibility.isChangeEnabled(OverlayManager.SELF_TARGETING_OVERLAY))
+                                ? ServiceManager.getService(Context.OVERLAY_SERVICE)
+                                : ServiceManager.getServiceOrThrow(Context.OVERLAY_SERVICE);
                 return new OverlayManager(ctx, IOverlayManager.Stub.asInterface(b));
             }});
 
@@ -1540,6 +1546,17 @@ public final class SystemServiceRegistry {
                                 IAmbientContextManager.Stub.asInterface(iBinder);
                         return new AmbientContextManager(ctx.getOuterContext(), manager);
                     }});
+        registerService(Context.WEARABLE_SENSING_SERVICE, WearableSensingManager.class,
+                new CachedServiceFetcher<WearableSensingManager>() {
+                    @Override
+                    public WearableSensingManager createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        IBinder iBinder = ServiceManager.getServiceOrThrow(
+                                Context.WEARABLE_SENSING_SERVICE);
+                        IWearableSensingManager manager =
+                                IWearableSensingManager.Stub.asInterface(iBinder);
+                        return new WearableSensingManager(ctx.getOuterContext(), manager);
+                    }});
 
         sInitializing = true;
         try {
@@ -1613,6 +1630,7 @@ public final class SystemServiceRegistry {
                 case Context.INCREMENTAL_SERVICE:
                 case Context.ETHERNET_SERVICE:
                 case Context.CONTEXTHUB_SERVICE:
+                case Context.VIRTUALIZATION_SERVICE:
                     return null;
             }
             Slog.wtf(TAG, "Manager wrapper not available: " + name);

@@ -727,6 +727,24 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
                 } catch (RemoteException ex) { }
             }
         }
+
+        @Override
+        public void goToFullscreenFromSplit() {
+            if (mBar != null) {
+                try {
+                    mBar.goToFullscreenFromSplit();
+                } catch (RemoteException ex) { }
+            }
+        }
+
+        @Override
+        public void enterStageSplitFromRunningApp(boolean leftOrTop) {
+            if (mBar != null) {
+                try {
+                    mBar.enterStageSplitFromRunningApp(leftOrTop);
+                } catch (RemoteException ex) { }
+            }
+        }
     };
 
     private final GlobalActionsProvider mGlobalActionsProvider = new GlobalActionsProvider() {

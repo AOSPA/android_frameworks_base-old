@@ -56,7 +56,7 @@ import com.android.systemui.R;
 import com.qti.extphone.Client;
 import com.qti.extphone.ExtTelephonyManager;
 import com.qti.extphone.IExtPhoneCallback;
-import com.qti.extphone.ExtPhoneCallbackBase;
+import com.qti.extphone.ExtPhoneCallbackListener;
 import com.qti.extphone.NrIconType;
 import com.qti.extphone.Status;
 import com.qti.extphone.ServiceCallback;
@@ -196,9 +196,12 @@ public class FiveGServiceClient {
         @Override
         public void onConnected() {
             Log.d(TAG, "ExtTelephony Service connected");
+            int[] events = new int[] {
+                    ExtPhoneCallbackListener.EVENT_ON_NR_ICON_TYPE};
             mServiceConnected = true;
             mIsConnectInProgress = false;
-            mClient = mExtTelephonyManager.registerCallback(mPackageName, mCallback);
+            mClient = mExtTelephonyManager.registerCallbackWithEvents(
+                    mPackageName, mExtPhoneCallbackListener, events);
             initFiveGServiceState();
             Log.d(TAG, "Client = " + mClient);
         }
@@ -206,7 +209,7 @@ public class FiveGServiceClient {
         public void onDisconnected() {
             Log.d(TAG, "ExtTelephony Service disconnected...");
             if (mServiceConnected) {
-                mExtTelephonyManager.unRegisterCallback(mCallback);
+                mExtTelephonyManager.unregisterCallback(mExtPhoneCallbackListener);
             }
             mServiceConnected = false;
             mClient = null;
@@ -332,7 +335,7 @@ public class FiveGServiceClient {
 
 
     @VisibleForTesting
-    protected IExtPhoneCallback mCallback = new ExtPhoneCallbackBase() {
+    protected ExtPhoneCallbackListener mExtPhoneCallbackListener = new ExtPhoneCallbackListener() {
         @Override
         public void onNrIconType(int slotId, Token token, Status status, NrIconType
                 nrIconType) throws RemoteException {

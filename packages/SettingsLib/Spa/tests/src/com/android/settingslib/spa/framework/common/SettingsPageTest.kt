@@ -22,9 +22,8 @@ import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.android.settingslib.spa.tests.testutils.BlankActivity
 import com.android.settingslib.spa.tests.testutils.SpaEnvironmentForTest
-import com.android.settingslib.spa.tests.testutils.SpaLoggerForTest
+import com.android.settingslib.spa.tests.testutils.getUniquePageId
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -32,8 +31,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class SettingsPageTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
-    private val spaLogger = SpaLoggerForTest()
-    private val spaEnvironment = SpaEnvironmentForTest(context, logger = spaLogger)
+    private val spaEnvironment = SpaEnvironmentForTest(context)
 
     @Test
     fun testNullPage() {
@@ -45,9 +43,7 @@ class SettingsPageTest {
         assertThat(page.isCreateBy("NULL")).isTrue()
         assertThat(page.isCreateBy("Spp")).isFalse()
         assertThat(page.hasRuntimeParam()).isFalse()
-        assertThat(page.isBrowsable(context, BlankActivity::class.java)).isFalse()
-        assertThat(page.createBrowseIntent(context, BlankActivity::class.java)).isNull()
-        assertThat(page.createBrowseAdbCommand(context, BlankActivity::class.java)).isNull()
+        assertThat(page.isBrowsable()).isFalse()
     }
 
     @Test
@@ -60,11 +56,7 @@ class SettingsPageTest {
         assertThat(page.isCreateBy("NULL")).isFalse()
         assertThat(page.isCreateBy("mySpp")).isTrue()
         assertThat(page.hasRuntimeParam()).isFalse()
-        assertThat(page.isBrowsable(context, BlankActivity::class.java)).isTrue()
-        assertThat(page.createBrowseIntent(context, BlankActivity::class.java)).isNotNull()
-        assertThat(page.createBrowseAdbCommand(context, BlankActivity::class.java)).contains(
-            "-e spaActivityDestination mySpp"
-        )
+        assertThat(page.isBrowsable()).isTrue()
     }
 
     @Test
@@ -74,20 +66,20 @@ class SettingsPageTest {
             "int_param" to 10,
         )
         val page = spaEnvironment.createPage("SppWithParam", arguments)
-        assertThat(page.id).isEqualTo(getUniquePageId("SppWithParam", listOf(
-            navArgument("string_param") { type = NavType.StringType },
-            navArgument("int_param") { type = NavType.IntType },
-        ), arguments))
+        assertThat(page.id).isEqualTo(
+            getUniquePageId(
+                "SppWithParam", listOf(
+                    navArgument("string_param") { type = NavType.StringType },
+                    navArgument("int_param") { type = NavType.IntType },
+                ), arguments
+            )
+        )
         assertThat(page.sppName).isEqualTo("SppWithParam")
         assertThat(page.displayName).isEqualTo("SppWithParam")
         assertThat(page.buildRoute()).isEqualTo("SppWithParam/myStr/10")
         assertThat(page.isCreateBy("SppWithParam")).isTrue()
         assertThat(page.hasRuntimeParam()).isFalse()
-        assertThat(page.isBrowsable(context, BlankActivity::class.java)).isTrue()
-        assertThat(page.createBrowseIntent(context, BlankActivity::class.java)).isNotNull()
-        assertThat(page.createBrowseAdbCommand(context, BlankActivity::class.java)).contains(
-            "-e spaActivityDestination SppWithParam/myStr/10"
-        )
+        assertThat(page.isBrowsable()).isTrue()
     }
 
     @Test
@@ -98,33 +90,20 @@ class SettingsPageTest {
             "rt_param" to "rtStr",
         )
         val page = spaEnvironment.createPage("SppWithRtParam", arguments)
-        assertThat(page.id).isEqualTo(getUniquePageId("SppWithRtParam", listOf(
-            navArgument("string_param") { type = NavType.StringType },
-            navArgument("int_param") { type = NavType.IntType },
-            navArgument("rt_param") { type = NavType.StringType },
-        ), arguments))
+        assertThat(page.id).isEqualTo(
+            getUniquePageId(
+                "SppWithRtParam", listOf(
+                    navArgument("string_param") { type = NavType.StringType },
+                    navArgument("int_param") { type = NavType.IntType },
+                    navArgument("rt_param") { type = NavType.StringType },
+                ), arguments
+            )
+        )
         assertThat(page.sppName).isEqualTo("SppWithRtParam")
         assertThat(page.displayName).isEqualTo("SppWithRtParam")
         assertThat(page.buildRoute()).isEqualTo("SppWithRtParam/myStr/10/rtStr")
         assertThat(page.isCreateBy("SppWithRtParam")).isTrue()
         assertThat(page.hasRuntimeParam()).isTrue()
-        assertThat(page.isBrowsable(context, BlankActivity::class.java)).isFalse()
-        assertThat(page.createBrowseIntent(context, BlankActivity::class.java)).isNull()
-        assertThat(page.createBrowseAdbCommand(context, BlankActivity::class.java)).isNull()
-    }
-
-    @Test
-    fun testPageEvent() {
-        spaLogger.reset()
-        SpaEnvironmentFactory.reset(spaEnvironment)
-        val page = spaEnvironment.createPage("SppHome")
-        page.enterPage()
-        page.leavePage()
-        page.enterPage()
-        assertThat(page.createBrowseIntent()).isNotNull()
-        assertThat(spaLogger.getEventCount(page.id, LogEvent.PAGE_ENTER, LogCategory.FRAMEWORK))
-            .isEqualTo(2)
-        assertThat(spaLogger.getEventCount(page.id, LogEvent.PAGE_LEAVE, LogCategory.FRAMEWORK))
-            .isEqualTo(1)
+        assertThat(page.isBrowsable()).isFalse()
     }
 }

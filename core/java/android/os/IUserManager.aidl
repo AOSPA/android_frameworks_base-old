@@ -58,6 +58,8 @@ interface IUserManager {
     void setUserIcon(int userId, in Bitmap icon);
     ParcelFileDescriptor getUserIcon(int userId);
     UserInfo getPrimaryUser();
+    int getMainUserId();
+    int getPreviousFullUserToEnterForeground();
     List<UserInfo> getUsers(boolean excludePartial, boolean excludeDying, boolean excludePreCreated);
     List<UserInfo> getProfiles(int userId, boolean enabledOnly);
     int[] getProfileIds(int userId, boolean enabledOnly);
@@ -77,6 +79,7 @@ interface IUserManager {
     String getUserAccount(int userId);
     void setUserAccount(int userId, String accountName);
     long getUserCreationTime(int userId);
+    int getUserSwitchability(int userId);
     boolean isUserSwitcherEnabled(boolean showEvenIfNotActionable, int mUserId);
     boolean isRestricted(int userId);
     boolean canHaveRestrictedProfile(int userId);

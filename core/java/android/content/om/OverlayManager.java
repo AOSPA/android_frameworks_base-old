@@ -17,6 +17,7 @@
 package android.content.om;
 
 import android.annotation.NonNull;
+import android.annotation.NonUiContext;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
@@ -25,12 +26,16 @@ import android.compat.Compatibility;
 import android.compat.annotation.ChangeId;
 import android.compat.annotation.EnabledSince;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.UserHandle;
 
+import com.android.internal.content.om.OverlayManagerImpl;
+
+import java.io.IOException;
 import java.util.List;
 
 /**
@@ -76,6 +81,7 @@ public class OverlayManager {
 
     private final IOverlayManager mService;
     private final Context mContext;
+    private final OverlayManagerImpl mOverlayManagerImpl;
 
     /**
      * Pre R a {@link java.lang.SecurityException} would only be thrown by setEnabled APIs (e
@@ -92,6 +98,21 @@ public class OverlayManager {
     private static final long THROW_SECURITY_EXCEPTIONS = 147340954;
 
     /**
+     * Applications can use OverlayManager to create overlays to overlay on itself resources. The
+     * overlay target is itself and the work range is only in caller application.
+     *
+     * <p>In {@link android.content.Context#getSystemService(String)}, it crashes because of {@link
+     * java.lang.NullPointerException} if the parameter is OverlayManager. if the self-targeting is
+     * enabled, the caller application can get the OverlayManager instance to use self-targeting
+     * functionality.
+     *
+     * @hide
+     */
+    @ChangeId
+    @EnabledSince(targetSdkVersion = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    public static final long SELF_TARGETING_OVERLAY = 205919743;
+
+    /**
      * Creates a new instance.
      *
      * @param context The current context in which to operate.
@@ -102,6 +123,7 @@ public class OverlayManager {
     public OverlayManager(Context context, IOverlayManager service) {
         mContext = context;
         mService = service;
+        mOverlayManagerImpl = new OverlayManagerImpl(context);
     }
 
     /** @hide */
@@ -286,6 +308,17 @@ public class OverlayManager {
      * @hide
      */
     public void commit(@NonNull final OverlayManagerTransaction transaction) {
+        if (transaction.isSelfTargetingTransaction()
+                || mService == null
+                || mService.asBinder() == null) {
+            try {
+                commitSelfTarget(transaction);
+            } catch (PackageManager.NameNotFoundException | IOException e) {
+                throw new RuntimeException(e);
+            }
+            return;
+        }
+
         try {
             mService.commit(transaction);
         } catch (RemoteException e) {
@@ -315,6 +348,50 @@ public class OverlayManager {
             throw new IllegalStateException(e);
         } else {
             throw e;
+        }
+    }
+
+    /**
+     * Get a OverlayManagerTransaction.Builder to build out a overlay manager transaction.
+     *
+     * @return a builder of the overlay manager transaction.
+     * @hide
+     */
+    @NonNull
+    public OverlayManagerTransaction.Builder beginTransaction() {
+        return new OverlayManagerTransaction.Builder(this);
+    }
+
+    /**
+     * Commit the self-targeting transaction to register or unregister overlays.
+     *
+     * <p>Applications can request OverlayManager to register overlays and unregister the registered
+     * overlays via {@link OverlayManagerTransaction}.
+     *
+     * @throws IOException if there is a file operation error.
+     * @throws PackageManager.NameNotFoundException if the package name is not found.
+     * @hide
+     */
+    @NonUiContext
+    void commitSelfTarget(@NonNull final OverlayManagerTransaction transaction)
+            throws PackageManager.NameNotFoundException, IOException {
+        synchronized (mOverlayManagerImpl) {
+            mOverlayManagerImpl.commit(transaction);
+        }
+    }
+
+    /**
+     * Get the related information of overlays for {@code targetPackageName}.
+     *
+     * @param targetPackageName the target package name
+     * @return a list of overlay information
+     * @hide
+     */
+    @NonNull
+    @NonUiContext
+    public List<OverlayInfo> getOverlayInfosForTarget(@NonNull final String targetPackageName) {
+        synchronized (mOverlayManagerImpl) {
+            return mOverlayManagerImpl.getOverlayInfosForTarget(targetPackageName);
         }
     }
 }

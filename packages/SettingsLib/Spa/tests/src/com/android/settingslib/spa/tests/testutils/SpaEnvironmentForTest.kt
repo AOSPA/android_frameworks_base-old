@@ -24,7 +24,9 @@ import android.os.Bundle
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import com.android.settingslib.spa.framework.BrowseActivity
+import com.android.settingslib.spa.framework.common.EntrySearchData
 import com.android.settingslib.spa.framework.common.EntrySliceData
+import com.android.settingslib.spa.framework.common.EntryStatusData
 import com.android.settingslib.spa.framework.common.LogCategory
 import com.android.settingslib.spa.framework.common.LogEvent
 import com.android.settingslib.spa.framework.common.SettingsEntry
@@ -49,7 +51,7 @@ class SpaLoggerForTest : SpaLogger {
         messageCount[key] = (messageCount[key] ?: 0) + 1
     }
 
-    override fun event(id: String, event: LogEvent, category: LogCategory, details: String?) {
+    override fun event(id: String, event: LogEvent, category: LogCategory, extraData: Bundle) {
         val key = EventCountKey(id, event, category)
         eventCount[key] = (eventCount[key] ?: 0) + 1
     }
@@ -141,8 +143,43 @@ object SppLayer2 : SettingsPageProvider {
     }
 }
 
+object SppForSearch : SettingsPageProvider {
+    override val name = "SppForSearch"
+
+    override fun buildEntry(arguments: Bundle?): List<SettingsEntry> {
+        val owner = this.createSettingsPage()
+        return listOf(
+            SettingsEntryBuilder.create(owner, "SearchStaticWithNoStatus")
+                .setSearchDataFn { EntrySearchData(title = "SearchStaticWithNoStatus") }
+                .build(),
+            SettingsEntryBuilder.create(owner, "SearchStaticWithMutableStatus")
+                .setHasMutableStatus(true)
+                .setSearchDataFn { EntrySearchData(title = "SearchStaticWithMutableStatus") }
+                .setStatusDataFn { EntryStatusData(isSwitchOff = true) }
+                .build(),
+            SettingsEntryBuilder.create(owner, "SearchDynamicWithMutableStatus")
+                .setIsSearchDataDynamic(true)
+                .setHasMutableStatus(true)
+                .setSearchDataFn { EntrySearchData(title = "SearchDynamicWithMutableStatus") }
+                .setStatusDataFn { EntryStatusData(isDisabled = true) }
+                .build(),
+            SettingsEntryBuilder.create(owner, "SearchDynamicWithImmutableStatus")
+                .setIsSearchDataDynamic(true)
+                .setSearchDataFn {
+                    EntrySearchData(
+                        title = "SearchDynamicWithImmutableStatus",
+                        keyword = listOf("kw1", "kw2")
+                    )
+                }
+                .setStatusDataFn { EntryStatusData(isDisabled = true) }
+                .build(),
+        )
+    }
+}
+
 class SpaEnvironmentForTest(
     context: Context,
+    rootPages: List<SettingsPage> = emptyList(),
     override val browseActivityClass: Class<out Activity>? = BlankActivity::class.java,
     override val sliceBroadcastReceiverClass: Class<out BroadcastReceiver>? =
         BlankSliceBroadcastReceiver::class.java,
@@ -153,6 +190,7 @@ class SpaEnvironmentForTest(
         SettingsPageProviderRepository(
             listOf(
                 SppHome, SppLayer1, SppLayer2,
+                SppForSearch,
                 object : SettingsPageProvider {
                     override val name = "SppWithParam"
                     override val parameter = listOf(
@@ -169,7 +207,7 @@ class SpaEnvironmentForTest(
                     )
                 },
             ),
-            listOf(SettingsPage.create("SppHome"))
+            rootPages
         )
     }
 

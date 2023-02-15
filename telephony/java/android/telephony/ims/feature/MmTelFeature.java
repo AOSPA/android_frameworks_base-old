@@ -275,6 +275,12 @@ public class MmTelFeature extends ImsFeature {
         }
 
         @Override
+        public void acknowledgeSmsWithPdu(int token, int messageRef, int result, byte[] pdu) {
+            executeMethodAsyncNoException(() -> MmTelFeature.this
+                    .acknowledgeSms(token, messageRef, result, pdu), "acknowledgeSms");
+        }
+
+        @Override
         public void acknowledgeSmsReport(int token, int messageRef, int result) {
             executeMethodAsyncNoException(() -> MmTelFeature.this
                     .acknowledgeSmsReport(token, messageRef, result), "acknowledgeSmsReport");
@@ -694,6 +700,7 @@ public class MmTelFeature extends ImsFeature {
             throw new IllegalStateException("Session is not available.");
         }
         try {
+            c.setDefaultExecutor(MmTelFeature.this.mExecutor);
             listener.onIncomingCall(c.getServiceImpl(), extras);
         } catch (RemoteException e) {
             throw new RuntimeException(e);
@@ -1085,6 +1092,11 @@ public class MmTelFeature extends ImsFeature {
     private void acknowledgeSms(int token, int messageRef,
             @ImsSmsImplBase.DeliverStatusResult int result) {
         getSmsImplementation().acknowledgeSms(token, messageRef, result);
+    }
+
+    private void acknowledgeSms(int token, int messageRef,
+            @ImsSmsImplBase.DeliverStatusResult int result, byte[] pdu) {
+        getSmsImplementation().acknowledgeSms(token, messageRef, result, pdu);
     }
 
     private void acknowledgeSmsReport(int token, int messageRef,

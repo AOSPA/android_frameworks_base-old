@@ -60,7 +60,6 @@ import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
 import static android.view.WindowManager.LayoutParams.TYPE_VOICE_INTERACTION;
 import static android.view.WindowManager.LayoutParams.TYPE_VOICE_INTERACTION_STARTING;
 import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
-import static android.view.WindowManager.TRANSIT_WAKE;
 import static android.view.WindowManagerGlobal.ADD_OKAY;
 import static android.view.WindowManagerPolicyConstants.ACTION_HDMI_PLUGGED;
 import static android.view.WindowManagerPolicyConstants.ALT_BAR_BOTTOM;
@@ -946,13 +945,7 @@ public class DisplayPolicy {
             if (!mDisplayContent.isDefaultDisplay) {
                 return;
             }
-            if (mAwake && mDisplayContent.mTransitionController.isShellTransitionsEnabled()
-                    && !mDisplayContent.mTransitionController.isCollecting()) {
-                // Start a transition for waking. This is needed for showWhenLocked activities.
-                mDisplayContent.mTransitionController.requestTransitionIfNeeded(TRANSIT_WAKE,
-                        0 /* flags */, null /* trigger */, mDisplayContent);
-            }
-            mService.mAtmService.mKeyguardController.updateDeferWakeTransition(
+            mService.mAtmService.mKeyguardController.updateDeferTransitionForAod(
                     mAwake /* waiting */);
         }
     }
@@ -1359,7 +1352,6 @@ public class DisplayPolicy {
             return null;
         }
         return (displayFrames, windowContainer, inOutFrame) -> {
-            inOutFrame.inset(win.mGivenContentInsets);
             final LayoutParams lp = win.mAttrs.forRotation(displayFrames.mRotation);
             final InsetsFrameProvider ifp = lp.providedInsets[index];
             InsetsFrameProvider.calculateInsetsFrame(displayFrames.mUnrestricted,
@@ -2293,15 +2285,10 @@ public class DisplayPolicy {
     }
 
     void updateSystemBarAttributes() {
-        WindowState winCandidate = mFocusedWindow;
-        if (winCandidate == null && mTopFullscreenOpaqueWindowState != null
-                && (mTopFullscreenOpaqueWindowState.mAttrs.flags
-                & WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE) == 0) {
-            // Only focusable window can take system bar control.
-            winCandidate = mTopFullscreenOpaqueWindowState;
-        }
         // If there is no window focused, there will be nobody to handle the events
         // anyway, so just hang on in whatever state we're in until things settle down.
+        WindowState winCandidate = mFocusedWindow != null ? mFocusedWindow
+                : mTopFullscreenOpaqueWindowState;
         if (winCandidate == null) {
             return;
         }

@@ -26,6 +26,7 @@ import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
+import android.annotation.UserIdInt;
 import android.app.ActivityThread;
 import android.compat.annotation.ChangeId;
 import android.compat.annotation.UnsupportedAppUsage;
@@ -66,6 +67,8 @@ import android.view.MotionEvent;
 import android.view.PointerIcon;
 import android.view.VerifiedInputEvent;
 import android.view.WindowManager.LayoutParams;
+import android.view.inputmethod.InputMethodInfo;
+import android.view.inputmethod.InputMethodSubtype;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
@@ -75,6 +78,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Executor;
 
@@ -249,6 +253,31 @@ public final class InputManager {
             SWITCH_STATE_ON
     })
     public @interface SwitchState {}
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(prefix = { "REMAPPABLE_MODIFIER_KEY_" }, value = {
+            RemappableModifierKey.REMAPPABLE_MODIFIER_KEY_CTRL_LEFT,
+            RemappableModifierKey.REMAPPABLE_MODIFIER_KEY_CTRL_RIGHT,
+            RemappableModifierKey.REMAPPABLE_MODIFIER_KEY_META_LEFT,
+            RemappableModifierKey.REMAPPABLE_MODIFIER_KEY_META_RIGHT,
+            RemappableModifierKey.REMAPPABLE_MODIFIER_KEY_ALT_LEFT,
+            RemappableModifierKey.REMAPPABLE_MODIFIER_KEY_ALT_RIGHT,
+            RemappableModifierKey.REMAPPABLE_MODIFIER_KEY_SHIFT_LEFT,
+            RemappableModifierKey.REMAPPABLE_MODIFIER_KEY_SHIFT_RIGHT,
+            RemappableModifierKey.REMAPPABLE_MODIFIER_KEY_CAPS_LOCK,
+    })
+    public @interface RemappableModifierKey {
+        int REMAPPABLE_MODIFIER_KEY_CTRL_LEFT = KeyEvent.KEYCODE_CTRL_LEFT;
+        int REMAPPABLE_MODIFIER_KEY_CTRL_RIGHT = KeyEvent.KEYCODE_CTRL_RIGHT;
+        int REMAPPABLE_MODIFIER_KEY_META_LEFT = KeyEvent.KEYCODE_META_LEFT;
+        int REMAPPABLE_MODIFIER_KEY_META_RIGHT = KeyEvent.KEYCODE_META_RIGHT;
+        int REMAPPABLE_MODIFIER_KEY_ALT_LEFT = KeyEvent.KEYCODE_ALT_LEFT;
+        int REMAPPABLE_MODIFIER_KEY_ALT_RIGHT = KeyEvent.KEYCODE_ALT_RIGHT;
+        int REMAPPABLE_MODIFIER_KEY_SHIFT_LEFT = KeyEvent.KEYCODE_SHIFT_LEFT;
+        int REMAPPABLE_MODIFIER_KEY_SHIFT_RIGHT = KeyEvent.KEYCODE_SHIFT_RIGHT;
+        int REMAPPABLE_MODIFIER_KEY_CAPS_LOCK = KeyEvent.KEYCODE_CAPS_LOCK;
+    }
 
     /**
      * Switch State: Unknown.
@@ -851,6 +880,60 @@ public final class InputManager {
     }
 
     /**
+     * Remaps modifier keys. Remapping a modifier key to itself will clear any previous remappings
+     * for that key.
+     *
+     * @param fromKey The modifier key getting remapped.
+     * @param toKey The modifier key that it is remapped to.
+     *
+     * @hide
+     */
+    @TestApi
+    @RequiresPermission(Manifest.permission.REMAP_MODIFIER_KEYS)
+    public void remapModifierKey(@RemappableModifierKey int fromKey,
+            @RemappableModifierKey int toKey) {
+        try {
+            mIm.remapModifierKey(fromKey, toKey);
+        } catch (RemoteException ex) {
+            throw ex.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Clears all existing modifier key remappings
+     *
+     * @hide
+     */
+    @TestApi
+    @RequiresPermission(Manifest.permission.REMAP_MODIFIER_KEYS)
+    public void clearAllModifierKeyRemappings() {
+        try {
+            mIm.clearAllModifierKeyRemappings();
+        } catch (RemoteException ex) {
+            throw ex.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Provides the current modifier key remapping
+     *
+     * @return a {fromKey, toKey} map that contains the existing modifier key remappings..
+     * {@link RemappableModifierKey}
+     *
+     * @hide
+     */
+    @TestApi
+    @NonNull
+    @RequiresPermission(Manifest.permission.REMAP_MODIFIER_KEYS)
+    public Map<Integer, Integer> getModifierKeyRemapping() {
+        try {
+            return mIm.getModifierKeyRemapping();
+        } catch (RemoteException ex) {
+            throw ex.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Gets the TouchCalibration applied to the specified input device's coordinates.
      *
      * @param inputDeviceDescriptor The input device descriptor.
@@ -883,6 +966,91 @@ public final class InputManager {
             TouchCalibration calibration) {
         try {
             mIm.setTouchCalibrationForInputDevice(inputDeviceDescriptor, surfaceRotation, calibration);
+        } catch (RemoteException ex) {
+            throw ex.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Gets the keyboard layout descriptor for the specified input device, userId, imeInfo and
+     * imeSubtype.
+     *
+     * @param identifier Identifier for the input device
+     * @param userId user profile ID
+     * @param imeInfo contains IME information like imeId, etc.
+     * @param imeSubtype contains IME subtype information like input languageTag, layoutType, etc.
+     * @return The keyboard layout descriptor, or null if no keyboard layout has been set.
+     *
+     * @hide
+     */
+    @Nullable
+    public String getKeyboardLayoutForInputDevice(@NonNull InputDeviceIdentifier identifier,
+            @UserIdInt int userId, @NonNull InputMethodInfo imeInfo,
+            @NonNull InputMethodSubtype imeSubtype) {
+        try {
+            return mIm.getKeyboardLayoutForInputDevice(identifier, userId, imeInfo, imeSubtype);
+        } catch (RemoteException ex) {
+            throw ex.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Sets the keyboard layout descriptor for the specified input device, userId, imeInfo and
+     * imeSubtype.
+     *
+     * <p>
+     * This method may have the side-effect of causing the input device in question to be
+     * reconfigured.
+     * </p>
+     *
+     * @param identifier The identifier for the input device.
+     * @param userId user profile ID
+     * @param imeInfo contains IME information like imeId, etc.
+     * @param imeSubtype contains IME subtype information like input languageTag, layoutType, etc.
+     * @param keyboardLayoutDescriptor The keyboard layout descriptor to use, must not be null.
+     *
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.SET_KEYBOARD_LAYOUT)
+    public void setKeyboardLayoutForInputDevice(@NonNull InputDeviceIdentifier identifier,
+            @UserIdInt int userId, @NonNull InputMethodInfo imeInfo,
+            @NonNull InputMethodSubtype imeSubtype, @NonNull String keyboardLayoutDescriptor) {
+        if (identifier == null) {
+            throw new IllegalArgumentException("identifier must not be null");
+        }
+        if (keyboardLayoutDescriptor == null) {
+            throw new IllegalArgumentException("keyboardLayoutDescriptor must not be null");
+        }
+
+        try {
+            mIm.setKeyboardLayoutForInputDevice(identifier, userId, imeInfo, imeSubtype,
+                    keyboardLayoutDescriptor);
+        } catch (RemoteException ex) {
+            throw ex.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Gets all keyboard layout descriptors that are enabled for the specified input device, userId,
+     * imeInfo and imeSubtype.
+     *
+     * @param identifier The identifier for the input device.
+     * @param userId user profile ID
+     * @param imeInfo contains IME information like imeId, etc.
+     * @param imeSubtype contains IME subtype information like input languageTag, layoutType, etc.
+     * @return The keyboard layout descriptors.
+     *
+     * @hide
+     */
+    public String[] getKeyboardLayoutListForInputDevice(InputDeviceIdentifier identifier,
+            @UserIdInt int userId, @NonNull InputMethodInfo imeInfo,
+            @NonNull InputMethodSubtype imeSubtype) {
+        if (identifier == null) {
+            throw new IllegalArgumentException("inputDeviceDescriptor must not be null");
+        }
+
+        try {
+            return mIm.getKeyboardLayoutListForInputDevice(identifier, userId, imeInfo, imeSubtype);
         } catch (RemoteException ex) {
             throw ex.rethrowFromSystemServer();
         }

@@ -3901,7 +3901,7 @@ public class Intent implements Parcelable, Cloneable {
             "android.intent.action.USER_INITIALIZE";
 
     /**
-     * Sent when a user switch is happening, causing the process's user to be
+     * Sent after a user switch is complete, if the switch caused the process's user to be
      * brought to the foreground.  This is only sent to receivers registered
      * through {@link Context#registerReceiver(BroadcastReceiver, IntentFilter)
      * Context.registerReceiver}.  It is sent to the user that is going to the
@@ -3913,7 +3913,7 @@ public class Intent implements Parcelable, Cloneable {
             "android.intent.action.USER_FOREGROUND";
 
     /**
-     * Sent when a user switch is happening, causing the process's user to be
+     * Sent after a user switch is complete, if the switch caused the process's user to be
      * sent to the background.  This is only sent to receivers registered
      * through {@link Context#registerReceiver(BroadcastReceiver, IntentFilter)
      * Context.registerReceiver}.  It is sent to the user that is going to the
@@ -4053,6 +4053,11 @@ public class Intent implements Parcelable, Cloneable {
      * regardless of which broadcast you receive. Because of that, receivers should always check
      * the current state of the user.
      * @hide
+     */
+    /*
+     * This broadcast is sent after the user switch is complete. In case a task needs to be done
+     * while the switch is happening (i.e. while the screen is frozen to hide UI jank), please use
+     * ActivityManagerService.registerUserSwitchObserver method.
      */
     @SystemApi
     public static final String ACTION_USER_SWITCHED =
@@ -5114,6 +5119,21 @@ public class Intent implements Parcelable, Cloneable {
     public static final String ACTION_VIEW_LOCUS = "android.intent.action.VIEW_LOCUS";
 
     /**
+     * Activity Action: Starts a note-taking activity that can be used to create a note. This action
+     * can be used to start an activity on the lock screen. Activity should ensure to appropriately
+     * handle privacy sensitive data and features when launched on the lock screen. See
+     * {@link android.app.KeyguardManager} for lock screen checks.
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_CREATE_NOTE = "android.intent.action.CREATE_NOTE";
+
+    /**
+     * A boolean extra used with {@link #ACTION_CREATE_NOTE} indicating whether the launched
+     * note-taking activity should show a UI that is suitable to use with stylus input.
+     */
+    public static final String EXTRA_USE_STYLUS_MODE = "android.intent.extra.USE_STYLUS_MODE";
+
+    /**
      * Broadcast Action: Sent to the integrity component when a package
      * needs to be verified. The data contains the package URI along with other relevant
      * information.
@@ -6114,6 +6134,14 @@ public class Intent implements Parcelable, Cloneable {
      * different version of the same package.
      */
     public static final String EXTRA_REPLACING = "android.intent.extra.REPLACING";
+
+    /**
+     * Used as a boolean extra field in {@link android.content.Intent#ACTION_PACKAGE_REMOVED}
+     * intents to indicate that this is a system update uninstall.
+     * @hide
+     */
+    public static final String EXTRA_SYSTEM_UPDATE_UNINSTALL =
+            "android.intent.extra.SYSTEM_UPDATE_UNINSTALL";
 
     /**
      * Used as an int extra field in {@link android.app.AlarmManager} pending intents

@@ -23,6 +23,8 @@ import com.android.settingslib.spa.tests.testutils.SpaEnvironmentForTest
 import com.android.settingslib.spa.tests.testutils.SppHome
 import com.android.settingslib.spa.tests.testutils.SppLayer1
 import com.android.settingslib.spa.tests.testutils.SppLayer2
+import com.android.settingslib.spa.tests.testutils.getUniqueEntryId
+import com.android.settingslib.spa.tests.testutils.getUniquePageId
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -30,7 +32,8 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class SettingsEntryRepositoryTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
-    private val spaEnvironment = SpaEnvironmentForTest(context)
+    private val spaEnvironment =
+        SpaEnvironmentForTest(context, listOf(SppHome.createSettingsPage()))
     private val entryRepository by spaEnvironment.entryRepository
 
     @Test

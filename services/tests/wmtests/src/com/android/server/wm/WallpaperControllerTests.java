@@ -54,6 +54,7 @@ import android.os.RemoteException;
 import android.platform.test.annotations.Presubmit;
 import android.view.DisplayCutout;
 import android.view.DisplayInfo;
+import android.view.DisplayShape;
 import android.view.Gravity;
 import android.view.InsetsState;
 import android.view.PrivacyIndicatorBounds;
@@ -165,7 +166,8 @@ public class WallpaperControllerTests extends WindowTestsBase {
         final DisplayInfo info = dc.computeScreenConfiguration(config, Surface.ROTATION_0);
         final DisplayCutout cutout = dc.calculateDisplayCutoutForRotation(Surface.ROTATION_0);
         final DisplayFrames displayFrames = new DisplayFrames(new InsetsState(),
-                info, cutout, RoundedCorners.NO_ROUNDED_CORNERS, new PrivacyIndicatorBounds());
+                info, cutout, RoundedCorners.NO_ROUNDED_CORNERS, new PrivacyIndicatorBounds(),
+                DisplayShape.NONE);
         wallpaperWindow.mToken.applyFixedRotationTransform(info, displayFrames, config);
 
         // Check that the wallpaper has the same frame in landscape than in portrait
@@ -311,12 +313,12 @@ public class WallpaperControllerTests extends WindowTestsBase {
         r.applyFixedRotationTransform(mDisplayContent.getDisplayInfo(),
                 mDisplayContent.mDisplayFrames, mDisplayContent.getConfiguration());
         // Invisible requested activity should not share its rotation transform.
-        r.mVisibleRequested = false;
+        r.setVisibleRequested(false);
         mDisplayContent.mWallpaperController.adjustWallpaperWindows();
         assertFalse(wallpaperToken.hasFixedRotationTransform());
 
         // Wallpaper should link the transform of its target.
-        r.mVisibleRequested = true;
+        r.setVisibleRequested(true);
         mDisplayContent.mWallpaperController.adjustWallpaperWindows();
         assertEquals(appWin, mDisplayContent.mWallpaperController.getWallpaperTarget());
         assertTrue(r.hasFixedRotationTransform());
@@ -369,7 +371,7 @@ public class WallpaperControllerTests extends WindowTestsBase {
         final SurfaceControl.Transaction t = mock(SurfaceControl.Transaction.class);
         token.finishSync(t, false /* cancel */);
         transit.onTransactionReady(transit.getSyncId(), t);
-        dc.mTransitionController.finishTransition(transit);
+        dc.mTransitionController.finishTransition(transit.getToken());
         assertFalse(wallpaperWindow.isVisible());
         assertFalse(token.isVisible());
     }

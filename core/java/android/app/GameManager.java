@@ -213,7 +213,7 @@ public final class GameManager {
     @RequiresPermission(Manifest.permission.MANAGE_GAME_MODE)
     public @GameMode int[] getAvailableGameModes(@NonNull String packageName) {
         try {
-            return mService.getAvailableGameModes(packageName);
+            return mService.getAvailableGameModes(packageName, mContext.getUserId());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -287,6 +287,7 @@ public final class GameManager {
      * <p>
      * The caller must have {@link android.Manifest.permission#MANAGE_GAME_MODE}.
      *
+     * @param packageName The package name of the game to update
      * @param gameModeConfig The configuration to use for game mode interventions
      * @hide
      */

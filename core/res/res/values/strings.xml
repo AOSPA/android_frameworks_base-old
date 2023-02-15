@@ -1135,6 +1135,16 @@
     <string name="permdesc_useDataInBackground">This app can use data in the background. This may increase data usage.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
+    <string name="permlab_schedule_exact_alarm">Schedule precisely timed actions</string>
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
+    <string name="permdesc_schedule_exact_alarm">This app can schedule work to happen at a desired time in the future. This also means that the app can run when you\u2019re not actively using the device.</string>
+
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
+    <string name="permlab_use_exact_alarm">Schedule alarms or event reminders</string>
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
+    <string name="permdesc_use_exact_alarm">This app can schedule actions like alarms and reminders to notify you at a desired time in the future.</string>
+
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_persistentActivity">make app always run</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permdesc_persistentActivity" product="tablet">Allows the app to make parts of itself persistent in memory.  This can limit memory available to other apps slowing down the tablet.</string>
@@ -1201,6 +1211,11 @@
     <string name="permlab_foregroundServiceSystemExempted">run foreground service with the type \"systemExempted\"</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permdesc_foregroundServiceSystemExempted">Allows the app to make use of foreground services with the type \"systemExempted\"</string>
+
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
+    <string name="permlab_foregroundServiceFileManagement">run foreground service with the type \"fileManagement\"</string>
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
+    <string name="permdesc_foregroundServiceFileManagement">Allows the app to make use of foreground services with the type \"fileManagement\"</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_foregroundServiceSpecialUse">run foreground service with the type \"specialUse\"</string>
@@ -6404,4 +6419,22 @@ ul.</string>
 
     <!-- Display content to tell the user the sim card name and number-->
     <string name="default_card_name">CARD <xliff:g id="cardNumber" example="1">%d</xliff:g></string>
+
+    <!-- Strings for CompanionDeviceManager -->
+    <!-- Title of Watch profile permission, which allows a companion app to manage watches. [CHAR LIMIT=NONE] -->
+    <string name="permlab_companionProfileWatch">Companion Watch profile permission to manage watches</string>
+    <!-- Description of Watch profile permission, which allows a companion app to manage watches. [CHAR LIMIT=NONE] -->
+    <string name="permdesc_companionProfileWatch">Allows a companion app to manage watches.</string>
+    <!-- Title of observing device presence permission, which allows a companion app to observe the presence of the associated devices. [CHAR LIMIT=NONE] -->
+    <string name="permlab_observeCompanionDevicePresence">Observe companion device presence</string>
+    <!-- Description of observing device presence permission, which allows a companion app to observe the presence of the associated devices. [CHAR LIMIT=NONE] -->
+    <string name="permdesc_observeCompanionDevicePresence">Allows a companion app to observe companion device presence when the devices are nearby or far-away.</string>
+    <!-- Title of delivering companion messages permission, which allows a companion app to deliver messages to other devices. [CHAR LIMIT=NONE] -->
+    <string name="permlab_deliverCompanionMessages">Deliver companion messages</string>
+    <!-- Description of delivering companion messages permission, which allows a companion app to deliver messages to other devices. [CHAR LIMIT=NONE] -->
+    <string name="permdesc_deliverCompanionMessages">Allows a companion app to deliver companion messages to other devices.</string>
+    <!-- Title of start foreground services from background permission [CHAR LIMIT=NONE] -->
+    <string name="permlab_startForegroundServicesFromBackground">Start foreground services from background</string>
+    <!-- Description of start foreground services from background permission [CHAR LIMIT=NONE] -->
+    <string name="permdesc_startForegroundServicesFromBackground">Allows a companion app to start foreground services from background.</string>
 </resources>

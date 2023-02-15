@@ -121,12 +121,6 @@ public class KeyguardSimPukViewController
     }
 
     @Override
-    public void reloadColors() {
-        super.reloadColors();
-        mView.reloadColors();
-    }
-
-    @Override
     protected void verifyPasswordAndUnlock() {
         mStateMachine.next();
     }
@@ -229,7 +223,7 @@ public class KeyguardSimPukViewController
                 else {
                     Log.d(TAG, "onSimCheckResponse " + " empty One result "
                             + result.toString());
-                    if (result.getAttemptsRemaining() >= 0) {
+                    if (result.getAttemptsRemaining() > 0) {
                         mRemainingAttempts = result.getAttemptsRemaining();
                         mMessageAreaController.setMessage(
                                 mView.getPukPasswordErrorMessage(
@@ -352,8 +346,6 @@ public class KeyguardSimPukViewController
             mSubId = subId;
             mShowDefaultMessage = true;
             mRemainingAttempts = -1;
-        }else{
-            mShowDefaultMessage = false;
         }
     }
 

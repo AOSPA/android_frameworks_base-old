@@ -23,6 +23,7 @@ import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA;
 import static android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE;
 import static android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC;
+import static android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_FILE_MANAGEMENT;
 import static android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH;
 import static android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION;
 import static android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MANIFEST;
@@ -48,6 +49,7 @@ import android.compat.annotation.Disabled;
 import android.compat.annotation.EnabledAfter;
 import android.compat.annotation.Overridable;
 import android.content.Context;
+import android.content.PermissionChecker;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.content.pm.ServiceInfo.ForegroundServiceType;
@@ -57,6 +59,7 @@ import android.hardware.usb.UsbManager;
 import android.healthconnect.HealthConnectManager;
 import android.os.RemoteException;
 import android.os.ServiceManager;
+import android.permission.PermissionCheckerManager;
 import android.util.ArraySet;
 import android.util.SparseArray;
 
@@ -407,6 +410,22 @@ public abstract class ForegroundServiceTypePolicy {
             ForegroundServiceTypePolicyInfo.INVALID_CHANGE_ID,
             ForegroundServiceTypePolicyInfo.INVALID_CHANGE_ID,
             null /* no type specific permissions */, null /* no type specific permissions */
+    );
+
+    /**
+     * The policy for the {@link ServiceInfo#FOREGROUND_SERVICE_TYPE_FILE_MANAGEMENT}.
+     *
+     * @hide
+     */
+    public static final @NonNull ForegroundServiceTypePolicyInfo FGS_TYPE_POLICY_FILE_MANAGEMENT =
+            new ForegroundServiceTypePolicyInfo(
+            FOREGROUND_SERVICE_TYPE_FILE_MANAGEMENT,
+            ForegroundServiceTypePolicyInfo.INVALID_CHANGE_ID,
+            ForegroundServiceTypePolicyInfo.INVALID_CHANGE_ID,
+            new ForegroundServiceTypePermissions(new ForegroundServiceTypePermission[] {
+                new RegularPermission(Manifest.permission.FOREGROUND_SERVICE_FILE_MANAGEMENT)
+            }, true),
+            null
     );
 
     /**
@@ -879,10 +898,12 @@ public abstract class ForegroundServiceTypePolicy {
         int checkPermission(@NonNull Context context, @NonNull String name, int callerUid,
                 int callerPid, String packageName, boolean allowWhileInUse) {
             // Simple case, check if it's already granted.
-            if (context.checkPermission(name, callerPid, callerUid) == PERMISSION_GRANTED) {
+            @PackageManager.PermissionResult int result;
+            if ((result = PermissionChecker.checkPermissionForPreflight(context, name,
+                    callerPid, callerUid, packageName)) == PERMISSION_GRANTED) {
                 return PERMISSION_GRANTED;
             }
-            if (allowWhileInUse) {
+            if (allowWhileInUse && result == PermissionCheckerManager.PERMISSION_SOFT_DENIED) {
                 // Check its appops
                 final int opCode = AppOpsManager.permissionToOpCode(name);
                 final AppOpsManager appOpsManager = context.getSystemService(AppOpsManager.class);
@@ -1053,6 +1074,8 @@ public abstract class ForegroundServiceTypePolicy {
                     FGS_TYPE_POLICY_SYSTEM_EXEMPTED);
             mForegroundServiceTypePolicies.put(FOREGROUND_SERVICE_TYPE_SHORT_SERVICE,
                     FGS_TYPE_POLICY_SHORT_SERVICE);
+            mForegroundServiceTypePolicies.put(FOREGROUND_SERVICE_TYPE_FILE_MANAGEMENT,
+                    FGS_TYPE_POLICY_FILE_MANAGEMENT);
             mForegroundServiceTypePolicies.put(FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
                     FGS_TYPE_POLICY_SPECIAL_USE);
         }

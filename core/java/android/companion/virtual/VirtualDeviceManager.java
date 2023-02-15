@@ -22,12 +22,15 @@ import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
+import android.annotation.SdkConstant;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.app.PendingIntent;
 import android.companion.AssociationInfo;
 import android.companion.virtual.audio.VirtualAudioDevice;
 import android.companion.virtual.audio.VirtualAudioDevice.AudioConfigurationChangeCallback;
+import android.companion.virtual.sensor.VirtualSensor;
+import android.companion.virtual.sensor.VirtualSensorConfig;
 import android.content.ComponentName;
 import android.content.Context;
 import android.graphics.Point;
@@ -38,9 +41,13 @@ import android.hardware.display.IVirtualDisplayCallback;
 import android.hardware.display.VirtualDisplay;
 import android.hardware.display.VirtualDisplayConfig;
 import android.hardware.input.VirtualDpad;
+import android.hardware.input.VirtualDpadConfig;
 import android.hardware.input.VirtualKeyboard;
+import android.hardware.input.VirtualKeyboardConfig;
 import android.hardware.input.VirtualMouse;
+import android.hardware.input.VirtualMouseConfig;
 import android.hardware.input.VirtualTouchscreen;
+import android.hardware.input.VirtualTouchscreenConfig;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.Handler;
@@ -58,6 +65,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.function.IntConsumer;
 
@@ -67,7 +75,6 @@ import java.util.function.IntConsumer;
 @SystemService(Context.VIRTUAL_DEVICE_SERVICE)
 public final class VirtualDeviceManager {
 
-    private static final boolean DEBUG = false;
     private static final String TAG = "VirtualDeviceManager";
 
     private static final int DEFAULT_VIRTUAL_DISPLAY_FLAGS =
@@ -76,7 +83,7 @@ public final class VirtualDeviceManager {
                     | DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY
                     | DisplayManager.VIRTUAL_DISPLAY_FLAG_DESTROY_CONTENT_ON_REMOVAL
                     | DisplayManager.VIRTUAL_DISPLAY_FLAG_SUPPORTS_TOUCH
-                    | DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP;
+                    | DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_FOCUS;
 
     /**
      * The default device ID, which is the ID of the primary (non-virtual) device.
@@ -87,6 +94,26 @@ public final class VirtualDeviceManager {
      * Invalid device ID.
      */
     public static final int INVALID_DEVICE_ID = -1;
+
+    /**
+     * Broadcast Action: A Virtual Device was removed.
+     *
+     * <p class="note">This is a protected intent that can only be sent by the system.</p>
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstant.SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_VIRTUAL_DEVICE_REMOVED =
+            "android.companion.virtual.action.VIRTUAL_DEVICE_REMOVED";
+
+    /**
+     * Int intent extra to be used with {@link #ACTION_VIRTUAL_DEVICE_REMOVED}.
+     * Contains the identifier of the virtual device, which was removed.
+     *
+     * @hide
+     */
+    public static final String EXTRA_VIRTUAL_DEVICE_ID =
+            "android.companion.virtual.extra.VIRTUAL_DEVICE_ID";
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
@@ -250,7 +277,10 @@ public final class VirtualDeviceManager {
                 };
         @Nullable
         private VirtualAudioDevice mVirtualAudioDevice;
+        @NonNull
+        private List<VirtualSensor> mVirtualSensors = new ArrayList<>();
 
+        @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)
         private VirtualDevice(
                 IVirtualDeviceManager service,
                 Context context,
@@ -264,6 +294,10 @@ public final class VirtualDeviceManager {
                     associationId,
                     params,
                     mActivityListenerBinder);
+            final List<VirtualSensorConfig> virtualSensorConfigs = params.getVirtualSensorConfigs();
+            for (int i = 0; i < virtualSensorConfigs.size(); ++i) {
+                mVirtualSensors.add(createVirtualSensor(virtualSensorConfigs.get(i)));
+            }
         }
 
         /**
@@ -275,6 +309,35 @@ public final class VirtualDeviceManager {
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
+        }
+
+        /**
+         * @return A new Context bound to this device. This is a convenience method equivalent to
+         * calling {@link Context#createDeviceContext(int)} with the device id of this device.
+         */
+        public @NonNull Context createContext() {
+            try {
+                return mContext.createDeviceContext(mVirtualDevice.getDeviceId());
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        /**
+         * Returns this device's sensor with the given type and name, if any.
+         *
+         * @see VirtualDeviceParams.Builder#addVirtualSensorConfig
+         *
+         * @param type The type of the sensor.
+         * @param name The name of the sensor.
+         * @return The matching sensor if found, {@code null} otherwise.
+         */
+        @Nullable
+        public VirtualSensor getVirtualSensor(int type, @NonNull String name) {
+            return mVirtualSensors.stream()
+                    .filter(sensor -> sensor.getType() == type && sensor.getName().equals(name))
+                    .findAny()
+                    .orElse(null);
         }
 
         /**
@@ -367,7 +430,7 @@ public final class VirtualDeviceManager {
          * @param densityDpi The density of the virtual display in dpi, must be greater than 0.
          * @param displayCategories The categories of the virtual display, indicating the type of
          * activities allowed to run on the display. Activities can declare their type using
-         * {@link android.content.pm.ActivityInfo#targetDisplayCategory}.
+         * {@link android.content.pm.ActivityInfo#requiredDisplayCategory}.
          * @param surface The surface to which the content of the virtual display should
          * be rendered, or null if there is none initially. The surface can also be set later using
          * {@link VirtualDisplay#setSurface(Surface)}.
@@ -437,6 +500,7 @@ public final class VirtualDeviceManager {
         @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)
         public void close() {
             try {
+                // This also takes care of unregistering all virtual sensors.
                 mVirtualDevice.close();
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
@@ -450,23 +514,15 @@ public final class VirtualDeviceManager {
         /**
          * Creates a virtual dpad.
          *
-         * @param display the display that the events inputted through this device should target
-         * @param inputDeviceName the name to call this input device
-         * @param vendorId the PCI vendor id
-         * @param productId the product id, as defined by the vendor
+         * @param config the configurations of the virtual Dpad.
          */
         @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)
         @NonNull
-        public VirtualDpad createVirtualDpad(
-                @NonNull VirtualDisplay display,
-                @NonNull String inputDeviceName,
-                int vendorId,
-                int productId) {
+        public VirtualDpad createVirtualDpad(@NonNull VirtualDpadConfig config) {
             try {
                 final IBinder token = new Binder(
-                        "android.hardware.input.VirtualDpad:" + inputDeviceName);
-                mVirtualDevice.createVirtualDpad(display.getDisplay().getDisplayId(),
-                        inputDeviceName, vendorId, productId, token);
+                        "android.hardware.input.VirtualDpad:" + config.getInputDeviceName());
+                mVirtualDevice.createVirtualDpad(config, token);
                 return new VirtualDpad(mVirtualDevice, token);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
@@ -476,24 +532,60 @@ public final class VirtualDeviceManager {
         /**
          * Creates a virtual keyboard.
          *
-         * @param display the display that the events inputted through this device should target
-         * @param inputDeviceName the name to call this input device
-         * @param vendorId the PCI vendor id
-         * @param productId the product id, as defined by the vendor
+         * @param config the configurations of the virtual keyboard.
          */
         @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)
         @NonNull
-        public VirtualKeyboard createVirtualKeyboard(
-                @NonNull VirtualDisplay display,
-                @NonNull String inputDeviceName,
-                int vendorId,
-                int productId) {
+        public VirtualKeyboard createVirtualKeyboard(@NonNull VirtualKeyboardConfig config) {
             try {
                 final IBinder token = new Binder(
-                        "android.hardware.input.VirtualKeyboard:" + inputDeviceName);
-                mVirtualDevice.createVirtualKeyboard(display.getDisplay().getDisplayId(),
-                        inputDeviceName, vendorId, productId, token);
+                        "android.hardware.input.VirtualKeyboard:" + config.getInputDeviceName());
+                mVirtualDevice.createVirtualKeyboard(config, token);
                 return new VirtualKeyboard(mVirtualDevice, token);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        /**
+         * Creates a virtual keyboard.
+         *
+         * @param display         the display that the events inputted through this device should
+         *                        target
+         * @param inputDeviceName the name to call this input device
+         * @param vendorId        the PCI vendor id
+         * @param productId       the product id, as defined by the vendor
+         * @see #createVirtualKeyboard(VirtualKeyboardConfig config)
+         * @deprecated Use {@link #createVirtualKeyboard(VirtualKeyboardConfig config)} instead
+         */
+        @Deprecated
+        @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)
+        @NonNull
+        public VirtualKeyboard createVirtualKeyboard(@NonNull VirtualDisplay display,
+                @NonNull String inputDeviceName, int vendorId, int productId) {
+            VirtualKeyboardConfig keyboardConfig =
+                    new VirtualKeyboardConfig.Builder()
+                            .setVendorId(vendorId)
+                            .setProductId(productId)
+                            .setInputDeviceName(inputDeviceName)
+                            .setAssociatedDisplayId(display.getDisplay().getDisplayId())
+                            .build();
+            return createVirtualKeyboard(keyboardConfig);
+        }
+
+        /**
+         * Creates a virtual mouse.
+         *
+         * @param config the configurations of the virtual mouse.
+         */
+        @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)
+        @NonNull
+        public VirtualMouse createVirtualMouse(@NonNull VirtualMouseConfig config) {
+            try {
+                final IBinder token = new Binder(
+                        "android.hardware.input.VirtualMouse:" + config.getInputDeviceName());
+                mVirtualDevice.createVirtualMouse(config, token);
+                return new VirtualMouse(mVirtualDevice, token);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -502,24 +594,44 @@ public final class VirtualDeviceManager {
         /**
          * Creates a virtual mouse.
          *
-         * @param display the display that the events inputted through this device should target
+         * @param display         the display that the events inputted through this device should
+         *                        target
          * @param inputDeviceName the name to call this input device
-         * @param vendorId the PCI vendor id
-         * @param productId the product id, as defined by the vendor
+         * @param vendorId        the PCI vendor id
+         * @param productId       the product id, as defined by the vendor
+         * @see #createVirtualMouse(VirtualMouseConfig config)
+         * @deprecated Use {@link #createVirtualMouse(VirtualMouseConfig config)} instead
+         * *
+         */
+        @Deprecated
+        @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)
+        @NonNull
+        public VirtualMouse createVirtualMouse(@NonNull VirtualDisplay display,
+                @NonNull String inputDeviceName, int vendorId, int productId) {
+            VirtualMouseConfig mouseConfig =
+                    new VirtualMouseConfig.Builder()
+                            .setVendorId(vendorId)
+                            .setProductId(productId)
+                            .setInputDeviceName(inputDeviceName)
+                            .setAssociatedDisplayId(display.getDisplay().getDisplayId())
+                            .build();
+            return createVirtualMouse(mouseConfig);
+        }
+
+        /**
+         * Creates a virtual touchscreen.
+         *
+         * @param config the configurations of the virtual touchscreen.
          */
         @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)
         @NonNull
-        public VirtualMouse createVirtualMouse(
-                @NonNull VirtualDisplay display,
-                @NonNull String inputDeviceName,
-                int vendorId,
-                int productId) {
+        public VirtualTouchscreen createVirtualTouchscreen(
+                @NonNull VirtualTouchscreenConfig config) {
             try {
                 final IBinder token = new Binder(
-                        "android.hardware.input.VirtualMouse:" + inputDeviceName);
-                mVirtualDevice.createVirtualMouse(display.getDisplay().getDisplayId(),
-                        inputDeviceName, vendorId, productId, token);
-                return new VirtualMouse(mVirtualDevice, token);
+                        "android.hardware.input.VirtualTouchscreen:" + config.getInputDeviceName());
+                mVirtualDevice.createVirtualTouchscreen(config, token);
+                return new VirtualTouchscreen(mVirtualDevice, token);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -528,29 +640,32 @@ public final class VirtualDeviceManager {
         /**
          * Creates a virtual touchscreen.
          *
-         * @param display the display that the events inputted through this device should target
+         * @param display         the display that the events inputted through this device should
+         *                        target
          * @param inputDeviceName the name to call this input device
-         * @param vendorId the PCI vendor id
-         * @param productId the product id, as defined by the vendor
+         * @param vendorId        the PCI vendor id
+         * @param productId       the product id, as defined by the vendor
+         * @see #createVirtualTouchscreen(VirtualTouchscreenConfig config)
+         * @deprecated Use {@link #createVirtualTouchscreen(VirtualTouchscreenConfig config)}
+         * instead
          */
+        @Deprecated
         @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)
         @NonNull
-        public VirtualTouchscreen createVirtualTouchscreen(
-                @NonNull VirtualDisplay display,
-                @NonNull String inputDeviceName,
-                int vendorId,
-                int productId) {
-            try {
-                final IBinder token = new Binder(
-                        "android.hardware.input.VirtualTouchscreen:" + inputDeviceName);
-                final Point size = new Point();
-                display.getDisplay().getSize(size);
-                mVirtualDevice.createVirtualTouchscreen(display.getDisplay().getDisplayId(),
-                        inputDeviceName, vendorId, productId, token, size);
-                return new VirtualTouchscreen(mVirtualDevice, token);
-            } catch (RemoteException e) {
-                throw e.rethrowFromSystemServer();
-            }
+        public VirtualTouchscreen createVirtualTouchscreen(@NonNull VirtualDisplay display,
+                @NonNull String inputDeviceName, int vendorId, int productId) {
+            final Point size = new Point();
+            display.getDisplay().getSize(size);
+            VirtualTouchscreenConfig touchscreenConfig =
+                    new VirtualTouchscreenConfig.Builder()
+                            .setVendorId(vendorId)
+                            .setProductId(productId)
+                            .setInputDeviceName(inputDeviceName)
+                            .setAssociatedDisplayId(display.getDisplay().getDisplayId())
+                            .setWidthInPixels(size.x)
+                            .setHeightInPixels(size.y)
+                            .build();
+            return createVirtualTouchscreen(touchscreenConfig);
         }
 
         /**
@@ -616,6 +731,28 @@ public final class VirtualDeviceManager {
                 // should only be used for informational purposes, and not for identifying the
                 // display in code.
                 return "VirtualDevice_" + mVirtualDevice.getAssociationId();
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        /**
+         * Creates a virtual sensor, capable of injecting sensor events into the system. Only for
+         * internal use, since device sensors must remain valid for the entire lifetime of the
+         * device.
+         *
+         * @param config The configuration of the sensor.
+         * @hide
+         */
+        @RequiresPermission(android.Manifest.permission.CREATE_VIRTUAL_DEVICE)
+        @NonNull
+        public VirtualSensor createVirtualSensor(@NonNull VirtualSensorConfig config) {
+            Objects.requireNonNull(config);
+            try {
+                final IBinder token = new Binder(
+                        "android.hardware.sensor.VirtualSensor:" + config.getName());
+                mVirtualDevice.createVirtualSensor(token, config);
+                return new VirtualSensor(config.getType(), config.getName(), mVirtualDevice, token);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }

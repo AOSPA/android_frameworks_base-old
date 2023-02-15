@@ -16,26 +16,34 @@
 
 package com.android.systemui.statusbar.pipeline.dagger
 
+import com.android.systemui.CoreStartable
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.log.table.TableLogBuffer
 import com.android.systemui.log.table.TableLogBufferFactory
 import com.android.systemui.statusbar.pipeline.airplane.data.repository.AirplaneModeRepository
 import com.android.systemui.statusbar.pipeline.airplane.data.repository.AirplaneModeRepositoryImpl
+import com.android.systemui.statusbar.pipeline.airplane.ui.viewmodel.AirplaneModeViewModel
+import com.android.systemui.statusbar.pipeline.airplane.ui.viewmodel.AirplaneModeViewModelImpl
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConnectionsRepository
-import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConnectionsRepositoryImpl
+import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileRepositorySwitcher
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.UserSetupRepository
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.UserSetupRepositoryImpl
 import com.android.systemui.statusbar.pipeline.mobile.domain.interactor.MobileIconsInteractor
 import com.android.systemui.statusbar.pipeline.mobile.domain.interactor.MobileIconsInteractorImpl
+import com.android.systemui.statusbar.pipeline.mobile.ui.MobileUiAdapter
 import com.android.systemui.statusbar.pipeline.mobile.util.MobileMappingsProxy
 import com.android.systemui.statusbar.pipeline.mobile.util.MobileMappingsProxyImpl
 import com.android.systemui.statusbar.pipeline.shared.data.repository.ConnectivityRepository
 import com.android.systemui.statusbar.pipeline.shared.data.repository.ConnectivityRepositoryImpl
 import com.android.systemui.statusbar.pipeline.wifi.data.repository.WifiRepository
 import com.android.systemui.statusbar.pipeline.wifi.data.repository.WifiRepositoryImpl
+import com.android.systemui.statusbar.pipeline.wifi.domain.interactor.WifiInteractor
+import com.android.systemui.statusbar.pipeline.wifi.domain.interactor.WifiInteractorImpl
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
+import dagger.multibindings.ClassKey
+import dagger.multibindings.IntoMap
 
 @Module
 abstract class StatusBarPipelineModule {
@@ -43,24 +51,32 @@ abstract class StatusBarPipelineModule {
     abstract fun airplaneModeRepository(impl: AirplaneModeRepositoryImpl): AirplaneModeRepository
 
     @Binds
-    abstract fun connectivityRepository(impl: ConnectivityRepositoryImpl): ConnectivityRepository
+    abstract fun airplaneModeViewModel(impl: AirplaneModeViewModelImpl): AirplaneModeViewModel
 
     @Binds
-    abstract fun wifiRepository(impl: WifiRepositoryImpl): WifiRepository
+    abstract fun connectivityRepository(impl: ConnectivityRepositoryImpl): ConnectivityRepository
+
+    @Binds abstract fun wifiRepository(impl: WifiRepositoryImpl): WifiRepository
+
+    @Binds
+    abstract fun wifiInteractor(impl: WifiInteractorImpl): WifiInteractor
 
     @Binds
     abstract fun mobileConnectionsRepository(
-        impl: MobileConnectionsRepositoryImpl
+        impl: MobileRepositorySwitcher
     ): MobileConnectionsRepository
 
-    @Binds
-    abstract fun userSetupRepository(impl: UserSetupRepositoryImpl): UserSetupRepository
+    @Binds abstract fun userSetupRepository(impl: UserSetupRepositoryImpl): UserSetupRepository
 
-    @Binds
-    abstract fun mobileMappingsProxy(impl: MobileMappingsProxyImpl): MobileMappingsProxy
+    @Binds abstract fun mobileMappingsProxy(impl: MobileMappingsProxyImpl): MobileMappingsProxy
 
     @Binds
     abstract fun mobileIconsInteractor(impl: MobileIconsInteractorImpl): MobileIconsInteractor
+
+    @Binds
+    @IntoMap
+    @ClassKey(MobileUiAdapter::class)
+    abstract fun bindFeature(impl: MobileUiAdapter): CoreStartable
 
     @Module
     companion object {
@@ -70,6 +86,14 @@ abstract class StatusBarPipelineModule {
         @WifiTableLog
         fun provideWifiTableLogBuffer(factory: TableLogBufferFactory): TableLogBuffer {
             return factory.create("WifiTableLog", 100)
+        }
+
+        @JvmStatic
+        @Provides
+        @SysUISingleton
+        @AirplaneTableLog
+        fun provideAirplaneTableLogBuffer(factory: TableLogBufferFactory): TableLogBuffer {
+            return factory.create("AirplaneTableLog", 30)
         }
     }
 }

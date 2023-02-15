@@ -93,11 +93,11 @@ import android.os.storage.StorageManagerInternal;
 import android.provider.Settings;
 import android.service.voice.VoiceInteractionManagerInternal;
 import android.stats.devicepolicy.DevicePolicyEnums;
+import android.telecom.TelecomManager;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.AtomicFile;
-import android.util.EventLog;
 import android.util.IndentingPrintWriter;
 import android.util.IntArray;
 import android.util.Slog;
@@ -126,11 +126,9 @@ import com.android.server.BundleUtils;
 import com.android.server.LocalServices;
 import com.android.server.LockGuard;
 import com.android.server.SystemService;
-import com.android.server.am.EventLogTags;
 import com.android.server.am.UserState;
 import com.android.server.pm.UserManagerInternal.UserLifecycleListener;
 import com.android.server.pm.UserManagerInternal.UserRestrictionsListener;
-import com.android.server.pm.UserManagerInternal.UserVisibilityListener;
 import com.android.server.storage.DeviceStorageMonitorInternal;
 import com.android.server.utils.Slogf;
 import com.android.server.utils.TimingsTraceAndSlog;
@@ -191,6 +189,7 @@ public class UserManagerService extends IUserManager.Stub {
     private static final String ATTR_CREATION_TIME = "created";
     private static final String ATTR_LAST_LOGGED_IN_TIME = "lastLoggedIn";
     private static final String ATTR_LAST_LOGGED_IN_FINGERPRINT = "lastLoggedInFingerprint";
+    private static final String ATTR_LAST_ENTERED_FOREGROUND_TIME = "lastEnteredForeground";
     private static final String ATTR_SERIAL_NO = "serialNumber";
     private static final String ATTR_NEXT_SERIAL_NO = "nextSerialNumber";
     private static final String ATTR_PARTIAL = "partial";
@@ -340,6 +339,9 @@ public class UserManagerService extends IUserManager.Stub {
 
         /** Elapsed realtime since boot when the user was unlocked. */
         long unlockRealtime;
+
+        /** Wall clock time in millis when the user last entered the foreground. */
+        long mLastEnteredForegroundTimeMillis;
 
         private long mLastRequestQuietModeEnabledMillis;
 
@@ -507,10 +509,6 @@ public class UserManagerService extends IUserManager.Stub {
 
     @GuardedBy("mUserLifecycleListeners")
     private final ArrayList<UserLifecycleListener> mUserLifecycleListeners = new ArrayList<>();
-
-    // TODO(b/244333150): temporary array, should belong to UserVisibilityMediator
-    @GuardedBy("mUserVisibilityListeners")
-    private final ArrayList<UserVisibilityListener> mUserVisibilityListeners = new ArrayList<>();
 
     private final LockPatternUtils mLockPatternUtils;
 
@@ -680,6 +678,10 @@ public class UserManagerService extends IUserManager.Stub {
                 final UserData user = mUms.getUserDataLU(targetUser.getUserIdentifier());
                 if (user != null) {
                     user.startRealtime = SystemClock.elapsedRealtime();
+                    if (targetUser.getUserIdentifier() == UserHandle.USER_SYSTEM
+                            && targetUser.isFull()) {
+                        mUms.setLastEnteredForegroundTimeToNow(user);
+                    }
                 }
             }
         }
@@ -690,6 +692,16 @@ public class UserManagerService extends IUserManager.Stub {
                 final UserData user = mUms.getUserDataLU(targetUser.getUserIdentifier());
                 if (user != null) {
                     user.unlockRealtime = SystemClock.elapsedRealtime();
+                }
+            }
+        }
+
+        @Override
+        public void onUserSwitching(@NonNull TargetUser from, @NonNull TargetUser to) {
+            synchronized (mUms.mUsersLock) {
+                final UserData user = mUms.getUserDataLU(to.getUserIdentifier());
+                if (user != null) {
+                    mUms.setLastEnteredForegroundTimeToNow(user);
                 }
             }
         }
@@ -899,6 +911,49 @@ public class UserManagerService extends IUserManager.Stub {
             }
         }
         return null;
+    }
+
+    @Override
+    public @UserIdInt int getMainUserId() {
+        checkQueryOrCreateUsersPermission("get main user id");
+        return getMainUserIdUnchecked();
+    }
+
+    private @UserIdInt int getMainUserIdUnchecked() {
+        synchronized (mUsersLock) {
+            final int userSize = mUsers.size();
+            for (int i = 0; i < userSize; i++) {
+                final UserInfo user = mUsers.valueAt(i).info;
+                if (user.isMain() && !mRemovingUserIds.get(user.id)) {
+                    return user.id;
+                }
+            }
+        }
+        return UserHandle.USER_NULL;
+    }
+
+    @Override
+    public int getPreviousFullUserToEnterForeground() {
+        checkQueryOrCreateUsersPermission("get previous user");
+        int previousUser = UserHandle.USER_NULL;
+        long latestEnteredTime = 0;
+        final int currentUser = getCurrentUserId();
+        synchronized (mUsersLock) {
+            final int userSize = mUsers.size();
+            for (int i = 0; i < userSize; i++) {
+                final UserData userData = mUsers.valueAt(i);
+                final int userId = userData.info.id;
+                if (userId != currentUser && userData.info.isFull() && !userData.info.partial
+                        && !mRemovingUserIds.get(userId)) {
+                    final long userEnteredTime = userData.mLastEnteredForegroundTimeMillis;
+                    if (userEnteredTime > latestEnteredTime) {
+                        latestEnteredTime = userEnteredTime;
+                        previousUser = userId;
+                    }
+                }
+            }
+        }
+        return previousUser;
     }
 
     public @NonNull List<UserInfo> getUsers(boolean excludeDying) {
@@ -1913,6 +1968,63 @@ public class UserManagerService extends IUserManager.Stub {
             UserInfo userInfo = getUserInfoLU(userId);
             return userInfo != null && userInfo.preCreated;
         }
+    }
+
+    /**
+     * Returns whether switching users is currently allowed for the provided user.
+     * <p>
+     * Switching users is not allowed in the following cases:
+     * <li>the user is in a phone call</li>
+     * <li>{@link UserManager#DISALLOW_USER_SWITCH} is set</li>
+     * <li>system user hasn't been unlocked yet</li>
+     *
+     * @return A {@link UserManager.UserSwitchabilityResult} flag indicating if the user is
+     * switchable.
+     */
+    public @UserManager.UserSwitchabilityResult int getUserSwitchability(int userId) {
+        checkManageOrInteractPermissionIfCallerInOtherProfileGroup(userId, "getUserSwitchability");
+
+        final TimingsTraceAndSlog t = new TimingsTraceAndSlog();
+        t.traceBegin("getUserSwitchability-" + userId);
+
+        int flags = UserManager.SWITCHABILITY_STATUS_OK;
+
+        t.traceBegin("TM.isInCall");
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            final TelecomManager telecomManager = mContext.getSystemService(TelecomManager.class);
+            if (telecomManager != null && telecomManager.isInCall()) {
+                flags |= UserManager.SWITCHABILITY_STATUS_USER_IN_CALL;
+            }
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+        t.traceEnd();
+
+        t.traceBegin("hasUserRestriction-DISALLOW_USER_SWITCH");
+        if (mLocalService.hasUserRestriction(DISALLOW_USER_SWITCH, userId)) {
+            flags |= UserManager.SWITCHABILITY_STATUS_USER_SWITCH_DISALLOWED;
+        }
+        t.traceEnd();
+
+        // System User is always unlocked in Headless System User Mode, so ignore this flag
+        if (!isHeadlessSystemUserMode()) {
+            t.traceBegin("getInt-ALLOW_USER_SWITCHING_WHEN_SYSTEM_USER_LOCKED");
+            final boolean allowUserSwitchingWhenSystemUserLocked = Settings.Global.getInt(
+                    mContext.getContentResolver(),
+                    Settings.Global.ALLOW_USER_SWITCHING_WHEN_SYSTEM_USER_LOCKED, 0) != 0;
+            t.traceEnd();
+            t.traceBegin("isUserUnlocked-USER_SYSTEM");
+            final boolean systemUserUnlocked = mLocalService.isUserUnlocked(UserHandle.USER_SYSTEM);
+            t.traceEnd();
+
+            if (!allowUserSwitchingWhenSystemUserLocked && !systemUserUnlocked) {
+                flags |= UserManager.SWITCHABILITY_STATUS_SYSTEM_USER_LOCKED;
+            }
+        }
+        t.traceEnd();
+
+        return flags;
     }
 
     @VisibleForTesting
@@ -3339,13 +3451,13 @@ public class UserManagerService extends IUserManager.Stub {
                     Slogf.wtf(LOG_TAG, "emulateSystemUserModeIfNeeded(): no system user data");
                     return;
                 }
+                final int oldMainUserId = getMainUserIdUnchecked();
                 final int oldFlags = systemUserData.info.flags;
                 final int newFlags;
                 final String newUserType;
-                // TODO(b/256624031): Also handle FLAG_MAIN
                 if (newHeadlessSystemUserMode) {
                     newUserType = UserManager.USER_TYPE_SYSTEM_HEADLESS;
-                    newFlags = oldFlags & ~UserInfo.FLAG_FULL;
+                    newFlags = oldFlags & ~UserInfo.FLAG_FULL & ~UserInfo.FLAG_MAIN;
                 } else {
                     newUserType = UserManager.USER_TYPE_FULL_SYSTEM;
                     newFlags = oldFlags | UserInfo.FLAG_FULL;
@@ -3360,9 +3472,38 @@ public class UserManagerService extends IUserManager.Stub {
                         + "%s, flags changed from %s to %s",
                         systemUserData.info.userType, newUserType,
                         UserInfo.flagsToString(oldFlags), UserInfo.flagsToString(newFlags));
+
                 systemUserData.info.userType = newUserType;
                 systemUserData.info.flags = newFlags;
                 writeUserLP(systemUserData);
+
+                // Switch the MainUser to a reasonable choice if needed.
+                // (But if there was no MainUser, we deliberately continue to have no MainUser.)
+                final UserData oldMain = getUserDataNoChecks(oldMainUserId);
+                if (newHeadlessSystemUserMode) {
+                    if (oldMain != null && (oldMain.info.flags & UserInfo.FLAG_SYSTEM) != 0) {
+                        // System was MainUser. So we need a new choice for Main. Pick the oldest.
+                        // If no oldest, don't set any. Let the BootUserInitializer do that later.
+                        final UserInfo newMainUser = getEarliestCreatedFullUser();
+                        if (newMainUser != null) {
+                            Slogf.i(LOG_TAG, "Designating user " + newMainUser.id + " to be Main");
+                            newMainUser.flags |= UserInfo.FLAG_MAIN;
+                            writeUserLP(getUserDataNoChecks(newMainUser.id));
+                        }
+                    }
+                } else {
+                    // TODO(b/256624031): For now, we demand the Main user (if there is one) is
+                    //  always the system in non-HSUM. In the future, when we relax this, change how
+                    //  we handle MAIN.
+                    if (oldMain != null && (oldMain.info.flags & UserInfo.FLAG_SYSTEM) == 0) {
+                        // Someone else was the MainUser; transfer it to System.
+                        Slogf.i(LOG_TAG, "Transferring Main to user 0 from " + oldMain.info.id);
+                        oldMain.info.flags &= ~UserInfo.FLAG_MAIN;
+                        systemUserData.info.flags |= UserInfo.FLAG_MAIN;
+                        writeUserLP(oldMain);
+                        writeUserLP(systemUserData);
+                    }
+                }
             }
         }
 
@@ -3639,8 +3780,10 @@ public class UserManagerService extends IUserManager.Stub {
             // Add FLAG_MAIN
             if (isHeadlessSystemUserMode()) {
                 final UserInfo earliestCreatedUser = getEarliestCreatedFullUser();
-                earliestCreatedUser.flags |= UserInfo.FLAG_MAIN;
-                userIdsToWrite.add(earliestCreatedUser.id);
+                if (earliestCreatedUser != null) {
+                    earliestCreatedUser.flags |= UserInfo.FLAG_MAIN;
+                    userIdsToWrite.add(earliestCreatedUser.id);
+                }
             } else {
                 synchronized (mUsersLock) {
                     final UserData userData = mUsers.get(UserHandle.USER_SYSTEM);
@@ -3780,9 +3923,10 @@ public class UserManagerService extends IUserManager.Stub {
         userInfo.profileBadge = getFreeProfileBadgeLU(userInfo.profileGroupId, userInfo.userType);
     }
 
-    private UserInfo getEarliestCreatedFullUser() {
+    /** Returns the oldest Full Admin user, or null is if there none. */
+    private @Nullable UserInfo getEarliestCreatedFullUser() {
         final List<UserInfo> users = getUsersInternal(true, true, true);
-        UserInfo earliestUser = users.get(0);
+        UserInfo earliestUser = null;
         long earliestCreationTime = Long.MAX_VALUE;
         for (int i = 0; i < users.size(); i++) {
             final UserInfo info = users.get(i);
@@ -3922,6 +4066,8 @@ public class UserManagerService extends IUserManager.Stub {
             serializer.attribute(null, ATTR_LAST_LOGGED_IN_FINGERPRINT,
                     userInfo.lastLoggedInFingerprint);
         }
+        serializer.attributeLong(
+                null, ATTR_LAST_ENTERED_FOREGROUND_TIME, userData.mLastEnteredForegroundTimeMillis);
         if (userInfo.iconPath != null) {
             serializer.attribute(null,  ATTR_ICON_PATH, userInfo.iconPath);
         }
@@ -4095,6 +4241,7 @@ public class UserManagerService extends IUserManager.Stub {
         long lastLoggedInTime = 0L;
         long lastRequestQuietModeEnabledTimestamp = 0L;
         String lastLoggedInFingerprint = null;
+        long lastEnteredForegroundTime = 0L;
         int profileGroupId = UserInfo.NO_PROFILE_GROUP_ID;
         int profileBadge = 0;
         int restrictedProfileParentId = UserInfo.NO_PROFILE_GROUP_ID;
@@ -4140,6 +4287,8 @@ public class UserManagerService extends IUserManager.Stub {
             lastLoggedInTime = parser.getAttributeLong(null, ATTR_LAST_LOGGED_IN_TIME, 0);
             lastLoggedInFingerprint = parser.getAttributeValue(null,
                     ATTR_LAST_LOGGED_IN_FINGERPRINT);
+            lastEnteredForegroundTime =
+                    parser.getAttributeLong(null, ATTR_LAST_ENTERED_FOREGROUND_TIME, 0L);
             profileGroupId = parser.getAttributeInt(null, ATTR_PROFILE_GROUP_ID,
                     UserInfo.NO_PROFILE_GROUP_ID);
             profileBadge = parser.getAttributeInt(null, ATTR_PROFILE_BADGE, 0);
@@ -4234,6 +4383,7 @@ public class UserManagerService extends IUserManager.Stub {
         userData.seedAccountOptions = seedAccountOptions;
         userData.userProperties = userProperties;
         userData.setLastRequestQuietModeEnabledMillis(lastRequestQuietModeEnabledTimestamp);
+        userData.mLastEnteredForegroundTimeMillis = lastEnteredForegroundTime;
         if (ignorePrepareStorageErrors) {
             userData.setIgnorePrepareStorageErrors();
         }
@@ -6153,6 +6303,11 @@ public class UserManagerService extends IUserManager.Stub {
                         || someUserHasSeedAccountNoChecks(accountName, accountType));
     }
 
+    private void setLastEnteredForegroundTimeToNow(@NonNull UserData userData) {
+        userData.mLastEnteredForegroundTimeMillis = System.currentTimeMillis();
+        scheduleWriteUser(userData);
+    }
+
     @Override
     public void onShellCommand(FileDescriptor in, FileDescriptor out,
             FileDescriptor err, String[] args, ShellCallback callback,
@@ -6279,9 +6434,6 @@ public class UserManagerService extends IUserManager.Stub {
         synchronized (mUserLifecycleListeners) {
             pw.println("  user lifecycle events: " + mUserLifecycleListeners.size());
         }
-        synchronized (mUserVisibilityListeners) {
-            pw.println("  user visibility events: " + mUserVisibilityListeners.size());
-        }
 
         // Dump UserTypes
         pw.println();
@@ -6376,6 +6528,9 @@ public class UserManagerService extends IUserManager.Stub {
 
         pw.print("    Unlock time: ");
         dumpTimeAgo(pw, tempStringBuilder, nowRealtime, userData.unlockRealtime);
+
+        pw.print("    Last entered foreground: ");
+        dumpTimeAgo(pw, tempStringBuilder, now, userData.mLastEnteredForegroundTimeMillis);
 
         pw.print("    Has profile owner: ");
         pw.println(mIsUserManaged.get(userId));
@@ -6854,31 +7009,17 @@ public class UserManagerService extends IUserManager.Stub {
 
         @Override
         public void addUserVisibilityListener(UserVisibilityListener listener) {
-            synchronized (mUserVisibilityListeners) {
-                mUserVisibilityListeners.add(listener);
-            }
+            mUserVisibilityMediator.addListener(listener);
         }
 
         @Override
         public void removeUserVisibilityListener(UserVisibilityListener listener) {
-            synchronized (mUserVisibilityListeners) {
-                mUserVisibilityListeners.remove(listener);
-            }
+            mUserVisibilityMediator.removeListener(listener);
         }
 
         @Override
-        public void onUserVisibilityChanged(@UserIdInt int userId, boolean visible) {
-            EventLog.writeEvent(EventLogTags.UM_USER_VISIBILITY_CHANGED, userId, visible ? 1 : 0);
-            mHandler.post(() -> {
-                UserVisibilityListener[] listeners;
-                synchronized (mUserVisibilityListeners) {
-                    listeners = new UserVisibilityListener[mUserVisibilityListeners.size()];
-                    mUserVisibilityListeners.toArray(listeners);
-                }
-                for (UserVisibilityListener listener : listeners) {
-                    listener.onUserVisibilityChanged(userId, visible);
-                }
-            });
+        public void onSystemUserVisibilityChanged(boolean visible) {
+            mUserVisibilityMediator.onSystemUserVisibilityChanged(visible);
         }
 
         @Override
@@ -6898,6 +7039,12 @@ public class UserManagerService extends IUserManager.Stub {
             }
             return userTypes;
         }
+
+        @Override
+        public @UserIdInt int getMainUserId() {
+            return getMainUserIdUnchecked();
+        }
+
     } // class LocalService
 
 

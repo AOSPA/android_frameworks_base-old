@@ -38,9 +38,6 @@ import static com.android.server.am.UserController.USER_COMPLETED_EVENT_MSG;
 import static com.android.server.am.UserController.USER_CURRENT_MSG;
 import static com.android.server.am.UserController.USER_START_MSG;
 import static com.android.server.am.UserController.USER_SWITCH_TIMEOUT_MSG;
-import static com.android.server.am.UserController.USER_VISIBILITY_CHANGED_MSG;
-import static com.android.server.pm.UserManagerInternal.USER_ASSIGNMENT_RESULT_SUCCESS_INVISIBLE;
-import static com.android.server.pm.UserManagerInternal.USER_ASSIGNMENT_RESULT_SUCCESS_VISIBLE;
 
 import static com.google.android.collect.Lists.newArrayList;
 import static com.google.android.collect.Sets.newHashSet;
@@ -102,7 +99,6 @@ import com.android.server.FgThread;
 import com.android.server.SystemService;
 import com.android.server.am.UserState.KeyEvictedCallback;
 import com.android.server.pm.UserManagerInternal;
-import com.android.server.pm.UserManagerInternal.UserAssignmentResult;
 import com.android.server.pm.UserManagerService;
 import com.android.server.wm.WindowManagerService;
 
@@ -117,6 +113,8 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Tests for {@link UserController}.
@@ -150,8 +148,10 @@ public class UserControllerTest {
 
     private static final List<String> START_FOREGROUND_USER_ACTIONS = newArrayList(
             Intent.ACTION_USER_STARTED,
-            Intent.ACTION_USER_SWITCHED,
             Intent.ACTION_USER_STARTING);
+
+    private static final List<String> START_FOREGROUND_USER_DEFERRED_ACTIONS = newArrayList(
+            Intent.ACTION_USER_SWITCHED);
 
     private static final List<String> START_BACKGROUND_USER_ACTIONS = newArrayList(
             Intent.ACTION_USER_STARTED,
@@ -162,16 +162,10 @@ public class UserControllerTest {
             REPORT_USER_SWITCH_MSG,
             USER_SWITCH_TIMEOUT_MSG,
             USER_START_MSG,
-            USER_VISIBILITY_CHANGED_MSG,
             USER_CURRENT_MSG);
 
-    private static final Set<Integer> START_INVISIBLE_BACKGROUND_USER_MESSAGE_CODES = newHashSet(
+    private static final Set<Integer> START_BACKGROUND_USER_MESSAGE_CODES = newHashSet(
             USER_START_MSG,
-            REPORT_LOCKED_BOOT_COMPLETE_MSG);
-
-    private static final Set<Integer> START_VISIBLE_BACKGROUND_USER_MESSAGE_CODES = newHashSet(
-            USER_START_MSG,
-            USER_VISIBILITY_CHANGED_MSG,
             REPORT_LOCKED_BOOT_COMPLETE_MSG);
 
     @Before
@@ -225,14 +219,12 @@ public class UserControllerTest {
 
     @Test
     public void testStartUser_background() {
-        mockAssignUserToMainDisplay(TEST_USER_ID, /* foreground= */ false,
-                USER_ASSIGNMENT_RESULT_SUCCESS_INVISIBLE);
         boolean started = mUserController.startUser(TEST_USER_ID, /* foreground= */ false);
         assertWithMessage("startUser(%s, foreground=false)", TEST_USER_ID).that(started).isTrue();
         verify(mInjector.getWindowManager(), never()).startFreezingScreen(anyInt(), anyInt());
         verify(mInjector.getWindowManager(), never()).setSwitchingUser(anyBoolean());
         verify(mInjector, never()).clearAllLockedTasks(anyString());
-        startBackgroundUserAssertions(/*visible= */ false);
+        startBackgroundUserAssertions();
         verifyUserAssignedToDisplay(TEST_USER_ID, Display.DEFAULT_DISPLAY);
     }
 
@@ -263,11 +255,10 @@ public class UserControllerTest {
                 .isTrue();
         verifyUserAssignedToDisplay(TEST_USER_ID, 42);
 
-        // TODO(b/239982558): might need to change assertions
         verify(mInjector.getWindowManager(), never()).startFreezingScreen(anyInt(), anyInt());
         verify(mInjector.getWindowManager(), never()).setSwitchingUser(anyBoolean());
         verify(mInjector, never()).clearAllLockedTasks(anyString());
-        startBackgroundUserAssertions(/*visible= */ true);
+        startBackgroundUserAssertions();
     }
 
     @Test
@@ -293,8 +284,6 @@ public class UserControllerTest {
 
     @Test
     public void testStartPreCreatedUser_background() throws Exception {
-        mockAssignUserToMainDisplay(TEST_PRE_CREATED_USER_ID, /* foreground= */ false,
-                USER_ASSIGNMENT_RESULT_SUCCESS_INVISIBLE);
         assertTrue(mUserController.startUser(TEST_PRE_CREATED_USER_ID, /* foreground= */ false));
         // Make sure no intents have been fired for pre-created users.
         assertTrue(mInjector.mSentIntents.isEmpty());
@@ -322,10 +311,8 @@ public class UserControllerTest {
         assertEquals("Unexpected message sent", expectedMessageCodes, actualCodes);
     }
 
-    private void startBackgroundUserAssertions(boolean visible) {
-        startUserAssertions(START_BACKGROUND_USER_ACTIONS,
-                visible ? START_VISIBLE_BACKGROUND_USER_MESSAGE_CODES
-                        : START_INVISIBLE_BACKGROUND_USER_MESSAGE_CODES);
+    private void startBackgroundUserAssertions() {
+        startUserAssertions(START_BACKGROUND_USER_ACTIONS, START_BACKGROUND_USER_MESSAGE_CODES);
     }
 
     private void startForegroundUserAssertions() {
@@ -413,11 +400,11 @@ public class UserControllerTest {
     private void continueAndCompleteUserSwitch(UserState userState, int oldUserId, int newUserId) {
         mUserController.continueUserSwitch(userState, oldUserId, newUserId);
         mInjector.mHandler.removeMessages(UserController.COMPLETE_USER_SWITCH_MSG);
-        mUserController.completeUserSwitch(newUserId);
+        mUserController.completeUserSwitch(oldUserId, newUserId);
     }
 
     @Test
-    public void testContinueUserSwitch() throws RemoteException {
+    public void testContinueUserSwitch() {
         mUserController.setInitialConfig(/* userSwitchUiEnabled= */ true,
                 /* maxRunningUsers= */ 3, /* delayUserDataLocking= */ false);
         // Start user -- this will update state of mUserController
@@ -432,12 +419,12 @@ public class UserControllerTest {
         continueAndCompleteUserSwitch(userState, oldUserId, newUserId);
         verify(mInjector, times(0)).dismissKeyguard(any(), anyString());
         verify(mInjector.getWindowManager(), times(1)).stopFreezingScreen();
-        continueUserSwitchAssertions(TEST_USER_ID, false);
-        verifySystemUserVisibilityChangedNotified(/* visible= */ false);
+        continueUserSwitchAssertions(oldUserId, TEST_USER_ID, false);
+        verifySystemUserVisibilityChangesNeverNotified();
     }
 
     @Test
-    public void testContinueUserSwitchDismissKeyguard() throws RemoteException {
+    public void testContinueUserSwitchDismissKeyguard() {
         when(mInjector.mKeyguardManagerMock.isDeviceSecure(anyInt())).thenReturn(false);
         mUserController.setInitialConfig(/* userSwitchUiEnabled= */ true,
                 /* maxRunningUsers= */ 3, /* delayUserDataLocking= */ false);
@@ -453,12 +440,12 @@ public class UserControllerTest {
         continueAndCompleteUserSwitch(userState, oldUserId, newUserId);
         verify(mInjector, times(1)).dismissKeyguard(any(), anyString());
         verify(mInjector.getWindowManager(), times(1)).stopFreezingScreen();
-        continueUserSwitchAssertions(TEST_USER_ID, false);
-        verifySystemUserVisibilityChangedNotified(/* visible= */ false);
+        continueUserSwitchAssertions(oldUserId, TEST_USER_ID, false);
+        verifySystemUserVisibilityChangesNeverNotified();
     }
 
     @Test
-    public void testContinueUserSwitchUIDisabled() throws RemoteException {
+    public void testContinueUserSwitchUIDisabled() {
         mUserController.setInitialConfig(/* userSwitchUiEnabled= */ false,
                 /* maxRunningUsers= */ 3, /* delayUserDataLocking= */ false);
 
@@ -473,11 +460,11 @@ public class UserControllerTest {
         // Verify that continueUserSwitch worked as expected
         continueAndCompleteUserSwitch(userState, oldUserId, newUserId);
         verify(mInjector.getWindowManager(), never()).stopFreezingScreen();
-        continueUserSwitchAssertions(TEST_USER_ID, false);
+        continueUserSwitchAssertions(oldUserId, TEST_USER_ID, false);
     }
 
-    private void continueUserSwitchAssertions(int expectedUserId, boolean backgroundUserStopping)
-            throws RemoteException {
+    private void continueUserSwitchAssertions(int expectedOldUserId, int expectedNewUserId,
+            boolean backgroundUserStopping) {
         Set<Integer> expectedCodes = new LinkedHashSet<>();
         expectedCodes.add(COMPLETE_USER_SWITCH_MSG);
         expectedCodes.add(REPORT_USER_SWITCH_COMPLETE_MSG);
@@ -489,7 +476,8 @@ public class UserControllerTest {
         assertEquals("Unexpected message sent", expectedCodes, actualCodes);
         Message msg = mInjector.mHandler.getMessageForCode(REPORT_USER_SWITCH_COMPLETE_MSG);
         assertNotNull(msg);
-        assertEquals("Unexpected userId", expectedUserId, msg.arg1);
+        assertEquals("Unexpected oldUserId", expectedOldUserId, msg.arg1);
+        assertEquals("Unexpected newUserId", expectedNewUserId, msg.arg2);
     }
 
     @Test
@@ -502,16 +490,21 @@ public class UserControllerTest {
         mUserController.startUser(TEST_USER_ID, true);
         Message reportMsg = mInjector.mHandler.getMessageForCode(REPORT_USER_SWITCH_MSG);
         assertNotNull(reportMsg);
+        int oldUserId = reportMsg.arg1;
         int newUserId = reportMsg.arg2;
         mInjector.mHandler.clearAllRecordedMessages();
         // Mockito can't reset only interactions, so just verify that this hasn't been
         // called with 'false' until after dispatchUserSwitchComplete.
         verify(mInjector.getWindowManager(), never()).setSwitchingUser(false);
         // Call dispatchUserSwitchComplete
-        mUserController.dispatchUserSwitchComplete(newUserId);
+        mUserController.dispatchUserSwitchComplete(oldUserId, newUserId);
         verify(observer, times(1)).onUserSwitchComplete(anyInt());
         verify(observer).onUserSwitchComplete(TEST_USER_ID);
         verify(mInjector.getWindowManager(), times(1)).setSwitchingUser(false);
+        startUserAssertions(Stream.concat(
+                        START_FOREGROUND_USER_ACTIONS.stream(),
+                        START_FOREGROUND_USER_DEFERRED_ACTIONS.stream()
+                ).collect(Collectors.toList()), Collections.emptySet());
     }
 
     @Test
@@ -561,7 +554,7 @@ public class UserControllerTest {
         assertFalse(mUserController.canStartMoreUsers());
         assertEquals(Arrays.asList(new Integer[] {0, TEST_USER_ID1, TEST_USER_ID2}),
                 mUserController.getRunningUsersLU());
-        verifySystemUserVisibilityChangedNotified(/* visible= */ false);
+        verifySystemUserVisibilityChangesNeverNotified();
     }
 
     /**
@@ -645,6 +638,39 @@ public class UserControllerTest {
                 /* keyEvictedCallback= */ mKeyEvictedCallback, /* expectLocking= */ true);
     }
 
+    @Test
+    public void testStopUser_invalidUser() {
+        int userId = -1;
+
+        assertThrows(IllegalArgumentException.class,
+                () -> mUserController.stopUser(userId, /* force= */ true,
+                        /* allowDelayedLocking= */ true, /* stopUserCallback= */ null,
+                        /* keyEvictedCallback= */ null));
+    }
+
+    @Test
+    public void testStopUser_systemUser() {
+        int userId = UserHandle.USER_SYSTEM;
+
+        int r = mUserController.stopUser(userId, /* force= */ true,
+                /* allowDelayedLocking= */ true, /* stopUserCallback= */ null,
+                /* keyEvictedCallback= */ null);
+
+        assertThat(r).isEqualTo(ActivityManager.USER_OP_ERROR_IS_SYSTEM);
+    }
+
+    @Test
+    public void testStopUser_currentUser() {
+        setUpUser(TEST_USER_ID1, /* flags= */ 0);
+        mUserController.startUser(TEST_USER_ID1, /* foreground= */ true);
+
+        int r = mUserController.stopUser(TEST_USER_ID1, /* force= */ true,
+                /* allowDelayedLocking= */ true, /* stopUserCallback= */ null,
+                /* keyEvictedCallback= */ null);
+
+        assertThat(r).isEqualTo(ActivityManager.USER_OP_IS_CURRENT);
+    }
+
     /**
      * Test conditional delayed locking with mDelayUserDataLocking true.
      */
@@ -709,24 +735,19 @@ public class UserControllerTest {
 
     @Test
     public void testStartProfile() throws Exception {
-        mockAssignUserToMainDisplay(TEST_PRE_CREATED_USER_ID, /* foreground= */ false,
-                USER_ASSIGNMENT_RESULT_SUCCESS_INVISIBLE);
         setUpAndStartProfileInBackground(TEST_USER_ID1);
 
-        startBackgroundUserAssertions(/*visible= */ true);
+        startBackgroundUserAssertions();
         verifyUserAssignedToDisplay(TEST_USER_ID1, Display.DEFAULT_DISPLAY);
     }
 
     @Test
     public void testStartProfile_whenUsersOnSecondaryDisplaysIsEnabled() throws Exception {
-        mockAssignUserToMainDisplay(TEST_USER_ID1, /* foreground= */ false,
-                USER_ASSIGNMENT_RESULT_SUCCESS_VISIBLE);
-
         mockIsUsersOnSecondaryDisplaysEnabled(true);
 
         setUpAndStartProfileInBackground(TEST_USER_ID1);
 
-        startBackgroundUserAssertions(/*visible= */ true);
+        startBackgroundUserAssertions();
         verifyUserAssignedToDisplay(TEST_USER_ID1, Display.DEFAULT_DISPLAY);
     }
 
@@ -923,8 +944,7 @@ public class UserControllerTest {
     }
 
     private void addForegroundUserAndContinueUserSwitch(int newUserId, int expectedOldUserId,
-            int expectedNumberOfCalls, boolean expectOldUserStopping)
-            throws RemoteException {
+            int expectedNumberOfCalls, boolean expectOldUserStopping) {
         // Start user -- this will update state of mUserController
         mUserController.startUser(newUserId, true);
         Message reportMsg = mInjector.mHandler.getMessageForCode(REPORT_USER_SWITCH_MSG);
@@ -939,7 +959,7 @@ public class UserControllerTest {
         continueAndCompleteUserSwitch(userState, oldUserId, newUserId);
         verify(mInjector.getWindowManager(), times(expectedNumberOfCalls))
                 .stopFreezingScreen();
-        continueUserSwitchAssertions(newUserId, expectOldUserStopping);
+        continueUserSwitchAssertions(oldUserId, newUserId, expectOldUserStopping);
     }
 
     private void setUpUser(@UserIdInt int userId, @UserInfoFlag int flags) {
@@ -983,13 +1003,6 @@ public class UserControllerTest {
         when(mInjector.isUsersOnSecondaryDisplaysEnabled()).thenReturn(value);
     }
 
-    private void mockAssignUserToMainDisplay(@UserIdInt int userId, boolean foreground,
-            @UserAssignmentResult int result) {
-        when(mInjector.mUserManagerInternalMock.assignUserToDisplayOnStart(eq(userId),
-                /* profileGroupId= */ anyInt(), eq(foreground), eq(Display.DEFAULT_DISPLAY)))
-                        .thenReturn(result);
-    }
-
     private void verifyUserAssignedToDisplay(@UserIdInt int userId, int displayId) {
         verify(mInjector.getUserManagerInternal()).assignUserToDisplayOnStart(eq(userId), anyInt(),
                 anyBoolean(), eq(displayId));
@@ -1008,8 +1021,8 @@ public class UserControllerTest {
         verify(mInjector.getUserManagerInternal(), never()).unassignUserFromDisplayOnStop(userId);
     }
 
-    private void verifySystemUserVisibilityChangedNotified(boolean visible) {
-        verify(mInjector).onUserVisibilityChanged(UserHandle.USER_SYSTEM, visible);
+    private void verifySystemUserVisibilityChangesNeverNotified() {
+        verify(mInjector, never()).onSystemUserVisibilityChanged(anyBoolean());
     }
 
     // Should be public to allow mocking
@@ -1154,8 +1167,8 @@ public class UserControllerTest {
         }
 
         @Override
-        void onUserVisibilityChanged(@UserIdInt int userId, boolean visible) {
-            Log.i(TAG, "onUserVisibilityChanged(" + userId + ", " + visible + ")");
+        void onSystemUserVisibilityChanged(boolean visible) {
+            Log.i(TAG, "onSystemUserVisibilityChanged(" + visible + ")");
         }
     }
 

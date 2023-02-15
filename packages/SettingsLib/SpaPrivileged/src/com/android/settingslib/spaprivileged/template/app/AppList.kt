@@ -49,10 +49,19 @@ import kotlinx.coroutines.Dispatchers
 private const val TAG = "AppList"
 private const val CONTENT_TYPE_HEADER = "header"
 
-internal data class AppListState(
+data class AppListState(
     val showSystem: State<Boolean>,
     val option: State<Int>,
     val searchQuery: State<String>,
+)
+
+data class AppListInput<T : AppRecord>(
+    val config: AppListConfig,
+    val listModel: AppListModel<T>,
+    val state: AppListState,
+    val header: @Composable () -> Unit,
+    val appItem: @Composable AppListItemModel<T>.() -> Unit,
+    val bottomPadding: Dp,
 )
 
 /**
@@ -61,16 +70,13 @@ internal data class AppListState(
  * This UI element will take the remaining space on the screen to show the App List.
  */
 @Composable
-internal fun <T : AppRecord> AppList(
-    config: AppListConfig,
-    listModel: AppListModel<T>,
-    state: AppListState,
-    header: @Composable () -> Unit,
-    appItem: @Composable (itemState: AppListItemModel<T>) -> Unit,
-    bottomPadding: Dp,
-    appListDataSupplier: @Composable () -> State<AppListData<T>?> = {
-        loadAppListData(config, listModel, state)
-    },
+fun <T : AppRecord> AppListInput<T>.AppList() {
+    AppListImpl { loadAppListData(config, listModel, state) }
+}
+
+@Composable
+internal fun <T : AppRecord> AppListInput<T>.AppListImpl(
+    appListDataSupplier: @Composable () -> State<AppListData<T>?>,
 ) {
     LogCompositions(TAG, config.userId.toString())
     val appListData = appListDataSupplier()

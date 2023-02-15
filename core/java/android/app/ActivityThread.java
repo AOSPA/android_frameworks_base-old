@@ -503,6 +503,7 @@ public final class ActivityThread extends ClientTransactionHandler
 
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     static volatile Handler sMainThreadHandler;  // set once in main()
+    private long mStartSeq; // Only accesssed from the main thread
 
     Bundle mCoreSettings = null;
 
@@ -1020,6 +1021,12 @@ public final class ActivityThread extends ClientTransactionHandler
         int flags;
     }
 
+    // A list of receivers and an index into the receiver to be processed next.
+    static final class ReceiverList {
+        List<ReceiverInfo> receivers;
+        int index;
+    }
+
     private class ApplicationThread extends IApplicationThread.Stub {
         private static final String DB_CONNECTION_INFO_HEADER = "  %8s %8s %14s %5s %5s %5s  %s";
         private static final String DB_CONNECTION_INFO_FORMAT = "  %8s %8s %14s %5d %5d %5d  %s";
@@ -1034,6 +1041,21 @@ public final class ActivityThread extends ClientTransactionHandler
                     sync, false, mAppThread.asBinder(), sendingUser);
             r.info = info;
             sendMessage(H.RECEIVER, r);
+        }
+
+        public final void scheduleReceiverList(List<ReceiverInfo> info) throws RemoteException {
+            for (int i = 0; i < info.size(); i++) {
+                ReceiverInfo r = info.get(i);
+                if (r.registered) {
+                    scheduleRegisteredReceiver(r.receiver, r.intent,
+                            r.resultCode, r.data, r.extras, r.ordered, r.sticky,
+                            r.sendingUser, r.processState);
+                } else {
+                    scheduleReceiver(r.intent, r.activityInfo, r.compatInfo,
+                            r.resultCode, r.data, r.extras, r.sync,
+                            r.sendingUser, r.processState);
+                }
+            }
         }
 
         public final void scheduleCreateBackupAgent(ApplicationInfo app,
@@ -4763,14 +4785,16 @@ public final class ActivityThread extends ClientTransactionHandler
         if (s != null) {
             try {
                 if (localLOGV) Slog.v(TAG, "Timeout short service " + s);
-                s.callOnTimeout(startId);
 
-                // TODO(short-service): Do we need "service executing" for timeout?
-                // (see handleStopService())
+                // Unlike other service callbacks, we don't do serviceDoneExecuting() here.
+                // "service executing" state is used to boost the procstate / oom-adj, but
+                // for short-FGS timeout, we have a specific control for them anyway, so
+                // we don't have to do that.
+                s.callOnTimeout(startId);
             } catch (Exception e) {
                 if (!mInstrumentation.onException(s, e)) {
                     throw new RuntimeException(
-                            "Unable to timeout service " + s
+                            "Unable to call onTimeout on service " + s
                                     + ": " + e.toString(), e);
                 }
                 Slog.i(TAG, "handleTimeoutService: exception for " + token, e);
@@ -6692,34 +6716,6 @@ public final class ActivityThread extends ClientTransactionHandler
         StrictMode.initThreadDefaults(data.appInfo);
         StrictMode.initVmDefaults(data.appInfo);
 
-        if (data.debugMode != ApplicationThreadConstants.DEBUG_OFF) {
-            // XXX should have option to change the port.
-            Debug.changeDebugPort(8100);
-            if (data.debugMode == ApplicationThreadConstants.DEBUG_WAIT) {
-                Slog.w(TAG, "Application " + data.info.getPackageName()
-                      + " is waiting for the debugger on port 8100...");
-
-                IActivityManager mgr = ActivityManager.getService();
-                try {
-                    mgr.showWaitingForDebugger(mAppThread, true);
-                } catch (RemoteException ex) {
-                    throw ex.rethrowFromSystemServer();
-                }
-
-                Debug.waitForDebugger();
-
-                try {
-                    mgr.showWaitingForDebugger(mAppThread, false);
-                } catch (RemoteException ex) {
-                    throw ex.rethrowFromSystemServer();
-                }
-
-            } else {
-                Slog.w(TAG, "Application " + data.info.getPackageName()
-                      + " can be debugged on port 8100...");
-            }
-        }
-
         // Allow binder tracing, and application-generated systrace messages if we're profileable.
         boolean isAppDebuggable = (data.appInfo.flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
         boolean isAppProfileable = isAppDebuggable || data.appInfo.isProfileable();
@@ -6750,6 +6746,13 @@ public final class ActivityThread extends ClientTransactionHandler
             ii = prepareInstrumentation(data);
         } else {
             ii = null;
+        }
+
+        final IActivityManager mgr = ActivityManager.getService();
+        try {
+            mgr.finishAttachApplication(mStartSeq);
+        } catch (RemoteException ex) {
+            throw ex.rethrowFromSystemServer();
         }
 
         final ContextImpl appContext = ContextImpl.createAppContext(this, data.info);
@@ -6828,6 +6831,35 @@ public final class ActivityThread extends ClientTransactionHandler
         Application app;
         final StrictMode.ThreadPolicy savedPolicy = StrictMode.allowThreadDiskWrites();
         final StrictMode.ThreadPolicy writesAllowedPolicy = StrictMode.getThreadPolicy();
+
+        // Wait for debugger after we have notified the system to finish attach application
+        if (data.debugMode != ApplicationThreadConstants.DEBUG_OFF) {
+            // XXX should have option to change the port.
+            Debug.changeDebugPort(8100);
+            if (data.debugMode == ApplicationThreadConstants.DEBUG_WAIT) {
+                Slog.w(TAG, "Application " + data.info.getPackageName()
+                        + " is waiting for the debugger on port 8100...");
+
+                try {
+                    mgr.showWaitingForDebugger(mAppThread, true);
+                } catch (RemoteException ex) {
+                    throw ex.rethrowFromSystemServer();
+                }
+
+                Debug.waitForDebugger();
+
+                try {
+                    mgr.showWaitingForDebugger(mAppThread, false);
+                } catch (RemoteException ex) {
+                    throw ex.rethrowFromSystemServer();
+                }
+
+            } else {
+                Slog.w(TAG, "Application " + data.info.getPackageName()
+                        + " can be debugged on port 8100...");
+            }
+        }
+
         try {
             // If the app is being launched for full backup or restore, bring it up in
             // a restricted environment with the base application class.
@@ -7695,6 +7727,8 @@ public final class ActivityThread extends ClientTransactionHandler
         sCurrentActivityThread = this;
         mConfigurationController = new ConfigurationController(this);
         mSystemThread = system;
+        mStartSeq = startSeq;
+
         if (!system) {
             android.ddm.DdmHandleAppName.setAppName("<pre-initialized>",
                                                     UserHandle.myUserId());

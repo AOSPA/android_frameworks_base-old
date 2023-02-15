@@ -187,8 +187,8 @@ public final class SurfaceControl implements Parcelable {
             int L, int T, int R, int B);
     private static native void nativeSetDisplaySize(long transactionObj, IBinder displayToken,
             int width, int height);
-    private static native StaticDisplayInfo nativeGetStaticDisplayInfo(IBinder displayToken);
-    private static native DynamicDisplayInfo nativeGetDynamicDisplayInfo(IBinder displayToken);
+    private static native StaticDisplayInfo nativeGetStaticDisplayInfo(long displayId);
+    private static native DynamicDisplayInfo nativeGetDynamicDisplayInfo(long displayId);
     private static native DisplayedContentSamplingAttributes
             nativeGetDisplayedContentSamplingAttributes(IBinder displayToken);
     private static native boolean nativeSetDisplayedContentSamplingEnabled(IBinder displayToken,
@@ -1507,6 +1507,7 @@ public final class SurfaceControl implements Parcelable {
     public static final class DynamicDisplayInfo {
         public DisplayMode[] supportedDisplayModes;
         public int activeDisplayModeId;
+        public float renderFrameRate;
 
         public int[] supportedColorModes;
         public int activeColorMode;
@@ -1523,6 +1524,7 @@ public final class SurfaceControl implements Parcelable {
             return "DynamicDisplayInfo{"
                     + "supportedDisplayModes=" + Arrays.toString(supportedDisplayModes)
                     + ", activeDisplayModeId=" + activeDisplayModeId
+                    + ", renderFrameRate=" + renderFrameRate
                     + ", supportedColorModes=" + Arrays.toString(supportedColorModes)
                     + ", activeColorMode=" + activeColorMode
                     + ", hdrCapabilities=" + hdrCapabilities
@@ -1538,6 +1540,7 @@ public final class SurfaceControl implements Parcelable {
             DynamicDisplayInfo that = (DynamicDisplayInfo) o;
             return Arrays.equals(supportedDisplayModes, that.supportedDisplayModes)
                 && activeDisplayModeId == that.activeDisplayModeId
+                && renderFrameRate == that.renderFrameRate
                 && Arrays.equals(supportedColorModes, that.supportedColorModes)
                 && activeColorMode == that.activeColorMode
                 && Objects.equals(hdrCapabilities, that.hdrCapabilities)
@@ -1547,7 +1550,7 @@ public final class SurfaceControl implements Parcelable {
         @Override
         public int hashCode() {
             return Objects.hash(Arrays.hashCode(supportedDisplayModes), activeDisplayModeId,
-                    activeColorMode, hdrCapabilities);
+                    renderFrameRate, activeColorMode, hdrCapabilities);
         }
     }
 
@@ -1566,6 +1569,7 @@ public final class SurfaceControl implements Parcelable {
         public float refreshRate;
         public long appVsyncOffsetNanos;
         public long presentationDeadlineNanos;
+        public int[] supportedHdrTypes;
 
         /**
          * The config group ID this config is associated to.
@@ -1585,6 +1589,7 @@ public final class SurfaceControl implements Parcelable {
                     + ", refreshRate=" + refreshRate
                     + ", appVsyncOffsetNanos=" + appVsyncOffsetNanos
                     + ", presentationDeadlineNanos=" + presentationDeadlineNanos
+                    + ", supportedHdrTypes=" + Arrays.toString(supportedHdrTypes)
                     + ", group=" + group + "}";
         }
 
@@ -1601,13 +1606,14 @@ public final class SurfaceControl implements Parcelable {
                     && Float.compare(that.refreshRate, refreshRate) == 0
                     && appVsyncOffsetNanos == that.appVsyncOffsetNanos
                     && presentationDeadlineNanos == that.presentationDeadlineNanos
+                    && Arrays.equals(supportedHdrTypes, that.supportedHdrTypes)
                     && group == that.group;
         }
 
         @Override
         public int hashCode() {
             return Objects.hash(id, width, height, xDpi, yDpi, refreshRate, appVsyncOffsetNanos,
-                    presentationDeadlineNanos, group);
+                    presentationDeadlineNanos, group, Arrays.hashCode(supportedHdrTypes));
         }
     }
 
@@ -1624,21 +1630,15 @@ public final class SurfaceControl implements Parcelable {
     /**
      * @hide
      */
-    public static StaticDisplayInfo getStaticDisplayInfo(IBinder displayToken) {
-        if (displayToken == null) {
-            throw new IllegalArgumentException("displayToken must not be null");
-        }
-        return nativeGetStaticDisplayInfo(displayToken);
+    public static StaticDisplayInfo getStaticDisplayInfo(long displayId) {
+        return nativeGetStaticDisplayInfo(displayId);
     }
 
     /**
      * @hide
      */
-    public static DynamicDisplayInfo getDynamicDisplayInfo(IBinder displayToken) {
-        if (displayToken == null) {
-            throw new IllegalArgumentException("displayToken must not be null");
-        }
-        return nativeGetDynamicDisplayInfo(displayToken);
+    public static DynamicDisplayInfo getDynamicDisplayInfo(long displayId) {
+        return nativeGetDynamicDisplayInfo(displayId);
     }
 
     /**

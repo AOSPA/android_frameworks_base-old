@@ -73,6 +73,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * @hide
@@ -103,6 +104,9 @@ public class BinaryTransparencyService extends SystemService {
     static final String BUNDLE_CONTENT_DIGEST_ALGORITHM = "content-digest-algo";
     @VisibleForTesting
     static final String BUNDLE_CONTENT_DIGEST = "content-digest";
+
+    static final String APEX_PRELOAD_LOCATION = "/system/apex/";
+    static final String APEX_PRELOAD_LOCATION_ERROR = "could-not-be-determined";
 
     // used for indicating any type of error during MBA measurement
     static final int MBA_STATUS_ERROR = 0;
@@ -306,27 +310,27 @@ public class BinaryTransparencyService extends SystemService {
                 Bundle packageMeasurement = measurePackage(packageInfo);
                 results.add(packageMeasurement);
 
-                if (record) {
+                if (record && (mba_status == MBA_STATUS_UPDATED_PRELOAD)) {
                     // compute digests of signing info
                     String[] signerDigestHexStrings = computePackageSignerSha256Digests(
                             packageInfo.signingInfo);
 
                     // now we should have all the bits for the atom
-                    /*  TODO: Uncomment and test after merging new atom definition.
+                    byte[] cDigest = packageMeasurement.getByteArray(BUNDLE_CONTENT_DIGEST);
                     FrameworkStatsLog.write(FrameworkStatsLog.MOBILE_BUNDLED_APP_INFO_GATHERED,
                             packageInfo.packageName,
                             packageInfo.getLongVersionCode(),
-                            HexEncoding.encodeToString(packageMeasurement.getByteArray(
-                                    BUNDLE_CONTENT_DIGEST), false),
+                            (cDigest != null) ? HexEncoding.encodeToString(
+                                    packageMeasurement.getByteArray(BUNDLE_CONTENT_DIGEST),
+                                    false) : null,
                             packageMeasurement.getInt(BUNDLE_CONTENT_DIGEST_ALGORITHM),
                             signerDigestHexStrings, // signer_cert_digest
-                            mba_status,                 // mba_status
+                            mba_status,             // mba_status
                             null,                   // initiator
                             null,                   // initiator_signer_digest
                             null,                   // installer
                             null                    // originator
                     );
-                     */
                 }
             }
             if (DEBUG) {
@@ -373,12 +377,13 @@ public class BinaryTransparencyService extends SystemService {
                     }
 
                     // we should now have all the info needed for the atom
-                    /*  TODO: Uncomment and test after merging new atom definition.
+                    byte[] cDigest = packageMeasurement.getByteArray(BUNDLE_CONTENT_DIGEST);
                     FrameworkStatsLog.write(FrameworkStatsLog.MOBILE_BUNDLED_APP_INFO_GATHERED,
                             packageInfo.packageName,
                             packageInfo.getLongVersionCode(),
-                            HexEncoding.encodeToString(packageMeasurement.getByteArray(
-                                    BUNDLE_CONTENT_DIGEST), false),
+                            (cDigest != null) ? HexEncoding.encodeToString(
+                                    packageMeasurement.getByteArray(BUNDLE_CONTENT_DIGEST),
+                                    false) : null,
                             packageMeasurement.getInt(BUNDLE_CONTENT_DIGEST_ALGORITHM),
                             signerDigestHexStrings,
                             MBA_STATUS_NEW_INSTALL,   // mba_status
@@ -387,7 +392,6 @@ public class BinaryTransparencyService extends SystemService {
                             installer,
                             originator
                     );
-                     */
                 }
             }
             if (DEBUG) {
@@ -472,6 +476,7 @@ public class BinaryTransparencyService extends SystemService {
                 }
 
                 private void printPackageMeasurements(PackageInfo packageInfo,
+                                                      boolean useSha256,
                                                       final PrintWriter pw) {
                     Map<Integer, byte[]> contentDigests = computeApkContentDigest(
                             packageInfo.applicationInfo.sourceDir);
@@ -481,32 +486,27 @@ public class BinaryTransparencyService extends SystemService {
                         return;
                     }
 
+                    if (useSha256) {
+                        byte[] fileBuff = PackageUtils.createLargeFileBuffer();
+                        String hexEncodedSha256Digest =
+                                PackageUtils.computeSha256DigestForLargeFile(
+                                        packageInfo.applicationInfo.sourceDir, fileBuff);
+                        pw.print(hexEncodedSha256Digest + ",");
+                    }
+
                     for (Map.Entry<Integer, byte[]> entry : contentDigests.entrySet()) {
                         Integer algorithmId = entry.getKey();
                         byte[] contentDigest = entry.getValue();
 
-                        // TODO(b/259348134): consider refactoring the following to a helper method
-                        switch (algorithmId) {
-                            case ApkSigningBlockUtils.CONTENT_DIGEST_CHUNKED_SHA256:
-                                pw.print("CHUNKED_SHA256:");
-                                break;
-                            case ApkSigningBlockUtils.CONTENT_DIGEST_CHUNKED_SHA512:
-                                pw.print("CHUNKED_SHA512:");
-                                break;
-                            case ApkSigningBlockUtils.CONTENT_DIGEST_VERITY_CHUNKED_SHA256:
-                                pw.print("VERITY_CHUNKED_SHA256:");
-                                break;
-                            case ApkSigningBlockUtils.CONTENT_DIGEST_SHA256:
-                                pw.print("SHA256:");
-                                break;
-                            default:
-                                pw.print("UNKNOWN_ALGO_ID(" + algorithmId + "):");
-                        }
+                        pw.print(translateContentDigestAlgorithmIdToString(algorithmId));
+                        pw.print(":");
                         pw.print(HexEncoding.encodeToString(contentDigest, false));
+                        pw.print("\n");
                     }
                 }
 
                 private void printPackageInstallationInfo(PackageInfo packageInfo,
+                                                          boolean useSha256,
                                                           final PrintWriter pw) {
                     pw.println("--- Package Installation Info ---");
                     pw.println("Current install location: "
@@ -517,11 +517,13 @@ public class BinaryTransparencyService extends SystemService {
                         pw.println("|--> Pre-installed package install location: "
                                 + origPackageFilepath);
 
-                        // TODO(b/259347186): revive this with the proper cmd options.
-                        /*
-                        String digest = PackageUtils.computeSha256DigestForLargeFile(
-                        origPackageFilepath, PackageUtils.createLargeFileBuffer());
-                         */
+                        if (useSha256) {
+                            String sha256Digest = PackageUtils.computeSha256DigestForLargeFile(
+                                    origPackageFilepath, PackageUtils.createLargeFileBuffer());
+                            pw.println("|--> Pre-installed package SHA-256 digest: "
+                                    + sha256Digest);
+                        }
+
 
                         Map<Integer, byte[]> contentDigests = computeApkContentDigest(
                                 origPackageFilepath);
@@ -529,36 +531,20 @@ public class BinaryTransparencyService extends SystemService {
                             pw.println("ERROR: Failed to compute package content digest for "
                                     + origPackageFilepath);
                         } else {
-                            // TODO(b/259348134): consider refactoring this to a helper method
                             for (Map.Entry<Integer, byte[]> entry : contentDigests.entrySet()) {
                                 Integer algorithmId = entry.getKey();
                                 byte[] contentDigest = entry.getValue();
-                                pw.print("|--> Pre-installed package content digest algorithm: ");
-                                switch (algorithmId) {
-                                    case ApkSigningBlockUtils.CONTENT_DIGEST_CHUNKED_SHA256:
-                                        pw.print("CHUNKED_SHA256");
-                                        break;
-                                    case ApkSigningBlockUtils.CONTENT_DIGEST_CHUNKED_SHA512:
-                                        pw.print("CHUNKED_SHA512");
-                                        break;
-                                    case ApkSigningBlockUtils.CONTENT_DIGEST_VERITY_CHUNKED_SHA256:
-                                        pw.print("VERITY_CHUNKED_SHA256");
-                                        break;
-                                    case ApkSigningBlockUtils.CONTENT_DIGEST_SHA256:
-                                        pw.print("SHA256");
-                                        break;
-                                    default:
-                                        pw.print("UNKNOWN");
-                                }
-                                pw.print("\n");
-                                pw.print("|--> Pre-installed package content digest: ");
-                                pw.print(HexEncoding.encodeToString(contentDigest, false));
-                                pw.print("\n");
+                                pw.println("|--> Pre-installed package content digest: "
+                                        + HexEncoding.encodeToString(contentDigest, false));
+                                pw.println("|--> Pre-installed package content digest algorithm: "
+                                        + translateContentDigestAlgorithmIdToString(algorithmId));
                             }
                         }
                     }
                     pw.println("First install time (ms): " + packageInfo.firstInstallTime);
                     pw.println("Last update time (ms): " + packageInfo.lastUpdateTime);
+                    // TODO(b/261493591): Determination of whether a package is preinstalled can be
+                    // made more robust
                     boolean isPreloaded = (packageInfo.firstInstallTime
                             == packageInfo.lastUpdateTime);
                     pw.println("Is preloaded: " + isPreloaded);
@@ -588,6 +574,7 @@ public class BinaryTransparencyService extends SystemService {
                         pw.println("ERROR: Package's signingInfo is null.");
                         return;
                     }
+                    // TODO(b/261501773): Handle printing of lineage of rotated keys.
                     pw.println("--- Package Signer Info ---");
                     pw.println("Has multiple signers: " + signerInfo.hasMultipleSigners());
                     Signature[] packageSigners = signerInfo.getApkContentsSigners();
@@ -697,14 +684,34 @@ public class BinaryTransparencyService extends SystemService {
 
                 }
 
+                private void printHeadersHelper(@NonNull String packageType,
+                                          boolean useSha256,
+                                          @NonNull final PrintWriter pw) {
+                    pw.print(packageType + " Info [Format: package_name,package_version,");
+                    if (useSha256) {
+                        pw.print("package_sha256_digest,");
+                    }
+                    pw.print("content_digest_algorithm:content_digest]:\n");
+                }
+
                 private int printAllApexs() {
                     final PrintWriter pw = getOutPrintWriter();
                     boolean verbose = false;
+                    boolean useSha256 = false;
+                    boolean printHeaders = true;
                     String opt;
                     while ((opt = getNextOption()) != null) {
                         switch (opt) {
                             case "-v":
+                            case "--verbose":
                                 verbose = true;
+                                break;
+                            case "-o":
+                            case "--old":
+                                useSha256 = true;
+                                break;
+                            case "--no-headers":
+                                printHeaders = false;
                                 break;
                             default:
                                 pw.println("ERROR: Unknown option: " + opt);
@@ -718,24 +725,17 @@ public class BinaryTransparencyService extends SystemService {
                         return -1;
                     }
 
-                    if (!verbose) {
-                        pw.println("APEX Info [Format: package_name,package_version,"
-                                // TODO(b/259347186): revive via special cmd line option
-                                //+ "package_sha256_digest,"
-                                + "content_digest_algorithm:content_digest]:");
+                    if (!verbose && printHeaders) {
+                        printHeadersHelper("APEX", useSha256, pw);
                     }
                     for (PackageInfo packageInfo : getCurrentInstalledApexs()) {
-                        if (verbose) {
-                            pw.println("APEX Info [Format: package_name,package_version,"
-                                    // TODO(b/259347186): revive via special cmd line option
-                                    //+ "package_sha256_digest,"
-                                    + "content_digest_algorithm:content_digest]:");
+                        if (verbose && printHeaders) {
+                            printHeadersHelper("APEX", useSha256, pw);
                         }
                         String packageName = packageInfo.packageName;
                         pw.print(packageName + ","
                                 + packageInfo.getLongVersionCode() + ",");
-                        printPackageMeasurements(packageInfo, pw);
-                        pw.print("\n");
+                        printPackageMeasurements(packageInfo, useSha256, pw);
 
                         if (verbose) {
                             ModuleInfo moduleInfo;
@@ -747,7 +747,7 @@ public class BinaryTransparencyService extends SystemService {
                                 pw.println("Is a module: false");
                             }
 
-                            printPackageInstallationInfo(packageInfo, pw);
+                            printPackageInstallationInfo(packageInfo, useSha256, pw);
                             printPackageSignerDetails(packageInfo.signingInfo, pw);
                             pw.println("");
                         }
@@ -758,11 +758,21 @@ public class BinaryTransparencyService extends SystemService {
                 private int printAllModules() {
                     final PrintWriter pw = getOutPrintWriter();
                     boolean verbose = false;
+                    boolean useSha256 = false;
+                    boolean printHeaders = true;
                     String opt;
                     while ((opt = getNextOption()) != null) {
                         switch (opt) {
                             case "-v":
+                            case "--verbose":
                                 verbose = true;
+                                break;
+                            case "-o":
+                            case "--old":
+                                useSha256 = true;
+                                break;
+                            case "--no-headers":
+                                printHeaders = false;
                                 break;
                             default:
                                 pw.println("ERROR: Unknown option: " + opt);
@@ -776,33 +786,25 @@ public class BinaryTransparencyService extends SystemService {
                         return -1;
                     }
 
-                    if (!verbose) {
-                        pw.println("Module Info [Format: package_name,package_version,"
-                                // TODO(b/259347186): revive via special cmd line option
-                                //+ "package_sha256_digest,"
-                                + "content_digest_algorithm:content_digest]:");
+                    if (!verbose && printHeaders) {
+                        printHeadersHelper("Module", useSha256, pw);
                     }
                     for (ModuleInfo module : pm.getInstalledModules(PackageManager.MATCH_ALL)) {
                         String packageName = module.getPackageName();
-                        if (verbose) {
-                            pw.println("Module Info [Format: package_name,package_version,"
-                                    // TODO(b/259347186): revive via special cmd line option
-                                    //+ "package_sha256_digest,"
-                                    + "content_digest_algorithm:content_digest]:");
+                        if (verbose && printHeaders) {
+                            printHeadersHelper("Module", useSha256, pw);
                         }
                         try {
                             PackageInfo packageInfo = pm.getPackageInfo(packageName,
                                     PackageManager.MATCH_APEX
                                             | PackageManager.GET_SIGNING_CERTIFICATES);
-                            //pw.print("package:");
                             pw.print(packageInfo.packageName + ",");
                             pw.print(packageInfo.getLongVersionCode() + ",");
-                            printPackageMeasurements(packageInfo, pw);
-                            pw.print("\n");
+                            printPackageMeasurements(packageInfo, useSha256, pw);
 
                             if (verbose) {
                                 printModuleDetails(module, pw);
-                                printPackageInstallationInfo(packageInfo, pw);
+                                printPackageInstallationInfo(packageInfo, useSha256, pw);
                                 printPackageSignerDetails(packageInfo.signingInfo, pw);
                                 pw.println("");
                             }
@@ -823,14 +825,24 @@ public class BinaryTransparencyService extends SystemService {
                     final PrintWriter pw = getOutPrintWriter();
                     boolean verbose = false;
                     boolean printLibraries = false;
+                    boolean useSha256 = false;
+                    boolean printHeaders = true;
                     String opt;
                     while ((opt = getNextOption()) != null) {
                         switch (opt) {
                             case "-v":
+                            case "--verbose":
                                 verbose = true;
                                 break;
                             case "-l":
                                 printLibraries = true;
+                                break;
+                            case "-o":
+                            case "--old":
+                                useSha256 = true;
+                                break;
+                            case "--no-headers":
+                                printHeaders = false;
                                 break;
                             default:
                                 pw.println("ERROR: Unknown option: " + opt);
@@ -838,27 +850,20 @@ public class BinaryTransparencyService extends SystemService {
                         }
                     }
 
-                    if (!verbose) {
-                        pw.println("MBA Info [Format: package_name,package_version,"
-                                // TODO(b/259347186): revive via special cmd line option
-                                //+ "package_sha256_digest,"
-                                + "content_digest_algorithm:content_digest]:");
+                    if (!verbose && printHeaders) {
+                        printHeadersHelper("MBA", useSha256, pw);
                     }
                     for (PackageInfo packageInfo : getNewlyInstalledMbas()) {
-                        if (verbose) {
-                            pw.println("MBA Info [Format: package_name,package_version,"
-                                    // TODO(b/259347186): revive via special cmd line option
-                                    //+ "package_sha256_digest,"
-                                    + "content_digest_algorithm:content_digest]:");
+                        if (verbose && printHeaders) {
+                            printHeadersHelper("MBA", useSha256, pw);
                         }
                         pw.print(packageInfo.packageName + ",");
                         pw.print(packageInfo.getLongVersionCode() + ",");
-                        printPackageMeasurements(packageInfo, pw);
-                        pw.print("\n");
+                        printPackageMeasurements(packageInfo, useSha256, pw);
 
                         if (verbose) {
                             printAppDetails(packageInfo, printLibraries, pw);
-                            printPackageInstallationInfo(packageInfo, pw);
+                            printPackageInstallationInfo(packageInfo, useSha256, pw);
                             printPackageSignerDetails(packageInfo.signingInfo, pw);
                             pw.println("");
                         }
@@ -925,27 +930,39 @@ public class BinaryTransparencyService extends SystemService {
                 private void printHelpMenu() {
                     final PrintWriter pw = getOutPrintWriter();
                     pw.println("Transparency manager (transparency) commands:");
-                    pw.println("    help");
-                    pw.println("        Print this help text.");
+                    pw.println("  help");
+                    pw.println("    Print this help text.");
                     pw.println("");
-                    pw.println("    get image_info [-a]");
-                    pw.println("        Print information about loaded image (firmware). Options:");
-                    pw.println("            -a: lists all other identifiable partitions.");
+                    pw.println("  get image_info [-a]");
+                    pw.println("    Print information about loaded image (firmware). Options:");
+                    pw.println("        -a: lists all other identifiable partitions.");
                     pw.println("");
-                    pw.println("    get apex_info [-v]");
-                    pw.println("        Print information about installed APEXs on device.");
-                    pw.println("            -v: lists more verbose information about each APEX.");
+                    pw.println("  get apex_info [-o] [-v] [--no-headers]");
+                    pw.println("    Print information about installed APEXs on device.");
+                    pw.println("      -o: also uses the old digest scheme (SHA256) to compute "
+                               + "APEX hashes. WARNING: This can be a very slow and CPU-intensive "
+                               + "computation.");
+                    pw.println("      -v: lists more verbose information about each APEX.");
+                    pw.println("      --no-headers: does not print the header if specified");
                     pw.println("");
-                    pw.println("    get module_info [-v]");
-                    pw.println("        Print information about installed modules on device.");
-                    pw.println("            -v: lists more verbose information about each module.");
+                    pw.println("  get module_info [-o] [-v] [--no-headers]");
+                    pw.println("    Print information about installed modules on device.");
+                    pw.println("      -o: also uses the old digest scheme (SHA256) to compute "
+                               + "module hashes. WARNING: This can be a very slow and "
+                               + "CPU-intensive computation.");
+                    pw.println("      -v: lists more verbose information about each module.");
+                    pw.println("      --no-headers: does not print the header if specified");
                     pw.println("");
-                    pw.println("    get mba_info [-v] [-l]");
-                    pw.println("        Print information about installed mobile bundle apps "
+                    pw.println("  get mba_info [-o] [-v] [-l] [--no-headers]");
+                    pw.println("    Print information about installed mobile bundle apps "
                                + "(MBAs on device).");
-                    pw.println("            -v: lists more verbose information about each app.");
-                    pw.println("            -l: lists shared library info. This will only be "
-                               + "listed with -v");
+                    pw.println("      -o: also uses the old digest scheme (SHA256) to compute "
+                               + "MBA hashes. WARNING: This can be a very slow and CPU-intensive "
+                               + "computation.");
+                    pw.println("      -v: lists more verbose information about each app.");
+                    pw.println("      -l: lists shared library info. (This option only works "
+                               + "when -v option is also specified)");
+                    pw.println("      --no-headers: does not print the header if specified");
                     pw.println("");
                 }
 
@@ -1075,6 +1092,21 @@ public class BinaryTransparencyService extends SystemService {
         FrameworkStatsLog.write(FrameworkStatsLog.VBMETA_DIGEST_REPORTED, mVbmetaDigest);
     }
 
+    private String translateContentDigestAlgorithmIdToString(int algorithmId) {
+        switch (algorithmId) {
+            case ApkSigningBlockUtils.CONTENT_DIGEST_CHUNKED_SHA256:
+                return "CHUNKED_SHA256";
+            case ApkSigningBlockUtils.CONTENT_DIGEST_CHUNKED_SHA512:
+                return "CHUNKED_SHA512";
+            case ApkSigningBlockUtils.CONTENT_DIGEST_VERITY_CHUNKED_SHA256:
+                return "VERITY_CHUNKED_SHA256";
+            case ApkSigningBlockUtils.CONTENT_DIGEST_SHA256:
+                return "SHA256";
+            default:
+                return "UNKNOWN_ALGO_ID(" + algorithmId + ")";
+        }
+    }
+
     @NonNull
     private List<PackageInfo> getCurrentInstalledApexs() {
         List<PackageInfo> results = new ArrayList<>();
@@ -1110,18 +1142,22 @@ public class BinaryTransparencyService extends SystemService {
         }
     }
 
-    // TODO(b/259349011): Need to be more robust against package name mismatch in the filename
+    @NonNull
     private String getOriginalApexPreinstalledLocation(String packageName,
                                                    String currentInstalledLocation) {
-        if (currentInstalledLocation.contains("/decompressed/")) {
-            String resultPath = "system/apex" + packageName + ".capex";
-            File f = new File(resultPath);
-            if (f.exists()) {
-                return resultPath;
+        // get a listing of all apex files in /system/apex/
+        Set<String> originalApexs = Stream.of(new File(APEX_PRELOAD_LOCATION).listFiles())
+                                        .filter(f -> !f.isDirectory())
+                                        .map(File::getName)
+                                        .collect(Collectors.toSet());
+
+        for (String originalApex : originalApexs) {
+            if (originalApex.startsWith(packageName)) {
+                return APEX_PRELOAD_LOCATION + originalApex;
             }
-            return "/system/apex/" + packageName + ".next.capex";
         }
-        return "/system/apex" + packageName + "apex";
+
+        return APEX_PRELOAD_LOCATION_ERROR;
     }
 
     /**

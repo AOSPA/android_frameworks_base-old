@@ -319,6 +319,19 @@ public final class Display {
     public static final int FLAG_TOUCH_FEEDBACK_DISABLED = 1 << 10;
 
     /**
+     * Flag: Indicates that the display maintains its own focus and touch mode.
+     *
+     * This flag is similar to {@link com.android.internal.R.bool.config_perDisplayFocusEnabled} in
+     * behavior, but only applies to the specific display instead of system-wide to all displays.
+     *
+     * Note: The display must be trusted in order to have its own focus.
+     *
+     * @see #FLAG_TRUSTED
+     * @hide
+     */
+    public static final int FLAG_OWN_FOCUS = 1 << 11;
+
+    /**
      * Display flag: Indicates that the contents of the display should not be scaled
      * to fit the physical screen dimensions.  Used for development only to emulate
      * devices with smaller physicals screens while preserving density.
@@ -992,6 +1005,28 @@ public final class Display {
                         mDisplayInfo.logicalWidth, mDisplayInfo.logicalHeight);
             }
             return roundedCorners == null ? null : roundedCorners.getRoundedCorner(position);
+        }
+    }
+
+    /**
+     * Returns the {@link DisplayShape} which is based on display coordinates.
+     *
+     * To get the {@link DisplayShape} based on the window frame, use
+     * {@link WindowInsets#getDisplayShape()} instead.
+     *
+     * @see DisplayShape
+     */
+    @SuppressLint("VisiblySynchronized")
+    @NonNull
+    public DisplayShape getShape() {
+        synchronized (mLock) {
+            updateDisplayInfoLocked();
+            final DisplayShape displayShape = mDisplayInfo.displayShape;
+            final @Surface.Rotation int rotation = getLocalRotation();
+            if (displayShape != null && rotation != mDisplayInfo.rotation) {
+                return displayShape.setRotation(rotation);
+            }
+            return displayShape;
         }
     }
 
@@ -1907,13 +1942,16 @@ public final class Display {
         private final float mRefreshRate;
         @NonNull
         private final float[] mAlternativeRefreshRates;
+        @NonNull
+        @HdrCapabilities.HdrType
+        private final int[] mSupportedHdrTypes;
 
         /**
          * @hide
          */
         @TestApi
         public Mode(int width, int height, float refreshRate) {
-            this(INVALID_MODE_ID, width, height, refreshRate, new float[0]);
+            this(INVALID_MODE_ID, width, height, refreshRate, new float[0], new int[0]);
         }
 
         /**
@@ -1921,14 +1959,14 @@ public final class Display {
          */
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public Mode(int modeId, int width, int height, float refreshRate) {
-            this(modeId, width, height, refreshRate, new float[0]);
+            this(modeId, width, height, refreshRate, new float[0], new int[0]);
         }
 
         /**
          * @hide
          */
         public Mode(int modeId, int width, int height, float refreshRate,
-                float[] alternativeRefreshRates) {
+                float[] alternativeRefreshRates, @HdrCapabilities.HdrType int[] supportedHdrTypes) {
             mModeId = modeId;
             mWidth = width;
             mHeight = height;
@@ -1936,6 +1974,8 @@ public final class Display {
             mAlternativeRefreshRates =
                     Arrays.copyOf(alternativeRefreshRates, alternativeRefreshRates.length);
             Arrays.sort(mAlternativeRefreshRates);
+            mSupportedHdrTypes = Arrays.copyOf(supportedHdrTypes, supportedHdrTypes.length);
+            Arrays.sort(mSupportedHdrTypes);
         }
 
         /**
@@ -2007,6 +2047,15 @@ public final class Display {
         @NonNull
         public float[] getAlternativeRefreshRates() {
             return mAlternativeRefreshRates;
+        }
+
+        /**
+         * Returns the supported {@link HdrCapabilities} HDR_TYPE_* for this specific mode
+         */
+        @NonNull
+        @HdrCapabilities.HdrType
+        public int[] getSupportedHdrTypes() {
+            return mSupportedHdrTypes;
         }
 
         /**
@@ -2083,7 +2132,8 @@ public final class Display {
             }
             Mode that = (Mode) other;
             return mModeId == that.mModeId && matches(that.mWidth, that.mHeight, that.mRefreshRate)
-                    && Arrays.equals(mAlternativeRefreshRates, that.mAlternativeRefreshRates);
+                    && Arrays.equals(mAlternativeRefreshRates, that.mAlternativeRefreshRates)
+                    && Arrays.equals(mSupportedHdrTypes, that.mSupportedHdrTypes);
         }
 
         @Override
@@ -2094,6 +2144,7 @@ public final class Display {
             hash = hash * 17 + mHeight;
             hash = hash * 17 + Float.floatToIntBits(mRefreshRate);
             hash = hash * 17 + Arrays.hashCode(mAlternativeRefreshRates);
+            hash = hash * 17 + Arrays.hashCode(mSupportedHdrTypes);
             return hash;
         }
 
@@ -2106,6 +2157,8 @@ public final class Display {
                     .append(", fps=").append(mRefreshRate)
                     .append(", alternativeRefreshRates=")
                     .append(Arrays.toString(mAlternativeRefreshRates))
+                    .append(", supportedHdrTypes=")
+                    .append(Arrays.toString(mSupportedHdrTypes))
                     .append("}")
                     .toString();
         }
@@ -2116,7 +2169,8 @@ public final class Display {
         }
 
         private Mode(Parcel in) {
-            this(in.readInt(), in.readInt(), in.readInt(), in.readFloat(), in.createFloatArray());
+            this(in.readInt(), in.readInt(), in.readInt(), in.readFloat(), in.createFloatArray(),
+                    in.createIntArray());
         }
 
         @Override
@@ -2126,6 +2180,7 @@ public final class Display {
             out.writeInt(mHeight);
             out.writeFloat(mRefreshRate);
             out.writeFloatArray(mAlternativeRefreshRates);
+            out.writeIntArray(mSupportedHdrTypes);
         }
 
         @SuppressWarnings("hiding")
@@ -2291,6 +2346,9 @@ public final class Display {
         /**
          * Gets the supported HDR types of this display.
          * Returns empty array if HDR is not supported by the display.
+         *
+         * @deprecated use {@link Display#getMode()}
+         * and {@link Mode#getSupportedHdrTypes()} instead
          */
         public @HdrType int[] getSupportedHdrTypes() {
             return mSupportedHdrTypes;

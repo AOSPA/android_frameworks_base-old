@@ -199,6 +199,11 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         mUnpairing = false;
     }
 
+    /** Clears any pending messages in the message queue. */
+    public void release() {
+        mHandler.removeCallbacksAndMessages(null);
+    }
+
     private void initDrawableCache() {
         int maxMemory = (int) (Runtime.getRuntime().maxMemory() / 1024);
         int cacheSize = maxMemory / 8;
@@ -1310,14 +1315,22 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
 
                 // Try to show left/right information if can not get it from battery for hearing
                 // aids specifically.
-                if (mIsActiveDeviceHearingAid
+                boolean isActiveAshaHearingAid = mIsActiveDeviceHearingAid;
+                boolean isActiveLeAudioHearingAid = mIsActiveDeviceLeAudio
+                        && isConnectedHapClientDevice();
+                if ((isActiveAshaHearingAid || isActiveLeAudioHearingAid)
                         && stringRes == R.string.bluetooth_active_no_battery_level) {
+                    final Set<CachedBluetoothDevice> memberDevices = getMemberDevice();
                     final CachedBluetoothDevice subDevice = getSubDevice();
-                    if (subDevice != null && subDevice.isConnected()) {
+                    if (memberDevices.stream().anyMatch(m -> m.isConnected())) {
+                        stringRes = R.string.bluetooth_hearing_aid_left_and_right_active;
+                    } else if (subDevice != null && subDevice.isConnected()) {
                         stringRes = R.string.bluetooth_hearing_aid_left_and_right_active;
                     } else {
                         int deviceSide = getDeviceSide();
-                        if (deviceSide == HearingAidInfo.DeviceSide.SIDE_LEFT) {
+                        if (deviceSide == HearingAidInfo.DeviceSide.SIDE_LEFT_AND_RIGHT) {
+                            stringRes = R.string.bluetooth_hearing_aid_left_and_right_active;
+                        } else if (deviceSide == HearingAidInfo.DeviceSide.SIDE_LEFT) {
                             stringRes = R.string.bluetooth_hearing_aid_left_active;
                         } else if (deviceSide == HearingAidInfo.DeviceSide.SIDE_RIGHT) {
                             stringRes = R.string.bluetooth_hearing_aid_right_active;
@@ -1587,11 +1600,13 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         final boolean tmpJustDiscovered = mJustDiscovered;
         final HearingAidInfo tmpHearingAidInfo = mHearingAidInfo;
         // Set main device from sub device
+        release();
         mDevice = mSubDevice.mDevice;
         mRssi = mSubDevice.mRssi;
         mJustDiscovered = mSubDevice.mJustDiscovered;
         mHearingAidInfo = mSubDevice.mHearingAidInfo;
         // Set sub device from backup
+        mSubDevice.release();
         mSubDevice.mDevice = tmpDevice;
         mSubDevice.mRssi = tmpRssi;
         mSubDevice.mJustDiscovered = tmpJustDiscovered;
@@ -1617,6 +1632,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
      * Remove a device from the member device sets.
      */
     public void removeMemberDevice(CachedBluetoothDevice memberDevice) {
+        memberDevice.release();
         mMemberDevices.remove(memberDevice);
     }
 
@@ -1634,11 +1650,13 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         final short tmpRssi = mRssi;
         final boolean tmpJustDiscovered = mJustDiscovered;
         // Set main device from sub device
+        release();
         mDevice = newMainDevice.mDevice;
         mRssi = newMainDevice.mRssi;
         mJustDiscovered = newMainDevice.mJustDiscovered;
 
         // Set sub device from backup
+        newMainDevice.release();
         newMainDevice.mDevice = tmpDevice;
         newMainDevice.mRssi = tmpRssi;
         newMainDevice.mJustDiscovered = tmpJustDiscovered;

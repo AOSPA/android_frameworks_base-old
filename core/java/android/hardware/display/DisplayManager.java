@@ -137,7 +137,8 @@ public final class DisplayManager {
             VIRTUAL_DISPLAY_FLAG_TRUSTED,
             VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP,
             VIRTUAL_DISPLAY_FLAG_ALWAYS_UNLOCKED,
-            VIRTUAL_DISPLAY_FLAG_TOUCH_FEEDBACK_DISABLED
+            VIRTUAL_DISPLAY_FLAG_TOUCH_FEEDBACK_DISABLED,
+            VIRTUAL_DISPLAY_FLAG_OWN_FOCUS,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface VirtualDisplayFlag {}
@@ -403,6 +404,31 @@ public final class DisplayManager {
      */
     public static final int VIRTUAL_DISPLAY_FLAG_TOUCH_FEEDBACK_DISABLED = 1 << 13;
 
+    /**
+     * Virtual display flags: Indicates that the display maintains its own focus and touch mode.
+     *
+     * This flag is similar to {@link com.android.internal.R.bool.config_perDisplayFocusEnabled} in
+     * behavior, but only applies to the specific display instead of system-wide to all displays.
+     *
+     * Note: The display must be trusted in order to have its own focus.
+     *
+     * @see #createVirtualDisplay
+     * @see #VIRTUAL_DISPLAY_FLAG_TRUSTED
+     * @hide
+     */
+    @TestApi
+    public static final int VIRTUAL_DISPLAY_FLAG_OWN_FOCUS = 1 << 14;
+
+    /**
+     * Virtual display flags: Indicates that the display should not be a part of the default
+     * DisplayGroup and instead be part of a DisplayGroup associated with its virtual device.
+     *
+     * @see #createVirtualDisplay
+     * @hide
+     */
+    public static final int VIRTUAL_DISPLAY_FLAG_DEVICE_DISPLAY_GROUP = 1 << 15;
+
+
     /** @hide */
     @IntDef(prefix = {"MATCH_CONTENT_FRAMERATE_"}, value = {
             MATCH_CONTENT_FRAMERATE_UNKNOWN,
@@ -571,18 +597,20 @@ public final class DisplayManager {
      * @see #DISPLAY_CATEGORY_PRESENTATION
      */
     public Display[] getDisplays(String category) {
-        final int[] displayIds = mGlobal.getDisplayIds();
+        boolean includeDisabled = (category != null
+                && category.equals(DISPLAY_CATEGORY_ALL_INCLUDING_DISABLED));
+        final int[] displayIds = mGlobal.getDisplayIds(includeDisabled);
         synchronized (mLock) {
             try {
-                if (category == null
-                        || DISPLAY_CATEGORY_ALL_INCLUDING_DISABLED.equals(category)) {
-                    addAllDisplaysLocked(mTempDisplays, displayIds);
-                } else if (category.equals(DISPLAY_CATEGORY_PRESENTATION)) {
+                if (DISPLAY_CATEGORY_PRESENTATION.equals(category)) {
                     addPresentationDisplaysLocked(mTempDisplays, displayIds, Display.TYPE_WIFI);
                     addPresentationDisplaysLocked(mTempDisplays, displayIds, Display.TYPE_EXTERNAL);
                     addPresentationDisplaysLocked(mTempDisplays, displayIds, Display.TYPE_OVERLAY);
                     addPresentationDisplaysLocked(mTempDisplays, displayIds, Display.TYPE_VIRTUAL);
                     addPresentationDisplaysLocked(mTempDisplays, displayIds, Display.TYPE_INTERNAL);
+                } else if (category == null
+                        || DISPLAY_CATEGORY_ALL_INCLUDING_DISABLED.equals(category)) {
+                    addAllDisplaysLocked(mTempDisplays, displayIds);
                 }
                 return mTempDisplays.toArray(new Display[mTempDisplays.size()]);
             } finally {

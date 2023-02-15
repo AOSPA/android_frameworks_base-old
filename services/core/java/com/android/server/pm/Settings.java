@@ -102,7 +102,6 @@ import com.android.server.LocalServices;
 import com.android.server.backup.PreferredActivityBackupHelper;
 import com.android.server.pm.Installer.InstallerException;
 import com.android.server.pm.parsing.PackageInfoUtils;
-import com.android.server.pm.parsing.pkg.AndroidPackageUtils;
 import com.android.server.pm.permission.LegacyPermissionDataProvider;
 import com.android.server.pm.permission.LegacyPermissionSettings;
 import com.android.server.pm.permission.LegacyPermissionState;
@@ -368,8 +367,14 @@ public final class Settings implements Watchable, Snappable {
     @Watched(manual = true)
     private final RuntimePermissionPersistence mRuntimePermissionsPersistence;
 
+    // Current settings file.
     private final File mSettingsFilename;
-    private final File mBackupSettingsFilename;
+    // Compressed current settings file.
+    private final File mCompressedSettingsFilename;
+    // Previous settings file.
+    // Removed when the current settings file successfully stored.
+    private final File mPreviousSettingsFilename;
+
     private final File mPackageListFilename;
     private final File mStoppedPackagesFilename;
     private final File mBackupStoppedPackagesFilename;
@@ -636,7 +641,8 @@ public final class Settings implements Watchable, Snappable {
         mRuntimePermissionsPersistence = null;
         mPermissionDataProvider = null;
         mSettingsFilename = null;
-        mBackupSettingsFilename = null;
+        mCompressedSettingsFilename = null;
+        mPreviousSettingsFilename = null;
         mPackageListFilename = null;
         mStoppedPackagesFilename = null;
         mBackupStoppedPackagesFilename = null;
@@ -707,7 +713,8 @@ public final class Settings implements Watchable, Snappable {
                 |FileUtils.S_IROTH|FileUtils.S_IXOTH,
                 -1, -1);
         mSettingsFilename = new File(mSystemDir, "packages.xml");
-        mBackupSettingsFilename = new File(mSystemDir, "packages-backup.xml");
+        mCompressedSettingsFilename = new File(mSystemDir, "packages.compressed");
+        mPreviousSettingsFilename = new File(mSystemDir, "packages-backup.xml");
         mPackageListFilename = new File(mSystemDir, "packages.list");
         FileUtils.setPermissions(mPackageListFilename, 0640, SYSTEM_UID, PACKAGE_INFO_GID);
 
@@ -748,7 +755,8 @@ public final class Settings implements Watchable, Snappable {
         mLock = null;
         mRuntimePermissionsPersistence = r.mRuntimePermissionsPersistence;
         mSettingsFilename = null;
-        mBackupSettingsFilename = null;
+        mCompressedSettingsFilename = null;
+        mPreviousSettingsFilename = null;
         mPackageListFilename = null;
         mStoppedPackagesFilename = null;
         mBackupStoppedPackagesFilename = null;
@@ -2462,7 +2470,7 @@ public final class Settings implements Watchable, Snappable {
                 mReadMessages.append("Reading from backup stopped packages file\n");
                 PackageManagerService.reportSettingsProblem(Log.INFO,
                         "Need to read from backup stopped packages file");
-                if (mSettingsFilename.exists()) {
+                if (mStoppedPackagesFilename.exists()) {
                     // If both the backup and normal file exist, we
                     // ignore the normal one since it might have been
                     // corrupted.
@@ -2573,10 +2581,10 @@ public final class Settings implements Watchable, Snappable {
             // to persist settings earlier. So preserve the older
             // backup for future reference since the current settings
             // might have been corrupted.
-            if (!mBackupSettingsFilename.exists()) {
-                if (!mSettingsFilename.renameTo(mBackupSettingsFilename)) {
+            if (!mPreviousSettingsFilename.exists()) {
+                if (!mSettingsFilename.renameTo(mPreviousSettingsFilename)) {
                     Slog.wtf(PackageManagerService.TAG,
-                            "Unable to backup package manager settings, "
+                            "Unable to store older package manager settings, "
                             + " current changes will be lost at reboot");
                     return;
                 }
@@ -2585,6 +2593,8 @@ public final class Settings implements Watchable, Snappable {
                 Slog.w(PackageManagerService.TAG, "Preserving older settings backup");
             }
         }
+        // Compressed settings are not valid anymore.
+        mCompressedSettingsFilename.delete();
 
         mPastSignatures.clear();
 
@@ -2670,13 +2680,33 @@ public final class Settings implements Watchable, Snappable {
             FileUtils.sync(fstr);
             fstr.close();
 
-            // New settings successfully written, old ones are no longer
-            // needed.
-            mBackupSettingsFilename.delete();
+            // New settings successfully written, old ones are no longer needed.
+            mPreviousSettingsFilename.delete();
+
             FileUtils.setPermissions(mSettingsFilename.toString(),
-                    FileUtils.S_IRUSR|FileUtils.S_IWUSR
-                    |FileUtils.S_IRGRP|FileUtils.S_IWGRP,
+                    FileUtils.S_IRUSR | FileUtils.S_IWUSR | FileUtils.S_IRGRP | FileUtils.S_IWGRP,
                     -1, -1);
+
+            final FileInputStream fis = new FileInputStream(mSettingsFilename);
+            final AtomicFile compressed = new AtomicFile(mCompressedSettingsFilename);
+            final FileOutputStream fos = compressed.startWrite();
+
+            BackgroundThread.getHandler().post(() -> {
+                try {
+                    if (!nativeCompressLz4(fis.getFD().getInt$(), fos.getFD().getInt$())) {
+                        throw new IOException("Failed to compress");
+                    }
+                    compressed.finishWrite(fos);
+                    FileUtils.setPermissions(mCompressedSettingsFilename.toString(),
+                            FileUtils.S_IRUSR | FileUtils.S_IWUSR | FileUtils.S_IRGRP
+                                    | FileUtils.S_IWGRP, -1, -1);
+                } catch (IOException e) {
+                    Slog.e(PackageManagerService.TAG, "Failed to write compressed settings file: "
+                            + mCompressedSettingsFilename, e);
+                    compressed.delete();
+                }
+                IoUtils.closeQuietly(fis);
+            });
 
             writeKernelMappingLPr();
             writePackageListLPr();
@@ -2699,6 +2729,8 @@ public final class Settings implements Watchable, Snappable {
         }
         //Debug.stopMethodTracing();
     }
+
+    private native boolean nativeCompressLz4(int inputFd, int outputFd);
 
     private void writeKernelRemoveUserLPr(int userId) {
         if (mKernelMappingFilename == null) return;
@@ -2900,7 +2932,7 @@ public final class Settings implements Watchable, Snappable {
                 sb.append(isDebug ? " 1 " : " 0 ");
                 sb.append(dataPath);
                 sb.append(" ");
-                sb.append(AndroidPackageUtils.getSeInfo(pkg.getPkg(), pkg));
+                sb.append(pkg.getSeInfo());
                 sb.append(" ");
                 final int gidsSize = gids.size();
                 if (gids != null && gids.size() > 0) {
@@ -3110,16 +3142,15 @@ public final class Settings implements Watchable, Snappable {
 
     boolean readLPw(@NonNull Computer computer, @NonNull List<UserInfo> users) {
         FileInputStream str = null;
-        if (mBackupSettingsFilename.exists()) {
+        if (mPreviousSettingsFilename.exists()) {
             try {
-                str = new FileInputStream(mBackupSettingsFilename);
+                str = new FileInputStream(mPreviousSettingsFilename);
                 mReadMessages.append("Reading from backup settings file\n");
                 PackageManagerService.reportSettingsProblem(Log.INFO,
                         "Need to read from backup settings file");
                 if (mSettingsFilename.exists()) {
-                    // If both the backup and settings file exist, we
-                    // ignore the settings since it might have been
-                    // corrupted.
+                    // If both the previous and current settings files exist,
+                    // we ignore the current since it might have been corrupted.
                     Slog.w(PackageManagerService.TAG, "Cleaning up settings file "
                             + mSettingsFilename);
                     mSettingsFilename.delete();
@@ -4359,7 +4390,7 @@ public final class Settings implements Watchable, Snappable {
                     // (CE storage is not ready yet; the CE data directories will be created later,
                     // when the user is "unlocked".)  Accumulate all required args, and call the
                     // installer after the mPackages lock has been released.
-                    final String seInfo = AndroidPackageUtils.getSeInfo(ps.getPkg(), ps);
+                    final String seInfo = ps.getSeInfo();
                     final boolean usesSdk = !ps.getPkg().getUsesSdkLibraries().isEmpty();
                     final CreateAppDataArgs args = Installer.buildCreateAppDataArgs(
                             ps.getVolumeUuid(), ps.getPackageName(), userHandle,
@@ -5595,8 +5626,8 @@ public final class Settings implements Watchable, Snappable {
     }
 
     private static final class RuntimePermissionPersistence {
-        // 200-400ms delay to avoid monopolizing PMS lock when written for multiple users.
-        private static final long WRITE_PERMISSIONS_DELAY_MILLIS = 300;
+        // 700-1300ms delay to avoid monopolizing PMS lock when written for multiple users.
+        private static final long WRITE_PERMISSIONS_DELAY_MILLIS = 1000;
         private static final double WRITE_PERMISSIONS_DELAY_JITTER = 0.3;
 
         private static final long MAX_WRITE_PERMISSIONS_DELAY_MILLIS = 2000;
@@ -5614,8 +5645,7 @@ public final class Settings implements Watchable, Snappable {
 
         // Low-priority handlers running on SystemBg thread.
         private final Handler mAsyncHandler = new MyHandler();
-        private final Handler mPersistenceHandler = new Handler(
-                BackgroundThread.getHandler().getLooper());
+        private final Handler mPersistenceHandler = new PersistenceHandler();
 
         private final Object mLock = new Object();
 
@@ -5762,20 +5792,22 @@ public final class Settings implements Watchable, Snappable {
                 @NonNull WatchedArrayMap<String, SharedUserSetting> sharedUsers,
                 @Nullable Handler pmHandler, @NonNull Object pmLock,
                 boolean sync) {
-            final int version;
-            final String fingerprint;
-            final boolean isLegacyPermissionStateStale;
             synchronized (mLock) {
                 mAsyncHandler.removeMessages(userId);
                 mWriteScheduled.delete(userId);
-
-                version = mVersions.get(userId, INITIAL_VERSION);
-                fingerprint = mFingerprints.get(userId);
-                isLegacyPermissionStateStale = mIsLegacyPermissionStateStale;
-                mIsLegacyPermissionStateStale = false;
             }
 
             Runnable writer = () -> {
+                final int version;
+                final String fingerprint;
+                final boolean isLegacyPermissionStateStale;
+                synchronized (mLock) {
+                    version = mVersions.get(userId, INITIAL_VERSION);
+                    fingerprint = mFingerprints.get(userId);
+                    isLegacyPermissionStateStale = mIsLegacyPermissionStateStale;
+                    mIsLegacyPermissionStateStale = false;
+                }
+
                 final RuntimePermissionsState runtimePermissions;
                 synchronized (pmLock) {
                     if (sync || isLegacyPermissionStateStale) {
@@ -5824,7 +5856,7 @@ public final class Settings implements Watchable, Snappable {
                 }
                 if (pmHandler != null) {
                     // Async version.
-                    mPersistenceHandler.post(() -> writePendingStates());
+                    mPersistenceHandler.obtainMessage(userId).sendToTarget();
                 } else {
                     // Sync version.
                     writePendingStates();
@@ -6098,6 +6130,17 @@ public final class Settings implements Watchable, Snappable {
                 if (callback != null) {
                     callback.run();
                 }
+            }
+        }
+
+        private final class PersistenceHandler extends Handler {
+            PersistenceHandler() {
+                super(BackgroundThread.getHandler().getLooper());
+            }
+
+            @Override
+            public void handleMessage(Message message) {
+                writePendingStates();
             }
         }
     }

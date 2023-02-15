@@ -35,7 +35,7 @@ package com.android.systemui.statusbar.policy;
  import android.testing.AndroidTestingRunner;
  import android.testing.TestableLooper.RunWithLooper;
 
- import com.qti.extphone.IExtPhoneCallback;
+ import com.qti.extphone.ExtPhoneCallbackListener;
  import com.qti.extphone.NrIconType;
  import com.qti.extphone.Status;
  import com.qti.extphone.Token;
@@ -56,7 +56,7 @@ package com.android.systemui.statusbar.policy;
  public class FiveGServiceClientTest extends NetworkControllerBaseTest {
      private final static String TAG = "FiveGServiceClientTest";
      private FiveGServiceClient mFiveGServiceClient;
-     protected IExtPhoneCallback mCallback;
+     protected ExtPhoneCallbackListener mCallback;
 
      Token mToken;
      Status mSuccessStatus;
@@ -70,7 +70,7 @@ package com.android.systemui.statusbar.policy;
          mSuccessStatus = new Status(Status.SUCCESS);
          mFailStatus = new Status(Status.FAILURE);
          mFiveGServiceClient = mNetworkController.getFiveGServiceClient();
-         mCallback = mFiveGServiceClient.mCallback;
+         mCallback = mFiveGServiceClient.mExtPhoneCallbackListener;
 
      }
 

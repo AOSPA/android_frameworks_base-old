@@ -188,6 +188,7 @@ import com.android.server.security.AttestationVerificationManagerService;
 import com.android.server.security.FileIntegrityService;
 import com.android.server.security.KeyAttestationApplicationIdProviderService;
 import com.android.server.security.KeyChainSystemService;
+import com.android.server.security.rkp.RemoteProvisioningService;
 import com.android.server.sensorprivacy.SensorPrivacyService;
 import com.android.server.sensors.SensorService;
 import com.android.server.signedconfig.SignedConfigService;
@@ -212,6 +213,7 @@ import com.android.server.usage.UsageStatsService;
 import com.android.server.utils.TimingsTraceAndSlog;
 import com.android.server.vibrator.VibratorManagerService;
 import com.android.server.vr.VrManagerService;
+import com.android.server.wearable.WearableSensingManagerService;
 import com.android.server.webkit.WebViewUpdateService;
 import com.android.server.wm.ActivityTaskManagerService;
 import com.android.server.wm.WindowManagerGlobalLock;
@@ -1362,9 +1364,14 @@ public final class SystemServer implements Dumpable {
         mSystemServiceManager.startService(BugreportManagerService.class);
         t.traceEnd();
 
-        // Serivce for GPU and GPU driver.
+        // Service for GPU and GPU driver.
         t.traceBegin("GpuService");
         mSystemServiceManager.startService(GpuService.class);
+        t.traceEnd();
+
+        // Handles system process requests for remotely provisioned keys & data.
+        t.traceBegin("StartRemoteProvisioningService");
+        mSystemServiceManager.startService(RemoteProvisioningService.class);
         t.traceEnd();
 
         t.traceEnd(); // startCoreServices
@@ -1836,6 +1843,7 @@ public final class SystemServer implements Dumpable {
             startSystemCaptionsManagerService(context, t);
             startTextToSpeechManagerService(context, t);
             startAmbientContextService(t);
+            startWearableSensingService(t);
 
             // System Speech Recognition Service
             t.traceBegin("StartSpeechRecognitionManagerService");
@@ -3220,6 +3228,12 @@ public final class SystemServer implements Dumpable {
     private void startAmbientContextService(@NonNull TimingsTraceAndSlog t) {
         t.traceBegin("StartAmbientContextService");
         mSystemServiceManager.startService(AmbientContextManagerService.class);
+        t.traceEnd();
+    }
+
+    private void startWearableSensingService(@NonNull TimingsTraceAndSlog t) {
+        t.traceBegin("startWearableSensingService");
+        mSystemServiceManager.startService(WearableSensingManagerService.class);
         t.traceEnd();
     }
 

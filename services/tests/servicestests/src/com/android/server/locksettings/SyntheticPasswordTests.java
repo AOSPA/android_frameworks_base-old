@@ -59,6 +59,7 @@ import org.mockito.ArgumentCaptor;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
 
 
 /**
@@ -136,6 +137,43 @@ public class SyntheticPasswordTests extends BaseLockSettingsServiceTests {
         assertTrue(mService.isSyntheticPasswordBasedCredential(userId));
     }
 
+    protected void initializeSyntheticPassword(int userId) {
+        synchronized (mService.mSpManager) {
+            mService.initializeSyntheticPasswordLocked(userId);
+        }
+    }
+
+    // Tests that the FRP credential is updated when an LSKF-based protector is created for the user
+    // that owns the FRP credential, if the device is already provisioned.
+    @Test
+    public void testFrpCredentialSyncedIfDeviceProvisioned() throws RemoteException {
+        setDeviceProvisioned(true);
+        initializeSyntheticPassword(PRIMARY_USER_ID);
+        verify(mStorage.mPersistentDataBlockManager).setFrpCredentialHandle(any());
+    }
+
+    // Tests that the FRP credential is not updated when an LSKF-based protector is created for the
+    // user that owns the FRP credential, if the new credential is empty and the device is not yet
+    // provisioned.
+    @Test
+    public void testEmptyFrpCredentialNotSyncedIfDeviceNotProvisioned() throws RemoteException {
+        setDeviceProvisioned(false);
+        initializeSyntheticPassword(PRIMARY_USER_ID);
+        verify(mStorage.mPersistentDataBlockManager, never()).setFrpCredentialHandle(any());
+    }
+
+    // Tests that the FRP credential is updated when an LSKF-based protector is created for the user
+    // that owns the FRP credential, if the new credential is nonempty and the device is not yet
+    // provisioned.
+    @Test
+    public void testNonEmptyFrpCredentialSyncedIfDeviceNotProvisioned() throws RemoteException {
+        setDeviceProvisioned(false);
+        initializeSyntheticPassword(PRIMARY_USER_ID);
+        verify(mStorage.mPersistentDataBlockManager, never()).setFrpCredentialHandle(any());
+        mService.setLockCredential(newPassword("password"), nonePassword(), PRIMARY_USER_ID);
+        verify(mStorage.mPersistentDataBlockManager).setFrpCredentialHandle(any());
+    }
+
     @Test
     public void testChangeCredential() throws RemoteException {
         final LockscreenCredential password = newPassword("password");
@@ -192,9 +230,11 @@ public class SyntheticPasswordTests extends BaseLockSettingsServiceTests {
                 badPassword, PRIMARY_USER_ID, 0 /* flags */).getResponseCode());
 
         // Check the same secret was passed each time
-        ArgumentCaptor<ArrayList<Byte>> secret = ArgumentCaptor.forClass(ArrayList.class);
-        verify(mAuthSecretService, atLeastOnce()).primaryUserCredential(secret.capture());
-        assertEquals(1, secret.getAllValues().stream().distinct().count());
+        ArgumentCaptor<byte[]> secret = ArgumentCaptor.forClass(byte[].class);
+        verify(mAuthSecretService, atLeastOnce()).setPrimaryUserCredential(secret.capture());
+        for (byte[] val : secret.getAllValues()) {
+          assertArrayEquals(val, secret.getAllValues().get(0));
+        }
     }
 
     @Test
@@ -205,7 +245,7 @@ public class SyntheticPasswordTests extends BaseLockSettingsServiceTests {
         reset(mAuthSecretService);
         assertEquals(VerifyCredentialResponse.RESPONSE_OK, mService.verifyCredential(
                 password, PRIMARY_USER_ID, 0 /* flags */).getResponseCode());
-        verify(mAuthSecretService).primaryUserCredential(any(ArrayList.class));
+        verify(mAuthSecretService).setPrimaryUserCredential(any(byte[].class));
     }
 
     @Test
@@ -215,7 +255,7 @@ public class SyntheticPasswordTests extends BaseLockSettingsServiceTests {
         initializeCredential(password, SECONDARY_USER_ID);
         assertEquals(VerifyCredentialResponse.RESPONSE_OK, mService.verifyCredential(
                 password, SECONDARY_USER_ID, 0 /* flags */).getResponseCode());
-        verify(mAuthSecretService, never()).primaryUserCredential(any(ArrayList.class));
+        verify(mAuthSecretService, never()).setPrimaryUserCredential(any(byte[].class));
     }
 
     @Test
@@ -226,7 +266,7 @@ public class SyntheticPasswordTests extends BaseLockSettingsServiceTests {
 
         reset(mAuthSecretService);
         mLocalService.unlockUserKeyIfUnsecured(PRIMARY_USER_ID);
-        verify(mAuthSecretService).primaryUserCredential(any(ArrayList.class));
+        verify(mAuthSecretService).setPrimaryUserCredential(any(byte[].class));
     }
 
     @Test
@@ -554,7 +594,7 @@ public class SyntheticPasswordTests extends BaseLockSettingsServiceTests {
         initializeCredential(password, PRIMARY_USER_ID);
         assertEquals(VerifyCredentialResponse.RESPONSE_OK, mService.verifyCredential(
                 password, PRIMARY_USER_ID, 0 /* flags */).getResponseCode());
-        verify(mAuthSecretService, never()).primaryUserCredential(any(ArrayList.class));
+        verify(mAuthSecretService, never()).setPrimaryUserCredential(any(byte[].class));
     }
 
     @Test

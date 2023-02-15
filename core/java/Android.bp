@@ -368,6 +368,20 @@ aidl_interface {
     },
 }
 
+// Build Rust bindings for remote provisioning. Needed by keystore2.
+aidl_interface {
+    name: "android.security.rkp_aidl",
+    unstable: true,
+    srcs: [
+        "android/security/rkp/*.aidl",
+    ],
+    backend: {
+        rust: {
+            enabled: true,
+        },
+    },
+}
+
 aidl_interface {
     name: "android.debug_aidl",
     unstable: true,
@@ -414,6 +428,17 @@ filegroup {
         "android/os/RegistrantList.java",
         "android/os/Registrant.java",
         "com/android/internal/os/SomeArgs.java",
+    ],
+}
+
+// This file group is used by service fuzzer
+filegroup {
+    name: "framework-core-sources-for-fuzzers",
+    srcs: [
+        "android/os/IInterface.java",
+        "android/os/Binder.java",
+        "android/os/IBinder.java",
+        "android/os/Parcelable.java",
     ],
 }
 

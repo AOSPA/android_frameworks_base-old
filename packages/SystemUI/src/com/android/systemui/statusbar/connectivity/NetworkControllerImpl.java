@@ -70,7 +70,7 @@ import com.android.systemui.Dumpable;
 import com.android.systemui.R;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.SysUISingleton;
-import com.android.systemui.dagger.qualifiers.Background;
+import com.android.systemui.dagger.qualifiers.LongRunning;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.demomode.DemoMode;
 import com.android.systemui.demomode.DemoModeController;
@@ -80,6 +80,7 @@ import com.android.systemui.plugins.log.LogBuffer;
 import com.android.systemui.plugins.log.LogLevel;
 import com.android.systemui.qs.tiles.dialog.InternetDialogFactory;
 import com.android.systemui.settings.UserTracker;
+import com.android.systemui.statusbar.pipeline.StatusBarPipelineFlags;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.DataSaverController;
 import com.android.systemui.statusbar.policy.DataSaverControllerImpl;
@@ -194,6 +195,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
     private final Executor mBgExecutor;
     // Handler that all callbacks are made on.
     private final CallbackHandler mCallbackHandler;
+    private final StatusBarPipelineFlags mStatusBarPipelineFlags;
 
     private int mEmergencySource;
     private boolean mIsEmergency;
@@ -228,12 +230,15 @@ public class NetworkControllerImpl extends BroadcastReceiver
 
     /**
      * Construct this controller object and register for updates.
+     *
+     * {@code @LongRunning} looper and bgExecutor instead {@code @Background} ones are used to
+     * address the b/246456655. This can be reverted after b/240663726 is fixed.
      */
     @Inject
     public NetworkControllerImpl(
             Context context,
-            @Background Looper bgLooper,
-            @Background Executor bgExecutor,
+            @LongRunning Looper bgLooper,
+            @LongRunning Executor bgExecutor,
             SubscriptionManager subscriptionManager,
             CallbackHandler callbackHandler,
             DeviceProvisionedController deviceProvisionedController,
@@ -244,6 +249,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
             TelephonyListenerManager telephonyListenerManager,
             @Nullable WifiManager wifiManager,
             AccessPointControllerImpl accessPointController,
+            StatusBarPipelineFlags statusBarPipelineFlags,
             DemoModeController demoModeController,
             CarrierConfigTracker carrierConfigTracker,
             WifiStatusTrackerFactory trackerFactory,
@@ -261,6 +267,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
                 bgExecutor,
                 callbackHandler,
                 accessPointController,
+                statusBarPipelineFlags,
                 new DataUsageController(context),
                 new SubscriptionDefaults(),
                 deviceProvisionedController,
@@ -287,6 +294,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
             Executor bgExecutor,
             CallbackHandler callbackHandler,
             AccessPointControllerImpl accessPointController,
+            StatusBarPipelineFlags statusBarPipelineFlags,
             DataUsageController dataUsageController,
             SubscriptionDefaults defaultsHandler,
             DeviceProvisionedController deviceProvisionedController,
@@ -307,6 +315,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
         mBgLooper = bgLooper;
         mBgExecutor = bgExecutor;
         mCallbackHandler = callbackHandler;
+        mStatusBarPipelineFlags = statusBarPipelineFlags;
         mDataSaverController = new DataSaverControllerImpl(context);
         mBroadcastDispatcher = broadcastDispatcher;
         mMobileFactory = mobileFactory;
@@ -1341,7 +1350,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
             mWifiSignalController.notifyListeners();
         }
         String sims = args.getString("sims");
-        if (sims != null) {
+        if (sims != null && !mStatusBarPipelineFlags.useNewMobileIcons()) {
             int num = MathUtils.constrain(Integer.parseInt(sims), 1, 8);
             List<SubscriptionInfo> subs = new ArrayList<>();
             if (num != mMobileSignalControllers.size()) {
@@ -1364,7 +1373,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
             mCallbackHandler.setNoSims(mHasNoSubs, mSimDetected);
         }
         String mobile = args.getString("mobile");
-        if (mobile != null) {
+        if (mobile != null && !mStatusBarPipelineFlags.useNewMobileIcons()) {
             boolean show = mobile.equals("show");
             String datatype = args.getString("datatype");
             String slotString = args.getString("slot");
@@ -1449,7 +1458,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
             controller.notifyListeners();
         }
         String carrierNetworkChange = args.getString("carriernetworkchange");
-        if (carrierNetworkChange != null) {
+        if (carrierNetworkChange != null && !mStatusBarPipelineFlags.useNewMobileIcons()) {
             boolean show = carrierNetworkChange.equals("show");
             for (int i = 0; i < mMobileSignalControllers.size(); i++) {
                 MobileSignalController controller = mMobileSignalControllers.valueAt(i);

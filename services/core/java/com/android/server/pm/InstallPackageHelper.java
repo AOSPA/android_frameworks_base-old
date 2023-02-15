@@ -20,6 +20,7 @@ import static android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DEFAULT;
 import static android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED;
 import static android.content.pm.PackageManager.INSTALL_FAILED_ALREADY_EXISTS;
 import static android.content.pm.PackageManager.INSTALL_FAILED_BAD_PERMISSION_GROUP;
+import static android.content.pm.PackageManager.INSTALL_FAILED_DEPRECATED_SDK_VERSION;
 import static android.content.pm.PackageManager.INSTALL_FAILED_DUPLICATE_PACKAGE;
 import static android.content.pm.PackageManager.INSTALL_FAILED_DUPLICATE_PERMISSION;
 import static android.content.pm.PackageManager.INSTALL_FAILED_DUPLICATE_PERMISSION_GROUP;
@@ -136,6 +137,7 @@ import android.os.incremental.IncrementalManager;
 import android.os.incremental.IncrementalStorage;
 import android.os.storage.StorageManager;
 import android.os.storage.VolumeInfo;
+import android.provider.DeviceConfig;
 import android.stats.storage.StorageEnums;
 import android.system.ErrnoException;
 import android.system.Os;
@@ -764,7 +766,7 @@ final class InstallPackageHelper {
                 || (installFlags & PackageManager.INSTALL_REQUEST_DOWNGRADE) != 0);
 
         if (ps != null && doSnapshotOrRestore) {
-            final String seInfo = AndroidPackageUtils.getSeInfo(request.getPkg(), ps);
+            final String seInfo = ps.getSeInfo();
             final RollbackManagerInternal rollbackManager =
                     mInjector.getLocalService(RollbackManagerInternal.class);
             rollbackManager.snapshotAndRestoreUserData(packageName,
@@ -1016,6 +1018,28 @@ final class InstallPackageHelper {
             throw new PrepareFailure("Failed parse during installPackageLI", e);
         } finally {
             Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
+        }
+
+        // If the minimum installable SDK version enforcement is enabled, block the install
+        // of apps using a lower target SDK version than required. This helps improve security
+        // and privacy as malware can target older SDK versions to avoid enforcement of new API
+        // behavior.
+        if (DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_PACKAGE_MANAGER_SERVICE,
+                "MinInstallableTargetSdk__install_block_enabled",
+                false)) {
+            int minInstallableTargetSdk =
+                    DeviceConfig.getInt(DeviceConfig.NAMESPACE_PACKAGE_MANAGER_SERVICE,
+                            "MinInstallableTargetSdk__min_installable_target_sdk",
+                            0);
+            if (parsedPackage.getTargetSdkVersion() < minInstallableTargetSdk) {
+                Slog.w(TAG, "App " + parsedPackage.getPackageName()
+                        + " targets deprecated sdk version");
+                throw new PrepareFailure(INSTALL_FAILED_DEPRECATED_SDK_VERSION,
+                        "App package must target at least version "
+                                + minInstallableTargetSdk);
+            }
+        } else {
+            Slog.i(TAG, "Minimum installable target sdk enforcement not enabled");
         }
 
         // Instant apps have several additional install-time checks.
@@ -2042,7 +2066,8 @@ final class InstallPackageHelper {
                         Slog.d(TAG, "Implicitly enabling system package on upgrade: " + pkgName);
                     }
                     // Enable system package for requested users
-                    if (installedForUsers != null) {
+                    if (installedForUsers != null
+                            && !installRequest.isKeepApplicationEnabledSetting()) {
                         for (int origUserId : installedForUsers) {
                             if (userId == UserHandle.USER_ALL || userId == origUserId) {
                                 ps.setEnabled(COMPONENT_ENABLED_STATE_DEFAULT,
@@ -2092,16 +2117,22 @@ final class InstallPackageHelper {
 
                 if (userId != UserHandle.USER_ALL) {
                     // It's implied that when a user requests installation, they want the app to
-                    // be installed and enabled.
+                    // be installed and enabled. The caller, however, can explicitly specify to
+                    // keep the existing enabled state.
                     ps.setInstalled(true, userId);
-                    ps.setEnabled(COMPONENT_ENABLED_STATE_DEFAULT, userId, installerPackageName);
+                    if (!installRequest.isKeepApplicationEnabledSetting()) {
+                        ps.setEnabled(COMPONENT_ENABLED_STATE_DEFAULT, userId,
+                                installerPackageName);
+                    }
                 } else if (allUsers != null) {
                     // The caller explicitly specified INSTALL_ALL_USERS flag.
                     // Thus, updating the settings to install the app for all users.
                     for (int currentUserId : allUsers) {
                         ps.setInstalled(true, currentUserId);
-                        ps.setEnabled(COMPONENT_ENABLED_STATE_DEFAULT, userId,
-                                installerPackageName);
+                        if (!installRequest.isKeepApplicationEnabledSetting()) {
+                            ps.setEnabled(COMPONENT_ENABLED_STATE_DEFAULT, currentUserId,
+                                    installerPackageName);
+                        }
                     }
                 }
 
@@ -2250,20 +2281,26 @@ final class InstallPackageHelper {
                 incrementalStorages.add(storage);
             }
 
-            try {
-                if (!VerityUtils.hasFsverity(pkg.getBaseApkPath())) {
-                    VerityUtils.setUpFsverity(pkg.getBaseApkPath(), (byte[]) null);
-                }
-                for (String path : pkg.getSplitCodePaths()) {
-                    if (!VerityUtils.hasFsverity(path)) {
-                        VerityUtils.setUpFsverity(path, (byte[]) null);
-                    }
-                }
-            } catch (IOException e) {
-                // There's nothing we can do if the setup failed. Since fs-verity is
-                // optional, just ignore the error for now.
-                Slog.e(TAG, "Failed to fully enable fs-verity to " + packageName);
+            // Enabling fs-verity is a blocking operation. To reduce the impact to the install time,
+            // run in a background thread.
+            final ArrayList<String> apkPaths = new ArrayList<>();
+            apkPaths.add(pkg.getBaseApkPath());
+            if (pkg.getSplitCodePaths() != null) {
+                Collections.addAll(apkPaths, pkg.getSplitCodePaths());
             }
+            mInjector.getBackgroundHandler().post(() -> {
+                try {
+                    for (String path : apkPaths) {
+                        if (!VerityUtils.hasFsverity(path)) {
+                            VerityUtils.setUpFsverity(path, (byte[]) null);
+                        }
+                    }
+                } catch (IOException e) {
+                    // There's nothing we can do if the setup failed. Since fs-verity is
+                    // optional, just ignore the error for now.
+                    Slog.e(TAG, "Failed to fully enable fs-verity to " + packageName);
+                }
+            });
 
             // Hardcode previousAppId to 0 to disable any data migration (http://b/221088088)
             mAppDataHelper.prepareAppDataPostCommitLIF(pkg, 0);
@@ -3914,13 +3951,20 @@ final class InstallPackageHelper {
                 && !pkgSetting.getPathString().equals(parsedPackage.getPath());
         final boolean newPkgVersionGreater = pkgAlreadyExists
                 && parsedPackage.getLongVersionCode() > pkgSetting.getVersionCode();
+        final boolean newSharedUserSetting = pkgAlreadyExists
+                && (initialScanRequest.mOldSharedUserSetting
+                != initialScanRequest.mSharedUserSetting);
         final boolean isSystemPkgBetter = scanSystemPartition && isSystemPkgUpdated
-                && newPkgChangedPaths && newPkgVersionGreater;
+                && newPkgChangedPaths && (newPkgVersionGreater || newSharedUserSetting);
         if (isSystemPkgBetter) {
             // The version of the application on /system is greater than the version on
             // /data. Switch back to the application on /system.
             // It's safe to assume the application on /system will correctly scan. If not,
             // there won't be a working copy of the application.
+            // Also, if the sharedUserSetting of the application on /system is different
+            // from the sharedUserSetting on /data, switch back to the application on /system.
+            // We should trust the sharedUserSetting on /system, even if the application
+            // version on /system is smaller than the version on /data.
             synchronized (mPm.mLock) {
                 // just remove the loaded entries from package lists
                 mPm.mPackages.remove(pkgSetting.getPackageName());
