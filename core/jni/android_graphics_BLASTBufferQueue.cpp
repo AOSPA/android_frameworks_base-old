@@ -104,19 +104,20 @@ static jobject nativeGetSurface(JNIEnv* env, jclass clazz, jlong ptr,
     return android_view_Surface_createFromSurface(env,
                                                   queue->getSurface(includeSurfaceControlHandle));
 }
-#ifdef QTI_PERF_PRERENDERING_BLASTBUFFERQUEUE
+
+/* QTI_BEGIN */
 static void nativeSetUndequeuedBufferCount(JNIEnv* env, jclass clazz, jlong ptr, jint count) {
     sp<BLASTBufferQueue> queue = reinterpret_cast<BLASTBufferQueue*>(ptr);
     if (queue == nullptr) return;
-    queue->setUndequeuedBufferCount(count);
+    queue->qtiSetUndequeuedBufferCount(count);
 }
 
 static jint nativeGetUndequeuedBufferCount(JNIEnv* env, jclass clazz, jlong ptr) {
     sp<BLASTBufferQueue> queue = reinterpret_cast<BLASTBufferQueue*>(ptr);
     if (queue == nullptr) return -1;
-    return queue->getUndequeuedBufferCount();
+    return queue->qtiGetUndequeuedBufferCount();
 }
-#endif
+/* QTI_END */
 
 class JGlobalRefHolder {
 public:
@@ -219,10 +220,10 @@ static const JNINativeMethod gMethods[] = {
         // clang-format off
         {"nativeCreate", "(Ljava/lang/String;Z)J", (void*)nativeCreate},
         {"nativeGetSurface", "(JZ)Landroid/view/Surface;", (void*)nativeGetSurface},
-#ifdef QTI_PERF_PRERENDERING_BLASTBUFFERQUEUE
+        /* QTI_BEGIN */
         {"nativeSetUndequeuedBufferCount", "(JI)V", (void*)nativeSetUndequeuedBufferCount},
         {"nativeGetUndequeuedBufferCount", "(J)I", (void*)nativeGetUndequeuedBufferCount},
-#endif
+        /* QTI_END */
         {"nativeDestroy", "(J)V", (void*)nativeDestroy},
         {"nativeSyncNextTransaction", "(JLjava/util/function/Consumer;Z)V", (void*)nativeSyncNextTransaction},
         {"nativeStopContinuousSyncTransaction", "(J)V", (void*)nativeStopContinuousSyncTransaction},

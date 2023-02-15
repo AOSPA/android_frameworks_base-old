@@ -9142,6 +9142,10 @@ public final class ViewRootImpl implements ViewParent,
 
             mViewFrameInfo.setInputEvent(mInputEventAssigner.processEvent(q.mEvent));
 
+            if (q.mEvent instanceof MotionEvent) {
+                ScrollOptimizer.setMotionType(((MotionEvent)q.mEvent).getActionMasked());
+            }
+
             deliverInputEvent(q);
         }
 
