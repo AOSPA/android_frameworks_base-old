@@ -80,7 +80,12 @@ constructor(
 ) : MobileIconViewModelCommon {
     /** Whether or not to show the error state of [SignalDrawable] */
     private val showExclamationMark: Flow<Boolean> =
-        iconInteractor.isDefaultDataEnabled.mapLatest { !it }
+        combine(
+            iconInteractor.isDefaultDataEnabled,
+            iconInteractor.hideNoInternetState
+        ){ isDefaultDataEnabled, hideNoInternetState ->
+            !isDefaultDataEnabled && !hideNoInternetState
+        }
 
     override val isVisible: StateFlow<Boolean> =
         if (!constants.hasDataCapabilities) {

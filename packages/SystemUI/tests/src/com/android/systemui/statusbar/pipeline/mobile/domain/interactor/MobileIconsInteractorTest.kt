@@ -744,6 +744,70 @@ class MobileIconsInteractorTest : SysuiTestCase() {
         return Pair(sub1, sub2)
     }
 
+    @Test
+    fun alwaysUseRsrpLevelForLte_configHasTrue() =
+        testScope.runTest {
+            var latest: Boolean? = null
+            val job = underTest.alwaysUseRsrpLevelForLte.onEach { latest = it }.launchIn(this)
+
+            val config = MobileMappings.Config()
+            config.showRsrpSignalLevelforLTE = true
+            connectionsRepository.defaultDataSubRatConfig.value = config
+            yield()
+
+            assertThat(latest).isTrue()
+
+            job.cancel()
+        }
+
+    @Test
+    fun alwaysUseRsrpLevelForLte_configHasFalse() =
+        testScope.runTest {
+            var latest: Boolean? = null
+            val job = underTest.alwaysUseRsrpLevelForLte.onEach { latest = it }.launchIn(this)
+
+            val config = MobileMappings.Config()
+            config.showRsrpSignalLevelforLTE = false
+            connectionsRepository.defaultDataSubRatConfig.value = config
+            yield()
+
+            assertThat(latest).isFalse()
+
+            job.cancel()
+        }
+
+    @Test
+    fun hideNoInternetState_configHasTrue() =
+        testScope.runTest {
+            var latest: Boolean? = null
+            val job = underTest.hideNoInternetState.onEach { latest = it }.launchIn(this)
+
+            val config = MobileMappings.Config()
+            config.hideNoInternetState = true
+            connectionsRepository.defaultDataSubRatConfig.value = config
+            yield()
+
+            assertThat(latest).isTrue()
+
+            job.cancel()
+        }
+
+    @Test
+    fun hideNoInternetState_configHasFalse() =
+        testScope.runTest {
+            var latest: Boolean? = null
+            val job = underTest.hideNoInternetState.onEach { latest = it }.launchIn(this)
+
+            val config = MobileMappings.Config()
+            config.hideNoInternetState = false
+            connectionsRepository.defaultDataSubRatConfig.value = config
+            yield()
+
+            assertThat(latest).isTrue()
+
+            job.cancel()
+        }
+
     companion object {
         private val tableLogBuffer =
             TableLogBuffer(8, "MobileIconsInteractorTest", FakeSystemClock())

@@ -20,8 +20,14 @@ import android.content.Context
 import android.content.IntentFilter
 import android.telephony.CellSignalStrength
 import android.telephony.CellSignalStrengthCdma
+import android.telephony.CellSignalStrengthLte
 import android.telephony.ServiceState
 import android.telephony.SignalStrength
+import android.telephony.SignalStrength.SIGNAL_STRENGTH_GREAT
+import android.telephony.SignalStrength.SIGNAL_STRENGTH_GOOD
+import android.telephony.SignalStrength.SIGNAL_STRENGTH_MODERATE
+import android.telephony.SignalStrength.SIGNAL_STRENGTH_POOR
+import android.telephony.SignalStrength.SIGNAL_STRENGTH_NONE_OR_UNKNOWN
 import android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID
 import android.telephony.TelephonyCallback
 import android.telephony.TelephonyDisplayInfo
@@ -177,6 +183,8 @@ class MobileConnectionRepositoryImpl(
                     isRoaming = serviceState.roaming,
                     operatorAlphaShort = serviceState.operatorAlphaShort,
                     isInService = Utils.isInService(serviceState),
+                    voiceNetworkType = serviceState.voiceNetworkType,
+                    dataNetworkType = serviceState.dataNetworkType,
                 )
             }
             is CallbackEvent.OnSignalStrengthChanged -> {
@@ -193,10 +201,29 @@ class MobileConnectionRepositoryImpl(
 
                 val primaryLevel = signalStrength.level
 
+                val lteRsrpLevel =
+                    signalStrength
+                        .getCellSignalStrengths(CellSignalStrengthLte::class.java)
+                        .let { strengths ->
+                            if (!strengths.isEmpty()) {
+                                when (strengths[0].rsrp) {
+                                    SignalStrength.INVALID -> signalStrength.level
+                                    in -120 until -113 -> SIGNAL_STRENGTH_POOR
+                                    in -113 until -105 -> SIGNAL_STRENGTH_MODERATE
+                                    in -105 until -97 -> SIGNAL_STRENGTH_GOOD
+                                    in -97 until -43 -> SIGNAL_STRENGTH_GREAT
+                                    else -> SIGNAL_STRENGTH_NONE_OR_UNKNOWN
+                                }
+                            } else {
+                                signalStrength.level
+                            }
+                        }
+
                 prevState.copy(
                     cdmaLevel = cdmaLevel,
                     primaryLevel = primaryLevel,
                     isGsm = signalStrength.isGsm,
+                    lteRsrpLevel = lteRsrpLevel,
                 )
             }
             is CallbackEvent.OnDataConnectionStateChanged -> {
