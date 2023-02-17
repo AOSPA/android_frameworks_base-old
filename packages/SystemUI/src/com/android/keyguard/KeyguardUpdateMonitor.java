@@ -2654,14 +2654,14 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                         || mOccludingAppRequestingFace
                         || awakeKeyguard
                         || shouldListenForFaceAssistant
-                        || mAuthController.isUdfpsFingerDown()
                         || mUdfpsBouncerShowing)
                 && !mSwitchingUser && !faceDisabledForUser && becauseCannotSkipBouncer
                 && !mKeyguardGoingAway && biometricEnabledForUser
                 && strongAuthAllowsScanning && mIsPrimaryUser
                 && (!mSecureCameraLaunched || mOccludingAppRequestingFace)
                 && !faceAuthenticated
-                && !fpOrFaceIsLockedOut;
+                && !fpOrFaceIsLockedOut
+                && !mAuthController.isUdfpsFingerDown();
 
         // Aggregate relevant fields for debug logging.
         maybeLogListenerModelData(
