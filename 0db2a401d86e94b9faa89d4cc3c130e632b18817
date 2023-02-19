@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "b199f4dc_a727d3fe",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 6
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000427
+      },
+      "writtenOn": "2023-02-19T03:11:02Z",
+      "side": 1,
+      "message": "i\u0027d like to explore moving this out of base in the future since it seems like a lot of code for just writing a setting and a sysfs node, but it\u0027s ok for now.",
+      "revId": "0db2a401d86e94b9faa89d4cc3c130e632b18817",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
