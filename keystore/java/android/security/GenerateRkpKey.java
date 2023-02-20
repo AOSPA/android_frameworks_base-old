@@ -52,6 +52,7 @@ public class GenerateRkpKey {
     private static final int NOTIFY_EMPTY = 0;
     private static final int NOTIFY_KEY_GENERATED = 1;
     private static final int TIMEOUT_MS = 1000;
+    private static final int DELAY_MS = 100;
 
     private IGenerateRkpKeyService mBinder;
     private Context mContext;
@@ -82,14 +83,20 @@ public class GenerateRkpKey {
     }
 
     private void bindAndSendCommand(int command, int securityLevel) throws RemoteException {
+        mCountDownLatch = new CountDownLatch(1);
         Intent intent = new Intent(IGenerateRkpKeyService.class.getName());
+        try {
+            //Add 100ms delay to allow GenerateKeyService to come up
+            mCountDownLatch.await(DELAY_MS, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Log.e(TAG, "Interrupted: ", e);
+        }
         ComponentName comp = intent.resolveSystemService(mContext.getPackageManager(), 0);
         if (comp == null) {
             // On a system that does not use RKP, the RemoteProvisioner app won't be installed.
             return;
         }
         intent.setComponent(comp);
-        mCountDownLatch = new CountDownLatch(1);
         Executor executor = Executors.newCachedThreadPool();
         if (!mContext.bindService(intent, Context.BIND_AUTO_CREATE, executor, mConnection)) {
             throw new RemoteException("Failed to bind to GenerateRkpKeyService");
