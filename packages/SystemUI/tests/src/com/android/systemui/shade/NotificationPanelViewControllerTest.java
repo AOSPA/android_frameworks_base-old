@@ -98,6 +98,7 @@ import com.android.systemui.SysuiTestCase;
 import com.android.systemui.biometrics.AuthController;
 import com.android.systemui.classifier.FalsingCollectorFake;
 import com.android.systemui.classifier.FalsingManagerFake;
+import com.android.systemui.common.ui.view.LongPressHandlingView;
 import com.android.systemui.doze.DozeLog;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.flags.FeatureFlags;
@@ -106,10 +107,12 @@ import com.android.systemui.fragments.FragmentService;
 import com.android.systemui.keyguard.KeyguardUnlockAnimationController;
 import com.android.systemui.keyguard.domain.interactor.AlternateBouncerInteractor;
 import com.android.systemui.keyguard.domain.interactor.KeyguardBottomAreaInteractor;
+import com.android.systemui.keyguard.domain.interactor.KeyguardInteractor;
 import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInteractor;
 import com.android.systemui.keyguard.ui.viewmodel.DreamingToLockscreenTransitionViewModel;
 import com.android.systemui.keyguard.ui.viewmodel.GoneToDreamingTransitionViewModel;
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardBottomAreaViewModel;
+import com.android.systemui.keyguard.ui.viewmodel.KeyguardLongPressViewModel;
 import com.android.systemui.keyguard.ui.viewmodel.LockscreenToDreamingTransitionViewModel;
 import com.android.systemui.keyguard.ui.viewmodel.LockscreenToOccludedTransitionViewModel;
 import com.android.systemui.keyguard.ui.viewmodel.OccludedToLockscreenTransitionViewModel;
@@ -198,7 +201,7 @@ import kotlinx.coroutines.CoroutineDispatcher;
 
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
-@TestableLooper.RunWithLooper
+@TestableLooper.RunWithLooper(setAsMainLooper = true)
 public class NotificationPanelViewControllerTest extends SysuiTestCase {
 
     private static final int SPLIT_SHADE_FULL_TRANSITION_DISTANCE = 400;
@@ -305,6 +308,8 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
     @Mock private GoneToDreamingTransitionViewModel mGoneToDreamingTransitionViewModel;
 
     @Mock private KeyguardTransitionInteractor mKeyguardTransitionInteractor;
+    @Mock private KeyguardInteractor mKeyguardInteractor;
+    @Mock private KeyguardLongPressViewModel mKeyuardLongPressViewModel;
     @Mock private CoroutineDispatcher mMainDispatcher;
     @Mock private MotionEvent mDownMotionEvent;
     @Captor
@@ -461,6 +466,9 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
 
         mMainHandler = new Handler(Looper.getMainLooper());
 
+        when(mView.requireViewById(R.id.keyguard_long_press))
+                .thenReturn(mock(LongPressHandlingView.class));
+
         mNotificationPanelViewController = new NotificationPanelViewController(
                 mView,
                 mMainHandler,
@@ -531,6 +539,8 @@ public class NotificationPanelViewControllerTest extends SysuiTestCase {
                 mMainDispatcher,
                 mKeyguardTransitionInteractor,
                 mDumpManager,
+                mKeyuardLongPressViewModel,
+                mKeyguardInteractor,
                 mEmergencyButtonControllerFactory);
         mNotificationPanelViewController.initDependencies(
                 mCentralSurfaces,

@@ -32,6 +32,7 @@ import static android.app.ActivityManager.INSTR_FLAG_DISABLE_TEST_API_CHECKS;
 import static android.app.ActivityManager.INSTR_FLAG_NO_RESTART;
 import static android.app.ActivityManager.INTENT_SENDER_ACTIVITY;
 import static android.app.ActivityManager.PROCESS_CAPABILITY_ALL;
+import static android.app.ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE;
 import static android.app.ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND;
 import static android.app.ActivityManager.PROCESS_STATE_NONEXISTENT;
 import static android.app.ActivityManager.PROCESS_STATE_TOP;
@@ -3404,6 +3405,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         mBatteryStatsService.noteProcessDied(app.info.uid, pid);
+        mOomAdjuster.updateShortFgsOwner(app.info.uid, pid, false);
 
         if (!app.isKilled()) {
             if (!fromBinderDied) {
@@ -8520,15 +8522,13 @@ public class ActivityManagerService extends IActivityManager.Stub
                 t.traceEnd();
             }
 
+            boolean isBootingSystemUser = currentUserId == UserHandle.USER_SYSTEM;
+
             // Some systems - like automotive - will explicitly unlock system user then switch
-            // to a secondary user. Hence, we don't want to send duplicate broadcasts for
-            // the system user here.
+            // to a secondary user.
             // TODO(b/242195409): this workaround shouldn't be necessary once we move
             // the headless-user start logic to UserManager-land.
-            final boolean isBootingSystemUser = (currentUserId == UserHandle.USER_SYSTEM)
-                    && !UserManager.isHeadlessSystemUserMode();
-
-            if (isBootingSystemUser) {
+            if (isBootingSystemUser && !UserManager.isHeadlessSystemUserMode()) {
                 t.traceBegin("startHomeOnAllDisplays");
                 mAtmInternal.startHomeOnAllDisplays(currentUserId, "systemReady");
                 t.traceEnd();
@@ -8540,6 +8540,10 @@ public class ActivityManagerService extends IActivityManager.Stub
 
 
             if (isBootingSystemUser) {
+                // Need to send the broadcasts for the system user here because
+                // UserController#startUserInternal will not send them for the system user starting,
+                // It checks if the user state already exists, which is always the case for the
+                // system user.
                 t.traceBegin("sendUserStartBroadcast");
                 final int callingUid = Binder.getCallingUid();
                 final int callingPid = Binder.getCallingPid();
@@ -14364,6 +14368,16 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
         }
 
+        if (Process.isSdkSandboxUid(realCallingUid)) {
+            SdkSandboxManagerLocal sdkSandboxManagerLocal = LocalManagerRegistry.getManager(
+                    SdkSandboxManagerLocal.class);
+            if (sdkSandboxManagerLocal == null) {
+                throw new IllegalStateException("SdkSandboxManagerLocal not found when sending"
+                    + " a broadcast from an SDK sandbox uid.");
+            }
+            sdkSandboxManagerLocal.enforceAllowedToSendBroadcast(intent);
+        }
+
         boolean timeoutExempt = false;
 
         if (action != null) {
@@ -14372,16 +14386,6 @@ public class ActivityManagerService extends IActivityManager.Stub
                     Slog.i(TAG, "Broadcast action " + action + " forcing include-background");
                 }
                 intent.addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
-            }
-
-            if (Process.isSdkSandboxUid(realCallingUid)) {
-                SdkSandboxManagerLocal sdkSandboxManagerLocal = LocalManagerRegistry.getManager(
-                        SdkSandboxManagerLocal.class);
-                if (sdkSandboxManagerLocal == null) {
-                    throw new IllegalStateException("SdkSandboxManagerLocal not found when sending"
-                            + " a broadcast from an SDK sandbox uid.");
-                }
-                sdkSandboxManagerLocal.enforceAllowedToSendBroadcast(intent);
             }
 
             switch (action) {
@@ -16835,6 +16839,12 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     @Override
+    public boolean startProfileWithListener(@UserIdInt int userId,
+            @Nullable IProgressListener unlockListener) {
+        return mUserController.startProfile(userId, unlockListener);
+    }
+
+    @Override
     public boolean stopProfile(@UserIdInt int userId) {
         return mUserController.stopProfile(userId);
     }
@@ -17957,11 +17967,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                  */
                 synchronized (wmLock) {
                     if ((startFlags & ActivityManager.START_FLAG_DEBUG) != 0) {
-                        setDebugApp(aInfo.processName, true, false);
-                    }
-
-                    if ((startFlags & ActivityManager.START_FLAG_DEBUG_SUSPEND) != 0) {
-                        setDebugApp(aInfo.processName, true, false, true);
+                        boolean suspend =
+                                (startFlags & ActivityManager.START_FLAG_DEBUG_SUSPEND) != 0;
+                        setDebugApp(aInfo.processName, true, false, suspend);
                     }
 
                     if ((startFlags & ActivityManager.START_FLAG_NATIVE_DEBUGGING) != 0) {
@@ -18420,6 +18428,23 @@ public class ActivityManagerService extends IActivityManager.Stub
         public void unregisterStrictModeCallback(int callingPid) {
             mStrictModeCallbacks.remove(callingPid);
         }
+
+        @Override
+        public boolean canHoldWakeLocksInDeepDoze(int uid, int procstate) {
+            // This method is called with the PowerManager lock held. Do not hold AM here.
+
+            // If the procstate is high enough, it's always allowed.
+            if (procstate <= PROCESS_STATE_BOUND_FOREGROUND_SERVICE) {
+                return true;
+            }
+            // IF it's too low, it's not allowed.
+            if (procstate > PROCESS_STATE_IMPORTANT_FOREGROUND) {
+                return false;
+            }
+            // If it's PROCESS_STATE_IMPORTANT_FOREGROUND, then we allow it only wheen the UID
+            // has a SHORT_FGS.
+            return mOomAdjuster.hasUidShortForegroundService(uid);
+        }
     }
 
     long inputDispatchingTimedOut(int pid, final boolean aboveSystem, TimeoutRecord timeoutRecord) {
@@ -18610,6 +18635,12 @@ public class ActivityManagerService extends IActivityManager.Stub
     public boolean isModernBroadcastQueueEnabled() {
         enforceCallingPermission(permission.DUMP, "isModernBroadcastQueueEnabled()");
         return mEnableModernQueue;
+    }
+
+    @Override
+    public boolean isProcessFrozen(int pid) {
+        enforceCallingPermission(permission.DUMP, "isProcessFrozen()");
+        return mOomAdjuster.mCachedAppOptimizer.isProcessFrozen(pid);
     }
 
     @Override

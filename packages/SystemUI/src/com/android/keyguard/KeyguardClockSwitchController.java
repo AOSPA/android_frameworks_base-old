@@ -45,6 +45,7 @@ import com.android.systemui.plugins.log.LogBuffer;
 import com.android.systemui.plugins.log.LogLevel;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.shared.clocks.ClockRegistry;
+import com.android.systemui.shared.regionsampling.RegionSampler;
 import com.android.systemui.statusbar.lockscreen.LockscreenSmartspaceController;
 import com.android.systemui.statusbar.notification.AnimatableProperty;
 import com.android.systemui.statusbar.notification.PropertyAnimator;
@@ -88,7 +89,10 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
     private final ClockRegistry.ClockChangeListener mClockChangedListener;
 
     private ViewGroup mStatusArea;
-    // If set will replace keyguard_slice_view
+
+    // If the SMARTSPACE flag is set, keyguard_slice_view is replaced by the following views.
+    private ViewGroup mDateWeatherView;
+    private View mWeatherView;
     private View mSmartspaceView;
 
     private final KeyguardUnlockAnimationController mKeyguardUnlockAnimationController;
@@ -192,14 +196,21 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
 
         if (mSmartspaceController.isEnabled()) {
             View ksv = mView.findViewById(R.id.keyguard_slice_view);
-            int ksvIndex = mStatusArea.indexOfChild(ksv);
+            int viewIndex = mStatusArea.indexOfChild(ksv);
             ksv.setVisibility(View.GONE);
 
-            addSmartspaceView(ksvIndex);
+            // TODO(b/261757708): add content observer for the Settings toggle and add/remove
+            //  weather according to the Settings.
+            if (mSmartspaceController.isDateWeatherDecoupled()) {
+                addDateWeatherView(viewIndex);
+                viewIndex += 1;
+            }
+
+            addSmartspaceView(viewIndex);
         }
 
         mSecureSettings.registerContentObserverForUser(
-                Settings.Secure.getUriFor(Settings.Secure.LOCKSCREEN_USE_DOUBLE_LINE_CLOCK),
+                Settings.Secure.LOCKSCREEN_USE_DOUBLE_LINE_CLOCK,
                 false, /* notifyForDescendants */
                 mDoubleLineClockObserver,
                 UserHandle.USER_ALL
@@ -229,12 +240,44 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
 
     void onLocaleListChanged() {
         if (mSmartspaceController.isEnabled()) {
+            if (mSmartspaceController.isDateWeatherDecoupled()) {
+                mDateWeatherView.removeView(mWeatherView);
+                int index = mStatusArea.indexOfChild(mDateWeatherView);
+                if (index >= 0) {
+                    mStatusArea.removeView(mDateWeatherView);
+                    addDateWeatherView(index);
+                }
+            }
             int index = mStatusArea.indexOfChild(mSmartspaceView);
             if (index >= 0) {
                 mStatusArea.removeView(mSmartspaceView);
                 addSmartspaceView(index);
             }
         }
+    }
+
+    private void addDateWeatherView(int index) {
+        mDateWeatherView = (ViewGroup) mSmartspaceController.buildAndConnectDateView(mView);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                MATCH_PARENT, WRAP_CONTENT);
+        mStatusArea.addView(mDateWeatherView, index, lp);
+        int startPadding = getContext().getResources().getDimensionPixelSize(
+                R.dimen.below_clock_padding_start);
+        int endPadding = getContext().getResources().getDimensionPixelSize(
+                R.dimen.below_clock_padding_end);
+        mDateWeatherView.setPaddingRelative(startPadding, 0, endPadding, 0);
+
+        addWeatherView();
+    }
+
+    private void addWeatherView() {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                WRAP_CONTENT, WRAP_CONTENT);
+        mWeatherView = mSmartspaceController.buildAndConnectWeatherView(mView);
+        // Place weather right after the date, before the extras
+        final int index = mDateWeatherView.getChildCount() == 0 ? 0 : 1;
+        mDateWeatherView.addView(mWeatherView, index, lp);
+        mWeatherView.setPaddingRelative(0, 0, 4, 0);
     }
 
     private void addSmartspaceView(int index) {
@@ -423,6 +466,10 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
         ClockController clock = getClock();
         if (clock != null) {
             clock.dump(pw);
+        }
+        final RegionSampler regionSampler = mClockEventController.getRegionSampler();
+        if (regionSampler != null) {
+            regionSampler.dump(pw);
         }
     }
 

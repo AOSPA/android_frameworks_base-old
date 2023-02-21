@@ -138,18 +138,25 @@ interface IAudioService {
     @EnforcePermission("MODIFY_AUDIO_ROUTING")
     List<AudioVolumeGroup> getAudioVolumeGroups();
 
-    @EnforcePermission("MODIFY_AUDIO_ROUTING")
-    void setVolumeIndexForAttributes(in AudioAttributes aa, int index, int flags,
-            String callingPackage, in String attributionTag);
+    @EnforcePermission(anyOf={"MODIFY_AUDIO_SYSTEM_SETTINGS", "MODIFY_AUDIO_ROUTING"})
+    void setVolumeGroupVolumeIndex(int groupId, int index, int flags, String callingPackage,
+            in String attributionTag);
 
-    @EnforcePermission("MODIFY_AUDIO_ROUTING")
-    int getVolumeIndexForAttributes(in AudioAttributes aa);
+    @EnforcePermission(anyOf={"MODIFY_AUDIO_SYSTEM_SETTINGS", "MODIFY_AUDIO_ROUTING"})
+    int getVolumeGroupVolumeIndex(int groupId);
 
-    @EnforcePermission("MODIFY_AUDIO_ROUTING")
-    int getMaxVolumeIndexForAttributes(in AudioAttributes aa);
+    @EnforcePermission(anyOf={"MODIFY_AUDIO_SYSTEM_SETTINGS", "MODIFY_AUDIO_ROUTING"})
+    int getVolumeGroupMaxVolumeIndex(int groupId);
 
-    @EnforcePermission("MODIFY_AUDIO_ROUTING")
-    int getMinVolumeIndexForAttributes(in AudioAttributes aa);
+    @EnforcePermission(anyOf={"MODIFY_AUDIO_SYSTEM_SETTINGS", "MODIFY_AUDIO_ROUTING"})
+    int getVolumeGroupMinVolumeIndex(int groupId);
+
+    @EnforcePermission("QUERY_AUDIO_STATE")
+    int getLastAudibleVolumeGroupVolume(int groupId);
+
+    boolean isVolumeGroupMuted(int groupId);
+
+    void adjustVolumeGroupVolume(int groupId, int direction, int flags, String callingPackage);
 
     @EnforcePermission("QUERY_AUDIO_STATE")
     int getLastAudibleStreamVolume(int streamType);
@@ -263,6 +270,8 @@ interface IAudioService {
 
     void setVolumeController(in IVolumeController controller);
 
+    @nullable IVolumeController getVolumeController();
+
     void notifyVolumeControllerVisible(in IVolumeController controller, boolean visible);
 
     boolean isStreamAffectedByRingerMode(int streamType);
@@ -272,6 +281,27 @@ interface IAudioService {
     void disableSafeMediaVolume(String callingPackage);
 
     void lowerVolumeToRs1(String callingPackage);
+
+    @EnforcePermission("MODIFY_AUDIO_SYSTEM_SETTINGS")
+    float getRs2Value();
+
+    @EnforcePermission("MODIFY_AUDIO_SYSTEM_SETTINGS")
+    oneway void setRs2Value(float rs2Value);
+
+    @EnforcePermission("MODIFY_AUDIO_SYSTEM_SETTINGS")
+    float getCsd();
+
+    @EnforcePermission("MODIFY_AUDIO_SYSTEM_SETTINGS")
+    oneway void setCsd(float csd);
+
+    @EnforcePermission("MODIFY_AUDIO_SYSTEM_SETTINGS")
+    oneway void forceUseFrameworkMel(boolean useFrameworkMel);
+
+    @EnforcePermission("MODIFY_AUDIO_SYSTEM_SETTINGS")
+    oneway void forceComputeCsdOnAllDevices(boolean computeCsdOnAllDevices);
+
+    @EnforcePermission("MODIFY_AUDIO_SYSTEM_SETTINGS")
+    boolean isCsdEnabled();
 
     int setHdmiSystemAudioSupported(boolean on);
 
@@ -385,10 +415,11 @@ interface IAudioService {
 
     oneway void setRttEnabled(in boolean rttEnabled);
 
-    @EnforcePermission("MODIFY_AUDIO_ROUTING")
+    @EnforcePermission(anyOf = {"MODIFY_AUDIO_ROUTING", "MODIFY_AUDIO_SYSTEM_SETTINGS"})
     void setDeviceVolumeBehavior(in AudioDeviceAttributes device,
              in int deviceVolumeBehavior, in String pkgName);
 
+    @EnforcePermission(anyOf = {"MODIFY_AUDIO_ROUTING", "QUERY_AUDIO_STATE", "MODIFY_AUDIO_SYSTEM_SETTINGS"})
     int getDeviceVolumeBehavior(in AudioDeviceAttributes device);
 
     // WARNING: read warning at top of file, new methods that need to be used by native

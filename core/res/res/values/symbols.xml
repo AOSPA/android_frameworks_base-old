@@ -328,6 +328,7 @@
   <java-symbol type="bool" name="config_use_strict_phone_number_comparation_for_kazakhstan" />
   <java-symbol type="integer" name="config_phonenumber_compare_min_match" />
   <java-symbol type="bool" name="config_single_volume" />
+  <java-symbol type="bool" name="config_volume_down_to_enter_silent" />
   <java-symbol type="bool" name="config_voice_capable" />
   <java-symbol type="bool" name="config_requireCallCapableAccountForHandle" />
   <java-symbol type="bool" name="config_user_notification_of_restrictied_mobile_access" />
@@ -340,6 +341,7 @@
   <java-symbol type="bool" name="config_checkWallpaperAtBoot" />
   <java-symbol type="string" name="config_wallpaperManagerServiceName" />
   <java-symbol type="string" name="config_inputEventCompatProcessorOverrideClassName" />
+  <java-symbol type="string" name="config_defaultHealthConnectApp" />
   <java-symbol type="bool" name="config_sendAudioBecomingNoisy" />
   <java-symbol type="bool" name="config_enableScreenshotChord" />
   <java-symbol type="bool" name="config_enableWifiDisplay" />
@@ -1062,6 +1064,7 @@
   <java-symbol type="string" name="managed_profile_label_badge" />
   <java-symbol type="string" name="managed_profile_label_badge_2" />
   <java-symbol type="string" name="managed_profile_label_badge_3" />
+  <java-symbol type="string" name="clone_profile_label_badge" />
   <java-symbol type="string" name="mediasize_unknown_portrait" />
   <java-symbol type="string" name="mediasize_unknown_landscape" />
   <java-symbol type="string" name="mediasize_iso_a0" />
@@ -1400,6 +1403,8 @@
   <java-symbol type="drawable" name="ic_qs_auto_rotate" />
   <java-symbol type="drawable" name="ic_qs_dnd" />
   <java-symbol type="drawable" name="ic_qs_one_handed_mode" />
+  <java-symbol type="drawable" name="ic_clone_icon_badge" />
+  <java-symbol type="drawable" name="ic_clone_badge" />
 
   <java-symbol type="drawable" name="sim_light_blue" />
   <java-symbol type="drawable" name="sim_light_green" />
@@ -2790,7 +2795,6 @@
   <java-symbol type="dimen" name="fast_scroller_minimum_touch_target" />
   <java-symbol type="array" name="config_cdma_international_roaming_indicators" />
   <java-symbol type="string" name="kg_text_message_separator" />
-  <java-symbol type="bool" name="kg_wake_on_acquire_start" />
 
   <java-symbol type="bool" name="config_use_sim_language_file" />
   <java-symbol type="bool" name="config_LTE_eri_for_network_name" />
@@ -3401,6 +3405,12 @@
   <java-symbol type="array" name="config_displayWhiteBalanceDisplayPrimaries" />
   <java-symbol type="array" name="config_displayWhiteBalanceDisplayNominalWhite" />
   <java-symbol type="bool" name="config_displayWhiteBalanceLightModeAllowed" />
+  <java-symbol type="integer" name="config_displayWhiteBalanceTransitionTime" />
+
+  <!-- Device states where the sensor based rotation values should be reversed around the Z axis
+       for the default display.
+       TODO(b/265312193): Remove this workaround when this bug is fixed.-->
+  <java-symbol type="array" name="config_deviceStatesToReverseDefaultDisplayRotationAroundZAxis" />
 
   <!-- Default user restrictions for the SYSTEM user -->
   <java-symbol type="array" name="config_defaultFirstUserRestrictions" />
@@ -3986,8 +3996,10 @@
   <java-symbol type="integer" name="config_maxScanTasksForHomeVisibility" />
 
   <!-- For Foldables -->
+  <java-symbol type="array" name="config_openDeviceStates" />
   <java-symbol type="array" name="config_foldedDeviceStates" />
   <java-symbol type="array" name="config_halfFoldedDeviceStates" />
+  <java-symbol type="array" name="config_rearDisplayDeviceStates" />
   <java-symbol type="bool" name="config_windowManagerHalfFoldAutoRotateOverride" />
   <java-symbol type="array" name="config_deviceStatesOnWhichToWakeUp" />
   <java-symbol type="array" name="config_deviceStatesOnWhichToSleep" />
@@ -4469,6 +4481,7 @@
   <java-symbol type="bool" name="config_letterboxIsEducationEnabled" />
   <java-symbol type="dimen" name="config_letterboxDefaultMinAspectRatioForUnresizableApps" />
   <java-symbol type="bool" name="config_letterboxIsSplitScreenAspectRatioForUnresizableAppsEnabled" />
+  <java-symbol type="bool" name="config_letterboxIsDisplayAspectRatioForFixedOrientationLetterboxEnabled" />
   <java-symbol type="bool" name="config_isCompatFakeFocusEnabled" />
   <java-symbol type="bool" name="config_isWindowManagerCameraCompatTreatmentEnabled" />
   <java-symbol type="bool" name="config_isCameraCompatControlForStretchedIssuesEnabled" />
@@ -4836,6 +4849,8 @@
   <java-symbol type="string" name="config_systemGameService" />
 
   <java-symbol type="string" name="config_supervisedUserCreationPackage"/>
+
+  <java-symbol type="bool" name="config_enableStylusPointerIcon" />
 
   <java-symbol type="bool" name="config_enableSafetyCenter" />
 

@@ -17,11 +17,21 @@
 package com.android.server.wm;
 
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
+import static android.content.pm.ActivityInfo.OVERRIDE_ANY_ORIENTATION;
 import static android.content.pm.ActivityInfo.OVERRIDE_CAMERA_COMPAT_DISABLE_FORCE_ROTATION;
 import static android.content.pm.ActivityInfo.OVERRIDE_CAMERA_COMPAT_DISABLE_REFRESH;
 import static android.content.pm.ActivityInfo.OVERRIDE_CAMERA_COMPAT_ENABLE_REFRESH_VIA_PAUSE;
 import static android.content.pm.ActivityInfo.OVERRIDE_ENABLE_COMPAT_IGNORE_REQUESTED_ORIENTATION;
+import static android.content.pm.ActivityInfo.OVERRIDE_LANDSCAPE_ORIENTATION_TO_REVERSE_LANDSCAPE;
+import static android.content.pm.ActivityInfo.OVERRIDE_UNDEFINED_ORIENTATION_TO_NOSENSOR;
+import static android.content.pm.ActivityInfo.OVERRIDE_UNDEFINED_ORIENTATION_TO_PORTRAIT;
+import static android.content.pm.ActivityInfo.OVERRIDE_USE_DISPLAY_LANDSCAPE_NATURAL_ORIENTATION;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_NOSENSOR;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+import static android.content.pm.ActivityInfo.isFixedOrientation;
+import static android.content.pm.ActivityInfo.isFixedOrientationLandscape;
 import static android.content.pm.ActivityInfo.screenOrientationToString;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
@@ -29,6 +39,8 @@ import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER;
 import static android.view.WindowManager.PROPERTY_CAMERA_COMPAT_ALLOW_FORCE_ROTATION;
 import static android.view.WindowManager.PROPERTY_CAMERA_COMPAT_ALLOW_REFRESH;
 import static android.view.WindowManager.PROPERTY_CAMERA_COMPAT_ENABLE_REFRESH_VIA_PAUSE;
+import static android.view.WindowManager.PROPERTY_COMPAT_ALLOW_DISPLAY_ORIENTATION_OVERRIDE;
+import static android.view.WindowManager.PROPERTY_COMPAT_ALLOW_ORIENTATION_OVERRIDE;
 import static android.view.WindowManager.PROPERTY_COMPAT_IGNORE_REQUESTED_ORIENTATION;
 
 import static com.android.internal.util.FrameworkStatsLog.APP_COMPAT_STATE_CHANGED__LETTERBOX_POSITION__BOTTOM;
@@ -61,6 +73,9 @@ import static com.android.server.wm.LetterboxConfiguration.LETTERBOX_VERTICAL_RE
 import static com.android.server.wm.LetterboxConfiguration.LETTERBOX_VERTICAL_REACHABILITY_POSITION_TOP;
 import static com.android.server.wm.LetterboxConfiguration.MIN_FIXED_ORIENTATION_LETTERBOX_ASPECT_RATIO;
 import static com.android.server.wm.LetterboxConfiguration.letterboxBackgroundTypeToString;
+
+import static java.lang.Boolean.FALSE;
+import static java.lang.Boolean.TRUE;
 
 import android.annotation.Nullable;
 import android.app.ActivityManager.TaskDescription;
@@ -104,6 +119,40 @@ final class LetterboxUiController {
     private final LetterboxConfiguration mLetterboxConfiguration;
 
     private final ActivityRecord mActivityRecord;
+
+    /**
+     * Taskbar expanded height. Used to determine when to crop an app window to display the
+     * rounded corners above the expanded taskbar.
+     */
+    private final float mExpandedTaskBarHeight;
+
+    // TODO(b/265576778): Cache other overrides as well.
+
+    // Corresponds to OVERRIDE_ANY_ORIENTATION
+    private final boolean mIsOverrideAnyOrientationEnabled;
+    // Corresponds to OVERRIDE_UNDEFINED_ORIENTATION_TO_PORTRAIT
+    private final boolean mIsOverrideToPortraitOrientationEnabled;
+    // Corresponds to OVERRIDE_UNDEFINED_ORIENTATION_TO_NOSENSOR
+    private final boolean mIsOverrideToNosensorOrientationEnabled;
+    // Corresponds to OVERRIDE_LANDSCAPE_ORIENTATION_TO_REVERSE_LANDSCAPE
+    private final boolean mIsOverrideToReverseLandscapeOrientationEnabled;
+    // Corresponds to OVERRIDE_USE_DISPLAY_LANDSCAPE_NATURAL_ORIENTATION
+    private final boolean mIsOverrideUseDisplayLandscapeNaturalOrientationEnabled;
+
+    // Corresponds to OVERRIDE_CAMERA_COMPAT_DISABLE_FORCE_ROTATION
+    private final boolean mIsOverrideCameraCompatDisableForceRotationEnabled;
+    // Corresponds to OVERRIDE_CAMERA_COMPAT_DISABLE_REFRESH
+    private final boolean mIsOverrideCameraCompatDisableRefreshEnabled;
+    // Corresponds to OVERRIDE_CAMERA_COMPAT_ENABLE_REFRESH_VIA_PAUSE
+    private final boolean mIsOverrideCameraCompatEnableRefreshViaPauseEnabled;
+
+    // Corresponds to OVERRIDE_ENABLE_COMPAT_IGNORE_REQUESTED_ORIENTATION
+    private final boolean mIsOverrideEnableCompatIgnoreRequestedOrientationEnabled;
+
+    @Nullable
+    private final Boolean mBooleanPropertyAllowOrientationOverride;
+    @Nullable
+    private final Boolean mBooleanPropertyAllowDisplayOrientationOverride;
 
     /*
      * WindowContainerListener responsible to make translucent activities inherit
@@ -184,6 +233,38 @@ final class LetterboxUiController {
                         () -> mLetterboxConfiguration.isCameraCompatTreatmentEnabled(
                                 /* checkDeviceConfig */ true),
                         PROPERTY_CAMERA_COMPAT_ENABLE_REFRESH_VIA_PAUSE);
+
+        mExpandedTaskBarHeight =
+                getResources().getDimensionPixelSize(R.dimen.taskbar_frame_height);
+
+        mBooleanPropertyAllowOrientationOverride =
+                readComponentProperty(packageManager, mActivityRecord.packageName,
+                        /* gatingCondition */ null,
+                        PROPERTY_COMPAT_ALLOW_ORIENTATION_OVERRIDE);
+        mBooleanPropertyAllowDisplayOrientationOverride =
+                readComponentProperty(packageManager, mActivityRecord.packageName,
+                        /* gatingCondition */ null,
+                        PROPERTY_COMPAT_ALLOW_DISPLAY_ORIENTATION_OVERRIDE);
+
+        mIsOverrideAnyOrientationEnabled = isCompatChangeEnabled(OVERRIDE_ANY_ORIENTATION);
+        mIsOverrideToPortraitOrientationEnabled =
+                isCompatChangeEnabled(OVERRIDE_UNDEFINED_ORIENTATION_TO_PORTRAIT);
+        mIsOverrideToReverseLandscapeOrientationEnabled =
+                isCompatChangeEnabled(OVERRIDE_LANDSCAPE_ORIENTATION_TO_REVERSE_LANDSCAPE);
+        mIsOverrideToNosensorOrientationEnabled =
+                isCompatChangeEnabled(OVERRIDE_UNDEFINED_ORIENTATION_TO_NOSENSOR);
+        mIsOverrideUseDisplayLandscapeNaturalOrientationEnabled =
+                isCompatChangeEnabled(OVERRIDE_USE_DISPLAY_LANDSCAPE_NATURAL_ORIENTATION);
+
+        mIsOverrideCameraCompatDisableForceRotationEnabled =
+                isCompatChangeEnabled(OVERRIDE_CAMERA_COMPAT_DISABLE_FORCE_ROTATION);
+        mIsOverrideCameraCompatDisableRefreshEnabled =
+                isCompatChangeEnabled(OVERRIDE_CAMERA_COMPAT_DISABLE_REFRESH);
+        mIsOverrideCameraCompatEnableRefreshViaPauseEnabled =
+                isCompatChangeEnabled(OVERRIDE_CAMERA_COMPAT_ENABLE_REFRESH_VIA_PAUSE);
+
+        mIsOverrideEnableCompatIgnoreRequestedOrientationEnabled =
+                isCompatChangeEnabled(OVERRIDE_ENABLE_COMPAT_IGNORE_REQUESTED_ORIENTATION);
     }
 
     /**
@@ -198,8 +279,8 @@ final class LetterboxUiController {
      */
     @Nullable
     private static Boolean readComponentProperty(PackageManager packageManager, String packageName,
-            BooleanSupplier gatingCondition, String propertyName) {
-        if (!gatingCondition.getAsBoolean()) {
+            @Nullable BooleanSupplier gatingCondition, String propertyName) {
+        if (gatingCondition != null && !gatingCondition.getAsBoolean()) {
             return null;
         }
         try {
@@ -253,7 +334,7 @@ final class LetterboxUiController {
         if (!shouldEnableWithOverrideAndProperty(
                 /* gatingCondition */ mLetterboxConfiguration
                         ::isPolicyForIgnoringRequestedOrientationEnabled,
-                OVERRIDE_ENABLE_COMPAT_IGNORE_REQUESTED_ORIENTATION,
+                mIsOverrideEnableCompatIgnoreRequestedOrientationEnabled,
                 mBooleanPropertyIgnoreRequestedOrientation)) {
             return false;
         }
@@ -299,6 +380,66 @@ final class LetterboxUiController {
     }
 
     /**
+     * Whether should fix display orientation to landscape natural orientation when a task is
+     * fullscreen and the display is ignoring orientation requests.
+     *
+     * <p>This treatment is enabled when the following conditions are met:
+     * <ul>
+     *     <li>Opt-out component property isn't enabled
+     *     <li>Opt-in per-app override is enabled
+     *     <li>Task is in fullscreen.
+     *     <li>{@link DisplayContent#getIgnoreOrientationRequest} is enabled
+     *     <li>Natural orientation of the display is landscape.
+     * </ul>
+     */
+    boolean shouldUseDisplayLandscapeNaturalOrientation() {
+        return shouldEnableWithOptInOverrideAndOptOutProperty(
+                /* gatingCondition */ () -> mActivityRecord.mDisplayContent != null
+                        && mActivityRecord.getTask() != null
+                        && mActivityRecord.mDisplayContent.getIgnoreOrientationRequest()
+                        && !mActivityRecord.getTask().inMultiWindowMode()
+                        && mActivityRecord.mDisplayContent.getNaturalOrientation()
+                                == ORIENTATION_LANDSCAPE,
+                mIsOverrideUseDisplayLandscapeNaturalOrientationEnabled,
+                mBooleanPropertyAllowDisplayOrientationOverride);
+    }
+
+    @ScreenOrientation
+    int overrideOrientationIfNeeded(@ScreenOrientation int candidate) {
+        if (FALSE.equals(mBooleanPropertyAllowOrientationOverride)) {
+            return candidate;
+        }
+
+        if (mIsOverrideToReverseLandscapeOrientationEnabled
+                && (isFixedOrientationLandscape(candidate) || mIsOverrideAnyOrientationEnabled)) {
+            Slog.w(TAG, "Requested orientation  " + screenOrientationToString(candidate) + " for "
+                    + mActivityRecord + " is overridden to "
+                    + screenOrientationToString(SCREEN_ORIENTATION_REVERSE_LANDSCAPE));
+            return SCREEN_ORIENTATION_REVERSE_LANDSCAPE;
+        }
+
+        if (!mIsOverrideAnyOrientationEnabled && isFixedOrientation(candidate)) {
+            return candidate;
+        }
+
+        if (mIsOverrideToPortraitOrientationEnabled) {
+            Slog.w(TAG, "Requested orientation  " + screenOrientationToString(candidate) + " for "
+                    + mActivityRecord + " is overridden to "
+                    + screenOrientationToString(SCREEN_ORIENTATION_PORTRAIT));
+            return SCREEN_ORIENTATION_PORTRAIT;
+        }
+
+        if (mIsOverrideToNosensorOrientationEnabled) {
+            Slog.w(TAG, "Requested orientation  " + screenOrientationToString(candidate) + " for "
+                    + mActivityRecord + " is overridden to "
+                    + screenOrientationToString(SCREEN_ORIENTATION_NOSENSOR));
+            return SCREEN_ORIENTATION_NOSENSOR;
+        }
+
+        return candidate;
+    }
+
+    /**
      * Whether activity is eligible for activity "refresh" after camera compat force rotation
      * treatment. See {@link DisplayRotationCompatPolicy} for context.
      *
@@ -313,7 +454,7 @@ final class LetterboxUiController {
         return shouldEnableWithOptOutOverrideAndProperty(
                 /* gatingCondition */ () -> mLetterboxConfiguration
                         .isCameraCompatTreatmentEnabled(/* checkDeviceConfig */ true),
-                OVERRIDE_CAMERA_COMPAT_DISABLE_REFRESH,
+                mIsOverrideCameraCompatDisableRefreshEnabled,
                 mBooleanPropertyCameraCompatAllowRefresh);
     }
 
@@ -335,7 +476,7 @@ final class LetterboxUiController {
         return shouldEnableWithOverrideAndProperty(
                 /* gatingCondition */ () -> mLetterboxConfiguration
                         .isCameraCompatTreatmentEnabled(/* checkDeviceConfig */ true),
-                OVERRIDE_CAMERA_COMPAT_ENABLE_REFRESH_VIA_PAUSE,
+                mIsOverrideCameraCompatEnableRefreshViaPauseEnabled,
                 mBooleanPropertyCameraCompatEnableRefreshViaPause);
     }
 
@@ -354,15 +495,19 @@ final class LetterboxUiController {
         return shouldEnableWithOptOutOverrideAndProperty(
                 /* gatingCondition */ () -> mLetterboxConfiguration
                         .isCameraCompatTreatmentEnabled(/* checkDeviceConfig */ true),
-                OVERRIDE_CAMERA_COMPAT_DISABLE_FORCE_ROTATION,
+                mIsOverrideCameraCompatDisableForceRotationEnabled,
                 mBooleanPropertyCameraCompatAllowForceRotation);
+    }
+
+    private boolean isCompatChangeEnabled(long overrideChangeId) {
+        return mActivityRecord.info.isChangeEnabled(overrideChangeId);
     }
 
     /**
      * Returns {@code true} when the following conditions are met:
      * <ul>
      *     <li>{@code gatingCondition} isn't {@code false}
-     *     <li>OEM didn't opt out with a {@code overrideChangeId} override
+     *     <li>OEM didn't opt out with a per-app override
      *     <li>App developers didn't opt out with a component {@code property}
      * </ul>
      *
@@ -370,12 +515,30 @@ final class LetterboxUiController {
      * disabled on per-app basis by OEMs or app developers.
      */
     private boolean shouldEnableWithOptOutOverrideAndProperty(BooleanSupplier gatingCondition,
-            long overrideChangeId, Boolean property) {
+            boolean isOverrideChangeEnabled, Boolean property) {
         if (!gatingCondition.getAsBoolean()) {
             return false;
         }
-        return !Boolean.FALSE.equals(property)
-                && !mActivityRecord.info.isChangeEnabled(overrideChangeId);
+        return !FALSE.equals(property) && !isOverrideChangeEnabled;
+    }
+
+    /**
+     * Returns {@code true} when the following conditions are met:
+     * <ul>
+     *     <li>{@code gatingCondition} isn't {@code false}
+     *     <li>OEM did opt in with a per-app override
+     *     <li>App developers didn't opt out with a component {@code property}
+     * </ul>
+     *
+     * <p>This is used for the treatments that are enabled based with the heuristic but can be
+     * disabled on per-app basis by OEMs or app developers.
+     */
+    private boolean shouldEnableWithOptInOverrideAndOptOutProperty(BooleanSupplier gatingCondition,
+            boolean isOverrideChangeEnabled, Boolean property) {
+        if (!gatingCondition.getAsBoolean()) {
+            return false;
+        }
+        return !FALSE.equals(property) && isOverrideChangeEnabled;
     }
 
     /**
@@ -384,21 +547,20 @@ final class LetterboxUiController {
      *     <li>{@code gatingCondition} isn't {@code false}
      *     <li>App developers didn't opt out with a component {@code property}
      *     <li>App developers opted in with a component {@code property} or an OEM opted in with a
-     *     component {@code property}
+     *     per-app override
      * </ul>
      *
      * <p>This is used for the treatments that are enabled only on per-app basis.
      */
     private boolean shouldEnableWithOverrideAndProperty(BooleanSupplier gatingCondition,
-            long overrideChangeId, Boolean property) {
+            boolean isOverrideChangeEnabled, Boolean property) {
         if (!gatingCondition.getAsBoolean()) {
             return false;
         }
-        if (Boolean.FALSE.equals(property)) {
+        if (FALSE.equals(property)) {
             return false;
         }
-        return Boolean.TRUE.equals(property)
-                || mActivityRecord.info.isChangeEnabled(overrideChangeId);
+        return TRUE.equals(property) || isOverrideChangeEnabled;
     }
 
     boolean hasWallpaperBackgroundForLetterbox() {
@@ -422,7 +584,7 @@ final class LetterboxUiController {
             if (w == null) {
                 return;
             }
-            adjustBoundsForTaskbar(w, outBounds);
+            adjustBoundsIfNeeded(w, outBounds);
         } else {
             outBounds.setEmpty();
         }
@@ -465,13 +627,13 @@ final class LetterboxUiController {
         if (w == null || winHint != null && w != winHint) {
             return;
         }
-        updateRoundedCorners(w);
+        updateRoundedCornersIfNeeded(w);
         // If there is another main window that is not an application-starting window, we should
         // update rounded corners for it as well, to avoid flickering rounded corners.
         final WindowState nonStartingAppW = mActivityRecord.findMainWindow(
                 /* includeStartingApp= */ false);
         if (nonStartingAppW != null && nonStartingAppW != w) {
-            updateRoundedCorners(nonStartingAppW);
+            updateRoundedCornersIfNeeded(nonStartingAppW);
         }
 
         updateWallpaperForLetterbox(w);
@@ -533,7 +695,7 @@ final class LetterboxUiController {
     // Note that we check the task rather than the parent as with ActivityEmbedding the parent might
     // be a TaskFragment, and its windowing mode is always MULTI_WINDOW, even if the task is
     // actually fullscreen.
-    private boolean isDisplayFullScreenAndInPosture(DeviceStateController.FoldState state,
+    private boolean isDisplayFullScreenAndInPosture(DeviceStateController.DeviceState state,
             boolean isTabletop) {
         Task task = mActivityRecord.getTask();
         return mActivityRecord.mDisplayContent != null
@@ -559,7 +721,7 @@ final class LetterboxUiController {
         // Don't check resolved configuration because it may not be updated yet during
         // configuration change.
         boolean bookMode = isDisplayFullScreenAndInPosture(
-                DeviceStateController.FoldState.HALF_FOLDED, false /* isTabletop */);
+                DeviceStateController.DeviceState.HALF_FOLDED, false /* isTabletop */);
         return isHorizontalReachabilityEnabled(parentConfiguration)
                 // Using the last global dynamic position to avoid "jumps" when moving
                 // between apps or activities.
@@ -571,7 +733,7 @@ final class LetterboxUiController {
         // Don't check resolved configuration because it may not be updated yet during
         // configuration change.
         boolean tabletopMode = isDisplayFullScreenAndInPosture(
-                DeviceStateController.FoldState.HALF_FOLDED, true /* isTabletop */);
+                DeviceStateController.DeviceState.HALF_FOLDED, true /* isTabletop */);
         return isVerticalReachabilityEnabled(parentConfiguration)
                 // Using the last global dynamic position to avoid "jumps" when moving
                 // between apps or activities.
@@ -584,7 +746,7 @@ final class LetterboxUiController {
                 ? getSplitScreenAspectRatio()
                 : mActivityRecord.shouldCreateCompatDisplayInsets()
                     ? getDefaultMinAspectRatioForUnresizableApps()
-                    : mLetterboxConfiguration.getFixedOrientationLetterboxAspectRatio();
+                    : getDefaultMinAspectRatio();
     }
 
     private float getDefaultMinAspectRatioForUnresizableApps() {
@@ -593,7 +755,7 @@ final class LetterboxUiController {
             return mLetterboxConfiguration.getDefaultMinAspectRatioForUnresizableApps()
                     > MIN_FIXED_ORIENTATION_LETTERBOX_ASPECT_RATIO
                             ? mLetterboxConfiguration.getDefaultMinAspectRatioForUnresizableApps()
-                            : mLetterboxConfiguration.getFixedOrientationLetterboxAspectRatio();
+                            : getDefaultMinAspectRatio();
         }
 
         return getSplitScreenAspectRatio();
@@ -619,6 +781,16 @@ final class LetterboxUiController {
             bounds.bottom = bounds.centerY();
         }
         return computeAspectRatio(bounds);
+    }
+
+    private float getDefaultMinAspectRatio() {
+        final DisplayContent displayContent = mActivityRecord.getDisplayContent();
+        if (displayContent == null
+                || !mLetterboxConfiguration
+                    .getIsDisplayAspectRatioEnabledForFixedOrientationLetterbox()) {
+            return mLetterboxConfiguration.getFixedOrientationLetterboxAspectRatio();
+        }
+        return computeAspectRatio(new Rect(displayContent.getBounds()));
     }
 
     Resources getResources() {
@@ -714,6 +886,7 @@ final class LetterboxUiController {
      *   <li>Activity is portrait-only.
      *   <li>Fullscreen window in landscape device orientation.
      *   <li>Horizontal Reachability is enabled.
+     *   <li>Activity fills parent vertically.
      * </ul>
      */
     private boolean isHorizontalReachabilityEnabled(Configuration parentConfiguration) {
@@ -721,10 +894,14 @@ final class LetterboxUiController {
                 && parentConfiguration.windowConfiguration.getWindowingMode()
                         == WINDOWING_MODE_FULLSCREEN
                 && (parentConfiguration.orientation == ORIENTATION_LANDSCAPE
-                && mActivityRecord.getOrientationForReachability() == ORIENTATION_PORTRAIT);
+                        && mActivityRecord.getOrientationForReachability() == ORIENTATION_PORTRAIT)
+                // Check whether the activity fills the parent vertically.
+                && parentConfiguration.windowConfiguration.getBounds().height()
+                        == mActivityRecord.getBounds().height();
     }
 
-    private boolean isHorizontalReachabilityEnabled() {
+    @VisibleForTesting
+    boolean isHorizontalReachabilityEnabled() {
         return isHorizontalReachabilityEnabled(mActivityRecord.getParent().getConfiguration());
     }
 
@@ -736,6 +913,7 @@ final class LetterboxUiController {
      *   <li>Activity is landscape-only.
      *   <li>Fullscreen window in portrait device orientation.
      *   <li>Vertical Reachability is enabled.
+     *   <li>Activity fills parent horizontally.
      * </ul>
      */
     private boolean isVerticalReachabilityEnabled(Configuration parentConfiguration) {
@@ -743,10 +921,14 @@ final class LetterboxUiController {
                 && parentConfiguration.windowConfiguration.getWindowingMode()
                         == WINDOWING_MODE_FULLSCREEN
                 && (parentConfiguration.orientation == ORIENTATION_PORTRAIT
-                && mActivityRecord.getOrientationForReachability() == ORIENTATION_LANDSCAPE);
+                        && mActivityRecord.getOrientationForReachability() == ORIENTATION_LANDSCAPE)
+                // Check whether the activity fills the parent horizontally.
+                && parentConfiguration.windowConfiguration.getBounds().width()
+                        == mActivityRecord.getBounds().width();
     }
 
-    private boolean isVerticalReachabilityEnabled() {
+    @VisibleForTesting
+    boolean isVerticalReachabilityEnabled() {
         return isVerticalReachabilityEnabled(mActivityRecord.getParent().getConfiguration());
     }
 
@@ -755,8 +937,8 @@ final class LetterboxUiController {
         return isSurfaceReadyAndVisible(mainWindow) && mainWindow.areAppWindowBoundsLetterboxed()
                 // Check for FLAG_SHOW_WALLPAPER explicitly instead of using
                 // WindowContainer#showWallpaper because the later will return true when this
-                // activity is using blurred wallpaper for letterbox backgroud.
-                && (mainWindow.mAttrs.flags & FLAG_SHOW_WALLPAPER) == 0;
+                // activity is using blurred wallpaper for letterbox background.
+                && (mainWindow.getAttrs().flags & FLAG_SHOW_WALLPAPER) == 0;
     }
 
     @VisibleForTesting
@@ -808,106 +990,107 @@ final class LetterboxUiController {
         return mLetterboxConfiguration.getLetterboxBackgroundColor();
     }
 
-    private void updateRoundedCorners(WindowState mainWindow) {
+    private void updateRoundedCornersIfNeeded(final WindowState mainWindow) {
         final SurfaceControl windowSurface = mainWindow.getSurfaceControl();
-        if (windowSurface != null && windowSurface.isValid()) {
-            final Transaction transaction = mActivityRecord.getSyncTransaction();
-
-            if (!requiresRoundedCorners(mainWindow) || mActivityRecord.isInLetterboxAnimation()) {
-                // We don't want corner radius on the window.
-                // In the case the ActivityRecord requires a letterboxed animation we never want
-                // rounded corners on the window because rounded corners are applied at the
-                // animation-bounds surface level and rounded corners on the window would interfere
-                // with that leading to unexpected rounded corner positioning during the animation.
-                transaction
-                        .setWindowCrop(windowSurface, null)
-                        .setCornerRadius(windowSurface, 0);
-                return;
-            }
-
-            Rect cropBounds = null;
-
-            if (hasVisibleTaskbar(mainWindow)) {
-                cropBounds = new Rect(mActivityRecord.getBounds());
-
-                // Rounded corners should be displayed above the taskbar.
-                // It is important to call adjustBoundsForTaskbarUnchecked before offsetTo
-                // because taskbar bounds are in screen coordinates
-                adjustBoundsForTaskbarUnchecked(mainWindow, cropBounds);
-
-                // Activity bounds are in screen coordinates while (0,0) for activity's surface
-                // control is at the top left corner of an app window so offsetting bounds
-                // accordingly.
-                cropBounds.offsetTo(0, 0);
-            }
-
-            transaction
-                    .setWindowCrop(windowSurface, cropBounds)
-                    .setCornerRadius(windowSurface, getRoundedCornersRadius(mainWindow));
+        if (windowSurface == null || !windowSurface.isValid()) {
+            return;
         }
+
+        // cropBounds must be non-null for the cornerRadius to be ever applied.
+        mActivityRecord.getSyncTransaction()
+                .setCrop(windowSurface, getCropBoundsIfNeeded(mainWindow))
+                .setCornerRadius(windowSurface, getRoundedCornersRadius(mainWindow));
     }
 
-    private boolean requiresRoundedCorners(WindowState mainWindow) {
-        final InsetsSource taskbarInsetsSource = getTaskbarInsetsSource(mainWindow);
+    @VisibleForTesting
+    @Nullable
+    Rect getCropBoundsIfNeeded(final WindowState mainWindow) {
+        if (!requiresRoundedCorners(mainWindow) || mActivityRecord.isInLetterboxAnimation()) {
+            // We don't want corner radius on the window.
+            // In the case the ActivityRecord requires a letterboxed animation we never want
+            // rounded corners on the window because rounded corners are applied at the
+            // animation-bounds surface level and rounded corners on the window would interfere
+            // with that leading to unexpected rounded corner positioning during the animation.
+            return null;
+        }
 
+        final Rect cropBounds = new Rect(mActivityRecord.getBounds());
+
+        // It is important to call {@link #adjustBoundsIfNeeded} before {@link cropBounds.offsetTo}
+        // because taskbar bounds used in {@link #adjustBoundsIfNeeded}
+        // are in screen coordinates
+        adjustBoundsIfNeeded(mainWindow, cropBounds);
+
+        // ActivityRecord bounds are in screen coordinates while (0,0) for activity's surface
+        // control is in the top left corner of an app window so offsetting bounds
+        // accordingly.
+        cropBounds.offsetTo(0, 0);
+        return cropBounds;
+    }
+
+    private boolean requiresRoundedCorners(final WindowState mainWindow) {
         return isLetterboxedNotForDisplayCutout(mainWindow)
-                && mLetterboxConfiguration.isLetterboxActivityCornersRounded()
-                && taskbarInsetsSource != null;
+                && mLetterboxConfiguration.isLetterboxActivityCornersRounded();
     }
 
     // Returns rounded corners radius the letterboxed activity should have based on override in
     // R.integer.config_letterboxActivityCornersRadius or min device bottom corner radii.
-    // Device corners can be different on the right and left sides but we use the same radius
+    // Device corners can be different on the right and left sides, but we use the same radius
     // for all corners for consistency and pick a minimal bottom one for consistency with a
     // taskbar rounded corners.
-    int getRoundedCornersRadius(WindowState mainWindow) {
-        if (!requiresRoundedCorners(mainWindow)) {
+    int getRoundedCornersRadius(final WindowState mainWindow) {
+        if (!requiresRoundedCorners(mainWindow) || mActivityRecord.isInLetterboxAnimation()) {
             return 0;
         }
 
+        final int radius;
         if (mLetterboxConfiguration.getLetterboxActivityCornersRadius() >= 0) {
-            return mLetterboxConfiguration.getLetterboxActivityCornersRadius();
+            radius = mLetterboxConfiguration.getLetterboxActivityCornersRadius();
+        } else {
+            final InsetsState insetsState = mainWindow.getInsetsState();
+            radius = Math.min(
+                    getInsetsStateCornerRadius(insetsState, RoundedCorner.POSITION_BOTTOM_LEFT),
+                    getInsetsStateCornerRadius(insetsState, RoundedCorner.POSITION_BOTTOM_RIGHT));
         }
 
-        final InsetsState insetsState = mainWindow.getInsetsState();
-        return Math.min(
-                getInsetsStateCornerRadius(insetsState, RoundedCorner.POSITION_BOTTOM_LEFT),
-                getInsetsStateCornerRadius(insetsState, RoundedCorner.POSITION_BOTTOM_RIGHT));
+        final float scale = mainWindow.mInvGlobalScale;
+        return (scale != 1f && scale > 0f) ? (int) (scale * radius) : radius;
     }
 
     /**
-     * Returns whether the taskbar is visible. Returns false if the window is in immersive mode,
-     * since the user can swipe to show/hide the taskbar as an overlay.
+     * Returns the taskbar in case it is visible and expanded in height, otherwise returns null.
      */
-    private boolean hasVisibleTaskbar(WindowState mainWindow) {
-        final InsetsSource taskbarInsetsSource = getTaskbarInsetsSource(mainWindow);
-
-        return taskbarInsetsSource != null
-                && taskbarInsetsSource.isVisible();
+    @VisibleForTesting
+    @Nullable
+    InsetsSource getExpandedTaskbarOrNull(final WindowState mainWindow) {
+        final InsetsSource taskbar = mainWindow.getInsetsState().peekSource(
+                InsetsState.ITYPE_EXTRA_NAVIGATION_BAR);
+        if (taskbar != null && taskbar.isVisible()
+                && taskbar.getFrame().height() >= mExpandedTaskBarHeight) {
+            return taskbar;
+        }
+        return null;
     }
 
-    private InsetsSource getTaskbarInsetsSource(WindowState mainWindow) {
-        final InsetsState insetsState = mainWindow.getInsetsState();
-        return insetsState.peekSource(InsetsState.ITYPE_EXTRA_NAVIGATION_BAR);
-    }
-
-    private void adjustBoundsForTaskbar(WindowState mainWindow, Rect bounds) {
+    private void adjustBoundsIfNeeded(final WindowState mainWindow, final Rect bounds) {
         // Rounded corners should be displayed above the taskbar. When taskbar is hidden,
         // an insets frame is equal to a navigation bar which shouldn't affect position of
         // rounded corners since apps are expected to handle navigation bar inset.
         // This condition checks whether the taskbar is visible.
         // Do not crop the taskbar inset if the window is in immersive mode - the user can
         // swipe to show/hide the taskbar as an overlay.
-        if (hasVisibleTaskbar(mainWindow)) {
-            adjustBoundsForTaskbarUnchecked(mainWindow, bounds);
+        // Adjust the bounds only in case there is an expanded taskbar,
+        // otherwise the rounded corners will be shown behind the navbar.
+        final InsetsSource expandedTaskbarOrNull = getExpandedTaskbarOrNull(mainWindow);
+        if (expandedTaskbarOrNull != null) {
+            // Rounded corners should be displayed above the expanded taskbar.
+            bounds.bottom = Math.min(bounds.bottom, expandedTaskbarOrNull.getFrame().top);
         }
-    }
 
-    private void adjustBoundsForTaskbarUnchecked(WindowState mainWindow, Rect bounds) {
-        // Rounded corners should be displayed above the taskbar.
-        bounds.bottom =
-                Math.min(bounds.bottom, getTaskbarInsetsSource(mainWindow).getFrame().top);
-        scaleIfNeeded(bounds);
+        final float scale = mainWindow.mInvGlobalScale;
+        if (scale != 1f && scale > 0f) {
+            bounds.scale(scale);
+        }
     }
 
     private int getInsetsStateCornerRadius(
@@ -1014,6 +1197,9 @@ final class LetterboxUiController {
                 + mLetterboxConfiguration.getDefaultMinAspectRatioForUnresizableApps());
         pw.println(prefix + "  isSplitScreenAspectRatioForUnresizableAppsEnabled="
                 + mLetterboxConfiguration.getIsSplitScreenAspectRatioForUnresizableAppsEnabled());
+        pw.println(prefix + "  isDisplayAspectRatioEnabledForFixedOrientationLetterbox="
+                + mLetterboxConfiguration
+                .getIsDisplayAspectRatioEnabledForFixedOrientationLetterbox());
     }
 
     /**
@@ -1074,7 +1260,7 @@ final class LetterboxUiController {
             int letterboxPositionForHorizontalReachability = getLetterboxConfiguration()
                     .getLetterboxPositionForHorizontalReachability(
                             isDisplayFullScreenAndInPosture(
-                                    DeviceStateController.FoldState.HALF_FOLDED,
+                                    DeviceStateController.DeviceState.HALF_FOLDED,
                                     false /* isTabletop */));
             positionToLog = letterboxHorizontalReachabilityPositionToLetterboxPosition(
                     letterboxPositionForHorizontalReachability);
@@ -1082,7 +1268,7 @@ final class LetterboxUiController {
             int letterboxPositionForVerticalReachability = getLetterboxConfiguration()
                     .getLetterboxPositionForVerticalReachability(
                             isDisplayFullScreenAndInPosture(
-                                    DeviceStateController.FoldState.HALF_FOLDED,
+                                    DeviceStateController.DeviceState.HALF_FOLDED,
                                     true /* isTabletop */));
             positionToLog = letterboxVerticalReachabilityPositionToLetterboxPosition(
                     letterboxPositionForVerticalReachability);
@@ -1191,7 +1377,8 @@ final class LetterboxUiController {
         // To avoid wrong behaviour, we're not forcing orientation for activities with not
         // fixed orientation (e.g. permission dialogs).
         return hasInheritedLetterboxBehavior()
-                && mActivityRecord.mOrientation != SCREEN_ORIENTATION_UNSPECIFIED;
+                && mActivityRecord.getOverrideOrientation()
+                        != SCREEN_ORIENTATION_UNSPECIFIED;
     }
 
     float getInheritedMinAspectRatio() {
@@ -1245,21 +1432,5 @@ final class LetterboxUiController {
         mIsInheritedInSizeCompatMode = false;
         mInheritedSizeCompatScale = 1f;
         mInheritedCompatDisplayInsets = null;
-    }
-
-    private void scaleIfNeeded(Rect bounds) {
-        if (boundsNeedToScale()) {
-            bounds.scale(1.0f / mActivityRecord.getCompatScale());
-        }
-    }
-
-    private boolean boundsNeedToScale() {
-        if (hasInheritedLetterboxBehavior()) {
-            return mIsInheritedInSizeCompatMode
-                    && mInheritedSizeCompatScale < 1.0f;
-        } else {
-            return mActivityRecord.inSizeCompatMode()
-                    && mActivityRecord.getCompatScale() < 1.0f;
-        }
     }
 }

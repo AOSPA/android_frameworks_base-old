@@ -458,6 +458,14 @@
     <string name="permdesc_bodySensors" product="default" msgid="7652650410295512140">"앱이 사용 중에 심박수, 체온, 혈중 산소 농도와 같은 생체 신호 센서 데이터에 액세스하도록 허용합니다."</string>
     <string name="permlab_bodySensors_background" msgid="4912560779957760446">"백그라운드에서 심박수와 같은 생체 신호 센서 데이터에 액세스"</string>
     <string name="permdesc_bodySensors_background" product="default" msgid="8870726027557749417">"앱이 백그라운드에서 심박수, 체온, 혈중 산소 농도와 같은 생체 신호 센서 데이터에 액세스하도록 허용합니다."</string>
+    <!-- no translation found for permlab_bodySensorsWristTemperature (5007987988922337657) -->
+    <skip />
+    <!-- no translation found for permdesc_bodySensorsWristTemperature (4978345709781045181) -->
+    <skip />
+    <!-- no translation found for permlab_bodySensors_wristTemperature_background (7692772783509074356) -->
+    <skip />
+    <!-- no translation found for permdesc_bodySensors_wristTemperature_background (3170369705518699219) -->
+    <skip />
     <string name="permlab_readCalendar" msgid="6408654259475396200">"캘린더 일정 및 세부정보 읽기"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"이 앱은 태블릿에 저장된 모든 캘린더 일정을 읽고 캘린더 데이터를 공유하거나 저장할 수 있습니다."</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"앱이 Android TV 기기에 저장된 모든 캘린더 일정을 읽고 캘린더 데이터를 공유하거나 저장할 수 있습니다."</string>
@@ -1943,10 +1951,8 @@
     <string name="work_mode_off_title" msgid="961171256005852058">"직장 앱을 사용 설정하시겠습니까?"</string>
     <string name="work_mode_off_message" msgid="7319580997683623309">"직장 앱 및 알림에 액세스하세요."</string>
     <string name="work_mode_turn_on" msgid="3662561662475962285">"사용 설정"</string>
-    <!-- no translation found for work_mode_emergency_call_button (6818855962881612322) -->
-    <skip />
-    <!-- no translation found for work_mode_dialer_off_message (2193299184850387465) -->
-    <skip />
+    <string name="work_mode_emergency_call_button" msgid="6818855962881612322">"긴급 전화"</string>
+    <string name="work_mode_dialer_off_message" msgid="2193299184850387465">"직장 앱 및 전화 통화에 대한 액세스를 요청하세요."</string>
     <string name="app_blocked_title" msgid="7353262160455028160">"앱을 사용할 수 없습니다"</string>
     <string name="app_blocked_message" msgid="542972921087873023">"현재 <xliff:g id="APP_NAME">%1$s</xliff:g> 앱을 사용할 수 없습니다."</string>
     <string name="app_streaming_blocked_title" msgid="6090945835898766139">"<xliff:g id="ACTIVITY">%1$s</xliff:g> 사용할 수 없음"</string>

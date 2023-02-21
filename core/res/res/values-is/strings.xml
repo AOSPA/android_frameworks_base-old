@@ -458,6 +458,14 @@
     <string name="permdesc_bodySensors" product="default" msgid="7652650410295512140">"Veitir forritinu aðgang að gögnum frá líkamsskynjurum, svo sem um hjartslátt, hitastig og súrefnismettun í blóði á meðan forritið er í notkun."</string>
     <string name="permlab_bodySensors_background" msgid="4912560779957760446">"Aðgangur að gögnum líkamsskynjara, t.d. um hjartslátt, meðan það er í bakgrunni"</string>
     <string name="permdesc_bodySensors_background" product="default" msgid="8870726027557749417">"Veitir forritinu aðgang að gögnum frá líkamsskynjurum, svo sem um hjartslátt, hitastig og súrefnismettun í blóði á meðan forritið keyrir í bakgrunni."</string>
+    <!-- no translation found for permlab_bodySensorsWristTemperature (5007987988922337657) -->
+    <skip />
+    <!-- no translation found for permdesc_bodySensorsWristTemperature (4978345709781045181) -->
+    <skip />
+    <!-- no translation found for permlab_bodySensors_wristTemperature_background (7692772783509074356) -->
+    <skip />
+    <!-- no translation found for permdesc_bodySensors_wristTemperature_background (3170369705518699219) -->
+    <skip />
     <string name="permlab_readCalendar" msgid="6408654259475396200">"Lesa dagatalsviðburði og upplýsingar"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"Þetta forrit getur lesið alla dagatalsviðburði sem eru vistaðir í spjaldtölvunni og deilt eða vistað dagatalsgögnin þín."</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"Þetta forrit getur lesið alla dagatalsviðburði sem eru vistaðir í Android TV og deilt eða vistað dagatalsgögnin þín."</string>
@@ -1708,8 +1716,7 @@
     <string name="color_correction_feature_name" msgid="7975133554160979214">"Litaleiðrétting"</string>
     <string name="one_handed_mode_feature_name" msgid="2334330034828094891">"Einhent stilling"</string>
     <string name="reduce_bright_colors_feature_name" msgid="3222994553174604132">"Mjög dökkt"</string>
-    <!-- no translation found for hearing_aids_feature_name (1125892105105852542) -->
-    <skip />
+    <string name="hearing_aids_feature_name" msgid="1125892105105852542">"Heyrnartæki"</string>
     <string name="accessibility_shortcut_enabling_service" msgid="5473495203759847687">"Hljóðstyrkstökkum haldið inni. Kveikt á <xliff:g id="SERVICE_NAME">%1$s</xliff:g>."</string>
     <string name="accessibility_shortcut_disabling_service" msgid="8675244165062700619">"Hljóðstyrkstökkum haldið inni. Slökkt á <xliff:g id="SERVICE_NAME">%1$s</xliff:g>."</string>
     <string name="accessibility_shortcut_spoken_feedback" msgid="4228997042855695090">"Haltu báðum hljóðstyrkstökkunum inni í þrjár sekúndur til að nota <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
@@ -1944,10 +1951,8 @@
     <string name="work_mode_off_title" msgid="961171256005852058">"Kveikja á vinnuforritum?"</string>
     <string name="work_mode_off_message" msgid="7319580997683623309">"Fá aðgang að vinnuforritum og tilkynningum"</string>
     <string name="work_mode_turn_on" msgid="3662561662475962285">"Kveikja"</string>
-    <!-- no translation found for work_mode_emergency_call_button (6818855962881612322) -->
-    <skip />
-    <!-- no translation found for work_mode_dialer_off_message (2193299184850387465) -->
-    <skip />
+    <string name="work_mode_emergency_call_button" msgid="6818855962881612322">"Neyðartilvik"</string>
+    <string name="work_mode_dialer_off_message" msgid="2193299184850387465">"Fá aðgang að vinnuforritum og símtölum"</string>
     <string name="app_blocked_title" msgid="7353262160455028160">"Forrit er ekki tiltækt"</string>
     <string name="app_blocked_message" msgid="542972921087873023">"<xliff:g id="APP_NAME">%1$s</xliff:g> er ekki tiltækt núna."</string>
     <string name="app_streaming_blocked_title" msgid="6090945835898766139">"<xliff:g id="ACTIVITY">%1$s</xliff:g> ekki í boði"</string>

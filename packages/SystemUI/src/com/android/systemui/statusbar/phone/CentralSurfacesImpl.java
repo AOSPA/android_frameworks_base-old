@@ -178,6 +178,7 @@ import com.android.systemui.qs.QSFragment;
 import com.android.systemui.qs.QSPanelController;
 import com.android.systemui.recents.ScreenPinningRequest;
 import com.android.systemui.scrim.ScrimView;
+import com.android.systemui.settings.UserTracker;
 import com.android.systemui.settings.brightness.BrightnessSliderController;
 import com.android.systemui.shade.CameraLauncher;
 import com.android.systemui.shade.NotificationPanelViewController;
@@ -507,6 +508,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
     private final KeyguardUnlockAnimationController mKeyguardUnlockAnimationController;
     private final MessageRouter mMessageRouter;
     private final WallpaperManager mWallpaperManager;
+    private final UserTracker mUserTracker;
 
     private CentralSurfacesComponent mCentralSurfacesComponent;
 
@@ -750,7 +752,8 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
             IDreamManager dreamManager,
             Lazy<CameraLauncher> cameraLauncherLazy,
             Lazy<LightRevealScrimViewModel> lightRevealScrimViewModelLazy,
-            AlternateBouncerInteractor alternateBouncerInteractor
+            AlternateBouncerInteractor alternateBouncerInteractor,
+            UserTracker userTracker
     ) {
         mContext = context;
         mNotificationsController = notificationsController;
@@ -830,6 +833,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
         mJankMonitor = jankMonitor;
         mCameraLauncherLazy = cameraLauncherLazy;
         mAlternateBouncerInteractor = alternateBouncerInteractor;
+        mUserTracker = userTracker;
 
         mLockscreenShadeTransitionController = lockscreenShadeTransitionController;
         mStartingSurfaceOptional = startingSurfaceOptional;
@@ -867,6 +871,11 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
         wiredChargingRippleController.registerCallbacks();
 
         mLightRevealScrimViewModelLazy = lightRevealScrimViewModelLazy;
+
+        // Based on teamfood flag, turn predictive back dispatch on at runtime.
+        if (mFeatureFlags.isEnabled(Flags.WM_ENABLE_PREDICTIVE_BACK_SYSUI)) {
+            mContext.getApplicationInfo().setEnableOnBackInvokedCallback(true);
+        }
     }
 
     @Override
@@ -980,11 +989,6 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
 
         // Lastly, call to the icon policy to install/update all the icons.
         mIconPolicy.init();
-
-        // Based on teamfood flag, turn predictive back dispatch on at runtime.
-        if (mFeatureFlags.isEnabled(Flags.WM_ENABLE_PREDICTIVE_BACK_SYSUI)) {
-            mContext.getApplicationInfo().setEnableOnBackInvokedCallback(true);
-        }
 
         mKeyguardStateController.addCallback(new KeyguardStateController.Callback() {
             @Override
@@ -1304,8 +1308,13 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
         // Set up the quick settings tile panel
         final View container = mNotificationShadeWindowView.findViewById(R.id.qs_frame);
         if (container != null) {
-            FragmentHostManager fragmentHostManager = FragmentHostManager.get(container);
-            ExtensionFragmentListener.attachExtensonToFragment(container, QS.TAG, R.id.qs_frame,
+            FragmentHostManager fragmentHostManager =
+                    mFragmentService.getFragmentHostManager(container);
+            ExtensionFragmentListener.attachExtensonToFragment(
+                    mFragmentService,
+                    container,
+                    QS.TAG,
+                    R.id.qs_frame,
                     mExtensionController
                             .newExtension(QS.class)
                             .withPlugin(QS.class)
@@ -1397,6 +1406,7 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
         // Things that mean we're not swiping to dismiss the keyguard, and should ignore this
         // expansion:
         // - Keyguard isn't even visible.
+        // - We're swiping on the bouncer, not the lockscreen.
         // - Keyguard is occluded. Expansion changes here are the shade being expanded over the
         //   occluding activity.
         // - Keyguard is visible, but can't be dismissed (swiping up will show PIN/password prompt).
@@ -1405,11 +1415,14 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
         //   to dismiss the lock screen until entering the SIM PIN.
         // - QS is expanded and we're swiping - swiping up now will hide QS, not dismiss the
         //   keyguard.
+        // - Shade is in QQS over keyguard - swiping up should take us back to keyguard
         if (!isKeyguardShowing()
+                || mStatusBarKeyguardViewManager.primaryBouncerIsOrWillBeShowing()
                 || isOccluded()
                 || !mKeyguardStateController.canDismissLockScreen()
                 || mKeyguardViewMediator.isAnySimPinSecure()
-                || (mNotificationPanelViewController.isQsExpanded() && trackingTouch)) {
+                || (mNotificationPanelViewController.isQsExpanded() && trackingTouch)
+                || mNotificationPanelViewController.getBarState() == StatusBarState.SHADE_LOCKED) {
             return;
         }
 
@@ -1472,7 +1485,9 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
     }
 
     protected QS createDefaultQSFragment() {
-        return FragmentHostManager.get(mNotificationShadeWindowView).create(QSFragment.class);
+        return mFragmentService
+                .getFragmentHostManager(mNotificationShadeWindowView)
+                .create(QSFragment.class);
     }
 
     private void setUpPresenter() {
@@ -3766,6 +3781,9 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
             });
         } else if (mDozing && !unlocking) {
             mScrimController.transitionTo(ScrimState.AOD);
+            // This will cancel the keyguardFadingAway animation if it is running. We need to do
+            // this as otherwise it can remain pending and leave keyguard in a weird state.
+            mUnlockScrimCallback.onCancelled();
         } else if (mKeyguardStateController.isShowing() && !isOccluded() && !unlocking) {
             mScrimController.transitionTo(ScrimState.KEYGUARD);
         } else if (mKeyguardStateController.isShowing() && mKeyguardUpdateMonitor.isDreaming()
@@ -4154,7 +4172,8 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
                 Log.wtf(TAG, "WallpaperManager not supported");
                 return;
             }
-            WallpaperInfo info = mWallpaperManager.getWallpaperInfoForUser(UserHandle.USER_CURRENT);
+            WallpaperInfo info = mWallpaperManager.getWallpaperInfoForUser(
+                    mUserTracker.getUserId());
             mWallpaperController.onWallpaperInfoUpdated(info);
 
             final boolean deviceSupportsAodWallpaper = mContext.getResources().getBoolean(
@@ -4378,6 +4397,6 @@ public class CentralSurfacesImpl implements CoreStartable, CentralSurfaces {
                 return new UserHandle(UserHandle.myUserId());
             }
         }
-        return UserHandle.CURRENT;
+        return mUserTracker.getUserHandle();
     }
 }

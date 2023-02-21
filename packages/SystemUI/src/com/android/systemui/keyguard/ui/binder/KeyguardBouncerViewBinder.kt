@@ -106,13 +106,6 @@ object KeyguardBouncerViewBinder {
                             hostViewController.appear(
                                 SystemBarUtils.getStatusBarHeight(view.context)
                             )
-                        }
-                    }
-
-                    launch {
-                        viewModel.showWithFullExpansion.collect { model ->
-                            hostViewController.resetSecurityContainer()
-                            hostViewController.showPromptReason(model.promptReason)
                             hostViewController.onResume()
                         }
                     }
@@ -157,6 +150,12 @@ object KeyguardBouncerViewBinder {
                             val visibility = if (isVisible) View.VISIBLE else View.INVISIBLE
                             view.visibility = visibility
                             hostViewController.onBouncerVisibilityChanged(visibility)
+                        }
+                    }
+
+                    launch {
+                        viewModel.isInteractable.collect { isInteractable ->
+                            hostViewController.setInteractable(isInteractable)
                         }
                     }
 

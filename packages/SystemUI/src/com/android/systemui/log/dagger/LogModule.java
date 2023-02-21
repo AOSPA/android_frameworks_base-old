@@ -191,37 +191,12 @@ public class LogModule {
                 false /* systrace */);
     }
 
-    /**
-     * Provides a logging buffer for logs related to swiping away the status bar while in immersive
-     * mode. See {@link com.android.systemui.statusbar.gesture.SwipeStatusBarAwayGestureLogger}.
-     */
+    /** Provides a logging buffer for logs related to swipe up gestures. */
     @Provides
     @SysUISingleton
-    @SwipeStatusBarAwayLog
-    public static LogBuffer provideSwipeAwayGestureLogBuffer(LogBufferFactory factory) {
-        return factory.create("SwipeStatusBarAwayLog", 30);
-    }
-
-    /**
-     * Provides a logging buffer for logs related to the media tap-to-transfer chip on the sender
-     * device. See {@link com.android.systemui.media.taptotransfer.sender.MediaTttSenderLogger}.
-     */
-    @Provides
-    @SysUISingleton
-    @MediaTttSenderLogBuffer
-    public static LogBuffer provideMediaTttSenderLogBuffer(LogBufferFactory factory) {
-        return factory.create("MediaTttSender", 20);
-    }
-
-    /**
-     * Provides a logging buffer for logs related to the media tap-to-transfer chip on the receiver
-     * device. See {@link com.android.systemui.media.taptotransfer.receiver.MediaTttReceiverLogger}.
-     */
-    @Provides
-    @SysUISingleton
-    @MediaTttReceiverLogBuffer
-    public static LogBuffer provideMediaTttReceiverLogBuffer(LogBufferFactory factory) {
-        return factory.create("MediaTttReceiver", 20);
+    @SwipeUpLog
+    public static LogBuffer provideSwipeUpLogBuffer(LogBufferFactory factory) {
+        return factory.create("SwipeUpLog", 30);
     }
 
     /**

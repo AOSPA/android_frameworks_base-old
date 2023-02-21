@@ -16,6 +16,10 @@
 
 package com.android.systemui.wallpapers;
 
+import static android.app.WallpaperManager.FLAG_LOCK;
+import static android.app.WallpaperManager.FLAG_SYSTEM;
+import static android.app.WallpaperManager.SetWallpaperFlags;
+
 import android.app.WallpaperColors;
 import android.app.WallpaperManager;
 import android.graphics.Bitmap;
@@ -28,7 +32,6 @@ import android.hardware.display.DisplayManager.DisplayListener;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.Trace;
-import android.os.UserHandle;
 import android.service.wallpaper.WallpaperService;
 import android.util.Log;
 import android.view.Surface;
@@ -39,6 +42,7 @@ import androidx.annotation.NonNull;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.dagger.qualifiers.Background;
+import com.android.systemui.settings.UserTracker;
 import com.android.systemui.util.concurrency.DelayableExecutor;
 
 import java.io.FileDescriptor;
@@ -60,6 +64,8 @@ public class ImageWallpaper extends WallpaperService {
     private volatile int mPages = 1;
     private boolean mPagesComputed = false;
 
+    private final UserTracker mUserTracker;
+
     // used to handle WallpaperService messages (e.g. DO_ATTACH, MSG_UPDATE_SURFACE)
     // and to receive WallpaperService callbacks (e.g. onCreateEngine, onSurfaceRedrawNeeded)
     private HandlerThread mWorker;
@@ -72,9 +78,11 @@ public class ImageWallpaper extends WallpaperService {
     private static final int DELAY_UNLOAD_BITMAP = 2000;
 
     @Inject
-    public ImageWallpaper(@Background DelayableExecutor backgroundExecutor) {
+    public ImageWallpaper(@Background DelayableExecutor backgroundExecutor,
+            UserTracker userTracker) {
         super();
         mBackgroundExecutor = backgroundExecutor;
+        mUserTracker = userTracker;
     }
 
     @Override
@@ -161,7 +169,9 @@ public class ImageWallpaper extends WallpaperService {
             }
             mWallpaperManager = getDisplayContext().getSystemService(WallpaperManager.class);
             mSurfaceHolder = surfaceHolder;
-            Rect dimensions = mWallpaperManager.peekBitmapDimensions();
+            Rect dimensions = mWallpaperManager.isLockscreenLiveWallpaperEnabled()
+                    ? mWallpaperManager.peekBitmapDimensions(getSourceFlag())
+                    : mWallpaperManager.peekBitmapDimensions();
             int width = Math.max(MIN_SURFACE_WIDTH, dimensions.width());
             int height = Math.max(MIN_SURFACE_HEIGHT, dimensions.height());
             mSurfaceHolder.setFixedSize(width, height);
@@ -310,7 +320,10 @@ public class ImageWallpaper extends WallpaperService {
             boolean loadSuccess = false;
             Bitmap bitmap;
             try {
-                bitmap = mWallpaperManager.getBitmapAsUser(UserHandle.USER_CURRENT, false);
+                bitmap = mWallpaperManager.isLockscreenLiveWallpaperEnabled()
+                        ? mWallpaperManager.getBitmapAsUser(
+                                mUserTracker.getUserId(), false, getSourceFlag())
+                        : mWallpaperManager.getBitmapAsUser(mUserTracker.getUserId(), false);
                 if (bitmap != null
                         && bitmap.getByteCount() > RecordingCanvas.MAX_BITMAP_SIZE) {
                     throw new RuntimeException("Wallpaper is too large to draw!");
@@ -321,10 +334,18 @@ public class ImageWallpaper extends WallpaperService {
                 // be loaded, we will go into a cycle. Don't do a build where the
                 // default wallpaper can't be loaded.
                 Log.w(TAG, "Unable to load wallpaper!", exception);
-                mWallpaperManager.clearWallpaper(
-                        WallpaperManager.FLAG_SYSTEM, UserHandle.USER_CURRENT);
+                if (mWallpaperManager.isLockscreenLiveWallpaperEnabled()) {
+                    mWallpaperManager.clearWallpaper(getWallpaperFlags(), mUserTracker.getUserId());
+                } else {
+                    mWallpaperManager.clearWallpaper(
+                            WallpaperManager.FLAG_SYSTEM, mUserTracker.getUserId());
+                }
+
                 try {
-                    bitmap = mWallpaperManager.getBitmapAsUser(UserHandle.USER_CURRENT, false);
+                    bitmap = mWallpaperManager.isLockscreenLiveWallpaperEnabled()
+                            ? mWallpaperManager.getBitmapAsUser(
+                                    mUserTracker.getUserId(), false, getSourceFlag())
+                            : mWallpaperManager.getBitmapAsUser(mUserTracker.getUserId(), false);
                 } catch (RuntimeException | OutOfMemoryError e) {
                     Log.w(TAG, "Unable to load default wallpaper!", e);
                     bitmap = null;
@@ -345,8 +366,9 @@ public class ImageWallpaper extends WallpaperService {
                     mBitmap.recycle();
                 }
                 mBitmap = bitmap;
-                mWideColorGamut = mWallpaperManager.wallpaperSupportsWcg(
-                        WallpaperManager.FLAG_SYSTEM);
+                mWideColorGamut = mWallpaperManager.isLockscreenLiveWallpaperEnabled()
+                        ? mWallpaperManager.wallpaperSupportsWcg(getSourceFlag())
+                        : mWallpaperManager.wallpaperSupportsWcg(WallpaperManager.FLAG_SYSTEM);
 
                 // +2 usages for the color extraction and the delayed unload.
                 mBitmapUsages += 2;
@@ -373,6 +395,15 @@ public class ImageWallpaper extends WallpaperService {
             } catch (RuntimeException e) {
                 Log.e(TAG, e.getMessage(), e);
             }
+        }
+
+        /**
+         * Helper to return the flag from where the source bitmap is from.
+         * Similar to {@link #getWallpaperFlags()}, but returns (FLAG_SYSTEM) instead of
+         * (FLAG_LOCK | FLAG_SYSTEM) if this engine is used for both lock screen & home screen.
+         */
+        private @SetWallpaperFlags int getSourceFlag() {
+            return getWallpaperFlags() == FLAG_LOCK ? FLAG_LOCK : FLAG_SYSTEM;
         }
 
         @VisibleForTesting

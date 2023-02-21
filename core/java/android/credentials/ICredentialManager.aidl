@@ -21,6 +21,8 @@ import java.util.List;
 import android.credentials.ClearCredentialStateRequest;
 import android.credentials.CreateCredentialRequest;
 import android.credentials.GetCredentialRequest;
+import android.credentials.RegisterCredentialDescriptionRequest;
+import android.credentials.UnregisterCredentialDescriptionRequest;
 import android.credentials.IClearCredentialStateCallback;
 import android.credentials.ICreateCredentialCallback;
 import android.credentials.IGetCredentialCallback;
@@ -44,4 +46,9 @@ interface ICredentialManager {
     @nullable ICancellationSignal listEnabledProviders(in IListEnabledProvidersCallback callback);
 
     void setEnabledProviders(in List<String> providers, in int userId, in ISetEnabledProvidersCallback callback);
+
+    void registerCredentialDescription(in RegisterCredentialDescriptionRequest request, String callingPackage);
+
+    void unregisterCredentialDescription(in UnregisterCredentialDescriptionRequest request, String callingPackage);
 }
+

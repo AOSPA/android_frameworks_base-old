@@ -18,6 +18,7 @@ package com.android.server.wm;
 
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_ATM;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_WITH_CLASS_NAME;
+import static com.android.server.wm.LetterboxConfigurationDeviceConfig.KEY_ALLOW_IGNORE_ORIENTATION_REQUEST;
 import static com.android.server.wm.LetterboxConfigurationDeviceConfig.KEY_ENABLE_DISPLAY_ROTATION_IMMERSIVE_APP_COMPAT_POLICY;
 
 import android.annotation.IntDef;
@@ -197,6 +198,12 @@ final class LetterboxConfiguration {
     // Whether using split screen aspect ratio as a default aspect ratio for unresizable apps.
     private boolean mIsSplitScreenAspectRatioForUnresizableAppsEnabled;
 
+    // Whether using display aspect ratio as a default aspect ratio for all letterboxed apps.
+    // mIsSplitScreenAspectRatioForUnresizableAppsEnabled and
+    // config_letterboxDefaultMinAspectRatioForUnresizableApps take priority over this for
+    // unresizable apps
+    private boolean mIsDisplayAspectRatioEnabledForFixedOrientationLetterbox;
+
     // Whether letterboxing strategy is enabled for translucent activities. If {@value false}
     // all the feature is disabled
     private boolean mTranslucentLetterboxingEnabled;
@@ -288,6 +295,9 @@ final class LetterboxConfiguration {
                 R.dimen.config_letterboxDefaultMinAspectRatioForUnresizableApps));
         mIsSplitScreenAspectRatioForUnresizableAppsEnabled = mContext.getResources().getBoolean(
                 R.bool.config_letterboxIsSplitScreenAspectRatioForUnresizableAppsEnabled);
+        mIsDisplayAspectRatioEnabledForFixedOrientationLetterbox = mContext.getResources()
+                .getBoolean(R.bool
+                        .config_letterboxIsDisplayAspectRatioForFixedOrientationLetterboxEnabled);
         mTranslucentLetterboxingEnabled = mContext.getResources().getBoolean(
                 R.bool.config_letterboxIsEnabledForTranslucentActivities);
         mIsCameraCompatTreatmentEnabled = mContext.getResources().getBoolean(
@@ -302,9 +312,20 @@ final class LetterboxConfiguration {
         mDeviceConfig.updateFlagActiveStatus(
                 /* isActive */ mIsDisplayRotationImmersiveAppCompatPolicyEnabled,
                 /* key */ KEY_ENABLE_DISPLAY_ROTATION_IMMERSIVE_APP_COMPAT_POLICY);
+        mDeviceConfig.updateFlagActiveStatus(
+                /* isActive */ true,
+                /* key */ KEY_ALLOW_IGNORE_ORIENTATION_REQUEST);
 
         mLetterboxConfigurationPersister = letterboxConfigurationPersister;
         mLetterboxConfigurationPersister.start();
+    }
+
+    /**
+     * Whether enabling ignoreOrientationRequest is allowed on the device. This value is controlled
+     * via {@link android.provider.DeviceConfig}.
+     */
+    boolean isIgnoreOrientationRequestAllowed() {
+        return mDeviceConfig.getFlag(KEY_ALLOW_IGNORE_ORIENTATION_REQUEST);
     }
 
     /**
@@ -943,11 +964,26 @@ final class LetterboxConfiguration {
     }
 
     /**
+     * Whether using display aspect ratio as a default aspect ratio for all letterboxed apps.
+     */
+    boolean getIsDisplayAspectRatioEnabledForFixedOrientationLetterbox() {
+        return mIsDisplayAspectRatioEnabledForFixedOrientationLetterbox;
+    }
+
+    /**
      * Overrides whether using split screen aspect ratio as a default aspect ratio for unresizable
      * apps.
      */
     void setIsSplitScreenAspectRatioForUnresizableAppsEnabled(boolean enabled) {
         mIsSplitScreenAspectRatioForUnresizableAppsEnabled = enabled;
+    }
+
+    /**
+     * Overrides whether using display aspect ratio as a default aspect ratio for all letterboxed
+     * apps.
+     */
+    void setIsDisplayAspectRatioEnabledForFixedOrientationLetterbox(boolean enabled) {
+        mIsDisplayAspectRatioEnabledForFixedOrientationLetterbox = enabled;
     }
 
     /**
@@ -957,6 +993,16 @@ final class LetterboxConfiguration {
     void resetIsSplitScreenAspectRatioForUnresizableAppsEnabled() {
         mIsSplitScreenAspectRatioForUnresizableAppsEnabled = mContext.getResources().getBoolean(
                 R.bool.config_letterboxIsSplitScreenAspectRatioForUnresizableAppsEnabled);
+    }
+
+    /**
+     * Resets whether using display aspect ratio as a default aspect ratio for all letterboxed
+     * apps {@link R.bool.config_letterboxIsDisplayAspectRatioForFixedOrientationLetterboxEnabled}.
+     */
+    void resetIsDisplayAspectRatioEnabledForFixedOrientationLetterbox() {
+        mIsDisplayAspectRatioEnabledForFixedOrientationLetterbox = mContext.getResources()
+                .getBoolean(R.bool
+                        .config_letterboxIsDisplayAspectRatioForFixedOrientationLetterboxEnabled);
     }
 
     boolean isTranslucentLetterboxingEnabled() {

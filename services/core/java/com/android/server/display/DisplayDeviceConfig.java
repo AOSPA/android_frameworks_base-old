@@ -17,12 +17,14 @@
 package com.android.server.display;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.hardware.display.DisplayManagerInternal;
 import android.hardware.display.DisplayManagerInternal.RefreshRateLimitation;
+import android.hardware.input.HostUsiVersion;
 import android.os.Environment;
 import android.os.PowerManager;
 import android.text.TextUtils;
@@ -57,6 +59,7 @@ import com.android.server.display.config.SensorDetails;
 import com.android.server.display.config.ThermalStatus;
 import com.android.server.display.config.ThermalThrottling;
 import com.android.server.display.config.ThresholdPoint;
+import com.android.server.display.config.UsiVersion;
 import com.android.server.display.config.XmlParser;
 
 import org.xmlpull.v1.XmlPullParserException;
@@ -132,6 +135,16 @@ import javax.xml.datatype.DatatypeConfigurationException;
  *            <brightness>0.01</brightness>
  *          </brightnessThrottlingPoint>
  *        </brightnessThrottlingMap>
+ *        <concurrentDisplaysBrightnessThrottlingMap>
+ *          <brightnessThrottlingPoint>
+ *            <thermalStatus>severe</thermalStatus>
+ *            <brightness>0.07</brightness>
+ *          </brightnessThrottlingPoint>
+ *          <brightnessThrottlingPoint>
+ *            <thermalStatus>critical</thermalStatus>
+ *            <brightness>0.005</brightness>
+ *          </brightnessThrottlingPoint>
+ *        </concurrentDisplaysBrightnessThrottlingMap>
  *      </thermalThrottling>
  *
  *      <refreshRate>
@@ -380,6 +393,12 @@ import javax.xml.datatype.DatatypeConfigurationException;
  *         <item>80</item>
  *         <item>1500</item>
  *     </screenOffBrightnessSensorValueToLux>
+ *     // The version of the Universal Stylus Initiative (USI) protocol supported by this display.
+ *     // This should be omitted if the display does not support USI styluses.
+ *     <usiVersion>
+ *         <majorVersion>2</majorVersion>
+ *         <minorVersion>0</minorVersion>
+ *     </usiVersion>
  *    </displayConfiguration>
  *  }
  *  </pre>
@@ -613,6 +632,11 @@ public class DisplayDeviceConfig {
     // overwritten value.
     private BrightnessThrottlingData mBrightnessThrottlingData;
     private BrightnessThrottlingData mOriginalBrightnessThrottlingData;
+    // The concurrent displays mode might need a stricter throttling policy
+    private BrightnessThrottlingData mConcurrentDisplaysBrightnessThrottlingData;
+
+    @Nullable
+    private HostUsiVersion mHostUsiVersion;
 
     @VisibleForTesting
     DisplayDeviceConfig(Context context) {
@@ -1258,10 +1282,18 @@ public class DisplayDeviceConfig {
     }
 
     /**
-     * @return brightness throttling data configuration data for the display.
+     * @return brightness throttling configuration data for the display.
      */
     public BrightnessThrottlingData getBrightnessThrottlingData() {
         return BrightnessThrottlingData.create(mBrightnessThrottlingData);
+    }
+
+    /**
+     * @return brightness throttling configuration data for the display for the concurrent
+     * displays mode.
+     */
+    public BrightnessThrottlingData getConcurrentDisplaysBrightnessThrottlingData() {
+        return BrightnessThrottlingData.create(mConcurrentDisplaysBrightnessThrottlingData);
     }
 
     /**
@@ -1348,6 +1380,15 @@ public class DisplayDeviceConfig {
      */
     public int[] getScreenOffBrightnessSensorValueToLux() {
         return mScreenOffBrightnessSensorValueToLux;
+    }
+
+    /**
+     * @return The USI version supported by this display, or null if USI is not supported.
+     * @see HostUsiVersion
+     */
+    @Nullable
+    public HostUsiVersion getHostUsiVersion() {
+        return mHostUsiVersion;
     }
 
     @Override
@@ -1454,6 +1495,8 @@ public class DisplayDeviceConfig {
                 + "\n"
                 + ", mScreenOffBrightnessSensorValueToLux=" + Arrays.toString(
                 mScreenOffBrightnessSensorValueToLux)
+                + "\n"
+                + ", mUsiVersion= " + mHostUsiVersion
                 + "}";
     }
 
@@ -1503,6 +1546,7 @@ public class DisplayDeviceConfig {
                 loadBrightnessConstraintsFromConfigXml();
                 loadBrightnessMap(config);
                 loadBrightnessThrottlingMap(config);
+                loadConcurrentDisplaysBrightnessThrottlingMap(config);
                 loadHighBrightnessModeData(config);
                 loadQuirks(config);
                 loadBrightnessRamps(config);
@@ -1514,6 +1558,7 @@ public class DisplayDeviceConfig {
                 loadAutoBrightnessConfigValues(config);
                 loadRefreshRateSetting(config);
                 loadScreenOffBrightnessSensorValueToLuxFromDdc(config);
+                loadUsiVersion(config);
             } else {
                 Slog.w(TAG, "DisplayDeviceConfig file is null");
             }
@@ -1714,13 +1759,13 @@ public class DisplayDeviceConfig {
     private void loadBrightnessThrottlingMap(DisplayConfiguration config) {
         final ThermalThrottling throttlingConfig = config.getThermalThrottling();
         if (throttlingConfig == null) {
-            Slog.i(TAG, "no thermal throttling config found");
+            Slog.i(TAG, "No thermal throttling config found");
             return;
         }
 
         final BrightnessThrottlingMap map = throttlingConfig.getBrightnessThrottlingMap();
         if (map == null) {
-            Slog.i(TAG, "no brightness throttling map found");
+            Slog.i(TAG, "No brightness throttling map found");
             return;
         }
 
@@ -1744,6 +1789,43 @@ public class DisplayDeviceConfig {
         if (!badConfig) {
             mBrightnessThrottlingData = BrightnessThrottlingData.create(throttlingLevels);
             mOriginalBrightnessThrottlingData = mBrightnessThrottlingData;
+        }
+    }
+
+    private void loadConcurrentDisplaysBrightnessThrottlingMap(DisplayConfiguration config) {
+        final ThermalThrottling throttlingConfig = config.getThermalThrottling();
+        if (throttlingConfig == null) {
+            Slog.i(TAG, "No concurrent displays thermal throttling config found");
+            return;
+        }
+
+        final BrightnessThrottlingMap map =
+                throttlingConfig.getConcurrentDisplaysBrightnessThrottlingMap();
+        if (map == null) {
+            Slog.i(TAG, "No concurrent displays brightness throttling map found");
+            return;
+        }
+
+        final List<BrightnessThrottlingPoint> points = map.getBrightnessThrottlingPoint();
+        // At least 1 point is guaranteed by the display device config schema
+        List<BrightnessThrottlingData.ThrottlingLevel> throttlingLevels =
+                new ArrayList<>(points.size());
+
+        boolean badConfig = false;
+        for (BrightnessThrottlingPoint point : points) {
+            ThermalStatus status = point.getThermalStatus();
+            if (!thermalStatusIsValid(status)) {
+                badConfig = true;
+                break;
+            }
+
+            throttlingLevels.add(new BrightnessThrottlingData.ThrottlingLevel(
+                    convertThermalStatus(status), point.getBrightness().floatValue()));
+        }
+
+        if (!badConfig) {
+            mConcurrentDisplaysBrightnessThrottlingData =
+                    BrightnessThrottlingData.create(throttlingLevels);
         }
     }
 
@@ -2529,7 +2611,8 @@ public class DisplayDeviceConfig {
         }
     }
 
-    private @PowerManager.ThermalStatus int convertThermalStatus(ThermalStatus value) {
+    @VisibleForTesting
+    static @PowerManager.ThermalStatus int convertThermalStatus(ThermalStatus value) {
         if (value == null) {
             return PowerManager.THERMAL_STATUS_NONE;
         }
@@ -2628,6 +2711,15 @@ public class DisplayDeviceConfig {
         for (int i = 0; i < items.size(); i++) {
             mScreenOffBrightnessSensorValueToLux[i] = items.get(i).intValue();
         }
+    }
+
+    private void loadUsiVersion(DisplayConfiguration config) {
+        final UsiVersion usiVersion = config.getUsiVersion();
+        mHostUsiVersion = usiVersion != null
+                ? new HostUsiVersion(
+                        usiVersion.getMajorVersion().intValue(),
+                        usiVersion.getMinorVersion().intValue())
+                : null;
     }
 
     /**
@@ -2855,7 +2947,8 @@ public class DisplayDeviceConfig {
             return throttlingLevels.hashCode();
         }
 
-        private BrightnessThrottlingData(List<ThrottlingLevel> inLevels) {
+        @VisibleForTesting
+        BrightnessThrottlingData(List<ThrottlingLevel> inLevels) {
             throttlingLevels = new ArrayList<>(inLevels.size());
             for (ThrottlingLevel level : inLevels) {
                 throttlingLevels.add(new ThrottlingLevel(level.thermalStatus, level.brightness));

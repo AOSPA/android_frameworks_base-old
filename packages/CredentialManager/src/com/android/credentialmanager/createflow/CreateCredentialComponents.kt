@@ -37,6 +37,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import com.android.credentialmanager.R
+import com.android.credentialmanager.common.ProviderActivityState
 import com.android.credentialmanager.common.material.ModalBottomSheetLayout
 import com.android.credentialmanager.common.material.ModalBottomSheetValue
 import com.android.credentialmanager.common.material.rememberModalBottomSheetState
@@ -66,63 +67,83 @@ fun CreateCredentialScreen(
         sheetState = state,
         sheetContent = {
             val uiState = viewModel.uiState
-            if (!uiState.hidden) {
-                when (uiState.currentScreenState) {
-                    CreateScreenState.PASSKEY_INTRO -> ConfirmationCard(
-                        onConfirm = viewModel::onConfirmIntro,
-                        onLearnMore = viewModel::onLearnMore,
-                    )
-                    CreateScreenState.PROVIDER_SELECTION -> ProviderSelectionCard(
-                        requestDisplayInfo = uiState.requestDisplayInfo,
-                        enabledProviderList = uiState.enabledProviders,
-                        disabledProviderList = uiState.disabledProviders,
-                        sortedCreateOptionsPairs = uiState.sortedCreateOptionsPairs,
-                        onOptionSelected = viewModel::onEntrySelectedFromFirstUseScreen,
-                        onDisabledProvidersSelected = viewModel::onDisabledProvidersSelected,
-                        onMoreOptionsSelected = viewModel::onMoreOptionsSelectedOnProviderSelection,
-                    )
-                    CreateScreenState.CREATION_OPTION_SELECTION -> CreationSelectionCard(
-                        requestDisplayInfo = uiState.requestDisplayInfo,
-                        enabledProviderList = uiState.enabledProviders,
-                        providerInfo = uiState.activeEntry?.activeProvider!!,
-                        createOptionInfo = uiState.activeEntry.activeEntryInfo as CreateOptionInfo,
-                        onOptionSelected = viewModel::onEntrySelected,
-                        onConfirm = viewModel::onConfirmEntrySelected,
-                        onMoreOptionsSelected = viewModel::onMoreOptionsSelectedOnCreationSelection,
-                    )
-                    CreateScreenState.MORE_OPTIONS_SELECTION -> MoreOptionsSelectionCard(
-                        requestDisplayInfo = uiState.requestDisplayInfo,
-                        enabledProviderList = uiState.enabledProviders,
-                        disabledProviderList = uiState.disabledProviders,
-                        sortedCreateOptionsPairs = uiState.sortedCreateOptionsPairs,
-                        hasDefaultProvider = uiState.hasDefaultProvider,
-                        isFromProviderSelection = uiState.isFromProviderSelection!!,
-                        onBackProviderSelectionButtonSelected =
-                        viewModel::onBackProviderSelectionButtonSelected,
-                        onBackCreationSelectionButtonSelected =
-                        viewModel::onBackCreationSelectionButtonSelected,
-                        onOptionSelected = viewModel::onEntrySelectedFromMoreOptionScreen,
-                        onDisabledProvidersSelected = viewModel::onDisabledProvidersSelected,
-                        onRemoteEntrySelected = viewModel::onEntrySelected,
-                    )
-                    CreateScreenState.MORE_OPTIONS_ROW_INTRO -> MoreOptionsRowIntroCard(
-                        providerInfo = uiState.activeEntry?.activeProvider!!,
-                        onChangeDefaultSelected = viewModel::onChangeDefaultSelected,
-                        onUseOnceSelected = viewModel::onUseOnceSelected,
-                    )
-                    CreateScreenState.EXTERNAL_ONLY_SELECTION -> ExternalOnlySelectionCard(
-                        requestDisplayInfo = uiState.requestDisplayInfo,
-                        activeRemoteEntry = uiState.activeEntry?.activeEntryInfo!!,
-                        onOptionSelected = viewModel::onEntrySelected,
-                        onConfirm = viewModel::onConfirmEntrySelected,
-                    )
-                    CreateScreenState.MORE_ABOUT_PASSKEYS_INTRO -> MoreAboutPasskeysIntroCard(
-                        onBackPasskeyIntroButtonSelected =
-                        viewModel::onBackPasskeyIntroButtonSelected,
-                    )
+            // Hide the sheet content as opposed to the whole bottom sheet to maintain the scrim
+            // background color even when the content should be hidden while waiting for
+            // results from the provider app.
+            when (uiState.providerActivityState) {
+                ProviderActivityState.NOT_APPLICABLE -> {
+                    when (uiState.currentScreenState) {
+                        CreateScreenState.PASSKEY_INTRO -> ConfirmationCard(
+                            onConfirm = viewModel::onConfirmIntro,
+                            onLearnMore = viewModel::onLearnMore,
+                        )
+                        CreateScreenState.PROVIDER_SELECTION -> ProviderSelectionCard(
+                            requestDisplayInfo = uiState.requestDisplayInfo,
+                            enabledProviderList = uiState.enabledProviders,
+                            disabledProviderList = uiState.disabledProviders,
+                            sortedCreateOptionsPairs = uiState.sortedCreateOptionsPairs,
+                            onOptionSelected = viewModel::onEntrySelectedFromFirstUseScreen,
+                            onDisabledProvidersSelected =
+                            viewModel::onDisabledProvidersSelected,
+                            onMoreOptionsSelected =
+                            viewModel::onMoreOptionsSelectedOnProviderSelection,
+                        )
+                        CreateScreenState.CREATION_OPTION_SELECTION -> CreationSelectionCard(
+                            requestDisplayInfo = uiState.requestDisplayInfo,
+                            enabledProviderList = uiState.enabledProviders,
+                            providerInfo = uiState.activeEntry?.activeProvider!!,
+                            createOptionInfo =
+                            uiState.activeEntry.activeEntryInfo as CreateOptionInfo,
+                            onOptionSelected = viewModel::onEntrySelected,
+                            onConfirm = viewModel::onConfirmEntrySelected,
+                            onMoreOptionsSelected =
+                            viewModel::onMoreOptionsSelectedOnCreationSelection,
+                        )
+                        CreateScreenState.MORE_OPTIONS_SELECTION -> MoreOptionsSelectionCard(
+                            requestDisplayInfo = uiState.requestDisplayInfo,
+                            enabledProviderList = uiState.enabledProviders,
+                            disabledProviderList = uiState.disabledProviders,
+                            sortedCreateOptionsPairs = uiState.sortedCreateOptionsPairs,
+                            hasDefaultProvider = uiState.hasDefaultProvider,
+                            isFromProviderSelection = uiState.isFromProviderSelection!!,
+                            onBackProviderSelectionButtonSelected =
+                            viewModel::onBackProviderSelectionButtonSelected,
+                            onBackCreationSelectionButtonSelected =
+                            viewModel::onBackCreationSelectionButtonSelected,
+                            onOptionSelected =
+                            viewModel::onEntrySelectedFromMoreOptionScreen,
+                            onDisabledProvidersSelected =
+                            viewModel::onDisabledProvidersSelected,
+                            onRemoteEntrySelected = viewModel::onEntrySelected,
+                        )
+                        CreateScreenState.MORE_OPTIONS_ROW_INTRO -> MoreOptionsRowIntroCard(
+                            providerInfo = uiState.activeEntry?.activeProvider!!,
+                            onChangeDefaultSelected = viewModel::onChangeDefaultSelected,
+                            onUseOnceSelected = viewModel::onUseOnceSelected,
+                        )
+                        CreateScreenState.EXTERNAL_ONLY_SELECTION -> ExternalOnlySelectionCard(
+                            requestDisplayInfo = uiState.requestDisplayInfo,
+                            activeRemoteEntry = uiState.activeEntry?.activeEntryInfo!!,
+                            onOptionSelected = viewModel::onEntrySelected,
+                            onConfirm = viewModel::onConfirmEntrySelected,
+                        )
+                        CreateScreenState.MORE_ABOUT_PASSKEYS_INTRO ->
+                            MoreAboutPasskeysIntroCard(
+                                onBackPasskeyIntroButtonSelected =
+                                viewModel::onBackPasskeyIntroButtonSelected,
+                            )
+                    }
                 }
-            } else if (uiState.selectedEntry != null && !uiState.providerActivityPending) {
-                viewModel.launchProviderUi(providerActivityLauncher)
+                ProviderActivityState.READY_TO_LAUNCH -> {
+                    // Launch only once per providerActivityState change so that the provider
+                    // UI will not be accidentally launched twice.
+                    LaunchedEffect(uiState.providerActivityState) {
+                        viewModel.launchProviderUi(providerActivityLauncher)
+                    }
+                }
+                ProviderActivityState.PENDING -> {
+                    // Hide our content when the provider activity is active.
+                }
             }
         },
         scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.8f),
@@ -477,7 +498,8 @@ fun MoreOptionsRowIntroCard(
                 Icons.Outlined.NewReleases,
                 contentDescription = null,
                 modifier = Modifier.align(alignment = Alignment.CenterHorizontally)
-                    .padding(all = 24.dp)
+                    .padding(all = 24.dp),
+                tint = LocalAndroidColorScheme.current.colorAccentPrimaryVariant,
             )
             TextOnSurface(
                 text = stringResource(
@@ -642,7 +664,7 @@ fun ExternalOnlySelectionCard(
             Icon(
                 painter = painterResource(R.drawable.ic_other_devices),
                 contentDescription = null,
-                tint = Color.Unspecified,
+                tint = LocalAndroidColorScheme.current.colorAccentPrimaryVariant,
                 modifier = Modifier.align(alignment = Alignment.CenterHorizontally)
                     .padding(all = 24.dp).size(32.dp)
             )
@@ -972,7 +994,8 @@ fun MoreOptionsDisabledProvidersRow(
                 Icon(
                     Icons.Filled.Add,
                     contentDescription = null,
-                    modifier = Modifier.padding(start = 16.dp)
+                    modifier = Modifier.padding(start = 16.dp),
+                    tint = LocalAndroidColorScheme.current.colorAccentPrimaryVariant,
                 )
             },
             label = {
@@ -984,7 +1007,9 @@ fun MoreOptionsDisabledProvidersRow(
                     )
                     // TODO: Update the subtitle once design is confirmed
                     TextSecondary(
-                        text = disabledProviders.joinToString(separator = " • ") { it.displayName },
+                        text = disabledProviders.joinToString(separator = " • ") {
+                            it.displayName
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(bottom = 16.dp, start = 5.dp),
                     )
@@ -1006,8 +1031,8 @@ fun RemoteEntryRow(
             Icon(
                 painter = painterResource(R.drawable.ic_other_devices),
                 contentDescription = null,
-                tint = Color.Unspecified,
-                modifier = Modifier.padding(start = 18.dp)
+                tint = LocalAndroidColorScheme.current.colorAccentPrimaryVariant,
+                modifier = Modifier.padding(start = 10.dp)
             )
         },
         label = {
@@ -1015,7 +1040,7 @@ fun RemoteEntryRow(
                 TextOnSurfaceVariant(
                     text = stringResource(R.string.another_device),
                     style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(start = 16.dp, top = 18.dp, bottom = 18.dp)
+                    modifier = Modifier.padding(start = 10.dp, top = 18.dp, bottom = 18.dp)
                         .align(alignment = Alignment.CenterHorizontally),
                 )
             }

@@ -458,6 +458,14 @@
     <string name="permdesc_bodySensors" product="default" msgid="7652650410295512140">"ആപ്പ് ഉപയോഗത്തിലുള്ളപ്പോൾ അതിനെ ഹൃദയമിടിപ്പ്, ശരീരോഷ്മാവ്, രക്തത്തിലെ ഓക്സിജൻ ശതമാനം എന്നിവ പോലുള്ള ബോഡി സെൻസർ ഡാറ്റ ആക്‌സസ് ചെയ്യാൻ അനുവദിക്കുന്നു."</string>
     <string name="permlab_bodySensors_background" msgid="4912560779957760446">"പശ്ചാത്തലത്തിലുള്ളപ്പോൾ ഹൃദയമിടിപ്പ് പോലുള്ള ബോഡി സെൻസർ ഡാറ്റ ആക്‌സസ് ചെയ്യുക"</string>
     <string name="permdesc_bodySensors_background" product="default" msgid="8870726027557749417">"ആപ്പ് പശ്ചാത്തലത്തിലുള്ളപ്പോൾ അതിനെ ഹൃദയമിടിപ്പ്, ശരീരോഷ്മാവ്, രക്തത്തിലെ ഓക്സിജൻ ശതമാനം എന്നിവ പോലുള്ള ബോഡി സെൻസർ ഡാറ്റ ആക്‌സസ് ചെയ്യാൻ അനുവദിക്കുന്നു."</string>
+    <!-- no translation found for permlab_bodySensorsWristTemperature (5007987988922337657) -->
+    <skip />
+    <!-- no translation found for permdesc_bodySensorsWristTemperature (4978345709781045181) -->
+    <skip />
+    <!-- no translation found for permlab_bodySensors_wristTemperature_background (7692772783509074356) -->
+    <skip />
+    <!-- no translation found for permdesc_bodySensors_wristTemperature_background (3170369705518699219) -->
+    <skip />
     <string name="permlab_readCalendar" msgid="6408654259475396200">"കലണ്ടർ ഇവന്റുകളും വിശദാംശങ്ങളും വായിക്കുക"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"ഈ ആപ്പിന് നിങ്ങളുടെ ടാബ്‌ലെറ്റിൽ സംഭരിച്ചിരിക്കുന്ന എല്ലാ കലണ്ടർ ഇവന്റുകളും വായിക്കാനും നിങ്ങളുടെ കലണ്ടർ വിവരങ്ങൾ പങ്കിടാനും അല്ലെങ്കിൽ സംരക്ഷിക്കാനും കഴിയും."</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"ഈ ആപ്പിന് നിങ്ങളുടെ Android TV-യിൽ സംഭരിച്ചിരിക്കുന്ന എല്ലാ കലണ്ടർ ഇവന്റുകളും വായിക്കാനും നിങ്ങളുടെ കലണ്ടർ ഡാറ്റ പങ്കിടാനോ സംരക്ഷിക്കാനോ സാധിക്കുകയും ചെയ്യും."</string>
@@ -1943,10 +1951,8 @@
     <string name="work_mode_off_title" msgid="961171256005852058">"ഔദ്യോഗിക ആപ്പുകൾ ഓണാക്കണോ?"</string>
     <string name="work_mode_off_message" msgid="7319580997683623309">"നിങ്ങളുടെ ഔദ്യോഗിക ആപ്പുകളിലേക്കും അറിയിപ്പുകളിലേക്കും ആക്‌സസ് നേടുക"</string>
     <string name="work_mode_turn_on" msgid="3662561662475962285">"ഓണാക്കുക"</string>
-    <!-- no translation found for work_mode_emergency_call_button (6818855962881612322) -->
-    <skip />
-    <!-- no translation found for work_mode_dialer_off_message (2193299184850387465) -->
-    <skip />
+    <string name="work_mode_emergency_call_button" msgid="6818855962881612322">"അടിയന്തരം"</string>
+    <string name="work_mode_dialer_off_message" msgid="2193299184850387465">"നിങ്ങളുടെ ഔദ്യോഗിക ആപ്പുകളിലേക്കും കോളുകളിലേക്കും ആക്‌സസ് നേടുക"</string>
     <string name="app_blocked_title" msgid="7353262160455028160">"ആപ്പ് ലഭ്യമല്ല"</string>
     <string name="app_blocked_message" msgid="542972921087873023">"<xliff:g id="APP_NAME">%1$s</xliff:g> ഇപ്പോൾ ലഭ്യമല്ല."</string>
     <string name="app_streaming_blocked_title" msgid="6090945835898766139">"<xliff:g id="ACTIVITY">%1$s</xliff:g> ലഭ്യമല്ല"</string>

@@ -153,7 +153,6 @@ void CanvasContext::removeRenderNode(RenderNode* node) {
 
 void CanvasContext::destroy() {
     stopDrawing();
-    setHardwareBuffer(nullptr);
     setSurface(nullptr);
     setSurfaceControl(nullptr);
     freePrefetchedLayers();
@@ -177,23 +176,12 @@ static void setBufferCount(ANativeWindow* window) {
     native_window_set_buffer_count(window, bufferCount);
 }
 
-void CanvasContext::setHardwareBuffer(AHardwareBuffer* buffer) {
-    if (mHardwareBuffer) {
-        AHardwareBuffer_release(mHardwareBuffer);
-        mHardwareBuffer = nullptr;
-    }
-
-    if (buffer) {
-        AHardwareBuffer_acquire(buffer);
-        mHardwareBuffer = buffer;
-    }
-    mRenderPipeline->setHardwareBuffer(mHardwareBuffer);
-}
-
 void CanvasContext::setSurface(ANativeWindow* window, bool enableTimeout) {
     ATRACE_CALL();
 
     if (window) {
+        // Ensure the hint session is running here, away from any critical paths
+        mHintSessionWrapper.init();
         mNativeSurface = std::make_unique<ReliableSurface>(window);
         mNativeSurface->init();
         if (enableTimeout) {
@@ -248,6 +236,8 @@ void CanvasContext::setupPipelineSurface() {
         // Order is important when new and old surfaces are the same, because old surface has
         // its frame stats disabled automatically.
         native_window_enable_frame_timestamps(mNativeSurface->getNativeWindow(), true);
+        native_window_set_scaling_mode(mNativeSurface->getNativeWindow(),
+                                       NATIVE_WINDOW_SCALING_MODE_FREEZE);
     } else {
         mRenderThread.removeFrameCallback(this);
         mGenerationID++;
@@ -271,7 +261,7 @@ void CanvasContext::setStopped(bool stopped) {
             mRenderThread.removeFrameCallback(this);
             mRenderPipeline->onStop();
             mRenderThread.cacheManager().onContextStopped(this);
-        } else if (mIsDirty && hasOutputTarget()) {
+        } else if (mIsDirty && hasSurface()) {
             mRenderThread.postFrameCallback(this);
         }
     }
@@ -297,9 +287,40 @@ void CanvasContext::setOpaque(bool opaque) {
     mOpaque = opaque;
 }
 
-void CanvasContext::setColorMode(ColorMode mode) {
-    mRenderPipeline->setSurfaceColorProperties(mode);
-    setupPipelineSurface();
+float CanvasContext::setColorMode(ColorMode mode) {
+    if (mode != mColorMode) {
+        if (mode == ColorMode::Hdr && !mRenderPipeline->supportsExtendedRangeHdr()) {
+            mode = ColorMode::WideColorGamut;
+        }
+        mColorMode = mode;
+        mRenderPipeline->setSurfaceColorProperties(mode);
+        setupPipelineSurface();
+    }
+    switch (mColorMode) {
+        case ColorMode::Hdr:
+            return 3.f;  // TODO: Refine this number
+        default:
+            return 1.f;
+    }
+}
+
+float CanvasContext::targetSdrHdrRatio() const {
+    if (mColorMode == ColorMode::Hdr) {
+        return mTargetSdrHdrRatio;
+    } else {
+        return 1.f;
+    }
+}
+
+void CanvasContext::setTargetSdrHdrRatio(float ratio) {
+    if (mTargetSdrHdrRatio == ratio) return;
+
+    mTargetSdrHdrRatio = ratio;
+    mRenderPipeline->setTargetSdrHdrRatio(ratio);
+    // We don't actually but we need to behave as if we do. Specifically we need to ensure
+    // all buffers in the swapchain are fully re-rendered as any partial updates to them will
+    // result in mixed target white points which looks really bad & flickery
+    mHaveNewSurface = true;
 }
 
 bool CanvasContext::makeCurrent() {
@@ -404,7 +425,7 @@ void CanvasContext::prepareTree(TreeInfo& info, int64_t* uiFrameInfo, int64_t sy
 
     mIsDirty = true;
 
-    if (CC_UNLIKELY(!hasOutputTarget())) {
+    if (CC_UNLIKELY(!hasSurface())) {
         mCurrentFrameInfo->addFlag(FrameInfoFlags::SkippedFrame);
         info.out.canDrawThisFrame = false;
         return;
@@ -549,7 +570,7 @@ void CanvasContext::draw() {
         std::scoped_lock lock(mFrameMetricsReporterMutex);
         drawResult = mRenderPipeline->draw(frame, windowDirty, dirty, mLightGeometry,
                                            &mLayerUpdateQueue, mContentDrawBounds, mOpaque,
-                                           mLightInfo, mRenderNodes, &(profiler()), mBufferParams);
+                                           mLightInfo, mRenderNodes, &(profiler()));
     }
 
     uint64_t frameCompleteNr = getFrameNumber();
@@ -563,7 +584,7 @@ void CanvasContext::draw() {
             const auto inputEventId =
                     static_cast<int32_t>(mCurrentFrameInfo->get(FrameInfoIndex::InputEventId));
             native_window_set_frame_timeline_info(
-                    mNativeSurface->getNativeWindow(), vsyncId, inputEventId,
+                    mNativeSurface->getNativeWindow(), frameCompleteNr, vsyncId, inputEventId,
                     mCurrentFrameInfo->get(FrameInfoIndex::FrameStartTime));
         }
     }
@@ -1019,6 +1040,10 @@ void CanvasContext::prepareSurfaceControlForWebview() {
 
 void CanvasContext::sendLoadResetHint() {
     mHintSessionWrapper.sendLoadResetHint();
+}
+
+void CanvasContext::sendLoadIncreaseHint() {
+    mHintSessionWrapper.sendLoadIncreaseHint();
 }
 
 void CanvasContext::setSyncDelayDuration(nsecs_t duration) {

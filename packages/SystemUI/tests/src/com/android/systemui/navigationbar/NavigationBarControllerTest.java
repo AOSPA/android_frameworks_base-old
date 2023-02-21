@@ -50,13 +50,14 @@ import com.android.systemui.dump.DumpManager;
 import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.model.SysUiState;
 import com.android.systemui.recents.OverviewProxyService;
+import com.android.systemui.settings.FakeDisplayTracker;
 import com.android.systemui.shared.recents.utilities.Utilities;
 import com.android.systemui.shared.system.TaskStackChangeListeners;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.phone.AutoHideController;
 import com.android.systemui.statusbar.phone.LightBarController;
-import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
 import com.android.systemui.statusbar.policy.ConfigurationController;
+import com.android.systemui.util.settings.SecureSettings;
 import com.android.wm.shell.back.BackAnimation;
 import com.android.wm.shell.pip.Pip;
 
@@ -81,6 +82,7 @@ public class NavigationBarControllerTest extends SysuiTestCase {
     private NavigationBar mDefaultNavBar;
     private NavigationBar mSecondaryNavBar;
     private StaticMockitoSession mMockitoSession;
+    private FakeDisplayTracker mDisplayTracker = new FakeDisplayTracker(mContext);
 
     @Mock
     private CommandQueue mCommandQueue;
@@ -109,7 +111,9 @@ public class NavigationBarControllerTest extends SysuiTestCase {
                         TaskStackChangeListeners.getTestInstance(),
                         Optional.of(mock(Pip.class)),
                         Optional.of(mock(BackAnimation.class)),
-                        mock(FeatureFlags.class)));
+                        mock(FeatureFlags.class),
+                        mock(SecureSettings.class),
+                        mDisplayTracker));
         initializeNavigationBars();
         mMockitoSession = mockitoSession().mockStatic(Utilities.class).startMocking();
     }

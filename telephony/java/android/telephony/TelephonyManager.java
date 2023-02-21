@@ -9467,7 +9467,6 @@ public class TelephonyManager {
             ALLOWED_NETWORK_TYPES_REASON_POWER,
             ALLOWED_NETWORK_TYPES_REASON_CARRIER,
             ALLOWED_NETWORK_TYPES_REASON_ENABLE_2G,
-            ALLOWED_NETWORK_TYPES_REASON_USER_RESTRICTIONS,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface AllowedNetworkTypesReason {
@@ -9506,15 +9505,6 @@ public class TelephonyManager {
     public static final int ALLOWED_NETWORK_TYPES_REASON_ENABLE_2G = 3;
 
     /**
-     * To indicate allowed network type change is requested by an update to the
-     * {@link android.os.UserManager.DISALLOW_CELLULAR_2G} user restriction.
-     *
-     * @hide
-     */
-    @SystemApi
-    public static final int ALLOWED_NETWORK_TYPES_REASON_USER_RESTRICTIONS = 4;
-
-    /**
      * Set the allowed network types of the device and provide the reason triggering the allowed
      * network change.
      * <p>Requires permission: {@link android.Manifest.permission#MODIFY_PHONE_STATE} or
@@ -9538,7 +9528,6 @@ public class TelephonyManager {
      * {@link android.Manifest.permission#MODIFY_PHONE_STATE} permissions.
      * <ol>
      *     <li>{@code TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_ENABLE_2G}</li>
-     *     <li>{@code TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_USER_RESTRICTIONS}</li>
      * </ol>
      */
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
@@ -9613,7 +9602,6 @@ public class TelephonyManager {
             case TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_POWER:
             case TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_CARRIER:
             case TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_ENABLE_2G:
-            case ALLOWED_NETWORK_TYPES_REASON_USER_RESTRICTIONS:
                 return true;
         }
         return false;
@@ -13197,6 +13185,81 @@ public class TelephonyManager {
     }
 
     /**
+     * Carrier restriction status value is unknown, in case modem did not provide any
+     * information about carrier restriction status.
+     */
+    public static final int CARRIER_RESTRICTION_STATUS_UNKNOWN = 0;
+
+    /** The device is not restricted to a carrier */
+    public static final int CARRIER_RESTRICTION_STATUS_NOT_RESTRICTED = 1;
+
+    /** The device is restricted to a carrier. */
+    public static final int CARRIER_RESTRICTION_STATUS_RESTRICTED = 2;
+
+    /** The device is restricted to the carrier of the calling application. */
+    public static final int CARRIER_RESTRICTION_STATUS_RESTRICTED_TO_CALLER = 3;
+
+    /** @hide */
+    @IntDef(prefix = {"CARRIER_RESTRICTION_STATUS_"}, value = {
+            CARRIER_RESTRICTION_STATUS_UNKNOWN,
+            CARRIER_RESTRICTION_STATUS_NOT_RESTRICTED,
+            CARRIER_RESTRICTION_STATUS_RESTRICTED,
+            CARRIER_RESTRICTION_STATUS_RESTRICTED_TO_CALLER
+    })
+
+    public @interface CarrierRestrictionStatus {
+    }
+
+    /**
+     * Get the carrier restriction status of the device.
+     * <p>To fetch the carrier restriction status of the device the calling application needs to be
+     * allowlisted to Android at <a href="https://android.googlesource.com/platform/packages/services/Telephony/+/master/assets/CarrierRestrictionOperatorDetails.json">here</a>.
+     * The calling application also needs the READ_PHONE_STATE permission.
+     * The return value of the API is as follows.
+     * <ul>
+     *      <li>return {@link #CARRIER_RESTRICTION_STATUS_RESTRICTED_TO_CALLER} if the caller
+     *      and the device locked by the network are same</li>
+     *      <li>return {@link #CARRIER_RESTRICTION_STATUS_RESTRICTED} if the caller and the
+     *      device locked by the network are different</li>
+     *      <li>return {@link #CARRIER_RESTRICTION_STATUS_NOT_RESTRICTED} if the device is
+     *      not locked</li>
+     *      <li>return {@link #CARRIER_RESTRICTION_STATUS_UNKNOWN} if the device locking
+     *      state is unavailable or radio does not supports the feature</li>
+     * </ul>
+     *
+     * @param executor The executor on which the result listener will be called.
+     * @param resultListener {@link Consumer} that will be called with the result fetched
+     *                       from the radio of type {@link CarrierRestrictionStatus}
+     * @throws SecurityException if the caller does not have the required permission/privileges or
+     *                           if the caller is not pre-registered.
+     */
+    @RequiresFeature(PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION)
+    @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
+    public void getCarrierRestrictionStatus(@NonNull Executor executor,
+            @NonNull @CarrierRestrictionStatus
+                    Consumer<Integer> resultListener) {
+        Objects.requireNonNull(executor);
+        Objects.requireNonNull(resultListener);
+
+        IIntegerConsumer internalCallback = new IIntegerConsumer.Stub() {
+            @Override
+            public void accept(@CarrierRestrictionStatus int result) {
+                executor.execute(() -> Binder.withCleanCallingIdentity(
+                        () -> resultListener.accept(result)));
+            }
+        };
+        try {
+            ITelephony service = getITelephony();
+            if (service != null) {
+                service.getCarrierRestrictionStatus(internalCallback, getOpPackageName());
+            }
+        } catch (RemoteException ex) {
+            Rlog.e(TAG, "getCarrierRestrictionStatus: RemoteException = " + ex);
+            throw ex.rethrowAsRuntimeException();
+        }
+    }
+
+    /**
      * Used to enable or disable carrier data by the system based on carrier signalling or
      * carrier privileged apps. Different from {@link #setDataEnabled(boolean)} which is linked to
      * user settings, carrier data on/off won't affect user settings but will bypass the
@@ -15037,6 +15100,14 @@ public class TelephonyManager {
     @TestApi
     public static final int HAL_SERVICE_IMS = 7;
 
+    /**
+     * HAL service type that supports the HAL APIs implementation of IRadioSatellite
+     * {@link RadioSatelliteProxy}
+     * @hide
+     */
+    @TestApi
+    public static final int HAL_SERVICE_SATELLITE = 8;
+
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
     @IntDef(prefix = {"HAL_SERVICE_"},
@@ -15049,6 +15120,7 @@ public class TelephonyManager {
                     HAL_SERVICE_SIM,
                     HAL_SERVICE_VOICE,
                     HAL_SERVICE_IMS,
+                    HAL_SERVICE_SATELLITE
             })
     public @interface HalService {}
 
@@ -16306,6 +16378,7 @@ public class TelephonyManager {
 
     /**
      * Setup sIPhoneSubInfo for testing.
+     *
      * @hide
      */
     @VisibleForTesting
@@ -16316,9 +16389,21 @@ public class TelephonyManager {
     }
 
     /**
-     * Whether device can connect to 5G network when two SIMs are active.
+     * Setup sISub for testing.
+     *
      * @hide
-     * TODO b/153669716: remove or make system API.
+     */
+    @VisibleForTesting
+    public static void setupISubForTest(ISub iSub) {
+        synchronized (sCacheLock) {
+            sISub = iSub;
+        }
+    }
+
+    /**
+     * Whether device can connect to 5G network when two SIMs are active.
+     *
+     * @hide TODO b/153669716: remove or make system API.
      */
     public boolean canConnectTo5GInDsdsMode() {
         ITelephony telephony = getITelephony();

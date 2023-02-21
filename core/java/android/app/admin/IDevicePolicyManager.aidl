@@ -336,6 +336,9 @@ interface IDevicePolicyManager {
     PackagePolicy getManagedProfileCallerIdAccessPolicy();
     boolean hasManagedProfileCallerIdAccess(int userId, String packageName);
 
+    void setCredentialManagerPolicy(in PackagePolicy policy);
+    PackagePolicy getCredentialManagerPolicy();
+
     void setManagedProfileContactsAccessPolicy(in PackagePolicy policy);
     PackagePolicy getManagedProfileContactsAccessPolicy();
     boolean hasManagedProfileContactsAccess(int userId, String packageName);
@@ -412,7 +415,7 @@ interface IDevicePolicyManager {
     CharSequence getDeviceOwnerOrganizationName();
     CharSequence getOrganizationNameForUser(int userHandle);
 
-    int getUserProvisioningState();
+    int getUserProvisioningState(int userHandle);
     void setUserProvisioningState(int state, int userHandle);
 
     void setAffiliationIds(in ComponentName admin, in List<String> ids);
@@ -550,7 +553,7 @@ interface IDevicePolicyManager {
     int getDeviceOwnerType(in ComponentName admin);
 
     void resetDefaultCrossProfileIntentFilters(int userId);
-    boolean canAdminGrantSensorsPermissionsForUser(int userId);
+    boolean canAdminGrantSensorsPermissions();
 
     void setUsbDataSignalingEnabled(String callerPackage, boolean enabled);
     boolean isUsbDataSignalingEnabled(String callerPackage);

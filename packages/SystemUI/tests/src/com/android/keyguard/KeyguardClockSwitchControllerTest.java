@@ -29,11 +29,11 @@ import static org.mockito.Mockito.when;
 
 import android.content.res.Resources;
 import android.database.ContentObserver;
-import android.net.Uri;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.testing.AndroidTestingRunner;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
@@ -119,6 +119,11 @@ public class KeyguardClockSwitchControllerTest extends SysuiTestCase {
     @Mock
     private LogBuffer mLogBuffer;
 
+    private final View mFakeDateView = (View) (new ViewGroup(mContext) {
+        @Override
+        protected void onLayout(boolean changed, int l, int t, int r, int b) {}
+    });
+    private final View mFakeWeatherView = new View(mContext);
     private final View mFakeSmartspaceView = new View(mContext);
 
     private KeyguardClockSwitchController mController;
@@ -146,6 +151,8 @@ public class KeyguardClockSwitchControllerTest extends SysuiTestCase {
         when(mLargeClockView.getContext()).thenReturn(getContext());
 
         when(mView.isAttachedToWindow()).thenReturn(true);
+        when(mSmartspaceController.buildAndConnectDateView(any())).thenReturn(mFakeDateView);
+        when(mSmartspaceController.buildAndConnectWeatherView(any())).thenReturn(mFakeWeatherView);
         when(mSmartspaceController.buildAndConnectView(any())).thenReturn(mFakeSmartspaceView);
         mExecutor = new FakeExecutor(new FakeSystemClock());
         mController = new KeyguardClockSwitchController(
@@ -253,6 +260,19 @@ public class KeyguardClockSwitchControllerTest extends SysuiTestCase {
     }
 
     @Test
+    public void onLocaleListChanged_rebuildsSmartspaceViews_whenDecouplingEnabled() {
+        when(mSmartspaceController.isEnabled()).thenReturn(true);
+        when(mSmartspaceController.isDateWeatherDecoupled()).thenReturn(true);
+        mController.init();
+
+        mController.onLocaleListChanged();
+        // Should be called once on initial setup, then once again for locale change
+        verify(mSmartspaceController, times(2)).buildAndConnectDateView(mView);
+        verify(mSmartspaceController, times(2)).buildAndConnectWeatherView(mView);
+        verify(mSmartspaceController, times(2)).buildAndConnectView(mView);
+    }
+
+    @Test
     public void testSmartspaceDisabledShowsKeyguardStatusArea() {
         when(mSmartspaceController.isEnabled()).thenReturn(false);
         mController.init();
@@ -275,7 +295,7 @@ public class KeyguardClockSwitchControllerTest extends SysuiTestCase {
         ArgumentCaptor<ContentObserver> observerCaptor =
                 ArgumentCaptor.forClass(ContentObserver.class);
         mController.init();
-        verify(mSecureSettings).registerContentObserverForUser(any(Uri.class),
+        verify(mSecureSettings).registerContentObserverForUser(any(String.class),
                 anyBoolean(), observerCaptor.capture(), eq(UserHandle.USER_ALL));
         ContentObserver observer = observerCaptor.getValue();
         mExecutor.runAllReady();
