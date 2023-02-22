@@ -40,7 +40,9 @@ import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.model.SysUiState;
 import com.android.systemui.recents.OverviewProxyService;
+import com.android.systemui.settings.DisplayTracker;
 import com.android.systemui.statusbar.CommandQueue;
+import com.android.systemui.util.settings.SecureSettings;
 
 import java.io.PrintWriter;
 
@@ -63,6 +65,7 @@ public class WindowMagnification implements CoreStartable, WindowMagnifierCallba
     private final AccessibilityManager mAccessibilityManager;
     private final CommandQueue mCommandQueue;
     private final OverviewProxyService mOverviewProxyService;
+    private final DisplayTracker mDisplayTracker;
 
     private WindowMagnificationConnectionImpl mWindowMagnificationConnectionImpl;
     private SysUiState mSysUiState;
@@ -74,15 +77,18 @@ public class WindowMagnification implements CoreStartable, WindowMagnifierCallba
         private final Handler mHandler;
         private final WindowMagnifierCallback mWindowMagnifierCallback;
         private final SysUiState mSysUiState;
+        private final SecureSettings mSecureSettings;
 
         ControllerSupplier(Context context, Handler handler,
                 WindowMagnifierCallback windowMagnifierCallback,
-                DisplayManager displayManager, SysUiState sysUiState) {
+                DisplayManager displayManager, SysUiState sysUiState,
+                SecureSettings secureSettings) {
             super(displayManager);
             mContext = context;
             mHandler = handler;
             mWindowMagnifierCallback = windowMagnifierCallback;
             mSysUiState = sysUiState;
+            mSecureSettings = secureSettings;
         }
 
         @Override
@@ -99,7 +105,8 @@ public class WindowMagnification implements CoreStartable, WindowMagnifierCallba
                     new SurfaceControl.Transaction(),
                     mWindowMagnifierCallback,
                     mSysUiState,
-                    WindowManagerGlobal::getWindowSession);
+                    WindowManagerGlobal::getWindowSession,
+                    mSecureSettings);
         }
     }
 
@@ -109,7 +116,8 @@ public class WindowMagnification implements CoreStartable, WindowMagnifierCallba
     @Inject
     public WindowMagnification(Context context, @Main Handler mainHandler,
             CommandQueue commandQueue, ModeSwitchesController modeSwitchesController,
-            SysUiState sysUiState, OverviewProxyService overviewProxyService) {
+            SysUiState sysUiState, OverviewProxyService overviewProxyService,
+            SecureSettings secureSettings, DisplayTracker displayTracker) {
         mContext = context;
         mHandler = mainHandler;
         mAccessibilityManager = mContext.getSystemService(AccessibilityManager.class);
@@ -117,8 +125,10 @@ public class WindowMagnification implements CoreStartable, WindowMagnifierCallba
         mModeSwitchesController = modeSwitchesController;
         mSysUiState = sysUiState;
         mOverviewProxyService = overviewProxyService;
+        mDisplayTracker = displayTracker;
         mMagnificationControllerSupplier = new ControllerSupplier(context,
-                mHandler, this, context.getSystemService(DisplayManager.class), sysUiState);
+                mHandler, this, context.getSystemService(DisplayManager.class), sysUiState,
+                secureSettings);
     }
 
     @Override
@@ -137,14 +147,14 @@ public class WindowMagnification implements CoreStartable, WindowMagnifierCallba
     private void updateSysUiStateFlag() {
         //TODO(b/187510533): support multi-display once SysuiState supports it.
         final WindowMagnificationController controller =
-                mMagnificationControllerSupplier.valueAt(Display.DEFAULT_DISPLAY);
+                mMagnificationControllerSupplier.valueAt(mDisplayTracker.getDefaultDisplayId());
         if (controller != null) {
             controller.updateSysUIStateFlag();
         } else {
             // The instance is initialized when there is an IPC request. Considering
             // self-crash cases, we need to reset the flag in such situation.
             mSysUiState.setFlag(SYSUI_STATE_MAGNIFICATION_OVERLAP, false)
-                    .commitUpdate(Display.DEFAULT_DISPLAY);
+                    .commitUpdate(mDisplayTracker.getDefaultDisplayId());
         }
     }
 

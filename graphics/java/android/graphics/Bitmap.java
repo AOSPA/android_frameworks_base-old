@@ -26,7 +26,9 @@ import android.compat.annotation.UnsupportedAppUsage;
 import android.hardware.HardwareBuffer;
 import android.os.Build;
 import android.os.Parcel;
+import android.os.ParcelFileDescriptor;
 import android.os.Parcelable;
+import android.os.SharedMemory;
 import android.os.StrictMode;
 import android.os.Trace;
 import android.util.DisplayMetrics;
@@ -38,6 +40,7 @@ import dalvik.annotation.optimization.CriticalNative;
 
 import libcore.util.NativeAllocationRegistry;
 
+import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.ref.WeakReference;
 import java.nio.Buffer;
@@ -90,6 +93,7 @@ public final class Bitmap implements Parcelable {
     private boolean mRecycled;
 
     private ColorSpace mColorSpace;
+    private Gainmap mGainmap;
 
     /*package*/ int mDensity = getDefaultDensity();
 
@@ -735,6 +739,26 @@ public final class Bitmap implements Parcelable {
             throw new RuntimeException("Failed to create shared Bitmap!");
         }
         return shared;
+    }
+
+    /**
+     * Returns the shared memory handle to the pixel storage if the bitmap is already using
+     * shared memory and null if it is not.  The SharedMemory object is then useful to then pass
+     * through HIDL APIs (e.g. WearOS's DisplayOffload service).
+     *
+     * @hide
+     */
+    public SharedMemory getSharedMemory() {
+        checkRecycled("Cannot access shared memory of a recycled bitmap");
+        if (nativeIsBackedByAshmem(mNativePtr)) {
+            try {
+                int fd = nativeGetAshmemFD(mNativePtr);
+                return SharedMemory.fromFileDescriptor(ParcelFileDescriptor.fromFd(fd));
+            } catch (IOException e) {
+                Log.e(TAG, "Unable to create dup'd file descriptor for shared bitmap memory");
+            }
+        }
+        return null;
     }
 
     /**
@@ -1874,6 +1898,27 @@ public final class Bitmap implements Parcelable {
     }
 
     /**
+     * Returns whether or not this Bitmap contains a Gainmap.
+     * @hide
+     */
+    public boolean hasGainmap() {
+        checkRecycled("Bitmap is recycled");
+        return nativeHasGainmap(mNativePtr);
+    }
+
+    /**
+     * Returns the gainmap or null if the bitmap doesn't contain a gainmap
+     * @hide
+     */
+    public @Nullable Gainmap getGainmap() {
+        checkRecycled("Bitmap is recycled");
+        if (mGainmap == null) {
+            mGainmap = nativeExtractGainmap(mNativePtr);
+        }
+        return mGainmap;
+    }
+
+    /**
      * Fills the bitmap's pixels with the specified {@link Color}.
      *
      * @throws IllegalStateException if the bitmap is not mutable.
@@ -2294,6 +2339,7 @@ public final class Bitmap implements Parcelable {
                                             boolean isMutable);
     private static native Bitmap nativeCopyAshmem(long nativeSrcBitmap);
     private static native Bitmap nativeCopyAshmemConfig(long nativeSrcBitmap, int nativeConfig);
+    private static native int nativeGetAshmemFD(long nativeBitmap);
     private static native long nativeGetNativeFinalizer();
     private static native void nativeRecycle(long nativeBitmap);
     @UnsupportedAppUsage
@@ -2356,6 +2402,8 @@ public final class Bitmap implements Parcelable {
 
     private static native void nativeSetImmutable(long nativePtr);
 
+    private static native Gainmap nativeExtractGainmap(long nativePtr);
+
     // ---------------- @CriticalNative -------------------
 
     @CriticalNative
@@ -2363,4 +2411,7 @@ public final class Bitmap implements Parcelable {
 
     @CriticalNative
     private static native boolean nativeIsBackedByAshmem(long nativePtr);
+
+    @CriticalNative
+    private static native boolean nativeHasGainmap(long nativePtr);
 }

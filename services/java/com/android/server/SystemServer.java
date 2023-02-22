@@ -1023,9 +1023,7 @@ public final class SystemServer implements Dumpable {
             Runnable runnable = new Runnable() {
                 @Override
                 public void run() {
-                    synchronized (this) {
-                        ShutdownThread.rebootOrShutdown(null, reboot, reason);
-                    }
+                    ShutdownThread.rebootOrShutdown(null, reboot, reason);
                 }
             };
 
@@ -1450,6 +1448,9 @@ public final class SystemServer implements Dumpable {
 
         boolean isArc = context.getPackageManager().hasSystemFeature(
                 "org.chromium.arc");
+
+        boolean isTv = context.getPackageManager().hasSystemFeature(
+                PackageManager.FEATURE_LEANBACK);
 
         boolean enableVrService = context.getPackageManager().hasSystemFeature(
                 PackageManager.FEATURE_VR_MODE_HIGH_PERFORMANCE);

@@ -63,6 +63,14 @@ public final class CredentialManager {
             "enable_credential_manager";
 
     /**
+     * Flag to enable and disable Credential Description api.
+     *
+     * @hide
+     */
+    private static final String DEVICE_CONFIG_ENABLE_CREDENTIAL_DESC_API =
+            "enable_credential_description_api";
+
+    /**
      * @hide instantiated by ContextImpl.
      */
     public CredentialManager(Context context, ICredentialManager service) {
@@ -292,6 +300,78 @@ public final class CredentialManager {
         return DeviceConfig.getBoolean(
                 DeviceConfig.NAMESPACE_CREDENTIAL, DEVICE_CONFIG_ENABLE_CREDENTIAL_MANAGER,
                 true);
+    }
+
+    /**
+     * Returns whether the credential description api is enabled.
+     *
+     * @hide
+     */
+    public static boolean isCredentialDescriptionApiEnabled() {
+        return DeviceConfig.getBoolean(
+                DeviceConfig.NAMESPACE_CREDENTIAL, DEVICE_CONFIG_ENABLE_CREDENTIAL_DESC_API, false);
+    }
+
+    /**
+     * Registers a {@link CredentialDescription} for an actively provisioned {@link Credential}
+     * a CredentialProvider has. This registry will then be used to determine where to
+     * fetch the requested {@link Credential} from. Not all credential types will be supported.
+     * The distinction will be made by the JetPack layer. For the types that are supported,
+     * JetPack will add a new key-value pair into {@link GetCredentialRequest}. These will not
+     * be persistent on the device. The Credential Providers will need to call this API again
+     * upon device reboot.
+     *
+     * @param request the request data
+     *
+     * @throws {@link  UnsupportedOperationException} if the feature has not been enabled.
+     * @throws {@link  com.android.server.credentials.NonCredentialProviderCallerException}
+     * if the calling package name is not also listed as a Credential Provider.
+     * @throws {@link  IllegalArgumentException} if the calling Credential Provider can not handle
+     * one or more of the Credential Types that are sent for registration.
+     *
+     */
+    public void registerCredentialDescription(
+            @NonNull RegisterCredentialDescriptionRequest request) {
+
+        if (!isCredentialDescriptionApiEnabled()) {
+            throw new UnsupportedOperationException("This API is not currently supported.");
+        }
+
+        requireNonNull(request, "request must not be null");
+
+        try {
+            mService.registerCredentialDescription(request, mContext.getOpPackageName());
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        }
+    }
+
+
+    /**
+     *  Unregisters a {@link CredentialDescription} for an actively provisioned {@link Credential}
+     * that has been registered previously.
+     *
+     *
+     * @param request the request data
+     *
+     * @throws {@link  UnsupportedOperationException} if the feature has not been enabled.
+     *
+     */
+    public void unregisterCredentialDescription(
+            @NonNull UnregisterCredentialDescriptionRequest request) {
+
+        if (!isCredentialDescriptionApiEnabled()) {
+            throw new UnsupportedOperationException("This API is not currently supported.");
+        }
+
+        requireNonNull(request, "request must not be null");
+
+        try {
+            mService.unregisterCredentialDescription(request, mContext.getOpPackageName());
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        }
+
     }
 
     private static class GetCredentialTransport extends IGetCredentialCallback.Stub {

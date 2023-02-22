@@ -92,6 +92,7 @@ import com.android.internal.util.UserIcons;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.KeyguardSecurityModel.SecurityMode;
 import com.android.settingslib.Utils;
+import com.android.settingslib.drawable.CircleFramedDrawable;
 import com.android.systemui.Gefingerpoken;
 import com.android.systemui.R;
 import com.android.systemui.animation.Interpolators;
@@ -234,14 +235,6 @@ public class KeyguardSecurityContainer extends ConstraintLayout {
                         setAlpha(0f);
                     }
                     updateChildren(0 /* translationY */, 1f /* alpha */);
-                }
-
-                private void updateChildren(int translationY, float alpha) {
-                    for (int i = 0; i < KeyguardSecurityContainer.this.getChildCount(); ++i) {
-                        View child = KeyguardSecurityContainer.this.getChildAt(i);
-                        child.setTranslationY(translationY);
-                        child.setAlpha(alpha);
-                    }
                 }
             };
 
@@ -594,6 +587,7 @@ public class KeyguardSecurityContainer extends ConstraintLayout {
      * This will run when the bouncer shows in all cases except when the user drags the bouncer up.
      */
     public void startAppearAnimation(SecurityMode securityMode) {
+        updateChildren(0 /* translationY */, 1f /* alpha */);
         mViewMode.startAppearAnimation(securityMode);
     }
 
@@ -775,6 +769,14 @@ public class KeyguardSecurityContainer extends ConstraintLayout {
     private void setScale(float scale) {
         setScaleX(scale);
         setScaleY(scale);
+    }
+
+    private void updateChildren(int translationY, float alpha) {
+        for (int i = 0; i < getChildCount(); ++i) {
+            View child = getChildAt(i);
+            child.setTranslationY(translationY);
+            child.setAlpha(alpha);
+        }
     }
 
     /**
@@ -998,8 +1000,10 @@ public class KeyguardSecurityContainer extends ConstraintLayout {
         private Drawable findUserIcon(int userId) {
             Bitmap userIcon = UserManager.get(mView.getContext()).getUserIcon(userId);
             if (userIcon != null) {
-                return new BitmapDrawable(userIcon);
+                return CircleFramedDrawable.getInstance(mView.getContext(),
+                        userIcon);
             }
+
             return UserIcons.getDefaultUserIcon(mResources, userId, false);
         }
 

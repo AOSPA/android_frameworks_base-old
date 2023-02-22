@@ -53,6 +53,7 @@ import com.android.systemui.statusbar.phone.SystemUIDialogManager
 import com.android.systemui.statusbar.phone.UnlockedScreenOffAnimationController
 import com.android.systemui.statusbar.policy.ConfigurationController
 import com.android.systemui.statusbar.policy.KeyguardStateController
+import com.android.systemui.util.settings.SecureSettings
 import com.google.common.truth.Truth.assertThat
 import org.junit.Before
 import org.junit.Rule
@@ -99,10 +100,12 @@ class UdfpsControllerOverlayTest : SysuiTestCase() {
     @Mock private lateinit var unlockedScreenOffAnimationController:
             UnlockedScreenOffAnimationController
     @Mock private lateinit var udfpsDisplayMode: UdfpsDisplayModeProvider
+    @Mock private lateinit var secureSettings: SecureSettings
     @Mock private lateinit var controllerCallback: IUdfpsOverlayControllerCallback
     @Mock private lateinit var udfpsController: UdfpsController
     @Mock private lateinit var udfpsView: UdfpsView
     @Mock private lateinit var udfpsEnrollView: UdfpsEnrollView
+    @Mock private lateinit var udfpsKeyguardView: UdfpsKeyguardView
     @Mock private lateinit var activityLaunchAnimator: ActivityLaunchAnimator
     @Mock private lateinit var featureFlags: FeatureFlags
     @Mock private lateinit var primaryBouncerInteractor: PrimaryBouncerInteractor
@@ -123,7 +126,7 @@ class UdfpsControllerOverlayTest : SysuiTestCase() {
         whenever(inflater.inflate(R.layout.udfps_bp_view, null))
             .thenReturn(mock(UdfpsBpView::class.java))
         whenever(inflater.inflate(R.layout.udfps_keyguard_view, null))
-            .thenReturn(mock(UdfpsKeyguardView::class.java))
+            .thenReturn(udfpsKeyguardView)
         whenever(inflater.inflate(R.layout.udfps_fpm_empty_view, null))
             .thenReturn(mock(UdfpsFpmEmptyView::class.java))
         whenever(udfpsEnrollView.context).thenReturn(context)
@@ -138,10 +141,10 @@ class UdfpsControllerOverlayTest : SysuiTestCase() {
             context, fingerprintManager, inflater, windowManager, accessibilityManager,
             statusBarStateController, shadeExpansionStateManager, statusBarKeyguardViewManager,
             keyguardUpdateMonitor, dialogManager, dumpManager, transitionController,
-            configurationController, keyguardStateController,
-            unlockedScreenOffAnimationController, udfpsDisplayMode, REQUEST_ID, reason,
+            configurationController, keyguardStateController, unlockedScreenOffAnimationController,
+            udfpsDisplayMode, secureSettings, REQUEST_ID, reason,
             controllerCallback, onTouch, activityLaunchAnimator, featureFlags,
-            primaryBouncerInteractor, alternateBouncerInteractor, isDebuggable,
+            primaryBouncerInteractor, alternateBouncerInteractor, isDebuggable
         )
         block()
     }
@@ -150,7 +153,10 @@ class UdfpsControllerOverlayTest : SysuiTestCase() {
     fun showUdfpsOverlay_bp() = withReason(REASON_AUTH_BP) { showUdfpsOverlay() }
 
     @Test
-    fun showUdfpsOverlay_keyguard() = withReason(REASON_AUTH_KEYGUARD) { showUdfpsOverlay() }
+    fun showUdfpsOverlay_keyguard() = withReason(REASON_AUTH_KEYGUARD) {
+        showUdfpsOverlay()
+        verify(udfpsKeyguardView).updateSensorLocation(eq(overlayParams.sensorBounds))
+    }
 
     @Test
     fun showUdfpsOverlay_settings() = withReason(REASON_AUTH_SETTINGS) { showUdfpsOverlay() }

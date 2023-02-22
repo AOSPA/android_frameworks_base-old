@@ -44,6 +44,7 @@ import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.HexDump;
+import com.android.security.SecureBox;
 import com.android.server.locksettings.recoverablekeystore.certificate.CertParsingException;
 import com.android.server.locksettings.recoverablekeystore.certificate.CertUtils;
 import com.android.server.locksettings.recoverablekeystore.certificate.CertValidationException;
@@ -963,6 +964,35 @@ public class RecoverableKeyStoreManager {
         } catch (InsecureUserException e) {
             Log.e(TAG, "InsecureUserException during lock screen secret update", e);
         }
+    }
+
+    /**
+     * Starts a session to verify lock screen credentials provided by a remote device.
+     */
+    public void startRemoteLockscreenValidation() {
+        checkVerifyRemoteLockscreenPermission();
+        // TODO(b/254335492): Create session in memory
+        return;
+    }
+
+    /**
+     * Verifies encrypted credentials guess from a remote device.
+     */
+    public void validateRemoteLockscreen(@NonNull byte[] encryptedCredential) {
+        checkVerifyRemoteLockscreenPermission();
+        // TODO(b/254335492): Decrypt and verify credentials
+        return;
+    }
+
+    private void checkVerifyRemoteLockscreenPermission() {
+        // TODO(b/254335492): Check new system permission
+        mContext.enforceCallingOrSelfPermission(
+                Manifest.permission.RECOVER_KEYSTORE,
+                "Caller " + Binder.getCallingUid()
+                        + " doesn't have verifyRemoteLockscreen permission.");
+        int userId = UserHandle.getCallingUserId();
+        int uid = Binder.getCallingUid();
+        mCleanupManager.registerRecoveryAgent(userId, uid);
     }
 
     private void checkRecoverKeyStorePermission() {

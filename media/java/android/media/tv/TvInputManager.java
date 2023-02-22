@@ -26,11 +26,13 @@ import android.annotation.StringDef;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
+import android.content.AttributionSource;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Rect;
 import android.media.AudioDeviceInfo;
 import android.media.AudioFormat.Encoding;
+import android.media.AudioPresentation;
 import android.media.PlaybackParams;
 import android.media.tv.interactive.TvInteractiveAppManager;
 import android.net.Uri;
@@ -309,6 +311,39 @@ public final class TvInputManager {
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
+    @IntDef(flag = false, prefix = "TIME_SHIFT_MODE_", value = {
+            TIME_SHIFT_MODE_OFF,
+            TIME_SHIFT_MODE_LOCAL,
+            TIME_SHIFT_MODE_NETWORK,
+            TIME_SHIFT_MODE_AUTO})
+    public @interface TimeShiftMode {}
+    /**
+     * Time shift mode: off.
+     * <p>Time shift is disabled.
+     * @hide
+     */
+    public static final int TIME_SHIFT_MODE_OFF = 1;
+    /**
+     * Time shift mode: local.
+     * <p>Time shift is handle locally, using on-device data. E.g. playing a local file.
+     * @hide
+     */
+    public static final int TIME_SHIFT_MODE_LOCAL = 2;
+    /**
+     * Time shift mode: network.
+     * <p>Time shift is handle remotely via network. E.g. online streaming.
+     * @hide
+     */
+    public static final int TIME_SHIFT_MODE_NETWORK = 3;
+    /**
+     * Time shift mode: auto.
+     * <p>Time shift mode is handled automatically.
+     * @hide
+     */
+    public static final int TIME_SHIFT_MODE_AUTO = 4;
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
     @IntDef({RECORDING_ERROR_UNKNOWN, RECORDING_ERROR_INSUFFICIENT_SPACE,
             RECORDING_ERROR_RESOURCE_BUSY})
     public @interface RecordingError {}
@@ -550,6 +585,27 @@ public final class TvInputManager {
         }
 
         /**
+         * This is called when the audio presentation information of the session has been changed.
+         *
+         * @param session A {@link TvInputManager.Session} associated with this callback.
+         * @param audioPresentations An updated list of selectable audio presentations.
+         */
+        public void onAudioPresentationsChanged(Session session,
+                List<AudioPresentation> audioPresentations) {
+        }
+
+        /**
+         * This is called when an audio presentation is selected.
+         *
+         * @param session A {@link TvInputManager.Session} associated with this callback.
+         * @param presentationId The ID of the selected audio presentation.
+         * @param programId The ID of the program providing the selected audio presentation.
+         */
+        public void onAudioPresentationSelected(Session session, int presentationId,
+                int programId) {
+        }
+
+        /**
          * This is called when the track information of the session has been changed.
          *
          * @param session A {@link TvInputManager.Session} associated with this callback.
@@ -698,6 +754,36 @@ public final class TvInputManager {
         }
 
         /**
+         * This is called when cueing message becomes available or unavailable.
+         * @param session A {@link TvInputManager.Session} associated with this callback.
+         * @param available The current availability of cueing message. {@code true} if cueing
+         *                  message is available; {@code false} if it becomes unavailable.
+         */
+        public void onCueingMessageAvailability(Session session, boolean available) {
+        }
+
+        /**
+         * This is called when time shift mode is set or updated.
+         * @param session A {@link TvInputManager.Session} associated with this callback.
+         * @param mode The current time shift mode. The value is one of the following:
+         * {@link TvInputManager#TIME_SHIFT_MODE_OFF}, {@link TvInputManager#TIME_SHIFT_MODE_LOCAL},
+         * {@link TvInputManager#TIME_SHIFT_MODE_NETWORK},
+         * {@link TvInputManager#TIME_SHIFT_MODE_AUTO}.
+         */
+        public void onTimeShiftMode(Session session, @TimeShiftMode int mode) {
+        }
+
+        /**
+         * Informs the app available speeds for time-shifting.
+         * @param session A {@link TvInputManager.Session} associated with this callback.
+         * @param speeds An ordered array of playback speeds, expressed as values relative to the
+         *               normal playback speed 1.0.
+         * @see PlaybackParams#getSpeed()
+         */
+        public void onAvailableSpeeds(Session session, float[] speeds) {
+        }
+
+        /**
          * This is called when the session has been tuned to the given channel.
          *
          * @param channelUri The URI of a channel.
@@ -773,6 +859,25 @@ public final class TvInputManager {
                 @Override
                 public void run() {
                     mSessionCallback.onChannelRetuned(mSession, channelUri);
+                }
+            });
+        }
+
+        void postAudioPresentationsChanged(final List<AudioPresentation> audioPresentations) {
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    mSessionCallback.onAudioPresentationsChanged(mSession, audioPresentations);
+                }
+            });
+        }
+
+        void postAudioPresentationSelected(final int presentationId, final int programId) {
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    mSessionCallback.onAudioPresentationSelected(mSession, presentationId,
+                            programId);
                 }
             });
         }
@@ -928,6 +1033,33 @@ public final class TvInputManager {
                             && mSession.getInteractiveAppSession() != null) {
                         mSession.getInteractiveAppSession().notifySignalStrength(strength);
                     }
+                }
+            });
+        }
+
+        void postCueingMessageAvailability(final boolean available) {
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    mSessionCallback.onCueingMessageAvailability(mSession, available);
+                }
+            });
+        }
+
+        void postTimeShiftMode(final int mode) {
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    mSessionCallback.onTimeShiftMode(mSession, mode);
+                }
+            });
+        }
+
+        void postAvailableSpeeds(float[] speeds) {
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    mSessionCallback.onAvailableSpeeds(mSession, speeds);
                 }
             });
         }
@@ -1234,6 +1366,36 @@ public final class TvInputManager {
                     record.postChannelRetuned(channelUri);
                 }
             }
+            @Override
+            public void onAudioPresentationsChanged(List<AudioPresentation> audioPresentations,
+                    int seq) {
+                synchronized (mSessionCallbackRecordMap) {
+                    SessionCallbackRecord record = mSessionCallbackRecordMap.get(seq);
+                    if (record == null) {
+                        Log.e(TAG, "Callback not found for seq " + seq);
+                        return;
+                    }
+                    if (record.mSession.updateAudioPresentations(audioPresentations)) {
+                        record.postAudioPresentationsChanged(audioPresentations);
+                    }
+                }
+            }
+
+            @Override
+            public void onAudioPresentationSelected(int presentationId, int programId, int seq) {
+                synchronized (mSessionCallbackRecordMap) {
+                    SessionCallbackRecord record = mSessionCallbackRecordMap.get(seq);
+                    if (record == null) {
+                        Log.e(TAG, "Callback not found for seq " + seq);
+                        return;
+                    }
+                    if (record.mSession.updateAudioPresentationSelection(presentationId,
+                            programId)) {
+                        record.postAudioPresentationSelected(presentationId, programId);
+                    }
+                }
+            }
+
 
             @Override
             public void onTracksChanged(List<TvTrackInfo> tracks, int seq) {
@@ -1401,6 +1563,42 @@ public final class TvInputManager {
                         return;
                     }
                     record.postSignalStrength(strength);
+                }
+            }
+
+            @Override
+            public void onCueingMessageAvailability(boolean available, int seq) {
+                synchronized (mSessionCallbackRecordMap) {
+                    SessionCallbackRecord record = mSessionCallbackRecordMap.get(seq);
+                    if (record == null) {
+                        Log.e(TAG, "Callback not found for seq " + seq);
+                        return;
+                    }
+                    record.postCueingMessageAvailability(available);
+                }
+            }
+
+            @Override
+            public void onTimeShiftMode(int mode, int seq) {
+                synchronized (mSessionCallbackRecordMap) {
+                    SessionCallbackRecord record = mSessionCallbackRecordMap.get(seq);
+                    if (record == null) {
+                        Log.e(TAG, "Callback not found for seq " + seq);
+                        return;
+                    }
+                    record.postTimeShiftMode(mode);
+                }
+            }
+
+            @Override
+            public void onAvailableSpeeds(float[] speeds, int seq) {
+                synchronized (mSessionCallbackRecordMap) {
+                    SessionCallbackRecord record = mSessionCallbackRecordMap.get(seq);
+                    if (record == null) {
+                        Log.e(TAG, "Callback not found for seq " + seq);
+                        return;
+                    }
+                    record.postAvailableSpeeds(speeds);
                 }
             }
 
@@ -1910,13 +2108,15 @@ public final class TvInputManager {
      * of the given TV input.
      *
      * @param inputId The ID of the TV input.
+     * @param tvAppAttributionSource The Attribution Source of the TV App.
      * @param callback A callback used to receive the created session.
      * @param handler A {@link Handler} that the session creation will be delivered to.
      * @hide
      */
-    public void createSession(@NonNull String inputId, @NonNull final SessionCallback callback,
-            @NonNull Handler handler) {
-        createSessionInternal(inputId, false, callback, handler);
+    public void createSession(@NonNull String inputId,
+            @NonNull AttributionSource tvAppAttributionSource,
+            @NonNull final SessionCallback callback, @NonNull Handler handler) {
+        createSessionInternal(inputId, tvAppAttributionSource, false, callback, handler);
     }
 
     /**
@@ -1941,7 +2141,7 @@ public final class TvInputManager {
      * @param useCase the use case type of the client.
      *        {@see TvInputService#PriorityHintUseCaseType}.
      * @param sessionId the unique id of the session owned by the client.
-     *        {@see TvInputService#onCreateSession(String, String)}.
+     *        {@see TvInputService#onCreateSession(String, String, AttributionSource)}.
      *
      * @return the use case priority value for the given use case type and the client's foreground
      *         or background status.
@@ -1992,11 +2192,11 @@ public final class TvInputManager {
      */
     public void createRecordingSession(@NonNull String inputId,
             @NonNull final SessionCallback callback, @NonNull Handler handler) {
-        createSessionInternal(inputId, true, callback, handler);
+        createSessionInternal(inputId, null, true, callback, handler);
     }
 
-    private void createSessionInternal(String inputId, boolean isRecordingSession,
-            SessionCallback callback, Handler handler) {
+    private void createSessionInternal(String inputId, AttributionSource tvAppAttributionSource,
+            boolean isRecordingSession, SessionCallback callback, Handler handler) {
         Preconditions.checkNotNull(inputId);
         Preconditions.checkNotNull(callback);
         Preconditions.checkNotNull(handler);
@@ -2005,7 +2205,8 @@ public final class TvInputManager {
             int seq = mNextSeq++;
             mSessionCallbackRecordMap.put(seq, record);
             try {
-                mService.createSession(mClient, inputId, isRecordingSession, seq, mUserId);
+                mService.createSession(
+                        mClient, inputId, tvAppAttributionSource, isRecordingSession, seq, mUserId);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -2176,8 +2377,8 @@ public final class TvInputManager {
      * @param deviceId The device ID to acquire Hardware for.
      * @param info The TV input which will use the acquired Hardware.
      * @param tvInputSessionId a String returned to TIS when the session was created.
-     *        {@see TvInputService#onCreateSession(String, String)}. If null, the client will be
-     *        treated as a background app.
+     *        {@see TvInputService#onCreateSession(String, String, AttributionSource)}. If null, the
+     *        client will be treated as a background app.
      * @param priorityHint The use case of the client. {@see TvInputService#PriorityHintUseCaseType}
      * @param executor the executor on which the listener would be invoked.
      * @param callback A callback to receive updates on Hardware.
@@ -2399,11 +2600,17 @@ public final class TvInputManager {
 
         private final Object mMetadataLock = new Object();
         // @GuardedBy("mMetadataLock")
+        private final List<AudioPresentation> mAudioPresentations = new ArrayList<>();
+        // @GuardedBy("mMetadataLock")
         private final List<TvTrackInfo> mAudioTracks = new ArrayList<>();
         // @GuardedBy("mMetadataLock")
         private final List<TvTrackInfo> mVideoTracks = new ArrayList<>();
         // @GuardedBy("mMetadataLock")
         private final List<TvTrackInfo> mSubtitleTracks = new ArrayList<>();
+        // @GuardedBy("mMetadataLock")
+        private int mSelectedAudioProgramId = AudioPresentation.PROGRAM_ID_UNKNOWN;
+        // @GuardedBy("mMetadataLock")
+        private int mSelectedAudioPresentationId = AudioPresentation.PRESENTATION_ID_UNKNOWN;
         // @GuardedBy("mMetadataLock")
         private String mSelectedAudioTrackId;
         // @GuardedBy("mMetadataLock")
@@ -2552,9 +2759,12 @@ public final class TvInputManager {
                 return;
             }
             synchronized (mMetadataLock) {
+                mAudioPresentations.clear();
                 mAudioTracks.clear();
                 mVideoTracks.clear();
                 mSubtitleTracks.clear();
+                mSelectedAudioProgramId = AudioPresentation.PROGRAM_ID_UNKNOWN;
+                mSelectedAudioPresentationId = AudioPresentation.PRESENTATION_ID_UNKNOWN;
                 mSelectedAudioTrackId = null;
                 mSelectedVideoTrackId = null;
                 mSelectedSubtitleTrackId = null;
@@ -2583,6 +2793,119 @@ public final class TvInputManager {
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
+        }
+
+        /**
+         * Selects an audio presentation
+         *
+         * @param presentationId The ID of the audio presentation to select.
+         * @param programId The ID of the program offering the selected audio presentation.
+         * @see #getAudioPresentations
+         */
+        public void selectAudioPresentation(int presentationId, int programId) {
+            synchronized (mMetadataLock) {
+                if (presentationId != AudioPresentation.PRESENTATION_ID_UNKNOWN
+                        && !containsAudioPresentation(mAudioPresentations, presentationId)) {
+                    Log.w(TAG, "Invalid audio presentation id: " + presentationId);
+                    return;
+                }
+            }
+            if (mToken == null) {
+                Log.w(TAG, "The session has been already released");
+                return;
+            }
+            try {
+                mService.selectAudioPresentation(mToken, presentationId, programId, mUserId);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        private boolean containsAudioPresentation(List<AudioPresentation> audioPresentations,
+                    int presentationId) {
+            synchronized (mMetadataLock) {
+                for (AudioPresentation audioPresentation : audioPresentations) {
+                    if (audioPresentation.getPresentationId() == presentationId) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        }
+
+        /**
+         * Returns a list of audio presentations.
+         *
+         * @return the list of audio presentations.
+         * Returns empty AudioPresentation list if no presentations are available.
+         */
+        public List<AudioPresentation> getAudioPresentations() {
+            synchronized (mMetadataLock) {
+                if (mAudioPresentations == null) {
+                    return new ArrayList<AudioPresentation>();
+                }
+                return new ArrayList<AudioPresentation>(mAudioPresentations);
+            }
+        }
+
+        /**
+         * Returns the program ID of the selected audio presentation.
+         *
+         * @return The ID of the program providing the selected audio presentation.
+         * Returns {@value AudioPresentation.PROGRAM_ID_UNKNOWN} if no audio presentation has
+         * been selected from a program.
+         * @see #selectAudioPresentation
+         */
+        public int getSelectedProgramId() {
+            synchronized (mMetadataLock) {
+                return mSelectedAudioProgramId;
+            }
+        }
+
+        /**
+         * Returns the presentation ID of the selected audio presentation.
+         *
+         * @return The ID of the selected audio presentation.
+         * Returns {@value AudioPresentation.PRESENTATION_ID_UNKNOWN} if no audio presentation
+         * has been selected.
+         * @see #selectAudioPresentation
+         */
+        public int getSelectedAudioPresentationId() {
+            synchronized (mMetadataLock) {
+                return mSelectedAudioPresentationId;
+            }
+        }
+
+        /**
+         * Responds to onAudioPresentationsChanged() and updates the internal audio presentation
+         * information.
+         * @return true if there is an update.
+         */
+        boolean updateAudioPresentations(List<AudioPresentation> audioPresentations) {
+            synchronized (mMetadataLock) {
+                mAudioPresentations.clear();
+                for (AudioPresentation presentation : audioPresentations) {
+                    mAudioPresentations.add(presentation);
+                }
+                return !mAudioPresentations.isEmpty();
+            }
+        }
+
+        /**
+         * Responds to onAudioPresentationSelected() and updates the internal audio presentation
+         * selection information.
+         * @return true if there is an update.
+         */
+        boolean updateAudioPresentationSelection(int presentationId, int programId) {
+            synchronized (mMetadataLock) {
+                if ((programId != mSelectedAudioProgramId)
+                        || (presentationId != mSelectedAudioPresentationId)) {
+                    mSelectedAudioPresentationId = presentationId;
+                    mSelectedAudioProgramId = programId;
+                    return true;
+                }
+            }
+            return false;
         }
 
         /**
@@ -2857,6 +3180,27 @@ public final class TvInputManager {
             }
             try {
                 mService.timeShiftSetPlaybackParams(mToken, params, mUserId);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+
+        /**
+         * Sets time shift mode.
+         *
+         * @param mode The time shift mode. The value is one of the following:
+         * {@link TvInputManager#TIME_SHIFT_MODE_OFF}, {@link TvInputManager#TIME_SHIFT_MODE_LOCAL},
+         * {@link TvInputManager#TIME_SHIFT_MODE_NETWORK},
+         * {@link TvInputManager#TIME_SHIFT_MODE_AUTO}.
+         * @hide
+         */
+        void timeShiftSetMode(@TimeShiftMode int mode) {
+            if (mToken == null) {
+                Log.w(TAG, "The session has been already released");
+                return;
+            }
+            try {
+                mService.timeShiftSetMode(mToken, mode, mUserId);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }

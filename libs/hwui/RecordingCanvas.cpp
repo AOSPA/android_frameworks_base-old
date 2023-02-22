@@ -21,6 +21,7 @@
 #include <hwui/Paint.h>
 
 #include <experimental/type_traits>
+#include <log/log.h>
 #include <utility>
 
 #include "SkAndroidFrameworkUtils.h"
@@ -42,8 +43,10 @@
 #include "SkRegion.h"
 #include "SkTextBlob.h"
 #include "SkVertices.h"
+#include "Tonemapper.h"
 #include "VectorDrawable.h"
 #include "include/gpu/GpuTypes.h" // from Skia
+#include "include/gpu/GrDirectContext.h"
 #include "pipeline/skia/AnimatedDrawables.h"
 #include "pipeline/skia/FunctorDrawable.h"
 
@@ -65,16 +68,24 @@ static void copy_v(void* dst) {}
 
 template <typename S, typename... Rest>
 static void copy_v(void* dst, const S* src, int n, Rest&&... rest) {
-    SkASSERTF(((uintptr_t)dst & (alignof(S) - 1)) == 0,
-              "Expected %p to be aligned for at least %zu bytes.", dst, alignof(S));
-    sk_careful_memcpy(dst, src, n * sizeof(S));
-    copy_v(SkTAddOffset<void>(dst, n * sizeof(S)), std::forward<Rest>(rest)...);
+    LOG_FATAL_IF(((uintptr_t)dst & (alignof(S) - 1)) != 0,
+                 "Expected %p to be aligned for at least %zu bytes.",
+                 dst, alignof(S));
+    // If n is 0, there is nothing to copy into dst from src.
+    if (n > 0) {
+        memcpy(dst, src, n * sizeof(S));
+        dst = reinterpret_cast<void*>(
+                reinterpret_cast<uint8_t*>(dst) + n * sizeof(S));
+    }
+    // Repeat for the next items, if any
+    copy_v(dst, std::forward<Rest>(rest)...);
 }
 
 // Helper for getting back at arrays which have been copy_v'd together after an Op.
 template <typename D, typename T>
 static const D* pod(const T* op, size_t offset = 0) {
-    return SkTAddOffset<const D>(op + 1, offset);
+    return reinterpret_cast<const D*>(
+                reinterpret_cast<const uint8_t*>(op + 1) + offset);
 }
 
 namespace {
@@ -334,7 +345,9 @@ struct DrawImage final : Op {
     SkPaint paint;
     BitmapPalette palette;
     void draw(SkCanvas* c, const SkMatrix&) const {
-        c->drawImage(image.get(), x, y, sampling, &paint);
+        SkPaint newPaint = paint;
+        tonemapPaint(image->imageInfo(), c->imageInfo(), -1, newPaint);
+        c->drawImage(image.get(), x, y, sampling, &newPaint);
     }
 };
 struct DrawImageRect final : Op {
@@ -356,7 +369,9 @@ struct DrawImageRect final : Op {
     SkCanvas::SrcRectConstraint constraint;
     BitmapPalette palette;
     void draw(SkCanvas* c, const SkMatrix&) const {
-        c->drawImageRect(image.get(), src, dst, sampling, &paint, constraint);
+        SkPaint newPaint = paint;
+        tonemapPaint(image->imageInfo(), c->imageInfo(), -1, newPaint);
+        c->drawImageRect(image.get(), src, dst, sampling, &newPaint, constraint);
     }
 };
 struct DrawImageLattice final : Op {
@@ -389,8 +404,10 @@ struct DrawImageLattice final : Op {
         auto flags =
                 (0 == fs) ? nullptr : pod<SkCanvas::Lattice::RectType>(
                                               this, (xs + ys) * sizeof(int) + fs * sizeof(SkColor));
-        c->drawImageLattice(image.get(), {xdivs, ydivs, flags, xs, ys, &src, colors}, dst,
-                            filter, &paint);
+        SkPaint newPaint = paint;
+        tonemapPaint(image->imageInfo(), c->imageInfo(), -1, newPaint);
+        c->drawImageLattice(image.get(), {xdivs, ydivs, flags, xs, ys, &src, colors}, dst, filter,
+                            &newPaint);
     }
 };
 
@@ -457,12 +474,43 @@ struct DrawVertices final : Op {
 struct DrawMesh final : Op {
     static const auto kType = Type::DrawMesh;
     DrawMesh(const SkMesh& mesh, sk_sp<SkBlender> blender, const SkPaint& paint)
-            : mesh(mesh), blender(std::move(blender)), paint(paint) {}
+            : cpuMesh(mesh), blender(std::move(blender)), paint(paint) {
+        isGpuBased = false;
+    }
 
-    SkMesh mesh;
+    SkMesh cpuMesh;
+    mutable SkMesh gpuMesh;
     sk_sp<SkBlender> blender;
     SkPaint paint;
-    void draw(SkCanvas* c, const SkMatrix&) const { c->drawMesh(mesh, blender, paint); }
+    mutable bool isGpuBased;
+    mutable GrDirectContext::DirectContextID contextId;
+    void draw(SkCanvas* c, const SkMatrix&) const {
+        GrDirectContext* directContext = c->recordingContext()->asDirectContext();
+        GrDirectContext::DirectContextID id = directContext->directContextID();
+        if (!isGpuBased || contextId != id) {
+            sk_sp<SkMesh::VertexBuffer> vb =
+                    SkMesh::CopyVertexBuffer(directContext, cpuMesh.refVertexBuffer());
+            if (!cpuMesh.indexBuffer()) {
+                gpuMesh = SkMesh::Make(cpuMesh.refSpec(), cpuMesh.mode(), vb, cpuMesh.vertexCount(),
+                                       cpuMesh.vertexOffset(), cpuMesh.refUniforms(),
+                                       cpuMesh.bounds())
+                                  .mesh;
+            } else {
+                sk_sp<SkMesh::IndexBuffer> ib =
+                        SkMesh::CopyIndexBuffer(directContext, cpuMesh.refIndexBuffer());
+                gpuMesh = SkMesh::MakeIndexed(cpuMesh.refSpec(), cpuMesh.mode(), vb,
+                                              cpuMesh.vertexCount(), cpuMesh.vertexOffset(), ib,
+                                              cpuMesh.indexCount(), cpuMesh.indexOffset(),
+                                              cpuMesh.refUniforms(), cpuMesh.bounds())
+                                  .mesh;
+            }
+
+            isGpuBased = true;
+            contextId = id;
+        }
+
+        c->drawMesh(gpuMesh, blender, paint);
+    }
 };
 struct DrawAtlas final : Op {
     static const auto kType = Type::DrawAtlas;
@@ -612,7 +660,7 @@ static constexpr inline bool is_power_of_two(int value) {
 template <typename T, typename... Args>
 void* DisplayListData::push(size_t pod, Args&&... args) {
     size_t skip = SkAlignPtr(sizeof(T) + pod);
-    SkASSERT(skip < (1 << 24));
+    LOG_FATAL_IF(skip >= (1 << 24));
     if (fUsed + skip > fReserved) {
         static_assert(is_power_of_two(SKLITEDL_PAGE),
                       "This math needs updating for non-pow2.");
@@ -621,7 +669,7 @@ void* DisplayListData::push(size_t pod, Args&&... args) {
         fBytes.realloc(fReserved);
         LOG_ALWAYS_FATAL_IF(fBytes.get() == nullptr, "realloc(%zd) failed", fReserved);
     }
-    SkASSERT(fUsed + skip <= fReserved);
+    LOG_FATAL_IF((fUsed + skip) > fReserved);
     auto op = (T*)(fBytes.get() + fUsed);
     fUsed += skip;
     new (op) T{std::forward<Args>(args)...};
@@ -751,7 +799,7 @@ void DisplayListData::drawImageLattice(sk_sp<const SkImage> image, const SkCanva
     int fs = lattice.fRectTypes ? (xs + 1) * (ys + 1) : 0;
     size_t bytes = (xs + ys) * sizeof(int) + fs * sizeof(SkCanvas::Lattice::RectType) +
                    fs * sizeof(SkColor);
-    SkASSERT(lattice.fBounds);
+    LOG_FATAL_IF(!lattice.fBounds);
     void* pod = this->push<DrawImageLattice>(bytes, std::move(image), xs, ys, fs, *lattice.fBounds,
                                              dst, filter, paint, palette);
     copy_v(pod, lattice.fXDivs, xs, lattice.fYDivs, ys, lattice.fColors, fs, lattice.fRectTypes,

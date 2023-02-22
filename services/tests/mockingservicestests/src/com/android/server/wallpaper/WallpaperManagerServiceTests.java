@@ -201,7 +201,7 @@ public class WallpaperManagerServiceTests {
     public void setUp() {
         MockitoAnnotations.initMocks(this);
 
-        ExtendedMockito.doAnswer(invocation ->  {
+        ExtendedMockito.doAnswer(invocation -> {
             int userId = (invocation.getArgument(0));
             return getWallpaperTestDir(userId);
         }).when(() -> WallpaperUtils.getWallpaperDir(anyInt()));
@@ -315,7 +315,8 @@ public class WallpaperManagerServiceTests {
 
         spyOn(mService.mWallpaperDisplayHelper);
         doReturn(true).when(mService.mWallpaperDisplayHelper)
-                .isUsableDisplay(any(Display.class), mService.mLastWallpaper.connection.mClientUid);
+                .isUsableDisplay(any(Display.class),
+                        eq(mService.mLastWallpaper.connection.mClientUid));
         mService.mLastWallpaper.connection.attachEngine(mock(IWallpaperEngine.class),
                 DEFAULT_DISPLAY);
 
@@ -427,7 +428,8 @@ public class WallpaperManagerServiceTests {
         doReturn(true).when(mService)
                 .bindWallpaperComponentLocked(any(), anyBoolean(), anyBoolean(), any(), any());
         doNothing().when(mService).saveSettingsLocked(wallpaper.userId);
-        doNothing().when(mService).generateCrop(wallpaper);
+        spyOn(mService.mWallpaperCropper);
+        doNothing().when(mService.mWallpaperCropper).generateCrop(wallpaper);
 
         // timestamps of {ACTION_WALLPAPER_CHANGED, onWallpaperColorsChanged}
         final long[] timestamps = new long[2];

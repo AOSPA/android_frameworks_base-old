@@ -25,15 +25,19 @@ class NotifPipelineFlags @Inject constructor(
     val context: Context,
     val featureFlags: FeatureFlags
 ) {
+    init {
+        featureFlags.addListener(Flags.DISABLE_FSI) { event -> event.requestNoRestart() }
+    }
+
     fun isDevLoggingEnabled(): Boolean =
         featureFlags.isEnabled(Flags.NOTIFICATION_PIPELINE_DEVELOPER_LOGGING)
-
-    fun isSmartspaceDedupingEnabled(): Boolean = featureFlags.isEnabled(Flags.SMARTSPACE)
 
     fun fullScreenIntentRequiresKeyguard(): Boolean =
         featureFlags.isEnabled(Flags.FSI_REQUIRES_KEYGUARD)
 
     fun fsiOnDNDUpdate(): Boolean = featureFlags.isEnabled(Flags.FSI_ON_DND_UPDATE)
+
+    fun disableFsi(): Boolean = featureFlags.isEnabled(Flags.DISABLE_FSI)
 
     val shouldFilterUnseenNotifsOnKeyguard: Boolean by lazy {
         featureFlags.isEnabled(Flags.FILTER_UNSEEN_NOTIFS_ON_KEYGUARD)

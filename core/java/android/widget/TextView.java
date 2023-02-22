@@ -202,6 +202,7 @@ import android.view.inputmethod.HandwritingGesture;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodManager;
 import android.view.inputmethod.InsertGesture;
+import android.view.inputmethod.InsertModeGesture;
 import android.view.inputmethod.JoinOrSplitGesture;
 import android.view.inputmethod.PreviewableHandwritingGesture;
 import android.view.inputmethod.RemoveSpaceGesture;
@@ -2534,7 +2535,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     /**
      * @hide
      */
-    @VisibleForTesting
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
     public CharSequence getTransformed() {
         return mTransformed;
     }
@@ -9620,6 +9621,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 gestures.add(InsertGesture.class);
                 gestures.add(RemoveSpaceGesture.class);
                 gestures.add(JoinOrSplitGesture.class);
+                gestures.add(InsertModeGesture.class);
                 outAttrs.setSupportedHandwritingGestures(gestures);
 
                 Set<Class<? extends PreviewableHandwritingGesture>> previews = new ArraySet<>();
@@ -10166,6 +10168,27 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             getEditableText().insert(startOffset, " ");
             Selection.setSelection(getEditableText(), startOffset + 1);
         }
+        return InputConnection.HANDWRITING_GESTURE_RESULT_SUCCESS;
+    }
+
+    /** @hide */
+    public int performHandwritingInsertModeGesture(@NonNull InsertModeGesture gesture) {
+        final PointF insertPoint =
+                convertFromScreenToContentCoordinates(gesture.getInsertionPoint());
+        final int line = getLineForHandwritingGesture(insertPoint);
+        final CancellationSignal cancellationSignal = gesture.getCancellationSignal();
+
+        // If no cancellationSignal is provided, don't enter the insert mode.
+        if (line == -1 || cancellationSignal == null) {
+            return handleGestureFailure(gesture);
+        }
+
+        final int offset = mLayout.getOffsetForHorizontal(line, insertPoint.x);
+
+        if (!mEditor.enterInsertMode(offset)) {
+            return InputConnection.HANDWRITING_GESTURE_RESULT_FAILED;
+        }
+        cancellationSignal.setOnCancelListener(() -> mEditor.exitInsertMode());
         return InputConnection.HANDWRITING_GESTURE_RESULT_SUCCESS;
     }
 
@@ -13595,6 +13618,27 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     /**
+     * Helper method to set {@code rect} to the text content's non-clipped area in the view's
+     * coordinates.
+     *
+     * @return true if at least part of the text content is visible; false if the text content is
+     * completely clipped or translated out of the visible area.
+     */
+    boolean getContentVisibleRect(Rect rect) {
+        if (!getLocalVisibleRect(rect)) {
+            return false;
+        }
+        // getLocalVisibleRect returns a rect relative to the unscrolled left top corner of the
+        // view. In other words, the returned rectangle's origin point is (-scrollX, -scrollY) in
+        // view's coordinates. So we need to offset it with the negative scrolled amount to convert
+        // it to view's coordinate.
+        rect.offset(-getScrollX(), -getScrollY());
+        // Clip the view's visible rect with the text layout's visible rect.
+        return rect.intersect(getCompoundPaddingLeft(), getCompoundPaddingTop(),
+                getWidth() - getCompoundPaddingRight(), getHeight() - getCompoundPaddingBottom());
+    }
+
+    /**
      * Populate requested character bounds in a {@link CursorAnchorInfo.Builder}
      *
      * @param builder The builder to populate
@@ -13614,9 +13658,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             return;
         }
         final Rect rect = new Rect();
-        getLocalVisibleRect(rect);
+        getContentVisibleRect(rect);
         final RectF visibleRect = new RectF(rect);
-
 
         final float[] characterBounds = getCharacterBounds(startIndex, endIndex,
                 viewportToContentHorizontalOffset, viewportToContentVerticalOffset);

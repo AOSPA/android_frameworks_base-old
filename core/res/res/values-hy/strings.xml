@@ -458,6 +458,14 @@
     <string name="permdesc_bodySensors" product="default" msgid="7652650410295512140">"Հավելվածին հասանելի է դարձնում մարմնի սենսորների տվյալները (օրինակ՝ սրտի զարկերի հաճախականությունը, ջերմաստիճանը, արյան մեջ թթվածնի տոկոսային պարունակության ցուցանիշները) հավելվածի օգտագործման ժամանակ։"</string>
     <string name="permlab_bodySensors_background" msgid="4912560779957760446">"Մարմնի սենսորների տվյալների հասանելիություն ֆոնային ռեժիմում"</string>
     <string name="permdesc_bodySensors_background" product="default" msgid="8870726027557749417">"Հավելվածին հասանելի է դարձնում մարմնի սենսորների տվյալները (օրինակ՝ սրտի զարկերի հաճախականությունը, ջերմաստիճանը, արյան մեջ թթվածնի տոկոսային պարունակության ցուցանիշները), երբ հավելվածն աշխատում է ֆոնային ռեժիմում։"</string>
+    <!-- no translation found for permlab_bodySensorsWristTemperature (5007987988922337657) -->
+    <skip />
+    <!-- no translation found for permdesc_bodySensorsWristTemperature (4978345709781045181) -->
+    <skip />
+    <!-- no translation found for permlab_bodySensors_wristTemperature_background (7692772783509074356) -->
+    <skip />
+    <!-- no translation found for permdesc_bodySensors_wristTemperature_background (3170369705518699219) -->
+    <skip />
     <string name="permlab_readCalendar" msgid="6408654259475396200">"Կարդալ օրացույցի միջոցառումները և տվյալները"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"Այս հավելվածը կարող է կարդալ օրացույցի՝ ձեր պլանշետում պահված բոլոր միջոցառումները, ինչպես նաև հրապարակել կամ պահել ձեր օրացույցի տվյալները:"</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"Այս հավելվածը կարող է կարդալ օրացույցի՝ ձեր Android TV սարքում պահված բոլոր միջոցառումները, ինչպես նաև հրապարակել կամ պահել ձեր օրացույցի տվյալները:"</string>
@@ -1943,10 +1951,8 @@
     <string name="work_mode_off_title" msgid="961171256005852058">"Միացնե՞լ հավելվածները"</string>
     <string name="work_mode_off_message" msgid="7319580997683623309">"Ձեզ հասանելի կդառնան ձեր աշխատանքային հավելվածներն ու ծանուցումները"</string>
     <string name="work_mode_turn_on" msgid="3662561662475962285">"Միացնել"</string>
-    <!-- no translation found for work_mode_emergency_call_button (6818855962881612322) -->
-    <skip />
-    <!-- no translation found for work_mode_dialer_off_message (2193299184850387465) -->
-    <skip />
+    <string name="work_mode_emergency_call_button" msgid="6818855962881612322">"Արտակարգ իրավիճակ"</string>
+    <string name="work_mode_dialer_off_message" msgid="2193299184850387465">"Ստացեք ձեր աշխատանքային հավելվածների և զանգերի հասանելիություն"</string>
     <string name="app_blocked_title" msgid="7353262160455028160">"Հավելվածը հասանելի չէ"</string>
     <string name="app_blocked_message" msgid="542972921087873023">"<xliff:g id="APP_NAME">%1$s</xliff:g> հավելվածն այս պահին հասանելի չէ։"</string>
     <string name="app_streaming_blocked_title" msgid="6090945835898766139">"<xliff:g id="ACTIVITY">%1$s</xliff:g>՝ անհասանելի է"</string>

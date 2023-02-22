@@ -16,12 +16,14 @@
 
 package android.app.admin;
 
+import static android.Manifest.permission.INTERACT_ACROSS_USERS;
+import static android.Manifest.permission.INTERACT_ACROSS_USERS_FULL;
 import static android.Manifest.permission.QUERY_ADMIN_POLICY;
 import static android.Manifest.permission.SET_TIME;
 import static android.Manifest.permission.SET_TIME_ZONE;
-import static android.Manifest.permission.INTERACT_ACROSS_USERS_FULL;
 import static android.content.Intent.LOCAL_FLAG_FROM_SYSTEM;
 import static android.net.NetworkCapabilities.NET_ENTERPRISE_ID_1;
+import static android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE;
 
 import static com.android.internal.util.function.pooled.PooledLambda.obtainMessage;
 
@@ -2812,6 +2814,17 @@ public class DevicePolicyManager {
     public static final int STATUS_PROVISIONING_NOT_ALLOWED_FOR_NON_DEVELOPER_USERS = 15;
 
     /**
+     * Result code for {@link #checkProvisioningPrecondition}.
+     *
+     * <p>Returned for {@link #ACTION_PROVISION_MANAGED_DEVICE} when provisioning a DPC which does
+     * not support headless system user mode on a headless system user mode device.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int STATUS_HEADLESS_SYSTEM_USER_MODE_NOT_SUPPORTED = 16;
+
+    /**
      * Result codes for {@link #checkProvisioningPrecondition} indicating all the provisioning pre
      * conditions.
      *
@@ -2824,7 +2837,8 @@ public class DevicePolicyManager {
             STATUS_HAS_PAIRED, STATUS_MANAGED_USERS_NOT_SUPPORTED, STATUS_SYSTEM_USER,
             STATUS_CANNOT_ADD_MANAGED_PROFILE, STATUS_DEVICE_ADMIN_NOT_SUPPORTED,
             STATUS_SPLIT_SYSTEM_USER_DEVICE_SYSTEM_USER,
-            STATUS_PROVISIONING_NOT_ALLOWED_FOR_NON_DEVELOPER_USERS
+            STATUS_PROVISIONING_NOT_ALLOWED_FOR_NON_DEVELOPER_USERS,
+            STATUS_HEADLESS_SYSTEM_USER_MODE_NOT_SUPPORTED
     })
     public @interface ProvisioningPrecondition {}
 
@@ -3947,6 +3961,7 @@ public class DevicePolicyManager {
      *
      * @throws SecurityException if caller is not device owner or profile owner of org-owned device
      *     or if called on a parent instance
+     * @throws UnsupportedOperationException if the device does not support MTE
      * @param policy the MTE policy to be set
      */
     public void setMtePolicy(@MtePolicy int policy) {
@@ -10030,6 +10045,58 @@ public class DevicePolicyManager {
     }
 
     /**
+     * Called by a device owner or profile owner of a managed profile to set the credential manager
+     * policy.
+     *
+     * <p>Affects APIs exposed by {@link android.credentials.CredentialManager}.
+     *
+     * <p>A {@link PackagePolicy#PACKAGE_POLICY_ALLOWLIST} policy type will limit the credential
+     * providers that the user can use to the list of packages in the policy.
+     *
+     * <p>A {@link PackagePolicy#PACKAGE_POLICY_ALLOWLIST_AND_SYSTEM} policy type
+     * allows access from the OEM default credential providers and the allowlist of credential
+     * providers.
+     *
+     * <p>A {@link PackagePolicy#PACKAGE_POLICY_BLOCKLIST} policy type will block the credential
+     * providers listed in the policy from being used by the user.
+     *
+     * @param policy the policy to set, setting this value to {@code null} will allow all packages
+     * @throws SecurityException if caller is not a device owner or profile owner of a
+     * managed profile
+     */
+    public void setCredentialManagerPolicy(@Nullable PackagePolicy policy) {
+        throwIfParentInstance("setCredentialManagerPolicy");
+        if (mService != null) {
+            try {
+                mService.setCredentialManagerPolicy(policy);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+    }
+
+    /**
+     * Called by a device owner or profile owner of a managed profile to retrieve the credential
+     * manager policy.
+     *
+     * @throws SecurityException if caller is not a device owner or profile owner of a
+     * managed profile.
+     * @return the current credential manager policy if null then this policy has not been
+     * configured.
+     */
+    public @Nullable PackagePolicy getCredentialManagerPolicy() {
+        throwIfParentInstance("getCredentialManagerPolicy");
+        if (mService != null) {
+            try {
+                return mService.getCredentialManagerPolicy();
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+        return null;
+    }
+
+    /**
      * Called by a profile owner of a managed profile to set the packages that are allowed to
      * lookup contacts in the managed profile based on caller id information.
      * <p>
@@ -11037,6 +11104,7 @@ public class DevicePolicyManager {
      * @throws SecurityException     if the caller is not a profile owner on an organization-owned
      *                               managed profile.
      * @throws IllegalStateException if called after the device setup has been completed.
+     * @throws UnsupportedOperationException if the api is not enabled.
      * @see ManagedSubscriptionsPolicy
      */
     public void setManagedSubscriptionsPolicy(@Nullable ManagedSubscriptionsPolicy policy) {
@@ -13481,11 +13549,14 @@ public class DevicePolicyManager {
             android.Manifest.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS
     })
     @UserProvisioningState
+    @UserHandleAware(
+            enabledSinceTargetSdkVersion = UPSIDE_DOWN_CAKE,
+            requiresPermissionIfNotCaller = INTERACT_ACROSS_USERS)
     public int getUserProvisioningState() {
         throwIfParentInstance("getUserProvisioningState");
         if (mService != null) {
             try {
-                return mService.getUserProvisioningState();
+                return mService.getUserProvisioningState(mContext.getUserId());
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -15711,7 +15782,7 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Returns true if the caller is running on a device where the admin can grant
+     * Returns true if the caller is running on a device where an admin can grant
      * permissions related to device sensors.
      * This is a signal that the device is a fully-managed device where personal usage is
      * discouraged.
@@ -15719,7 +15790,7 @@ public class DevicePolicyManager {
      * {@link #setPermissionGrantState(ComponentName, String, String, int)}.
      *
      * May be called by any app.
-     * @return true if the app can grant device sensors-related permissions, false otherwise.
+     * @return true if an admin can grant device sensors-related permissions, false otherwise.
      */
     public boolean canAdminGrantSensorsPermissions() {
         throwIfParentInstance("canAdminGrantSensorsPermissions");
@@ -15727,7 +15798,7 @@ public class DevicePolicyManager {
             return false;
         }
         try {
-            return mService.canAdminGrantSensorsPermissionsForUser(myUserId());
+            return mService.canAdminGrantSensorsPermissions();
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }

@@ -29,6 +29,7 @@ import static android.app.admin.DevicePolicyResources.Strings.Core.PROFILE_ENCRY
 import static android.content.Context.KEYGUARD_SERVICE;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.os.UserHandle.USER_ALL;
+import static android.provider.DeviceConfig.NAMESPACE_AUTO_PIN_CONFIRMATION;
 
 import static com.android.internal.widget.LockPatternUtils.CREDENTIAL_TYPE_NONE;
 import static com.android.internal.widget.LockPatternUtils.CREDENTIAL_TYPE_PASSWORD;
@@ -114,6 +115,7 @@ import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.EventLog;
+import android.util.FeatureFlagUtils;
 import android.util.LongSparseArray;
 import android.util.Slog;
 import android.util.SparseArray;
@@ -1730,6 +1732,13 @@ public class LockSettingsService extends ILockSettings.Stub {
         if (newCredential.isPattern()) {
             setBoolean(LockPatternUtils.PATTERN_EVER_CHOSEN_KEY, true, userHandle);
         }
+        if (DeviceConfig.getBoolean(NAMESPACE_AUTO_PIN_CONFIRMATION,
+                "enable_auto_pin_confirmation", /* defaultValue= */ false)) {
+            if (newCredential.isPin()) {
+                setLong(LockPatternUtils.PIN_LENGTH, newCredential.size(), userHandle);
+            }
+        }
+
         updatePasswordHistory(newCredential, userHandle);
         mContext.getSystemService(TrustManager.class).reportEnabledTrustAgentsChanged(userHandle);
     }
@@ -2551,6 +2560,28 @@ public class LockSettingsService extends ILockSettings.Stub {
     @Override
     public @Nullable String getKey(@NonNull String alias) throws RemoteException {
         return mRecoverableKeyStoreManager.getKey(alias);
+    }
+
+    /**
+     * Starts a session to verify lock screen credentials provided by a remote device.
+     */
+    public void startRemoteLockscreenValidation() {
+        if (!FeatureFlagUtils.isEnabled(mContext,
+                FeatureFlagUtils.SETTINGS_ENABLE_LOCKSCREEN_TRANSFER_API)) {
+            throw new UnsupportedOperationException("Under development");
+        }
+        mRecoverableKeyStoreManager.startRemoteLockscreenValidation();
+    }
+
+    /**
+     * Verifies credentials guess from a remote device.
+     */
+    public void validateRemoteLockscreen(@NonNull byte[] encryptedCredential) {
+        if (!FeatureFlagUtils.isEnabled(mContext,
+                FeatureFlagUtils.SETTINGS_ENABLE_LOCKSCREEN_TRANSFER_API)) {
+            throw new UnsupportedOperationException("Under development");
+        }
+        mRecoverableKeyStoreManager.validateRemoteLockscreen(encryptedCredential);
     }
 
     // Reading these settings needs the contacts permission

@@ -228,9 +228,6 @@ class SettingsProtoDumpUtil {
                 Settings.Global.APP_AUTO_RESTRICTION_ENABLED,
                 GlobalSettingsProto.App.AUTO_RESTRICTION_ENABLED);
         dumpSetting(s, p,
-                Settings.Global.FORCED_APP_STANDBY_ENABLED,
-                GlobalSettingsProto.App.FORCED_APP_STANDBY_ENABLED);
-        dumpSetting(s, p,
                 Settings.Global.FORCED_APP_STANDBY_FOR_SMALL_BATTERY_ENABLED,
                 GlobalSettingsProto.App.FORCED_APP_STANDBY_FOR_SMALL_BATTERY_ENABLED);
         p.end(appToken);
@@ -241,6 +238,15 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Global.AUDIO_SAFE_VOLUME_STATE,
                 GlobalSettingsProto.AUDIO_SAFE_VOLUME_STATE);
+        dumpSetting(s, p,
+                Settings.Global.AUDIO_SAFE_CSD_CURRENT_VALUE,
+                GlobalSettingsProto.AUDIO_SAFE_CSD_CURRENT_VALUE);
+        dumpSetting(s, p,
+                Settings.Global.AUDIO_SAFE_CSD_NEXT_WARNING,
+                GlobalSettingsProto.AUDIO_SAFE_CSD_NEXT_WARNING);
+        dumpSetting(s, p,
+                Settings.Global.AUDIO_SAFE_CSD_DOSE_RECORDS,
+                GlobalSettingsProto.AUDIO_SAFE_CSD_DOSE_RECORDS);
 
         final long autofillToken = p.start(GlobalSettingsProto.AUTOFILL);
         dumpSetting(s, p,
@@ -2919,6 +2925,22 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.System.TIME_12_24,
                 SystemSettingsProto.TIME_12_24);
+
+        final long touchpadToken = p.start(SystemSettingsProto.TOUCHPAD);
+        dumpSetting(s, p,
+                Settings.System.TOUCHPAD_NATURAL_SCROLLING,
+                SystemSettingsProto.Touchpad.NATURAL_SCROLLING);
+        dumpSetting(s, p,
+                Settings.System.TOUCHPAD_POINTER_SPEED,
+                SystemSettingsProto.Touchpad.POINTER_SPEED);
+        dumpSetting(s, p,
+                Settings.System.TOUCHPAD_RIGHT_CLICK_ZONE,
+                SystemSettingsProto.Touchpad.RIGHT_CLICK_ZONE);
+        dumpSetting(s, p,
+                Settings.System.TOUCHPAD_TAP_TO_CLICK,
+                SystemSettingsProto.Touchpad.TAP_TO_CLICK);
+        p.end(touchpadToken);
+
         dumpSetting(s, p,
                 Settings.System.TTY_MODE,
                 SystemSettingsProto.TTY_MODE);

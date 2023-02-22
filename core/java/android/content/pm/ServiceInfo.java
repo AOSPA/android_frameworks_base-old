@@ -323,6 +323,7 @@ public class ServiceInfo extends ComponentInfo
      * permissions:
      * {@link android.Manifest.permission#ACTIVITY_RECOGNITION},
      * {@link android.Manifest.permission#BODY_SENSORS},
+     * {@link android.Manifest.permission#BODY_SENSORS_WRIST_TEMPERATURE},
      * {@link android.Manifest.permission#HIGH_SAMPLING_RATE_SENSORS}.
      */
     @RequiresPermission(
@@ -332,6 +333,7 @@ public class ServiceInfo extends ComponentInfo
             anyOf = {
                 Manifest.permission.ACTIVITY_RECOGNITION,
                 Manifest.permission.BODY_SENSORS,
+                Manifest.permission.BODY_SENSORS_WRIST_TEMPERATURE,
                 Manifest.permission.HIGH_SAMPLING_RATE_SENSORS,
             }
     )
@@ -388,7 +390,7 @@ public class ServiceInfo extends ComponentInfo
      *
      * <ul>
      *     <li>
-     *         The type has a 1 minute timeout.
+     *         The type has a 3 minute timeout.
      *         A foreground service of this type must be stopped within the timeout by
      *         {@link android.app.Service#stopSelf),
      *         or {@link android.content.Context#stopService).

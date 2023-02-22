@@ -19,6 +19,7 @@ package com.android.systemui.keyguard.data.quickaffordance
 
 import android.app.StatusBarManager
 import android.content.Context
+import android.content.pm.PackageManager
 import com.android.systemui.R
 import com.android.systemui.animation.Expandable
 import com.android.systemui.camera.CameraGestureHelper
@@ -36,6 +37,7 @@ class CameraQuickAffordanceConfig
 @Inject
 constructor(
     @Application private val context: Context,
+    private val packageManager: PackageManager,
     private val cameraGestureHelper: Lazy<CameraGestureHelper>,
 ) : KeyguardQuickAffordanceConfig {
 
@@ -46,7 +48,7 @@ constructor(
         get() = context.getString(R.string.accessibility_camera_button)
 
     override val pickerIconResourceId: Int
-        get() = com.android.internal.R.drawable.perm_group_camera
+        get() = R.drawable.ic_camera
 
     override val lockScreenState: Flow<KeyguardQuickAffordanceConfig.LockScreenState>
         get() =
@@ -54,11 +56,19 @@ constructor(
                 KeyguardQuickAffordanceConfig.LockScreenState.Visible(
                     icon =
                         Icon.Resource(
-                            com.android.internal.R.drawable.perm_group_camera,
+                            R.drawable.ic_camera,
                             ContentDescription.Resource(R.string.accessibility_camera_button)
                         )
                 )
             )
+
+    override suspend fun getPickerScreenState(): KeyguardQuickAffordanceConfig.PickerScreenState {
+        return if (isLaunchable()) {
+            super.getPickerScreenState()
+        } else {
+            KeyguardQuickAffordanceConfig.PickerScreenState.UnavailableOnDevice
+        }
+    }
 
     override fun onTriggered(
         expandable: Expandable?
@@ -67,5 +77,9 @@ constructor(
             .get()
             .launchCamera(StatusBarManager.CAMERA_LAUNCH_SOURCE_QUICK_AFFORDANCE)
         return KeyguardQuickAffordanceConfig.OnTriggeredResult.Handled
+    }
+
+    private fun isLaunchable(): Boolean {
+        return packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
     }
 }

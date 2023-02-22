@@ -457,6 +457,11 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         }
 
         @Override
+        public void noteCpuWakingNetworkPacket(Network network, long elapsedMillis, int uid) {
+            Slog.d(TAG, "Wakeup due to incoming packet on network " + network + " to uid " + uid);
+        }
+
+        @Override
         public void noteBinderCallStats(int workSourceUid, long incrementatCallCount,
                 Collection<BinderCallsStats.CallStat> callStats) {
             synchronized (BatteryStatsService.this.mLock) {
@@ -2900,11 +2905,9 @@ public final class BatteryStatsService extends IBatteryStats.Stub
             if (DBG) Slog.d(TAG, "begin dumpLocked from UID " + Binder.getCallingUid());
             awaitCompletion();
 
-            synchronized (mStats) {
-                mStats.dumpLocked(mContext, pw, flags, reqUid, historyStart);
-                if (writeData) {
-                    mStats.writeAsyncLocked();
-                }
+            mStats.dump(mContext, pw, flags, reqUid, historyStart);
+            if (writeData) {
+                mStats.writeAsyncLocked();
             }
             pw.println();
             mCpuWakeupStats.dump(new IndentingPrintWriter(pw, "  "), SystemClock.elapsedRealtime());

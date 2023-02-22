@@ -43,6 +43,7 @@ import android.app.job.JobService;
 import android.app.job.JobSnapshot;
 import android.app.job.JobWorkItem;
 import android.app.job.UserVisibleJobSummary;
+import android.app.tare.EconomyManager;
 import android.app.usage.UsageStatsManager;
 import android.app.usage.UsageStatsManagerInternal;
 import android.compat.annotation.ChangeId;
@@ -417,7 +418,8 @@ public class JobSchedulerService extends com.android.server.SystemService
             // Load all the constants.
             synchronized (mLock) {
                 mConstants.updateTareSettingsLocked(
-                        economyManagerInternal.isEnabled(JobSchedulerEconomicPolicy.POLICY_JOB));
+                        economyManagerInternal.getEnabledMode(
+                                JobSchedulerEconomicPolicy.POLICY_JOB));
             }
             onPropertiesChanged(DeviceConfig.getProperties(DeviceConfig.NAMESPACE_JOB_SCHEDULER));
         }
@@ -514,8 +516,8 @@ public class JobSchedulerService extends com.android.server.SystemService
         }
 
         @Override
-        public void onTareEnabledStateChanged(boolean isTareEnabled) {
-            if (mConstants.updateTareSettingsLocked(isTareEnabled)) {
+        public void onTareEnabledModeChanged(@EconomyManager.EnabledMode int enabledMode) {
+            if (mConstants.updateTareSettingsLocked(enabledMode)) {
                 for (int controller = 0; controller < mControllers.size(); controller++) {
                     final StateController sc = mControllers.get(controller);
                     sc.onConstantsUpdatedLocked();
@@ -962,10 +964,11 @@ public class JobSchedulerService extends com.android.server.SystemService
                                     DEFAULT_RUNTIME_USER_INITIATED_DATA_TRANSFER_LIMIT_MS)));
         }
 
-        private boolean updateTareSettingsLocked(boolean isTareEnabled) {
+        private boolean updateTareSettingsLocked(@EconomyManager.EnabledMode int enabledMode) {
             boolean changed = false;
-            if (USE_TARE_POLICY != isTareEnabled) {
-                USE_TARE_POLICY = isTareEnabled;
+            final boolean useTare = enabledMode == EconomyManager.ENABLED_MODE_ON;
+            if (USE_TARE_POLICY != useTare) {
+                USE_TARE_POLICY = useTare;
                 changed = true;
             }
             return changed;
@@ -1581,6 +1584,12 @@ public class JobSchedulerService extends com.android.server.SystemService
         return reason;
     }
 
+    @VisibleForTesting
+    @JobScheduler.PendingJobReason
+    int getPendingJobReason(JobStatus job) {
+        return getPendingJobReason(job.getUid(), job.getNamespace(), job.getJobId());
+    }
+
     @JobScheduler.PendingJobReason
     @GuardedBy("mLock")
     private int getPendingJobReasonLocked(int uid, String namespace, int jobId) {
@@ -1691,11 +1700,45 @@ public class JobSchedulerService extends com.android.server.SystemService
         }
     }
 
-    private void stopUserVisibleJobsInternal(@NonNull String packageName, int userId) {
+    @VisibleForTesting
+    void stopUserVisibleJobsInternal(@NonNull String packageName, int userId) {
+        final int packageUid = mLocalPM.getPackageUid(packageName, 0, userId);
+        if (packageUid < 0) {
+            Slog.wtf(TAG, "Asked to stop jobs of an unknown package");
+            return;
+        }
         synchronized (mLock) {
             mConcurrencyManager.stopUserVisibleJobsLocked(userId, packageName,
                     JobParameters.STOP_REASON_USER,
                     JobParameters.INTERNAL_STOP_REASON_USER_UI_STOP);
+            final ArraySet<JobStatus> jobs = mJobs.getJobsByUid(packageUid);
+            for (int i = jobs.size() - 1; i >= 0; i--) {
+                final JobStatus job = jobs.valueAt(i);
+
+                // For now, demote all jobs of the app. However, if the app was only doing work
+                // on behalf of another app and the user wanted just that work to stop, this
+                // unfairly penalizes any other jobs that may be scheduled.
+                // For example, if apps A & B ask app C to do something (thus A & B are "source"
+                // and C is "calling"), but only A's work was under way and the user wanted
+                // to stop only that work, B's jobs would be demoted as well.
+                // TODO(255768978): make it possible to demote only the relevant subset of jobs
+                job.addInternalFlags(JobStatus.INTERNAL_FLAG_DEMOTED_BY_USER);
+
+                // The app process will be killed soon. There's no point keeping its jobs in
+                // the pending queue to try and start them.
+                if (mPendingJobQueue.remove(job)) {
+                    synchronized (mPendingJobReasonCache) {
+                        SparseIntArray jobIdToReason = mPendingJobReasonCache.get(
+                                job.getUid(), job.getNamespace());
+                        if (jobIdToReason == null) {
+                            jobIdToReason = new SparseIntArray();
+                            mPendingJobReasonCache.add(job.getUid(), job.getNamespace(),
+                                    jobIdToReason);
+                        }
+                        jobIdToReason.put(job.getJobId(), JobScheduler.PENDING_JOB_REASON_USER);
+                    }
+                }
+            }
         }
     }
 
@@ -2349,7 +2392,7 @@ public class JobSchedulerService extends com.android.server.SystemService
      */
     @VisibleForTesting
     JobStatus getRescheduleJobForFailureLocked(JobStatus failureToReschedule,
-            int internalStopReason) {
+            @JobParameters.StopReason int stopReason, int internalStopReason) {
         final long elapsedNowMillis = sElapsedRealtimeClock.millis();
         final JobInfo job = failureToReschedule.getJob();
 
@@ -2357,9 +2400,11 @@ public class JobSchedulerService extends com.android.server.SystemService
         int numFailures = failureToReschedule.getNumFailures();
         int numSystemStops = failureToReschedule.getNumSystemStops();
         // We should back off slowly if JobScheduler keeps stopping the job,
-        // but back off immediately if the issue appeared to be the app's fault.
+        // but back off immediately if the issue appeared to be the app's fault
+        // or the user stopped the job somehow.
         if (internalStopReason == JobParameters.INTERNAL_STOP_REASON_SUCCESSFUL_FINISH
-                || internalStopReason == JobParameters.INTERNAL_STOP_REASON_TIMEOUT) {
+                || internalStopReason == JobParameters.INTERNAL_STOP_REASON_TIMEOUT
+                || stopReason == JobParameters.STOP_REASON_USER) {
             numFailures++;
         } else {
             numSystemStops++;
@@ -2390,11 +2435,14 @@ public class JobSchedulerService extends com.android.server.SystemService
         }
         delayMillis =
                 Math.min(delayMillis, JobInfo.MAX_BACKOFF_DELAY_MILLIS);
-        // TODO(255767350): demote all jobs to regular for user stops so they don't keep privileges
         JobStatus newJob = new JobStatus(failureToReschedule,
                 elapsedNowMillis + delayMillis,
                 JobStatus.NO_LATEST_RUNTIME, numFailures, numSystemStops,
                 failureToReschedule.getLastSuccessfulRunTime(), sSystemClock.millis());
+        if (stopReason == JobParameters.STOP_REASON_USER) {
+            // Demote all jobs to regular for user stops so they don't keep privileges.
+            newJob.addInternalFlags(JobStatus.INTERNAL_FLAG_DEMOTED_BY_USER);
+        }
         if (job.isPeriodic()) {
             newJob.setOriginalLatestRunTimeElapsed(
                     failureToReschedule.getOriginalLatestRunTimeElapsed());
@@ -2515,8 +2563,8 @@ public class JobSchedulerService extends com.android.server.SystemService
      * @param needsReschedule Whether the implementing class should reschedule this job.
      */
     @Override
-    public void onJobCompletedLocked(JobStatus jobStatus, int debugStopReason,
-            boolean needsReschedule) {
+    public void onJobCompletedLocked(JobStatus jobStatus, @JobParameters.StopReason int stopReason,
+            int debugStopReason, boolean needsReschedule) {
         if (DEBUG) {
             Slog.d(TAG, "Completed " + jobStatus + ", reason=" + debugStopReason
                     + ", reschedule=" + needsReschedule);
@@ -2543,8 +2591,9 @@ public class JobSchedulerService extends com.android.server.SystemService
         // job so we can transfer any appropriate state over from the previous job when
         // we stop it.
         final JobStatus rescheduledJob = needsReschedule
-                ? getRescheduleJobForFailureLocked(jobStatus, debugStopReason) : null;
+                ? getRescheduleJobForFailureLocked(jobStatus, stopReason, debugStopReason) : null;
         if (rescheduledJob != null
+                && !rescheduledJob.shouldTreatAsUserInitiatedJob()
                 && (debugStopReason == JobParameters.INTERNAL_STOP_REASON_TIMEOUT
                 || debugStopReason == JobParameters.INTERNAL_STOP_REASON_PREEMPT)) {
             rescheduledJob.disallowRunInBatterySaverAndDoze();
@@ -3473,23 +3522,6 @@ public class JobSchedulerService extends com.android.server.SystemService
     }
 
     final class LocalService implements JobSchedulerInternal {
-
-        /**
-         * Returns a list of all pending jobs. A running job is not considered pending. Periodic
-         * jobs are always considered pending.
-         */
-        @Override
-        public List<JobInfo> getSystemScheduledPendingJobs() {
-            synchronized (mLock) {
-                final List<JobInfo> pendingJobs = new ArrayList<JobInfo>();
-                mJobs.forEachJob(Process.SYSTEM_UID, (job) -> {
-                    if (job.getJob().isPeriodic() || !mConcurrencyManager.isJobRunningLocked(job)) {
-                        pendingJobs.add(job.getJob());
-                    }
-                });
-                return pendingJobs;
-            }
-        }
 
         @Override
         public void cancelJobsForUid(int uid, boolean includeProxiedJobs,

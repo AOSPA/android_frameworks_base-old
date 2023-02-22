@@ -693,6 +693,7 @@
             <intent-filter>
                 <action android:name="android.telecom.action.SHOW_SWITCH_TO_WORK_PROFILE_FOR_CALL_DIALOG" />
                 <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="tel" />
             </intent-filter>
         </activity>
 
@@ -940,7 +941,7 @@
             android:excludeFromRecents="true"
             android:theme="@android:style/Theme.NoDisplay"
             android:label="@string/note_task_button_label"
-            android:icon="@drawable/ic_note_task_button">
+            android:icon="@drawable/ic_note_task_shortcut_widget">
 
             <intent-filter>
                 <action android:name="android.intent.action.CREATE_SHORTCUT" />

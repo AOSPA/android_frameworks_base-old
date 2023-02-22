@@ -20,7 +20,6 @@ import static android.app.StatusBarManager.DISABLE2_NONE;
 import static android.app.StatusBarManager.DISABLE_NONE;
 import static android.inputmethodservice.InputMethodService.BACK_DISPOSITION_DEFAULT;
 import static android.inputmethodservice.InputMethodService.IME_INVISIBLE;
-import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
 
 import android.annotation.Nullable;
@@ -38,7 +37,6 @@ import android.hardware.biometrics.BiometricManager.BiometricMultiSensorMode;
 import android.hardware.biometrics.IBiometricContextListener;
 import android.hardware.biometrics.IBiometricSysuiReceiver;
 import android.hardware.biometrics.PromptInfo;
-import android.hardware.display.DisplayManager;
 import android.hardware.fingerprint.IUdfpsRefreshRateRequestCallback;
 import android.inputmethodservice.InputMethodService.BackDispositionMode;
 import android.media.INearbyMediaDevicesProvider;
@@ -46,6 +44,7 @@ import android.media.MediaRoute2Info;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.HandlerExecutor;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
@@ -53,7 +52,6 @@ import android.os.ParcelFileDescriptor;
 import android.os.Process;
 import android.os.RemoteException;
 import android.util.Pair;
-import android.util.Slog;
 import android.util.SparseArray;
 import android.view.InsetsState.InternalInsetsType;
 import android.view.WindowInsets.Type.InsetsType;
@@ -61,6 +59,7 @@ import android.view.WindowInsetsController.Appearance;
 import android.view.WindowInsetsController.Behavior;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.VisibleForTesting;
 
 import com.android.internal.os.SomeArgs;
 import com.android.internal.statusbar.IAddTileResultCallback;
@@ -71,6 +70,7 @@ import com.android.internal.statusbar.StatusBarIcon;
 import com.android.internal.util.GcUtils;
 import com.android.internal.view.AppearanceRegion;
 import com.android.systemui.dump.DumpHandler;
+import com.android.systemui.settings.DisplayTracker;
 import com.android.systemui.statusbar.CommandQueue.Callbacks;
 import com.android.systemui.statusbar.commandline.CommandRegistry;
 import com.android.systemui.statusbar.policy.CallbackController;
@@ -90,8 +90,7 @@ import java.util.ArrayList;
  * are coalesced, note that they are all idempotent.
  */
 public class CommandQueue extends IStatusBar.Stub implements
-        CallbackController<Callbacks>,
-        DisplayManager.DisplayListener {
+        CallbackController<Callbacks> {
     private static final String TAG = CommandQueue.class.getSimpleName();
 
     private static final int INDEX_MASK = 0xffff;
@@ -190,6 +189,7 @@ public class CommandQueue extends IStatusBar.Stub implements
      * event.
      */
     private int mLastUpdatedImeDisplayId = INVALID_DISPLAY;
+    private final DisplayTracker mDisplayTracker;
     private ProtoTracer mProtoTracer;
     private final @Nullable CommandRegistry mRegistry;
     private final @Nullable DumpHandler mDumpHandler;
@@ -228,7 +228,7 @@ public class CommandQueue extends IStatusBar.Stub implements
          */
         default void setImeWindowStatus(int displayId, IBinder token,  int vis,
                 @BackDispositionMode int backDisposition, boolean showImeSwitcher) { }
-        default void showRecentApps(boolean triggeredFromAltTab, boolean forward) { }
+        default void showRecentApps(boolean triggeredFromAltTab) { }
         default void hideRecentApps(boolean triggeredFromAltTab, boolean triggeredFromHomeKey) { }
         default void toggleRecentApps() { }
         default void toggleSplitScreen() { }
@@ -352,7 +352,7 @@ public class CommandQueue extends IStatusBar.Stub implements
         }
 
         /**
-         * @see DisplayManager.DisplayListener#onDisplayRemoved(int)
+         * @see DisplayTracker.Callback#onDisplayRemoved(int)
          */
         default void onDisplayRemoved(int displayId) {
         }
@@ -501,46 +501,43 @@ public class CommandQueue extends IStatusBar.Stub implements
         default void showMediaOutputSwitcher(String packageName) {}
     }
 
-    public CommandQueue(Context context) {
-        this(context, null, null, null);
+    @VisibleForTesting
+    public CommandQueue(Context context, DisplayTracker displayTracker) {
+        this(context, displayTracker, null, null, null);
     }
 
     public CommandQueue(
             Context context,
+            DisplayTracker displayTracker,
             ProtoTracer protoTracer,
             CommandRegistry registry,
             DumpHandler dumpHandler
     ) {
+        mDisplayTracker = displayTracker;
         mProtoTracer = protoTracer;
         mRegistry = registry;
         mDumpHandler = dumpHandler;
-        context.getSystemService(DisplayManager.class).registerDisplayListener(this, mHandler);
+        mDisplayTracker.addDisplayChangeCallback(new DisplayTracker.Callback() {
+            @Override
+            public void onDisplayRemoved(int displayId) {
+                synchronized (mLock) {
+                    mDisplayDisabled.remove(displayId);
+                }
+                // This callback is registered with {@link #mHandler} that already posts to run on
+                // main thread, so it is safe to dispatch directly.
+                for (int i = mCallbacks.size() - 1; i >= 0; i--) {
+                    mCallbacks.get(i).onDisplayRemoved(displayId);
+                }
+            }
+        }, new HandlerExecutor(mHandler));
         // We always have default display.
-        setDisabled(DEFAULT_DISPLAY, DISABLE_NONE, DISABLE2_NONE);
+        setDisabled(mDisplayTracker.getDefaultDisplayId(), DISABLE_NONE, DISABLE2_NONE);
     }
-
-    @Override
-    public void onDisplayAdded(int displayId) { }
-
-    @Override
-    public void onDisplayRemoved(int displayId) {
-        synchronized (mLock) {
-            mDisplayDisabled.remove(displayId);
-        }
-        // This callback is registered with {@link #mHandler} that already posts to run on main
-        // thread, so it is safe to dispatch directly.
-        for (int i = mCallbacks.size() - 1; i >= 0; i--) {
-            mCallbacks.get(i).onDisplayRemoved(displayId);
-        }
-    }
-
-    @Override
-    public void onDisplayChanged(int displayId) { }
 
     // TODO(b/118592525): add multi-display support if needed.
     public boolean panelsEnabled() {
-        final int disabled1 = getDisabled1(DEFAULT_DISPLAY);
-        final int disabled2 = getDisabled2(DEFAULT_DISPLAY);
+        final int disabled1 = getDisabled1(mDisplayTracker.getDefaultDisplayId());
+        final int disabled2 = getDisabled2(mDisplayTracker.getDefaultDisplayId());
         return (disabled1 & StatusBarManager.DISABLE_EXPAND) == 0
                 && (disabled2 & StatusBarManager.DISABLE2_NOTIFICATION_SHADE) == 0;
     }
@@ -695,11 +692,11 @@ public class CommandQueue extends IStatusBar.Stub implements
         }
     }
 
-    public void showRecentApps(boolean triggeredFromAltTab, boolean forward) {
+    public void showRecentApps(boolean triggeredFromAltTab) {
         synchronized (mLock) {
             mHandler.removeMessages(MSG_SHOW_RECENT_APPS);
-            mHandler.obtainMessage(MSG_SHOW_RECENT_APPS, triggeredFromAltTab ? 1 : 0,
-                    forward ? 1 : 0, null).sendToTarget();
+            mHandler.obtainMessage(MSG_SHOW_RECENT_APPS, triggeredFromAltTab ? 1 : 0, 0,
+                    null).sendToTarget();
         }
     }
 
@@ -1271,8 +1268,7 @@ public class CommandQueue extends IStatusBar.Stub implements
     public void showMediaOutputSwitcher(String packageName) {
         int callingUid = Binder.getCallingUid();
         if (callingUid != 0 && callingUid != Process.SYSTEM_UID) {
-            Slog.e(TAG, "Call only allowed from system server.");
-            return;
+            throw new SecurityException("Call only allowed from system server.");
         }
         synchronized (mLock) {
             SomeArgs args = SomeArgs.obtain();
@@ -1407,7 +1403,7 @@ public class CommandQueue extends IStatusBar.Stub implements
                     break;
                 case MSG_SHOW_RECENT_APPS:
                     for (int i = 0; i < mCallbacks.size(); i++) {
-                        mCallbacks.get(i).showRecentApps(msg.arg1 != 0, msg.arg2 != 0);
+                        mCallbacks.get(i).showRecentApps(msg.arg1 != 0);
                     }
                     break;
                 case MSG_HIDE_RECENT_APPS:

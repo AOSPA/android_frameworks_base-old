@@ -245,9 +245,13 @@
     <!-- Content description for the right boundary of the screenshot being cropped, with the current position as a percentage. [CHAR LIMIT=NONE] -->
     <string name="screenshot_right_boundary_pct">Right boundary <xliff:g id="percent" example="50">%1$d</xliff:g> percent</string>
     <!-- Notification displayed when a screenshot is saved in a work profile. [CHAR LIMIT=NONE] -->
-    <string name="screenshot_work_profile_notification">Work screenshots are saved in the <xliff:g id="app" example="Work Files">%1$s</xliff:g> app</string>
+    <string name="screenshot_work_profile_notification">Saved in <xliff:g id="app" example="Files">%1$s</xliff:g> in the work profile</string>
     <!-- Default name referring to the app on the device that lets the user browse stored files. [CHAR LIMIT=NONE] -->
     <string name="screenshot_default_files_app_name">Files</string>
+    <!-- A notice shown to the user to indicate that an app has detected the screenshot that the user has just taken. [CHAR LIMIT=75] -->
+    <string name="screenshot_detected_template"><xliff:g id="appName" example="Google Chrome">%1$s</xliff:g> detected this screenshot.</string>
+    <!-- A notice shown to the user to indicate that multiple apps have detected the screenshot that the user has just taken. [CHAR LIMIT=75] -->
+    <string name="screenshot_detected_multiple_template"><xliff:g id="appName" example="Google Chrome">%1$s</xliff:g> and other open apps detected this screenshot.</string>
 
     <!-- Notification title displayed for screen recording [CHAR LIMIT=50]-->
     <string name="screenrecord_name">Screen Recorder</string>
@@ -2353,6 +2357,14 @@
     <!-- Removed control in management screen [CHAR LIMIT=20] -->
     <string name="controls_removed">Removed</string>
 
+    <!-- Title for the dialog presented to the user to authorize this app to display a Device
+         controls panel (embedded activity) instead of controls rendered by SystemUI [CHAR LIMIT=30] -->
+    <string name="controls_panel_authorization_title">Add <xliff:g id="appName" example="My app">%s</xliff:g>?</string>
+
+    <!-- Shows in a dialog presented to the user to authorize this app to display a Device controls
+         panel (embedded activity) instead of controls rendered by SystemUI [CHAR LIMIT=NONE] -->
+    <string name="controls_panel_authorization">When you add <xliff:g id="appName" example="My app">%s</xliff:g>, it can add controls and content to this panel. In some apps, you can choose which controls show up here.</string>
+
     <!-- a11y state description for a control that is currently favorited [CHAR LIMIT=NONE] -->
     <string name="accessibility_control_favorite">Favorited</string>
     <!-- a11y state description for a control that is currently favorited with its position [CHAR LIMIT=NONE] -->
@@ -2467,6 +2479,8 @@
     <string name="controls_media_smartspace_rec_item_description">Play <xliff:g id="song_name" example="Daily mix">%1$s</xliff:g> by <xliff:g id="artist_name" example="Various artists">%2$s</xliff:g> from <xliff:g id="app_label" example="Spotify">%3$s</xliff:g></string>
     <!-- Description for Smartspace recommendation's media item which doesn't have artist info, including information for the media's title and the source app [CHAR LIMIT=NONE]-->
     <string name="controls_media_smartspace_rec_item_no_artist_description">Play <xliff:g id="song_name" example="Daily mix">%1$s</xliff:g> from <xliff:g id="app_label" example="Spotify">%2$s</xliff:g></string>
+    <!-- Header title for Smartspace recommendation card within media controls. [CHAR_LIMIT=30] -->
+    <string name="controls_media_smartspace_rec_header">For You</string>
 
     <!--- ****** Media tap-to-transfer ****** -->
     <!-- Text for a button to undo the media transfer. [CHAR LIMIT=20] -->
@@ -2502,6 +2516,8 @@
     <string name="controls_menu_add">Add controls</string>
     <!-- Controls menu, edit [CHAR_LIMIT=30] -->
     <string name="controls_menu_edit">Edit controls</string>
+    <!-- Controls menu, add another app [CHAR LIMIT=30] -->
+    <string name="controls_menu_add_another_app">Add app</string>
 
     <!-- Title for the media output dialog with media related devices [CHAR LIMIT=50] -->
     <string name="media_output_dialog_add_output">Add outputs</string>
@@ -2910,6 +2926,12 @@
     <!-- Subtitle for the notification sent when a stylus battery is low. [CHAR LIMIT=none]-->
     <string name="stylus_battery_low_subtitle">Connect your stylus to a charger</string>
 
+    <!-- Title for notification of low stylus battery. [CHAR_LIMIT=NONE] -->
+    <string name="stylus_battery_low">Stylus battery low</string>
+
+    <!-- Label for a lock screen shortcut to start the camera in video mode. [CHAR_LIMIT=16] -->
+    <string name="video_camera">Video camera</string>
+
     <!-- Switch to work profile dialer app for placing a call dialog. -->
     <!-- Text for Switch to work profile dialog's Title. Switch to work profile dialog guide users to make call from work
     profile dialer app as it's not possible to make call from current profile due to an admin policy. [CHAR LIMIT=60] -->
@@ -2924,4 +2946,13 @@
     <!-- Label for the close button on switch to work profile dialog. Switch to work profile dialog guide users to make call from work
     profile dialer app as it's not possible to make call from current profile due to an admin policy.[CHAR LIMIT=60] -->
     <string name="call_from_work_profile_close">Close</string>
+
+    <!--
+    Label for a menu item in a menu that is shown when the user wishes to configure the lock screen.
+    Clicking on this menu item takes the user to a screen where they can modify the settings of the
+    lock screen.
+
+    [CHAR LIMIT=32]
+    -->
+    <string name="lock_screen_settings">Lock screen settings</string>
 </resources>

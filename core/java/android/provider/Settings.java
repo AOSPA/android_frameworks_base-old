@@ -40,6 +40,7 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.SearchManager;
 import android.app.WallpaperManager;
+import android.app.tare.EconomyManager;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.ContentResolver;
@@ -72,6 +73,7 @@ import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
 import android.os.DropBoxManager;
 import android.os.IBinder;
+import android.os.IpcDataCache;
 import android.os.LocaleList;
 import android.os.PowerManager;
 import android.os.PowerManager.AutoPowerSaveModeTriggers;
@@ -123,6 +125,9 @@ import java.util.concurrent.Executor;
 public final class Settings {
     /** @hide */
     public static final boolean DEFAULT_OVERRIDEABLE_BY_RESTORE = false;
+
+    /** @hide default value of whether IpcDataCache is enabled or not */
+    public static final boolean IPC_DATA_CACHE_ENABLED = false;
 
     // Intent actions for Settings
 
@@ -1060,13 +1065,30 @@ public final class Settings {
      * In some cases, a matching Activity may not exist, so ensure you
      * safeguard against this.
      * <p>
-     * Input: Nothing.
-     * <p>
+     * Input: The optional {@code #EXTRA_EXPLICIT_LOCALES} with language tags that contains locales
+     * to limit available locales. This is only supported when device is under demo mode.
+     * If intent does not contain this extra, it will show system supported locale list.
+     * <br/>
+     * If {@code #EXTRA_EXPLICIT_LOCALES} contain a unsupported locale, it will still show this
+     * locale on list, but may not be supported by the devcie.
+     *
      * Output: Nothing.
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_LOCALE_SETTINGS =
             "android.settings.LOCALE_SETTINGS";
+
+    /**
+     * Activity Extra: Show explicit locales in launched locale picker activity.
+     *
+     * This can be passed as an extra field in an Activity Intent with one or more language tags
+     * as a {@link LocaleList}. This must be passed as an extra field to the
+     * {@link #ACTION_LOCALE_SETTINGS}.
+     *
+     * @hide
+     */
+    public static final String EXTRA_EXPLICIT_LOCALES =
+            "android.provider.extra.EXPLICIT_LOCALES";
 
     /**
      * Activity Action: Show settings to allow configuration of per application locale.
@@ -2903,8 +2925,8 @@ public final class Settings {
 
     public static final String AUTHORITY = "settings";
 
-    private static final String TAG = "Settings";
-    private static final boolean LOCAL_LOGV = false;
+    static final String TAG = "Settings";
+    static final boolean LOCAL_LOGV = false;
 
     // Used in system server calling uid workaround in call()
     private static boolean sInSystemServer = false;
@@ -3014,10 +3036,10 @@ public final class Settings {
         }
     }
 
-    private static final class ContentProviderHolder {
+    static final class ContentProviderHolder {
         private final Object mLock = new Object();
 
-        private final Uri mUri;
+        final Uri mUri;
         @GuardedBy("mLock")
         @UnsupportedAppUsage
         private IContentProvider mContentProvider;
@@ -3044,14 +3066,14 @@ public final class Settings {
     }
 
     // Thread-safe.
-    private static class NameValueCache {
+    static class NameValueCache {
         private static final boolean DEBUG = false;
 
-        private static final String[] SELECT_VALUE_PROJECTION = new String[] {
+        static final String[] SELECT_VALUE_PROJECTION = new String[] {
                 Settings.NameValueTable.VALUE
         };
 
-        private static final String NAME_EQ_PLACEHOLDER = "name=?";
+        static final String NAME_EQ_PLACEHOLDER = "name=?";
 
         // Must synchronize on 'this' to access mValues and mValuesVersion.
         private final ArrayMap<String, String> mValues = new ArrayMap<>();
@@ -3071,6 +3093,14 @@ public final class Settings {
         private final ArraySet<String> mReadableFields;
         private final ArraySet<String> mAllFields;
         private final ArrayMap<String, Integer> mReadableFieldsWithMaxTargetSdk;
+
+        private final String mSettingsType;
+
+        // Caches for settings key -> value, only for the current user
+        private final IpcDataCache<SettingsIpcDataCache.GetQuery, String> mValueCache;
+        // Cache for settings namespace -> list of settings, only for the current user
+        private final IpcDataCache<SettingsIpcDataCache.ListQuery, HashMap<String, String>>
+                mNamespaceCache;
 
         @GuardedBy("this")
         private GenerationTracker mGenerationTracker;
@@ -3097,6 +3127,11 @@ public final class Settings {
             mReadableFieldsWithMaxTargetSdk = new ArrayMap<>();
             getPublicSettingsForClass(callerClass, mAllFields, mReadableFields,
                     mReadableFieldsWithMaxTargetSdk);
+            mSettingsType = callerClass.getSimpleName().toLowerCase();
+            mValueCache = IPC_DATA_CACHE_ENABLED ? SettingsIpcDataCache.createValueCache(
+                    mProviderHolder, mCallGetCommand, mUri, mSettingsType) : null;
+            mNamespaceCache = IPC_DATA_CACHE_ENABLED ? SettingsIpcDataCache.createListCache(
+                    mProviderHolder, mCallListCommand, mSettingsType) : null;
         }
 
         public boolean putStringForUser(ContentResolver cr, String name, String value,
@@ -3195,6 +3230,30 @@ public final class Settings {
                 }
             }
 
+            if (IPC_DATA_CACHE_ENABLED) {
+                if (userHandle != UserHandle.myUserId()) {
+                    if (LOCAL_LOGV) {
+                        Log.v(TAG, "get setting for user " + userHandle
+                                + " by user " + UserHandle.myUserId()
+                                + " so skipping cache");
+                    }
+                    try {
+                        return SettingsIpcDataCache.getValueFromContentProviderCall(
+                                mProviderHolder, mCallGetCommand, mUri, userHandle, cr, name);
+                    } catch (RemoteException e) {
+                        return null;
+                    }
+                }
+
+                try {
+                    return mValueCache.query(new SettingsIpcDataCache.GetQuery(cr, name));
+                } catch (RuntimeException e) {
+                    // Failed to query the server
+                    return null;
+                }
+            }
+
+            // Fall back to old cache mechanism
             final boolean isSelf = (userHandle == UserHandle.myUserId());
             int currentGeneration = -1;
             if (isSelf) {
@@ -3391,6 +3450,38 @@ public final class Settings {
                 List<String> names) {
             String namespace = prefix.substring(0, prefix.length() - 1);
             Config.enforceReadPermission(namespace);
+
+            if (mCallListCommand == null) {
+                // No list command specified, return empty map
+                return new ArrayMap<>();
+            }
+
+            if (IPC_DATA_CACHE_ENABLED) {
+                ArrayMap<String, String> results = new ArrayMap<>();
+                HashMap<String, String> flagsToValues;
+                try {
+                    flagsToValues = mNamespaceCache.query(
+                            new SettingsIpcDataCache.ListQuery(cr, prefix));
+                } catch (RuntimeException e) {
+                    // Failed to query the server, return an empty map
+                    return results;
+                }
+
+                if (flagsToValues != null) {
+                    if (!names.isEmpty()) {
+                        for (Map.Entry<String, String> flag : flagsToValues.entrySet()) {
+                            if (names.contains(flag.getKey())) {
+                                results.put(flag.getKey(), flag.getValue());
+                            }
+                        }
+                    } else {
+                        results.putAll(flagsToValues);
+                    }
+                }
+                return results;
+            }
+
+            // Fall back to old cache mechanism
             ArrayMap<String, String> keyValues = new ArrayMap<>();
             int currentGeneration = -1;
 
@@ -3430,10 +3521,7 @@ public final class Settings {
                 }
             }
 
-            if (mCallListCommand == null) {
-                // No list command specified, return empty map
-                return keyValues;
-            }
+
             IContentProvider cp = mProviderHolder.getProvider(cr);
 
             try {
@@ -3539,13 +3627,25 @@ public final class Settings {
             }
         }
 
-        public void clearGenerationTrackerForTest() {
+        public void clearCachesForTest() {
+            if (IPC_DATA_CACHE_ENABLED) {
+                mValueCache.clear();
+                mNamespaceCache.clear();
+                return;
+            }
+            // Fall back to old cache mechanism
             synchronized (NameValueCache.this) {
                 if (mGenerationTracker != null) {
                     mGenerationTracker.destroy();
                 }
                 mValues.clear();
                 mGenerationTracker = null;
+            }
+        }
+
+        public void invalidateCache() {
+            if (IPC_DATA_CACHE_ENABLED) {
+                SettingsIpcDataCache.invalidateCache(mSettingsType);
             }
         }
     }
@@ -3824,7 +3924,12 @@ public final class Settings {
         /** @hide */
         public static void clearProviderForTest() {
             sProviderHolder.clearProviderForTest();
-            sNameValueCache.clearGenerationTrackerForTest();
+            sNameValueCache.clearCachesForTest();
+        }
+
+        /** @hide */
+        public static void invalidateValueCache() {
+            sNameValueCache.invalidateCache();
         }
 
         /** @hide */
@@ -5569,6 +5674,44 @@ public final class Settings {
         public static final String POINTER_SPEED = "pointer_speed";
 
         /**
+         * Touchpad pointer speed setting.
+         * This is an integer value in a range between -7 and +7, so there are 15 possible values.
+         *   -7 = slowest
+         *    0 = default speed
+         *   +7 = fastest
+         * @hide
+         */
+        public static final String TOUCHPAD_POINTER_SPEED = "touchpad_pointer_speed";
+
+        /**
+         * Whether to invert the touchpad scrolling direction.
+         *
+         * If set to 1 (the default), moving two fingers downwards on the touchpad will scroll
+         * upwards, consistent with normal touchscreen scrolling. If set to 0, moving two fingers
+         * downwards will scroll downwards.
+         *
+         * @hide
+         */
+        public static final String TOUCHPAD_NATURAL_SCROLLING = "touchpad_natural_scrolling";
+
+        /**
+         * Whether to enable tap-to-click on touchpads.
+         *
+         * @hide
+         */
+        public static final String TOUCHPAD_TAP_TO_CLICK = "touchpad_tap_to_click";
+
+        /**
+         * Whether to enable a right-click zone on touchpads.
+         *
+         * When set to 1, pressing to click in a section on the right-hand side of the touchpad will
+         * result in a context click (a.k.a. right click).
+         *
+         * @hide
+         */
+        public static final String TOUCHPAD_RIGHT_CLICK_ZONE = "touchpad_right_click_zone";
+
+        /**
          * Whether lock-to-app will be triggered by long-press on recents.
          * @hide
          */
@@ -5754,6 +5897,10 @@ public final class Settings {
             PRIVATE_SETTINGS.add(DISPLAY_COLOR_MODE_VENDOR_HINT);
             PRIVATE_SETTINGS.add(DESKTOP_MODE);
             PRIVATE_SETTINGS.add(LOCALE_PREFERENCES);
+            PRIVATE_SETTINGS.add(TOUCHPAD_POINTER_SPEED);
+            PRIVATE_SETTINGS.add(TOUCHPAD_NATURAL_SCROLLING);
+            PRIVATE_SETTINGS.add(TOUCHPAD_TAP_TO_CLICK);
+            PRIVATE_SETTINGS.add(TOUCHPAD_RIGHT_CLICK_ZONE);
             PRIVATE_SETTINGS.add(CALL_CONNECTED_TONE_ENABLED);
         }
 
@@ -6273,7 +6420,12 @@ public final class Settings {
         /** @hide */
         public static void clearProviderForTest() {
             sProviderHolder.clearProviderForTest();
-            sNameValueCache.clearGenerationTrackerForTest();
+            sNameValueCache.clearCachesForTest();
+        }
+
+        /** @hide */
+        public static void invalidateValueCache() {
+            sNameValueCache.invalidateCache();
         }
 
         /** @hide */
@@ -9732,7 +9884,7 @@ public final class Settings {
         /**
          * Indicates whether "seen" notifications should be suppressed from the lockscreen.
          * <p>
-         * Type: int (0 for false, 1 for true)
+         * Type: int (0 for unset, 1 for true, 2 for false)
          *
          * @hide
          */
@@ -14574,15 +14726,6 @@ public final class Settings {
                 "app_auto_restriction_enabled";
 
         /**
-         * Feature flag to enable or disable the Forced App Standby feature.
-         * Type: int (0 for false, 1 for true)
-         * Default: 1
-         * @hide
-         */
-        @Readable
-        public static final String FORCED_APP_STANDBY_ENABLED = "forced_app_standby_enabled";
-
-        /**
          * Whether or not to enable Forced App Standby on small battery devices.
          * Type: int (0 for false, 1 for true)
          * Default: 0
@@ -14605,7 +14748,7 @@ public final class Settings {
          *
          * @hide
          */
-        public static final int DEFAULT_ENABLE_TARE = 1;
+        public static final int DEFAULT_ENABLE_TARE = EconomyManager.DEFAULT_ENABLE_TARE_MODE;
 
         /**
          * Whether to enable the TARE AlarmManager economic policy or not.
@@ -14620,7 +14763,8 @@ public final class Settings {
          *
          * @hide
          */
-        public static final int DEFAULT_ENABLE_TARE_ALARM_MANAGER = 0;
+        public static final int DEFAULT_ENABLE_TARE_ALARM_MANAGER =
+                        EconomyManager.DEFAULT_ENABLE_POLICY_ALARM ? 1 : 0;
 
         /**
          * Settings for AlarmManager's TARE EconomicPolicy (list of its economic factors).
@@ -14644,7 +14788,8 @@ public final class Settings {
          *
          * @hide
          */
-        public static final int DEFAULT_ENABLE_TARE_JOB_SCHEDULER = 0;
+        public static final int DEFAULT_ENABLE_TARE_JOB_SCHEDULER =
+                EconomyManager.DEFAULT_ENABLE_POLICY_JOB_SCHEDULER ? 1 : 0;
 
         /**
          * Settings for JobScheduler's TARE EconomicPolicy (list of its economic factors).
@@ -15374,6 +15519,25 @@ public final class Settings {
          */
         @Readable
         public static final String AUDIO_SAFE_VOLUME_STATE = "audio_safe_volume_state";
+
+        /**
+         * Persisted safe hearding current CSD value. Values are stored as float percentages where
+         * 1.f represents 100% sound dose has been reached.
+         * @hide
+         */
+        public static final String AUDIO_SAFE_CSD_CURRENT_VALUE = "audio_safe_csd_current_value";
+
+        /**
+         * Persisted safe hearding next CSD warning value. Values are stored as float percentages.
+         * @hide
+         */
+        public static final String AUDIO_SAFE_CSD_NEXT_WARNING = "audio_safe_csd_next_warning";
+
+        /**
+         * Persisted safe hearding dose records (see {@link android.media.SoundDoseRecord})
+         * @hide
+         */
+        public static final String AUDIO_SAFE_CSD_DOSE_RECORDS = "audio_safe_csd_dose_records";
 
         /**
          * URL for tzinfo (time zone) updates
@@ -16430,7 +16594,12 @@ public final class Settings {
         /** @hide */
         public static void clearProviderForTest() {
             sProviderHolder.clearProviderForTest();
-            sNameValueCache.clearGenerationTrackerForTest();
+            sNameValueCache.clearCachesForTest();
+        }
+
+        /** @hide */
+        public static void invalidateValueCache() {
+            sNameValueCache.invalidateCache();
         }
 
         /** @hide */
@@ -18123,6 +18292,37 @@ public final class Settings {
             public static final String WRIST_ORIENTATION_MODE = "wear_wrist_orientation_mode";
 
             /**
+             * Current lock screen state of the device
+             * (null = default value of this setting (lockscreen is never set),
+             * 0 = {@link #LOCK_SCREEN_STATE_NONE},
+             * 1 = {@link #LOCK_SCREEN_STATE_PIN},
+             * 2 = {@link #LOCK_SCREEN_STATE_PATTERN})
+             * @hide
+             */
+            public static final String LOCK_SCREEN_STATE = "lock_screen_state";
+
+            /**
+             * No lock screen set
+             * One of the possible states for {@link #LOCK_SCREEN_STATE}.
+             * @hide
+             */
+            public static final int LOCK_SCREEN_STATE_NONE = 0;
+
+            /**
+             * Lock screen set as a pin
+             * One of the possible states for {@link #LOCK_SCREEN_STATE}.
+             * @hide
+             */
+            public static final int LOCK_SCREEN_STATE_PIN = 1;
+
+            /**
+             * Lock screen set as a pattern
+             * One of the possible states for {@link #LOCK_SCREEN_STATE}.
+             * @hide
+             */
+            public static final int LOCK_SCREEN_STATE_PATTERN = 2;
+
+            /**
              * Setting indicating the name of the Wear OS app package containing the device's sysui.
              *
              * @hide
@@ -18654,7 +18854,17 @@ public final class Settings {
         /** @hide */
         public static void clearProviderForTest() {
             sProviderHolder.clearProviderForTest();
-            sNameValueCache.clearGenerationTrackerForTest();
+            sNameValueCache.clearCachesForTest();
+        }
+
+        /** @hide */
+        public static void invalidateValueCache() {
+            sNameValueCache.invalidateCache();
+        }
+
+        /** @hide */
+        public static void invalidateNamespaceCache() {
+            sNameValueCache.invalidateCache();
         }
 
         private static void handleMonitorCallback(

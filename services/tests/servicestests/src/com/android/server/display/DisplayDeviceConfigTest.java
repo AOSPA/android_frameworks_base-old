@@ -19,6 +19,7 @@ package com.android.server.display;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.mockito.ArgumentMatchers.anyFloat;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
@@ -32,6 +33,7 @@ import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.internal.R;
+import com.android.server.display.config.ThermalStatus;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -43,6 +45,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 @SmallTest
 @RunWith(AndroidJUnit4.class)
@@ -164,7 +168,56 @@ public final class DisplayDeviceConfigTest {
         assertArrayEquals(new int[]{-1, 10, 20, 30, 40},
                 mDisplayDeviceConfig.getScreenOffBrightnessSensorValueToLux());
 
-        // Todo(brup): Add asserts for BrightnessThrottlingData, DensityMapping,
+        List<DisplayDeviceConfig.BrightnessThrottlingData.ThrottlingLevel> throttlingLevels =
+                new ArrayList();
+        throttlingLevels.add(new DisplayDeviceConfig.BrightnessThrottlingData.ThrottlingLevel(
+                DisplayDeviceConfig.convertThermalStatus(ThermalStatus.light), 0.4f
+        ));
+        throttlingLevels.add(new DisplayDeviceConfig.BrightnessThrottlingData.ThrottlingLevel(
+                DisplayDeviceConfig.convertThermalStatus(ThermalStatus.moderate), 0.3f
+        ));
+        throttlingLevels.add(new DisplayDeviceConfig.BrightnessThrottlingData.ThrottlingLevel(
+                DisplayDeviceConfig.convertThermalStatus(ThermalStatus.severe), 0.2f
+        ));
+        throttlingLevels.add(new DisplayDeviceConfig.BrightnessThrottlingData.ThrottlingLevel(
+                DisplayDeviceConfig.convertThermalStatus(ThermalStatus.critical), 0.1f
+        ));
+        throttlingLevels.add(new DisplayDeviceConfig.BrightnessThrottlingData.ThrottlingLevel(
+                DisplayDeviceConfig.convertThermalStatus(ThermalStatus.emergency), 0.05f
+        ));
+        throttlingLevels.add(new DisplayDeviceConfig.BrightnessThrottlingData.ThrottlingLevel(
+                DisplayDeviceConfig.convertThermalStatus(ThermalStatus.shutdown), 0.025f
+        ));
+        assertEquals(new DisplayDeviceConfig.BrightnessThrottlingData(throttlingLevels),
+                mDisplayDeviceConfig.getBrightnessThrottlingData());
+
+        throttlingLevels.clear();
+        throttlingLevels.add(new DisplayDeviceConfig.BrightnessThrottlingData.ThrottlingLevel(
+                DisplayDeviceConfig.convertThermalStatus(ThermalStatus.light), 0.2f
+        ));
+        throttlingLevels.add(new DisplayDeviceConfig.BrightnessThrottlingData.ThrottlingLevel(
+                DisplayDeviceConfig.convertThermalStatus(ThermalStatus.moderate), 0.15f
+        ));
+        throttlingLevels.add(new DisplayDeviceConfig.BrightnessThrottlingData.ThrottlingLevel(
+                DisplayDeviceConfig.convertThermalStatus(ThermalStatus.severe), 0.1f
+        ));
+        throttlingLevels.add(new DisplayDeviceConfig.BrightnessThrottlingData.ThrottlingLevel(
+                DisplayDeviceConfig.convertThermalStatus(ThermalStatus.critical), 0.05f
+        ));
+        throttlingLevels.add(new DisplayDeviceConfig.BrightnessThrottlingData.ThrottlingLevel(
+                DisplayDeviceConfig.convertThermalStatus(ThermalStatus.emergency), 0.025f
+        ));
+        throttlingLevels.add(new DisplayDeviceConfig.BrightnessThrottlingData.ThrottlingLevel(
+                DisplayDeviceConfig.convertThermalStatus(ThermalStatus.shutdown), 0.0125f
+        ));
+        assertEquals(new DisplayDeviceConfig.BrightnessThrottlingData(throttlingLevels),
+                mDisplayDeviceConfig.getConcurrentDisplaysBrightnessThrottlingData());
+
+        assertNotNull(mDisplayDeviceConfig.getHostUsiVersion());
+        assertEquals(mDisplayDeviceConfig.getHostUsiVersion().getMajorVersion(), 2);
+        assertEquals(mDisplayDeviceConfig.getHostUsiVersion().getMinorVersion(), 0);
+
+        // Todo: Add asserts for BrightnessThrottlingData, DensityMapping,
         // HighBrightnessModeData AmbientLightSensor, RefreshRateLimitations and ProximitySensor.
     }
 
@@ -236,7 +289,7 @@ public final class DisplayDeviceConfigTest {
         assertArrayEquals(mDisplayDeviceConfig.getHighAmbientBrightnessThresholds(),
                 HIGH_AMBIENT_THRESHOLD_OF_PEAK_REFRESH_RATE);
 
-        // Todo(brup): Add asserts for BrightnessThrottlingData, DensityMapping,
+        // Todo: Add asserts for BrightnessThrottlingData, DensityMapping,
         // HighBrightnessModeData AmbientLightSensor, RefreshRateLimitations and ProximitySensor.
     }
 
@@ -428,16 +481,60 @@ public final class DisplayDeviceConfigTest {
                 +   "<ambientLightHorizonShort>50</ambientLightHorizonShort>\n"
                 +   "<screenBrightnessRampIncreaseMaxMillis>"
                 +       "2000"
-                +    "</screenBrightnessRampIncreaseMaxMillis>\n"
+                +   "</screenBrightnessRampIncreaseMaxMillis>\n"
                 +   "<thermalThrottling>\n"
                 +       "<brightnessThrottlingMap>\n"
                 +           "<brightnessThrottlingPoint>\n"
+                +               "<thermalStatus>light</thermalStatus>\n"
+                +               "<brightness>0.4</brightness>\n"
+                +           "</brightnessThrottlingPoint>\n"
+                +           "<brightnessThrottlingPoint>\n"
+                +               "<thermalStatus>moderate</thermalStatus>\n"
+                +               "<brightness>0.3</brightness>\n"
+                +           "</brightnessThrottlingPoint>\n"
+                +           "<brightnessThrottlingPoint>\n"
+                +               "<thermalStatus>severe</thermalStatus>\n"
+                +               "<brightness>0.2</brightness>\n"
+                +           "</brightnessThrottlingPoint>\n"
+                +           "<brightnessThrottlingPoint>\n"
+                +               "<thermalStatus>critical</thermalStatus>\n"
+                +               "<brightness>0.1</brightness>\n"
+                +           "</brightnessThrottlingPoint>\n"
+                +           "<brightnessThrottlingPoint>\n"
                 +               "<thermalStatus>emergency</thermalStatus>\n"
-                +               "<!-- Throttling to 250 nits: (250-2.0)/(500-2.0)*(0.62-0.0)+0"
-                +               ".0 = 0.30875502 -->\n"
-                +               "<brightness>0.30875502</brightness>\n"
+                +               "<brightness>0.05</brightness>\n"
+                +           "</brightnessThrottlingPoint>\n"
+                +           "<brightnessThrottlingPoint>\n"
+                +               "<thermalStatus>shutdown</thermalStatus>\n"
+                +               "<brightness>0.025</brightness>\n"
                 +           "</brightnessThrottlingPoint>\n"
                 +       "</brightnessThrottlingMap>\n"
+                +       "<concurrentDisplaysBrightnessThrottlingMap>\n"
+                +           "<brightnessThrottlingPoint>\n"
+                +               "<thermalStatus>light</thermalStatus>\n"
+                +               "<brightness>0.2</brightness>\n"
+                +           "</brightnessThrottlingPoint>\n"
+                +           "<brightnessThrottlingPoint>\n"
+                +               "<thermalStatus>moderate</thermalStatus>\n"
+                +               "<brightness>0.15</brightness>\n"
+                +           "</brightnessThrottlingPoint>\n"
+                +           "<brightnessThrottlingPoint>\n"
+                +               "<thermalStatus>severe</thermalStatus>\n"
+                +               "<brightness>0.1</brightness>\n"
+                +           "</brightnessThrottlingPoint>\n"
+                +           "<brightnessThrottlingPoint>\n"
+                +               "<thermalStatus>critical</thermalStatus>\n"
+                +               "<brightness>0.05</brightness>\n"
+                +           "</brightnessThrottlingPoint>\n"
+                +           "<brightnessThrottlingPoint>\n"
+                +               "<thermalStatus>emergency</thermalStatus>\n"
+                +               "<brightness>0.025</brightness>\n"
+                +           "</brightnessThrottlingPoint>\n"
+                +           "<brightnessThrottlingPoint>\n"
+                +               "<thermalStatus>shutdown</thermalStatus>\n"
+                +               "<brightness>0.0125</brightness>\n"
+                +           "</brightnessThrottlingPoint>\n"
+                +       "</concurrentDisplaysBrightnessThrottlingMap>\n"
                 +   "</thermalThrottling>\n"
                 +   "<refreshRate>\n"
                 +       "<lowerBlockingZoneConfigs>\n"
@@ -478,6 +575,10 @@ public final class DisplayDeviceConfigTest {
                 +       "<item>30</item>\n"
                 +       "<item>40</item>\n"
                 +   "</screenOffBrightnessSensorValueToLux>\n"
+                +   "<usiVersion>\n"
+                +       "<majorVersion>2</majorVersion>\n"
+                +       "<minorVersion>0</minorVersion>\n"
+                +   "</usiVersion>\n"
                 + "</displayConfiguration>\n";
     }
 

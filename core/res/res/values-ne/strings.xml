@@ -330,8 +330,8 @@
     <string name="capability_desc_canRequestTouchExploration" msgid="4394677060796752976">"ट्याप गरिएका वस्तुहरू चर्को स्वरमा बोलिने छन् र इसाराहरूको प्रयोग गरेर स्क्रिनमा अन्वेषण गर्न सकिन्छ।"</string>
     <string name="capability_title_canRequestFilterKeyEvents" msgid="2772371671541753254">"आफुले टाइप गरेको पाठको निरीक्षण गर्नुहोस्"</string>
     <string name="capability_desc_canRequestFilterKeyEvents" msgid="2381315802405773092">"व्यक्तिगत डेटा जस्तै क्रेडिट कार्ड नम्बरहरू र पासवर्डहरू समावेश गर्दछ।"</string>
-    <string name="capability_title_canControlMagnification" msgid="7701572187333415795">"प्रदर्शन आवर्धन नियन्त्रण गर्नुहोस्"</string>
-    <string name="capability_desc_canControlMagnification" msgid="2206586716709254805">"प्रदर्शनको जुम स्तर र स्थिति नियन्त्रण गर्नुहोस्।"</string>
+    <string name="capability_title_canControlMagnification" msgid="7701572187333415795">"डिस्प्ले म्याग्निफिकेसन नियन्त्रण गर्नुहोस्"</string>
+    <string name="capability_desc_canControlMagnification" msgid="2206586716709254805">"डिस्प्लेको जुम लेबल र स्थिति नियन्त्रण गर्नुहोस्।"</string>
     <string name="capability_title_canPerformGestures" msgid="9106545062106728987">"इसाराहरू सम्बन्धी कार्य गर्नुहोस्"</string>
     <string name="capability_desc_canPerformGestures" msgid="6619457251067929726">"ट्याप, स्वाइप गर्न, थिच्न र अन्य इसाराहरू सम्बन्धी कार्य गर्न सक्छ"</string>
     <string name="capability_title_canCaptureFingerprintGestures" msgid="1189053104594608091">"फिंगरप्रिन्टका इसाराहरू"</string>
@@ -458,6 +458,14 @@
     <string name="permdesc_bodySensors" product="default" msgid="7652650410295512140">"यसले यो एप प्रयोग गरिँदै गरेका बेला यसलाई हृदयको गति, शरीरको तापक्रम तथा रगतमा रहेको अक्सिजनको प्रतिशत जस्ता बडी सेन्सरसम्बन्धी डेटा हेर्ने तथा प्रयोग गर्ने अनुमति दिन्छ।"</string>
     <string name="permlab_bodySensors_background" msgid="4912560779957760446">"ब्याकग्राउन्डमा चलेका बेला हृदयको गति जस्ता बडी सेन्सरसम्बन्धी डेटा हेरियोस् र प्रयोग गरियोस्"</string>
     <string name="permdesc_bodySensors_background" product="default" msgid="8870726027557749417">"यसले यो एप ब्याकग्राउन्डमा चलेका बेला यसलाई हृदयको गति, शरीरको तापक्रम तथा रगतमा रहेको अक्सिजनको प्रतिशत जस्ता बडी सेन्सरसम्बन्धी डेटा हेर्ने तथा प्रयोग गर्ने अनुमति दिन्छ।"</string>
+    <!-- no translation found for permlab_bodySensorsWristTemperature (5007987988922337657) -->
+    <skip />
+    <!-- no translation found for permdesc_bodySensorsWristTemperature (4978345709781045181) -->
+    <skip />
+    <!-- no translation found for permlab_bodySensors_wristTemperature_background (7692772783509074356) -->
+    <skip />
+    <!-- no translation found for permdesc_bodySensors_wristTemperature_background (3170369705518699219) -->
+    <skip />
     <string name="permlab_readCalendar" msgid="6408654259475396200">"पात्रोका कार्यक्रम र विवरणहरू पढ्ने"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"यस एपले तपाईंको ट्याब्लेटमा भण्डारण गरिएका पात्रो सम्बन्धी सबै कार्यक्रमहरू पढ्न र तपाईंको पात्रोको डेटा आदान प्रदान वा सुरक्षित गर्न सक्छ।"</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"यस एपले तपाईंको Android टिभी डिभाइसमा भण्डारण गरिएका पात्रोसम्बन्धी सबै कार्यक्रमहरू पढ्न र तपाईंको पात्रोको डेटा आदान प्रदान वा सुरक्षित गर्न सक्छ।"</string>
@@ -1943,10 +1951,8 @@
     <string name="work_mode_off_title" msgid="961171256005852058">"कामसम्बन्धी एपहरू अन गर्ने हो?"</string>
     <string name="work_mode_off_message" msgid="7319580997683623309">"कामसम्बन्धी एप चलाउने र सूचना प्राप्त गर्ने सुविधा अन गर्नुहोस्"</string>
     <string name="work_mode_turn_on" msgid="3662561662475962285">"अन गर्नुहोस्"</string>
-    <!-- no translation found for work_mode_emergency_call_button (6818855962881612322) -->
-    <skip />
-    <!-- no translation found for work_mode_dialer_off_message (2193299184850387465) -->
-    <skip />
+    <string name="work_mode_emergency_call_button" msgid="6818855962881612322">"आपत्‌कालीन"</string>
+    <string name="work_mode_dialer_off_message" msgid="2193299184850387465">"कामसम्बन्धी एप चलाउने र कल प्राप्त गर्ने सुविधा अन गर्नुहोस्"</string>
     <string name="app_blocked_title" msgid="7353262160455028160">"एप उपलब्ध छैन"</string>
     <string name="app_blocked_message" msgid="542972921087873023">"<xliff:g id="APP_NAME">%1$s</xliff:g> अहिले उपलब्ध छैन।"</string>
     <string name="app_streaming_blocked_title" msgid="6090945835898766139">"<xliff:g id="ACTIVITY">%1$s</xliff:g> उपलब्ध छैन"</string>

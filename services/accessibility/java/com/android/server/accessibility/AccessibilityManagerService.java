@@ -28,6 +28,7 @@ import static android.accessibilityservice.AccessibilityTrace.FLAGS_WINDOW_MANAG
 import static android.provider.Settings.Secure.ACCESSIBILITY_DISPLAY_MAGNIFICATION_NAVBAR_ENABLED;
 import static android.provider.Settings.Secure.CONTRAST_LEVEL;
 import static android.view.accessibility.AccessibilityManager.ACCESSIBILITY_BUTTON;
+import static android.view.accessibility.AccessibilityManager.ACCESSIBILITY_MENU_IN_SYSTEM;
 import static android.view.accessibility.AccessibilityManager.ACCESSIBILITY_SHORTCUT_KEY;
 import static android.view.accessibility.AccessibilityManager.CONTRAST_DEFAULT_VALUE;
 import static android.view.accessibility.AccessibilityManager.CONTRAST_NOT_SET;
@@ -170,6 +171,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -215,6 +217,9 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
     private static final String SET_PIP_ACTION_REPLACEMENT =
             "setPictureInPictureActionReplacingConnection";
 
+    @VisibleForTesting
+    static final String MENU_SERVICE_RELATIVE_CLASS_NAME = ".AccessibilityMenuService";
+
     private static final char COMPONENT_NAME_SEPARATOR = ':';
 
     private static final int OWN_PROCESS_ID = android.os.Process.myPid();
@@ -253,7 +258,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
     private final MagnificationController mMagnificationController;
     private final MagnificationProcessor mMagnificationProcessor;
 
-    private final MainHandler mMainHandler;
+    private final Handler mMainHandler;
 
     // Lazily initialized - access through getSystemActionPerformer()
     private SystemActionPerformer mSystemActionPerformer;
@@ -407,6 +412,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
     @VisibleForTesting
     AccessibilityManagerService(
             Context context,
+            Handler handler,
             PackageManager packageManager,
             AccessibilitySecurityPolicy securityPolicy,
             SystemActionPerformer systemActionPerformer,
@@ -420,7 +426,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         mWindowManagerService = LocalServices.getService(WindowManagerInternal.class);
         mTraceManager = AccessibilityTraceManager.getInstance(
                 mWindowManagerService.getAccessibilityController(), this, mLock);
-        mMainHandler = new MainHandler(mContext.getMainLooper());
+        mMainHandler = handler;
         mActivityTaskManagerService = LocalServices.getService(ActivityTaskManagerInternal.class);
         mPackageManager = packageManager;
         mSecurityPolicy = securityPolicy;
@@ -606,6 +612,16 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         }
     }
 
+    private void onSomePackagesChangedLocked() {
+        final AccessibilityUserState userState = getCurrentUserStateLocked();
+        // Reload the installed services since some services may have different attributes
+        // or resolve info (does not support equals), etc. Remove them then to force reload.
+        userState.mInstalledServices.clear();
+        if (readConfigurationForUserStateLocked(userState)) {
+            onUserStateChangedLocked(userState);
+        }
+    }
+
     private void registerBroadcastReceivers() {
         PackageMonitor monitor = new PackageMonitor() {
             @Override
@@ -621,15 +637,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                     if (getChangingUserId() != mCurrentUserId) {
                         return;
                     }
-                    // We will update when the automation service dies.
-                    final AccessibilityUserState userState = getCurrentUserStateLocked();
-                    // We have to reload the installed services since some services may
-                    // have different attributes, resolve info (does not support equals),
-                    // etc. Remove them then to force reload.
-                    userState.mInstalledServices.clear();
-                    if (readConfigurationForUserStateLocked(userState)) {
-                        onUserStateChangedLocked(userState);
-                    }
+                    onSomePackagesChangedLocked();
                 }
             }
 
@@ -761,6 +769,24 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         // package changes
         monitor.register(mContext, null,  UserHandle.ALL, true);
 
+        // Register an additional observer for new packages using PackageManagerInternal, which
+        // generally notifies observers much sooner than the BroadcastReceiver-based PackageMonitor.
+        final PackageManagerInternal pm = LocalServices.getService(
+                PackageManagerInternal.class);
+        if (pm != null) {
+            pm.getPackageList(new PackageManagerInternal.PackageListObserver() {
+                @Override
+                public void onPackageAdded(String packageName, int uid) {
+                    final int userId = UserHandle.getUserId(uid);
+                    synchronized (mLock) {
+                        if (userId == mCurrentUserId) {
+                            onSomePackagesChangedLocked();
+                        }
+                    }
+                }
+            });
+        }
+
         // user change and unlock
         IntentFilter intentFilter = new IntentFilter();
         intentFilter.addAction(Intent.ACTION_USER_SWITCHED);
@@ -821,6 +847,95 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         };
         mContext.registerReceiverAsUser(receiver, UserHandle.ALL, filter, null, mMainHandler,
                 Context.RECEIVER_EXPORTED);
+    }
+
+    /**
+     * Migrates the Accessibility Menu to the version provided by the system build,
+     * if necessary based on presence of the service on the device.
+     */
+    @VisibleForTesting
+    void migrateAccessibilityMenuIfNecessaryLocked(AccessibilityUserState userState) {
+        final Set<ComponentName> menuComponentNames = findA11yMenuComponentNamesLocked();
+        final ComponentName menuOutsideSystem = getA11yMenuOutsideSystem(menuComponentNames);
+        final boolean shouldMigrateToMenuInSystem = menuComponentNames.size() == 2
+                && menuComponentNames.contains(ACCESSIBILITY_MENU_IN_SYSTEM)
+                && menuOutsideSystem != null;
+
+        if (!shouldMigrateToMenuInSystem) {
+            if (menuComponentNames.size() == 1) {
+                // If only one Menu package exists then reset its component to the default state.
+                mPackageManager.setComponentEnabledSetting(
+                        menuComponentNames.stream().findFirst().get(),
+                        PackageManager.COMPONENT_ENABLED_STATE_DEFAULT,
+                        PackageManager.DONT_KILL_APP);
+            }
+            return;
+        }
+
+        // Hide Menu-outside-system so that it does not appear in Settings.
+        mPackageManager.setComponentEnabledSetting(
+                menuOutsideSystem,
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                PackageManager.DONT_KILL_APP);
+        // Migrate the accessibility shortcuts.
+        migrateA11yMenuInSettingLocked(userState,
+                Settings.Secure.ACCESSIBILITY_BUTTON_TARGETS, menuOutsideSystem);
+        migrateA11yMenuInSettingLocked(userState,
+                Settings.Secure.ACCESSIBILITY_BUTTON_TARGET_COMPONENT, menuOutsideSystem);
+        migrateA11yMenuInSettingLocked(userState,
+                Settings.Secure.ACCESSIBILITY_SHORTCUT_TARGET_SERVICE, menuOutsideSystem);
+        // If Menu-outside-system is currently enabled by the user then automatically
+        // disable it and enable Menu-in-system.
+        migrateA11yMenuInSettingLocked(userState,
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, menuOutsideSystem);
+    }
+
+    /**
+     * Returns all {@link ComponentName}s whose class name ends in {@link
+     * #MENU_SERVICE_RELATIVE_CLASS_NAME}.
+     **/
+    private Set<ComponentName> findA11yMenuComponentNamesLocked() {
+        Set<ComponentName> result = new ArraySet<>();
+        final var flags =
+                PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_DISABLED_COMPONENTS
+                        | PackageManager.MATCH_DIRECT_BOOT_AWARE
+                        | PackageManager.MATCH_DIRECT_BOOT_UNAWARE);
+        for (ResolveInfo resolveInfo : mPackageManager.queryIntentServicesAsUser(
+                new Intent(AccessibilityService.SERVICE_INTERFACE), flags, mCurrentUserId)) {
+            final ComponentName componentName = resolveInfo.serviceInfo.getComponentName();
+            if (componentName.getClassName().endsWith(MENU_SERVICE_RELATIVE_CLASS_NAME)) {
+                result.add(componentName);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Returns the first {@link ComponentName} in the provided set that is not equal to {@link
+     * AccessibilityManager#ACCESSIBILITY_MENU_IN_SYSTEM}.
+     */
+    private static ComponentName getA11yMenuOutsideSystem(Set<ComponentName> menuComponentNames) {
+        Optional<ComponentName> menuOutsideSystem = menuComponentNames.stream().filter(
+                name -> !name.equals(ACCESSIBILITY_MENU_IN_SYSTEM)).findFirst();
+        if (menuOutsideSystem.isEmpty()) {
+            return null;
+        }
+        return menuOutsideSystem.get();
+    }
+
+    /**
+     * Replaces <code>toRemove</code> with {@link AccessibilityManager#ACCESSIBILITY_MENU_IN_SYSTEM}
+     * in the requested setting, if present already.
+     */
+    private void migrateA11yMenuInSettingLocked(AccessibilityUserState userState, String setting,
+            ComponentName toRemove) {
+        mTempComponentNameSet.clear();
+        readComponentNamesFromSettingLocked(setting, userState.mUserId, mTempComponentNameSet);
+        if (mTempComponentNameSet.contains(toRemove)) {
+            mTempComponentNameSet.remove(toRemove);
+            mTempComponentNameSet.add(ACCESSIBILITY_MENU_IN_SYSTEM);
+            persistComponentNamesToSettingLocked(setting, mTempComponentNameSet, userState.mUserId);
+        }
     }
 
     // Called only during settings restore; currently supports only the owner user
@@ -1591,6 +1706,8 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             // The user changed.
             mCurrentUserId = userId;
             AccessibilityUserState userState = getCurrentUserStateLocked();
+
+            migrateAccessibilityMenuIfNecessaryLocked(userState);
 
             readConfigurationForUserStateLocked(userState);
             mSecurityPolicy.onSwitchUserLocked(mCurrentUserId, userState.mEnabledServices);
@@ -4027,7 +4144,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         private final ArrayList<Display> mDisplaysList = new ArrayList<>();
         private int mSystemUiUid = 0;
 
-        AccessibilityDisplayListener(Context context, MainHandler handler) {
+        AccessibilityDisplayListener(Context context, Handler handler) {
             mDisplayManager = (DisplayManager) context.getSystemService(Context.DISPLAY_SERVICE);
             mDisplayManager.registerDisplayListener(this, handler);
             initializeDisplayList();
@@ -4875,5 +4992,12 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         transaction.reparent(sc, parent);
         transaction.apply();
         transaction.close();
+    }
+
+    @Override
+    public void setCurrentUserFocusAppearance(int strokeWidth, int color) {
+        synchronized (mLock) {
+            getCurrentUserStateLocked().setFocusAppearanceLocked(strokeWidth, color);
+        }
     }
 }
