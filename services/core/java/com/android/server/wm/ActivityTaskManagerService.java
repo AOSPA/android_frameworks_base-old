@@ -19,6 +19,7 @@ package com.android.server.wm;
 import static android.Manifest.permission.BIND_VOICE_INTERACTION;
 import static android.Manifest.permission.CHANGE_CONFIGURATION;
 import static android.Manifest.permission.CONTROL_REMOTE_APP_TRANSITION_ANIMATIONS;
+import static android.Manifest.permission.DETECT_SCREEN_CAPTURE;
 import static android.Manifest.permission.INTERACT_ACROSS_USERS;
 import static android.Manifest.permission.INTERACT_ACROSS_USERS_FULL;
 import static android.Manifest.permission.INTERNAL_SYSTEM_WINDOW;
@@ -145,6 +146,7 @@ import android.app.IAppTask;
 import android.app.IApplicationThread;
 import android.app.IAssistDataReceiver;
 import android.app.INotificationManager;
+import android.app.IScreenCaptureObserver;
 import android.app.ITaskStackListener;
 import android.app.Notification;
 import android.app.NotificationManager;
@@ -5437,6 +5439,32 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
     }
 
+    @Override
+    public void registerScreenCaptureObserver(IBinder activityToken,
+            IScreenCaptureObserver observer) {
+        mAmInternal.enforceCallingPermission(DETECT_SCREEN_CAPTURE,
+                "registerScreenCaptureObserver");
+        synchronized (mGlobalLock) {
+            ActivityRecord activityRecord = ActivityRecord.forTokenLocked(activityToken);
+            if (activityRecord != null) {
+                activityRecord.registerCaptureObserver(observer);
+            }
+        }
+    }
+
+    @Override
+    public void unregisterScreenCaptureObserver(IBinder activityToken,
+            IScreenCaptureObserver observer) {
+        mAmInternal.enforceCallingPermission(DETECT_SCREEN_CAPTURE,
+                "unregisterScreenCaptureObserver");
+        synchronized (mGlobalLock) {
+            ActivityRecord activityRecord = ActivityRecord.forTokenLocked(activityToken);
+            if (activityRecord != null) {
+                activityRecord.unregisterCaptureObserver(observer);
+            }
+        }
+    }
+
     /**
      * Returns {@code true} if the process represented by the pid passed as argument is
      * instrumented and the instrumentation source was granted with the permission also
@@ -6915,6 +6943,18 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
                 activity.restartProcessIfVisible();
             }
+        }
+
+        /** Sets the task stack listener that gets callbacks when a task stack changes. */
+        @Override
+        public void registerTaskStackListener(ITaskStackListener listener) {
+            ActivityTaskManagerService.this.registerTaskStackListener(listener);
+        }
+
+        /** Unregister a task stack listener so that it stops receiving callbacks. */
+        @Override
+        public void unregisterTaskStackListener(ITaskStackListener listener) {
+            ActivityTaskManagerService.this.unregisterTaskStackListener(listener);
         }
     }
 }

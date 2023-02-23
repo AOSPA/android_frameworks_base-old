@@ -460,6 +460,14 @@
     <string name="permdesc_bodySensors" product="default" msgid="7652650410295512140">"Zezwala aplikacji na dostęp do danych z czujników na ciele, takich jak tętno, temperatura i poziom saturacji, gdy aplikacja ta jest używana."</string>
     <string name="permlab_bodySensors_background" msgid="4912560779957760446">"Zezwól na dostęp do danych z czujników na ciele, np. tętna, podczas używania aplikacji w tle"</string>
     <string name="permdesc_bodySensors_background" product="default" msgid="8870726027557749417">"Zezwala aplikacji na dostęp do danych z czujników na ciele, takich jak tętno, temperatura i poziom saturacji, gdy aplikacja ta jest używana w tle."</string>
+    <!-- no translation found for permlab_bodySensorsWristTemperature (5007987988922337657) -->
+    <skip />
+    <!-- no translation found for permdesc_bodySensorsWristTemperature (4978345709781045181) -->
+    <skip />
+    <!-- no translation found for permlab_bodySensors_wristTemperature_background (7692772783509074356) -->
+    <skip />
+    <!-- no translation found for permdesc_bodySensors_wristTemperature_background (3170369705518699219) -->
+    <skip />
     <string name="permlab_readCalendar" msgid="6408654259475396200">"Odczytywanie wydarzeń i informacji z kalendarza"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"Ta aplikacja może odczytywać wszystkie zapisane na tablecie wydarzenia z kalendarza i udostępniać oraz zapisywać dane kalendarza."</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"Ta aplikacja może odczytywać wszystkie wydarzenia z kalendarza zapisane na urządzeniu z Androidem TV oraz udostępniać i zapisywać dane z kalendarza."</string>
@@ -1945,10 +1953,8 @@
     <string name="work_mode_off_title" msgid="961171256005852058">"Włączyć aplikacje służbowe?"</string>
     <string name="work_mode_off_message" msgid="7319580997683623309">"Uzyskaj dostęp do służbowych aplikacji i powiadomień"</string>
     <string name="work_mode_turn_on" msgid="3662561662475962285">"Włącz"</string>
-    <!-- no translation found for work_mode_emergency_call_button (6818855962881612322) -->
-    <skip />
-    <!-- no translation found for work_mode_dialer_off_message (2193299184850387465) -->
-    <skip />
+    <string name="work_mode_emergency_call_button" msgid="6818855962881612322">"Połączenie alarmowe"</string>
+    <string name="work_mode_dialer_off_message" msgid="2193299184850387465">"Uzyskaj dostęp do służbowych aplikacji i połączeń"</string>
     <string name="app_blocked_title" msgid="7353262160455028160">"Aplikacja jest niedostępna"</string>
     <string name="app_blocked_message" msgid="542972921087873023">"Aplikacja <xliff:g id="APP_NAME">%1$s</xliff:g> jest obecnie niedostępna."</string>
     <string name="app_streaming_blocked_title" msgid="6090945835898766139">"<xliff:g id="ACTIVITY">%1$s</xliff:g> – brak dostępu"</string>

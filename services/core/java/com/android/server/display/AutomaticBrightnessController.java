@@ -196,6 +196,11 @@ class AutomaticBrightnessController {
     // available.
     private float mScreenAutoBrightness = PowerManager.BRIGHTNESS_INVALID_FLOAT;
 
+    // The screen brightness level before clamping and throttling. This value needs to be stored
+    // for concurrent displays mode and passed to the additional displays which will do their own
+    // clamping and throttling.
+    private float mRawScreenAutoBrightness = PowerManager.BRIGHTNESS_INVALID_FLOAT;
+
     // The current display policy. This is useful, for example,  for knowing when we're dozing,
     // where the light sensor may not be available.
     private int mDisplayPolicy = DisplayPowerRequest.POLICY_OFF;
@@ -380,6 +385,10 @@ class AutomaticBrightnessController {
         return mScreenAutoBrightness;
     }
 
+    float getRawAutomaticScreenBrightness() {
+        return mRawScreenAutoBrightness;
+    }
+
     public boolean hasValidAmbientLux() {
         return mAmbientLuxValid;
     }
@@ -393,7 +402,6 @@ class AutomaticBrightnessController {
             boolean userChangedAutoBrightnessAdjustment, int displayPolicy,
             boolean shouldResetShortTermModel) {
         mState = state;
-        mHbmController.setAutoBrightnessEnabled(mState);
         // While dozing, the application processor may be suspended which will prevent us from
         // receiving new information from the light sensor. On some devices, we may be able to
         // switch to a wake-up light sensor instead but for now we will simply disable the sensor
@@ -457,7 +465,6 @@ class AutomaticBrightnessController {
         mHandler.sendEmptyMessage(MSG_RUN_UPDATE);
     }
 
-    @VisibleForTesting
     float getAmbientLux() {
         return mAmbientLux;
     }
@@ -653,6 +660,7 @@ class AutomaticBrightnessController {
                 mPreThresholdLux = PowerManager.BRIGHTNESS_INVALID_FLOAT;
             }
             mScreenAutoBrightness = PowerManager.BRIGHTNESS_INVALID_FLOAT;
+            mRawScreenAutoBrightness = PowerManager.BRIGHTNESS_INVALID_FLOAT;
             mPreThresholdBrightness = PowerManager.BRIGHTNESS_INVALID_FLOAT;
             mRecentLightSamples = 0;
             mAmbientLightRingBuffer.clear();
@@ -915,6 +923,7 @@ class AutomaticBrightnessController {
 
         float value = mCurrentBrightnessMapper.getBrightness(mAmbientLux, mForegroundAppPackageName,
                 mForegroundAppCategory);
+        mRawScreenAutoBrightness = value;
         float newScreenAutoBrightness = clampScreenBrightness(value);
 
         // The min/max range can change for brightness due to HBM. See if the current brightness
@@ -1122,6 +1131,14 @@ class AutomaticBrightnessController {
     public float convertToNits(float brightness) {
         if (mCurrentBrightnessMapper != null) {
             return mCurrentBrightnessMapper.convertToNits(brightness);
+        } else {
+            return -1.0f;
+        }
+    }
+
+    public float convertToFloatScale(float nits) {
+        if (mCurrentBrightnessMapper != null) {
+            return mCurrentBrightnessMapper.convertToFloatScale(nits);
         } else {
             return -1.0f;
         }

@@ -465,6 +465,12 @@
     <string-array translatable="false" name="config_cdma_dun_supported_types">
     </string-array>
 
+    <!-- Package name of the system app that implements the shared connectivity service -->
+    <string translatable="false" name="sharedconnectivity_service_package"></string>
+
+     <!-- Class name in the system app that implements the shared connectivity service -->
+    <string translatable="false" name="sharedconnectivity_service_class"></string>
+
     <!-- Flag indicating whether we should enable the automatic brightness.
          Software implementation will be used if config_hardware_auto_brightness_available is not set -->
     <bool name="config_automatic_brightness_available">false</bool>
@@ -636,6 +642,16 @@
          The default is false. -->
     <bool name="config_lidControlsSleep">false</bool>
 
+    <!-- The device states (supplied by DeviceStateManager) that should be treated as open by the
+         device fold controller. Default is empty. -->
+    <integer-array name="config_openDeviceStates">
+        <!-- Example:
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+        -->
+    </integer-array>
+
     <!-- The device states (supplied by DeviceStateManager) that should be treated as folded by the
          display fold controller. Default is empty. -->
     <integer-array name="config_foldedDeviceStates">
@@ -649,6 +665,16 @@
     <!-- The device states (supplied by DeviceStateManager) that should be treated as half-folded by
      the display fold controller. Default is empty. -->
     <integer-array name="config_halfFoldedDeviceStates">
+        <!-- Example:
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+        -->
+    </integer-array>
+
+    <!-- The device states (supplied by DeviceStateManager) that should be treated as a rear display
+     state. Default is empty. -->
+    <integer-array name="config_rearDisplayDeviceStates">
         <!-- Example:
         <item>0</item>
         <item>1</item>
@@ -947,6 +973,15 @@
 
     <!-- Boolean indicating whether light mode is allowed when DWB is turned on. -->
     <bool name="config_displayWhiteBalanceLightModeAllowed">true</bool>
+
+    <!-- Duration, in milliseconds, of the display white balance animated transitions. -->
+    <integer name="config_displayWhiteBalanceTransitionTime">3000</integer>
+
+    <!-- Device states where the sensor based rotation values should be reversed around the Z axis
+         for the default display.
+         TODO(b/265312193): Remove this workaround when this bug is fixed.-->
+    <integer-array name="config_deviceStatesToReverseDefaultDisplayRotationAroundZAxis">
+    </integer-array>
 
     <!-- Indicate available ColorDisplayManager.COLOR_MODE_xxx. -->
     <integer-array name="config_availableColorModes">
@@ -2006,6 +2041,9 @@
          STREAM_MUSIC as if it's on TV platform. -->
     <bool name="config_single_volume">false</bool>
 
+    <!-- Volume policy -->
+    <bool name="config_volume_down_to_enter_silent">false</bool>
+
     <!-- The number of volume steps for the notification stream -->
     <integer name="config_audio_notif_vol_steps">7</integer>
 
@@ -2148,6 +2186,8 @@
     <bool name="config_enableDefaultNotes">false</bool>
     <!-- Whether the default notes role for work profile should be enabled. -->
     <bool name="config_enableDefaultNotesForWorkProfile">false</bool>
+    <!-- The name of the package that will hold the system financed device controller role. -->
+    <string name="config_systemFinancedDeviceController" translatable="false">com.android.devicelockcontroller</string>
 
     <!-- The name of the package that will handle updating the device management role. -->
     <string name="config_devicePolicyManagementUpdater" translatable="false"></string>
@@ -2351,22 +2391,13 @@
          display, this value should be true. -->
     <bool name="config_perDisplayFocusEnabled">false</bool>
 
-    <!-- Whether the system enables motion prediction. Only enable this after confirming that the
-         model works well on your device. To enable system-based prediction, set this value to true.
-          -->
-    <bool name="config_enableMotionPrediction">true</bool>
+    <!-- Whether to use the system motion prediction model. Only set this value to true after
+         confirming that the model works well on your device. -->
+    <bool name="config_enableMotionPrediction">false</bool>
 
     <!-- Additional offset to use for motion prediction, in nanoseconds. A positive number indicates
-         that the prediction will take place further in the future. For example, suppose a
-         MotionEvent arrives with timestamp t=1, and the current expected presentation time is t=2.
-         Typically, the prediction will target the presentation time, t=2. If you'd like to make
-         prediction more aggressive, you could set the offset to a positive number.
-         Setting the offset to 1 here would mean that the prediction will be done for time t=3.
-         A negative number may also be provided, to make the prediction less aggressive. In general,
-         the offset here should represent some built-in hardware delays that may not be accounted
-         for by the "expected present time". See also:
-         https://developer.android.com/reference/android/view/
-                  Choreographer.FrameTimeline#getExpectedPresentationTimeNanos() -->
+         that the prediction will take place further in the future and, in general, should represent
+         some built-in hardware delays that prediction should try to recover. -->
     <integer name="config_motionPredictionOffsetNanos">0</integer>
 
     <!-- Whether a software navigation bar should be shown. NOTE: in the future this may be
@@ -4617,6 +4648,12 @@
     <!-- Component name for the default module metadata provider on this device -->
     <string name="config_defaultModuleMetadataProvider" translatable="false">com.android.modulemetadata</string>
 
+    <!-- Package name for the default Health Connect app.
+         OEMs can set this with their own health app package name to define a default app with high
+         priority for the app to store the health data. If set the app always has priority of 1
+         unless it is changed by the user. -->
+    <string name="config_defaultHealthConnectApp" translatable="false"></string>
+
     <!-- This is the default launcher package with an activity to use on secondary displays that
          support system decorations.
          This launcher package must have an activity that supports multiple instances and has
@@ -5433,6 +5470,9 @@
     <!-- Whether using split screen aspect ratio as a default aspect ratio for unresizable apps. -->
     <bool name="config_letterboxIsSplitScreenAspectRatioForUnresizableAppsEnabled">false</bool>
 
+    <!-- Whether using display aspect ratio as a default aspect ratio for all letterboxed apps. -->
+    <bool name="config_letterboxIsDisplayAspectRatioForFixedOrientationLetterboxEnabled">false</bool>
+
     <!-- Whether the specific behaviour for translucent activities letterboxing is enabled.
          TODO(b/255532890) Enable when ignoreOrientationRequest is set -->
     <bool name="config_letterboxIsEnabledForTranslucentActivities">false</bool>
@@ -5961,6 +6001,10 @@
          When this resource is empty, that button will not be shown. -->
     <string name="config_supervisedUserCreationPackage" translatable="false"></string>
 
+    <!-- Flag indicating whether the show Stylus pointer icon.
+     If set, a pointer icon will be shown over the location of a stylus pointer.-->
+    <bool name="config_enableStylusPointerIcon">false</bool>
+
     <!-- Determines whether SafetyCenter feature is enabled. -->
     <bool name="config_enableSafetyCenter">true</bool>
 
@@ -6178,6 +6222,12 @@
     <!-- Maximum time in millisecs for telephony should wait to deactivate data call
          when user turned off mobile data or data roaming during CIWLAN -->
     <integer name="config_maximumDelayTimeToDeactivateDataCall">7000</integer>
+
+    <!-- Certificate digests for trusted apps that will be allowed to obtain the knownSigner
+         permission for staging HealthConnect's remote data. The digest should be computed over the
+         DER encoding of the trusted certificate using the SHA-256 digest algorithm. -->
+    <string-array name="config_healthConnectStagingDataKnownSigners">
+    </string-array>
 
     <!-- Certificate digests for trusted apps that will be allowed to obtain the knownSigner Health
         Connect Migration permissions. The digest should be computed over the DER encoding of the

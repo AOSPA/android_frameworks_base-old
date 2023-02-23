@@ -2094,8 +2094,10 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                     // When the Task is entering picture-in-picture, we should clear all override
                     // from the client organizer, so the PIP activity can get the correct config
                     // from the Task, and prevent conflict with the PipTaskOrganizer.
+                    // TaskFragmentOrganizer may have requested relative bounds, so reset the
+                    // relative bounds before update configuration.
+                    tf.setRelativeEmbeddedBounds(new Rect());
                     tf.updateRequestedOverrideConfiguration(EMPTY);
-                    tf.updateRelativeEmbeddedBounds();
                 }
             });
             rootTask.setWindowingMode(WINDOWING_MODE_PINNED);
@@ -2384,7 +2386,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 }
                 if (rootTask.getDisplayArea().isTopRootTask(rootTask)
                         && topRunningActivity.isState(RESUMED)) {
-                    // Kick off any lingering app transitions form the MoveTaskToFront
+                    // Kick off any lingering app transitions from the MoveTaskToFront
                     // operation, but only consider the top task and root-task on that
                     // display.
                     rootTask.executeAppTransition(targetOptions);

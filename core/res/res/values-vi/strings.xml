@@ -326,7 +326,7 @@
     <string name="permgroupdesc_notifications" msgid="4608679556801506580">"hiển thị thông báo"</string>
     <string name="capability_title_canRetrieveWindowContent" msgid="7554282892101587296">"Truy xuất nội dung cửa sổ"</string>
     <string name="capability_desc_canRetrieveWindowContent" msgid="6195610527625237661">"Kiểm tra nội dung của cửa sổ bạn đang tương tác."</string>
-    <string name="capability_title_canRequestTouchExploration" msgid="327598364696316213">"Bật Khám phá bằng cách chạm"</string>
+    <string name="capability_title_canRequestTouchExploration" msgid="327598364696316213">"Bật tính năng Khám phá bằng cách chạm"</string>
     <string name="capability_desc_canRequestTouchExploration" msgid="4394677060796752976">"Đọc to các mục được nhấn và cho phép khám phá màn hình bằng cử chỉ."</string>
     <string name="capability_title_canRequestFilterKeyEvents" msgid="2772371671541753254">"Quan sát nội dung bạn nhập"</string>
     <string name="capability_desc_canRequestFilterKeyEvents" msgid="2381315802405773092">"Bao gồm dữ liệu cá nhân chẳng hạn như số thẻ tín dụng và mật khẩu."</string>
@@ -458,6 +458,14 @@
     <string name="permdesc_bodySensors" product="default" msgid="7652650410295512140">"Cho phép ứng dụng truy cập vào dữ liệu cảm biến cơ thể khi đang dùng, chẳng hạn như nhịp tim, thân nhiệt và tỷ lệ phần trăm oxy trong máu."</string>
     <string name="permlab_bodySensors_background" msgid="4912560779957760446">"Truy cập vào dữ liệu cảm biến cơ thể khi ở chế độ nền, chẳng hạn như nhịp tim"</string>
     <string name="permdesc_bodySensors_background" product="default" msgid="8870726027557749417">"Cho phép ứng dụng truy cập vào dữ liệu cảm biến cơ thể khi ở chế độ nền, chẳng hạn như nhịp tim, thân nhiệt và tỷ lệ phần trăm oxy trong máu."</string>
+    <!-- no translation found for permlab_bodySensorsWristTemperature (5007987988922337657) -->
+    <skip />
+    <!-- no translation found for permdesc_bodySensorsWristTemperature (4978345709781045181) -->
+    <skip />
+    <!-- no translation found for permlab_bodySensors_wristTemperature_background (7692772783509074356) -->
+    <skip />
+    <!-- no translation found for permdesc_bodySensors_wristTemperature_background (3170369705518699219) -->
+    <skip />
     <string name="permlab_readCalendar" msgid="6408654259475396200">"Đọc chi tiết và sự kiện lịch"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="515452384059803326">"Ứng dụng này có thể đọc tất cả các sự kiện lịch được lưu trữ trên máy tính bảng của bạn và chia sẻ hoặc lưu dữ liệu lịch của bạn."</string>
     <string name="permdesc_readCalendar" product="tv" msgid="5811726712981647628">"Ứng dụng này có thể đọc tất cả sự kiện trên lịch mà bạn lưu vào thiết bị Android TV cũng như chia sẻ hoặc lưu dữ liệu lịch của bạn."</string>
@@ -1943,10 +1951,8 @@
     <string name="work_mode_off_title" msgid="961171256005852058">"Bật các ứng dụng công việc?"</string>
     <string name="work_mode_off_message" msgid="7319580997683623309">"Bạn sẽ có quyền truy cập vào các ứng dụng công việc và thông báo"</string>
     <string name="work_mode_turn_on" msgid="3662561662475962285">"Bật"</string>
-    <!-- no translation found for work_mode_emergency_call_button (6818855962881612322) -->
-    <skip />
-    <!-- no translation found for work_mode_dialer_off_message (2193299184850387465) -->
-    <skip />
+    <string name="work_mode_emergency_call_button" msgid="6818855962881612322">"Khẩn cấp"</string>
+    <string name="work_mode_dialer_off_message" msgid="2193299184850387465">"Hãy lấy quyền cập vào ứng dụng công việc và cuộc gọi"</string>
     <string name="app_blocked_title" msgid="7353262160455028160">"Ứng dụng này không dùng được"</string>
     <string name="app_blocked_message" msgid="542972921087873023">"<xliff:g id="APP_NAME">%1$s</xliff:g> hiện không dùng được."</string>
     <string name="app_streaming_blocked_title" msgid="6090945835898766139">"Không hỗ trợ <xliff:g id="ACTIVITY">%1$s</xliff:g>"</string>

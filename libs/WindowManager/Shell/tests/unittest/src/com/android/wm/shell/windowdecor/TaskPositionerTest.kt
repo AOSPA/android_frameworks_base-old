@@ -1,6 +1,7 @@
 package com.android.wm.shell.windowdecor
 
 import android.app.ActivityManager
+import android.app.WindowConfiguration
 import android.graphics.Rect
 import android.os.IBinder
 import android.testing.AndroidTestingRunner
@@ -10,6 +11,7 @@ import androidx.test.filters.SmallTest
 import com.android.wm.shell.ShellTaskOrganizer
 import com.android.wm.shell.ShellTestCase
 import com.android.wm.shell.windowdecor.TaskPositioner.CTRL_TYPE_RIGHT
+import com.android.wm.shell.windowdecor.TaskPositioner.CTRL_TYPE_TOP
 import com.android.wm.shell.windowdecor.TaskPositioner.CTRL_TYPE_UNDEFINED
 import org.junit.Before
 import org.junit.Test
@@ -63,8 +65,92 @@ class TaskPositionerTest : ShellTestCase() {
     }
 
     @Test
+    fun testDragResize_notMove_skipsTransactionOnEnd() {
+        taskPositioner.onDragPositioningStart(
+                CTRL_TYPE_TOP or CTRL_TYPE_RIGHT,
+                STARTING_BOUNDS.left.toFloat(),
+                STARTING_BOUNDS.top.toFloat()
+        )
+
+        taskPositioner.onDragPositioningEnd(
+                STARTING_BOUNDS.left.toFloat() + 10,
+                STARTING_BOUNDS.top.toFloat() + 10
+        )
+
+        verify(mockShellTaskOrganizer, never()).applyTransaction(argThat { wct ->
+            return@argThat wct.changes.any { (token, change) ->
+                token == taskBinder &&
+                        ((change.windowSetMask and WindowConfiguration.WINDOW_CONFIG_BOUNDS) != 0)
+            }
+        })
+    }
+
+    @Test
+    fun testDragResize_noEffectiveMove_skipsTransactionOnMoveAndEnd() {
+        taskPositioner.onDragPositioningStart(
+                CTRL_TYPE_TOP or CTRL_TYPE_RIGHT,
+                STARTING_BOUNDS.left.toFloat(),
+                STARTING_BOUNDS.top.toFloat()
+        )
+
+        taskPositioner.onDragPositioningMove(
+                STARTING_BOUNDS.left.toFloat(),
+                STARTING_BOUNDS.top.toFloat()
+        )
+
+        taskPositioner.onDragPositioningEnd(
+                STARTING_BOUNDS.left.toFloat() + 10,
+                STARTING_BOUNDS.top.toFloat() + 10
+        )
+
+        verify(mockShellTaskOrganizer, never()).applyTransaction(argThat { wct ->
+            return@argThat wct.changes.any { (token, change) ->
+                token == taskBinder &&
+                        ((change.windowSetMask and WindowConfiguration.WINDOW_CONFIG_BOUNDS) != 0)
+            }
+        })
+    }
+
+    @Test
+    fun testDragResize_hasEffectiveMove_issuesTransactionOnMoveAndEnd() {
+        taskPositioner.onDragPositioningStart(
+                CTRL_TYPE_TOP or CTRL_TYPE_RIGHT,
+                STARTING_BOUNDS.left.toFloat(),
+                STARTING_BOUNDS.top.toFloat()
+        )
+
+        taskPositioner.onDragPositioningMove(
+                STARTING_BOUNDS.left.toFloat() + 10,
+                STARTING_BOUNDS.top.toFloat()
+        )
+        val rectAfterMove = Rect(STARTING_BOUNDS)
+        rectAfterMove.right += 10
+        verify(mockShellTaskOrganizer).applyTransaction(argThat { wct ->
+            return@argThat wct.changes.any { (token, change) ->
+                token == taskBinder &&
+                        (change.windowSetMask and WindowConfiguration.WINDOW_CONFIG_BOUNDS) != 0 &&
+                        change.configuration.windowConfiguration.bounds == rectAfterMove
+            }
+        })
+
+        taskPositioner.onDragPositioningEnd(
+                STARTING_BOUNDS.left.toFloat() + 10,
+                STARTING_BOUNDS.top.toFloat() + 10
+        )
+        val rectAfterEnd = Rect(rectAfterMove)
+        rectAfterEnd.top += 10
+        verify(mockShellTaskOrganizer).applyTransaction(argThat { wct ->
+            return@argThat wct.changes.any { (token, change) ->
+                token == taskBinder &&
+                        (change.windowSetMask and WindowConfiguration.WINDOW_CONFIG_BOUNDS) != 0 &&
+                        change.configuration.windowConfiguration.bounds == rectAfterEnd
+            }
+        })
+    }
+
+    @Test
     fun testDragResize_move_skipsDragResizingFlag() {
-        taskPositioner.onDragResizeStart(
+        taskPositioner.onDragPositioningStart(
                 CTRL_TYPE_UNDEFINED, // Move
                 STARTING_BOUNDS.left.toFloat(),
                 STARTING_BOUNDS.top.toFloat()
@@ -73,12 +159,12 @@ class TaskPositionerTest : ShellTestCase() {
         // Move the task 10px to the right.
         val newX = STARTING_BOUNDS.left.toFloat() + 10
         val newY = STARTING_BOUNDS.top.toFloat()
-        taskPositioner.onDragResizeMove(
+        taskPositioner.onDragPositioningMove(
                 newX,
                 newY
         )
 
-        taskPositioner.onDragResizeEnd(newX, newY)
+        taskPositioner.onDragPositioningEnd(newX, newY)
 
         verify(mockShellTaskOrganizer, never()).applyTransaction(argThat { wct ->
             return@argThat wct.changes.any { (token, change) ->
@@ -91,7 +177,7 @@ class TaskPositionerTest : ShellTestCase() {
 
     @Test
     fun testDragResize_resize_setsDragResizingFlag() {
-        taskPositioner.onDragResizeStart(
+        taskPositioner.onDragPositioningStart(
                 CTRL_TYPE_RIGHT, // Resize right
                 STARTING_BOUNDS.left.toFloat(),
                 STARTING_BOUNDS.top.toFloat()
@@ -100,12 +186,12 @@ class TaskPositionerTest : ShellTestCase() {
         // Resize the task by 10px to the right.
         val newX = STARTING_BOUNDS.right.toFloat() + 10
         val newY = STARTING_BOUNDS.top.toFloat()
-        taskPositioner.onDragResizeMove(
+        taskPositioner.onDragPositioningMove(
                 newX,
                 newY
         )
 
-        taskPositioner.onDragResizeEnd(newX, newY)
+        taskPositioner.onDragPositioningEnd(newX, newY)
 
         verify(mockShellTaskOrganizer).applyTransaction(argThat { wct ->
             return@argThat wct.changes.any { (token, change) ->

@@ -33,6 +33,8 @@ import static android.view.WindowManager.TRANSIT_CHANGE;
 import static android.view.WindowManager.TRANSIT_CLOSE;
 import static android.view.WindowManager.TRANSIT_FLAG_IS_RECENTS;
 import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_LOCKED;
+import static android.view.WindowManager.TRANSIT_KEYGUARD_OCCLUDE;
+import static android.view.WindowManager.TRANSIT_KEYGUARD_UNOCCLUDE;
 import static android.view.WindowManager.TRANSIT_OPEN;
 import static android.view.WindowManager.TRANSIT_TO_BACK;
 import static android.view.WindowManager.TRANSIT_TO_FRONT;
@@ -1156,12 +1158,15 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
     private void commitVisibleActivities(SurfaceControl.Transaction transaction) {
         for (int i = mParticipants.size() - 1; i >= 0; --i) {
             final ActivityRecord ar = mParticipants.valueAt(i).asActivityRecord();
-            if (ar == null || !ar.isVisibleRequested()) {
+            if (ar == null || ar.getTask() == null) {
                 continue;
             }
-            ar.commitVisibility(true /* visible */, false /* performLayout */,
-                    true /* fromTransition */);
-            ar.commitFinishDrawing(transaction);
+            if (ar.isVisibleRequested()) {
+                ar.commitVisibility(true /* visible */, false /* performLayout */,
+                        true /* fromTransition */);
+                ar.commitFinishDrawing(transaction);
+            }
+            ar.getTask().setDeferTaskAppear(false);
         }
     }
 
@@ -1299,8 +1304,13 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
     private void handleNonAppWindowsInTransition(@NonNull DisplayContent dc,
             @TransitionType int transit, @TransitionFlags int flags) {
         if ((flags & TRANSIT_FLAG_KEYGUARD_LOCKED) != 0) {
-            mController.mAtm.mWindowManager.mPolicy.applyKeyguardOcclusionChange(
-                    false /* notify */);
+            // If the occlusion changed but the transition isn't an occlude/unocclude transition,
+            // then we have to notify KeyguardService directly. This can happen if there is
+            // another ongoing transition when the app changes occlusion OR if the app dies or
+            // is killed. Both of these are common during tests.
+            final boolean notify = !(transit == TRANSIT_KEYGUARD_OCCLUDE
+                    || transit == TRANSIT_KEYGUARD_UNOCCLUDE);
+            mController.mAtm.mWindowManager.mPolicy.applyKeyguardOcclusionChange(notify);
         }
     }
 
@@ -1647,6 +1657,12 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
             // DisplayContent is the "root", so we reinterpret it's wc as the window layer
             // making the parent surface the displaycontent's surface.
             return wc.getSurfaceControl();
+        } else if (wc.getParent().asDisplayContent() != null) {
+            // DisplayContent is kinda split into 2 pieces, the "real root" and the
+            // "windowing layer". So if the parent of the window is DC, then it really belongs on
+            // the windowing layer (unless it's an overlay display area, but those can't be in
+            // transitions anyways).
+            return wc.getParent().asDisplayContent().getWindowingLayer();
         }
         return wc.getParent().getSurfaceControl();
     }

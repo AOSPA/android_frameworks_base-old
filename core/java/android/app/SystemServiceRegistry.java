@@ -510,11 +510,12 @@ public final class SystemServiceRegistry {
                 return new BinaryTransparencyManager(ctx, service);
             }});
 
+        // InputManager stores its own static instance for historical purposes.
         registerService(Context.INPUT_SERVICE, InputManager.class,
-                new StaticServiceFetcher<InputManager>() {
+                new ServiceFetcher<InputManager>() {
             @Override
-            public InputManager createService() {
-                return InputManager.getInstance();
+            public InputManager getService(ContextImpl ctx) {
+                return InputManager.getInstance(ctx);
             }});
 
         registerService(Context.DISPLAY_SERVICE, DisplayManager.class,
@@ -1335,7 +1336,7 @@ public final class SystemServiceRegistry {
                         return new TimeZoneDetectorImpl();
                     }});
 
-        registerService(Context.TIME_MANAGER, TimeManager.class,
+        registerService(Context.TIME_MANAGER_SERVICE, TimeManager.class,
                 new CachedServiceFetcher<TimeManager>() {
                     @Override
                     public TimeManager createService(ContextImpl ctx)

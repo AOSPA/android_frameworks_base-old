@@ -1060,6 +1060,11 @@
         android:permissionFlags="hardRestricted"
         android:protectionLevel="dangerous" />
 
+    <!-- @SystemApi @hide Allows an application to communicate over satellite.
+         Only granted if the application is a system app. -->
+    <permission android:name="android.permission.SATELLITE_COMMUNICATION"
+                android:protectionLevel="internal|role" />
+
     <!-- ====================================================================== -->
     <!-- Permissions for accessing external storage                             -->
     <!-- ====================================================================== -->
@@ -1766,6 +1771,34 @@
         android:description="@string/permdesc_bodySensors_background"
         android:protectionLevel="dangerous"
         android:permissionFlags="hardRestricted" />
+
+    <!-- Allows an application to access wrist temperature data from the watch sensors.
+        <p class="note"><strong>Note: </strong> This permission is for Wear OS only.
+        <p>Protection level: dangerous -->
+    <permission android:name="android.permission.BODY_SENSORS_WRIST_TEMPERATURE"
+                android:permissionGroup="android.permission-group.UNDEFINED"
+                android:label="@string/permlab_bodySensorsWristTemperature"
+                android:description="@string/permdesc_bodySensorsWristTemperature"
+                android:backgroundPermission="android.permission.BODY_SENSORS_WRIST_TEMPERATURE_BACKGROUND"
+                android:protectionLevel="dangerous" />
+
+    <!-- Allows an application to access wrist temperature data from the watch sensors.
+         If you're requesting this permission, you must also request
+         {@link #BODY_SENSORS_WRIST_TEMPERATURE}. Requesting this permission by itself doesn't
+         give you heart rate body sensors access.
+         <p class="note"><strong>Note: </strong> This permission is for Wear OS only.
+         <p>Protection level: dangerous
+
+         <p> This is a hard restricted permission which cannot be held by an app until
+         the installer on record allowlists the permission. For more details see
+         {@link android.content.pm.PackageInstaller.SessionParams#setWhitelistedRestrictedPermissions(Set)}.
+    -->
+    <permission android:name="android.permission.BODY_SENSORS_WRIST_TEMPERATURE_BACKGROUND"
+                android:permissionGroup="android.permission-group.UNDEFINED"
+                android:label="@string/permlab_bodySensors_wristTemperature_background"
+                android:description="@string/permdesc_bodySensors_wristTemperature_background"
+                android:protectionLevel="dangerous"
+                android:permissionFlags="hardRestricted" />
 
     <!-- Allows an app to use fingerprint hardware.
          <p>Protection level: normal
@@ -4164,7 +4197,7 @@
          <p>Should only be requested by the System, should be required by
          TileService declarations.-->
     <permission android:name="android.permission.BIND_QUICK_SETTINGS_TILE"
-        android:protectionLevel="signature" />
+        android:protectionLevel="signature|recents" />
 
     <!-- Allows SystemUI to request third party controls.
          <p>Should only be requested by the System and required by
@@ -5281,6 +5314,12 @@
          @hide
          @TestApi -->
     <permission android:name="android.permission.MODIFY_USER_PREFERRED_DISPLAY_MODE"
+                android:protectionLevel="signature" />
+
+    <!-- Allows an application to modify the HDR conversion mode.
+         @hide
+         @TestApi -->
+    <permission android:name="android.permission.MODIFY_HDR_CONVERSION_MODE"
                 android:protectionLevel="signature" />
 
     <!-- @SystemApi Allows an application to control VPN.
@@ -6657,7 +6696,7 @@
     <permission android:name="android.permission.USE_FULL_SCREEN_INTENT"
                 android:label="@string/permlab_fullScreenIntent"
                 android:description="@string/permdesc_fullScreenIntent"
-                android:protectionLevel="normal" />
+                android:protectionLevel="normal|appop" />
 
     <!-- @SystemApi Allows requesting the framework broadcast the
          {@link Intent#ACTION_DEVICE_CUSTOMIZATION_READY} intent.
@@ -7073,6 +7112,17 @@
       -->
     <permission android:name="android.permission.GET_APP_METADATA"
                 android:protectionLevel="signature|installer" />
+
+    <!-- @hide @SystemApi Allows an application to stage HealthConnect's remote data so that
+         HealthConnect can later integrate it. -->
+    <permission android:name="android.permission.STAGE_HEALTH_CONNECT_REMOTE_DATA"
+                android:protectionLevel="signature|knownSigner"
+                android:knownCerts="@array/config_healthConnectStagingDataKnownSigners"/>
+
+    <!-- @hide @TestApi Allows an application to clear HealthConnect's staged remote data for
+         testing only. For security reasons, this is a platform-only permission. -->
+    <permission android:name="android.permission.DELETE_STAGED_HEALTH_CONNECT_REMOTE_DATA"
+                android:protectionLevel="signature" />
 
     <!-- @SystemApi Allows the holder to call health connect migration APIs.
         @hide -->

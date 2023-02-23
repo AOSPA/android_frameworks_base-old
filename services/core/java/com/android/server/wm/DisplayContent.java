@@ -27,6 +27,7 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
@@ -1145,14 +1146,18 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                     mWmService.mAtmService.getRecentTasks().getInputListener());
         }
 
-        mDisplayPolicy = new DisplayPolicy(mWmService, this);
-        mDisplayRotation = new DisplayRotation(mWmService, this, mDisplayInfo.address);
+        mDeviceStateController = new DeviceStateController(mWmService.mContext, mWmService.mH);
 
-        mDeviceStateController = new DeviceStateController(mWmService.mContext, mWmService.mH,
-                newFoldState -> {
+        mDisplayPolicy = new DisplayPolicy(mWmService, this);
+        mDisplayRotation = new DisplayRotation(mWmService, this, mDisplayInfo.address,
+                mDeviceStateController);
+
+        final Consumer<DeviceStateController.DeviceState> deviceStateConsumer =
+                (@NonNull DeviceStateController.DeviceState newFoldState) -> {
                     mDisplaySwitchTransitionLauncher.foldStateChanged(newFoldState);
                     mDisplayRotation.foldStateChanged(newFoldState);
-                });
+                };
+        mDeviceStateController.registerDeviceStateCallback(deviceStateConsumer);
 
         mCloseToSquareMaxAspectRatio = mWmService.mContext.getResources().getFloat(
                 R.dimen.config_closeToSquareDisplayMaxAspectRatio);
@@ -1618,7 +1623,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         // If display rotation class tells us that it doesn't consider app requested orientation,
         // this display won't rotate just because of an app changes its requested orientation. Thus
         // it indicates that this display chooses not to handle this request.
-        final int orientation = requestingContainer != null ? requestingContainer.mOrientation
+        final int orientation = requestingContainer != null
+                ? requestingContainer.getOverrideOrientation()
                 : SCREEN_ORIENTATION_UNSET;
         final boolean handled = handlesOrientationChangeFromDescendant(orientation);
         if (config == null) {
@@ -1744,15 +1750,15 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         if (mTransitionController.useShellTransitionsRotation()) {
             return ROTATION_UNDEFINED;
         }
+        final int activityOrientation = r.getOverrideOrientation();
         if (!WindowManagerService.ENABLE_FIXED_ROTATION_TRANSFORM
-                || getIgnoreOrientationRequest(r.mOrientation)) {
+                || getIgnoreOrientationRequest(activityOrientation)) {
             return ROTATION_UNDEFINED;
         }
-        if (r.mOrientation == ActivityInfo.SCREEN_ORIENTATION_BEHIND) {
+        if (activityOrientation == ActivityInfo.SCREEN_ORIENTATION_BEHIND) {
             final ActivityRecord nextCandidate = getActivity(
-                    a -> a.mOrientation != SCREEN_ORIENTATION_UNSET
-                            && a.mOrientation != ActivityInfo.SCREEN_ORIENTATION_BEHIND,
-                    r, false /* includeBoundary */, true /* traverseTopToBottom */);
+                    a -> a.canDefineOrientationForActivitiesAbove() /* callback */,
+                    r /* boundary */, false /* includeBoundary */, true /* traverseTopToBottom */);
             if (nextCandidate != null) {
                 r = nextCandidate;
             }
@@ -2774,6 +2780,15 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         final int orientation = super.getOrientation();
 
         if (!handlesOrientationChangeFromDescendant(orientation)) {
+            ActivityRecord topActivity = topRunningActivity(/* considerKeyguardState= */ true);
+            if (topActivity != null && topActivity.mLetterboxUiController
+                    .shouldUseDisplayLandscapeNaturalOrientation()) {
+                ProtoLog.v(WM_DEBUG_ORIENTATION,
+                        "Display id=%d is ignoring orientation request for %d, return %d"
+                        + " following a per-app override for %s",
+                        mDisplayId, orientation, SCREEN_ORIENTATION_LANDSCAPE, topActivity);
+                return SCREEN_ORIENTATION_LANDSCAPE;
+            }
             mLastOrientationSource = null;
             // Return SCREEN_ORIENTATION_UNSPECIFIED so that Display respect sensor rotation
             ProtoLog.v(WM_DEBUG_ORIENTATION,
@@ -5261,6 +5276,11 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             return b;
         }
 
+        // WARNING: it says `mSurfaceControl` below, but this CHANGES meaning after construction!
+        // DisplayAreas are added in `configureSurface()` *before* `mSurfaceControl` gets replaced
+        // with a wrapper or magnification surface so they end up in the right place; however,
+        // anything added or reparented to "the display" *afterwards* needs to be reparented to
+        // `getWindowinglayer()` (unless it's an overlay DisplayArea).
         return b.setName(child.getName())
                 .setParent(mSurfaceControl);
     }

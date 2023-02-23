@@ -27,10 +27,16 @@ import android.app.job.JobParameters;
 import android.app.job.JobScheduler;
 import android.app.job.JobService;
 import android.compat.annotation.ChangeId;
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.pm.ApexStagedEvent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IBackgroundInstallControlService;
+import android.content.pm.IPackageManagerNative;
+import android.content.pm.IStagedApexObserver;
 import android.content.pm.InstallSourceInfo;
 import android.content.pm.ModuleInfo;
 import android.content.pm.PackageInfo;
@@ -48,9 +54,13 @@ import android.hardware.biometrics.SensorProperties;
 import android.hardware.biometrics.SensorProperties.ComponentInfo;
 import android.hardware.face.FaceManager;
 import android.hardware.face.FaceSensorProperties;
+import android.hardware.face.FaceSensorPropertiesInternal;
+import android.hardware.face.IFaceAuthenticatorsRegisteredCallback;
 import android.hardware.fingerprint.FingerprintManager;
 import android.hardware.fingerprint.FingerprintSensorProperties;
 import android.hardware.fingerprint.FingerprintSensorPropertiesInternal;
+import android.hardware.fingerprint.IFingerprintAuthenticatorsRegisteredCallback;
+import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
@@ -62,6 +72,7 @@ import android.os.ShellCallback;
 import android.os.ShellCommand;
 import android.os.SystemProperties;
 import android.os.UserHandle;
+import android.provider.DeviceConfig;
 import android.text.TextUtils;
 import android.util.PackageUtils;
 import android.util.Slog;
@@ -72,6 +83,8 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.os.IBinaryTransparencyService;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.pm.ApexManager;
+import com.android.server.pm.pkg.AndroidPackage;
+import com.android.server.pm.pkg.PackageState;
 
 import libcore.util.HexEncoding;
 
@@ -80,10 +93,8 @@ import java.io.PrintWriter;
 import java.security.PublicKey;
 import java.security.cert.CertificateException;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
@@ -93,7 +104,6 @@ import java.util.stream.Collectors;
  */
 public class BinaryTransparencyService extends SystemService {
     private static final String TAG = "TransparencyService";
-    private static final String EXTRA_SERVICE = "service";
 
     @VisibleForTesting
     static final String VBMETA_DIGEST_UNINITIALIZED = "vbmeta-digest-uninitialized";
@@ -112,7 +122,9 @@ public class BinaryTransparencyService extends SystemService {
     static final long RECORD_MEASUREMENTS_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
     @VisibleForTesting
-    static final String BUNDLE_PACKAGE_INFO = "package-info";
+    static final String BUNDLE_PACKAGE_NAME = "package-name";
+    @VisibleForTesting
+    static final String BUNDLE_PACKAGE_IS_APEX = "package-is-apex";
     @VisibleForTesting
     static final String BUNDLE_CONTENT_DIGEST_ALGORITHM = "content-digest-algo";
     @VisibleForTesting
@@ -131,6 +143,10 @@ public class BinaryTransparencyService extends SystemService {
     // used for indicating newly installed MBAs that are updated (but unused currently)
     static final int MBA_STATUS_UPDATED_NEW_INSTALL = 4;
 
+    @VisibleForTesting
+    static final String KEY_ENABLE_BIOMETRIC_PROPERTY_VERIFICATION =
+            "enable_biometric_property_verification";
+
     private static final boolean DEBUG = false;     // toggle this for local debug
 
     private final Context mContext;
@@ -138,6 +154,7 @@ public class BinaryTransparencyService extends SystemService {
     // the system time (in ms) the last measurement was taken
     private long mMeasurementsLastRecordedMs;
     private PackageManagerInternal mPackageManagerInternal;
+    private BiometricLogger mBiometricLogger;
 
     /**
      * Guards whether or not measurements of MBA to be performed. When this change is enabled,
@@ -159,7 +176,18 @@ public class BinaryTransparencyService extends SystemService {
             List<Bundle> results = new ArrayList<>();
 
             for (PackageInfo packageInfo : getCurrentInstalledApexs()) {
-                Bundle apexMeasurement = measurePackage(packageInfo);
+                PackageState packageState = mPackageManagerInternal.getPackageStateInternal(
+                        packageInfo.packageName);
+                if (packageState == null) {
+                    Slog.w(TAG, "Package state is unavailable, ignoring the package "
+                            + packageInfo.packageName);
+                    continue;
+                }
+                Bundle apexMeasurement = measurePackage(packageState);
+                if (apexMeasurement == null) {
+                    Slog.w(TAG, "Skipping the missing APEX in " + packageState.getPath());
+                    continue;
+                }
                 results.add(apexMeasurement);
             }
 
@@ -192,26 +220,30 @@ public class BinaryTransparencyService extends SystemService {
 
         /**
          * Perform basic measurement (i.e. content digest) on a given package.
-         * @param packageInfo The package to be measured.
+         * @param packageState The package to be measured.
          * @return a {@link android.os.Bundle} that packs the measurement result with the following
-         *         keys: {@link #BUNDLE_PACKAGE_INFO},
+         *         keys: {@link #BUNDLE_PACKAGE_NAME},
+         *               {@link #BUNDLE_PACKAGE_IS_APEX}
          *               {@link #BUNDLE_CONTENT_DIGEST_ALGORITHM}
          *               {@link #BUNDLE_CONTENT_DIGEST}
          */
-        private @NonNull Bundle measurePackage(PackageInfo packageInfo) {
+        private @Nullable Bundle measurePackage(PackageState packageState) {
             Bundle result = new Bundle();
 
             // compute content digest
             if (DEBUG) {
-                Slog.d(TAG, "Computing content digest for " + packageInfo.packageName + " at "
-                        + packageInfo.applicationInfo.sourceDir);
+                Slog.d(TAG, "Computing content digest for " + packageState.getPackageName() + " at "
+                        + packageState.getPath());
             }
-            Map<Integer, byte[]> contentDigests = computeApkContentDigest(
-                    packageInfo.applicationInfo.sourceDir);
-            result.putParcelable(BUNDLE_PACKAGE_INFO, packageInfo);
+            AndroidPackage pkg = packageState.getAndroidPackage();
+            if (pkg == null) {
+                Slog.w(TAG, "Skipping the missing APK in " + packageState.getPath());
+                return null;
+            }
+            Map<Integer, byte[]> contentDigests = computeApkContentDigest(pkg.getBaseApkPath());
+            result.putString(BUNDLE_PACKAGE_NAME, pkg.getPackageName());
             if (contentDigests == null) {
-                Slog.d(TAG, "Failed to compute content digest for "
-                        + packageInfo.applicationInfo.sourceDir);
+                Slog.d(TAG, "Failed to compute content digest for " + pkg.getBaseApkPath());
                 result.putInt(BUNDLE_CONTENT_DIGEST_ALGORITHM, 0);
                 result.putByteArray(BUNDLE_CONTENT_DIGEST, null);
                 return result;
@@ -235,6 +267,7 @@ public class BinaryTransparencyService extends SystemService {
                 result.putInt(BUNDLE_CONTENT_DIGEST_ALGORITHM, 0);
                 result.putByteArray(BUNDLE_CONTENT_DIGEST, null);
             }
+            result.putBoolean(BUNDLE_PACKAGE_IS_APEX, packageState.isApex());
 
             return result;
         }
@@ -243,56 +276,40 @@ public class BinaryTransparencyService extends SystemService {
         /**
          * Measures and records digests for *all* covered binaries/packages.
          *
-         * This method will be called in a Job scheduled to take measurements periodically.
+         * This method will be called in a Job scheduled to take measurements periodically. If the
+         * last measurement was performaned recently (less than RECORD_MEASUREMENT_COOLDOWN_MS
+         * ago), the measurement and recording will be skipped.
          *
          * Packages that are covered so far are:
          * - all APEXs (introduced in Android T)
          * - all mainline modules (introduced in Android T)
          * - all preloaded apps and their update(s) (new in Android U)
          * - dynamically installed mobile bundled apps (MBAs) (new in Android U)
-         *
-         * @return a {@code List<Bundle>}. Each Bundle item contains values as
-         *          defined by the return value of {@link #measurePackage(PackageInfo)}.
          */
-        public List getMeasurementsForAllPackages() {
-            List<Bundle> results = new ArrayList<>();
-            PackageManager pm = mContext.getPackageManager();
-            Set<String> packagesMeasured = new HashSet<>();
-
+        public void recordMeasurementsForAllPackages() {
             // check if we should record the resulting measurements
             long currentTimeMs = System.currentTimeMillis();
-            boolean record = false;
-            if ((currentTimeMs - mMeasurementsLastRecordedMs) >= RECORD_MEASUREMENTS_COOLDOWN_MS) {
-                Slog.d(TAG, "Measurement was last taken at " + mMeasurementsLastRecordedMs
-                        + " and is now updated to: " + currentTimeMs);
-                mMeasurementsLastRecordedMs = currentTimeMs;
-                record = true;
+            if ((currentTimeMs - mMeasurementsLastRecordedMs) < RECORD_MEASUREMENTS_COOLDOWN_MS) {
+                Slog.d(TAG, "Skip measurement since the last measurement was only taken at "
+                        + mMeasurementsLastRecordedMs + " within the cooldown period");
+                return;
             }
+            Slog.d(TAG, "Measurement was last taken at " + mMeasurementsLastRecordedMs
+                    + " and is now updated to: " + currentTimeMs);
+            mMeasurementsLastRecordedMs = currentTimeMs;
+
+            Bundle packagesMeasured = new Bundle();
 
             // measure all APEXs first
             if (DEBUG) {
                 Slog.d(TAG, "Measuring APEXs...");
             }
-            for (PackageInfo packageInfo : getCurrentInstalledApexs()) {
-                packagesMeasured.add(packageInfo.packageName);
+            List<IBinaryTransparencyService.ApexInfo> allApexInfo = collectAllApexInfo(
+                    /* includeTestOnly */ false);
+            for (IBinaryTransparencyService.ApexInfo apexInfo : allApexInfo) {
+                packagesMeasured.putBoolean(apexInfo.packageName, true);
 
-                Bundle apexMeasurement = measurePackage(packageInfo);
-                results.add(apexMeasurement);
-
-                if (record) {
-                    // compute digests of signing info
-                    String[] signerDigestHexStrings = computePackageSignerSha256Digests(
-                            packageInfo.signingInfo);
-
-                    // log to statsd
-                    FrameworkStatsLog.write(FrameworkStatsLog.APEX_INFO_GATHERED,
-                                            packageInfo.packageName,
-                                            packageInfo.getLongVersionCode(),
-                                            HexEncoding.encodeToString(apexMeasurement.getByteArray(
-                                                    BUNDLE_CONTENT_DIGEST), false),
-                                            apexMeasurement.getInt(BUNDLE_CONTENT_DIGEST_ALGORITHM),
-                                            signerDigestHexStrings);
-                }
+                recordApexInfo(apexInfo);
             }
             if (DEBUG) {
                 Slog.d(TAG, "Measured " + packagesMeasured.size()
@@ -300,57 +317,11 @@ public class BinaryTransparencyService extends SystemService {
             }
 
             // proceed with all preloaded apps
-            for (PackageInfo packageInfo : pm.getInstalledPackages(
-                    PackageManager.PackageInfoFlags.of(PackageManager.MATCH_FACTORY_ONLY
-                            | PackageManager.GET_SIGNING_CERTIFICATES))) {
-                if (packagesMeasured.contains(packageInfo.packageName)) {
-                    continue;
-                }
-                packagesMeasured.add(packageInfo.packageName);
-
-                int mba_status = MBA_STATUS_PRELOADED;
-                if (packageInfo.signingInfo == null) {
-                    Slog.d(TAG, "Preload " + packageInfo.packageName  + " at "
-                            + packageInfo.applicationInfo.sourceDir + " has likely been updated.");
-                    mba_status = MBA_STATUS_UPDATED_PRELOAD;
-
-                    PackageInfo origPackageInfo = packageInfo;
-                    try {
-                        packageInfo = pm.getPackageInfo(packageInfo.packageName,
-                                PackageManager.PackageInfoFlags.of(PackageManager.MATCH_ALL
-                                        | PackageManager.GET_SIGNING_CERTIFICATES));
-                    } catch (PackageManager.NameNotFoundException e) {
-                        Slog.e(TAG, "Failed to obtain an updated PackageInfo of "
-                                + origPackageInfo.packageName, e);
-                        packageInfo = origPackageInfo;
-                        mba_status = MBA_STATUS_ERROR;
-                    }
-                }
-
-
-                Bundle packageMeasurement = measurePackage(packageInfo);
-                results.add(packageMeasurement);
-
-                if (record && (mba_status == MBA_STATUS_UPDATED_PRELOAD)) {
-                    // compute digests of signing info
-                    String[] signerDigestHexStrings = computePackageSignerSha256Digests(
-                            packageInfo.signingInfo);
-
-                    // now we should have all the bits for the atom
-                    byte[] cDigest = packageMeasurement.getByteArray(BUNDLE_CONTENT_DIGEST);
-                    FrameworkStatsLog.write(FrameworkStatsLog.MOBILE_BUNDLED_APP_INFO_GATHERED,
-                            packageInfo.packageName,
-                            packageInfo.getLongVersionCode(),
-                            (cDigest != null) ? HexEncoding.encodeToString(cDigest, false) : null,
-                            packageMeasurement.getInt(BUNDLE_CONTENT_DIGEST_ALGORITHM),
-                            signerDigestHexStrings, // signer_cert_digest
-                            mba_status,             // mba_status
-                            null,                   // initiator
-                            null,                   // initiator_signer_digest
-                            null,                   // installer
-                            null                    // originator
-                    );
-                }
+            List<IBinaryTransparencyService.AppInfo> allUpdatedPreloadInfo =
+                    collectAllUpdatedPreloadInfo(packagesMeasured);
+            for (IBinaryTransparencyService.AppInfo appInfo : allUpdatedPreloadInfo) {
+                packagesMeasured.putBoolean(appInfo.packageName, true);
+                writeAppInfoToLog(appInfo);
             }
             if (DEBUG) {
                 Slog.d(TAG, "Measured " + packagesMeasured.size()
@@ -359,61 +330,11 @@ public class BinaryTransparencyService extends SystemService {
 
             if (CompatChanges.isChangeEnabled(LOG_MBA_INFO)) {
                 // lastly measure all newly installed MBAs
-                for (PackageInfo packageInfo : getNewlyInstalledMbas()) {
-                    if (packagesMeasured.contains(packageInfo.packageName)) {
-                        continue;
-                    }
-                    packagesMeasured.add(packageInfo.packageName);
-
-                    Bundle packageMeasurement = measurePackage(packageInfo);
-                    results.add(packageMeasurement);
-
-                    if (record) {
-                        // compute digests of signing info
-                        String[] signerDigestHexStrings = computePackageSignerSha256Digests(
-                                packageInfo.signingInfo);
-
-                        // then extract package's InstallSourceInfo
-                        if (DEBUG) {
-                            Slog.d(TAG,
-                                    "Extracting InstallSourceInfo for " + packageInfo.packageName);
-                        }
-                        InstallSourceInfo installSourceInfo = getInstallSourceInfo(
-                                packageInfo.packageName);
-                        String initiator = null;
-                        SigningInfo initiatorSignerInfo = null;
-                        String[] initiatorSignerInfoDigest = null;
-                        String installer = null;
-                        String originator = null;
-
-                        if (installSourceInfo != null) {
-                            initiator = installSourceInfo.getInitiatingPackageName();
-                            initiatorSignerInfo =
-                                    installSourceInfo.getInitiatingPackageSigningInfo();
-                            if (initiatorSignerInfo != null) {
-                                initiatorSignerInfoDigest = computePackageSignerSha256Digests(
-                                        initiatorSignerInfo);
-                            }
-                            installer = installSourceInfo.getInstallingPackageName();
-                            originator = installSourceInfo.getOriginatingPackageName();
-                        }
-
-                        // we should now have all the info needed for the atom
-                        byte[] cDigest = packageMeasurement.getByteArray(BUNDLE_CONTENT_DIGEST);
-                        FrameworkStatsLog.write(FrameworkStatsLog.MOBILE_BUNDLED_APP_INFO_GATHERED,
-                                packageInfo.packageName,
-                                packageInfo.getLongVersionCode(),
-                                (cDigest != null) ? HexEncoding.encodeToString(cDigest, false)
-                                        : null,
-                                packageMeasurement.getInt(BUNDLE_CONTENT_DIGEST_ALGORITHM),
-                                signerDigestHexStrings,
-                                MBA_STATUS_NEW_INSTALL,   // mba_status
-                                initiator,
-                                initiatorSignerInfoDigest,
-                                installer,
-                                originator
-                        );
-                    }
+                List<IBinaryTransparencyService.AppInfo> allMbaInfo =
+                        collectAllMbaInfo(packagesMeasured);
+                for (IBinaryTransparencyService.AppInfo appInfo : allUpdatedPreloadInfo) {
+                    packagesMeasured.putBoolean(appInfo.packageName, true);
+                    writeAppInfoToLog(appInfo);
                 }
             }
             if (DEBUG) {
@@ -421,8 +342,164 @@ public class BinaryTransparencyService extends SystemService {
                 Slog.d(TAG, "Measured " + packagesMeasured.size()
                         + " packages altogether in " + timeSpentMeasuring + "ms");
             }
+        }
 
+        @Override
+        public List<IBinaryTransparencyService.ApexInfo> collectAllApexInfo(
+                boolean includeTestOnly) {
+            var results = new ArrayList<IBinaryTransparencyService.ApexInfo>();
+            for (PackageInfo packageInfo : getCurrentInstalledApexs()) {
+                PackageState packageState = mPackageManagerInternal.getPackageStateInternal(
+                        packageInfo.packageName);
+                if (packageState == null) {
+                    Slog.w(TAG, "Package state is unavailable, ignoring the APEX "
+                            + packageInfo.packageName);
+                    continue;
+                }
+
+                Bundle apexMeasurement = measurePackage(packageState);
+                if (apexMeasurement == null) {
+                    Slog.w(TAG, "Skipping the missing APEX in " + packageState.getPath());
+                    continue;
+                }
+
+                var apexInfo = new IBinaryTransparencyService.ApexInfo();
+                apexInfo.packageName = packageState.getPackageName();
+                apexInfo.longVersion = packageState.getVersionCode();
+                apexInfo.digest = apexMeasurement.getByteArray(BUNDLE_CONTENT_DIGEST);
+                apexInfo.digestAlgorithm =
+                        apexMeasurement.getInt(BUNDLE_CONTENT_DIGEST_ALGORITHM);
+                apexInfo.signerDigests =
+                        computePackageSignerSha256Digests(packageState.getSigningInfo());
+
+                if (includeTestOnly) {
+                    apexInfo.moduleName = apexPackageNameToModuleName(
+                            packageState.getPackageName());
+                }
+
+                results.add(apexInfo);
+            }
             return results;
+        }
+
+        @Override
+        public List<IBinaryTransparencyService.AppInfo> collectAllUpdatedPreloadInfo(
+                Bundle packagesToSkip) {
+            final var results = new ArrayList<IBinaryTransparencyService.AppInfo>();
+
+            PackageManager pm = mContext.getPackageManager();
+            mPackageManagerInternal.forEachPackageState((packageState) -> {
+                if (!packageState.isUpdatedSystemApp()) {
+                    return;
+                }
+                if (packagesToSkip.containsKey(packageState.getPackageName())) {
+                    return;
+                }
+
+                Slog.d(TAG, "Preload " + packageState.getPackageName() + " at "
+                        + packageState.getPath() + " has likely been updated.");
+
+                Bundle packageMeasurement = measurePackage(packageState);
+                if (packageMeasurement == null) {
+                    Slog.w(TAG, "Skipping the missing APK in " + packageState.getPath());
+                    return;
+                }
+
+                var appInfo = new IBinaryTransparencyService.AppInfo();
+                appInfo.packageName = packageState.getPackageName();
+                appInfo.longVersion = packageState.getVersionCode();
+                appInfo.digest = packageMeasurement.getByteArray(BUNDLE_CONTENT_DIGEST);
+                appInfo.digestAlgorithm =
+                        packageMeasurement.getInt(BUNDLE_CONTENT_DIGEST_ALGORITHM);
+                appInfo.signerDigests =
+                        computePackageSignerSha256Digests(packageState.getSigningInfo());
+                appInfo.mbaStatus = MBA_STATUS_UPDATED_PRELOAD;
+
+                results.add(appInfo);
+            });
+            return results;
+        }
+
+        public List<IBinaryTransparencyService.AppInfo> collectAllMbaInfo(Bundle packagesToSkip) {
+            var results = new ArrayList<IBinaryTransparencyService.AppInfo>();
+            for (PackageInfo packageInfo : getNewlyInstalledMbas()) {
+                if (packagesToSkip.containsKey(packageInfo.packageName)) {
+                    continue;
+                }
+                PackageState packageState = mPackageManagerInternal.getPackageStateInternal(
+                        packageInfo.packageName);
+                if (packageState == null) {
+                    Slog.w(TAG, "Package state is unavailable, ignoring the package "
+                            + packageInfo.packageName);
+                    continue;
+                }
+
+                Bundle packageMeasurement = measurePackage(packageState);
+                if (packageMeasurement == null) {
+                    Slog.w(TAG, "Skipping the missing APK in " + packageState.getPath());
+                    continue;
+                }
+                if (DEBUG) {
+                    Slog.d(TAG,
+                            "Extracting InstallSourceInfo for " + packageState.getPackageName());
+                }
+                var appInfo = new IBinaryTransparencyService.AppInfo();
+                appInfo.packageName = packageState.getPackageName();
+                appInfo.longVersion = packageState.getVersionCode();
+                appInfo.digest = packageMeasurement.getByteArray(BUNDLE_CONTENT_DIGEST);
+                appInfo.digestAlgorithm =
+                    packageMeasurement.getInt(BUNDLE_CONTENT_DIGEST_ALGORITHM);
+                appInfo.signerDigests =
+                        computePackageSignerSha256Digests(packageState.getSigningInfo());
+                appInfo.mbaStatus = MBA_STATUS_NEW_INSTALL;
+
+                // Install source isn't currently available in PackageState (there's a TODO).
+                // Extract manually with another call.
+                InstallSourceInfo installSourceInfo = getInstallSourceInfo(
+                        packageState.getPackageName());
+                if (installSourceInfo != null) {
+                    appInfo.initiator = installSourceInfo.getInitiatingPackageName();
+                    SigningInfo initiatorSignerInfo =
+                            installSourceInfo.getInitiatingPackageSigningInfo();
+                    if (initiatorSignerInfo != null) {
+                        appInfo.initiatorSignerDigests =
+                                computePackageSignerSha256Digests(initiatorSignerInfo);
+                    }
+                    appInfo.installer = installSourceInfo.getInstallingPackageName();
+                    appInfo.originator = installSourceInfo.getOriginatingPackageName();
+                }
+
+                results.add(appInfo);
+            }
+            return results;
+        }
+
+        private void recordApexInfo(IBinaryTransparencyService.ApexInfo apexInfo) {
+            // Must order by the proto's field number.
+            FrameworkStatsLog.write(FrameworkStatsLog.APEX_INFO_GATHERED,
+                    apexInfo.packageName,
+                    apexInfo.longVersion,
+                    (apexInfo.digest != null) ? HexEncoding.encodeToString(apexInfo.digest, false)
+                            : null,
+                    apexInfo.digestAlgorithm,
+                    apexInfo.signerDigests);
+        }
+
+        private void writeAppInfoToLog(IBinaryTransparencyService.AppInfo appInfo) {
+            // Must order by the proto's field number.
+            FrameworkStatsLog.write(FrameworkStatsLog.MOBILE_BUNDLED_APP_INFO_GATHERED,
+                    appInfo.packageName,
+                    appInfo.longVersion,
+                    (appInfo.digest != null) ? HexEncoding.encodeToString(appInfo.digest, false)
+                            : null,
+                    appInfo.digestAlgorithm,
+                    appInfo.signerDigests,
+                    appInfo.mbaStatus,
+                    appInfo.initiator,
+                    appInfo.initiatorSignerDigests,
+                    appInfo.installer,
+                    appInfo.originator,
+                    appInfo.splitName);
         }
 
         /**
@@ -1049,13 +1126,56 @@ public class BinaryTransparencyService extends SystemService {
     }
     private final BinaryTransparencyServiceImpl mServiceImpl;
 
+    /**
+     * A wrapper of {@link FrameworkStatsLog} for easier testing
+     */
+    @VisibleForTesting
+    public static class BiometricLogger {
+        private static final String TAG = "BiometricLogger";
+
+        private static final BiometricLogger sInstance = new BiometricLogger();
+
+        private BiometricLogger() {}
+
+        public static BiometricLogger getInstance() {
+            return sInstance;
+        }
+
+        /**
+         * A wrapper of {@link FrameworkStatsLog}
+         *
+         * @param sensorId The sensorId of the biometric to be logged
+         * @param modality The modality of the biometric
+         * @param sensorType The sensor type of the biometric
+         * @param sensorStrength The sensor strength of the biometric
+         * @param componentId The component Id of a component of the biometric
+         * @param hardwareVersion The hardware version of a component of the biometric
+         * @param firmwareVersion The firmware version of a component of the biometric
+         * @param serialNumber The serial number of a component of the biometric
+         * @param softwareVersion The software version of a component of the biometric
+         */
+        public void logStats(int sensorId, int modality, int sensorType, int sensorStrength,
+                String componentId, String hardwareVersion, String firmwareVersion,
+                String serialNumber, String softwareVersion) {
+            FrameworkStatsLog.write(FrameworkStatsLog.BIOMETRIC_PROPERTIES_COLLECTED,
+                    sensorId, modality, sensorType, sensorStrength, componentId, hardwareVersion,
+                    firmwareVersion, serialNumber, softwareVersion);
+        }
+    }
+
     public BinaryTransparencyService(Context context) {
+        this(context, BiometricLogger.getInstance());
+    }
+
+    @VisibleForTesting
+    BinaryTransparencyService(Context context, BiometricLogger biometricLogger) {
         super(context);
         mContext = context;
         mServiceImpl = new BinaryTransparencyServiceImpl();
         mVbmetaDigest = VBMETA_DIGEST_UNINITIALIZED;
         mMeasurementsLastRecordedMs = 0;
         mPackageManagerInternal = LocalServices.getService(PackageManagerInternal.class);
+        mBiometricLogger = biometricLogger;
     }
 
     /**
@@ -1070,38 +1190,6 @@ public class BinaryTransparencyService extends SystemService {
         } catch (Throwable t) {
             Slog.e(TAG, "Failed to start BinaryTransparencyService.", t);
         }
-
-        // register a package observer to detect updates to preloads
-        mPackageManagerInternal.getPackageList(new PackageManagerInternal.PackageListObserver() {
-            @Override
-            public void onPackageAdded(String packageName, int uid) {
-
-            }
-
-            @Override
-            public void onPackageChanged(String packageName, int uid) {
-                // check if the updated package is a preloaded app.
-                PackageManager pm = mContext.getPackageManager();
-                try {
-                    pm.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(
-                            PackageManager.MATCH_FACTORY_ONLY));
-                } catch (PackageManager.NameNotFoundException e) {
-                    // this means that this package is not a preloaded app
-                    return;
-                }
-
-                Slog.d(TAG, "Preload " + packageName + " was updated. Scheduling measurement...");
-                UpdateMeasurementsJobService.scheduleBinaryMeasurements(mContext,
-                        BinaryTransparencyService.this);
-            }
-
-            @Override
-            public void onPackageRemoved(String packageName, int uid) {
-
-            }
-        });
-
-        // TODO(b/264428429): Register observer for updates to APEXs.
     }
 
     /**
@@ -1133,6 +1221,8 @@ public class BinaryTransparencyService extends SystemService {
             Slog.i(TAG, "Scheduling measurements to be taken.");
             UpdateMeasurementsJobService.scheduleBinaryMeasurements(mContext,
                     BinaryTransparencyService.this);
+
+            registerAllPackageUpdateObservers();
         }
     }
 
@@ -1156,14 +1246,11 @@ public class BinaryTransparencyService extends SystemService {
             // where this operation might take longer than expected, and so that we don't block
             // system_server's main thread.
             Executors.defaultThreadFactory().newThread(() -> {
-                // we discard the return value of getMeasurementsForAllPackages() as the
-                // results of the measurements will be recorded, and that is what we're aiming
-                // for with this job.
                 IBinder b = ServiceManager.getService(Context.BINARY_TRANSPARENCY_SERVICE);
                 IBinaryTransparencyService iBtsService =
                         IBinaryTransparencyService.Stub.asInterface(b);
                 try {
-                    iBtsService.getMeasurementsForAllPackages();
+                    iBtsService.recordMeasurementsForAllPackages();
                 } catch (RemoteException e) {
                     Slog.e(TAG, "Taking binary measurements was interrupted.", e);
                     return;
@@ -1311,7 +1398,7 @@ public class BinaryTransparencyService extends SystemService {
         // Note: none of the component info is a device identifier since every device of a given
         // model and build share the same biometric system info (see b/216195167)
         for (ComponentInfo componentInfo : prop.getComponentInfo()) {
-            FrameworkStatsLog.write(FrameworkStatsLog.BIOMETRIC_PROPERTIES_COLLECTED,
+            mBiometricLogger.logStats(
                     sensorId,
                     modality,
                     sensorType,
@@ -1324,7 +1411,19 @@ public class BinaryTransparencyService extends SystemService {
         }
     }
 
-    private void collectBiometricProperties() {
+    @VisibleForTesting
+    void collectBiometricProperties() {
+        // Check the flag to determine whether biometric property verification is enabled. It's
+        // disabled by default.
+        if (!DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_BIOMETRICS,
+                KEY_ENABLE_BIOMETRIC_PROPERTY_VERIFICATION, false)) {
+            if (DEBUG) {
+                Slog.d(TAG, "Do not collect/verify biometric properties. Feature disabled by "
+                        + "DeviceConfig");
+            }
+            return;
+        }
+
         PackageManager pm = mContext.getPackageManager();
         FingerprintManager fpManager = null;
         FaceManager faceManager = null;
@@ -1336,25 +1435,51 @@ public class BinaryTransparencyService extends SystemService {
         }
 
         if (fpManager != null) {
-            // Log data for each fingerprint sensor
-            for (FingerprintSensorPropertiesInternal propInternal :
-                    fpManager.getSensorPropertiesInternal()) {
-                final FingerprintSensorProperties prop =
-                        FingerprintSensorProperties.from(propInternal);
-                logBiometricProperties(prop,
-                        FrameworkStatsLog
-                                .BIOMETRIC_PROPERTIES_COLLECTED__MODALITY__MODALITY_FINGERPRINT,
-                        toFingerprintSensorType(prop.getSensorType()));
-            }
+            final int fpModality = FrameworkStatsLog
+                    .BIOMETRIC_PROPERTIES_COLLECTED__MODALITY__MODALITY_FINGERPRINT;
+            fpManager.addAuthenticatorsRegisteredCallback(
+                    new IFingerprintAuthenticatorsRegisteredCallback.Stub() {
+                        @Override
+                        public void onAllAuthenticatorsRegistered(
+                                List<FingerprintSensorPropertiesInternal> sensors) {
+                            if (DEBUG) {
+                                Slog.d(TAG, "Retrieve fingerprint sensor properties. "
+                                        + "sensors.size()=" + sensors.size());
+                            }
+                            // Log data for each fingerprint sensor
+                            for (FingerprintSensorPropertiesInternal propInternal : sensors) {
+                                final FingerprintSensorProperties prop =
+                                        FingerprintSensorProperties.from(propInternal);
+                                logBiometricProperties(prop,
+                                        fpModality,
+                                        toFingerprintSensorType(prop.getSensorType()));
+                            }
+                        }
+                    });
         }
 
         if (faceManager != null) {
-            // Log data for each face sensor
-            for (FaceSensorProperties prop : faceManager.getSensorProperties()) {
-                logBiometricProperties(prop,
-                        FrameworkStatsLog.BIOMETRIC_PROPERTIES_COLLECTED__MODALITY__MODALITY_FACE,
-                        toFaceSensorType(prop.getSensorType()));
-            }
+            final int faceModality = FrameworkStatsLog
+                    .BIOMETRIC_PROPERTIES_COLLECTED__MODALITY__MODALITY_FACE;
+            faceManager.addAuthenticatorsRegisteredCallback(
+                    new IFaceAuthenticatorsRegisteredCallback.Stub() {
+                        @Override
+                        public void onAllAuthenticatorsRegistered(
+                                List<FaceSensorPropertiesInternal> sensors) {
+                            if (DEBUG) {
+                                Slog.d(TAG, "Retrieve face sensor properties. sensors.size()="
+                                        + sensors.size());
+                            }
+                            // Log data for each face sensor
+                            for (FaceSensorPropertiesInternal propInternal : sensors) {
+                                final FaceSensorProperties prop =
+                                        FaceSensorProperties.from(propInternal);
+                                logBiometricProperties(prop,
+                                        faceModality,
+                                        toFaceSensorType(prop.getSensorType()));
+                            }
+                        }
+                    });
         }
     }
 
@@ -1362,6 +1487,126 @@ public class BinaryTransparencyService extends SystemService {
         mVbmetaDigest = SystemProperties.get(SYSPROP_NAME_VBETA_DIGEST, VBMETA_DIGEST_UNAVAILABLE);
         Slog.d(TAG, String.format("VBMeta Digest: %s", mVbmetaDigest));
         FrameworkStatsLog.write(FrameworkStatsLog.VBMETA_DIGEST_REPORTED, mVbmetaDigest);
+    }
+
+    /**
+     * Listen for APK updates.
+     *
+     * There are two ways available to us to do this:
+     * 1. Register an observer using
+     * {@link PackageManagerInternal#getPackageList(PackageManagerInternal.PackageListObserver)}.
+     * 2. Register broadcast receivers, listening to either {@code ACTION_PACKAGE_ADDED} or
+     * {@code ACTION_PACKAGE_REPLACED}.
+     *
+     * After experimentation, we found that Option #1 does not catch updates to non-staged APEXs.
+     * Thus, we are implementing Option #2 here. More specifically, listening to
+     * {@link Intent#ACTION_PACKAGE_ADDED} allows us to capture all events we care about.
+     *
+     * We did not use {@link Intent#ACTION_PACKAGE_REPLACED} because it unfortunately does not
+     * detect updates to non-staged APEXs. Thus, we rely on {@link Intent#EXTRA_REPLACING} to
+     * filter out new installation from updates instead.
+     */
+    private void registerApkAndNonStagedApexUpdateListener() {
+        Slog.d(TAG, "Registering APK & Non-Staged APEX updates...");
+        IntentFilter filter = new IntentFilter(Intent.ACTION_PACKAGE_ADDED);
+        filter.addDataScheme("package");    // this is somehow necessary
+        mContext.registerReceiver(new PackageUpdatedReceiver(), filter);
+    }
+
+    /**
+     * Listen for staged-APEX updates.
+     *
+     * This method basically covers cases that are not caught by
+     * {@link #registerApkAndNonStagedApexUpdateListener()}, namely updates to APEXs that are staged
+     * for the subsequent reboot.
+     */
+    private void registerStagedApexUpdateObserver() {
+        Slog.d(TAG, "Registering APEX updates...");
+        IPackageManagerNative iPackageManagerNative = IPackageManagerNative.Stub.asInterface(
+                ServiceManager.getService("package_native"));
+        if (iPackageManagerNative == null) {
+            Slog.e(TAG, "IPackageManagerNative is null");
+            return;
+        }
+
+        try {
+            iPackageManagerNative.registerStagedApexObserver(new IStagedApexObserver.Stub() {
+                @Override
+                public void onApexStaged(ApexStagedEvent event) throws RemoteException {
+                    Slog.d(TAG, "A new APEX has been staged for update. There are currently "
+                            + event.stagedApexModuleNames.length + " APEX(s) staged for update. "
+                            + "Scheduling measurement...");
+                    UpdateMeasurementsJobService.scheduleBinaryMeasurements(mContext,
+                            BinaryTransparencyService.this);
+                }
+            });
+        } catch (RemoteException e) {
+            Slog.e(TAG, "Failed to register a StagedApexObserver.");
+        }
+    }
+
+    private boolean isPackagePreloaded(String packageName) {
+        PackageManager pm = mContext.getPackageManager();
+        try {
+            pm.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(
+                    PackageManager.MATCH_FACTORY_ONLY));
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        }
+        return true;
+    }
+
+    private boolean isPackageAnApex(String packageName) {
+        PackageManager pm = mContext.getPackageManager();
+        try {
+            PackageInfo packageInfo = pm.getPackageInfo(packageName,
+                    PackageManager.PackageInfoFlags.of(PackageManager.MATCH_APEX));
+            return packageInfo.isApex;
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        }
+    }
+
+    private class PackageUpdatedReceiver extends BroadcastReceiver {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (!intent.getAction().equals(Intent.ACTION_PACKAGE_ADDED)) {
+                return;
+            }
+
+            Uri data = intent.getData();
+            if (data == null) {
+                Slog.e(TAG, "Shouldn't happen: intent data is null!");
+                return;
+            }
+
+            if (!intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) {
+                Slog.d(TAG, "Not an update. Skipping...");
+                return;
+            }
+
+            String packageName = data.getSchemeSpecificPart();
+            // now we've got to check what package is this
+            if (isPackagePreloaded(packageName) || isPackageAnApex(packageName)) {
+                Slog.d(TAG, packageName + " was updated. Scheduling measurement...");
+                UpdateMeasurementsJobService.scheduleBinaryMeasurements(mContext,
+                        BinaryTransparencyService.this);
+            }
+        }
+    }
+
+    /**
+     * Register observers for APK and APEX updates. The current implementation breaks this process
+     * into 2 cases/methods because PackageManager does not offer a unified interface to register
+     * for all package updates in a universal and comprehensive manner.
+     * Thus, the observers will be invoked when either
+     * i) APK or non-staged APEX update; or
+     * ii) APEX staging happens.
+     * This will then be used as signals to schedule measurement for the relevant binaries.
+     */
+    private void registerAllPackageUpdateObservers() {
+        registerApkAndNonStagedApexUpdateListener();
+        registerStagedApexUpdateObserver();
     }
 
     private String translateContentDigestAlgorithmIdToString(int algorithmId) {
@@ -1418,11 +1663,7 @@ public class BinaryTransparencyService extends SystemService {
     private String getOriginalApexPreinstalledLocation(String packageName,
             String currentInstalledLocation) {
         try {
-            // It appears that only apexd knows the preinstalled location, and it uses module name
-            // as the identifier instead of package name. Given the input is a package name, we
-            // need to covert to module name.
-            final String moduleName = ApexManager.getInstance().getApexModuleNameForPackageName(
-                    packageName);
+            final String moduleName = apexPackageNameToModuleName(packageName);
             IApexService apexService = IApexService.Stub.asInterface(
                     Binder.allowBlocking(ServiceManager.waitForService("apexservice")));
             for (ApexInfo info : apexService.getAllPackages()) {
@@ -1434,6 +1675,13 @@ public class BinaryTransparencyService extends SystemService {
             Slog.e(TAG, "Unable to get package list from apexservice", e);
         }
         return APEX_PRELOAD_LOCATION_ERROR;
+    }
+
+    private String apexPackageNameToModuleName(String packageName) {
+        // It appears that only apexd knows the preinstalled location, and it uses module name as
+        // the identifier instead of package name. Given the input is a package name, we need to
+        // covert to module name.
+        return ApexManager.getInstance().getApexModuleNameForPackageName(packageName);
     }
 
     /**

@@ -361,7 +361,14 @@ public final class JobServiceContext implements ServiceConnection {
             boolean binding = false;
             try {
                 final int bindFlags;
-                if (job.shouldTreatAsExpeditedJob()) {
+                if (job.shouldTreatAsUserInitiatedJob()) {
+                    // TODO (191785864, 261999509): add an appropriate flag so user-initiated jobs
+                    //    can bypass data saver
+                    bindFlags = Context.BIND_AUTO_CREATE
+                            | Context.BIND_ALMOST_PERCEPTIBLE
+                            | Context.BIND_BYPASS_POWER_NETWORK_RESTRICTIONS
+                            | Context.BIND_NOT_APP_COMPONENT_USAGE;
+                } else if (job.shouldTreatAsExpeditedJob()) {
                     bindFlags = Context.BIND_AUTO_CREATE | Context.BIND_NOT_FOREGROUND
                             | Context.BIND_ALMOST_PERCEPTIBLE
                             | Context.BIND_BYPASS_POWER_NETWORK_RESTRICTIONS
@@ -1187,6 +1194,7 @@ public final class JobServiceContext implements ServiceConnection {
         applyStoppedReasonLocked(reason);
         completedJob = mRunningJob;
         final int internalStopReason = mParams.getInternalStopReasonCode();
+        final int stopReason = mParams.getStopReason();
         mPreviousJobHadSuccessfulFinish =
                 (internalStopReason == JobParameters.INTERNAL_STOP_REASON_SUCCESSFUL_FINISH);
         if (!mPreviousJobHadSuccessfulFinish) {
@@ -1207,7 +1215,7 @@ public final class JobServiceContext implements ServiceConnection {
                 completedJob.hasContentTriggerConstraint(),
                 completedJob.isRequestedExpeditedJob(),
                 completedJob.startedAsExpeditedJob,
-                mParams.getStopReason(),
+                stopReason,
                 completedJob.getJob().isPrefetch(),
                 completedJob.getJob().getPriority(),
                 completedJob.getEffectivePriority(),
@@ -1260,7 +1268,8 @@ public final class JobServiceContext implements ServiceConnection {
         if (completedJob.isUserVisibleJob()) {
             mService.informObserversOfUserVisibleJobChange(this, completedJob, false);
         }
-        mCompletedListener.onJobCompletedLocked(completedJob, internalStopReason, reschedule);
+        mCompletedListener.onJobCompletedLocked(completedJob, stopReason, internalStopReason,
+                reschedule);
         mJobConcurrencyManager.onJobCompletedLocked(this, completedJob, workType);
     }
 

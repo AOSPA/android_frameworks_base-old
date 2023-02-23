@@ -5854,7 +5854,7 @@ public abstract class Context {
     public static final String SECURE_ELEMENT_SERVICE = "secure_element";
 
     /**
-     * Use with {@link #getSystemService(String)} to retrieve an
+     * Use with {@link #getSystemService(String)} to retrieve a
      * {@link android.app.timedetector.TimeDetector}.
      * @hide
      *
@@ -5863,7 +5863,7 @@ public abstract class Context {
     public static final String TIME_DETECTOR_SERVICE = "time_detector";
 
     /**
-     * Use with {@link #getSystemService(String)} to retrieve an
+     * Use with {@link #getSystemService(String)} to retrieve a
      * {@link android.app.timezonedetector.TimeZoneDetector}.
      * @hide
      *
@@ -5872,12 +5872,14 @@ public abstract class Context {
     public static final String TIME_ZONE_DETECTOR_SERVICE = "time_zone_detector";
 
     /**
-     * Use with {@link #getSystemService(String)} to retrieve an {@link TimeManager}.
+     * Use with {@link #getSystemService(String)} to retrieve a {@link TimeManager}.
      * @hide
      *
      * @see #getSystemService(String)
      */
-    public static final String TIME_MANAGER = "time_manager";
+    @SystemApi
+    @SuppressLint("ServiceName")
+    public static final String TIME_MANAGER_SERVICE = "time_manager";
 
     /**
      * Binder service name for {@link AppBindingService}.
@@ -6194,6 +6196,16 @@ public abstract class Context {
      * @see #getSystemService(String)
      */
     public static final String GRAMMATICAL_INFLECTION_SERVICE = "grammatical_inflection";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.telephony.satellite.SatelliteManager} for accessing satellite functionality.
+     *
+     * @see #getSystemService(String)
+     * @see android.telephony.satellite.SatelliteManager
+     * @hide
+     */
+    public static final String SATELLITE_SERVICE = "satellite";
 
     /**
      * Determine whether the given permission is allowed for a particular
@@ -7340,6 +7352,7 @@ public abstract class Context {
      * @see #createDeviceContext(int)
      * @hide
      */
+    @TestApi
     public void updateDeviceId(int deviceId) {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
     }
@@ -7376,10 +7389,12 @@ public abstract class Context {
     /**
      * Indicates whether the value of {@link Context#getDeviceId()} can be relied upon for
      * this instance. It will return {@code true} for Contexts created by
-     * {@link Context#createDeviceContext(int)}, as well as for UI and Display Contexts.
+     * {@link Context#createDeviceContext(int)} which reference a valid device ID, as well as for
+     * UI and Display Contexts.
      * <p>
      * Contexts created with {@link Context#createDeviceContext(int)} will have an explicit
-     * device association, which will never change. UI Contexts and Display Contexts are
+     * device association, which will never change, even if the underlying device is closed or is
+     * removed. UI Contexts and Display Contexts are
      * already associated with a display, so if the device association is not explicitly
      * given, {@link Context#getDeviceId()} will return the ID of the device associated with
      * the associated display. The system can assign an arbitrary device id value for Contexts not
@@ -7527,14 +7542,12 @@ public abstract class Context {
     }
 
     /**
-     * Get the binder object associated with the IApplicationThread of this Context.
-     *
-     * This can be used by a mainline module to uniquely identify a specific app process.
+     * Used by a mainline module to uniquely identify a specific app process.
      * @hide
      */
     @NonNull
     @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
-    public IBinder getIApplicationThreadBinder() {
+    public IBinder getProcessToken() {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
     }
 

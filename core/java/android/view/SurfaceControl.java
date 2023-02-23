@@ -222,6 +222,8 @@ public final class SurfaceControl implements Parcelable {
             int transform);
     private static native void nativeSetDataSpace(long transactionObj, long nativeObject,
             @DataSpace.NamedDataSpace int dataSpace);
+    private static native void nativeSetExtendedRangeBrightness(long transactionObj,
+            long nativeObject, float currentBufferRatio, float desiredRatio);
     private static native void nativeSetDamageRegion(long transactionObj, long nativeObject,
             Region region);
     private static native void nativeSetDimmingEnabled(long transactionObj, long nativeObject,
@@ -278,7 +280,12 @@ public final class SurfaceControl implements Parcelable {
     private static native void nativeSetDefaultApplyToken(IBinder token);
     private static native IBinder nativeGetDefaultApplyToken();
     private static native boolean nativeBootFinished();
-
+    private static native long nativeCreateTpc(TrustedPresentationCallback callback);
+    private static native long getNativeTrustedPresentationCallbackFinalizer();
+    private static native void nativeSetTrustedPresentationCallback(long transactionObj,
+            long nativeObject, long nativeTpc, TrustedPresentationThresholds thresholds);
+    private static native void nativeClearTrustedPresentationCallback(long transactionObj,
+            long nativeObject);
 
     /**
      * Transforms that can be applied to buffers as they are displayed to a window.
@@ -462,6 +469,8 @@ public final class SurfaceControl implements Parcelable {
     private int mWidth;
     @GuardedBy("mLock")
     private int mHeight;
+
+    private TrustedPresentationCallback mTrustedPresentationCallback;
 
     private WeakReference<View> mLocalOwnerView;
 
@@ -2401,6 +2410,79 @@ public final class SurfaceControl implements Parcelable {
     }
 
     /**
+     * Threshold values that are sent with
+     * {@link Transaction#setTrustedPresentationCallback(SurfaceControl,
+     * TrustedPresentationThresholds, Executor, Consumer)}
+     */
+    public static class TrustedPresentationThresholds {
+        private float mMinAlpha;
+        private float mMinFractionRendered;
+        private int mStabilityRequirementMs;
+
+        /**
+         * Creates a TrustedPresentationThresholds that's used when calling
+         * {@link Transaction#setTrustedPresentationCallback(SurfaceControl,
+         * TrustedPresentationThresholds, Executor, Consumer)}
+         *
+         * @param minAlpha               The min alpha the {@link SurfaceControl} is required to
+         *                               have to be considered inside the threshold.
+         * @param minFractionRendered    The min fraction of the SurfaceControl that was resented
+         *                               to the user to be considered inside the threshold.
+         * @param stabilityRequirementMs The time in milliseconds required for the
+         *                               {@link SurfaceControl} to be in the threshold.
+         * @throws IllegalArgumentException If threshold values are invalid.
+         */
+        public TrustedPresentationThresholds(
+                @FloatRange(from = 0f, fromInclusive = false, to = 1f) float minAlpha,
+                @FloatRange(from = 0f, fromInclusive = false, to = 1f) float minFractionRendered,
+                @IntRange(from = 1) int stabilityRequirementMs) {
+            mMinAlpha = minAlpha;
+            mMinFractionRendered = minFractionRendered;
+            mStabilityRequirementMs = stabilityRequirementMs;
+
+            checkValid();
+        }
+
+        private void checkValid() {
+            if (mMinAlpha <= 0 || mMinFractionRendered <= 0 || mStabilityRequirementMs < 1) {
+                throw new IllegalArgumentException(
+                        "TrustedPresentationThresholds values are invalid");
+            }
+        }
+    }
+
+    /**
+     * Register a TrustedPresentationCallback for a particular SurfaceControl so it can be notified
+     * when the specified Threshold has been crossed.
+     *
+     * @hide
+     */
+    public abstract static class TrustedPresentationCallback {
+        private final long mNativeObject;
+
+        private static final NativeAllocationRegistry sRegistry =
+                NativeAllocationRegistry.createMalloced(
+                        TrustedPresentationCallback.class.getClassLoader(),
+                        getNativeTrustedPresentationCallbackFinalizer());
+
+        private final Runnable mFreeNativeResources;
+
+        private TrustedPresentationCallback() {
+            mNativeObject = nativeCreateTpc(this);
+            mFreeNativeResources = sRegistry.registerNativeAllocation(this, mNativeObject);
+        }
+
+        /**
+         * Invoked when the SurfaceControl that this TrustedPresentationCallback was registered for
+         * enters or exits the threshold bounds.
+         *
+         * @param inTrustedPresentationState true when the SurfaceControl entered the
+         *                                   presentation state, false when it has left.
+         */
+        public abstract void onTrustedPresentationChanged(boolean inTrustedPresentationState);
+    }
+
+    /**
      * An atomic set of changes to a set of SurfaceControl.
      */
     public static class Transaction implements Closeable, Parcelable {
@@ -3613,6 +3695,46 @@ public final class SurfaceControl implements Parcelable {
         }
 
         /**
+         * Sets the desired extended range brightness for the layer. This only applies for layers
+         * whose dataspace has RANGE_EXTENDED.
+         *
+         * @param sc The layer whose extended range brightness is being specified
+         * @param currentBufferRatio The current sdr/hdr ratio of the current buffer. For example
+         *                           if the buffer was rendered with a target SDR whitepoint of
+         *                           100 nits and a max display brightness of 200 nits, this should
+         *                           be set to 2.0f.
+         *
+         *                           Default value is 1.0f.
+         *
+         *                           Transfer functions that encode their own brightness ranges,
+         *                           such as HLG or PQ, should also set this to 1.0f and instead
+         *                           communicate extended content brightness information via
+         *                           metadata such as CTA861_3 or SMPTE2086.
+         *
+         * @param desiredRatio The desired sdr/hdr ratio. This can be used to communicate the max
+         *                     desired brightness range. This is similar to the "max luminance"
+         *                     value in other HDR metadata formats, but represented as a ratio of
+         *                     the target SDR whitepoint to the max display brightness. The system
+         *                     may not be able to, or may choose not to, deliver the
+         *                     requested range.
+         *
+         *                     If unspecified, the system will attempt to provide the best range
+         *                     it can for the given ambient conditions & device state. However,
+         *                     voluntarily reducing the requested range can help improve battery
+         *                     life as well as can improve quality by ensuring greater bit depth
+         *                     is allocated to the luminance range in use.
+         * @return this
+         * @hide
+         **/
+        public @NonNull Transaction setExtendedRangeBrightness(@NonNull SurfaceControl sc,
+                float currentBufferRatio, float desiredRatio) {
+            checkPreconditions(sc);
+            nativeSetExtendedRangeBrightness(mNativeObject, sc.mNativeObject, currentBufferRatio,
+                    desiredRatio);
+            return this;
+        }
+
+        /**
          * Sets the trusted overlay state on this SurfaceControl and it is inherited to all the
          * children. The caller must hold the ACCESS_SURFACE_FLINGER permission.
          * @hide
@@ -3734,6 +3856,106 @@ public final class SurfaceControl implements Parcelable {
             TransactionCommittedListener listenerInner =
                     () -> executor.execute(listener::onTransactionCommitted);
             nativeAddTransactionCommittedListener(mNativeObject, listenerInner);
+            return this;
+        }
+
+        /**
+         * Sets a callback to receive feedback about the presentation of a {@link SurfaceControl}.
+         * When the {@link SurfaceControl} is presented according to the passed in
+         * {@link TrustedPresentationThresholds}, it is said to "enter the state", and receives the
+         * callback with {@code true}. When the conditions fall out of thresholds, it is then
+         * said to leave the state.
+         * <p>
+         * There are a few simple thresholds:
+         * <ul>
+         *    <li>minAlpha: Lower bound on computed alpha</li>
+         *    <li>minFractionRendered: Lower bounds on fraction of pixels that were rendered</li>
+         *    <li>stabilityThresholdMs: A time that alpha and fraction rendered must remain within
+         *    bounds before we can "enter the state" </li>
+         * </ul>
+         * <p>
+         * The fraction of pixels rendered is a computation based on scale, crop
+         * and occlusion. The calculation may be somewhat counterintuitive, so we
+         * can work through an example. Imagine we have a SurfaceControl with a 100x100 buffer
+         * which is occluded by (10x100) pixels on the left, and cropped by (100x10) pixels
+         * on the top. Furthermore imagine this SurfaceControl is scaled by 0.9 in both dimensions.
+         * (c=crop,o=occluded,b=both,x=none)
+         *
+         * <blockquote>
+         * <table>
+         *   <caption></caption>
+         *   <tr><td>b</td><td>c</td><td>c</td><td>c</td></tr>
+         *   <tr><td>o</td><td>x</td><td>x</td><td>x</td></tr>
+         *   <tr><td>o</td><td>x</td><td>x</td><td>x</td></tr>
+         *   <tr><td>o</td><td>x</td><td>x</td><td>x</td></tr>
+         * </table>
+         * </blockquote>
+         *
+         *<p>
+         * We first start by computing fr=xscale*yscale=0.9*0.9=0.81, indicating
+         * that "81%" of the pixels were rendered. This corresponds to what was 100
+         * pixels being displayed in 81 pixels. This is somewhat of an abuse of
+         * language, as the information of merged pixels isn't totally lost, but
+         * we err on the conservative side.
+         * <p>
+         * We then repeat a similar process for the crop and covered regions and
+         * accumulate the results: fr = fr * (fractionNotCropped) * (fractionNotCovered)
+         * So for this example we would get 0.9*0.9*0.9*0.9=0.65...
+         * <p>
+         * Notice that this is not completely accurate, as we have double counted
+         * the region marked as b. However we only wanted a "lower bound" and so it
+         * is ok to err in this direction. Selection of the threshold will ultimately
+         * be somewhat arbitrary, and so there are some somewhat arbitrary decisions in
+         * this API as well.
+         * <p>
+         * @param sc         The {@link SurfaceControl} to set the
+         *                   {@link TrustedPresentationCallback} on
+         * @param thresholds The {@link TrustedPresentationThresholds} that will specify when the to
+         *                   invoke the callback.
+         * @param executor   The {@link Executor} where the callback will be invoked on.
+         * @param listener   The {@link Consumer} that will receive the callbacks when entered or
+         *                   exited the threshold.
+         * @return This transaction
+         * @see TrustedPresentationThresholds
+         */
+        @NonNull
+        public Transaction setTrustedPresentationCallback(@NonNull SurfaceControl sc,
+                @NonNull TrustedPresentationThresholds thresholds, @NonNull Executor executor,
+                @NonNull Consumer<Boolean> listener) {
+            checkPreconditions(sc);
+            TrustedPresentationCallback tpc = new TrustedPresentationCallback() {
+                @Override
+                public void onTrustedPresentationChanged(boolean inTrustedPresentationState) {
+                    executor.execute(
+                            () -> listener.accept(inTrustedPresentationState));
+                }
+            };
+
+            if (sc.mTrustedPresentationCallback != null) {
+                sc.mTrustedPresentationCallback.mFreeNativeResources.run();
+            }
+
+            nativeSetTrustedPresentationCallback(mNativeObject, sc.mNativeObject,
+                    tpc.mNativeObject, thresholds);
+            sc.mTrustedPresentationCallback = tpc;
+            return this;
+        }
+
+        /**
+         * Clears the {@link TrustedPresentationCallback} for a specific {@link SurfaceControl}
+         *
+         * @param sc The SurfaceControl that the {@link TrustedPresentationCallback} should be
+         *           cleared from
+         * @return This transaction
+         */
+        @NonNull
+        public Transaction clearTrustedPresentationCallback(@NonNull SurfaceControl sc) {
+            checkPreconditions(sc);
+            nativeClearTrustedPresentationCallback(mNativeObject, sc.mNativeObject);
+            if (sc.mTrustedPresentationCallback != null) {
+                sc.mTrustedPresentationCallback.mFreeNativeResources.run();
+                sc.mTrustedPresentationCallback = null;
+            }
             return this;
         }
 

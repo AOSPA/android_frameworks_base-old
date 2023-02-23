@@ -188,6 +188,7 @@ import com.android.modules.utils.TypedXmlSerializer;
 import com.android.permission.persistence.RuntimePermissionsPersistence;
 import com.android.server.EventLogTags;
 import com.android.server.FgThread;
+import com.android.server.IntentResolver;
 import com.android.server.LocalManagerRegistry;
 import com.android.server.LocalServices;
 import com.android.server.LockGuard;
@@ -2974,15 +2975,6 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                     }
                 }
                 if (doTrim) {
-                    if (!isFirstBoot()) {
-                        try {
-                            ActivityManager.getService().showBootMessage(
-                                    mContext.getResources().getString(
-                                            R.string.android_upgrading_fstrim),
-                                    true);
-                        } catch (RemoteException e) {
-                        }
-                    }
                     sm.runMaintenance();
                 }
             } else {
@@ -4779,6 +4771,44 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
         }
 
         @Override
+        public boolean removeCrossProfileIntentFilter(IntentFilter intentFilter,
+                String ownerPackage,
+                int sourceUserId,
+                int targetUserId, int flags) {
+            mContext.enforceCallingOrSelfPermission(
+                    android.Manifest.permission.INTERACT_ACROSS_USERS_FULL, null);
+            final int callingUid = Binder.getCallingUid();
+            enforceOwnerRights(snapshotComputer(), ownerPackage, callingUid);
+            mUserManager.enforceCrossProfileIntentFilterAccess(sourceUserId, targetUserId,
+                    callingUid, /* addCrossProfileIntentFilter */ false);
+            PackageManagerServiceUtils.enforceShellRestriction(mInjector.getUserManagerInternal(),
+                    UserManager.DISALLOW_DEBUGGING_FEATURES, callingUid, sourceUserId);
+
+            boolean removedMatchingFilter = false;
+            synchronized (mLock) {
+                CrossProfileIntentResolver resolver =
+                        mSettings.editCrossProfileIntentResolverLPw(sourceUserId);
+
+                ArraySet<CrossProfileIntentFilter> set =
+                        new ArraySet<>(resolver.filterSet());
+                for (CrossProfileIntentFilter filter : set) {
+                    if (IntentResolver.filterEquals(filter.mFilter, intentFilter)
+                            && filter.getOwnerPackage().equals(ownerPackage)
+                            && filter.getTargetUserId() == targetUserId
+                            && filter.getFlags() == flags) {
+                        resolver.removeFilter(filter);
+                        removedMatchingFilter = true;
+                        break;
+                    }
+                }
+            }
+            if (removedMatchingFilter) {
+                scheduleWritePackageRestrictions(sourceUserId);
+            }
+            return removedMatchingFilter;
+        }
+
+        @Override
         public final void deleteApplicationCacheFiles(final String packageName,
                 final IPackageDataObserver observer) {
             final int userId = UserHandle.getCallingUserId();
@@ -5455,9 +5485,11 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
                             String loadingPkgDexCodeIsa = InstructionSets.getDexCodeInstructionSet(
                                     VMRuntime.getInstructionSet(loadingPkgAbi));
                             if (!loaderIsa.equals(loadingPkgDexCodeIsa)) {
-                                // TODO(b/251903639): Make this crash to surface this problem
-                                // better.
-                                Slog.w(PackageManagerService.TAG,
+                                // TODO(b/251903639): We make this a wtf to surface any situations
+                                // where this argument doesn't correspond to our expectations. Later
+                                // it should be turned into an IllegalArgumentException, when we can
+                                // assume it's the caller that's wrong rather than us.
+                                Log.wtf(TAG,
                                         "Invalid loaderIsa in notifyDexLoad call from "
                                                 + loadingPackageName + ", uid " + callingUid
                                                 + ": expected " + loadingPkgDexCodeIsa + ", got "
@@ -6198,8 +6230,12 @@ public class PackageManagerService implements PackageSender, TestUtilityService 
             mHandler.post(() -> {
                 final int id = verificationId >= 0 ? verificationId : -verificationId;
                 final PackageVerificationState state = mPendingVerification.get(id);
-                if (state == null || !state.checkRequiredVerifierUid(callingUid)) {
-                    // Only allow calls from required verifiers.
+                if (state == null) {
+                    return;
+                }
+                if (!state.checkRequiredVerifierUid(callingUid)
+                        && !state.checkSufficientVerifierUid(callingUid)) {
+                    // Only allow calls from verifiers.
                     return;
                 }
 

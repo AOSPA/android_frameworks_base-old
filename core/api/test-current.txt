@@ -16,6 +16,7 @@ package android {
     field public static final String CONFIGURE_DISPLAY_BRIGHTNESS = "android.permission.CONFIGURE_DISPLAY_BRIGHTNESS";
     field public static final String CONTROL_DEVICE_LIGHTS = "android.permission.CONTROL_DEVICE_LIGHTS";
     field public static final String CONTROL_DEVICE_STATE = "android.permission.CONTROL_DEVICE_STATE";
+    field public static final String DELETE_STAGED_HEALTH_CONNECT_REMOTE_DATA = "android.permission.DELETE_STAGED_HEALTH_CONNECT_REMOTE_DATA";
     field public static final String FORCE_DEVICE_POLICY_MANAGER_LOGS = "android.permission.FORCE_DEVICE_POLICY_MANAGER_LOGS";
     field public static final String FORCE_STOP_PACKAGES = "android.permission.FORCE_STOP_PACKAGES";
     field public static final String GRANT_RUNTIME_PERMISSIONS = "android.permission.GRANT_RUNTIME_PERMISSIONS";
@@ -29,6 +30,7 @@ package android {
     field public static final String MANAGE_NOTIFICATION_LISTENERS = "android.permission.MANAGE_NOTIFICATION_LISTENERS";
     field public static final String MANAGE_ROLLBACKS = "android.permission.MANAGE_ROLLBACKS";
     field public static final String MANAGE_TOAST_RATE_LIMITING = "android.permission.MANAGE_TOAST_RATE_LIMITING";
+    field public static final String MODIFY_HDR_CONVERSION_MODE = "android.permission.MODIFY_HDR_CONVERSION_MODE";
     field public static final String MODIFY_REFRESH_RATE_SWITCHING_TYPE = "android.permission.MODIFY_REFRESH_RATE_SWITCHING_TYPE";
     field public static final String MODIFY_USER_PREFERRED_DISPLAY_MODE = "android.permission.MODIFY_USER_PREFERRED_DISPLAY_MODE";
     field public static final String NETWORK_SETTINGS = "android.permission.NETWORK_SETTINGS";
@@ -131,6 +133,7 @@ package android.app {
     method @RequiresPermission(allOf={android.Manifest.permission.PACKAGE_USAGE_STATS, android.Manifest.permission.INTERACT_ACROSS_USERS_FULL}, conditional=true) public int getUidProcessState(int);
     method public void holdLock(android.os.IBinder, int);
     method public static boolean isHighEndGfx();
+    method public void notifySystemPropertiesChanged();
     method @RequiresPermission(android.Manifest.permission.SET_ACTIVITY_WATCHER) public void removeHomeVisibilityListener(@NonNull android.app.HomeVisibilityListener);
     method @RequiresPermission(android.Manifest.permission.RESET_APP_ERRORS) public void resetAppErrors();
     method public static void resumeAppSwitches() throws android.os.RemoteException;
@@ -759,6 +762,7 @@ package android.content {
     method public int getUserId();
     method public void setAutofillOptions(@Nullable android.content.AutofillOptions);
     method public void setContentCaptureOptions(@Nullable android.content.ContentCaptureOptions);
+    method public void updateDeviceId(int);
     field public static final String ATTENTION_SERVICE = "attention";
     field public static final String CONTENT_CAPTURE_MANAGER_SERVICE = "content_capture";
     field public static final String DEVICE_IDLE_CONTROLLER = "deviceidle";
@@ -943,6 +947,13 @@ package android.content.pm {
     field public int restrictedProfileParentId;
     field public int serialNumber;
     field public String userType;
+  }
+
+  public final class UserProperties implements android.os.Parcelable {
+    method public int getShowInLauncher();
+    field public static final int SHOW_IN_LAUNCHER_NO = 2; // 0x2
+    field public static final int SHOW_IN_LAUNCHER_SEPARATE = 1; // 0x1
+    field public static final int SHOW_IN_LAUNCHER_WITH_PARENT = 0; // 0x0
   }
 
 }
@@ -1330,11 +1341,14 @@ package android.hardware.display {
     method public boolean areUserDisabledHdrTypesAllowed();
     method @RequiresPermission(android.Manifest.permission.MODIFY_USER_PREFERRED_DISPLAY_MODE) public void clearGlobalUserPreferredDisplayMode();
     method @Nullable public android.view.Display.Mode getGlobalUserPreferredDisplayMode();
+    method @NonNull public android.hardware.display.HdrConversionMode getHdrConversionMode();
+    method @NonNull public int[] getSupportedHdrOutputTypes();
     method @NonNull public int[] getUserDisabledHdrTypes();
     method public boolean isMinimalPostProcessingRequested(int);
     method @RequiresPermission(android.Manifest.permission.ACCESS_SURFACE_FLINGER) public void overrideHdrTypes(int, @NonNull int[]);
     method @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public void setAreUserDisabledHdrTypesAllowed(boolean);
     method @RequiresPermission(android.Manifest.permission.MODIFY_USER_PREFERRED_DISPLAY_MODE) public void setGlobalUserPreferredDisplayMode(@NonNull android.view.Display.Mode);
+    method @RequiresPermission(android.Manifest.permission.MODIFY_HDR_CONVERSION_MODE) public void setHdrConversionMode(@NonNull android.hardware.display.HdrConversionMode);
     method @RequiresPermission(android.Manifest.permission.MODIFY_REFRESH_RATE_SWITCHING_TYPE) public void setRefreshRateSwitchingType(int);
     method @RequiresPermission(android.Manifest.permission.OVERRIDE_DISPLAY_MODE_REQUESTS) public void setShouldAlwaysRespectAppRequestedMode(boolean);
     method @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public void setUserDisabledHdrTypes(@NonNull int[]);
@@ -1345,6 +1359,19 @@ package android.hardware.display {
     field public static final int SWITCHING_TYPE_WITHIN_GROUPS = 1; // 0x1
     field public static final int VIRTUAL_DISPLAY_FLAG_OWN_FOCUS = 16384; // 0x4000
     field public static final int VIRTUAL_DISPLAY_FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS = 512; // 0x200
+  }
+
+  public final class HdrConversionMode implements android.os.Parcelable {
+    ctor public HdrConversionMode(int, int);
+    ctor public HdrConversionMode(int);
+    method public int describeContents();
+    method public int getConversionMode();
+    method public int getPreferredHdrOutputType();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.hardware.display.HdrConversionMode> CREATOR;
+    field public static final int HDR_CONVERSION_FORCE = 3; // 0x3
+    field public static final int HDR_CONVERSION_PASSTHROUGH = 1; // 0x1
+    field public static final int HDR_CONVERSION_SYSTEM = 2; // 0x2
   }
 
 }
@@ -1414,6 +1441,8 @@ package android.hardware.lights {
 package android.hardware.location {
 
   public final class ContextHubManager {
+    method @NonNull @RequiresPermission(android.Manifest.permission.ACCESS_CONTEXT_HUB) public boolean disableTestMode();
+    method @NonNull @RequiresPermission(android.Manifest.permission.ACCESS_CONTEXT_HUB) public boolean enableTestMode();
     method @NonNull @RequiresPermission(android.Manifest.permission.ACCESS_CONTEXT_HUB) public long[] getPreloadedNanoAppIds(@NonNull android.hardware.location.ContextHubInfo);
   }
 
@@ -1627,20 +1656,27 @@ package android.media {
 
   public class AudioManager {
     method @RequiresPermission("android.permission.QUERY_AUDIO_STATE") public int abandonAudioFocusForTest(@NonNull android.media.AudioFocusRequest, @NonNull String);
+    method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_SYSTEM_SETTINGS) public void forceComputeCsdOnAllDevices(boolean);
+    method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_SYSTEM_SETTINGS) public void forceUseFrameworkMel(boolean);
     method @NonNull @RequiresPermission(android.Manifest.permission.CALL_AUDIO_INTERCEPTION) public android.media.AudioRecord getCallDownlinkExtractionAudioRecord(@NonNull android.media.AudioFormat);
     method @NonNull @RequiresPermission(android.Manifest.permission.CALL_AUDIO_INTERCEPTION) public android.media.AudioTrack getCallUplinkInjectionAudioTrack(@NonNull android.media.AudioFormat);
+    method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_SYSTEM_SETTINGS) public float getCsd();
     method @Nullable public static android.media.AudioDeviceInfo getDeviceInfoFromType(int);
     method @IntRange(from=0) @RequiresPermission("android.permission.QUERY_AUDIO_STATE") public long getFadeOutDurationOnFocusLossMillis(@NonNull android.media.AudioAttributes);
     method @Nullable public static android.media.AudioHalVersionInfo getHalVersion();
     method public static final int[] getPublicStreamTypes();
     method @NonNull public java.util.List<java.lang.Integer> getReportedSurroundFormats();
+    method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_SYSTEM_SETTINGS) public float getRs2Value();
     method public int getStreamMinVolumeInt(int);
     method @NonNull public java.util.Map<java.lang.Integer,java.lang.Boolean> getSurroundFormats();
     method public boolean hasRegisteredDynamicPolicy();
-    method @RequiresPermission(anyOf={android.Manifest.permission.MODIFY_AUDIO_ROUTING, android.Manifest.permission.QUERY_AUDIO_STATE}) public boolean isFullVolumeDevice();
+    method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_SYSTEM_SETTINGS) public boolean isCsdEnabled();
+    method @RequiresPermission(anyOf={android.Manifest.permission.MODIFY_AUDIO_ROUTING, android.Manifest.permission.QUERY_AUDIO_STATE, android.Manifest.permission.MODIFY_AUDIO_SYSTEM_SETTINGS}) public boolean isFullVolumeDevice();
     method @RequiresPermission(android.Manifest.permission.CALL_AUDIO_INTERCEPTION) public boolean isPstnCallAudioInterceptable();
     method @RequiresPermission("android.permission.QUERY_AUDIO_STATE") public int requestAudioFocusForTest(@NonNull android.media.AudioFocusRequest, @NonNull String, int, int);
+    method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_SYSTEM_SETTINGS) public void setCsd(float);
     method public void setRampingRingerEnabled(boolean);
+    method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_SYSTEM_SETTINGS) public void setRs2Value(float);
     method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING) public void setTestDeviceConnectionState(@NonNull android.media.AudioDeviceAttributes, boolean);
   }
 
@@ -1833,7 +1869,10 @@ package android.os {
   public class Build {
     method public static boolean is64BitAbi(String);
     method public static boolean isDebuggable();
+    field @Nullable public static final String BRAND_FOR_ATTESTATION;
     field public static final boolean IS_EMULATOR;
+    field @Nullable public static final String MODEL_FOR_ATTESTATION;
+    field @Nullable public static final String PRODUCT_FOR_ATTESTATION;
   }
 
   public static class Build.VERSION {
@@ -2561,6 +2600,7 @@ package android.service.dreams {
   public abstract class DreamOverlayService extends android.app.Service {
     ctor public DreamOverlayService();
     method @Nullable public final android.os.IBinder onBind(@NonNull android.content.Intent);
+    method public void onEndDream();
     method public abstract void onStartDream(@NonNull android.view.WindowManager.LayoutParams);
     method public final void requestExit();
     method public final boolean shouldShowComplications();
@@ -2793,6 +2833,7 @@ package android.telephony {
     field public static final int HAL_SERVICE_MESSAGING = 2; // 0x2
     field public static final int HAL_SERVICE_MODEM = 3; // 0x3
     field public static final int HAL_SERVICE_NETWORK = 4; // 0x4
+    field public static final int HAL_SERVICE_SATELLITE = 8; // 0x8
     field public static final int HAL_SERVICE_SIM = 5; // 0x5
     field public static final int HAL_SERVICE_VOICE = 6; // 0x6
     field public static final android.util.Pair HAL_VERSION_UNKNOWN;
@@ -3356,6 +3397,7 @@ package android.view.inputmethod {
   }
 
   public final class InputMethodInfo implements android.os.Parcelable {
+    ctor public InputMethodInfo(@NonNull String, @NonNull String, @NonNull CharSequence, @NonNull String, boolean, @NonNull String);
     ctor public InputMethodInfo(@NonNull String, @NonNull String, @NonNull CharSequence, @NonNull String, int);
   }
 

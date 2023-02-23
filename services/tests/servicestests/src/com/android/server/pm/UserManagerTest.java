@@ -19,7 +19,6 @@ package com.android.server.pm;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
 
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.fail;
 import static org.junit.Assume.assumeTrue;
 import static org.testng.Assert.assertThrows;
@@ -145,7 +144,9 @@ public final class UserManagerTest {
 
     @Test
     public void testCloneUser() throws Exception {
-
+        assumeCloneEnabled();
+        UserHandle mainUser = mUserManager.getMainUser();
+        assumeTrue("Main user is null", mainUser != null);
         // Get the default properties for clone user type.
         final UserTypeDetails userTypeDetails =
                 UserTypeFactory.getUserTypes().get(UserManager.USER_TYPE_PROFILE_CLONE);
@@ -154,7 +155,7 @@ public final class UserManagerTest {
         final UserProperties typeProps = userTypeDetails.getDefaultUserPropertiesReference();
 
         // Test that only one clone user can be created
-        final int mainUserId = mUserManager.getMainUser().getIdentifier();
+        final int mainUserId = mainUser.getIdentifier();
         UserInfo userInfo = createProfileForUser("Clone user1",
                 UserManager.USER_TYPE_PROFILE_CLONE,
                 mainUserId);
@@ -189,6 +190,11 @@ public final class UserManagerTest {
                 cloneUserProperties::getCrossProfileIntentFilterAccessControl);
         assertThrows(SecurityException.class,
                 cloneUserProperties::getCrossProfileIntentResolutionStrategy);
+        assertThat(typeProps.isMediaSharedWithParent())
+                .isEqualTo(cloneUserProperties.isMediaSharedWithParent());
+        assertThat(typeProps.isCredentialShareableWithParent())
+                .isEqualTo(cloneUserProperties.isCredentialShareableWithParent());
+        assertThrows(SecurityException.class, cloneUserProperties::getDeleteAppWithParent);
 
         // Verify clone user parent
         assertThat(mUserManager.getProfileParent(mainUserId)).isNull();
@@ -532,6 +538,7 @@ public final class UserManagerTest {
     @Test
     public void testRemoveUserWhenPossible_withProfiles() throws Exception {
         assumeHeadlessModeEnabled();
+        assumeCloneEnabled();
         final UserInfo parentUser = createUser("Human User", /* flags= */ 0);
         final UserInfo cloneProfileUser = createProfileForUser("Clone Profile user",
                 UserManager.USER_TYPE_PROFILE_CLONE,
@@ -834,12 +841,16 @@ public final class UserManagerTest {
         // provided that the test caller has the necessary permissions.
         assertThat(userProps.getShowInLauncher()).isEqualTo(typeProps.getShowInLauncher());
         assertThat(userProps.getShowInSettings()).isEqualTo(typeProps.getShowInSettings());
-        assertFalse(userProps.getUseParentsContacts());
+        assertThat(userProps.getUseParentsContacts()).isFalse();
         assertThrows(SecurityException.class, userProps::getCrossProfileIntentFilterAccessControl);
         assertThrows(SecurityException.class, userProps::getCrossProfileIntentResolutionStrategy);
         assertThrows(SecurityException.class, userProps::getStartWithParent);
         assertThrows(SecurityException.class, userProps::getInheritDevicePolicy);
+        assertThat(userProps.isMediaSharedWithParent()).isFalse();
+        assertThat(userProps.isCredentialShareableWithParent()).isTrue();
+        assertThrows(SecurityException.class, userProps::getDeleteAppWithParent);
     }
+
 
     // Make sure only max managed profiles can be created
     @MediumTest
@@ -1529,6 +1540,12 @@ public final class UserManagerTest {
         // assume headless mode is enabled
         assumeTrue("Device doesn't have headless mode enabled",
                 UserManager.isHeadlessSystemUserMode());
+    }
+
+    private void assumeCloneEnabled() {
+        // assume clone profile is supported on the device
+        assumeTrue("Device doesn't support clone profiles ",
+                mUserManager.isUserTypeEnabled(UserManager.USER_TYPE_PROFILE_CLONE));
     }
 
     private boolean isAutomotive() {

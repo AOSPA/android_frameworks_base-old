@@ -36,6 +36,9 @@ import android.view.SurfaceSession
 import android.view.WindowManager
 import android.view.WindowlessWindowManager
 import com.android.systemui.dagger.qualifiers.Main
+import com.android.systemui.flags.FeatureFlags
+import com.android.systemui.flags.Flags
+import com.android.systemui.settings.DisplayTracker
 import com.android.systemui.statusbar.LightRevealEffect
 import com.android.systemui.statusbar.LightRevealScrim
 import com.android.systemui.statusbar.LinearLightRevealEffect
@@ -57,6 +60,7 @@ class UnfoldLightRevealOverlayAnimation
 @Inject
 constructor(
     private val context: Context,
+    private val featureFlags: FeatureFlags,
     private val deviceStateManager: DeviceStateManager,
     private val contentResolver: ContentResolver,
     private val displayManager: DisplayManager,
@@ -65,6 +69,7 @@ constructor(
     @Main private val executor: Executor,
     private val threadFactory: ThreadFactory,
     private val rotationChangeProvider: RotationChangeProvider,
+    private val displayTracker: DisplayTracker
 ) {
 
     private val transitionListener = TransitionListener()
@@ -81,6 +86,7 @@ constructor(
     private var scrimView: LightRevealScrim? = null
     private var isFolded: Boolean = false
     private var isUnfoldHandled: Boolean = true
+    private var overlayAddReason: AddOverlayReason? = null
 
     private var currentRotation: Int = context.display!!.rotation
 
@@ -100,7 +106,7 @@ constructor(
                 .setName("unfold-overlay-container")
 
         displayAreaHelper.get().attachToRootDisplayArea(
-            Display.DEFAULT_DISPLAY,
+            displayTracker.defaultDisplayId,
             containerBuilder
         ) { builder ->
             executor.execute {
@@ -158,6 +164,8 @@ constructor(
         ensureInBackground()
         ensureOverlayRemoved()
 
+        overlayAddReason = reason
+
         val newRoot = SurfaceControlViewHost(context, context.display!!, wwm)
         val params = getLayoutParams()
         val newView =
@@ -170,11 +178,7 @@ constructor(
                 .apply {
                     revealEffect = createLightRevealEffect()
                     isScrimOpaqueChangedListener = Consumer {}
-                    revealAmount =
-                        when (reason) {
-                            FOLD -> TRANSPARENT
-                            UNFOLD -> BLACK
-                        }
+                    revealAmount = calculateRevealAmount()
                 }
 
         newRoot.setView(newView, params)
@@ -205,6 +209,31 @@ constructor(
 
         scrimView = newView
         root = newRoot
+    }
+
+    private fun calculateRevealAmount(animationProgress: Float? = null): Float {
+        val overlayAddReason = overlayAddReason ?: UNFOLD
+
+        if (animationProgress == null) {
+            // Animation progress is unknown, calculate the initial value based on the overlay
+            // add reason
+            return when (overlayAddReason) {
+                FOLD -> TRANSPARENT
+                UNFOLD -> BLACK
+            }
+        }
+
+        val showVignetteWhenFolding =
+            featureFlags.isEnabled(Flags.ENABLE_DARK_VIGNETTE_WHEN_FOLDING)
+
+        return if (!showVignetteWhenFolding && overlayAddReason == FOLD) {
+            // Do not darken the content when SHOW_VIGNETTE_WHEN_FOLDING flag is off
+            // and we are folding the device. We still add the overlay to block touches
+            // while the animation is running but the overlay is transparent.
+            TRANSPARENT
+        } else {
+            animationProgress
+        }
     }
 
     private fun getLayoutParams(): WindowManager.LayoutParams {
@@ -259,7 +288,7 @@ constructor(
     private inner class TransitionListener : TransitionProgressListener {
 
         override fun onTransitionProgress(progress: Float) {
-            executeInBackground { scrimView?.revealAmount = progress }
+            executeInBackground { scrimView?.revealAmount = calculateRevealAmount(progress) }
         }
 
         override fun onTransitionFinished() {

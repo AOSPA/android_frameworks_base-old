@@ -24,16 +24,18 @@ import com.android.launcher3.icons.IconFactory
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.media.MediaProjectionAppSelectorActivity
 import com.android.systemui.media.MediaProjectionAppSelectorActivity.Companion.EXTRA_HOST_APP_USER_HANDLE
+import com.android.systemui.mediaprojection.appselector.data.ActivityTaskManagerLabelLoader
 import com.android.systemui.mediaprojection.appselector.data.ActivityTaskManagerThumbnailLoader
 import com.android.systemui.mediaprojection.appselector.data.AppIconLoader
 import com.android.systemui.mediaprojection.appselector.data.IconLoaderLibAppIconLoader
+import com.android.systemui.mediaprojection.appselector.data.RecentTaskLabelLoader
 import com.android.systemui.mediaprojection.appselector.data.RecentTaskListProvider
 import com.android.systemui.mediaprojection.appselector.data.RecentTaskThumbnailLoader
 import com.android.systemui.mediaprojection.appselector.data.ShellRecentTaskListProvider
 import com.android.systemui.mediaprojection.appselector.view.MediaProjectionRecentsViewController
 import com.android.systemui.mediaprojection.appselector.view.TaskPreviewSizeProvider
-import com.android.systemui.settings.UserTracker
-import com.android.systemui.shared.system.ActivityManagerWrapper
+import com.android.systemui.mediaprojection.devicepolicy.MediaProjectionDevicePolicyModule
+import com.android.systemui.mediaprojection.devicepolicy.PersonalProfile
 import com.android.systemui.statusbar.phone.ConfigurationControllerImpl
 import com.android.systemui.statusbar.policy.ConfigurationController
 import dagger.Binds
@@ -43,7 +45,6 @@ import dagger.Provides
 import dagger.Subcomponent
 import dagger.multibindings.ClassKey
 import dagger.multibindings.IntoMap
-import java.lang.IllegalArgumentException
 import javax.inject.Qualifier
 import javax.inject.Scope
 import kotlinx.coroutines.CoroutineScope
@@ -53,13 +54,12 @@ import kotlinx.coroutines.SupervisorJob
 
 @Qualifier @Retention(AnnotationRetention.BINARY) annotation class HostUserHandle
 
-@Qualifier @Retention(AnnotationRetention.BINARY) annotation class PersonalProfile
-
-@Qualifier @Retention(AnnotationRetention.BINARY) annotation class WorkProfile
-
 @Retention(AnnotationRetention.RUNTIME) @Scope annotation class MediaProjectionAppSelectorScope
 
-@Module(subcomponents = [MediaProjectionAppSelectorComponent::class])
+@Module(
+    subcomponents = [MediaProjectionAppSelectorComponent::class],
+    includes = [MediaProjectionDevicePolicyModule::class]
+)
 interface MediaProjectionModule {
     @Binds
     @IntoMap
@@ -69,9 +69,10 @@ interface MediaProjectionModule {
     ): Activity
 }
 
-/** Scoped values for [MediaProjectionAppSelectorComponent].
- *  We create a scope for the activity so certain dependencies like [TaskPreviewSizeProvider]
- *  could be reused. */
+/**
+ * Scoped values for [MediaProjectionAppSelectorComponent]. We create a scope for the activity so
+ * certain dependencies like [TaskPreviewSizeProvider] could be reused.
+ */
 @Module
 interface MediaProjectionAppSelectorModule {
 
@@ -80,6 +81,10 @@ interface MediaProjectionAppSelectorModule {
     fun bindRecentTaskThumbnailLoader(
         impl: ActivityTaskManagerThumbnailLoader
     ): RecentTaskThumbnailLoader
+
+    @Binds
+    @MediaProjectionAppSelectorScope
+    fun bindRecentTaskLabelLoader(impl: ActivityTaskManagerLabelLoader): RecentTaskLabelLoader
 
     @Binds
     @MediaProjectionAppSelectorScope
@@ -104,20 +109,6 @@ interface MediaProjectionAppSelectorModule {
         ): ConfigurationController = ConfigurationControllerImpl(activity)
 
         @Provides
-        @PersonalProfile
-        @MediaProjectionAppSelectorScope
-        fun personalUserHandle(activityManagerWrapper: ActivityManagerWrapper): UserHandle {
-            // Current foreground user is the 'personal' profile
-            return UserHandle.of(activityManagerWrapper.currentUserId)
-        }
-
-        @Provides
-        @WorkProfile
-        @MediaProjectionAppSelectorScope
-        fun workProfileUserHandle(userTracker: UserTracker): UserHandle? =
-            userTracker.userProfiles.find { it.isManagedProfile }?.userHandle
-
-        @Provides
         @HostUserHandle
         @MediaProjectionAppSelectorScope
         fun hostUserHandle(activity: MediaProjectionAppSelectorActivity): UserHandle {
@@ -125,8 +116,10 @@ interface MediaProjectionAppSelectorModule {
                 activity.intent.extras
                     ?: error("MediaProjectionAppSelectorActivity should be launched with extras")
             return extras.getParcelable(EXTRA_HOST_APP_USER_HANDLE)
-                ?: error("MediaProjectionAppSelectorActivity should be provided with " +
-                        "$EXTRA_HOST_APP_USER_HANDLE extra")
+                ?: error(
+                    "MediaProjectionAppSelectorActivity should be provided with " +
+                        "$EXTRA_HOST_APP_USER_HANDLE extra"
+                )
         }
 
         @Provides fun bindIconFactory(context: Context): IconFactory = IconFactory.obtain(context)
@@ -146,9 +139,7 @@ interface MediaProjectionAppSelectorComponent {
     /** Generates [MediaProjectionAppSelectorComponent]. */
     @Subcomponent.Factory
     interface Factory {
-        /**
-         * Create a factory to inject the activity into the graph
-         */
+        /** Create a factory to inject the activity into the graph */
         fun create(
             @BindsInstance activity: MediaProjectionAppSelectorActivity,
             @BindsInstance view: MediaProjectionAppSelectorView,

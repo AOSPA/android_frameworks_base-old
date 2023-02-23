@@ -795,7 +795,7 @@ final class ActivityManagerConstants extends ContentObserver {
             "no_kill_cached_processes_post_boot_completed_duration_millis";
 
     /** @see mEnforceReceiverExportedFlagRequirement */
-    private static final boolean DEFAULT_ENFORCE_RECEIVER_EXPORTED_FLAG_REQUIREMENT = false;
+    private static final boolean DEFAULT_ENFORCE_RECEIVER_EXPORTED_FLAG_REQUIREMENT = true;
 
     /** @see #mNoKillCachedProcessesUntilBootCompleted */
     private static final boolean DEFAULT_NO_KILL_CACHED_PROCESSES_UNTIL_BOOT_COMPLETED = true;
@@ -963,7 +963,7 @@ final class ActivityManagerConstants extends ContentObserver {
             "short_fgs_timeout_duration";
 
     /** @see #KEY_SHORT_FGS_TIMEOUT_DURATION */
-    static final long DEFAULT_SHORT_FGS_TIMEOUT_DURATION = 60_000;
+    static final long DEFAULT_SHORT_FGS_TIMEOUT_DURATION = 3 * 60_000;
 
     /** @see #KEY_SHORT_FGS_TIMEOUT_DURATION */
     public volatile long mShortFgsTimeoutDuration = DEFAULT_SHORT_FGS_TIMEOUT_DURATION;

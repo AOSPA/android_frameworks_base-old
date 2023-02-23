@@ -49,6 +49,7 @@ import kotlin.math.pow
 import kotlin.math.sqrt
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
@@ -66,6 +67,8 @@ import kotlinx.coroutines.launch
 object KeyguardBottomAreaViewBinder {
 
     private const val EXIT_DOZE_BUTTON_REVEAL_ANIMATION_DURATION_MS = 250L
+    private const val SCALE_SELECTED_BUTTON = 1.23f
+    private const val DIM_ALPHA = 0.3f
 
     /**
      * Defines interface for an object that acts as the binding between the view and its view-model.
@@ -161,9 +164,23 @@ object KeyguardBottomAreaViewBinder {
 
                         ambientIndicationArea?.alpha = alpha
                         indicationArea.alpha = alpha
-                        startButton.alpha = alpha
-                        endButton.alpha = alpha
                     }
+                }
+
+                launch {
+                    updateButtonAlpha(
+                        view = startButton,
+                        viewModel = viewModel.startButton,
+                        alphaFlow = viewModel.alpha,
+                    )
+                }
+
+                launch {
+                    updateButtonAlpha(
+                        view = endButton,
+                        viewModel = viewModel.endButton,
+                        alphaFlow = viewModel.alpha,
+                    )
                 }
 
                 launch {
@@ -315,6 +332,11 @@ object KeyguardBottomAreaViewBinder {
             } else {
                 null
             }
+        view
+            .animate()
+            .scaleX(if (viewModel.isSelected) SCALE_SELECTED_BUTTON else 1f)
+            .scaleY(if (viewModel.isSelected) SCALE_SELECTED_BUTTON else 1f)
+            .start()
 
         view.isClickable = viewModel.isClickable
         if (viewModel.isClickable) {
@@ -331,6 +353,17 @@ object KeyguardBottomAreaViewBinder {
         }
 
         view.isSelected = viewModel.isSelected
+    }
+
+    private suspend fun updateButtonAlpha(
+        view: View,
+        viewModel: Flow<KeyguardQuickAffordanceViewModel>,
+        alphaFlow: Flow<Float>,
+    ) {
+        combine(viewModel.map { it.isDimmed }, alphaFlow) { isDimmed, alpha ->
+                if (isDimmed) DIM_ALPHA else alpha
+            }
+            .collect { view.alpha = it }
     }
 
     private class OnTouchListener(

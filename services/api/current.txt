@@ -46,6 +46,14 @@ package com.android.server.am {
 
 }
 
+package com.android.server.appop {
+
+  public interface AppOpsManagerLocal {
+    method public boolean isUidInForeground(int);
+  }
+
+}
+
 package com.android.server.pm {
 
   public interface PackageManagerLocal {
@@ -213,19 +221,6 @@ package com.android.server.role {
   public interface RoleServicePlatformHelper {
     method @NonNull public String computePackageStateHash(int);
     method @NonNull public java.util.Map<java.lang.String,java.util.Set<java.lang.String>> getLegacyRoleState(int);
-  }
-
-}
-
-package com.android.server.security {
-
-  public class FileIntegrityService extends com.android.server.SystemService {
-    method public void onStart();
-    method public static void setUpFsVerity(@NonNull String) throws java.io.IOException;
-  }
-
-  public class KeyChainSystemService extends com.android.server.SystemService {
-    method public void onStart();
   }
 
 }

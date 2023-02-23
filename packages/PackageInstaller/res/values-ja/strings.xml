@@ -26,10 +26,8 @@
     <string name="install_done" msgid="5987363587661783896">"アプリをインストールしました。"</string>
     <string name="install_confirm_question" msgid="7663733664476363311">"このアプリをインストールしますか？"</string>
     <string name="install_confirm_question_update" msgid="3348888852318388584">"このアプリを更新しますか？"</string>
-    <!-- no translation found for install_confirm_question_update_owner_changed (4215696609006069124) -->
-    <skip />
-    <!-- no translation found for install_confirm_question_update_owner_reminder (8778026710268011466) -->
-    <skip />
+    <string name="install_confirm_question_update_owner_changed" msgid="4215696609006069124">"このアプリのアップデートは現在 <xliff:g id="EXISTING_UPDATE_OWNER">%1$s</xliff:g> によって管理されています。\n\n更新すると、今後は代わりに <xliff:g id="NEW_UPDATE_OWNER">%2$s</xliff:g> からアップデートを入手するようになります。"</string>
+    <string name="install_confirm_question_update_owner_reminder" msgid="8778026710268011466">"このアプリのアップデートは現在 <xliff:g id="EXISTING_UPDATE_OWNER">%1$s</xliff:g> によって管理されています。\n\nこのアップデートを <xliff:g id="NEW_UPDATE_OWNER">%2$s</xliff:g> からインストールしますか？"</string>
     <string name="install_failed" msgid="5777824004474125469">"アプリはインストールされていません。"</string>
     <string name="install_failed_blocked" msgid="8512284352994752094">"パッケージのインストールはブロックされています。"</string>
     <string name="install_failed_conflict" msgid="3493184212162521426">"パッケージが既存のパッケージと競合するため、アプリをインストールできませんでした。"</string>
@@ -72,6 +70,7 @@
     <string name="uninstalling_app" msgid="8866082646836981397">"「<xliff:g id="PACKAGE_LABEL">%1$s</xliff:g>」をアンインストールしています…"</string>
     <string name="uninstall_done" msgid="439354138387969269">"アンインストールが完了しました。"</string>
     <string name="uninstall_done_app" msgid="4588850984473605768">"「<xliff:g id="PACKAGE_LABEL">%1$s</xliff:g>」をアンインストールしました"</string>
+    <string name="uninstall_done_clone_app" msgid="5578308154544195413">"削除された <xliff:g id="PACKAGE_LABEL">%1$s</xliff:g> のクローン"</string>
     <string name="uninstall_failed" msgid="1847750968168364332">"アンインストールできませんでした。"</string>
     <string name="uninstall_failed_app" msgid="5506028705017601412">"「<xliff:g id="PACKAGE_LABEL">%1$s</xliff:g>」をアンインストールできませんでした。"</string>
     <string name="uninstalling_cloned_app" msgid="1826380164974984870">"<xliff:g id="PACKAGE_LABEL">%1$s</xliff:g> のクローンを削除しています…"</string>

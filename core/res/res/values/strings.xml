@@ -1331,6 +1331,16 @@
     <!-- Description of the background body sensors permission, listed so the user can decide whether to allow the application to access data from body sensors in the background. [CHAR LIMIT=NONE] -->
     <string name="permdesc_bodySensors_background" product="default">Allows the app to access body sensor data, such as heart rate, temperature, and blood oxygen percentage, while the app is in the background.</string>
 
+    <!-- Title of the body sensors wrist temperature permission, listed so the user can decide whether to allow the application to access body sensor wrist temperature data. [CHAR LIMIT=NONE] -->
+    <string name="permlab_bodySensorsWristTemperature">Access body sensor wrist temperature data while the app is in use.</string>
+    <!-- Description of the body sensors wrist temperature permission, listed so the user can decide whether to allow the application to access data from body sensors. [CHAR LIMIT=NONE] -->
+    <string name="permdesc_bodySensorsWristTemperature" product="default">Allows the app to access body sensor wrist temperature data, while the app is in use.</string>
+
+    <!-- Title of the body sensors wrist temperature permission, listed so the user can decide whether to allow the application to access body sensor wrist temperature data. [CHAR LIMIT=NONE] -->
+    <string name="permlab_bodySensors_wristTemperature_background">Access body sensor wrist temperature data while the app is in the background.</string>
+    <!-- Description of the body sensors wrist temperature permission, listed so the user can decide whether to allow the application to access data from body sensors. [CHAR LIMIT=NONE] -->
+    <string name="permdesc_bodySensors_wristTemperature_background" product="default">Allows the app to access body sensor wrist temperature data, while the app is in the background.</string>
+
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_readCalendar">Read calendar events and details</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
@@ -5016,6 +5026,14 @@
     <!-- Cling help message confirmation button when hiding the navigation bar entering immersive mode [CHAR LIMIT=30] -->
     <string name="immersive_cling_positive">Got it</string>
 
+    <!-- Text on a toast shown after the system rotates the screen for camera app
+         compatibility. [CHAR LIMIT=NONE] -->
+    <string name="display_rotation_camera_compat_toast_after_rotation">Rotate for a better view</string>
+
+    <!-- Text on a toast shown when a camera view is started within the app that may not be able
+         to display the camera preview correctly while in split screen. [CHAR LIMIT=NONE] -->
+    <string name="display_rotation_camera_compat_toast_in_split_screen">Exit split screen for a better view</string>
+
     <!-- Label for button to confirm chosen date or time [CHAR LIMIT=30] -->
     <string name="done_label">Done</string>
     <!--
@@ -5050,6 +5068,13 @@
     <string name="managed_profile_label_badge">Work <xliff:g id="label" example="Email">%1$s</xliff:g></string>
     <string name="managed_profile_label_badge_2">2nd Work <xliff:g id="label" example="Email">%1$s</xliff:g></string>
     <string name="managed_profile_label_badge_3">3rd Work <xliff:g id="label" example="Email">%1$s</xliff:g></string>
+
+    <!--
+        Used to wrap a label for content description for a Clone profile, e.g. "Clone Messenger"
+        instead of Messenger when the Messenger app is cloned.
+        [CHAR LIMIT=20]
+    -->
+    <string name="clone_profile_label_badge">Clone <xliff:g id="label" example="Messenger">%1$s</xliff:g></string>
 
     <!-- DO NOT TRANSLATE -->
     <string name="time_placeholder">--</string>

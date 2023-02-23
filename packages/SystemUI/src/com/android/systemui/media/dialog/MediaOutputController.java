@@ -141,7 +141,7 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
     @VisibleForTesting
     LocalMediaManager mLocalMediaManager;
     @VisibleForTesting
-    private MediaOutputMetricLogger mMetricLogger;
+    MediaOutputMetricLogger mMetricLogger;
     private int mCurrentState;
 
     private int mColorItemContent;
@@ -380,6 +380,15 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
             return null;
         }
         return mContext.getPackageManager().getLaunchIntentForPackage(mPackageName);
+    }
+
+    void tryToLaunchMediaApplication() {
+        Intent launchIntent = getAppLaunchIntent();
+        if (launchIntent != null) {
+            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            mCallback.dismissDialog();
+            mContext.startActivity(launchIntent);
+        }
     }
 
     CharSequence getHeaderTitle() {
@@ -861,10 +870,13 @@ public class MediaOutputController implements LocalMediaManager.DeviceCallback,
     }
 
     void adjustVolume(MediaDevice device, int volume) {
-        mMetricLogger.logInteractionAdjustVolume(device);
         ThreadUtils.postOnBackgroundThread(() -> {
             device.requestSetVolume(volume);
         });
+    }
+
+    void logInteractionAdjustVolume(MediaDevice device) {
+        mMetricLogger.logInteractionAdjustVolume(device);
     }
 
     String getPackageName() {

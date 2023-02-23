@@ -61,7 +61,6 @@ import android.app.ActivityManagerInternal;
 import android.app.AppGlobals;
 import android.app.AppOpsManager;
 import android.app.BroadcastOptions;
-import android.app.Dialog;
 import android.app.IStopUserCallback;
 import android.app.IUserSwitchObserver;
 import android.app.KeyguardManager;
@@ -1458,8 +1457,7 @@ class UserController implements Handler.Callback {
     }
 
     private boolean shouldStartWithParent(UserInfo user) {
-        final UserProperties properties = mInjector.getUserManagerInternal()
-                .getUserProperties(user.id);
+        final UserProperties properties = getUserProperties(user.id);
         return (properties != null && properties.getStartWithParent())
                 && !user.isQuietModeEnabled();
     }
@@ -1472,7 +1470,11 @@ class UserController implements Handler.Callback {
      * @param userId the id of the user to start.
      * @return true if the operation was successful.
      */
-    boolean startProfile(final @UserIdInt int userId) {
+    boolean startProfile(@UserIdInt int userId) {
+        return startProfile(userId, /* unlockListener= */ null);
+    }
+
+    boolean startProfile(@UserIdInt int userId, @Nullable IProgressListener unlockListener) {
         if (mInjector.checkCallingPermission(android.Manifest.permission.MANAGE_USERS)
                 == PackageManager.PERMISSION_DENIED && mInjector.checkCallingPermission(
                 android.Manifest.permission.INTERACT_ACROSS_USERS_FULL)
@@ -1493,7 +1495,7 @@ class UserController implements Handler.Callback {
         }
 
         return startUserNoChecks(userId, Display.DEFAULT_DISPLAY,
-                USER_START_MODE_BACKGROUND_VISIBLE, /* unlockListener= */ null);
+                USER_START_MODE_BACKGROUND_VISIBLE, unlockListener);
     }
 
     @VisibleForTesting
@@ -1677,6 +1679,7 @@ class UserController implements Handler.Callback {
                         R.anim.screen_user_exit, R.anim.screen_user_enter);
                 t.traceEnd();
             }
+            dismissUserSwitchDialog(); // so that we don't hold a reference to mUserSwitchingDialog
 
             boolean needStart = false;
             boolean updateUmState = false;
@@ -1863,6 +1866,8 @@ class UserController implements Handler.Callback {
         boolean success = startUser(targetUserId, USER_START_MODE_FOREGROUND);
         if (!success) {
             mInjector.getWindowManager().setSwitchingUser(false);
+            mTargetUserId = UserHandle.USER_NULL;
+            dismissUserSwitchDialog();
         }
     }
 
@@ -2009,6 +2014,10 @@ class UserController implements Handler.Callback {
                     START_USER_SWITCH_FG_MSG, targetUserId, 0));
         }
         return true;
+    }
+
+    private void dismissUserSwitchDialog() {
+        mInjector.dismissUserSwitchingDialog();
     }
 
     private void showUserSwitchDialog(Pair<UserInfo, UserInfo> fromToUserPair) {
@@ -2767,6 +2776,10 @@ class UserController implements Handler.Callback {
         return mInjector.getUserManager().getUserInfo(userId);
     }
 
+    private @Nullable UserProperties getUserProperties(@UserIdInt int userId) {
+        return mInjector.getUserManagerInternal().getUserProperties(userId);
+    }
+
     int[] getUserIds() {
         return mInjector.getUserManager().getUserIds();
     }
@@ -2897,7 +2910,8 @@ class UserController implements Handler.Callback {
         if (getStartedUserState(userId) == null) {
             return false;
         }
-        if (!mInjector.getUserManager().isCredentialSharableWithParent(userId)) {
+        final UserProperties properties = getUserProperties(userId);
+        if (properties == null || !properties.isCredentialShareableWithParent()) {
             return false;
         }
         if (mLockPatternUtils.isSeparateProfileChallengeEnabled(userId)) {
@@ -3462,6 +3476,9 @@ class UserController implements Handler.Callback {
         private UserManagerService mUserManager;
         private UserManagerInternal mUserManagerInternal;
         private Handler mHandler;
+        private final Object mUserSwitchingDialogLock = new Object();
+        @GuardedBy("mUserSwitchingDialogLock")
+        private UserSwitchingDialog mUserSwitchingDialog;
 
         Injector(ActivityManagerService service) {
             mService = service;
@@ -3637,6 +3654,15 @@ class UserController implements Handler.Callback {
             mService.mCpHelper.installEncryptionUnawareProviders(userId);
         }
 
+        void dismissUserSwitchingDialog() {
+            synchronized (mUserSwitchingDialogLock) {
+                if (mUserSwitchingDialog != null) {
+                    mUserSwitchingDialog.dismiss();
+                    mUserSwitchingDialog = null;
+                }
+            }
+        }
+
         void showUserSwitchingDialog(UserInfo fromUser, UserInfo toUser,
                 String switchingFromSystemUserMessage, String switchingToSystemUserMessage) {
             if (mService.mContext.getPackageManager()
@@ -3647,10 +3673,13 @@ class UserController implements Handler.Callback {
                 Slogf.w(TAG, "Showing user switch dialog on UserController, it could cause a race "
                         + "condition if it's shown by CarSystemUI as well");
             }
-            final Dialog d = new UserSwitchingDialog(mService, mService.mContext, fromUser,
-                    toUser, true /* above system */, switchingFromSystemUserMessage,
-                    switchingToSystemUserMessage);
-            d.show();
+            synchronized (mUserSwitchingDialogLock) {
+                dismissUserSwitchingDialog();
+                mUserSwitchingDialog = new UserSwitchingDialog(mService, mService.mContext,
+                        fromUser, toUser, true /* above system */, switchingFromSystemUserMessage,
+                        switchingToSystemUserMessage);
+                mUserSwitchingDialog.show();
+            }
         }
 
         void reportGlobalUsageEvent(int event) {

@@ -575,6 +575,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     // What we do when the user double-taps on home
     private int mDoubleTapOnHomeBehavior;
 
+    // Whether to lock the device after the next app transition has finished.
+    private boolean mLockAfterAppTransitionFinished;
+
     // Allowed theater mode wake actions
     private boolean mAllowTheaterModeWakeFromKey;
     private boolean mAllowTheaterModeWakeFromPowerKey;
@@ -661,7 +664,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     dispatchMediaKeyRepeatWithWakeLock((KeyEvent)msg.obj);
                     break;
                 case MSG_DISPATCH_SHOW_RECENTS:
-                    showRecents();
+                    showRecentApps(false);
                     break;
                 case MSG_DISPATCH_SHOW_GLOBAL_ACTIONS:
                     showGlobalActionsInternal();
@@ -1004,14 +1007,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             powerMultiPressAction(eventTime, interactive, mTriplePressOnPowerBehavior);
         } else if (count > 3 && count <= getMaxMultiPressPowerCount()) {
             Slog.d(TAG, "No behavior defined for power press count " + count);
-        } else if (count == 1 && interactive) {
-            if (beganFromNonInteractive) {
-                // The "screen is off" case, where we might want to start dreaming on power button
-                // press.
-                attemptToDreamFromShortPowerButtonPress(false, () -> {});
-                return;
-            }
-
+        } else if (count == 1 && interactive && !beganFromNonInteractive) {
             if (mSideFpsEventHandler.shouldConsumeSinglePress(eventTime)) {
                 Slog.i(TAG, "Suppressing power key because the user is interacting with the "
                         + "fingerprint sensor");
@@ -1089,11 +1085,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             return;
         }
 
-        // Make sure the device locks. Unfortunately, this has the side-effect of briefly revealing
-        // the lock screen before the dream appears. Note that locking is a side-effect of the no
-        // dream action that is executed if we early return above.
-        // TODO(b/261662912): Find a better way to lock the device that doesn't result in jank.
-        lockNow(null);
+        synchronized (mLock) {
+            // Lock the device after the dream transition has finished.
+            mLockAfterAppTransitionFinished = true;
+        }
 
         dreamManagerInternal.requestDream();
     }
@@ -2212,6 +2207,22 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 handleTransitionForKeyguardLw(
                         keyguardGoingAwayCancelled /* startKeyguardExitAnimation */,
                         true /* notifyOccluded */);
+
+                synchronized (mLock) {
+                    mLockAfterAppTransitionFinished = false;
+                }
+            }
+
+            @Override
+            public void onAppTransitionFinishedLocked(IBinder token) {
+                synchronized (mLock) {
+                    if (!mLockAfterAppTransitionFinished) {
+                        return;
+                    }
+                    mLockAfterAppTransitionFinished = false;
+                }
+
+                lockNow(null);
             }
         });
 
@@ -2925,7 +2936,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 break;
             case KeyEvent.KEYCODE_RECENT_APPS:
                 if (down && repeatCount == 0) {
-                    showRecents();
+                    showRecentApps(false /* triggeredFromAltTab */);
                 }
                 return key_consumed;
             case KeyEvent.KEYCODE_APP_SWITCH:
@@ -3108,22 +3119,21 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 }
                 break;
             case KeyEvent.KEYCODE_TAB:
-                if (down) {
-                    if (event.isMetaPressed()) {
-                        if (!keyguardOn && isUserSetupComplete()) {
-                            showRecents();
+                if (down && event.isMetaPressed()) {
+                    if (!keyguardOn && isUserSetupComplete()) {
+                        showRecentApps(false);
+                        return key_consumed;
+                    }
+                } else if (down && repeatCount == 0) {
+                    // Display task switcher for ALT-TAB.
+                    if (mRecentAppsHeldModifiers == 0 && !keyguardOn && isUserSetupComplete()) {
+                        final int shiftlessModifiers =
+                                event.getModifiers() & ~KeyEvent.META_SHIFT_MASK;
+                        if (KeyEvent.metaStateHasModifiers(
+                                shiftlessModifiers, KeyEvent.META_ALT_ON)) {
+                            mRecentAppsHeldModifiers = shiftlessModifiers;
+                            showRecentApps(true);
                             return key_consumed;
-                        }
-                    } else {
-                        // Display task switcher for ALT-TAB.
-                        if (mRecentAppsHeldModifiers == 0 && !keyguardOn && isUserSetupComplete()) {
-                            final int modifiers = event.getModifiers();
-                            if (KeyEvent.metaStateHasModifiers(modifiers, KeyEvent.META_ALT_ON)) {
-                                mRecentAppsHeldModifiers = modifiers;
-                                showRecentsFromAltTab(KeyEvent.metaStateHasModifiers(modifiers,
-                                        KeyEvent.META_SHIFT_ON));
-                                return key_consumed;
-                            }
                         }
                     }
                 }
@@ -3660,19 +3670,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mHandler.obtainMessage(MSG_DISPATCH_SHOW_RECENTS).sendToTarget();
     }
 
-    private void showRecents() {
+    private void showRecentApps(boolean triggeredFromAltTab) {
         mPreloadedRecentApps = false; // preloading no longer needs to be canceled
         StatusBarManagerInternal statusbar = getStatusBarManagerInternal();
         if (statusbar != null) {
-            statusbar.showRecentApps(false /* triggeredFromAltTab */, false /* forward */);
-        }
-    }
-
-    private void showRecentsFromAltTab(boolean forward) {
-        mPreloadedRecentApps = false; // preloading no longer needs to be canceled
-        StatusBarManagerInternal statusbar = getStatusBarManagerInternal();
-        if (statusbar != null) {
-            statusbar.showRecentApps(true /* triggeredFromAltTab */, forward);
+            statusbar.showRecentApps(triggeredFromAltTab);
         }
     }
 
@@ -5731,44 +5733,53 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         switch (effectId) {
             case HapticFeedbackConstants.CONTEXT_CLICK:
             case HapticFeedbackConstants.GESTURE_END:
+            case HapticFeedbackConstants.GESTURE_THRESHOLD_ACTIVATE:
             case HapticFeedbackConstants.ROTARY_SCROLL_TICK:
+            case HapticFeedbackConstants.SEGMENT_TICK:
                 return VibrationEffect.get(VibrationEffect.EFFECT_TICK);
+
             case HapticFeedbackConstants.TEXT_HANDLE_MOVE:
                 if (!mHapticTextHandleEnabled) {
                     return null;
                 }
                 // fallthrough
             case HapticFeedbackConstants.CLOCK_TICK:
+            case HapticFeedbackConstants.SEGMENT_FREQUENT_TICK:
                 return VibrationEffect.get(VibrationEffect.EFFECT_TEXTURE_TICK);
+
             case HapticFeedbackConstants.KEYBOARD_RELEASE:
             case HapticFeedbackConstants.VIRTUAL_KEY_RELEASE:
             case HapticFeedbackConstants.ENTRY_BUMP:
             case HapticFeedbackConstants.DRAG_CROSSING:
                 return VibrationEffect.get(VibrationEffect.EFFECT_TICK, false);
+
             case HapticFeedbackConstants.KEYBOARD_TAP: // == KEYBOARD_PRESS
             case HapticFeedbackConstants.VIRTUAL_KEY:
             case HapticFeedbackConstants.EDGE_RELEASE:
+            case HapticFeedbackConstants.CALENDAR_DATE:
             case HapticFeedbackConstants.CONFIRM:
             case HapticFeedbackConstants.GESTURE_START:
             case HapticFeedbackConstants.ROTARY_SCROLL_ITEM_FOCUS:
             case HapticFeedbackConstants.ROTARY_SCROLL_LIMIT:
                 return VibrationEffect.get(VibrationEffect.EFFECT_CLICK);
+
             case HapticFeedbackConstants.LONG_PRESS:
             case HapticFeedbackConstants.LONG_PRESS_POWER_BUTTON:
+            case HapticFeedbackConstants.DRAG_START:
             case HapticFeedbackConstants.EDGE_SQUEEZE:
                 return VibrationEffect.get(VibrationEffect.EFFECT_HEAVY_CLICK);
+
             case HapticFeedbackConstants.REJECT:
                 return VibrationEffect.get(VibrationEffect.EFFECT_DOUBLE_CLICK);
 
-            case HapticFeedbackConstants.CALENDAR_DATE:
-                return VibrationEffect.get(VibrationEffect.EFFECT_CLICK);
             case HapticFeedbackConstants.SAFE_MODE_ENABLED:
                 pattern = mSafeModeEnabledVibePattern;
                 break;
 
             case HapticFeedbackConstants.ASSISTANT_BUTTON:
                 if (mVibrator.areAllPrimitivesSupported(
-                        VibrationEffect.Composition.PRIMITIVE_QUICK_RISE)) {
+                        VibrationEffect.Composition.PRIMITIVE_QUICK_RISE,
+                        VibrationEffect.Composition.PRIMITIVE_TICK)) {
                     // quiet ramp, short pause, then sharp tick
                     return VibrationEffect.startComposition()
                             .addPrimitive(VibrationEffect.Composition.PRIMITIVE_QUICK_RISE, 0.25f)
@@ -5778,6 +5789,22 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 // fallback for devices without composition support
                 return VibrationEffect.get(VibrationEffect.EFFECT_HEAVY_CLICK);
 
+            case HapticFeedbackConstants.GESTURE_THRESHOLD_DEACTIVATE:
+                return getScaledPrimitiveOrElseEffect(
+                        VibrationEffect.Composition.PRIMITIVE_TICK, 0.4f,
+                        VibrationEffect.EFFECT_TEXTURE_TICK);
+
+            case HapticFeedbackConstants.TOGGLE_ON:
+                return getScaledPrimitiveOrElseEffect(
+                        VibrationEffect.Composition.PRIMITIVE_TICK, 0.5f,
+                        VibrationEffect.EFFECT_TICK);
+
+            case HapticFeedbackConstants.TOGGLE_OFF:
+                return getScaledPrimitiveOrElseEffect(
+                        VibrationEffect.Composition.PRIMITIVE_LOW_TICK, 0.2f,
+                        VibrationEffect.EFFECT_TEXTURE_TICK);
+
+            case HapticFeedbackConstants.NO_HAPTICS:
             default:
                 return null;
         }
@@ -5790,6 +5817,17 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         } else {
             // Pattern vibration
             return VibrationEffect.createWaveform(pattern, -1);
+        }
+    }
+
+    private VibrationEffect getScaledPrimitiveOrElseEffect(int primitiveId, float scale,
+            int elseEffectId) {
+        if (mVibrator.areAllPrimitivesSupported(primitiveId)) {
+            return VibrationEffect.startComposition()
+                    .addPrimitive(primitiveId, scale)
+                    .compose();
+        } else {
+            return VibrationEffect.get(elseEffectId);
         }
     }
 
