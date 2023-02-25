@@ -909,6 +909,11 @@ public class InternetDialog extends SystemUIDialog implements
     }
 
     @Override
+    public void onCarrierNetworkChange(boolean active) {
+        mHandler.post(() -> updateDialog(true /* shouldUpdateMobileNetwork */));
+    }
+
+    @Override
     public void onNonDdsCallStateChanged(int callState) {
         mHandler.post(() -> updateDialog(true /* shouldUpdateMobileNetwork */));
     }

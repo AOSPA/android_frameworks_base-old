@@ -20,6 +20,7 @@
 #include "android_media_tv_Tuner.h"
 
 #include <aidl/android/hardware/tv/tuner/AudioExtraMetaData.h>
+#include <aidl/android/hardware/tv/tuner/AudioPresentation.h>
 #include <aidl/android/hardware/tv/tuner/AudioStreamType.h>
 #include <aidl/android/hardware/tv/tuner/AvStreamType.h>
 #include <aidl/android/hardware/tv/tuner/Constant.h>
@@ -161,12 +162,14 @@
 #include <nativehelper/ScopedLocalRef.h>
 #include <utils/Log.h>
 
+#include "android_media_AudioPresentation.h"
 #include "android_media_MediaCodecLinearBlock.h"
 #include "android_runtime/AndroidRuntime.h"
 
 #pragma GCC diagnostic ignored "-Wunused-function"
 
 using ::aidl::android::hardware::tv::tuner::AudioExtraMetaData;
+using ::aidl::android::hardware::tv::tuner::AudioPreselection;
 using ::aidl::android::hardware::tv::tuner::AudioStreamType;
 using ::aidl::android::hardware::tv::tuner::AvStreamType;
 using ::aidl::android::hardware::tv::tuner::Constant;
@@ -362,6 +365,9 @@ void DestroyCallback(const C2Buffer * buf, void *arg) {
 }
 
 namespace android {
+
+static JAudioPresentationInfo::fields_t gAudioPresentationFields;
+
 /////////////// LnbClientCallbackImpl ///////////////////////
 void LnbClientCallbackImpl::onEvent(const LnbEventType lnbEventType) {
     ALOGV("LnbClientCallbackImpl::onEvent, type=%d", lnbEventType);
@@ -634,27 +640,45 @@ void FilterClientCallbackImpl::getMediaEvent(jobjectArray &arr, const int size,
             eventClazz,
             "<init>",
             "(IZJZJJJLandroid/media/MediaCodec$LinearBlock;"
-            "ZJIZILandroid/media/tv/tuner/filter/AudioDescriptor;)V");
+            "ZJIZILandroid/media/tv/tuner/filter/AudioDescriptor;"
+            "Ljava/util/List;)V");
     jfieldID eventContext = env->GetFieldID(eventClazz, "mNativeContext", "J");
 
     const DemuxFilterMediaEvent &mediaEvent = event.get<DemuxFilterEvent::Tag::media>();
     jobject audioDescriptor = nullptr;
-    if (mediaEvent.extraMetaData.getTag() == DemuxFilterMediaEventExtraMetaData::Tag::audio) {
-        jclass adClazz = env->FindClass("android/media/tv/tuner/filter/AudioDescriptor");
-        jmethodID adInit = env->GetMethodID(adClazz, "<init>", "(BBCBBB)V");
+    gAudioPresentationFields.init(env);
+    jobject presentationsJObj = JAudioPresentationInfo::asJobject(env, gAudioPresentationFields);
+    switch (mediaEvent.extraMetaData.getTag()) {
+        case DemuxFilterMediaEventExtraMetaData::Tag::audio: {
+            jclass adClazz = env->FindClass("android/media/tv/tuner/filter/AudioDescriptor");
+            jmethodID adInit = env->GetMethodID(adClazz, "<init>", "(BBCBBB)V");
 
-        const AudioExtraMetaData &ad =
-                mediaEvent.extraMetaData.get<DemuxFilterMediaEventExtraMetaData::Tag::audio>();
-        jbyte adFade = ad.adFade;
-        jbyte adPan = ad.adPan;
-        jchar versionTextTag = ad.versionTextTag;
-        jbyte adGainCenter = ad.adGainCenter;
-        jbyte adGainFront = ad.adGainFront;
-        jbyte adGainSurround = ad.adGainSurround;
+            const AudioExtraMetaData &ad =
+                    mediaEvent.extraMetaData.get<DemuxFilterMediaEventExtraMetaData::Tag::audio>();
+            jbyte adFade = ad.adFade;
+            jbyte adPan = ad.adPan;
+            jchar versionTextTag = ad.versionTextTag;
+            jbyte adGainCenter = ad.adGainCenter;
+            jbyte adGainFront = ad.adGainFront;
+            jbyte adGainSurround = ad.adGainSurround;
 
-        audioDescriptor = env->NewObject(adClazz, adInit, adFade, adPan, versionTextTag,
-                                         adGainCenter, adGainFront, adGainSurround);
-        env->DeleteLocalRef(adClazz);
+            audioDescriptor = env->NewObject(adClazz, adInit, adFade, adPan, versionTextTag,
+                                             adGainCenter, adGainFront, adGainSurround);
+            env->DeleteLocalRef(adClazz);
+            break;
+        }
+        case DemuxFilterMediaEventExtraMetaData::Tag::audioPresentations: {
+            JAudioPresentationInfo::addPresentations(
+                    env, gAudioPresentationFields,
+                    mediaEvent.extraMetaData
+                            .get<DemuxFilterMediaEventExtraMetaData::Tag::audioPresentations>(),
+                    presentationsJObj);
+            break;
+        }
+        default: {
+            ALOGE("FilterClientCallbackImpl::getMediaEvent: unknown extraMetaData");
+            break;
+        }
     }
 
     jlong dataLength = mediaEvent.dataLength;
@@ -683,7 +707,8 @@ void FilterClientCallbackImpl::getMediaEvent(jobjectArray &arr, const int size,
 
     jobject obj = env->NewObject(eventClazz, eventInit, streamId, isPtsPresent, pts, isDtsPresent,
                                  dts, dataLength, offset, nullptr, isSecureMemory, avDataId,
-                                 mpuSequenceNumber, isPesPrivateData, sc, audioDescriptor);
+                                 mpuSequenceNumber, isPesPrivateData, sc, audioDescriptor,
+                                 presentationsJObj);
 
     uint64_t avSharedMemSize = mFilterClient->getAvSharedHandleInfo().size;
     if (mediaEvent.avMemory.fds.size() > 0 || mediaEvent.avDataId != 0 ||
@@ -702,6 +727,7 @@ void FilterClientCallbackImpl::getMediaEvent(jobjectArray &arr, const int size,
     }
     env->DeleteLocalRef(obj);
     env->DeleteLocalRef(eventClazz);
+    env->DeleteLocalRef(presentationsJObj);
 }
 
 void FilterClientCallbackImpl::getPesEvent(jobjectArray &arr, const int size,
@@ -1591,6 +1617,15 @@ jobject JTuner::getDtmbFrontendCaps(JNIEnv *env, FrontendCapabilities &caps) {
             interleaveModeCap, codeRateCap, bandwidthCap);
 }
 
+jobject JTuner::getIptvFrontendCaps(JNIEnv *env, FrontendCapabilities &caps) {
+    jclass clazz = env->FindClass("android/media/tv/tuner/frontend/IptvFrontendCapabilities");
+    jmethodID capsInit = env->GetMethodID(clazz, "<init>", "(I)V");
+
+    jint protocolCap = caps.get<FrontendCapabilities::Tag::iptvCaps>()->protocolCap;
+
+    return env->NewObject(clazz, capsInit, protocolCap);
+}
+
 jobject JTuner::getFrontendInfo(int id) {
     shared_ptr<FrontendInfo> feInfo;
     feInfo = sTunerClient->getFrontendInfo(id);
@@ -1667,6 +1702,11 @@ jobject JTuner::getFrontendInfo(int id) {
         case FrontendType::DTMB:
             if (FrontendCapabilities::Tag::dtmbCaps == caps.getTag()) {
                 jcaps = getDtmbFrontendCaps(env, caps);
+            }
+            break;
+        case FrontendType::IPTV:
+            if (FrontendCapabilities::Tag::iptvCaps == caps.getTag()) {
+                jcaps = getIptvFrontendCaps(env, caps);
             }
             break;
         default:
@@ -3492,17 +3532,18 @@ static DemuxIpAddress getDemuxIpAddress(JNIEnv *env, const jobject& config, cons
 
 static FrontendIptvSettingsFec getIptvFrontendSettingsFec(JNIEnv *env, const jobject &settings) {
     jclass clazz = env->FindClass("android/media/tv/tuner/frontend/IptvFrontendSettings");
-    jobject fec = env->GetObjectField(settings, env->GetFieldID(clazz, "mFec",
-            "[Landroid/media/tv/tuner/frontend/IptvFrontendSettingsFec;"));
     jclass fecClazz = env->FindClass("android/media/tv/tuner/frontend/IptvFrontendSettingsFec");
-    FrontendIptvSettingsFecType fecType =
+    jobject fec = env->GetObjectField(settings, env->GetFieldID(clazz, "mFec",
+            "Landroid/media/tv/tuner/frontend/IptvFrontendSettingsFec;"));
+
+    FrontendIptvSettingsFecType type =
             static_cast<FrontendIptvSettingsFecType>(
-                    env->GetIntField(fec, env->GetFieldID(fecClazz, "mFec", "I")));
+                    env->GetIntField(fec, env->GetFieldID(fecClazz, "mFecType", "I")));
     int32_t fecColNum = env->GetIntField(fec, env->GetFieldID(fecClazz, "mFecColNum", "I"));
     int32_t fecRowNum = env->GetIntField(fec, env->GetFieldID(fecClazz, "mFecRowNum", "I"));
 
-    FrontendIptvSettingsFec frontendIptvSettingsFec {
-        .type = fecType,
+    FrontendIptvSettingsFec frontendIptvSettingsFec = {
+        .type = type,
         .fecColNum = fecColNum,
         .fecRowNum = fecRowNum,
     };
@@ -3512,31 +3553,36 @@ static FrontendIptvSettingsFec getIptvFrontendSettingsFec(JNIEnv *env, const job
 
 static FrontendSettings getIptvFrontendSettings(JNIEnv *env, const jobject &settings) {
     FrontendSettings frontendSettings;
-    const char *clazzName = "android/media/tv/tuner/frontend/IptvFrontendSettings";
-    jclass clazz = env->FindClass(clazzName);
+    const char *className = "android/media/tv/tuner/frontend/IptvFrontendSettings";
+    jclass clazz = env->FindClass(className);
     FrontendIptvSettingsProtocol protocol =
             static_cast<FrontendIptvSettingsProtocol>(
                     env->GetIntField(settings, env->GetFieldID(clazz, "mProtocol", "I")));
     FrontendIptvSettingsIgmp igmp =
             static_cast<FrontendIptvSettingsIgmp>(
                     env->GetIntField(settings, env->GetFieldID(clazz, "mIgmp", "I")));
-    FrontendIptvSettingsFec fec = getIptvFrontendSettingsFec(env, settings);
     int64_t bitrate = env->GetIntField(settings, env->GetFieldID(clazz, "mBitrate", "J"));
-    jstring contentUrlJString = (jstring) env->GetObjectField(settings, env->GetFieldID(
-                                clazz, "mContentUrl",
-                                "[Landroid/media/tv/tuner/frontend/IptvFrontendSettings;"));
-    const char *contentUrl = env->GetStringUTFChars(contentUrlJString, 0);
-    DemuxIpAddress ipAddr = getDemuxIpAddress(env, settings, clazzName);
+    jstring jContentUrl = (jstring) env->GetObjectField(settings, env->GetFieldID(
+                                clazz, "mContentUrl", "Ljava/lang/String;"));
+    const char *contentUrl = env->GetStringUTFChars(jContentUrl, 0);
+    DemuxIpAddress ipAddr = getDemuxIpAddress(env, settings, className);
 
     FrontendIptvSettings frontendIptvSettings{
             .protocol = protocol,
-            .fec = fec,
             .igmp = igmp,
             .bitrate = bitrate,
             .ipAddr = ipAddr,
             .contentUrl = contentUrl,
     };
+
+    jobject jFec = env->GetObjectField(settings, env->GetFieldID(clazz, "mFec",
+            "Landroid/media/tv/tuner/frontend/IptvFrontendSettingsFec;"));
+    if (jFec != nullptr) {
+        frontendIptvSettings.fec = getIptvFrontendSettingsFec(env, settings);
+    }
+
     frontendSettings.set<FrontendSettings::Tag::iptv>(frontendIptvSettings);
+    env->ReleaseStringUTFChars(jContentUrl, contentUrl);
     return frontendSettings;
 }
 
@@ -3852,7 +3898,6 @@ static jobject android_media_tv_Tuner_open_lnb_by_name(JNIEnv *env, jobject thiz
     sp<JTuner> tuner = getTuner(env, thiz);
     return tuner->openLnbByName(name);
 }
-
 
 static jobject android_media_tv_Tuner_open_filter(
         JNIEnv *env, jobject thiz, jint type, jint subType, jlong bufferSize) {

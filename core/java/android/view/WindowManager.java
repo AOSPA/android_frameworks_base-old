@@ -855,6 +855,43 @@ public interface WindowManager extends ViewManager {
 
     /**
      * Application level {@link android.content.pm.PackageManager.Property PackageManager
+     * .Property} for an app to inform the system that the application can be opted-in or opted-out
+     * from the compatibility treatment that enables sending a fake focus event for unfocused
+     * resumed split screen activities. This is needed because some game engines wait to get
+     * focus before drawing the content of the app which isn't guaranteed by default in multi-window
+     * modes.
+     *
+     * <p>Device manufacturers can enable this treatment using their discretion on a per-device
+     * basis to improve display compatibility. The treatment also needs to be specifically enabled
+     * on a per-app basis afterwards. This can either be done by device manufacturers or developers.
+     *
+     * <p>With this property set to {@code true}, the system will apply the treatment only if the
+     * device manufacturer had previously enabled it on the device. A fake focus event will be sent
+     * to the app after it is resumed only if the app is in split-screen.
+     *
+     * <p>Setting this property to {@code false} informs the system that the activity must be
+     * opted-out from the compatibility treatment even if the device manufacturer has opted the app
+     * into the treatment.
+     *
+     * <p>If the property remains unset the system will apply the treatment only if it had
+     * previously been enabled both at the device and app level by the device manufacturer.
+     *
+     * <p><b>Syntax:</b>
+     * <pre>
+     * &lt;application&gt;
+     *   &lt;property
+     *     android:name="android.window.PROPERTY_COMPAT_ENABLE_FAKE_FOCUS"
+     *     android:value="true|false"/&gt;
+     * &lt;/application&gt;
+     * </pre>
+     *
+     * @hide
+     */
+    // TODO(b/263984287): Make this public API.
+    String PROPERTY_COMPAT_ENABLE_FAKE_FOCUS = "android.window.PROPERTY_COMPAT_ENABLE_FAKE_FOCUS";
+
+    /**
+     * Application level {@link android.content.pm.PackageManager.Property PackageManager
      * .Property} for an app to inform the system that the app should be excluded from the
      * camera compatibility force rotation treatment.
      *
@@ -3532,6 +3569,22 @@ public interface WindowManager extends ViewManager {
          */
         public float preferredMaxDisplayRefreshRate;
 
+        /** Indicates whether this window wants the HDR conversion is disabled. */
+        public static final int DISPLAY_FLAG_DISABLE_HDR_CONVERSION =  1 << 0;
+
+        /**
+         * Flags that can be used to set display properties.
+         *
+         * @hide
+         */
+        @IntDef(flag = true, prefix = "DISPLAY_FLAG_", value = {
+                DISPLAY_FLAG_DISABLE_HDR_CONVERSION,
+        })
+        public @interface DisplayFlags {}
+
+        @DisplayFlags
+        private int mDisplayFlags;
+
         /**
          * An internal annotation for flags that can be specified to {@link #systemUiVisibility}
          * and {@link #subtreeSystemUiVisibility}.
@@ -4249,6 +4302,24 @@ public interface WindowManager extends ViewManager {
             preservePreviousSurfaceInsets = preservePrevious;
         }
 
+        /** Returns whether the HDR conversion is enabled for the window */
+        public boolean isHdrConversionEnabled() {
+            return ((mDisplayFlags & DISPLAY_FLAG_DISABLE_HDR_CONVERSION) == 0);
+        }
+
+        /**
+         * Enables/disables the HDR conversion for the window.
+         *
+         * By default, the HDR conversion is enabled for the window.
+         */
+        public void setHdrConversionEnabled(boolean enabled) {
+            if (!enabled) {
+                mDisplayFlags |= DISPLAY_FLAG_DISABLE_HDR_CONVERSION;
+            } else {
+                mDisplayFlags &= ~DISPLAY_FLAG_DISABLE_HDR_CONVERSION;
+            }
+        }
+
         /**
          * <p>Set the color mode of the window. Setting the color mode might
          * override the window's pixel {@link WindowManager.LayoutParams#format format}.</p>
@@ -4423,6 +4494,7 @@ public interface WindowManager extends ViewManager {
             out.writeTypedArray(providedInsets, 0 /* parcelableFlags */);
             checkNonRecursiveParams();
             out.writeTypedArray(paramsForRotation, 0 /* parcelableFlags */);
+            out.writeInt(mDisplayFlags);
         }
 
         public static final @android.annotation.NonNull Parcelable.Creator<LayoutParams> CREATOR
@@ -4493,6 +4565,7 @@ public interface WindowManager extends ViewManager {
             mWallpaperTouchEventsEnabled = in.readBoolean();
             providedInsets = in.createTypedArray(InsetsFrameProvider.CREATOR);
             paramsForRotation = in.createTypedArray(LayoutParams.CREATOR);
+            mDisplayFlags = in.readInt();
         }
 
         @SuppressWarnings({"PointlessBitwiseExpression"})
@@ -4527,6 +4600,8 @@ public interface WindowManager extends ViewManager {
         public static final int SURFACE_INSETS_CHANGED = 1<<20;
         /** {@hide} */
         public static final int PREFERRED_REFRESH_RATE_CHANGED = 1 << 21;
+        /** {@hide} */
+        public static final int DISPLAY_FLAGS_CHANGED = 1 << 22;
         /** {@hide} */
         public static final int PREFERRED_DISPLAY_MODE_ID = 1 << 23;
         /** {@hide} */
@@ -4685,6 +4760,11 @@ public interface WindowManager extends ViewManager {
             if (preferredMaxDisplayRefreshRate != o.preferredMaxDisplayRefreshRate) {
                 preferredMaxDisplayRefreshRate = o.preferredMaxDisplayRefreshRate;
                 changes |= PREFERRED_MAX_DISPLAY_REFRESH_RATE;
+            }
+
+            if (mDisplayFlags != o.mDisplayFlags) {
+                mDisplayFlags = o.mDisplayFlags;
+                changes |= DISPLAY_FLAGS_CHANGED;
             }
 
             if (systemUiVisibility != o.systemUiVisibility
@@ -4941,6 +5021,10 @@ public interface WindowManager extends ViewManager {
             if (preferredMaxDisplayRefreshRate != 0) {
                 sb.append(" preferredMaxDisplayRefreshRate=");
                 sb.append(preferredMaxDisplayRefreshRate);
+            }
+            if (mDisplayFlags != 0) {
+                sb.append(" displayFlags=0x");
+                sb.append(Integer.toHexString(mDisplayFlags));
             }
             if (hasSystemUiListeners) {
                 sb.append(" sysuil=");

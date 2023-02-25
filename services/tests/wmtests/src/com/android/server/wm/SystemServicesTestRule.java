@@ -352,6 +352,7 @@ public class SystemServicesTestRule implements TestRule {
         mAtmService.setWindowManager(mWmService);
         mWmService.mDisplayEnabled = true;
         mWmService.mDisplayReady = true;
+        mAtmService.getTransitionController().mIsWaitingForDisplayEnabled = false;
         // Set configuration for default display
         mWmService.getDefaultDisplayContentLocked().reconfigureDisplayLocked();
 
@@ -419,6 +420,7 @@ public class SystemServicesTestRule implements TestRule {
         LocalServices.removeServiceForTest(UsageStatsManagerInternal.class);
         LocalServices.removeServiceForTest(StatusBarManagerInternal.class);
         LocalServices.removeServiceForTest(UserManagerInternal.class);
+        LocalServices.removeServiceForTest(ImeTargetVisibilityPolicy.class);
     }
 
     Description getDescription() {

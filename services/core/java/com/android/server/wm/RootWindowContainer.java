@@ -138,6 +138,7 @@ import android.view.Display;
 import android.view.DisplayInfo;
 import android.view.SurfaceControl;
 import android.view.WindowManager;
+import android.window.TaskFragmentAnimationParams;
 import android.window.WindowContainerToken;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -236,6 +237,10 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     WindowManagerService mWindowManager;
     DisplayManager mDisplayManager;
     private DisplayManagerInternal mDisplayManagerInternal;
+    @NonNull
+    private final DeviceStateController mDeviceStateController;
+    @NonNull
+    private final DisplayRotationCoordinator mDisplayRotationCoordinator;
 
     public static boolean mPerfSendTapHint = false;
     public static boolean mIsPerfBoostAcquired = false;
@@ -388,9 +393,9 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             }
 
             ProtoLog.d(WM_DEBUG_TASKS, "Comparing existing cls=%s /aff=%s to new cls=%s /aff=%s",
-                    r.getTask().rootAffinity, mIntent.getComponent().flattenToShortString(),
-                    mInfo.taskAffinity, (task.realActivity != null
-                            ? task.realActivity.flattenToShortString() : ""));
+                    (task.realActivity != null ? task.realActivity.flattenToShortString() : ""),
+                    task.rootAffinity, mIntent.getComponent().flattenToShortString(),
+                    mTaskAffinity);
             // TODO Refactor to remove duplications. Check if logic can be simplified.
             if (task.realActivity != null && task.realActivity.compareTo(cls) == 0
                     && Objects.equals(documentData, taskDocumentData)) {
@@ -448,6 +453,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         mTaskSupervisor = mService.mTaskSupervisor;
         mTaskSupervisor.mRootWindowContainer = this;
         mDisplayOffTokenAcquirer = mService.new SleepTokenAcquirerImpl(DISPLAY_OFF_SLEEP_TOKEN_TAG);
+        mDeviceStateController = new DeviceStateController(service.mContext, service.mH);
+        mDisplayRotationCoordinator = new DisplayRotationCoordinator();
     }
 
     /**
@@ -1287,7 +1294,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         final Display[] displays = mDisplayManager.getDisplays();
         for (int displayNdx = 0; displayNdx < displays.length; ++displayNdx) {
             final Display display = displays[displayNdx];
-            final DisplayContent displayContent = new DisplayContent(display, this);
+            final DisplayContent displayContent =
+                    new DisplayContent(display, this, mDeviceStateController);
             addChild(displayContent, POSITION_BOTTOM);
             if (displayContent.mDisplayId == DEFAULT_DISPLAY) {
                 mDefaultDisplay = displayContent;
@@ -1303,6 +1311,11 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     // TODO(multi-display): Look at all callpoints to make sure they make sense in multi-display.
     DisplayContent getDefaultDisplay() {
         return mDefaultDisplay;
+    }
+
+    @NonNull
+    DisplayRotationCoordinator getDisplayRotationCoordinator() {
+        return mDisplayRotationCoordinator;
     }
 
     /**
@@ -1366,7 +1379,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             return null;
         }
         // The display hasn't been added to ActivityManager yet, create a new record now.
-        displayContent = new DisplayContent(display, this);
+        displayContent = new DisplayContent(display, this, mDeviceStateController);
         addChild(displayContent, POSITION_BOTTOM);
         return displayContent;
     }
@@ -2090,6 +2103,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                     return;
                 }
                 tf.resetAdjacentTaskFragment();
+                tf.setCompanionTaskFragment(null /* companionTaskFragment */);
+                tf.setAnimationParams(TaskFragmentAnimationParams.DEFAULT);
                 if (tf.getTopNonFinishingActivity() != null) {
                     // When the Task is entering picture-in-picture, we should clear all override
                     // from the client organizer, so the PIP activity can get the correct config

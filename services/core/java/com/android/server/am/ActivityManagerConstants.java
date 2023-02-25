@@ -263,6 +263,10 @@ final class ActivityManagerConstants extends ContentObserver {
       */
     private static final String KEY_LOW_SWAP_THRESHOLD_PERCENT = "low_swap_threshold_percent";
 
+    /** Default value for mFlagApplicationStartInfoEnabled. Defaults to false. */
+    private static final String KEY_DEFAULT_APPLICATION_START_INFO_ENABLED =
+            "enable_app_start_info";
+
     /**
      * Default value for mFlagBackgroundActivityStartsEnabled if not explicitly set in
      * Settings.Global. This allows it to be set experimentally unless it has been
@@ -553,6 +557,9 @@ final class ActivityManagerConstants extends ContentObserver {
     // Controlled by Settings.Global.ACTIVITY_STARTS_LOGGING_ENABLED
     volatile boolean mFlagActivityStartsLoggingEnabled;
 
+    // Indicates whether ApplicationStartInfo is enabled.
+    volatile boolean mFlagApplicationStartInfoEnabled;
+
     // Indicates whether the background activity starts is enabled.
     // Controlled by Settings.Global.BACKGROUND_ACTIVITY_STARTS_ENABLED.
     // If not set explicitly the default is controlled by DeviceConfig.
@@ -782,10 +789,6 @@ final class ActivityManagerConstants extends ContentObserver {
     // initialized in the constructor.
     public int CUR_MAX_EMPTY_PROCESSES;
 
-    /** @see mEnforceReceiverExportedFlagRequirement */
-    private static final String KEY_ENFORCE_RECEIVER_EXPORTED_FLAG_REQUIREMENT =
-            "enforce_exported_flag_requirement";
-
     /** @see #mNoKillCachedProcessesUntilBootCompleted */
     private static final String KEY_NO_KILL_CACHED_PROCESSES_UNTIL_BOOT_COMPLETED =
             "no_kill_cached_processes_until_boot_completed";
@@ -794,24 +797,12 @@ final class ActivityManagerConstants extends ContentObserver {
     private static final String KEY_NO_KILL_CACHED_PROCESSES_POST_BOOT_COMPLETED_DURATION_MILLIS =
             "no_kill_cached_processes_post_boot_completed_duration_millis";
 
-    /** @see mEnforceReceiverExportedFlagRequirement */
-    private static final boolean DEFAULT_ENFORCE_RECEIVER_EXPORTED_FLAG_REQUIREMENT = true;
-
     /** @see #mNoKillCachedProcessesUntilBootCompleted */
     private static final boolean DEFAULT_NO_KILL_CACHED_PROCESSES_UNTIL_BOOT_COMPLETED = true;
 
     /** @see #mNoKillCachedProcessesPostBootCompletedDurationMillis */
     private static final long
             DEFAULT_NO_KILL_CACHED_PROCESSES_POST_BOOT_COMPLETED_DURATION_MILLIS = 600_000;
-
-    /**
-     * If true, enforce the requirement that dynamically registered receivers specify one of
-     * {@link android.content.Context#RECEIVER_EXPORTED} or
-     * {@link android.content.Context#RECEIVER_NOT_EXPORTED} if registering for any non-system
-     * broadcasts.
-     */
-    volatile boolean mEnforceReceiverExportedFlagRequirement =
-            DEFAULT_ENFORCE_RECEIVER_EXPORTED_FLAG_REQUIREMENT;
 
     /**
      * If true, do not kill excessive cached processes proactively, until user-0 is unlocked.
@@ -983,6 +974,20 @@ final class ActivityManagerConstants extends ContentObserver {
             DEFAULT_SHORT_FGS_PROC_STATE_EXTRA_WAIT_DURATION;
 
     /**
+     * If enabled, when starting an application, the system will wait for a
+     * {@link ActivityManagerService#finishAttachApplication} from the app before scheduling
+     * Broadcasts or Services to it.
+     */
+    private static final String KEY_ENABLE_WAIT_FOR_FINISH_ATTACH_APPLICATION =
+            "enable_wait_for_finish_attach_application";
+
+    private static final boolean DEFAULT_ENABLE_WAIT_FOR_FINISH_ATTACH_APPLICATION = false;
+
+    /** @see #KEY_ENABLE_WAIT_FOR_FINISH_ATTACH_APPLICATION */
+    public volatile boolean mEnableWaitForFinishAttachApplication =
+            DEFAULT_ENABLE_WAIT_FOR_FINISH_ATTACH_APPLICATION;
+
+    /**
      * If a "short service" doesn't finish within this after the timeout (
      * {@link #KEY_SHORT_FGS_TIMEOUT_DURATION}), then we'll declare an ANR.
      * i.e. if the timeout is 60 seconds, and this ANR extra duration is 5 seconds, then
@@ -1009,6 +1014,9 @@ final class ActivityManagerConstants extends ContentObserver {
                         switch (name) {
                             case KEY_MAX_CACHED_PROCESSES:
                                 updateMaxCachedProcesses();
+                                break;
+                            case KEY_DEFAULT_APPLICATION_START_INFO_ENABLED:
+                                updateApplicationStartInfoEnabled();
                                 break;
                             case KEY_DEFAULT_BACKGROUND_ACTIVITY_STARTS_ENABLED:
                                 updateBackgroundActivityStarts();
@@ -1124,9 +1132,6 @@ final class ActivityManagerConstants extends ContentObserver {
                             case KEY_NO_KILL_CACHED_PROCESSES_UNTIL_BOOT_COMPLETED:
                                 updateNoKillCachedProcessesUntilBootCompleted();
                                 break;
-                            case KEY_ENFORCE_RECEIVER_EXPORTED_FLAG_REQUIREMENT:
-                                updateEnforceReceiverExportedFlagRequirement();
-                                break;
                             case KEY_NO_KILL_CACHED_PROCESSES_POST_BOOT_COMPLETED_DURATION_MILLIS:
                                 updateNoKillCachedProcessesPostBootCompletedDurationMillis();
                                 break;
@@ -1156,6 +1161,10 @@ final class ActivityManagerConstants extends ContentObserver {
                                 break;
                             case KEY_TOP_TO_FGS_GRACE_DURATION:
                                 updateTopToFgsGraceDuration();
+                                break;
+                            case KEY_ENABLE_WAIT_FOR_FINISH_ATTACH_APPLICATION:
+                                updateEnableWaitForFinishAttachApplication();
+                                break;
                             default:
                                 break;
                         }
@@ -1447,6 +1456,14 @@ final class ActivityManagerConstants extends ContentObserver {
                 Settings.Global.ACTIVITY_STARTS_LOGGING_ENABLED, 1) == 1;
     }
 
+    private void updateApplicationStartInfoEnabled() {
+        mFlagApplicationStartInfoEnabled =
+                DeviceConfig.getBoolean(
+                        DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                        KEY_DEFAULT_APPLICATION_START_INFO_ENABLED,
+                        /*defaultValue*/ false);
+    }
+
     private void updateBackgroundActivityStarts() {
         mFlagBackgroundActivityStartsEnabled = DeviceConfig.getBoolean(
                 DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
@@ -1670,13 +1687,6 @@ final class ActivityManagerConstants extends ContentObserver {
                 DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
                 KEY_DEFER_BOOT_COMPLETED_BROADCAST,
                 DEFAULT_DEFER_BOOT_COMPLETED_BROADCAST);
-    }
-
-    private void updateEnforceReceiverExportedFlagRequirement() {
-        mEnforceReceiverExportedFlagRequirement = DeviceConfig.getBoolean(
-                DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
-                KEY_ENFORCE_RECEIVER_EXPORTED_FLAG_REQUIREMENT,
-                DEFAULT_ENFORCE_RECEIVER_EXPORTED_FLAG_REQUIREMENT);
     }
 
     private void updateNoKillCachedProcessesUntilBootCompleted() {
@@ -1923,6 +1933,13 @@ final class ActivityManagerConstants extends ContentObserver {
                 DEFAULT_SHORT_FGS_ANR_EXTRA_WAIT_DURATION);
     }
 
+    private void updateEnableWaitForFinishAttachApplication() {
+        mEnableWaitForFinishAttachApplication = DeviceConfig.getBoolean(
+                DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                KEY_ENABLE_WAIT_FOR_FINISH_ATTACH_APPLICATION,
+                DEFAULT_ENABLE_WAIT_FOR_FINISH_ATTACH_APPLICATION);
+    }
+
     @NeverCompile // Avoid size overhead of debugging code.
     void dump(PrintWriter pw) {
         pw.println("ACTIVITY MANAGER SETTINGS (dumpsys activity settings) "
@@ -2028,6 +2045,10 @@ final class ActivityManagerConstants extends ContentObserver {
         pw.println(mFgToBgFgsGraceDuration);
         pw.print("  "); pw.print(KEY_FGS_START_FOREGROUND_TIMEOUT); pw.print("=");
         pw.println(mFgsStartForegroundTimeoutMs);
+        pw.print("  ");
+        pw.print(KEY_DEFAULT_APPLICATION_START_INFO_ENABLED);
+        pw.print("=");
+        pw.println(mFlagApplicationStartInfoEnabled);
         pw.print("  "); pw.print(KEY_DEFAULT_BACKGROUND_ACTIVITY_STARTS_ENABLED); pw.print("=");
         pw.println(mFlagBackgroundActivityStartsEnabled);
         pw.print("  "); pw.print(KEY_DEFAULT_BACKGROUND_FGS_STARTS_RESTRICTION_ENABLED);
@@ -2059,8 +2080,6 @@ final class ActivityManagerConstants extends ContentObserver {
         pw.print("="); pw.println(mPrioritizeAlarmBroadcasts);
         pw.print("  "); pw.print(KEY_NO_KILL_CACHED_PROCESSES_UNTIL_BOOT_COMPLETED);
         pw.print("="); pw.println(mNoKillCachedProcessesUntilBootCompleted);
-        pw.print("  "); pw.print(KEY_ENFORCE_RECEIVER_EXPORTED_FLAG_REQUIREMENT);
-        pw.print("="); pw.println(mEnforceReceiverExportedFlagRequirement);
         pw.print("  "); pw.print(KEY_NO_KILL_CACHED_PROCESSES_POST_BOOT_COMPLETED_DURATION_MILLIS);
         pw.print("="); pw.println(mNoKillCachedProcessesPostBootCompletedDurationMillis);
         pw.print("  "); pw.print(KEY_MAX_EMPTY_TIME_MILLIS);
@@ -2112,5 +2131,7 @@ final class ActivityManagerConstants extends ContentObserver {
         pw.print("  CUR_TRIM_EMPTY_PROCESSES="); pw.println(CUR_TRIM_EMPTY_PROCESSES);
         pw.print("  CUR_TRIM_CACHED_PROCESSES="); pw.println(CUR_TRIM_CACHED_PROCESSES);
         pw.print("  OOMADJ_UPDATE_QUICK="); pw.println(OOMADJ_UPDATE_QUICK);
+        pw.print("  ENABLE_WAIT_FOR_FINISH_ATTACH_APPLICATION=");
+        pw.println(mEnableWaitForFinishAttachApplication);
     }
 }

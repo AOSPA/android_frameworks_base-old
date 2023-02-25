@@ -599,7 +599,7 @@ public final class Settings {
 
     /**
      * Activity Action: Show settings to allow configuration of
-     * {@link Manifest.permission#RUN_LONG_JOBS} permission
+     * {@link Manifest.permission#RUN_USER_INITIATED_JOBS} permission
      *
      * Input: Optionally, the Intent's data URI can specify the application package name to
      * directly invoke the management GUI specific to the package name. For example
@@ -1716,7 +1716,6 @@ public final class Settings {
      * Input: Nothing.
      * <p>
      * Output: Nothing
-     * @see android.nfc.NfcAdapter#isNdefPushEnabled()
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_NFCSHARING_SETTINGS =
@@ -7011,6 +7010,58 @@ public final class Settings {
                 "bluetooth_le_broadcast_app_source_name";
 
         /**
+         * Ringtone routing value for hearing aid. It routes ringtone to hearing aid or device
+         * speaker.
+         * <ul>
+         *     <li> 0 = Default
+         *     <li> 1 = Route to hearing aid
+         *     <li> 2 = Route to device speaker
+         * </ul>
+         * @hide
+         */
+        public static final String HEARING_AID_RINGTONE_ROUTING =
+                "hearing_aid_ringtone_routing";
+
+        /**
+         * Phone call routing value for hearing aid. It routes phone call to hearing aid or
+         * device speaker.
+         * <ul>
+         *     <li> 0 = Default
+         *     <li> 1 = Route to hearing aid
+         *     <li> 2 = Route to device speaker
+         * </ul>
+         * @hide
+         */
+        public static final String HEARING_AID_CALL_ROUTING =
+                "hearing_aid_call_routing";
+
+        /**
+         * Media routing value for hearing aid. It routes media to hearing aid or device
+         * speaker.
+         * <ul>
+         *     <li> 0 = Default
+         *     <li> 1 = Route to hearing aid
+         *     <li> 2 = Route to device speaker
+         * </ul>
+         * @hide
+         */
+        public static final String HEARING_AID_MEDIA_ROUTING =
+                "hearing_aid_media_routing";
+
+        /**
+         * System sounds routing value for hearing aid. It routes system sounds to hearing aid
+         * or device speaker.
+         * <ul>
+         *     <li> 0 = Default
+         *     <li> 1 = Route to hearing aid
+         *     <li> 2 = Route to device speaker
+         * </ul>
+         * @hide
+         */
+        public static final String HEARING_AID_SYSTEM_SOUNDS_ROUTING =
+                "hearing_aid_system_sounds_routing";
+
+        /**
          * Setting to indicate that on device captions are enabled.
          *
          * @hide
@@ -7403,6 +7454,9 @@ public final class Settings {
          *
          * Format like "ime0;subtype0;subtype1;subtype2:ime1:ime2;subtype0"
          * where imeId is ComponentName and subtype is int32.
+         *
+         * <p>Note: This setting is not readable to the app targeting API level 34 or higher. use
+         * {@link android.view.inputmethod.InputMethodManager#getEnabledInputMethodList()} instead.
          */
         @Readable(maxTargetSdk = Build.VERSION_CODES.TIRAMISU)
         public static final String ENABLED_INPUT_METHODS = "enabled_input_methods";
@@ -7433,7 +7487,7 @@ public final class Settings {
          * @hide
          */
         @SuppressLint("NoSettingsProvider")
-        public static final String STYLUS_BUTTONS_DISABLED = "stylus_buttons_disabled";
+        public static final String STYLUS_BUTTONS_ENABLED = "stylus_buttons_enabled";
 
         /**
          * Host name and port for global http proxy. Uses ':' seperator for
@@ -10279,6 +10333,17 @@ public final class Settings {
                 "active_unlock_on_unlock_intent_when_biometric_enrolled";
 
         /**
+         * If active unlock triggers on unlock intents, then also request active unlock on
+         * these wake-up reasons. See PowerManager.WakeReason for value mappings.
+         * WakeReasons should be separated by a pipe. For example: "0|3" or "0". If this
+         * setting should be disabled, then this should be set to an empty string. A null value
+         * will use the system default value (WAKE_REASON_UNFOLD_DEVICE).
+         * @hide
+         */
+        public static final String ACTIVE_UNLOCK_WAKEUPS_CONSIDERED_UNLOCK_INTENTS =
+                "active_unlock_wakeups_considered_unlock_intents";
+
+        /**
          * Whether the assist gesture should be enabled.
          *
          * @hide
@@ -11158,11 +11223,27 @@ public final class Settings {
         public static final int ACCESSIBILITY_MAGNIFICATION_MODE_ALL = 0x3;
 
         /**
+         * Whether the magnification always on feature is enabled. If true, the magnifier will not
+         * deactivate on Activity transitions; it will only zoom out to 100%.
+         *
+         * @hide
+         */
+        public static final String ACCESSIBILITY_MAGNIFICATION_ALWAYS_ON_ENABLED =
+                "accessibility_magnification_always_on_enabled";
+
+        /**
          * Whether the following typing focus feature for magnification is enabled.
          * @hide
          */
         public static final String ACCESSIBILITY_MAGNIFICATION_FOLLOW_TYPING_ENABLED =
                 "accessibility_magnification_follow_typing_enabled";
+
+        /**
+         * Whether the magnification joystick controller feature is enabled.
+         * @hide
+         */
+        public static final String ACCESSIBILITY_MAGNIFICATION_JOYSTICK_ENABLED =
+                "accessibility_magnification_joystick_enabled";
 
         /**
          * Controls magnification capability. Accessibility magnification is capable of at least one
@@ -11463,6 +11544,13 @@ public final class Settings {
          */
         public static final String EXTRA_AUTOMATIC_POWER_SAVE_MODE =
                 "extra_automatic_power_save_mode";
+
+        /**
+         * Whether lockscreen weather is enabled.
+         *
+         * @hide
+         */
+        public static final String LOCK_SCREEN_WEATHER_ENABLED = "lockscreen_weather_enabled";
 
         /**
          * These entries are considered common between the personal and the managed profile,
@@ -15921,6 +16009,36 @@ public final class Settings {
                 "user_preferred_resolution_width";
 
         /**
+         * The HDR output mode chosen by the user. This is one of:
+         * {@link android.hardware.display.HdrConversionMode#HDR_CONVERSION_PASSTHROUGH},
+         * {@link android.hardware.display.HdrConversionMode#HDR_CONVERSION_SYSTEM},
+         * {@link android.hardware.display.HdrConversionMode#HDR_CONVERSION_FORCE}.
+         *
+         * @hide
+         */
+        @TestApi
+        @Readable
+        public static final String HDR_CONVERSION_MODE = "hdr_conversion_mode";
+
+        /**
+         * The output HDR type chosen by the user in case when {@link #HDR_CONVERSION_MODE} is
+         * {@link #HDR_CONVERSION_FORCE}. This is one of:
+         * {@link android.view.Display.HdrCapabilities#HDR_TYPE_INVALID},
+         * {@link android.view.Display.HdrCapabilities#HDR_TYPE_DOLBY_VISION},
+         * {@link android.view.Display.HdrCapabilities#HDR_TYPE_HDR10},
+         * {@link android.view.Display.HdrCapabilities#HDR_TYPE_HLG},
+         * {@link android.view.Display.HdrCapabilities#HDR_TYPE_HDR10_PLUS}
+         * <p>
+         * The value is {@link android.view.Display.HdrCapabilities#HDR_TYPE_INVALID} when user
+         * chooses SDR output type. </p>
+         *
+         * @hide
+         */
+        @TestApi
+        @Readable
+        public static final String HDR_FORCE_CONVERSION_TYPE = "hdr_force_conversion_type";
+
+        /**
          * The name of the device
          */
         @Readable
@@ -18075,6 +18193,12 @@ public final class Settings {
                     "gesture_touch_and_hold_watchface_enabled";
 
             /**
+             * Whether screenshot is enabled.
+             * @hide
+             */
+            public static final String SCREENSHOT_ENABLED = "screenshot_enabled";
+
+            /**
              * Whether bedtime mode is enabled.
              * @hide
              */
@@ -18414,6 +18538,91 @@ public final class Settings {
              * @hide
              */
             public static final String DYNAMIC_COLOR_THEME_ENABLED = "dynamic_color_theme_enabled";
+
+            /**
+             * Current state of accessibility vibration watch feature
+             * (0 = false, 1 = true)
+             *
+             * @hide
+             */
+            public static final String ACCESSIBILITY_VIBRATION_WATCH_ENABLED =
+                    "a11y_vibration_watch_enabled";
+
+            /**
+             * Stores current type of accessibility vibration
+             * (0 = {@link #ACCESSIBILITY_VIBRATION_WATCH_TYPE_DIGIT},
+             * 1 = {@link #ACCESSIBILITY_VIBRATION_WATCH_TYPE_TERSE)
+             *
+             * @hide
+             */
+            public static final String ACCESSIBILITY_VIBRATION_WATCH_TYPE =
+                    "a11y_vibration_watch_type";
+
+            /**
+             * Vibration watch type digit
+             * One of the possible states for {@link #ACCESSIBILITY_VIBRATION_WATCH_TYPE}.
+             *
+             * @hide
+             */
+            public static final int ACCESSIBILITY_VIBRATION_WATCH_TYPE_DIGIT = 0;
+
+            /**
+             * Vibration watch type terse
+             * One of the possible states for {@link #ACCESSIBILITY_VIBRATION_WATCH_TYPE}.
+             *
+             * @hide
+             */
+            public static final int ACCESSIBILITY_VIBRATION_WATCH_TYPE_TERSE = 1;
+
+            /**
+             * Stores current accessibility vibration watch speed
+             * (0 = {@link #ACCESSIBILITY_VIBRATION_WATCH_SPEED_VERY_SLOW},
+             * 1 = {@link #ACCESSIBILITY_VIBRATION_WATCH_SPEED_SLOW},
+             * 2 = {@link #ACCESSIBILITY_VIBRATION_WATCH_SPEED_MEDIUM},
+             * 3 = {@link #ACCESSIBILITY_VIBRATION_WATCH_SPEED_FAST},
+             * 4 = {@link #ACCESSIBILITY_VIBRATION_WATCH_SPEED_VERY_FAST})
+             */
+            public static final String ACCESSIBILITY_VIBRATION_WATCH_SPEED = "vibration_speed";
+
+            /**
+             * Vibration watch speed type very slow
+             * One of the possible states for {@link #ACCESSIBILITY_VIBRATION_WATCH_SPEED}.
+             *
+             * @hide
+             */
+            public static final int ACCESSIBILITY_VIBRATION_WATCH_SPEED_VERY_SLOW = 0;
+
+            /**
+             * Vibration watch speed type slow
+             * One of the possible states for {@link #ACCESSIBILITY_VIBRATION_WATCH_SPEED}.
+             *
+             * @hide
+             */
+            public static final int ACCESSIBILITY_VIBRATION_WATCH_SPEED_SLOW = 1;
+
+            /**
+             * Vibration watch speed type medium
+             * One of the possible states for {@link #ACCESSIBILITY_VIBRATION_WATCH_SPEED}.
+             *
+             * @hide
+             */
+            public static final int ACCESSIBILITY_VIBRATION_WATCH_SPEED_MEDIUM = 2;
+
+            /**
+             * Vibration watch speed type fast
+             * One of the possible states for {@link #ACCESSIBILITY_VIBRATION_WATCH_SPEED}.
+             *
+             * @hide
+             */
+            public static final int ACCESSIBILITY_VIBRATION_WATCH_SPEED_FAST = 3;
+
+            /**
+             * Vibration watch speed type very fast
+             * One of the possible states for {@link #ACCESSIBILITY_VIBRATION_WATCH_SPEED}.
+             *
+             * @hide
+             */
+            public static final int ACCESSIBILITY_VIBRATION_WATCH_SPEED_VERY_FAST = 4;
         }
     }
 
@@ -19337,6 +19546,18 @@ public final class Settings {
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION =
             "android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION";
+
+    /**
+     * Activity Action: Show screen for controlling whether an app can send full screen intents.
+     * <p>
+     *     Input: the intent's data URI must specify the application package name for which you want
+     *     to manage full screen intents.
+     * <p>
+     * Output: Nothing.
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT =
+            "android.settings.MANAGE_APP_USE_FULL_SCREEN_INTENT";
 
     /**
      * Activity Action: For system or preinstalled apps to show their {@link Activity} embedded

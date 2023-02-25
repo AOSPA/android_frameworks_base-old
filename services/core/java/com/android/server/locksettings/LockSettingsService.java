@@ -18,7 +18,6 @@ package com.android.server.locksettings;
 
 import static android.Manifest.permission.ACCESS_KEYGUARD_SECURE_STORAGE;
 import static android.Manifest.permission.MANAGE_BIOMETRIC;
-import static android.Manifest.permission.READ_CONTACTS;
 import static android.Manifest.permission.SET_AND_VERIFY_LOCKSCREEN_CREDENTIALS;
 import static android.Manifest.permission.SET_INITIAL_LOCK;
 import static android.app.admin.DevicePolicyManager.DEPRECATE_USERMANAGERINTERNAL_DEVICEPOLICY_DEFAULT;
@@ -29,7 +28,7 @@ import static android.app.admin.DevicePolicyResources.Strings.Core.PROFILE_ENCRY
 import static android.content.Context.KEYGUARD_SERVICE;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.os.UserHandle.USER_ALL;
-import static android.provider.DeviceConfig.NAMESPACE_AUTO_PIN_CONFIRMATION;
+import static android.os.UserHandle.USER_SYSTEM;
 
 import static com.android.internal.widget.LockPatternUtils.CREDENTIAL_TYPE_NONE;
 import static com.android.internal.widget.LockPatternUtils.CREDENTIAL_TYPE_PASSWORD;
@@ -57,6 +56,8 @@ import android.app.KeyguardManager;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.app.RemoteLockscreenValidationResult;
+import android.app.StartLockscreenValidationRequest;
 import android.app.admin.DevicePolicyManager;
 import android.app.admin.DevicePolicyManagerInternal;
 import android.app.admin.DeviceStateCache;
@@ -70,6 +71,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.pm.UserInfo;
+import android.content.res.Resources;
 import android.database.ContentObserver;
 import android.database.sqlite.SQLiteDatabase;
 import android.hardware.authsecret.IAuthSecret;
@@ -96,7 +98,6 @@ import android.os.storage.IStorageManager;
 import android.os.storage.StorageManager;
 import android.provider.DeviceConfig;
 import android.provider.Settings;
-import android.provider.Settings.Secure;
 import android.security.AndroidKeyStoreMaintenance;
 import android.security.Authorization;
 import android.security.KeyStore;
@@ -110,12 +111,12 @@ import android.security.keystore.recovery.WrappedApplicationKey;
 import android.security.keystore2.AndroidKeyStoreLoadStoreParameter;
 import android.security.keystore2.AndroidKeyStoreProvider;
 import android.service.gatekeeper.IGateKeeperService;
+import android.service.notification.StatusBarNotification;
 import android.system.keystore2.Domain;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.EventLog;
-import android.util.FeatureFlagUtils;
 import android.util.LongSparseArray;
 import android.util.Slog;
 import android.util.SparseArray;
@@ -218,6 +219,8 @@ public class LockSettingsService extends ILockSettings.Stub {
     private static final String PROFILE_KEY_NAME_ENCRYPT = "profile_key_name_encrypt_";
     private static final String PROFILE_KEY_NAME_DECRYPT = "profile_key_name_decrypt_";
 
+    private static final int HEADLESS_VENDOR_AUTH_SECRET_LENGTH = 32;
+
     // Order of holding lock: mSeparateChallengeLock -> mSpManager -> this
     // Do not call into ActivityManager while holding mSpManager lock.
     private final Object mSeparateChallengeLock = new Object();
@@ -268,6 +271,13 @@ public class LockSettingsService extends ILockSettings.Stub {
     private final SparseArray<PasswordMetrics> mUserPasswordMetrics = new SparseArray<>();
     @VisibleForTesting
     protected boolean mHasSecureLockScreen;
+
+    @VisibleForTesting
+    protected final Object mHeadlessAuthSecretLock = new Object();
+
+    @VisibleForTesting
+    @GuardedBy("mHeadlessAuthSecretLock")
+    protected byte[] mAuthSecret;
 
     protected IGateKeeperService mGateKeeperService;
     protected IAuthSecret mAuthSecretService;
@@ -565,6 +575,15 @@ public class LockSettingsService extends ILockSettings.Stub {
                 java.security.KeyStore ks) {
             return new ManagedProfilePasswordCache(ks, getUserManager());
         }
+
+        public boolean isHeadlessSystemUserMode() {
+            return UserManager.isHeadlessSystemUserMode();
+        }
+
+        public boolean isMainUserPermanentAdmin() {
+            return Resources.getSystem()
+                    .getBoolean(com.android.internal.R.bool.config_isMainUserPermanentAdmin);
+        }
     }
 
     public LockSettingsService(Context context) {
@@ -584,6 +603,7 @@ public class LockSettingsService extends ILockSettings.Stub {
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_USER_ADDED);
         filter.addAction(Intent.ACTION_USER_STARTING);
+        filter.addAction(Intent.ACTION_LOCALE_CHANGED);
         injector.getContext().registerReceiverAsUser(mBroadcastReceiver, UserHandle.ALL, filter,
                 null, null);
 
@@ -603,6 +623,20 @@ public class LockSettingsService extends ILockSettings.Stub {
                 mStorage);
 
         LocalServices.addService(LockSettingsInternal.class, new LocalService());
+    }
+
+    private void updateActivatedEncryptionNotifications(String reason) {
+        for (UserInfo userInfo : mUserManager.getUsers()) {
+            Context userContext = mContext.createContextAsUser(UserHandle.of(userInfo.id), 0);
+            NotificationManager nm = (NotificationManager)
+                    userContext.getSystemService(Context.NOTIFICATION_SERVICE);
+            for (StatusBarNotification notification : nm.getActiveNotifications()) {
+                if (notification.getId() == SystemMessage.NOTE_FBE_ENCRYPTED_NOTIFICATION) {
+                    maybeShowEncryptionNotificationForUser(userInfo.id, reason);
+                    break;
+                }
+            }
+        }
     }
 
     /**
@@ -802,6 +836,8 @@ public class LockSettingsService extends ILockSettings.Stub {
             } else if (Intent.ACTION_USER_STARTING.equals(intent.getAction())) {
                 final int userHandle = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, 0);
                 mStorage.prefetchUser(userHandle);
+            } else if (Intent.ACTION_LOCALE_CHANGED.equals(intent.getAction())) {
+                updateActivatedEncryptionNotifications("locale changed");
             }
         }
     };
@@ -817,7 +853,6 @@ public class LockSettingsService extends ILockSettings.Stub {
                 .hasSystemFeature(PackageManager.FEATURE_SECURE_LOCK_SCREEN);
         migrateOldData();
         getGateKeeperService();
-        mSpManager.initWeaverService();
         getAuthSecretHal();
         mDeviceProvisionedObserver.onSystemReady();
 
@@ -1051,27 +1086,21 @@ public class LockSettingsService extends ILockSettings.Stub {
         mContext.enforceCallingOrSelfPermission(PERMISSION, "LockSettingsHave");
     }
 
-    private final void checkReadPermission(String requestedKey, int userId) {
-        final int callingUid = Binder.getCallingUid();
+    private static final String[] UNPROTECTED_SETTINGS = {
+        // These three LOCK_PATTERN_* settings have traditionally been readable via the public API
+        // android.provider.Settings.{System,Secure}.getString() without any permission.
+        Settings.Secure.LOCK_PATTERN_ENABLED,
+        Settings.Secure.LOCK_PATTERN_VISIBLE,
+        Settings.Secure.LOCK_PATTERN_TACTILE_FEEDBACK_ENABLED,
+    };
 
-        for (int i = 0; i < READ_CONTACTS_PROTECTED_SETTINGS.length; i++) {
-            String key = READ_CONTACTS_PROTECTED_SETTINGS[i];
-            if (key.equals(requestedKey) && mContext.checkCallingOrSelfPermission(READ_CONTACTS)
-                    != PackageManager.PERMISSION_GRANTED) {
-                throw new SecurityException("uid=" + callingUid
-                        + " needs permission " + READ_CONTACTS + " to read "
-                        + requestedKey + " for user " + userId);
-            }
+    private final void checkDatabaseReadPermission(String requestedKey, int userId) {
+        if (ArrayUtils.contains(UNPROTECTED_SETTINGS, requestedKey)) {
+            return;
         }
-
-        for (int i = 0; i < READ_PASSWORD_PROTECTED_SETTINGS.length; i++) {
-            String key = READ_PASSWORD_PROTECTED_SETTINGS[i];
-            if (key.equals(requestedKey) && mContext.checkCallingOrSelfPermission(PERMISSION)
-                    != PackageManager.PERMISSION_GRANTED) {
-                throw new SecurityException("uid=" + callingUid
-                        + " needs permission " + PERMISSION + " to read "
-                        + requestedKey + " for user " + userId);
-            }
+        if (!hasPermission(PERMISSION)) {
+            throw new SecurityException("uid=" + getCallingUid() + " needs permission "
+                    + PERMISSION + " to read " + requestedKey + " for user " + userId);
         }
     }
 
@@ -1100,7 +1129,7 @@ public class LockSettingsService extends ILockSettings.Stub {
 
     @Override
     public boolean getSeparateProfileChallengeEnabled(int userId) {
-        checkReadPermission(SEPARATE_PROFILE_CHALLENGE_KEY, userId);
+        checkDatabaseReadPermission(SEPARATE_PROFILE_CHALLENGE_KEY, userId);
         return getSeparateProfileChallengeEnabledInternal(userId);
     }
 
@@ -1181,7 +1210,7 @@ public class LockSettingsService extends ILockSettings.Stub {
 
     @Override
     public boolean getBoolean(String key, boolean defaultValue, int userId) {
-        checkReadPermission(key, userId);
+        checkDatabaseReadPermission(key, userId);
         if (Settings.Secure.LOCK_PATTERN_ENABLED.equals(key)) {
             return getCredentialTypeInternal(userId) == CREDENTIAL_TYPE_PATTERN;
         }
@@ -1190,13 +1219,13 @@ public class LockSettingsService extends ILockSettings.Stub {
 
     @Override
     public long getLong(String key, long defaultValue, int userId) {
-        checkReadPermission(key, userId);
+        checkDatabaseReadPermission(key, userId);
         return mStorage.getLong(key, defaultValue, userId);
     }
 
     @Override
     public String getString(String key, String defaultValue, int userId) {
-        checkReadPermission(key, userId);
+        checkDatabaseReadPermission(key, userId);
         return mStorage.getString(key, defaultValue, userId);
     }
 
@@ -1721,7 +1750,7 @@ public class LockSettingsService extends ILockSettings.Stub {
                 throw new IllegalStateException("password change failed");
             }
 
-            onSyntheticPasswordKnown(userId, sp);
+            onSyntheticPasswordUnlocked(userId, sp);
             setLockCredentialWithSpLocked(credential, sp, userId);
             sendCredentialsOnChangeIfRequired(credential, userId, isLockTiedToParent);
             return true;
@@ -1732,8 +1761,7 @@ public class LockSettingsService extends ILockSettings.Stub {
         if (newCredential.isPattern()) {
             setBoolean(LockPatternUtils.PATTERN_EVER_CHOSEN_KEY, true, userHandle);
         }
-        if (DeviceConfig.getBoolean(NAMESPACE_AUTO_PIN_CONFIRMATION,
-                "enable_auto_pin_confirmation", /* defaultValue= */ false)) {
+        if (LockPatternUtils.isAutoPinConfirmFeatureAvailable()) {
             if (newCredential.isPin()) {
                 setLong(LockPatternUtils.PIN_LENGTH, newCredential.size(), userHandle);
             }
@@ -2033,7 +2061,7 @@ public class LockSettingsService extends ILockSettings.Stub {
                 Slogf.wtf(TAG, "Failed to unwrap synthetic password for unsecured user %d", userId);
                 return;
             }
-            onSyntheticPasswordKnown(userId, result.syntheticPassword);
+            onSyntheticPasswordUnlocked(userId, result.syntheticPassword);
             unlockUserKey(userId, result.syntheticPassword);
         }
     }
@@ -2565,38 +2593,19 @@ public class LockSettingsService extends ILockSettings.Stub {
     /**
      * Starts a session to verify lock screen credentials provided by a remote device.
      */
-    public void startRemoteLockscreenValidation() {
-        if (!FeatureFlagUtils.isEnabled(mContext,
-                FeatureFlagUtils.SETTINGS_ENABLE_LOCKSCREEN_TRANSFER_API)) {
-            throw new UnsupportedOperationException("Under development");
-        }
-        mRecoverableKeyStoreManager.startRemoteLockscreenValidation();
+    @NonNull
+    public StartLockscreenValidationRequest startRemoteLockscreenValidation() {
+        return mRecoverableKeyStoreManager.startRemoteLockscreenValidation(this);
     }
 
     /**
-     * Verifies credentials guess from a remote device.
+     * Verifies encrypted credentials guess from a remote device.
      */
-    public void validateRemoteLockscreen(@NonNull byte[] encryptedCredential) {
-        if (!FeatureFlagUtils.isEnabled(mContext,
-                FeatureFlagUtils.SETTINGS_ENABLE_LOCKSCREEN_TRANSFER_API)) {
-            throw new UnsupportedOperationException("Under development");
-        }
-        mRecoverableKeyStoreManager.validateRemoteLockscreen(encryptedCredential);
+    @NonNull
+    public RemoteLockscreenValidationResult
+            validateRemoteLockscreen(@NonNull byte[] encryptedCredential) {
+        return mRecoverableKeyStoreManager.validateRemoteLockscreen(encryptedCredential, this);
     }
-
-    // Reading these settings needs the contacts permission
-    private static final String[] READ_CONTACTS_PROTECTED_SETTINGS = new String[] {
-            Secure.LOCK_SCREEN_OWNER_INFO_ENABLED,
-            Secure.LOCK_SCREEN_OWNER_INFO
-    };
-
-    // Reading these settings needs the same permission as checking the password
-    private static final String[] READ_PASSWORD_PROTECTED_SETTINGS = new String[] {
-            LockPatternUtils.LOCK_PASSWORD_SALT_KEY,
-            LockPatternUtils.PASSWORD_HISTORY_KEY,
-            LockPatternUtils.PASSWORD_TYPE_KEY,
-            SEPARATE_PROFILE_CHALLENGE_KEY
-    };
 
     private class GateKeeperDiedRecipient implements IBinder.DeathRecipient {
         @Override
@@ -2634,43 +2643,112 @@ public class LockSettingsService extends ILockSettings.Stub {
         }
     }
 
-    private void onSyntheticPasswordKnown(@UserIdInt int userId, SyntheticPassword sp) {
+    private void onSyntheticPasswordCreated(@UserIdInt int userId, SyntheticPassword sp) {
+        onSyntheticPasswordKnown(userId, sp, true);
+    }
+
+    private void onSyntheticPasswordUnlocked(@UserIdInt int userId, SyntheticPassword sp) {
+        onSyntheticPasswordKnown(userId, sp, false);
+    }
+
+    private void onSyntheticPasswordKnown(
+            @UserIdInt int userId, SyntheticPassword sp, boolean justCreated) {
         if (mInjector.isGsiRunning()) {
             Slog.w(TAG, "Running in GSI; skipping calls to AuthSecret and RebootEscrow");
             return;
         }
 
-        mRebootEscrowManager.callToRebootEscrowIfNeeded(userId, sp.getVersion(),
-                sp.getSyntheticPassword());
-
-        callToAuthSecretIfNeeded(userId, sp);
+        mRebootEscrowManager.callToRebootEscrowIfNeeded(
+                userId, sp.getVersion(), sp.getSyntheticPassword());
+        callToAuthSecretIfNeeded(userId, sp, justCreated);
     }
 
-    private void callToAuthSecretIfNeeded(@UserIdInt int userId, SyntheticPassword sp) {
-        // If the given user is the primary user, pass the auth secret to the HAL.  Only the system
-        // user can be primary.  Check for the system user ID before calling getUserInfo(), as other
-        // users may still be under construction.
+    /**
+     * Handles generation, storage, and sending of the vendor auth secret. Here we try to retrieve
+     * the auth secret to send it to the auth secret HAL, generate a fresh secret if need be, store
+     * it encrypted on disk so that the given user can unlock it in future, and stash it in memory
+     * so that when future users are created they can also unlock it.
+     *
+     * <p>Called whenever the SP of a user is available, except in GSI.
+     */
+    private void callToAuthSecretIfNeeded(
+            @UserIdInt int userId, SyntheticPassword sp, boolean justCreated) {
         if (mAuthSecretService == null) {
+            // If there's no IAuthSecret service, we don't need to maintain a auth secret
             return;
         }
-        if (userId == UserHandle.USER_SYSTEM &&
-                mUserManager.getUserInfo(userId).isPrimary()) {
-            final byte[] secret = sp.deriveVendorAuthSecret();
-            try {
-                mAuthSecretService.setPrimaryUserCredential(secret);
-            } catch (RemoteException e) {
-                Slog.w(TAG, "Failed to pass primary user secret to AuthSecret HAL", e);
+        // User may be partially created, so use the internal user manager interface
+        final UserManagerInternal userManagerInternal = mInjector.getUserManagerInternal();
+        final UserInfo userInfo = userManagerInternal.getUserInfo(userId);
+        if (userInfo == null) {
+            // User may be partially deleted, skip this.
+            return;
+        }
+        final byte[] authSecret;
+        if (!mInjector.isHeadlessSystemUserMode()) {
+            // On non-headless systems, the auth secret is derived from user 0's
+            // SP, and only user 0 passes it to the HAL.
+            if (userId != USER_SYSTEM) {
+                return;
             }
+            authSecret = sp.deriveVendorAuthSecret();
+        } else if (!mInjector.isMainUserPermanentAdmin() || !userInfo.isFull()) {
+            // Only full users can receive or pass on the auth secret.
+            // If there is no main permanent admin user, we don't try to create or send
+            // an auth secret, since there may sometimes be no full users.
+            return;
+        } else if (justCreated) {
+            if (userInfo.isMain()) {
+                // The first user is just being created, so we create a new auth secret
+                // at the same time.
+                Slog.i(TAG, "Generating new vendor auth secret and storing for user: " + userId);
+                authSecret = SecureRandomUtils.randomBytes(HEADLESS_VENDOR_AUTH_SECRET_LENGTH);
+                // Store it in memory, for when new users are created.
+                synchronized (mHeadlessAuthSecretLock) {
+                    mAuthSecret = authSecret;
+                }
+            } else {
+                // A new user is being created. Another user should already have logged in at
+                // this point, and therefore the auth secret should be stored in memory.
+                synchronized (mHeadlessAuthSecretLock) {
+                    authSecret = mAuthSecret;
+                }
+                if (authSecret == null) {
+                    Slog.e(TAG, "Creating non-main user " + userId
+                            + " but vendor auth secret is not in memory");
+                    return;
+                }
+            }
+            // Store the auth secret encrypted using the user's SP (which was just created).
+            mSpManager.writeVendorAuthSecret(authSecret, sp, userId);
+        } else {
+            // The user already exists, so the auth secret should be stored encrypted
+            // with that user's SP.
+            authSecret = mSpManager.readVendorAuthSecret(sp, userId);
+            if (authSecret == null) {
+                Slog.e(TAG, "Unable to read vendor auth secret for user: " + userId);
+                return;
+            }
+            // Store it in memory, for when new users are created.
+            synchronized (mHeadlessAuthSecretLock) {
+                mAuthSecret = authSecret;
+            }
+        }
+        Slog.i(TAG, "Sending vendor auth secret to IAuthSecret HAL as user: " + userId);
+        try {
+            mAuthSecretService.setPrimaryUserCredential(authSecret);
+        } catch (RemoteException e) {
+            Slog.w(TAG, "Failed to send vendor auth secret to IAuthSecret HAL", e);
         }
     }
 
     /**
      * Creates the synthetic password (SP) for the given user, protects it with an empty LSKF, and
      * protects the user's CE key with a key derived from the SP.
-     * <p>
-     * This is called just once in the lifetime of the user: at user creation time (possibly delayed
-     * until the time when Weaver is guaranteed to be available), or when upgrading from Android 13
-     * or earlier where users with no LSKF didn't necessarily have an SP.
+     *
+     * <p>This is called just once in the lifetime of the user: at user creation time (possibly
+     * delayed until the time when Weaver is guaranteed to be available), or when upgrading from
+     * Android 13 or earlier where users with no LSKF didn't necessarily have an SP.
      */
     @VisibleForTesting
     SyntheticPassword initializeSyntheticPassword(int userId) {
@@ -2685,7 +2763,7 @@ public class LockSettingsService extends ILockSettings.Stub {
                     LockscreenCredential.createNone(), sp, userId);
             setCurrentLskfBasedProtectorId(protectorId, userId);
             setUserKeyProtection(userId, sp.deriveFileBasedEncryptionKey());
-            onSyntheticPasswordKnown(userId, sp);
+            onSyntheticPasswordCreated(userId, sp);
             return sp;
         }
     }
@@ -2752,7 +2830,7 @@ public class LockSettingsService extends ILockSettings.Stub {
         }
         mStrongAuth.reportSuccessfulStrongAuthUnlock(userId);
 
-        onSyntheticPasswordKnown(userId, sp);
+        onSyntheticPasswordUnlocked(userId, sp);
     }
 
     private void setDeviceUnlockedForUser(int userId) {
@@ -3040,7 +3118,7 @@ public class LockSettingsService extends ILockSettings.Stub {
                     + "verification.");
             return false;
         }
-        onSyntheticPasswordKnown(userId, result.syntheticPassword);
+        onSyntheticPasswordUnlocked(userId, result.syntheticPassword);
         setLockCredentialWithSpLocked(credential, result.syntheticPassword, userId);
         return true;
     }
@@ -3411,10 +3489,10 @@ public class LockSettingsService extends ILockSettings.Stub {
                     Slog.w(TAG, "Querying password metrics for unified challenge profile: "
                             + userHandle);
                 }
+                return LockSettingsService.this.getUserPasswordMetrics(userHandle);
             } finally {
                 Binder.restoreCallingIdentity(identity);
             }
-            return LockSettingsService.this.getUserPasswordMetrics(userHandle);
         }
 
         @Override

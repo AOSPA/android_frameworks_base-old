@@ -55,8 +55,6 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.protolog.ProtoLogGroup;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.server.FgThread;
-import com.android.server.LocalServices;
-import com.android.server.statusbar.StatusBarManagerInternal;
 
 import java.util.ArrayList;
 import java.util.function.LongConsumer;
@@ -88,12 +86,12 @@ class TransitionController {
 
     private ITransitionPlayer mTransitionPlayer;
     final TransitionMetricsReporter mTransitionMetricsReporter = new TransitionMetricsReporter();
-    final TransitionTracer mTransitionTracer;
 
     private WindowProcessController mTransitionPlayerProc;
     final ActivityTaskManagerService mAtm;
-    final TaskSnapshotController mTaskSnapshotController;
     final RemotePlayer mRemotePlayer;
+    TaskSnapshotController mTaskSnapshotController;
+    TransitionTracer mTransitionTracer;
 
     private final ArrayList<WindowManagerInternal.AppTransitionListener> mLegacyListeners =
             new ArrayList<>();
@@ -111,9 +109,6 @@ class TransitionController {
     /** The transition currently being constructed (collecting participants). */
     private Transition mCollectingTransition = null;
 
-    // TODO(b/188595497): remove when not needed.
-    final StatusBarManagerInternal mStatusBar;
-
     /**
      * `true` when building surface layer order for the finish transaction. We want to prevent
      * wm from touching z-order of surfaces during transitions, but we still need to be able to
@@ -126,19 +121,28 @@ class TransitionController {
 
     final Handler mLoggerHandler = FgThread.getHandler();
 
-    TransitionController(ActivityTaskManagerService atm,
-            TaskSnapshotController taskSnapshotController,
-            TransitionTracer transitionTracer) {
+    /**
+     * {@code true} While this waits for the display to become enabled (during boot). While waiting
+     * for the display, all core-initiated transitions will be "local".
+     * Note: This defaults to false so that it doesn't interfere with unit tests.
+     */
+    boolean mIsWaitingForDisplayEnabled = false;
+
+    TransitionController(ActivityTaskManagerService atm) {
         mAtm = atm;
         mRemotePlayer = new RemotePlayer(atm);
-        mStatusBar = LocalServices.getService(StatusBarManagerInternal.class);
-        mTaskSnapshotController = taskSnapshotController;
-        mTransitionTracer = transitionTracer;
         mTransitionPlayerDeath = () -> {
             synchronized (mAtm.mGlobalLock) {
                 detachPlayer();
             }
         };
+    }
+
+    void setWindowManager(WindowManagerService wms) {
+        mTaskSnapshotController = wms.mTaskSnapshotController;
+        mTransitionTracer = wms.mTransitionTracer;
+        mIsWaitingForDisplayEnabled = !wms.mDisplayEnabled;
+        registerLegacyListener(wms.mActivityManagerAppTransitionNotifier);
     }
 
     private void detachPlayer() {
@@ -353,11 +357,37 @@ class TransitionController {
     }
 
     /**
+     * During transient-launch, the "behind" app should retain focus during the transition unless
+     * something takes focus from it explicitly (eg. by calling ATMS.setFocusedTask or by another
+     * transition interrupting this one.
+     *
+     * The rules around this are basically: if there is exactly one active transition and `wc` is
+     * the "behind" of a transient launch, then it can retain focus.
+     */
+    boolean shouldKeepFocus(@NonNull WindowContainer wc) {
+        if (mCollectingTransition != null) {
+            if (!mPlayingTransitions.isEmpty()) return false;
+            return mCollectingTransition.isInTransientHide(wc);
+        } else if (mPlayingTransitions.size() == 1) {
+            return mPlayingTransitions.get(0).isInTransientHide(wc);
+        }
+        return false;
+    }
+
+    /**
+     * @return {@code true} if {@param ar} is part of a transient-launch activity in the
+     * collecting transition.
+     */
+    boolean isTransientCollect(@NonNull ActivityRecord ar) {
+        return mCollectingTransition != null && mCollectingTransition.isTransientLaunch(ar);
+    }
+
+    /**
      * @return {@code true} if {@param ar} is part of a transient-launch activity in an active
      * transition.
      */
     boolean isTransientLaunch(@NonNull ActivityRecord ar) {
-        if (mCollectingTransition != null && mCollectingTransition.isTransientLaunch(ar)) {
+        if (isTransientCollect(ar)) {
             return true;
         }
         for (int i = mPlayingTransitions.size() - 1; i >= 0; --i) {
@@ -460,6 +490,15 @@ class TransitionController {
     Transition requestStartTransition(@NonNull Transition transition, @Nullable Task startTask,
             @Nullable RemoteTransition remoteTransition,
             @Nullable TransitionRequestInfo.DisplayChange displayChange) {
+        if (mIsWaitingForDisplayEnabled) {
+            ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS, "Disabling player for transition"
+                    + " #%d because display isn't enabled yet", transition.getSyncId());
+            transition.mIsPlayerEnabled = false;
+            transition.mLogger.mRequestTimeNs = SystemClock.uptimeNanos();
+            mAtm.mH.post(() -> mAtm.mWindowOrganizerController.startTransition(
+                    transition.getToken(), null));
+            return transition;
+        }
         try {
             ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS,
                     "Requesting StartTransition: %s", transition);
@@ -470,7 +509,7 @@ class TransitionController {
             }
             final TransitionRequestInfo request = new TransitionRequestInfo(
                     transition.mType, info, remoteTransition, displayChange);
-            transition.mLogger.mRequestTimeNs = SystemClock.uptimeNanos();
+            transition.mLogger.mRequestTimeNs = SystemClock.elapsedRealtimeNanos();
             transition.mLogger.mRequest = request;
             mTransitionPlayer.requestStartTransition(transition.getToken(), request);
             transition.setRemoteTransition(remoteTransition);

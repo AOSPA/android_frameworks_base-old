@@ -66,6 +66,7 @@ import java.util.concurrent.Executor;
 public final class DisplayManager {
     private static final String TAG = "DisplayManager";
     private static final boolean DEBUG = false;
+    private static final boolean ENABLE_VIRTUAL_DISPLAY_REFRESH_RATE = false;
 
     private final Context mContext;
     private final DisplayManagerGlobal mGlobal;
@@ -112,6 +113,24 @@ public final class DisplayManager {
      */
     public static final String DISPLAY_CATEGORY_PRESENTATION =
             "android.hardware.display.category.PRESENTATION";
+
+    /**
+     * Display category: Rear displays.
+     * <p>
+     * This category can be used to identify complementary internal displays that are facing away
+     * from the user.
+     * Certain applications may present to this display.
+     * Similar to presentation displays.
+     * </p>
+     *
+     * @see android.app.Presentation
+     * @see Display#FLAG_PRESENTATION
+     * @see #getDisplays(String)
+     * @hide
+     */
+    @TestApi
+    public static final String DISPLAY_CATEGORY_REAR =
+            "android.hardware.display.category.REAR";
 
     /**
      * Display category: All displays, including disabled displays.
@@ -522,7 +541,8 @@ public final class DisplayManager {
             EVENT_FLAG_DISPLAY_ADDED,
             EVENT_FLAG_DISPLAY_CHANGED,
             EVENT_FLAG_DISPLAY_REMOVED,
-            EVENT_FLAG_DISPLAY_BRIGHTNESS
+            EVENT_FLAG_DISPLAY_BRIGHTNESS,
+            EVENT_FLAG_HDR_SDR_RATIO_CHANGED
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface EventsMask {}
@@ -564,6 +584,19 @@ public final class DisplayManager {
      * @hide
      */
     public static final long EVENT_FLAG_DISPLAY_BRIGHTNESS = 1L << 3;
+
+    /**
+     * Event flag to register for a display's hdr/sdr ratio changes. This notification is sent
+     * through the {@link DisplayListener#onDisplayChanged} callback method. New hdr/sdr
+     * values can be retrieved via {@link Display#getHdrSdrRatio()}.
+     *
+     * Requires that {@link Display#isHdrSdrRatioAvailable()} is true.
+     *
+     * @see #registerDisplayListener(DisplayListener, Handler, long)
+     *
+     * @hide
+     */
+    public static final long EVENT_FLAG_HDR_SDR_RATIO_CHANGED = 1L << 4;
 
     /** @hide */
     public DisplayManager(Context context) {
@@ -618,11 +651,19 @@ public final class DisplayManager {
         synchronized (mLock) {
             try {
                 if (DISPLAY_CATEGORY_PRESENTATION.equals(category)) {
-                    addPresentationDisplaysLocked(mTempDisplays, displayIds, Display.TYPE_WIFI);
-                    addPresentationDisplaysLocked(mTempDisplays, displayIds, Display.TYPE_EXTERNAL);
-                    addPresentationDisplaysLocked(mTempDisplays, displayIds, Display.TYPE_OVERLAY);
-                    addPresentationDisplaysLocked(mTempDisplays, displayIds, Display.TYPE_VIRTUAL);
-                    addPresentationDisplaysLocked(mTempDisplays, displayIds, Display.TYPE_INTERNAL);
+                    addDisplaysLocked(mTempDisplays, displayIds, Display.TYPE_WIFI,
+                            Display.FLAG_PRESENTATION);
+                    addDisplaysLocked(mTempDisplays, displayIds, Display.TYPE_EXTERNAL,
+                            Display.FLAG_PRESENTATION);
+                    addDisplaysLocked(mTempDisplays, displayIds, Display.TYPE_OVERLAY,
+                            Display.FLAG_PRESENTATION);
+                    addDisplaysLocked(mTempDisplays, displayIds, Display.TYPE_VIRTUAL,
+                            Display.FLAG_PRESENTATION);
+                    addDisplaysLocked(mTempDisplays, displayIds, Display.TYPE_INTERNAL,
+                            Display.FLAG_PRESENTATION);
+                } else if (DISPLAY_CATEGORY_REAR.equals(category)) {
+                    addDisplaysLocked(mTempDisplays, displayIds, Display.TYPE_INTERNAL,
+                            Display.FLAG_REAR);
                 } else if (category == null
                         || DISPLAY_CATEGORY_ALL_INCLUDING_DISABLED.equals(category)) {
                     addAllDisplaysLocked(mTempDisplays, displayIds);
@@ -643,15 +684,16 @@ public final class DisplayManager {
         }
     }
 
-    private void addPresentationDisplaysLocked(
-            ArrayList<Display> displays, int[] displayIds, int matchType) {
-        for (int i = 0; i < displayIds.length; i++) {
-            if (displayIds[i] == DEFAULT_DISPLAY) {
+    private void addDisplaysLocked(
+            ArrayList<Display> displays, int[] displayIds, int matchType, int flagMask) {
+        for (int displayId : displayIds) {
+            if (displayId == DEFAULT_DISPLAY) {
                 continue;
             }
-            Display display = getOrCreateDisplayLocked(displayIds[i], true /*assumeValid*/);
+
+            Display display = getOrCreateDisplayLocked(displayId, /* assumeValid= */ true);
             if (display != null
-                    && (display.getFlags() & Display.FLAG_PRESENTATION) != 0
+                    && (display.getFlags() & flagMask) == flagMask
                     && display.getType() == matchType) {
                 displays.add(display);
             }
@@ -938,6 +980,24 @@ public final class DisplayManager {
 
     /**
      * Creates a virtual display.
+     *
+     * @see #createVirtualDisplay(String, int, int, int, float, Surface, int,
+     * Handler, VirtualDisplay.Callback)
+     */
+    @Nullable
+    public VirtualDisplay createVirtualDisplay(@NonNull String name,
+            @IntRange(from = 1) int width,
+            @IntRange(from = 1) int height,
+            @IntRange(from = 1) int densityDpi,
+            float requestedRefreshRate,
+            @Nullable Surface surface,
+            @VirtualDisplayFlag int flags) {
+        return createVirtualDisplay(name, width, height, densityDpi, requestedRefreshRate,
+                surface, flags, null, null);
+    }
+
+    /**
+     * Creates a virtual display.
      * <p>
      * The content of a virtual display is rendered to a {@link Surface} provided
      * by the application.
@@ -987,11 +1047,81 @@ public final class DisplayManager {
             @VirtualDisplayFlag int flags,
             @Nullable VirtualDisplay.Callback callback,
             @Nullable Handler handler) {
+        return createVirtualDisplay(name, width, height, densityDpi, 0.0f, surface,
+                flags, handler, callback);
+    }
+
+    /**
+     * Creates a virtual display.
+     * <p>
+     * The content of a virtual display is rendered to a {@link Surface} provided
+     * by the application.
+     * </p><p>
+     * The virtual display should be {@link VirtualDisplay#release released}
+     * when no longer needed.  Because a virtual display renders to a surface
+     * provided by the application, it will be released automatically when the
+     * process terminates and all remaining windows on it will be forcibly removed.
+     * </p><p>
+     * The behavior of the virtual display depends on the flags that are provided
+     * to this method.  By default, virtual displays are created to be private,
+     * non-presentation and unsecure.  Permissions may be required to use certain flags.
+     * </p><p>
+     * As of {@link android.os.Build.VERSION_CODES#KITKAT_WATCH}, the surface may
+     * be attached or detached dynamically using {@link VirtualDisplay#setSurface}.
+     * Previously, the surface had to be non-null when {@link #createVirtualDisplay}
+     * was called and could not be changed for the lifetime of the display.
+     * </p><p>
+     * Detaching the surface that backs a virtual display has a similar effect to
+     * turning off the screen.
+     * </p>
+     *
+     * @param name The name of the virtual display, must be non-empty.
+     * @param width The width of the virtual display in pixels, must be greater than 0.
+     * @param height The height of the virtual display in pixels, must be greater than 0.
+     * @param densityDpi The density of the virtual display in dpi, must be greater than 0.
+     * @param requestedRefreshRate The requested refresh rate in frames per second.
+     * For best results, specify a divisor of the physical refresh rate, e.g., 30 or 60 on
+     * 120hz display. If an arbitrary refresh rate is specified, the rate will be rounded
+     * up or down to a divisor of the physical display. If 0 is specified, the virtual
+     * display is refreshed at the physical display refresh rate.
+     * @param surface The surface to which the content of the virtual display should
+     * be rendered, or null if there is none initially.
+     * @param flags A combination of virtual display flags:
+     * {@link #VIRTUAL_DISPLAY_FLAG_PUBLIC}, {@link #VIRTUAL_DISPLAY_FLAG_PRESENTATION},
+     * {@link #VIRTUAL_DISPLAY_FLAG_SECURE}, {@link #VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY},
+     * or {@link #VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR}.
+     * @param handler The handler on which the listener should be invoked, or null
+     * if the listener should be invoked on the calling thread's looper.
+     * @param callback Callback to call when the state of the {@link VirtualDisplay} changes
+     * @return The newly created virtual display, or null if the application could
+     * not create the virtual display.
+     *
+     * @throws SecurityException if the caller does not have permission to create
+     * a virtual display with the specified flags.
+     */
+    @Nullable
+    public VirtualDisplay createVirtualDisplay(@NonNull String name,
+            @IntRange(from = 1) int width,
+            @IntRange(from = 1) int height,
+            @IntRange(from = 1) int densityDpi,
+            float requestedRefreshRate,
+            @Nullable Surface surface,
+            @VirtualDisplayFlag int flags,
+            @Nullable Handler handler,
+            @Nullable VirtualDisplay.Callback callback) {
+        if (!ENABLE_VIRTUAL_DISPLAY_REFRESH_RATE && requestedRefreshRate != 0.0f) {
+            Slog.e(TAG, "Please turn on ENABLE_VIRTUAL_DISPLAY_REFRESH_RATE to use the new api");
+            return null;
+        }
+
         final VirtualDisplayConfig.Builder builder = new VirtualDisplayConfig.Builder(name, width,
                 height, densityDpi);
         builder.setFlags(flags);
         if (surface != null) {
             builder.setSurface(surface);
+        }
+        if (requestedRefreshRate != 0.0f) {
+            builder.setRequestedRefreshRate(requestedRefreshRate);
         }
         return createVirtualDisplay(null /* projection */, builder.build(), callback, handler,
                 null /* windowContext */);
@@ -1313,6 +1443,7 @@ public final class DisplayManager {
      * hdrConversionMode.conversionMode is not {@link HdrConversionMode#HDR_CONVERSION_FORCE}.
      *
      * @see #getHdrConversionMode
+     * @see #getHdrConversionModeSetting
      * @see #getSupportedHdrOutputTypes
      * @hide
      */
@@ -1324,15 +1455,37 @@ public final class DisplayManager {
 
     /**
      * Returns the {@link HdrConversionMode} of the device, which is set by the user.
+
+     * The HDR conversion mode chosen by user which considers the app override is returned. Apps can
+     * override HDR conversion using
+     * {@link android.view.WindowManager.LayoutParams#disableHdrConversion}.
      *
      * @see #setHdrConversionMode
      * @see #getSupportedHdrOutputTypes
+     * @see #getHdrConversionModeSetting()
      * @hide
      */
     @TestApi
     @NonNull
     public HdrConversionMode getHdrConversionMode() {
         return mGlobal.getHdrConversionMode();
+    }
+
+    /**
+     * Returns the {@link HdrConversionMode} of the device, which is set by the user.
+
+     * The HDR conversion mode chosen by user is returned irrespective of whether HDR conversion
+     * is disabled by an app.
+     *
+     * @see #setHdrConversionMode
+     * @see #getSupportedHdrOutputTypes
+     * @see #getHdrConversionMode()
+     * @hide
+     */
+    @TestApi
+    @NonNull
+    public HdrConversionMode getHdrConversionModeSetting() {
+        return mGlobal.getHdrConversionModeSetting();
     }
 
     /**

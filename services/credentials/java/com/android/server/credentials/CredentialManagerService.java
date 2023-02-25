@@ -16,9 +16,12 @@
 
 package com.android.server.credentials;
 
+import static android.Manifest.permission.CREDENTIAL_MANAGER_SET_ORIGIN;
 import static android.content.Context.CREDENTIAL_SERVICE;
+import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.content.ComponentName;
@@ -29,8 +32,8 @@ import android.credentials.ClearCredentialStateRequest;
 import android.credentials.CreateCredentialException;
 import android.credentials.CreateCredentialRequest;
 import android.credentials.CredentialDescription;
+import android.credentials.CredentialOption;
 import android.credentials.GetCredentialException;
-import android.credentials.GetCredentialOption;
 import android.credentials.GetCredentialRequest;
 import android.credentials.IClearCredentialStateCallback;
 import android.credentials.ICreateCredentialCallback;
@@ -49,8 +52,6 @@ import android.os.RemoteException;
 import android.os.UserHandle;
 import android.provider.DeviceConfig;
 import android.provider.Settings;
-import android.service.credentials.BeginCreateCredentialRequest;
-import android.service.credentials.BeginGetCredentialRequest;
 import android.service.credentials.CallingAppInfo;
 import android.service.credentials.CredentialProviderInfo;
 import android.text.TextUtils;
@@ -63,13 +64,11 @@ import com.android.server.infra.AbstractMasterSystemService;
 import com.android.server.infra.SecureSettingsServiceNameResolver;
 
 import java.util.ArrayList;
-import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * Entry point service for credential management.
@@ -85,16 +84,16 @@ public final class CredentialManagerService
     private static final String TAG = "CredManSysService";
     private static final String DEVICE_CONFIG_ENABLE_CREDENTIAL_DESC_API =
             "enable_credential_description_api";
+    private static final String PERMISSION_DENIED_ERROR = "permission_denied";
+    private static final String PERMISSION_DENIED_WRITE_SECURE_SETTINGS_ERROR =
+            "Caller is missing WRITE_SECURE_SETTINGS permission";
 
     private final Context mContext;
 
-    /**
-     * Cache of system service list per user id.
-     */
+    /** Cache of system service list per user id. */
     @GuardedBy("mLock")
     private final SparseArray<List<CredentialManagerServiceImpl>> mSystemServicesCacheList =
             new SparseArray<>();
-
 
     public CredentialManagerService(@NonNull Context context) {
         super(
@@ -113,9 +112,11 @@ public final class CredentialManagerService
         List<CredentialManagerServiceImpl> services = new ArrayList<>();
         List<CredentialProviderInfo> credentialProviderInfos =
                 CredentialProviderInfo.getAvailableSystemServices(mContext, resolvedUserId);
-        credentialProviderInfos.forEach(info -> {
-            services.add(new CredentialManagerServiceImpl(this, mLock, resolvedUserId, info));
-        });
+        credentialProviderInfos.forEach(
+                info -> {
+                    services.add(
+                            new CredentialManagerServiceImpl(this, mLock, resolvedUserId, info));
+                });
         return services;
     }
 
@@ -178,10 +179,9 @@ public final class CredentialManagerService
         CredentialManagerServiceImpl serviceToBeRemoved = null;
         for (CredentialManagerServiceImpl service : services) {
             if (service != null) {
-                CredentialProviderInfo credentialProviderInfo =
-                        service.getCredentialProviderInfo();
-                ComponentName componentName = credentialProviderInfo.getServiceInfo()
-                        .getComponentName();
+                CredentialProviderInfo credentialProviderInfo = service.getCredentialProviderInfo();
+                ComponentName componentName =
+                        credentialProviderInfo.getServiceInfo().getComponentName();
                 if (packageName.equals(componentName.getPackageName())) {
                     serviceToBeRemoved = service;
                     removeServiceFromMultiModeSettings(componentName.flattenToString(), userId);
@@ -197,8 +197,6 @@ public final class CredentialManagerService
         // TODO("Iterate over system services and remove if needed")
     }
 
-
-
     @GuardedBy("mLock")
     private List<CredentialManagerServiceImpl> getOrConstructSystemServiceListLock(
             int resolvedUserId) {
@@ -208,6 +206,16 @@ public final class CredentialManagerService
             mSystemServicesCacheList.put(resolvedUserId, services);
         }
         return services;
+    }
+
+    private boolean hasWriteSecureSettingsPermission() {
+        final String permission = android.Manifest.permission.WRITE_SECURE_SETTINGS;
+        final boolean result =
+                mContext.checkCallingOrSelfPermission(permission) == PERMISSION_GRANTED;
+        if (!result) {
+            Slog.e(TAG, "Caller does not have WRITE_SECURE_SETTINGS permission.");
+        }
+        return result;
     }
 
     private void runForUser(@NonNull final Consumer<CredentialManagerServiceImpl> c) {
@@ -227,8 +235,7 @@ public final class CredentialManagerService
     }
 
     @GuardedBy("mLock")
-    private List<CredentialManagerServiceImpl> getAllCredentialProviderServicesLocked(
-            int userId) {
+    private List<CredentialManagerServiceImpl> getAllCredentialProviderServicesLocked(int userId) {
         List<CredentialManagerServiceImpl> concatenatedServices = new ArrayList<>();
         List<CredentialManagerServiceImpl> userConfigurableServices =
                 getServiceListForUserLocked(userId);
@@ -238,52 +245,55 @@ public final class CredentialManagerService
         concatenatedServices.addAll(getOrConstructSystemServiceListLock(userId));
         return concatenatedServices;
     }
+
     public static boolean isCredentialDescriptionApiEnabled() {
-        return DeviceConfig.getBoolean(
+        final long origId = Binder.clearCallingIdentity();
+        try {
+            return DeviceConfig.getBoolean(
                 DeviceConfig.NAMESPACE_CREDENTIAL, DEVICE_CONFIG_ENABLE_CREDENTIAL_DESC_API, false);
+        } finally {
+            Binder.restoreCallingIdentity(origId);
+        }
     }
 
     @SuppressWarnings("GuardedBy") // ErrorProne requires initiateProviderSessionForRequestLocked
     // to be guarded by 'service.mLock', which is the same as mLock.
     private List<ProviderSession> initiateProviderSessionsWithActiveContainers(
-            RequestSession session,
-            List<String> requestOptions, Set<ComponentName> activeCredentialContainers) {
+            GetRequestSession session,
+            List<String> requestOptions,
+            Set<String> activeCredentialContainers) {
         List<ProviderSession> providerSessions = new ArrayList<>();
         // Invoke all services of a user to initiate a provider session
-        runForUser((service) -> {
-            if (activeCredentialContainers.contains(service.getComponentName())) {
-                ProviderSession providerSession = service
-                        .initiateProviderSessionForRequestLocked(session, requestOptions);
-                if (providerSession != null) {
-                    providerSessions.add(providerSession);
-                }
-            }
-        });
+        for (String packageName : activeCredentialContainers) {
+            providerSessions.add(
+                    ProviderRegistryGetSession.createNewSession(
+                            mContext,
+                            UserHandle.getCallingUserId(),
+                            session,
+                            packageName,
+                            requestOptions));
+        }
         return providerSessions;
     }
 
     @NonNull
-    private Set<String> getMatchingProviders(GetCredentialRequest request) {
+    private Set<String> getFilteredResultFromRegistry(List<CredentialOption> options) {
         // Session for active/provisioned credential descriptions;
-        CredentialDescriptionRegistry registry = CredentialDescriptionRegistry
-                .forUser(UserHandle.getCallingUserId());
+        CredentialDescriptionRegistry registry =
+                CredentialDescriptionRegistry.forUser(UserHandle.getCallingUserId());
 
         // All requested credential descriptions based on the given request.
         Set<String> requestedCredentialDescriptions =
-                request.getGetCredentialOptions().stream().map(
-                        getCredentialOption -> getCredentialOption
-                                        .getCredentialRetrievalData()
-                                        .getString(GetCredentialOption
-                                                .FLATTENED_REQUEST))
+                options.stream()
+                        .map(
+                                getCredentialOption ->
+                                        getCredentialOption
+                                                .getCredentialRetrievalData()
+                                                .getString(CredentialOption.FLATTENED_REQUEST))
                         .collect(Collectors.toSet());
 
         // All requested credential descriptions based on the given request.
-        return requestedCredentialDescriptions.stream()
-                .map(registry::filterCredentials)
-                .flatMap(
-                        (Function<Set<String>, Stream<String>>)
-                                Collection::stream)
-                .collect(Collectors.toSet());
+        return registry.getMatchingProviders(requestedCredentialDescriptions);
     }
 
     @SuppressWarnings("GuardedBy") // ErrorProne requires initiateProviderSessionForRequestLocked
@@ -306,18 +316,33 @@ public final class CredentialManagerService
         return providerSessions;
     }
 
-    private CallingAppInfo constructCallingAppInfo(String packageName, int userId) {
+    @Override
+    @GuardedBy("CredentialDescriptionRegistry.sLock")
+    public void onUserStopped(@NonNull TargetUser user) {
+        super.onUserStopped(user);
+        CredentialDescriptionRegistry.clearUserSession(user.getUserIdentifier());
+    }
+
+    private CallingAppInfo constructCallingAppInfo(
+            String realPackageName,
+            int userId,
+            @Nullable String origin) {
         final PackageInfo packageInfo;
+        String actualPackageName = origin == null ? realPackageName : origin;
         try {
-            packageInfo = getContext().getPackageManager().getPackageInfoAsUser(
-                    packageName,
-                    PackageManager.PackageInfoFlags.of(PackageManager.GET_SIGNING_CERTIFICATES),
-                    userId);
+            packageInfo =
+                getContext()
+                    .getPackageManager()
+                    .getPackageInfoAsUser(
+                        actualPackageName,
+                        PackageManager.PackageInfoFlags.of(
+                            PackageManager.GET_SIGNING_CERTIFICATES),
+                        userId);
         } catch (PackageManager.NameNotFoundException e) {
             Log.i(TAG, "Issue while retrieving signatureInfo : " + e.getMessage());
-            return new CallingAppInfo(packageName, null);
+            return new CallingAppInfo(actualPackageName, null);
         }
-        return new CallingAppInfo(packageName, packageInfo.signingInfo);
+        return new CallingAppInfo(actualPackageName, packageInfo.signingInfo);
     }
 
     final class CredentialManagerServiceStub extends ICredentialManager.Stub {
@@ -327,11 +352,11 @@ public final class CredentialManagerService
                 IGetCredentialCallback callback,
                 final String callingPackage) {
             Log.i(TAG, "starting executeGetCredential with callingPackage: " + callingPackage);
-            // TODO : Implement cancellation
             ICancellationSignal cancelTransport = CancellationSignal.createTransport();
 
-            int userId = UserHandle.getCallingUserId();
-            int callingUid = Binder.getCallingUid();
+            final int userId = UserHandle.getCallingUserId();
+            final int callingUid = Binder.getCallingUid();
+            enforceCallingPackage(callingPackage, callingUid);
             // New request session, scoped for this request only.
             final GetRequestSession session =
                     new GetRequestSession(
@@ -340,36 +365,127 @@ public final class CredentialManagerService
                             callingUid,
                             callback,
                             request,
-                            constructCallingAppInfo(callingPackage, userId));
+                            constructCallingAppInfo(callingPackage, userId, null),
+                            CancellationSignal.fromTransport(cancelTransport));
 
-            // Initiate all provider sessions
-            List<ProviderSession> providerSessions =
+            processGetCredential(request, callback, session);
+            return cancelTransport;
+        }
+
+        public ICancellationSignal executeGetCredentialWithOrigin(
+                GetCredentialRequest request,
+                IGetCredentialCallback callback,
+                final String callingPackage,
+                final String origin) {
+            Log.i(TAG, "starting executeGetCredential with callingPackage: " + callingPackage);
+            ICancellationSignal cancelTransport = CancellationSignal.createTransport();
+
+            // Check privileged permissions
+            mContext.enforceCallingPermission(CREDENTIAL_MANAGER_SET_ORIGIN, null);
+
+            final int userId = UserHandle.getCallingUserId();
+            final int callingUid = Binder.getCallingUid();
+            enforceCallingPackage(callingPackage, callingUid);
+
+            // New request session, scoped for this request only.
+            final GetRequestSession session =
+                    new GetRequestSession(
+                        getContext(),
+                        userId,
+                        callingUid,
+                        callback,
+                        request,
+                        constructCallingAppInfo(callingPackage, userId, origin),
+                        CancellationSignal.fromTransport(cancelTransport));
+
+            processGetCredential(request, callback, session);
+            return cancelTransport;
+        }
+
+        private void processGetCredential(
+                GetCredentialRequest request,
+                IGetCredentialCallback callback,
+                GetRequestSession session) {
+            List<ProviderSession> providerSessions;
+
+            // TODO(b/268143699): temporarily disable the flag due to bug.
+            if (false) {
+                List<CredentialOption> optionsThatRequireActiveCredentials =
+                        request.getCredentialOptions().stream()
+                        .filter(
+                            getCredentialOption ->
+                                !TextUtils.isEmpty(
+                                    getCredentialOption
+                                        .getCredentialRetrievalData()
+                                        .getString(
+                                            CredentialOption
+                                                .FLATTENED_REQUEST,
+                                            null)))
+                        .toList();
+
+                List<CredentialOption> optionsThatDoNotRequireActiveCredentials =
+                        request.getCredentialOptions().stream()
+                        .filter(
+                            getCredentialOption ->
+                                TextUtils.isEmpty(
+                                    getCredentialOption
+                                        .getCredentialRetrievalData()
+                                        .getString(
+                                            CredentialOption
+                                                .FLATTENED_REQUEST,
+                                            null)))
+                        .toList();
+
+                List<ProviderSession> sessionsWithoutRemoteService =
+                        initiateProviderSessionsWithActiveContainers(
+                        session,
+                        optionsThatRequireActiveCredentials.stream()
+                            .map(
+                                getCredentialOption ->
+                                    getCredentialOption
+                                        .getCredentialRetrievalData()
+                                        .getString(
+                                            CredentialOption
+                                                .FLATTENED_REQUEST))
+                            .collect(Collectors.toList()),
+                        getFilteredResultFromRegistry(optionsThatRequireActiveCredentials));
+
+                List<ProviderSession> sessionsWithRemoteService =
                         initiateProviderSessions(
-                                session,
-                                request.getGetCredentialOptions().stream()
-                                        .map(GetCredentialOption::getType)
-                                        .collect(Collectors.toList()));
+                        session,
+                        optionsThatDoNotRequireActiveCredentials.stream()
+                            .map(CredentialOption::getType)
+                            .collect(Collectors.toList()));
+
+                Set<ProviderSession> all = new LinkedHashSet<>();
+                all.addAll(sessionsWithRemoteService);
+                all.addAll(sessionsWithoutRemoteService);
+
+                providerSessions = new ArrayList<>(all);
+            } else {
+                // Initiate all provider sessions
+                providerSessions =
+                    initiateProviderSessions(
+                        session,
+                        request.getCredentialOptions().stream()
+                            .map(CredentialOption::getType)
+                            .collect(Collectors.toList()));
+            }
 
             if (providerSessions.isEmpty()) {
                 try {
-                    callback.onError(GetCredentialException.TYPE_NO_CREDENTIAL,
+                    callback.onError(
+                            GetCredentialException.TYPE_NO_CREDENTIAL,
                             "No credentials available on this device.");
                 } catch (RemoteException e) {
                     Log.i(
                             TAG,
                             "Issue invoking onError on IGetCredentialCallback "
-                                    + "callback: "
-                                    + e.getMessage());
+                                + "callback: "
+                                + e.getMessage());
                 }
             }
-
-            // Iterate over all provider sessions and invoke the request
-            providerSessions.forEach(
-                    providerGetSession -> providerGetSession
-                    .getRemoteCredentialService().onBeginGetCredential(
-                    (BeginGetCredentialRequest) providerGetSession.getProviderRequest(),
-                    /*callback=*/providerGetSession));
-            return cancelTransport;
+            providerSessions.forEach(ProviderSession::invokeSession);
         }
 
         @Override
@@ -377,13 +493,15 @@ public final class CredentialManagerService
                 CreateCredentialRequest request,
                 ICreateCredentialCallback callback,
                 String callingPackage) {
-            Log.i(TAG, "starting executeCreateCredential with callingPackage: " + callingPackage);
-
+            Log.i(TAG, "starting executeCreateCredential with callingPackage: "
+                    + callingPackage);
             ICancellationSignal cancelTransport = CancellationSignal.createTransport();
 
+            final int userId = UserHandle.getCallingUserId();
+            final int callingUid = Binder.getCallingUid();
+            enforceCallingPackage(callingPackage, callingUid);
+
             // New request session, scoped for this request only.
-            int userId = UserHandle.getCallingUserId();
-            int callingUid = Binder.getCallingUid();
             final CreateRequestSession session =
                     new CreateRequestSession(
                             getContext(),
@@ -391,34 +509,67 @@ public final class CredentialManagerService
                             callingUid,
                             request,
                             callback,
-                            constructCallingAppInfo(callingPackage, userId));
+                            constructCallingAppInfo(callingPackage, userId, null),
+                            CancellationSignal.fromTransport(cancelTransport));
 
+            processCreateCredential(request, callback, session);
+            return cancelTransport;
+        }
+
+        public ICancellationSignal executeCreateCredentialWithOrigin(
+                CreateCredentialRequest request,
+                ICreateCredentialCallback callback,
+                String callingPackage,
+                String origin) {
+            Log.i(TAG, "starting executeCreateCredential with callingPackage: " + callingPackage);
+            ICancellationSignal cancelTransport = CancellationSignal.createTransport();
+
+            // Check privileged permissions
+            mContext.enforceCallingPermission(CREDENTIAL_MANAGER_SET_ORIGIN, null);
+
+            final int userId = UserHandle.getCallingUserId();
+            final int callingUid = Binder.getCallingUid();
+            enforceCallingPackage(callingPackage, callingUid);
+
+            // New request session, scoped for this request only.
+            final CreateRequestSession session =
+                    new CreateRequestSession(
+                        getContext(),
+                        userId,
+                        callingUid,
+                        request,
+                        callback,
+                        constructCallingAppInfo(callingPackage, userId, origin),
+                        CancellationSignal.fromTransport(cancelTransport));
+
+            processCreateCredential(request, callback, session);
+            return cancelTransport;
+        }
+
+        private void processCreateCredential(
+                CreateCredentialRequest request,
+                ICreateCredentialCallback callback,
+                CreateRequestSession session) {
             // Initiate all provider sessions
             List<ProviderSession> providerSessions =
                     initiateProviderSessions(session, List.of(request.getType()));
 
             if (providerSessions.isEmpty()) {
                 try {
-                    callback.onError(CreateCredentialException.TYPE_NO_CREDENTIAL,
-                            "No credentials available on this device.");
+                    callback.onError(
+                            CreateCredentialException.TYPE_NO_CREATE_OPTIONS,
+                            "No create options available.");
                 } catch (RemoteException e) {
                     Log.i(
                             TAG,
                             "Issue invoking onError on ICreateCredentialCallback "
-                                    + "callback: "
-                                    + e.getMessage());
+                                + "callback: "
+                                + e.getMessage());
                 }
             }
 
             // Iterate over all provider sessions and invoke the request
-            providerSessions.forEach(
-                    providerCreateSession -> providerCreateSession
-                            .getRemoteCredentialService()
-                            .onCreateCredential(
-                                    (BeginCreateCredentialRequest)
-                                            providerCreateSession.getProviderRequest(),
-                                    /* callback= */ providerCreateSession));
-            return cancelTransport;
+            providerSessions.forEach(ProviderSession::invokeSession);
         }
 
         @SuppressWarnings("GuardedBy") // ErrorProne requires listEnabledProviders
@@ -427,6 +578,16 @@ public final class CredentialManagerService
         public ICancellationSignal listEnabledProviders(IListEnabledProvidersCallback callback) {
             Log.i(TAG, "listEnabledProviders");
             ICancellationSignal cancelTransport = CancellationSignal.createTransport();
+
+            if (!hasWriteSecureSettingsPermission()) {
+                try {
+                    callback.onError(
+                            PERMISSION_DENIED_ERROR, PERMISSION_DENIED_WRITE_SECURE_SETTINGS_ERROR);
+                } catch (RemoteException e) {
+                    Log.e(TAG, "Issue with invoking response: " + e.getMessage());
+                }
+                return cancelTransport;
+            }
 
             List<String> enabledProviders = new ArrayList<>();
             runForUser(
@@ -449,6 +610,16 @@ public final class CredentialManagerService
         public void setEnabledProviders(
                 List<String> providers, int userId, ISetEnabledProvidersCallback callback) {
             Log.i(TAG, "setEnabledProviders");
+
+            if (!hasWriteSecureSettingsPermission()) {
+                try {
+                    callback.onError(
+                            PERMISSION_DENIED_ERROR, PERMISSION_DENIED_WRITE_SECURE_SETTINGS_ERROR);
+                } catch (RemoteException e) {
+                    Log.e(TAG, "Issue with invoking response: " + e.getMessage());
+                }
+                return;
+            }
 
             userId =
                     ActivityManager.handleIncomingUser(
@@ -490,17 +661,52 @@ public final class CredentialManagerService
         }
 
         @Override
+        public boolean isEnabledCredentialProviderService(
+                ComponentName componentName, String callingPackage) {
+            Log.i(TAG, "isEnabledCredentialProviderService");
+
+            // TODO(253157366): Check additional set of services.
+            final int userId = UserHandle.getCallingUserId();
+            final int callingUid = Binder.getCallingUid();
+            enforceCallingPackage(callingPackage, callingUid);
+            synchronized (mLock) {
+                final List<CredentialManagerServiceImpl> services =
+                        getServiceListForUserLocked(userId);
+                for (CredentialManagerServiceImpl s : services) {
+                    final ComponentName serviceComponentName = s.getServiceComponentName();
+
+                    if (serviceComponentName.equals(componentName)) {
+                        if (!s.getServicePackageName().equals(callingPackage)) {
+                            // The component name and the package name do not match.
+                            Log.w(
+                                    TAG,
+                                    "isEnabledCredentialProviderService: Component name does not"
+                                            + " match package name.");
+                            return false;
+                        }
+
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        @Override
         public ICancellationSignal clearCredentialState(
                 ClearCredentialStateRequest request,
                 IClearCredentialStateCallback callback,
                 String callingPackage) {
             Log.i(TAG, "starting clearCredentialState with callingPackage: " + callingPackage);
+            final int userId = UserHandle.getCallingUserId();
+            int callingUid = Binder.getCallingUid();
+            enforceCallingPackage(callingPackage, callingUid);
+
             // TODO : Implement cancellation
             ICancellationSignal cancelTransport = CancellationSignal.createTransport();
 
             // New request session, scoped for this request only.
-            int userId = UserHandle.getCallingUserId();
-            int callingUid = Binder.getCallingUid();
             final ClearRequestSession session =
                     new ClearRequestSession(
                             getContext(),
@@ -508,7 +714,8 @@ public final class CredentialManagerService
                             callingUid,
                             callback,
                             request,
-                            constructCallingAppInfo(callingPackage, userId));
+                            constructCallingAppInfo(callingPackage, userId, null),
+                            CancellationSignal.fromTransport(cancelTransport));
 
             // Initiate all provider sessions
             // TODO: Determine if provider needs to have clear capability in their manifest
@@ -517,8 +724,7 @@ public final class CredentialManagerService
             if (providerSessions.isEmpty()) {
                 try {
                     // TODO("Replace with properly defined error type")
-                    callback.onError("UNKNOWN", "No crdentials available on this "
-                            + "device");
+                    callback.onError("UNKNOWN", "No crdentials available on this " + "device");
                 } catch (RemoteException e) {
                     Log.i(
                             TAG,
@@ -529,54 +735,59 @@ public final class CredentialManagerService
             }
 
             // Iterate over all provider sessions and invoke the request
-            providerSessions.forEach(
-                    providerClearSession -> {
-                        providerClearSession
-                                .getRemoteCredentialService()
-                                .onClearCredentialState(
-                                        (android.service.credentials.ClearCredentialStateRequest)
-                                                providerClearSession.getProviderRequest(),
-                                        /* callback= */ providerClearSession);
-                    });
+            providerSessions.forEach(ProviderSession::invokeSession);
             return cancelTransport;
         }
 
         @Override
         public void registerCredentialDescription(
                 RegisterCredentialDescriptionRequest request, String callingPackage)
-                throws IllegalArgumentException , NonCredentialProviderCallerException {
+                throws IllegalArgumentException, NonCredentialProviderCallerException {
             Log.i(TAG, "registerCredentialDescription");
 
-            List<CredentialProviderInfo> services =
-                    CredentialProviderInfo.getAvailableServices(mContext,
-                            UserHandle.getCallingUserId());
+            enforceCallingPackage(callingPackage, Binder.getCallingUid());
 
-            List<String> providers = services.stream()
-                    .map(credentialProviderInfo
-                            -> credentialProviderInfo.getServiceInfo().packageName).toList();
+            List<CredentialProviderInfo> services =
+                    CredentialProviderInfo.getAvailableServices(
+                            mContext, UserHandle.getCallingUserId());
+
+            List<String> providers =
+                    services.stream()
+                            .map(
+                                    credentialProviderInfo ->
+                                            credentialProviderInfo.getServiceInfo().packageName)
+                            .toList();
 
             if (!providers.contains(callingPackage)) {
                 throw new NonCredentialProviderCallerException(callingPackage);
             }
 
-            List<CredentialProviderInfo> matchingService = services.stream().filter(
-                    credentialProviderInfo ->
-                            credentialProviderInfo.getServiceInfo()
-                                    .packageName.equals(callingPackage)).toList();
+            List<CredentialProviderInfo> matchingService =
+                    services.stream()
+                            .filter(
+                                    credentialProviderInfo ->
+                                            credentialProviderInfo
+                                                    .getServiceInfo()
+                                                    .packageName
+                                                    .equals(callingPackage))
+                            .toList();
 
             CredentialProviderInfo credentialProviderInfo = matchingService.get(0);
 
-            Set<String> supportedTypes = request.getCredentialDescriptions()
-                    .stream().map(CredentialDescription::getType).filter(
-                            credentialProviderInfo::hasCapability).collect(Collectors.toSet());
+            Set<String> supportedTypes =
+                    request.getCredentialDescriptions().stream()
+                            .map(CredentialDescription::getType)
+                            .filter(credentialProviderInfo::hasCapability)
+                            .collect(Collectors.toSet());
 
             if (supportedTypes.size() != request.getCredentialDescriptions().size()) {
-                throw new IllegalArgumentException("CredentialProvider does not support one or more"
-                        + "of the registered types. Check your XML entry.");
+                throw new IllegalArgumentException(
+                        "CredentialProvider does not support one or more"
+                                + "of the registered types. Check your XML entry.");
             }
 
-            CredentialDescriptionRegistry session = CredentialDescriptionRegistry
-                    .forUser(UserHandle.getCallingUserId());
+            CredentialDescriptionRegistry session =
+                    CredentialDescriptionRegistry.forUser(UserHandle.getCallingUserId());
 
             session.executeRegisterRequest(request, callingPackage);
         }
@@ -586,24 +797,43 @@ public final class CredentialManagerService
                 UnregisterCredentialDescriptionRequest request, String callingPackage)
                 throws IllegalArgumentException {
             Log.i(TAG, "registerCredentialDescription");
-            ICancellationSignal cancelTransport = CancellationSignal.createTransport();
+
+            enforceCallingPackage(callingPackage, Binder.getCallingUid());
 
             List<CredentialProviderInfo> services =
-                    CredentialProviderInfo.getAvailableServices(mContext,
-                            UserHandle.getCallingUserId());
+                    CredentialProviderInfo.getAvailableServices(
+                            mContext, UserHandle.getCallingUserId());
 
-            List<String> providers = services.stream()
-                    .map(credentialProviderInfo
-                            -> credentialProviderInfo.getServiceInfo().packageName).toList();
+            List<String> providers =
+                    services.stream()
+                            .map(
+                                    credentialProviderInfo ->
+                                            credentialProviderInfo.getServiceInfo().packageName)
+                            .toList();
 
             if (!providers.contains(callingPackage)) {
                 throw new NonCredentialProviderCallerException(callingPackage);
             }
 
-            CredentialDescriptionRegistry session = CredentialDescriptionRegistry
-                    .forUser(UserHandle.getCallingUserId());
+            CredentialDescriptionRegistry session =
+                    CredentialDescriptionRegistry.forUser(UserHandle.getCallingUserId());
 
             session.executeUnregisterRequest(request, callingPackage);
+        }
+    }
+
+    private void enforceCallingPackage(String callingPackage, int callingUid) {
+        int packageUid;
+        PackageManager pm = mContext.createContextAsUser(
+                UserHandle.getUserHandleForUid(callingUid), 0).getPackageManager();
+        try {
+            packageUid = pm.getPackageUid(callingPackage,
+                    PackageManager.PackageInfoFlags.of(0));
+        } catch (PackageManager.NameNotFoundException e) {
+            throw new SecurityException(callingPackage + " not found");
+        }
+        if (packageUid != callingUid) {
+            throw new SecurityException(callingPackage + " does not belong to uid " + callingUid);
         }
     }
 }

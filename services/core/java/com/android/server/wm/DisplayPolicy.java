@@ -114,7 +114,6 @@ import android.view.InsetsFlags;
 import android.view.InsetsFrameProvider;
 import android.view.InsetsSource;
 import android.view.InsetsState;
-import android.view.InsetsState.InternalInsetsType;
 import android.view.Surface;
 import android.view.View;
 import android.view.ViewDebug;
@@ -177,9 +176,8 @@ public class DisplayPolicy {
     /** Use the transit animation in style resource (see {@link #selectAnimation}). */
     static final int ANIMATION_STYLEABLE = 0;
 
-    private static final int[] SHOW_TYPES_FOR_SWIPE = {ITYPE_NAVIGATION_BAR, ITYPE_STATUS_BAR,
-            ITYPE_CLIMATE_BAR, ITYPE_EXTRA_NAVIGATION_BAR};
-    private static final int[] SHOW_TYPES_FOR_PANIC = {ITYPE_NAVIGATION_BAR};
+    private static final int SHOW_TYPES_FOR_SWIPE = Type.statusBars() | Type.navigationBars();
+    private static final int SHOW_TYPES_FOR_PANIC = Type.navigationBars();
 
     private final WindowManagerService mService;
     private final Context mContext;
@@ -270,7 +268,7 @@ public class DisplayPolicy {
 
     private boolean mIsFreeformWindowOverlappingWithNavBar;
 
-    private boolean mLastImmersiveMode;
+    private boolean mIsImmersiveMode;
 
     // The windows we were told about in focusChanged.
     private WindowState mFocusedWindow;
@@ -1234,8 +1232,16 @@ public class DisplayPolicy {
                 } else {
                     overrideProviders = null;
                 }
-                mDisplayContent.setInsetProvider(provider.type, win, frameProvider,
-                        overrideProviders);
+                // TODO (b/234093736): Let InsetsFrameProvider have the following fields:
+                //                     - IBinder owner.
+                //                     - int index.
+                //                     - @InsetsType int type.
+                //                     So we can create the id by using InsetsSource#createId.
+                //                     And we won't need toPublicType anymore.
+                final int id = provider.type;
+                final @InsetsType int type = InsetsState.toPublicType(id);
+                mDisplayContent.getInsetsStateController().getOrCreateSourceProvider(id, type)
+                        .setWindowContainer(win, frameProvider, overrideProviders);
                 mInsetsSourceWindowsExceptIme.add(win);
             }
         }
@@ -1328,10 +1334,17 @@ public class DisplayPolicy {
             mLastFocusedWindow = null;
         }
 
-        final SparseArray<InsetsSource> sources = win.getProvidedInsetsSources();
-        for (int index = sources.size() - 1; index >= 0; index--) {
-            final @InternalInsetsType int type = sources.keyAt(index);
-            mDisplayContent.setInsetProvider(type, null /* win */, null /* frameProvider */);
+        if (win.hasInsetsSourceProvider()) {
+            final SparseArray<InsetsSourceProvider> providers = win.getInsetsSourceProviders();
+            final InsetsStateController controller = mDisplayContent.getInsetsStateController();
+            for (int index = providers.size() - 1; index >= 0; index--) {
+                final InsetsSourceProvider provider = providers.valueAt(index);
+                provider.setWindowContainer(
+                        null /* windowContainer */,
+                        null /* frameProvider */,
+                        null /* overrideFrameProviders */);
+                controller.removeSourceProvider(provider.getSource().getId());
+            }
         }
         mInsetsSourceWindowsExceptIme.remove(win);
     }
@@ -1400,7 +1413,6 @@ public class DisplayPolicy {
      * some temporal states, but doesn't change the window frames used to show on screen.
      */
     void simulateLayoutDisplay(DisplayFrames displayFrames) {
-        final InsetsStateController controller = mDisplayContent.getInsetsStateController();
         sTmpClientFrames.attachedFrame = null;
         for (int i = mInsetsSourceWindowsExceptIme.size() - 1; i >= 0; i--) {
             final WindowState win = mInsetsSourceWindowsExceptIme.valueAt(i);
@@ -1409,11 +1421,10 @@ public class DisplayPolicy {
                     displayFrames.mUnrestricted, win.getWindowingMode(), UNSPECIFIED_LENGTH,
                     UNSPECIFIED_LENGTH, win.getRequestedVisibleTypes(), win.mGlobalScale,
                     sTmpClientFrames);
-            final SparseArray<InsetsSource> sources = win.getProvidedInsetsSources();
+            final SparseArray<InsetsSourceProvider> providers = win.getInsetsSourceProviders();
             final InsetsState state = displayFrames.mInsetsState;
-            for (int index = sources.size() - 1; index >= 0; index--) {
-                final int type = sources.keyAt(index);
-                state.addSource(controller.getSourceProvider(type).createSimulatedSource(
+            for (int index = providers.size() - 1; index >= 0; index--) {
+                state.addSource(providers.valueAt(index).createSimulatedSource(
                         displayFrames, sTmpClientFrames.frame));
             }
         }
@@ -1516,30 +1527,33 @@ public class DisplayPolicy {
             mIsFreeformWindowOverlappingWithNavBar = true;
         }
 
-        final SparseArray<InsetsSource> sources = win.getProvidedInsetsSources();
-        final Rect bounds = win.getBounds();
-        for (int index = sources.size() - 1; index >= 0; index--) {
-            final InsetsSource source = sources.valueAt(index);
-            if ((source.getType()
-                    & (Type.systemGestures() | Type.mandatorySystemGestures())) == 0) {
-                continue;
-            }
-            if (mLeftGestureHost != null && mTopGestureHost != null
-                    && mRightGestureHost != null && mBottomGestureHost != null) {
-                continue;
-            }
-            final Insets insets = source.calculateInsets(bounds, false /* ignoreVisibility */);
-            if (mLeftGestureHost == null && insets.left > 0) {
-                mLeftGestureHost = win;
-            }
-            if (mTopGestureHost == null && insets.top > 0) {
-                mTopGestureHost = win;
-            }
-            if (mRightGestureHost == null && insets.right > 0) {
-                mRightGestureHost = win;
-            }
-            if (mBottomGestureHost == null && insets.bottom > 0) {
-                mBottomGestureHost = win;
+        if (win.hasInsetsSourceProvider()) {
+            final SparseArray<InsetsSourceProvider> providers = win.getInsetsSourceProviders();
+            final Rect bounds = win.getBounds();
+            for (int index = providers.size() - 1; index >= 0; index--) {
+                final InsetsSourceProvider provider = providers.valueAt(index);
+                final InsetsSource source = provider.getSource();
+                if ((source.getType()
+                        & (Type.systemGestures() | Type.mandatorySystemGestures())) == 0) {
+                    continue;
+                }
+                if (mLeftGestureHost != null && mTopGestureHost != null
+                        && mRightGestureHost != null && mBottomGestureHost != null) {
+                    continue;
+                }
+                final Insets insets = source.calculateInsets(bounds, false /* ignoreVisibility */);
+                if (mLeftGestureHost == null && insets.left > 0) {
+                    mLeftGestureHost = win;
+                }
+                if (mTopGestureHost == null && insets.top > 0) {
+                    mTopGestureHost = win;
+                }
+                if (mRightGestureHost == null && insets.right > 0) {
+                    mRightGestureHost = win;
+                }
+                if (mBottomGestureHost == null && insets.bottom > 0) {
+                    mBottomGestureHost = win;
+                }
             }
         }
 
@@ -1766,14 +1780,13 @@ public class DisplayPolicy {
     }
 
     /**
-     * @return Whether the top app should hide the statusbar based on the top fullscreen opaque
-     *         window.
+     * @return Whether the top fullscreen app hides the given type of system bar.
      */
-    boolean topAppHidesStatusBar() {
+    boolean topAppHidesSystemBar(@InsetsType int type) {
         if (mTopFullscreenOpaqueWindowState == null || mForceShowSystemBars) {
             return false;
         }
-        return !mTopFullscreenOpaqueWindowState.isRequestedVisible(Type.statusBars());
+        return !mTopFullscreenOpaqueWindowState.isRequestedVisible(type);
     }
 
     /**
@@ -1895,21 +1908,6 @@ public class DisplayPolicy {
                 wpMgr.onDisplayReady(displayId);
             }
         });
-    }
-
-    /**
-     * Get the Navigation Bar Frame height. This dimension is the height of the navigation bar that
-     * is used for spacing to show additional buttons on the navigation bar (such as the ime
-     * switcher when ime is visible).
-     *
-     * @param rotation specifies rotation to return dimension from
-     * @return navigation bar frame height
-     */
-    private int getNavigationBarFrameHeight(int rotation) {
-        if (mNavigationBar == null) {
-            return 0;
-        }
-        return mNavigationBar.mAttrs.forRotation(rotation).height;
     }
 
     /**
@@ -2148,7 +2146,7 @@ public class DisplayPolicy {
      * Called when an app has started replacing its main window.
      */
     void addRelaunchingApp(ActivityRecord app) {
-        if (mSystemBarColorApps.contains(app)) {
+        if (mSystemBarColorApps.contains(app) && !app.hasStartingWindow()) {
             mRelaunchingSystemBarColorApps.add(app);
         }
     }
@@ -2211,7 +2209,10 @@ public class DisplayPolicy {
                 navColorWin != null && navColorWin == mDisplayContent.mInputMethodWindow;
         final int appearance = updateLightNavigationBarLw(win.mAttrs.insetsFlags.appearance,
                 navColorWin) | opaqueAppearance;
-        final int behavior = win.mAttrs.insetsFlags.behavior;
+        final WindowState navBarControlWin = topAppHidesSystemBar(Type.navigationBars())
+                ? mTopFullscreenOpaqueWindowState
+                : win;
+        final int behavior = navBarControlWin.mAttrs.insetsFlags.behavior;
         final String focusedApp = win.mAttrs.packageName;
         final boolean isFullscreen = !win.isRequestedVisible(Type.statusBars())
                 || !win.isRequestedVisible(Type.navigationBars());
@@ -2326,7 +2327,7 @@ public class DisplayPolicy {
                 || mDisplayContent.getInsetsPolicy().remoteInsetsControllerControlsSystemBars(win);
         mDisplayContent.getInsetsPolicy().updateBarControlTarget(win);
 
-        final boolean topAppHidesStatusBar = topAppHidesStatusBar();
+        final boolean topAppHidesStatusBar = topAppHidesSystemBar(Type.statusBars());
         if (getStatusBar() != null) {
             final StatusBarManagerInternal statusBar = getStatusBarManagerInternal();
             if (statusBar != null) {
@@ -2343,14 +2344,27 @@ public class DisplayPolicy {
         appearance = configureNavBarOpacity(appearance, multiWindowTaskVisible,
                 freeformRootTaskVisible);
 
+        // Show immersive mode confirmation if needed.
+        final boolean wasImmersiveMode = mIsImmersiveMode;
+        final boolean isImmersiveMode = isImmersiveMode(win);
+        if (wasImmersiveMode != isImmersiveMode) {
+            mIsImmersiveMode = isImmersiveMode;
+            // The immersive confirmation window should be attached to the immersive window root.
+            final RootDisplayArea root = win.getRootDisplayArea();
+            final int rootDisplayAreaId = root == null ? FEATURE_UNDEFINED : root.mFeatureId;
+            mImmersiveModeConfirmation.immersiveModeChangedLw(rootDisplayAreaId, isImmersiveMode,
+                    mService.mPolicy.isUserSetupComplete(),
+                    isNavBarEmpty(disableFlags));
+        }
+
+        // Show transient bars for panic if needed.
         final boolean requestHideNavBar = !win.isRequestedVisible(Type.navigationBars());
         final long now = SystemClock.uptimeMillis();
         final boolean pendingPanic = mPendingPanicGestureUptime != 0
                 && now - mPendingPanicGestureUptime <= PANIC_GESTURE_EXPIRATION;
         final DisplayPolicy defaultDisplayPolicy =
                 mService.getDefaultDisplayContentLocked().getDisplayPolicy();
-        if (pendingPanic && requestHideNavBar && win != mNotificationShade
-                && getInsetsPolicy().isHidden(ITYPE_NAVIGATION_BAR)
+        if (pendingPanic && requestHideNavBar && isImmersiveMode
                 // TODO (b/111955725): Show keyguard presentation on all external displays
                 && defaultDisplayPolicy.isKeyguardDrawComplete()) {
             // The user performed the panic gesture recently, we're about to hide the bars,
@@ -2360,19 +2374,6 @@ public class DisplayPolicy {
                 mDisplayContent.getInsetsPolicy().showTransient(SHOW_TYPES_FOR_PANIC,
                         true /* isGestureOnSystemBar */);
             }
-        }
-
-        // update navigation bar
-        boolean oldImmersiveMode = mLastImmersiveMode;
-        boolean newImmersiveMode = isImmersiveMode(win);
-        if (oldImmersiveMode != newImmersiveMode) {
-            mLastImmersiveMode = newImmersiveMode;
-            // The immersive confirmation window should be attached to the immersive window root.
-            final RootDisplayArea root = win.getRootDisplayArea();
-            final int rootDisplayAreaId = root == null ? FEATURE_UNDEFINED : root.mFeatureId;
-            mImmersiveModeConfirmation.immersiveModeChangedLw(rootDisplayAreaId, newImmersiveMode,
-                    mService.mPolicy.isUserSetupComplete(),
-                    isNavBarEmpty(disableFlags));
         }
 
         return appearance;
@@ -2385,23 +2386,40 @@ public class DisplayPolicy {
         return intersectsAnyInsets(win.getFrame(), win.getInsetsState(), type);
     }
 
-    private Rect getBarContentFrameForWindow(WindowState win, @InternalInsetsType int type) {
+    private Rect getBarContentFrameForWindow(WindowState win, @InsetsType int type) {
         final DisplayFrames displayFrames = win.getDisplayFrames(mDisplayContent.mDisplayFrames);
         final InsetsState state = displayFrames.mInsetsState;
-        final Rect tmpRect = new Rect();
-        sTmpDisplayCutoutSafe.set(displayFrames.mDisplayCutoutSafe);
-        if (type == ITYPE_STATUS_BAR) {
-            // The status bar content can extend into regular display cutout insets but not
-            // waterfall insets.
-            sTmpDisplayCutoutSafe.top =
-                    Math.max(state.getDisplayCutout().getWaterfallInsets().top, 0);
+        final Rect df = displayFrames.mUnrestricted;
+        final Rect safe = sTmpDisplayCutoutSafe;
+        final Insets waterfallInsets = state.getDisplayCutout().getWaterfallInsets();
+        final Rect outRect = new Rect();
+        final Rect sourceContent = sTmpRect;
+        safe.set(displayFrames.mDisplayCutoutSafe);
+        for (int i = state.sourceSize() - 1; i >= 0; i--) {
+            final InsetsSource source = state.sourceAt(i);
+            if (source.getType() != type) {
+                continue;
+            }
+            if (type == Type.statusBars()) {
+                safe.set(displayFrames.mDisplayCutoutSafe);
+                final Insets insets = source.calculateInsets(df, true /* ignoreVisibility */);
+                // The status bar content can extend into regular display cutout insets if they are
+                // at the same side, but the content cannot extend into waterfall insets.
+                if (insets.left > 0) {
+                    safe.left = Math.max(df.left + waterfallInsets.left, df.left);
+                } else if (insets.top > 0) {
+                    safe.top = Math.max(df.top + waterfallInsets.top, df.top);
+                } else if (insets.right > 0) {
+                    safe.right = Math.max(df.right - waterfallInsets.right, df.right);
+                } else if (insets.bottom > 0) {
+                    safe.bottom = Math.max(df.bottom - waterfallInsets.bottom, df.bottom);
+                }
+            }
+            sourceContent.set(source.getFrame());
+            sourceContent.intersect(safe);
+            outRect.union(sourceContent);
         }
-        final InsetsSource source = state.peekSource(type);
-        if (source != null) {
-            tmpRect.set(source.getFrame());
-            tmpRect.intersect(sTmpDisplayCutoutSafe);
-        }
-        return tmpRect;
+        return outRect;
     }
 
     /**
@@ -2414,7 +2432,7 @@ public class DisplayPolicy {
      * be drawn over letterboxed activity.
      */
     @VisibleForTesting
-    boolean isFullyTransparentAllowed(WindowState win, @InternalInsetsType int type) {
+    boolean isFullyTransparentAllowed(WindowState win, @InsetsType int type) {
         if (win == null) {
             return true;
         }
@@ -2441,7 +2459,7 @@ public class DisplayPolicy {
         for (int i = mStatusBarBackgroundWindows.size() - 1; i >= 0; i--) {
             final WindowState window = mStatusBarBackgroundWindows.get(i);
             drawBackground &= drawsBarBackground(window);
-            isFullyTransparentAllowed &= isFullyTransparentAllowed(window, ITYPE_STATUS_BAR);
+            isFullyTransparentAllowed &= isFullyTransparentAllowed(window, Type.statusBars());
         }
 
         if (drawBackground) {
@@ -2481,7 +2499,7 @@ public class DisplayPolicy {
             }
         }
 
-        if (!isFullyTransparentAllowed(mNavBarBackgroundWindow, ITYPE_NAVIGATION_BAR)) {
+        if (!isFullyTransparentAllowed(mNavBarBackgroundWindow, Type.navigationBars())) {
             appearance |= APPEARANCE_SEMI_TRANSPARENT_NAVIGATION_BARS;
         }
 
@@ -2496,18 +2514,10 @@ public class DisplayPolicy {
         if (win == null) {
             return false;
         }
-        return getNavigationBar() != null
-                && canHideNavigationBar()
-                && getInsetsPolicy().isHidden(ITYPE_NAVIGATION_BAR)
-                && win != getNotificationShade()
-                && !win.isActivityTypeDream();
-    }
-
-    /**
-     * @return whether the navigation bar can be hidden, e.g. the device has a navigation bar
-     */
-    private boolean canHideNavigationBar() {
-        return hasNavigationBar();
+        if (win == getNotificationShade() || win.isActivityTypeDream()) {
+            return false;
+        }
+        return getInsetsPolicy().hasHiddenSources(Type.navigationBars());
     }
 
     private static boolean isNavBarEmpty(int systemUiFlags) {

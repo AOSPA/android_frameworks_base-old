@@ -52,10 +52,12 @@ import android.view.accessibility.MagnificationAnimationCallback;
 import android.view.animation.DecelerateInterpolator;
 
 import com.android.internal.R;
+import com.android.internal.accessibility.common.MagnificationConstants;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.LocalServices;
+import com.android.server.accessibility.AccessibilityManagerService;
 import com.android.server.accessibility.AccessibilityTraceManager;
 import com.android.server.wm.WindowManagerInternal;
 
@@ -98,7 +100,8 @@ public class FullScreenMagnificationController implements
     private final Rect mTempRect = new Rect();
     // Whether the following typing focus feature for magnification is enabled.
     private boolean mMagnificationFollowTypingEnabled = true;
-
+    // Whether the always on magnification feature is enabled.
+    private boolean mAlwaysOnMagnificationEnabled = false;
     private final DisplayManagerInternal mDisplayManagerInternal;
 
     /**
@@ -290,18 +293,15 @@ public class FullScreenMagnificationController implements
 
         @Override
         public void onDisplaySizeChanged() {
-            // Treat as context change and reset
-            final Message m = PooledLambda.obtainMessage(
-                    FullScreenMagnificationController::resetIfNeeded,
-                    FullScreenMagnificationController.this, mDisplayId, true);
-            mControllerCtx.getHandler().sendMessage(m);
+            // Treat as context change
+            onUserContextChanged();
         }
 
         @Override
         public void onUserContextChanged() {
             final Message m = PooledLambda.obtainMessage(
-                    FullScreenMagnificationController::resetIfNeeded,
-                    FullScreenMagnificationController.this, mDisplayId, true);
+                    FullScreenMagnificationController::onUserContextChanged,
+                    FullScreenMagnificationController.this, mDisplayId);
             mControllerCtx.getHandler().sendMessage(m);
         }
 
@@ -794,6 +794,33 @@ public class FullScreenMagnificationController implements
         return mMagnificationFollowTypingEnabled;
     }
 
+    void setAlwaysOnMagnificationEnabled(boolean enabled) {
+        mAlwaysOnMagnificationEnabled = enabled;
+    }
+
+    boolean isAlwaysOnMagnificationEnabled() {
+        return mAlwaysOnMagnificationEnabled;
+    }
+
+    /**
+     * if the magnifier with given displayId is activated:
+     * 1. if {@link #isAlwaysOnMagnificationEnabled()}, zoom the magnifier to 100%,
+     * 2. otherwise, reset the magnification.
+     *
+     * @param displayId The logical display id.
+     */
+    void onUserContextChanged(int displayId) {
+        synchronized (mLock) {
+            if (isAlwaysOnMagnificationEnabled()) {
+                setScaleAndCenter(displayId, 1.0f, Float.NaN, Float.NaN,
+                        true,
+                        AccessibilityManagerService.MAGNIFICATION_GESTURE_HANDLER_ID);
+            } else {
+                reset(displayId, true);
+            }
+        }
+    }
+
     /**
      * Remove the display magnification with given id.
      *
@@ -1157,11 +1184,14 @@ public class FullScreenMagnificationController implements
     }
 
     /**
-     * Persists the default display magnification scale to the current user's settings.
+     * Persists the default display magnification scale to the current user's settings
+     * <strong>if scale is >= {@link MagnificationConstants.PERSISTED_SCALE_MIN_VALUE}</strong>.
+     * We assume if the scale is < {@link MagnificationConstants.PERSISTED_SCALE_MIN_VALUE}, there
+     * will be no obvious magnification effect.
      */
     public void persistScale(int displayId) {
         final float scale = getScale(Display.DEFAULT_DISPLAY);
-        if (scale < 2.0f) {
+        if (scale < MagnificationConstants.PERSISTED_SCALE_MIN_VALUE) {
             return;
         }
         mScaleProvider.putScale(scale, displayId);
@@ -1176,7 +1206,8 @@ public class FullScreenMagnificationController implements
      */
     public float getPersistedScale(int displayId) {
         return MathUtils.constrain(mScaleProvider.getScale(displayId),
-                2.0f, MagnificationScaleProvider.MAX_SCALE);
+                MagnificationConstants.PERSISTED_SCALE_MIN_VALUE,
+                MagnificationScaleProvider.MAX_SCALE);
     }
 
     /**
