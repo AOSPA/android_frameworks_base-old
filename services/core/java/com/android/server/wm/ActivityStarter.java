@@ -1037,10 +1037,33 @@ class ActivityStarter {
             return err;
         }
 
-        boolean abort = !mSupervisor.checkStartAnyActivityPermission(intent, aInfo, resultWho,
-                requestCode, callingPid, callingUid, callingPackage, callingFeatureId,
-                request.ignoreTargetSecurity, inTask != null, callerApp, resultRecord,
-                resultRootTask);
+        boolean abort;
+        try {
+            abort = !mSupervisor.checkStartAnyActivityPermission(intent, aInfo, resultWho,
+                    requestCode, callingPid, callingUid, callingPackage, callingFeatureId,
+                    request.ignoreTargetSecurity, inTask != null, callerApp, resultRecord,
+                    resultRootTask);
+        } catch (SecurityException e) {
+            // Return activity not found for the explicit intent if the caller can't see the target
+            // to prevent the disclosure of package existence.
+            final Intent originalIntent = request.ephemeralIntent;
+            if (originalIntent != null && (originalIntent.getComponent() != null
+                    || originalIntent.getPackage() != null)) {
+                final String targetPackageName = originalIntent.getComponent() != null
+                        ? originalIntent.getComponent().getPackageName()
+                        : originalIntent.getPackage();
+                if (mService.getPackageManagerInternalLocked()
+                        .filterAppAccess(targetPackageName, callingUid, userId)) {
+                    if (resultRecord != null) {
+                        resultRecord.sendResult(INVALID_UID, resultWho, requestCode,
+                                RESULT_CANCELED, null /* data */, null /* dataGrants */);
+                    }
+                    SafeActivityOptions.abort(options);
+                    return ActivityManager.START_CLASS_NOT_FOUND;
+                }
+            }
+            throw e;
+        }
         abort |= !mService.mIntentFirewall.checkStartActivity(intent, callingUid,
                 callingPid, resolvedType, aInfo.applicationInfo);
         abort |= !mService.getPermissionPolicyInternal().checkStartActivity(intent, callingUid,
@@ -1948,7 +1971,7 @@ class ActivityStarter {
 
         FrameworkStatsLog.write(FrameworkStatsLog.ACTIVITY_ACTION_BLOCKED,
                 /* caller_uid */
-                mSourceRecord != null ? mSourceRecord.getUid() : -1,
+                mSourceRecord != null ? mSourceRecord.getUid() : mCallingUid,
                 /* caller_activity_class_name */
                 mSourceRecord != null ? mSourceRecord.info.name : null,
                 /* target_task_top_activity_uid */
@@ -1969,10 +1992,12 @@ class ActivityStarter {
                 /* action */
                 action,
                 /* version */
-                2,
+                3,
                 /* multi_window - we have our source not in the target task, but both are visible */
                 targetTask != null && mSourceRecord != null
-                        && !targetTask.equals(mSourceRecord.getTask()) && targetTask.isVisible()
+                        && !targetTask.equals(mSourceRecord.getTask()) && targetTask.isVisible(),
+                /* bal_code */
+                mBalCode
         );
 
         boolean shouldBlockActivityStart =
@@ -1980,19 +2005,20 @@ class ActivityStarter {
 
         if (ActivitySecurityModelFeatureFlags.shouldShowToast(mCallingUid)) {
             UiThread.getHandler().post(() -> Toast.makeText(mService.mContext,
-                    (shouldBlockActivityStart
-                            ? "Activity start blocked by "
-                            : "Activity start would be blocked by ")
-                            + ActivitySecurityModelFeatureFlags.DOC_LINK,
+                    "Activity start from " + r.launchedFromPackage
+                            + (shouldBlockActivityStart ? " " : " would be ")
+                            + "blocked by " + ActivitySecurityModelFeatureFlags.DOC_LINK,
                     Toast.LENGTH_SHORT).show());
         }
 
 
         if (shouldBlockActivityStart) {
             Slog.e(TAG, "Abort Launching r: " + r
-                    + " as source: " + mSourceRecord
-                    + "is in background. New task: " + newTask
-                    + ". Top activity: " + targetTopActivity);
+                    + " as source: "
+                    + (mSourceRecord != null ? mSourceRecord : r.launchedFromPackage)
+                    + " is in background. New task: " + newTask
+                    + ". Top activity: " + targetTopActivity
+                    + ". BAL Code: " + mBalCode);
 
             return false;
         }

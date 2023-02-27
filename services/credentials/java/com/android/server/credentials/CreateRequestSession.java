@@ -16,6 +16,9 @@
 
 package com.android.server.credentials;
 
+import static com.android.server.credentials.MetricUtilities.METRICS_PROVIDER_STATUS_FINAL_FAILURE;
+import static com.android.server.credentials.MetricUtilities.METRICS_PROVIDER_STATUS_FINAL_SUCCESS;
+
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.ComponentName;
@@ -27,6 +30,7 @@ import android.credentials.CredentialManager;
 import android.credentials.ICreateCredentialCallback;
 import android.credentials.ui.ProviderData;
 import android.credentials.ui.RequestInfo;
+import android.os.CancellationSignal;
 import android.os.RemoteException;
 import android.service.credentials.CallingAppInfo;
 import android.service.credentials.CredentialProviderInfo;
@@ -47,9 +51,10 @@ public final class CreateRequestSession extends RequestSession<CreateCredentialR
     CreateRequestSession(@NonNull Context context, int userId, int callingUid,
             CreateCredentialRequest request,
             ICreateCredentialCallback callback,
-            CallingAppInfo callingAppInfo) {
+            CallingAppInfo callingAppInfo,
+            CancellationSignal cancellationSignal) {
         super(context, userId, callingUid, request, callback, RequestInfo.TYPE_CREATE,
-                callingAppInfo);
+                callingAppInfo, cancellationSignal);
     }
 
     /**
@@ -92,10 +97,15 @@ public final class CreateRequestSession extends RequestSession<CreateCredentialR
     public void onFinalResponseReceived(ComponentName componentName,
             @Nullable CreateCredentialResponse response) {
         Log.i(TAG, "onFinalCredentialReceived from: " + componentName.flattenToString());
+        setChosenMetric(componentName);
         if (response != null) {
+            mChosenProviderMetric.setChosenProviderStatus(
+                    METRICS_PROVIDER_STATUS_FINAL_SUCCESS);
             respondToClientWithResponseAndFinish(response);
         } else {
-            respondToClientWithErrorAndFinish(CreateCredentialException.TYPE_NO_CREDENTIAL,
+            mChosenProviderMetric.setChosenProviderStatus(
+                    METRICS_PROVIDER_STATUS_FINAL_FAILURE);
+            respondToClientWithErrorAndFinish(CreateCredentialException.TYPE_NO_CREATE_OPTIONS,
                     "Invalid response");
         }
     }
@@ -117,8 +127,20 @@ public final class CreateRequestSession extends RequestSession<CreateCredentialR
         }
     }
 
+    @Override
+    public void onUiSelectorInvocationFailure() {
+        respondToClientWithErrorAndFinish(CreateCredentialException.TYPE_NO_CREATE_OPTIONS,
+                "No create options available.");
+    }
+
     private void respondToClientWithResponseAndFinish(CreateCredentialResponse response) {
         Log.i(TAG, "respondToClientWithResponseAndFinish");
+        if (isSessionCancelled()) {
+            // TODO: Differentiate btw cancelled and false
+            logApiCalled(RequestType.CREATE_CREDENTIALS, /* isSuccessful */ true);
+            finishSession(/*propagateCancellation=*/true);
+            return;
+        }
         try {
             mClientCallback.onResponse(response);
             logApiCalled(RequestType.CREATE_CREDENTIALS, /* isSuccessful */ true);
@@ -126,18 +148,24 @@ public final class CreateRequestSession extends RequestSession<CreateCredentialR
             Log.i(TAG, "Issue while responding to client: " + e.getMessage());
             logApiCalled(RequestType.CREATE_CREDENTIALS, /* isSuccessful */ false);
         }
-        finishSession();
+        finishSession(/*propagateCancellation=*/false);
     }
 
     private void respondToClientWithErrorAndFinish(String errorType, String errorMsg) {
         Log.i(TAG, "respondToClientWithErrorAndFinish");
+        if (isSessionCancelled()) {
+            // TODO: Differentiate btw cancelled and false
+            logApiCalled(RequestType.CREATE_CREDENTIALS, /* isSuccessful */ true);
+            finishSession(/*propagateCancellation=*/true);
+            return;
+        }
         try {
             mClientCallback.onError(errorType, errorMsg);
         } catch (RemoteException e) {
             Log.i(TAG, "Issue while responding to client: " + e.getMessage());
         }
         logApiCalled(RequestType.CREATE_CREDENTIALS, /* isSuccessful */ false);
-        finishSession();
+        finishSession(/*propagateCancellation=*/false);
     }
 
     @Override
@@ -152,8 +180,8 @@ public final class CreateRequestSession extends RequestSession<CreateCredentialR
                 Log.i(TAG, "in onProviderStatusChanged - isUiInvocationNeeded");
                 getProviderDataAndInitiateUi();
             } else {
-                respondToClientWithErrorAndFinish(CreateCredentialException.TYPE_NO_CREDENTIAL,
-                        "No credentials available");
+                respondToClientWithErrorAndFinish(CreateCredentialException.TYPE_NO_CREATE_OPTIONS,
+                        "No create options available.");
             }
         }
     }

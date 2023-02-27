@@ -21,8 +21,11 @@ import static android.content.pm.ActivityInfo.OVERRIDE_ANY_ORIENTATION;
 import static android.content.pm.ActivityInfo.OVERRIDE_CAMERA_COMPAT_DISABLE_FORCE_ROTATION;
 import static android.content.pm.ActivityInfo.OVERRIDE_CAMERA_COMPAT_DISABLE_REFRESH;
 import static android.content.pm.ActivityInfo.OVERRIDE_CAMERA_COMPAT_ENABLE_REFRESH_VIA_PAUSE;
+import static android.content.pm.ActivityInfo.OVERRIDE_ENABLE_COMPAT_FAKE_FOCUS;
 import static android.content.pm.ActivityInfo.OVERRIDE_ENABLE_COMPAT_IGNORE_REQUESTED_ORIENTATION;
 import static android.content.pm.ActivityInfo.OVERRIDE_LANDSCAPE_ORIENTATION_TO_REVERSE_LANDSCAPE;
+import static android.content.pm.ActivityInfo.OVERRIDE_ORIENTATION_ONLY_FOR_CAMERA;
+import static android.content.pm.ActivityInfo.OVERRIDE_RESPECT_REQUESTED_ORIENTATION;
 import static android.content.pm.ActivityInfo.OVERRIDE_UNDEFINED_ORIENTATION_TO_NOSENSOR;
 import static android.content.pm.ActivityInfo.OVERRIDE_UNDEFINED_ORIENTATION_TO_PORTRAIT;
 import static android.content.pm.ActivityInfo.OVERRIDE_USE_DISPLAY_LANDSCAPE_NATURAL_ORIENTATION;
@@ -41,6 +44,7 @@ import static android.view.WindowManager.PROPERTY_CAMERA_COMPAT_ALLOW_REFRESH;
 import static android.view.WindowManager.PROPERTY_CAMERA_COMPAT_ENABLE_REFRESH_VIA_PAUSE;
 import static android.view.WindowManager.PROPERTY_COMPAT_ALLOW_DISPLAY_ORIENTATION_OVERRIDE;
 import static android.view.WindowManager.PROPERTY_COMPAT_ALLOW_ORIENTATION_OVERRIDE;
+import static android.view.WindowManager.PROPERTY_COMPAT_ENABLE_FAKE_FOCUS;
 import static android.view.WindowManager.PROPERTY_COMPAT_IGNORE_REQUESTED_ORIENTATION;
 
 import static com.android.internal.util.FrameworkStatsLog.APP_COMPAT_STATE_CHANGED__LETTERBOX_POSITION__BOTTOM;
@@ -77,6 +81,7 @@ import static com.android.server.wm.LetterboxConfiguration.letterboxBackgroundTy
 import static java.lang.Boolean.FALSE;
 import static java.lang.Boolean.TRUE;
 
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager.TaskDescription;
 import android.content.pm.ActivityInfo.ScreenOrientation;
@@ -100,7 +105,10 @@ import com.android.internal.statusbar.LetterboxDetails;
 import com.android.server.wm.LetterboxConfiguration.LetterboxBackgroundType;
 
 import java.io.PrintWriter;
+import java.util.Optional;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 /** Controls behaviour of the letterbox UI for {@link mActivityRecord}. */
 // TODO(b/185262487): Improve test coverage of this class. Parts of it are tested in
@@ -109,6 +117,9 @@ import java.util.function.BooleanSupplier;
 // hierarchy in addition to ActivityRecord (Task, DisplayArea, ...).
 // TODO(b/263021211): Consider renaming to more generic CompatUIController.
 final class LetterboxUiController {
+
+    private static final Predicate<ActivityRecord> FIRST_OPAQUE_NOT_FINISHING_ACTIVITY_PREDICATE =
+            activityRecord -> activityRecord.fillsParent() && !activityRecord.isFinishing();
 
     private static final String TAG = TAG_WITH_CLASS_NAME ? "LetterboxUiController" : TAG_ATM;
 
@@ -136,8 +147,12 @@ final class LetterboxUiController {
     private final boolean mIsOverrideToNosensorOrientationEnabled;
     // Corresponds to OVERRIDE_LANDSCAPE_ORIENTATION_TO_REVERSE_LANDSCAPE
     private final boolean mIsOverrideToReverseLandscapeOrientationEnabled;
+    // Corresponds to OVERRIDE_ORIENTATION_ONLY_FOR_CAMERA
+    private final boolean mIsOverrideOrientationOnlyForCameraEnabled;
     // Corresponds to OVERRIDE_USE_DISPLAY_LANDSCAPE_NATURAL_ORIENTATION
     private final boolean mIsOverrideUseDisplayLandscapeNaturalOrientationEnabled;
+    // Corresponds to OVERRIDE_RESPECT_REQUESTED_ORIENTATION
+    private final boolean mIsOverrideRespectRequestedOrientationEnabled;
 
     // Corresponds to OVERRIDE_CAMERA_COMPAT_DISABLE_FORCE_ROTATION
     private final boolean mIsOverrideCameraCompatDisableForceRotationEnabled;
@@ -148,6 +163,9 @@ final class LetterboxUiController {
 
     // Corresponds to OVERRIDE_ENABLE_COMPAT_IGNORE_REQUESTED_ORIENTATION
     private final boolean mIsOverrideEnableCompatIgnoreRequestedOrientationEnabled;
+
+    // Corresponds to OVERRIDE_ENABLE_COMPAT_FAKE_FOCUS
+    private final boolean mIsOverrideEnableCompatFakeFocusEnabled;
 
     @Nullable
     private final Boolean mBooleanPropertyAllowOrientationOverride;
@@ -204,6 +222,9 @@ final class LetterboxUiController {
     @Nullable
     private final Boolean mBooleanPropertyIgnoreRequestedOrientation;
 
+    @Nullable
+    private final Boolean mBooleanPropertyFakeFocus;
+
     private boolean mIsRelauchingAfterRequestedOrientationChanged;
 
     LetterboxUiController(WindowManagerService wmService, ActivityRecord activityRecord) {
@@ -218,6 +239,10 @@ final class LetterboxUiController {
                 readComponentProperty(packageManager, mActivityRecord.packageName,
                         mLetterboxConfiguration::isPolicyForIgnoringRequestedOrientationEnabled,
                         PROPERTY_COMPAT_IGNORE_REQUESTED_ORIENTATION);
+        mBooleanPropertyFakeFocus =
+                readComponentProperty(packageManager, mActivityRecord.packageName,
+                        mLetterboxConfiguration::isCompatFakeFocusEnabled,
+                        PROPERTY_COMPAT_ENABLE_FAKE_FOCUS);
         mBooleanPropertyCameraCompatAllowForceRotation =
                 readComponentProperty(packageManager, mActivityRecord.packageName,
                         () -> mLetterboxConfiguration.isCameraCompatTreatmentEnabled(
@@ -253,8 +278,12 @@ final class LetterboxUiController {
                 isCompatChangeEnabled(OVERRIDE_LANDSCAPE_ORIENTATION_TO_REVERSE_LANDSCAPE);
         mIsOverrideToNosensorOrientationEnabled =
                 isCompatChangeEnabled(OVERRIDE_UNDEFINED_ORIENTATION_TO_NOSENSOR);
+        mIsOverrideOrientationOnlyForCameraEnabled =
+                isCompatChangeEnabled(OVERRIDE_ORIENTATION_ONLY_FOR_CAMERA);
         mIsOverrideUseDisplayLandscapeNaturalOrientationEnabled =
                 isCompatChangeEnabled(OVERRIDE_USE_DISPLAY_LANDSCAPE_NATURAL_ORIENTATION);
+        mIsOverrideRespectRequestedOrientationEnabled =
+                isCompatChangeEnabled(OVERRIDE_RESPECT_REQUESTED_ORIENTATION);
 
         mIsOverrideCameraCompatDisableForceRotationEnabled =
                 isCompatChangeEnabled(OVERRIDE_CAMERA_COMPAT_DISABLE_FORCE_ROTATION);
@@ -265,6 +294,9 @@ final class LetterboxUiController {
 
         mIsOverrideEnableCompatIgnoreRequestedOrientationEnabled =
                 isCompatChangeEnabled(OVERRIDE_ENABLE_COMPAT_IGNORE_REQUESTED_ORIENTATION);
+
+        mIsOverrideEnableCompatFakeFocusEnabled =
+                isCompatChangeEnabled(OVERRIDE_ENABLE_COMPAT_FAKE_FOCUS);
     }
 
     /**
@@ -360,6 +392,25 @@ final class LetterboxUiController {
     }
 
     /**
+     * Whether sending compat fake focus for split screen resumed activities is enabled. Needed
+     * because some game engines wait to get focus before drawing the content of the app which isn't
+     * guaranteed by default in multi-window modes.
+     *
+     * <p>This treatment is enabled when the following conditions are met:
+     * <ul>
+     *     <li>Flag gating the treatment is enabled
+     *     <li>Component property is NOT set to false
+     *     <li>Component property is set to true or per-app override is enabled
+     * </ul>
+     */
+    boolean shouldSendFakeFocus() {
+        return shouldEnableWithOverrideAndProperty(
+                /* gatingCondition */ mLetterboxConfiguration::isCompatFakeFocusEnabled,
+                mIsOverrideEnableCompatFakeFocusEnabled,
+                mBooleanPropertyFakeFocus);
+    }
+
+    /**
      * Sets whether an activity is relaunching after the app has called {@link
      * android.app.Activity#setRequestedOrientation}.
      */
@@ -377,6 +428,10 @@ final class LetterboxUiController {
 
     void setIsRefreshAfterRotationRequested(boolean isRequested) {
         mIsRefreshAfterRotationRequested = isRequested;
+    }
+
+    boolean isOverrideRespectRequestedOrientationEnabled() {
+        return mIsOverrideRespectRequestedOrientationEnabled;
     }
 
     /**
@@ -410,6 +465,14 @@ final class LetterboxUiController {
             return candidate;
         }
 
+        DisplayContent displayContent = mActivityRecord.mDisplayContent;
+        if (mIsOverrideOrientationOnlyForCameraEnabled && displayContent != null
+                && (displayContent.mDisplayRotationCompatPolicy == null
+                        || !displayContent.mDisplayRotationCompatPolicy
+                                .isActivityEligibleForOrientationOverride(mActivityRecord))) {
+            return candidate;
+        }
+
         if (mIsOverrideToReverseLandscapeOrientationEnabled
                 && (isFixedOrientationLandscape(candidate) || mIsOverrideAnyOrientationEnabled)) {
             Slog.w(TAG, "Requested orientation  " + screenOrientationToString(candidate) + " for "
@@ -437,6 +500,10 @@ final class LetterboxUiController {
         }
 
         return candidate;
+    }
+
+    boolean isOverrideOrientationOnlyForCameraEnabled() {
+        return mIsOverrideOrientationOnlyForCameraEnabled;
     }
 
     /**
@@ -1330,7 +1397,8 @@ final class LetterboxUiController {
             return;
         }
         final ActivityRecord firstOpaqueActivityBeneath = mActivityRecord.getTask().getActivity(
-                ActivityRecord::fillsParent, mActivityRecord, false /* includeBoundary */,
+                FIRST_OPAQUE_NOT_FINISHING_ACTIVITY_PREDICATE /* callback */,
+                mActivityRecord /* boundary */, false /* includeBoundary */,
                 true /* traverseTopToBottom */);
         if (firstOpaqueActivityBeneath == null) {
             // We skip letterboxing if the translucent activity doesn't have any opaque
@@ -1404,6 +1472,32 @@ final class LetterboxUiController {
 
     public ActivityRecord.CompatDisplayInsets getInheritedCompatDisplayInsets() {
         return mInheritedCompatDisplayInsets;
+    }
+
+    /**
+     * In case of translucent activities, it consumes the {@link ActivityRecord} of the first opaque
+     * activity beneath using the given consumer and returns {@code true}.
+     */
+    boolean applyOnOpaqueActivityBelow(@NonNull Consumer<ActivityRecord> consumer) {
+        return findOpaqueNotFinishingActivityBelow()
+                .map(activityRecord -> {
+                    consumer.accept(activityRecord);
+                    return true;
+                }).orElse(false);
+    }
+
+    /**
+     * @return The first not finishing opaque activity beneath the current translucent activity
+     * if it exists and the strategy is enabled.
+     */
+    private Optional<ActivityRecord> findOpaqueNotFinishingActivityBelow() {
+        if (!hasInheritedLetterboxBehavior() || mActivityRecord.getTask() == null) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(mActivityRecord.getTask().getActivity(
+                FIRST_OPAQUE_NOT_FINISHING_ACTIVITY_PREDICATE /* callback */,
+                mActivityRecord /* boundary */, false /* includeBoundary */,
+                true /* traverseTopToBottom */));
     }
 
     private void inheritConfiguration(ActivityRecord firstOpaque) {

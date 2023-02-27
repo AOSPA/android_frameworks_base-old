@@ -465,12 +465,6 @@
     <string-array translatable="false" name="config_cdma_dun_supported_types">
     </string-array>
 
-    <!-- Package name of the system app that implements the shared connectivity service -->
-    <string translatable="false" name="sharedconnectivity_service_package"></string>
-
-     <!-- Class name in the system app that implements the shared connectivity service -->
-    <string translatable="false" name="sharedconnectivity_service_class"></string>
-
     <!-- Flag indicating whether we should enable the automatic brightness.
          Software implementation will be used if config_hardware_auto_brightness_available is not set -->
     <bool name="config_automatic_brightness_available">false</bool>
@@ -983,6 +977,13 @@
     <integer-array name="config_deviceStatesToReverseDefaultDisplayRotationAroundZAxis">
     </integer-array>
 
+    <!-- Boolean indicating whether secondary built-in displays should have their orientation
+         match the active default display. This config assumes that the secondary display only
+         requires swapping ROTATION_90 and ROTATION_270.
+         TODO(b/265991392): This should eventually be configured and parsed in
+          display_settings.xml -->
+    <bool name="config_matchSecondaryInternalDisplaysOrientationToReverseDefaultDisplay">true</bool>
+
     <!-- Indicate available ColorDisplayManager.COLOR_MODE_xxx. -->
     <integer-array name="config_availableColorModes">
         <!-- Example:
@@ -1309,7 +1310,7 @@
     <!-- Default value for led color when battery is medium charged -->
     <integer name="config_notificationsBatteryMediumARGB">0xFFFFFF00</integer>
 
-    <!-- Default value for led color when battery is fully charged -->
+    <!-- Default value for led color when battery is fully or nearly fully charged -->
     <integer name="config_notificationsBatteryFullARGB">0xFF00FF00</integer>
 
     <!-- Default value for LED on time when the battery is low on charge in miliseconds -->
@@ -1323,6 +1324,9 @@
 
     <!-- Default value for LED off time when the battery is low on charge in miliseconds -->
     <integer name="config_notificationsBatteryLedOff">2875</integer>
+
+    <!-- Battery level percent that is treated as nearly full. -->
+    <integer name="config_notificationsBatteryNearlyFullLevel">90</integer>
 
     <!-- If true, only colorized CallStyle notifications will apply custom colors -->
     <bool name="config_callNotificationActionColorsRequireColorized">true</bool>
@@ -2189,6 +2193,9 @@
     <!-- The name of the package that will hold the system financed device controller role. -->
     <string name="config_systemFinancedDeviceController" translatable="false">com.android.devicelockcontroller</string>
 
+    <!-- The component name of the wear service class that will be started by the system server. -->
+    <string name="config_wearServiceComponent" translatable="false"></string>
+
     <!-- The name of the package that will handle updating the device management role. -->
     <string name="config_devicePolicyManagementUpdater" translatable="false"></string>
 
@@ -2677,6 +2684,14 @@
     <!-- Maximum velocity to initiate a fling, as measured in dips per second. -->
     <dimen name="config_viewMaxFlingVelocity">8000dp</dimen>
 
+    <!-- Minimum velocity (absolute value) to initiate a fling from a rotary encoder device, as
+         measured in dips per second. Setting this to -1dp disables rotary encoder fling.  -->
+    <dimen name="config_viewMinRotaryEncoderFlingVelocity">-1dp</dimen>
+
+    <!-- Maximum velocity (absolute value) to initiate a fling from a rotary encoder device, as
+         measured in dips per second. Setting this to -1dp disables rotary encoder fling.  -->
+    <dimen name="config_viewMaxRotaryEncoderFlingVelocity">-1dp</dimen>
+
     <!-- Amount of time in ms the user needs to press the relevant key to bring up the
          global actions dialog -->
     <integer name="config_globalActionsKeyTimeout">500</integer>
@@ -2738,6 +2753,11 @@
          Should be false for most devices, except automotive vehicle with passenger displays. -->
     <bool name="config_multiuserVisibleBackgroundUsers">false</bool>
 
+    <!-- Whether the device allows users to start in background visible on the default display.
+         Should be false for most devices, except passenger-only automotive build (i.e., when
+         Android runs in a separate system in the back seat to manage the passenger displays) -->
+    <bool name="config_multiuserVisibleBackgroundUsersOnDefaultDisplay">false</bool>
+
     <!-- Whether to automatically switch to the designated Dock User (the user chosen for
          displaying dreams, etc.) after a timeout when the device is docked.  -->
     <bool name="config_enableTimeoutToDockUserWhenDocked">false</bool>
@@ -2763,6 +2783,10 @@
     <!-- Whether the main user is a permanent admin user. If the main user is a permanent admin user
      it can't be deleted or downgraded to non-admin status. -->
     <bool name="config_isMainUserPermanentAdmin">false</bool>
+
+    <!-- Whether switch to headless system user is allowed. If allowed,
+    headless system user can run in the foreground even though it is not a full user. -->
+    <bool name="config_canSwitchToHeadlessSystemUser">false</bool>
 
     <!-- Whether UI for multi user should be shown -->
     <bool name="config_enableMultiUserUI">false</bool>
@@ -2975,6 +2999,12 @@
          Can be customized for other product types -->
     <string name="config_customAdbWifiNetworkConfirmationSecondaryUserComponent"
             >com.android.systemui/com.android.systemui.wifi.WifiDebuggingSecondaryUserActivity</string>
+
+    <!-- Package name of the system service that implements the shared connectivity service -->
+    <string translatable="false" name="shared_connectivity_service_package"></string>
+
+    <!-- Intent action used when binding to the shared connectivity service -->
+    <string translatable="false" name="shared_connectivity_service_intent_action"></string>
 
     <!-- Component name of the activity that shows the usb containment status. -->
     <string name="config_usbContaminantActivity" translatable="false"
@@ -3222,6 +3252,12 @@
          activity transition.  We just want to start the dream. -->
     <string name="config_somnambulatorComponent" translatable="false"
             >com.android.systemui/com.android.systemui.Somnambulator</string>
+
+    <!-- The component name of the screenshot App Clips service that communicates with SystemUI to
+         evaluate certain aspects of App Clips flow such as whether a calling activity can launch
+         capture content for note activity. -->
+    <string name="config_screenshotAppClipsServiceComponent" translatable="false"
+            >com.android.systemui/com.android.systemui.screenshot.appclips.AppClipsService</string>
 
     <!-- The component name of a special dock app that merely launches a dream.
          We don't want to launch this app when docked because it causes an unnecessary
@@ -4097,16 +4133,6 @@
     -->
     <string-array translatable="false" name="config_convert_to_emergency_number_map" />
 
-    <!-- An array of packages for which notifications cannot be blocked.
-         Should only be used for core device functionality that must not be
-         rendered inoperative for safety reasons, like the phone dialer and
-         SMS handler. -->
-    <string-array translatable="false" name="config_nonBlockableNotificationPackages">
-        <item>com.android.dialer</item>
-        <item>com.android.messaging</item>
-        <item>com.android.cellbroadcastreceiver.module</item>
-    </string-array>
-
     <!-- An array of packages that can make sound on the ringer stream in priority-only DND
      mode -->
     <string-array translatable="false" name="config_priorityOnlyDndExemptPackages">
@@ -4163,11 +4189,18 @@
     <bool name="config_quickSettingsSupported">true</bool>
 
     <!-- The component name, flattened to a string, for the default autofill service
-         to  enabled for an user. This service must be trusted, as it can be activated
+         to  enabled for a user. This service must be trusted, as it can be activated
          without explicit consent of the user. If no autofill service with the
           specified name exists on the device, autofill will be disabled by default.
     -->
     <string name="config_defaultAutofillService" translatable="false"></string>
+
+    <!-- The component name, flattened to a string, for the default field classification service
+         to  enabled for a user. This service must be trusted, as it can be activated
+         without explicit consent of the user. If no field classification service with the
+         specified name exists on the device, field classification will be disabled by default.
+    -->
+    <string name="config_defaultFieldClassificationService" translatable="false"></string>
 
     <!-- The package name for the OEM custom system textclassifier service.
          This service must be trusted, as it can be activated without explicit consent of the user.
@@ -4357,6 +4390,18 @@
      See android.credentials.CredentialManager
     -->
     <string name="config_defaultCredentialManagerHybridService" translatable="false"></string>
+
+    <!-- The component name, flattened to a string, for the system's credential manager
+      provider service. This service allows credential retrieval and storage od credentials.
+
+     This service must be trusted, as it can be activated without explicit consent of the user.
+     If no service with the specified name exists on the device, there will be no user configurable
+     provider to service credential manager requests. However, credential manager system
+     services that do not require user consent, will still work.
+
+     See android.credentials.CredentialManager
+    -->
+    <string name="config_defaultCredentialProviderService" translatable="false"></string>
 
     <!-- The package name for the system's smartspace service.
      This service returns smartspace results.
@@ -5019,6 +5064,26 @@
         <item>sensorRadius</item>
       -->
     </integer-array>
+
+    <!-- The properties for handling UDFPS touch detection
+    <string-array name="config_udfps_touch_detection_options">
+        <item>[detector_type],[sensor_shape],[target_size],[min_ellipse_overlap_percentage]</item>
+    </string-array>
+
+        [detector_type]: 0 for bounding box detector, 1 for ellipse detector
+        [sensor_shape]: 0 for square, 1 for circle
+        [target_size]: percentage (defined as a float of 0-1) of sensor that is considered the target, expands outward from center
+        [min_ellipse_overlap_percentage]: minimum percentage (float from 0-1) needed to be considered a valid overlap
+        [step_size]: size of each step when iterating over sensor pixel grid
+    -->
+    <string-array name="config_udfps_touch_detection_options">
+        <item>0,0,1.0,0,1</item>
+        <item>1,1,1.0,0,1</item>
+        <item>1,1,1.0,.4,1</item>
+    </string-array>
+
+    <!-- The integer index of the selected option in config_udfps_touch_detection_options -->
+    <integer name="config_selected_udfps_touch_detection">2</integer>
 
     <!-- An array of arrays of side fingerprint sensor properties relative to each display.
          Note: this value is temporary and is expected to be queried directly
@@ -6183,6 +6248,18 @@
          different from the home screen wallpaper. -->
     <bool name="config_independentLockscreenLiveWallpaper">false</bool>
 
+    <!-- Device state that corresponds to concurrent display mode where the default display
+         is the internal display. Public API for the feature is provided through Jetpack
+         WindowManager.
+         TODO(b/236022708) Move concurrent display state to device state config file
+    -->
+    <integer name="config_deviceStateConcurrentRearDisplay">-1</integer>
+
+    <!-- Physical display address that corresponds to the rear display in rear display mode
+         and concurrent display mode. Used to get information about the display before
+         entering the corresponding modes -->
+    <string name="config_rearDisplayPhysicalAddress" translatable="false"></string>
+
     <!-- List of certificate to be used for font fs-verity integrity verification -->
     <string-array translatable="false" name="config_fontManagerServiceCerts">
     </string-array>
@@ -6234,4 +6311,33 @@
         trusted certificate using the SHA-256 digest algorithm. -->
     <string-array name="config_healthConnectMigrationKnownSigners">
     </string-array>
+
+    <!-- Package name of Health Connect data migrator application.  -->
+    <string name="config_healthConnectMigratorPackageName"></string>
+
+    <!-- The Universal Stylus Initiative (USI) protocol version supported by each display.
+         (@see https://universalstylus.org/).
+
+         The i-th value in this array corresponds to the supported USI version of the i-th display
+         listed in config_displayUniqueIdArray. On a single-display device, the
+         config_displayUniqueIdArray may be empty, in which case the only value in this array should
+         be the USI version for the main built-in display.
+
+         If the display does not support USI, the version value should be an empty string. If the
+         display supports USI, the version must be in the following format:
+           "<major-version>.<minor-version>"
+
+         For example, "", "1.0", and "2.0" are valid values. -->
+    <string-array name="config_displayUsiVersionArray" translatable="false">
+        <item>""</item>
+    </string-array>
+
+    <!-- Whether system apps should be scanned in the stopped state during initial boot.
+        Packages can be added by OEMs in an allowlist, to prevent them from being scanned as
+        "stopped" during initial boot of a device, or after an OTA update. Stopped state of
+        an app is not changed during subsequent reboots.  -->
+    <bool name="config_stopSystemPackagesByDefault">false</bool>
+
+    <!-- Whether to show weather on the lock screen by default. -->
+    <bool name="config_lockscreenWeatherEnabledByDefault">false</bool>
 </resources>

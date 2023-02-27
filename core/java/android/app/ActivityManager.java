@@ -630,6 +630,8 @@ public class ActivityManager {
             PROCESS_CAPABILITY_FOREGROUND_LOCATION,
             PROCESS_CAPABILITY_FOREGROUND_CAMERA,
             PROCESS_CAPABILITY_FOREGROUND_MICROPHONE,
+            PROCESS_CAPABILITY_NETWORK,
+            PROCESS_CAPABILITY_BFSL,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ProcessCapability {}
@@ -654,20 +656,36 @@ public class ActivityManager {
     @TestApi
     public static final int PROCESS_CAPABILITY_NETWORK = 1 << 3;
 
-    /** @hide all capabilities, the ORing of all flags in {@link ProcessCapability}*/
-    @TestApi
+    /**
+     * Flag used to indicate whether an app is allowed to start a foreground service from the
+     * background, decided by the procstates. ("BFSL" == "background foreground service launch")
+     *
+     * - BFSL has a number of exemptions -- e.g. when an app is power-allowlisted, including
+     *   temp-allowlist -- but this capability is *not* used to represent such exemptions.
+     *   This is set only based on the procstate and the foreground service type.
+     * - Basically, procstates <= BFGS (i.e. BFGS, FGS, BTOP, TOP, ...) are BFSL-allowed,
+     *   and that's how things worked on Android S/T.
+     *   However, Android U added a "SHORT_SERVICE" FGS type, which gets the FGS procstate
+     *   *but* can't start another FGS. So now we use this flag to decide whether FGS/BFGS
+     *   procstates are BFSL-allowed. (higher procstates, such as BTOP, will still always be
+     *   BFSL-allowed.)
+     *   We propagate this flag across via service bindings and provider references.
+     *
+     * @hide
+     */
+    public static final int PROCESS_CAPABILITY_BFSL = 1 << 4;
+
+    /**
+     * @hide all capabilities, the ORing of all flags in {@link ProcessCapability}.
+     *
+     * Don't expose it as TestApi -- we may add new capabilities any time, which could
+     * break CTS tests if they relied on it.
+     */
     public static final int PROCESS_CAPABILITY_ALL = PROCESS_CAPABILITY_FOREGROUND_LOCATION
             | PROCESS_CAPABILITY_FOREGROUND_CAMERA
             | PROCESS_CAPABILITY_FOREGROUND_MICROPHONE
-            | PROCESS_CAPABILITY_NETWORK;
-    /**
-     * All explicit capabilities. These are capabilities that need to be specified from manifest
-     * file.
-     * @hide
-     */
-    @TestApi
-    public static final int PROCESS_CAPABILITY_ALL_EXPLICIT =
-            PROCESS_CAPABILITY_FOREGROUND_LOCATION;
+            | PROCESS_CAPABILITY_NETWORK
+            | PROCESS_CAPABILITY_BFSL;
 
     /**
      * All implicit capabilities. There are capabilities that process automatically have.
@@ -686,6 +704,7 @@ public class ActivityManager {
         pw.print((caps & PROCESS_CAPABILITY_FOREGROUND_CAMERA) != 0 ? 'C' : '-');
         pw.print((caps & PROCESS_CAPABILITY_FOREGROUND_MICROPHONE) != 0 ? 'M' : '-');
         pw.print((caps & PROCESS_CAPABILITY_NETWORK) != 0 ? 'N' : '-');
+        pw.print((caps & PROCESS_CAPABILITY_BFSL) != 0 ? 'F' : '-');
     }
 
     /** @hide */
@@ -694,6 +713,7 @@ public class ActivityManager {
         sb.append((caps & PROCESS_CAPABILITY_FOREGROUND_CAMERA) != 0 ? 'C' : '-');
         sb.append((caps & PROCESS_CAPABILITY_FOREGROUND_MICROPHONE) != 0 ? 'M' : '-');
         sb.append((caps & PROCESS_CAPABILITY_NETWORK) != 0 ? 'N' : '-');
+        sb.append((caps & PROCESS_CAPABILITY_BFSL) != 0 ? 'F' : '-');
     }
 
     /**
@@ -702,13 +722,10 @@ public class ActivityManager {
      */
     public static void printCapabilitiesFull(PrintWriter pw, @ProcessCapability int caps) {
         printCapabilitiesSummary(pw, caps);
-        final int remain = caps & ~(PROCESS_CAPABILITY_FOREGROUND_LOCATION
-                | PROCESS_CAPABILITY_FOREGROUND_CAMERA
-                | PROCESS_CAPABILITY_FOREGROUND_MICROPHONE
-                | PROCESS_CAPABILITY_NETWORK);
+        final int remain = caps & ~PROCESS_CAPABILITY_ALL;
         if (remain != 0) {
-            pw.print('+');
-            pw.print(remain);
+            pw.print("+0x");
+            pw.print(Integer.toHexString(remain));
         }
     }
 
@@ -3659,6 +3676,123 @@ public class ActivityManager {
     }
 
     /**
+     * Return a list of {@link ApplicationStartInfo} records containing the information about the
+     * most recent app startups.
+     *
+     * <p class="note"> Note: System stores this historical information in a ring buffer and only
+     * the most recent records will be returned. </p>
+     *
+     * @param maxNum      The maximum number of results to be returned; a value of 0
+     *                    means to ignore this parameter and return all matching records. If fewer
+     *                    records exist, all existing records will be returned.
+     *
+     * @return a list of {@link ApplicationStartInfo} records matching the criteria, sorted in
+     *         the order from most recent to least recent.
+     */
+    @NonNull
+    public List<ApplicationStartInfo> getHistoricalProcessStartReasons(
+            @IntRange(from = 0) int maxNum) {
+        try {
+            ParceledListSlice<ApplicationStartInfo> startInfos = getService()
+                    .getHistoricalProcessStartReasons(null, maxNum, mContext.getUserId());
+            return startInfos == null ? Collections.emptyList() : startInfos.getList();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Return a list of {@link ApplicationStartInfo} records containing the information about the
+     * most recent app startups.
+     *
+     * <p class="note"> Note: System stores this historical information in a ring buffer and only
+     * the most recent records will be returned. </p>
+     *
+     * @param packageName Package name for which app startups to receive.
+     * @param maxNum      The maximum number of results to be returned; a value of 0
+     *                    means to ignore this parameter and return all matching records. If fewer
+     *                    records exist, all existing records will be returned.
+     *
+     * @return a list of {@link ApplicationStartInfo} records matching the criteria, sorted in
+     *         the order from most recent to least recent.
+     *
+     * @hide
+     */
+    @NonNull
+    @SystemApi
+    @RequiresPermission(Manifest.permission.DUMP)
+    public List<ApplicationStartInfo> getExternalHistoricalProcessStartReasons(
+            @NonNull String packageName, @IntRange(from = 0) int maxNum) {
+        try {
+            ParceledListSlice<ApplicationStartInfo> startInfos = getService()
+                    .getHistoricalProcessStartReasons(packageName, maxNum, mContext.getUserId());
+            return startInfos == null ? Collections.emptyList() : startInfos.getList();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Callback to receive {@link ApplicationStartInfo} object once recording of startup related
+     * metrics is complete.
+     * Use with {@link #setApplicationStartInfoCompleteListener}.
+     */
+    public interface ApplicationStartInfoCompleteListener {
+        /** {@link ApplicationStartInfo} is complete, no more info will be added. */
+        void onApplicationStartInfoComplete(@NonNull ApplicationStartInfo applicationStartInfo);
+    }
+
+    /**
+     * Sets a callback to be notified when the {@link ApplicationStartInfo} records of this startup
+     * are complete.
+     *
+     * <p class="note"> Note: callback will not wait for {@link Activity#reportFullyDrawn} to occur.
+     * Timestamp for fully drawn may be added after callback occurs. Set callback after invoking
+     * {@link Activity#reportFullyDrawn} if timestamp for fully drawn is required.</p>
+     *
+     * <p class="note"> Note: if start records have already been retrieved, the callback will be
+     * invoked immediately on the specified executor with the previously resolved AppStartInfo.</p>
+     *
+     * <p class="note"> Note: callback is asynchronous and should be made from a background thread.
+     * </p>
+     *
+     * @param executor    The executor on which the listener should be called.
+     * @param listener    Callback to be called when collection of {@link ApplicationStartInfo} is
+     *                    complete. Will replace existing listener if one is already attached.
+     *
+     * @throws IllegalArgumentException if executor or listener are null.
+     */
+    public void setApplicationStartInfoCompleteListener(@NonNull final Executor executor,
+            @NonNull final ApplicationStartInfoCompleteListener listener) {
+        Preconditions.checkNotNull(executor, "executor cannot be null");
+        Preconditions.checkNotNull(listener, "listener cannot be null");
+        IApplicationStartInfoCompleteListener callback =
+                new IApplicationStartInfoCompleteListener.Stub() {
+            @Override
+            public void onApplicationStartInfoComplete(ApplicationStartInfo applicationStartInfo) {
+                executor.execute(() ->
+                        listener.onApplicationStartInfoComplete(applicationStartInfo));
+            }
+        };
+        try {
+            getService().setApplicationStartInfoCompleteListener(callback, mContext.getUserId());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Removes the callback set by {@link #setApplicationStartInfoCompleteListener} if there is one.
+     */
+    public void removeApplicationStartInfoCompleteListener() {
+        try {
+            getService().removeApplicationStartInfoCompleteListener(mContext.getUserId());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Return a list of {@link ApplicationExitInfo} records containing the reasons for the most
      * recent app deaths.
      *
@@ -4417,7 +4551,8 @@ public class ActivityManager {
                     "device does not support users on secondary displays");
         }
         try {
-            return getService().startUserInBackgroundVisibleOnDisplay(userId, displayId);
+            return getService().startUserInBackgroundVisibleOnDisplay(userId, displayId,
+                    /* unlockProgressListener= */ null);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

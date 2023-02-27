@@ -31,15 +31,19 @@ import android.os.Handler
 import android.os.UserHandle
 import android.provider.Settings.Secure.LOCK_SCREEN_ALLOW_PRIVATE_NOTIFICATIONS
 import android.provider.Settings.Secure.LOCK_SCREEN_SHOW_NOTIFICATIONS
+import android.provider.Settings.Secure.LOCK_SCREEN_WEATHER_ENABLED
 import android.util.Log
 import android.view.ContextThemeWrapper
 import android.view.View
 import android.view.ViewGroup
+import com.android.keyguard.KeyguardUpdateMonitor
 import com.android.settingslib.Utils
+import com.android.systemui.Dumpable
 import com.android.systemui.R
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.dagger.qualifiers.Main
+import com.android.systemui.dump.DumpManager
 import com.android.systemui.flags.FeatureFlags
 import com.android.systemui.flags.Flags
 import com.android.systemui.plugins.ActivityStarter
@@ -54,11 +58,14 @@ import com.android.systemui.shared.regionsampling.RegionSampler
 import com.android.systemui.shared.regionsampling.UpdateColorCallback
 import com.android.systemui.smartspace.dagger.SmartspaceModule.Companion.DATE_SMARTSPACE_DATA_PLUGIN
 import com.android.systemui.smartspace.dagger.SmartspaceModule.Companion.WEATHER_SMARTSPACE_DATA_PLUGIN
+import com.android.systemui.plugins.Weather
 import com.android.systemui.statusbar.phone.KeyguardBypassController
 import com.android.systemui.statusbar.policy.ConfigurationController
 import com.android.systemui.statusbar.policy.DeviceProvisionedController
 import com.android.systemui.util.concurrency.Execution
 import com.android.systemui.util.settings.SecureSettings
+import java.io.PrintWriter
+import java.time.Instant
 import java.util.Optional
 import java.util.concurrent.Executor
 import javax.inject.Inject
@@ -81,6 +88,8 @@ constructor(
         private val statusBarStateController: StatusBarStateController,
         private val deviceProvisionedController: DeviceProvisionedController,
         private val bypassController: KeyguardBypassController,
+        private val keyguardUpdateMonitor: KeyguardUpdateMonitor,
+        private val dumpManager: DumpManager,
         private val execution: Execution,
         @Main private val uiExecutor: Executor,
         @Background private val bgExecutor: Executor,
@@ -91,7 +100,7 @@ constructor(
         optionalWeatherPlugin: Optional<BcSmartspaceDataPlugin>,
         optionalPlugin: Optional<BcSmartspaceDataPlugin>,
         optionalConfigPlugin: Optional<BcSmartspaceConfigPlugin>,
-) {
+) : Dumpable {
     companion object {
         private const val TAG = "LockscreenSmartspaceController"
     }
@@ -165,6 +174,17 @@ constructor(
             }
             isContentUpdatedOnce = true
         }
+
+        val now = Instant.now()
+        val weatherTarget = targets.find { t ->
+            t.featureType == SmartspaceTarget.FEATURE_WEATHER &&
+                    now.isAfter(Instant.ofEpochMilli(t.creationTimeMillis)) &&
+                    now.isBefore(Instant.ofEpochMilli(t.expiryTimeMillis))
+        }
+        if (weatherTarget != null) {
+            val weatherData = Weather.fromBundle(weatherTarget.baseAction.extras)
+            keyguardUpdateMonitor.sendWeatherData(weatherData)
+        }
     }
 
     private val userTrackerCallback = object : UserTracker.Callback {
@@ -215,6 +235,7 @@ constructor(
 
     init {
         deviceProvisionedController.addCallback(deviceProvisionedListener)
+        dumpManager.registerDumpable(this)
     }
 
     fun isEnabled(): Boolean {
@@ -228,6 +249,17 @@ constructor(
 
         return featureFlags.isEnabled(Flags.SMARTSPACE_DATE_WEATHER_DECOUPLED) &&
                 datePlugin != null && weatherPlugin != null
+    }
+
+    fun isWeatherEnabled(): Boolean {
+       execution.assertIsMainThread()
+       val defaultValue = context.getResources().getBoolean(
+               com.android.internal.R.bool.config_lockscreenWeatherEnabledByDefault)
+       val showWeather = secureSettings.getIntForUser(
+           LOCK_SCREEN_WEATHER_ENABLED,
+           if (defaultValue) 1 else 0,
+           userTracker.userId) == 1
+       return showWeather
     }
 
     private fun updateBypassEnabled() {
@@ -516,5 +548,12 @@ constructor(
             }
         }
         return null
+    }
+
+    override fun dump(pw: PrintWriter, args: Array<out String>) {
+        pw.println("Region Samplers: ${regionSamplers.size}")
+        regionSamplers.map { (_, sampler) ->
+            sampler.dump(pw)
+        }
     }
 }

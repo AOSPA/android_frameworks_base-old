@@ -16,6 +16,9 @@
 
 package com.android.server.credentials;
 
+import static com.android.server.credentials.MetricUtilities.METRICS_PROVIDER_STATUS_FINAL_FAILURE;
+import static com.android.server.credentials.MetricUtilities.METRICS_PROVIDER_STATUS_FINAL_SUCCESS;
+
 import android.annotation.Nullable;
 import android.content.ComponentName;
 import android.content.Context;
@@ -25,6 +28,7 @@ import android.credentials.GetCredentialResponse;
 import android.credentials.IGetCredentialCallback;
 import android.credentials.ui.ProviderData;
 import android.credentials.ui.RequestInfo;
+import android.os.CancellationSignal;
 import android.os.RemoteException;
 import android.service.credentials.CallingAppInfo;
 import android.service.credentials.CredentialProviderInfo;
@@ -43,8 +47,9 @@ public final class GetRequestSession extends RequestSession<GetCredentialRequest
 
     public GetRequestSession(Context context, int userId, int callingUid,
             IGetCredentialCallback callback, GetCredentialRequest request,
-            CallingAppInfo callingAppInfo) {
-        super(context, userId, callingUid, request, callback, RequestInfo.TYPE_GET, callingAppInfo);
+            CallingAppInfo callingAppInfo, CancellationSignal cancellationSignal) {
+        super(context, userId, callingUid, request, callback, RequestInfo.TYPE_GET,
+                callingAppInfo, cancellationSignal);
     }
 
     /**
@@ -85,9 +90,14 @@ public final class GetRequestSession extends RequestSession<GetCredentialRequest
     public void onFinalResponseReceived(ComponentName componentName,
             @Nullable GetCredentialResponse response) {
         Log.i(TAG, "onFinalCredentialReceived from: " + componentName.flattenToString());
+        setChosenMetric(componentName);
         if (response != null) {
+            mChosenProviderMetric.setChosenProviderStatus(
+                    METRICS_PROVIDER_STATUS_FINAL_SUCCESS);
             respondToClientWithResponseAndFinish(response);
         } else {
+            mChosenProviderMetric.setChosenProviderStatus(
+                    METRICS_PROVIDER_STATUS_FINAL_FAILURE);
             respondToClientWithErrorAndFinish(GetCredentialException.TYPE_NO_CREDENTIAL,
                     "Invalid response from provider");
         }
@@ -102,6 +112,12 @@ public final class GetRequestSession extends RequestSession<GetCredentialRequest
     }
 
     private void respondToClientWithResponseAndFinish(GetCredentialResponse response) {
+        if (isSessionCancelled()) {
+            // TODO: Differentiate btw cancelled and false
+            logApiCalled(RequestType.GET_CREDENTIALS, /* isSuccessful */ false);
+            finishSession(/*propagateCancellation=*/true);
+            return;
+        }
         try {
             mClientCallback.onResponse(response);
             logApiCalled(RequestType.GET_CREDENTIALS, /* isSuccessful */ true);
@@ -109,18 +125,22 @@ public final class GetRequestSession extends RequestSession<GetCredentialRequest
             Log.i(TAG, "Issue while responding to client with a response : " + e.getMessage());
             logApiCalled(RequestType.GET_CREDENTIALS, /* isSuccessful */ false);
         }
-        finishSession();
+        finishSession(/*propagateCancellation=*/false);
     }
 
     private void respondToClientWithErrorAndFinish(String errorType, String errorMsg) {
+        if (isSessionCancelled()) {
+            logApiCalled(RequestType.GET_CREDENTIALS, /* isSuccessful */ false);
+            finishSession(/*propagateCancellation=*/true);
+            return;
+        }
         try {
             mClientCallback.onError(errorType, errorMsg);
         } catch (RemoteException e) {
             Log.i(TAG, "Issue while responding to client with error : " + e.getMessage());
-
         }
         logApiCalled(RequestType.GET_CREDENTIALS, /* isSuccessful */ false);
-        finishSession();
+        finishSession(/*propagateCancellation=*/false);
     }
 
     @Override
@@ -132,6 +152,12 @@ public final class GetRequestSession extends RequestSession<GetCredentialRequest
             respondToClientWithErrorAndFinish(GetCredentialException.TYPE_INTERRUPTED,
                     "The UI was interrupted - please try again.");
         }
+    }
+
+    @Override
+    public void onUiSelectorInvocationFailure() {
+        respondToClientWithErrorAndFinish(GetCredentialException.TYPE_NO_CREDENTIAL,
+                    "No credentials to show on the selector.");
     }
 
     @Override

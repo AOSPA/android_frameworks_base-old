@@ -16,19 +16,21 @@
 
 package com.android.server.credentials;
 
-import static com.android.internal.util.FrameworkStatsLog.CREDENTIAL_MANAGER_API_CALLED__API_NAME__API_NAME_CLEAR_CREDENTIAL;
-import static com.android.internal.util.FrameworkStatsLog.CREDENTIAL_MANAGER_API_CALLED__API_NAME__API_NAME_CREATE_CREDENTIAL;
-import static com.android.internal.util.FrameworkStatsLog.CREDENTIAL_MANAGER_API_CALLED__API_NAME__API_NAME_GET_CREDENTIAL;
-import static com.android.internal.util.FrameworkStatsLog.CREDENTIAL_MANAGER_API_CALLED__API_NAME__API_NAME_UNKNOWN;
-import static com.android.internal.util.FrameworkStatsLog.CREDENTIAL_MANAGER_API_CALLED__API_STATUS__API_STATUS_FAILURE;
-import static com.android.internal.util.FrameworkStatsLog.CREDENTIAL_MANAGER_API_CALLED__API_STATUS__API_STATUS_SUCCESS;
+import static com.android.server.credentials.MetricUtilities.METRICS_API_NAME_CLEAR_CREDENTIAL;
+import static com.android.server.credentials.MetricUtilities.METRICS_API_NAME_CREATE_CREDENTIAL;
+import static com.android.server.credentials.MetricUtilities.METRICS_API_NAME_GET_CREDENTIAL;
+import static com.android.server.credentials.MetricUtilities.METRICS_API_NAME_UNKNOWN;
+import static com.android.server.credentials.MetricUtilities.METRICS_API_STATUS_FAILURE;
+import static com.android.server.credentials.MetricUtilities.METRICS_API_STATUS_SUCCESS;
 
 import android.annotation.NonNull;
 import android.annotation.UserIdInt;
+import android.content.ComponentName;
 import android.content.Context;
 import android.credentials.ui.ProviderData;
 import android.credentials.ui.UserSelectionDialogResult;
 import android.os.Binder;
+import android.os.CancellationSignal;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -36,7 +38,10 @@ import android.service.credentials.CallingAppInfo;
 import android.service.credentials.CredentialProviderInfo;
 import android.util.Log;
 
+import com.android.internal.R;
 import com.android.internal.util.FrameworkStatsLog;
+import com.android.server.credentials.metrics.CandidateProviderMetric;
+import com.android.server.credentials.metrics.ChosenProviderMetric;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -48,20 +53,6 @@ import java.util.Map;
  */
 abstract class RequestSession<T, U> implements CredentialManagerUi.CredentialManagerUiCallback {
     private static final String TAG = "RequestSession";
-
-    // Metrics constants
-    private static final int METRICS_API_NAME_UNKNOWN =
-            CREDENTIAL_MANAGER_API_CALLED__API_NAME__API_NAME_UNKNOWN;
-    private static final int METRICS_API_NAME_GET_CREDENTIAL =
-            CREDENTIAL_MANAGER_API_CALLED__API_NAME__API_NAME_GET_CREDENTIAL;
-    private static final int METRICS_API_NAME_CREATE_CREDENTIAL =
-            CREDENTIAL_MANAGER_API_CALLED__API_NAME__API_NAME_CREATE_CREDENTIAL;
-    private static final int METRICS_API_NAME_CLEAR_CREDENTIAL =
-            CREDENTIAL_MANAGER_API_CALLED__API_NAME__API_NAME_CLEAR_CREDENTIAL;
-    private static final int METRICS_API_STATUS_SUCCESS =
-            CREDENTIAL_MANAGER_API_CALLED__API_STATUS__API_STATUS_SUCCESS;
-    private static final int METRICS_API_STATUS_FAILURE =
-            CREDENTIAL_MANAGER_API_CALLED__API_STATUS__API_STATUS_FAILURE;
 
     // TODO: Revise access levels of attributes
     @NonNull
@@ -83,13 +74,19 @@ abstract class RequestSession<T, U> implements CredentialManagerUi.CredentialMan
     private final int mCallingUid;
     @NonNull
     protected final CallingAppInfo mClientAppInfo;
+    @NonNull
+    protected final CancellationSignal mCancellationSignal;
 
     protected final Map<String, ProviderSession> mProviders = new HashMap<>();
+    protected ChosenProviderMetric mChosenProviderMetric = new ChosenProviderMetric();
+    //TODO improve design to allow grouped metrics per request
+    protected final String mHybridService;
 
     protected RequestSession(@NonNull Context context,
             @UserIdInt int userId, int callingUid, @NonNull T clientRequest, U clientCallback,
             @NonNull String requestType,
-            CallingAppInfo callingAppInfo) {
+            CallingAppInfo callingAppInfo,
+            CancellationSignal cancellationSignal) {
         mContext = context;
         mUserId = userId;
         mCallingUid = callingUid;
@@ -97,10 +94,13 @@ abstract class RequestSession<T, U> implements CredentialManagerUi.CredentialMan
         mClientCallback = clientCallback;
         mRequestType = requestType;
         mClientAppInfo = callingAppInfo;
+        mCancellationSignal = cancellationSignal;
         mHandler = new Handler(Looper.getMainLooper(), null, true);
         mRequestId = new Binder();
         mCredentialManagerUi = new CredentialManagerUi(mContext,
                 mUserId, this);
+        mHybridService = context.getResources().getString(
+                R.string.config_defaultCredentialManagerHybridService);
     }
 
     public abstract ProviderSession initiateProviderSession(CredentialProviderInfo providerInfo,
@@ -112,6 +112,10 @@ abstract class RequestSession<T, U> implements CredentialManagerUi.CredentialMan
 
     @Override // from CredentialManagerUiCallbacks
     public void onUiSelection(UserSelectionDialogResult selection) {
+        if (isSessionCancelled()) {
+            finishSession(/*propagateCancellation=*/true);
+            return;
+        }
         String providerId = selection.getProviderId();
         Log.i(TAG, "onUiSelection, providerId: " + providerId);
         ProviderSession providerSession = mProviders.get(providerId);
@@ -127,18 +131,24 @@ abstract class RequestSession<T, U> implements CredentialManagerUi.CredentialMan
     @Override // from CredentialManagerUiCallbacks
     public void onUiCancellation(boolean isUserCancellation) {
         Log.i(TAG, "Ui canceled. Canceled by user: " + isUserCancellation);
+        if (isSessionCancelled()) {
+            finishSession(/*propagateCancellation=*/true);
+            return;
+        }
         // User canceled the activity
-        finishSession();
+        finishSession(/*propagateCancellation=*/false);
     }
 
-    protected void finishSession() {
+    @Override
+    public void onUiSelectorInvocationFailure() {
+        Log.i(TAG, "onUiSelectorInvocationFailure");
+    }
+
+    protected void finishSession(boolean propagateCancellation) {
         Log.i(TAG, "finishing session");
-        clearProviderSessions();
-    }
-
-    protected void clearProviderSessions() {
-        Log.i(TAG, "Clearing sessions");
-        //TODO: Implement
+        if (propagateCancellation) {
+            mProviders.values().forEach(ProviderSession::cancelProviderRemoteSession);
+        }
         mProviders.clear();
     }
 
@@ -150,7 +160,6 @@ abstract class RequestSession<T, U> implements CredentialManagerUi.CredentialMan
         }
         return false;
     }
-
     // TODO: move these definitions to a separate logging focused class.
     enum RequestType {
         GET_CREDENTIALS,
@@ -171,11 +180,34 @@ abstract class RequestSession<T, U> implements CredentialManagerUi.CredentialMan
         }
     }
 
-    protected void logApiCalled(RequestType requestType, boolean isSuccessful) {
+    protected void logApiCalled(RequestType requestType, boolean isSuccessfulOverall) {
+        var providerSessions = mProviders.values();
+        int providerSize = providerSessions.size();
+        int[] candidateUidList = new int[providerSize];
+        int[] candidateQueryRoundTripTimeList = new int[providerSize];
+        int[] candidateStatusList = new int[providerSize];
+        int index = 0;
+        for (var session : providerSessions) {
+            CandidateProviderMetric metric = session.mCandidateProviderMetric;
+            candidateUidList[index] = metric.getCandidateUid();
+            candidateQueryRoundTripTimeList[index] = metric.getQueryLatencyMs();
+            candidateStatusList[index] = metric.getProviderQueryStatus();
+            index++;
+        }
         FrameworkStatsLog.write(FrameworkStatsLog.CREDENTIAL_MANAGER_API_CALLED,
                 /* api_name */getApiNameFromRequestType(requestType), /* caller_uid */
                 mCallingUid, /* api_status */
-                isSuccessful ? METRICS_API_STATUS_SUCCESS : METRICS_API_STATUS_FAILURE);
+                isSuccessfulOverall ? METRICS_API_STATUS_SUCCESS : METRICS_API_STATUS_FAILURE,
+                candidateUidList,
+                candidateQueryRoundTripTimeList,
+                candidateStatusList, mChosenProviderMetric.getChosenUid(),
+                mChosenProviderMetric.getEntireProviderLatencyMs(),
+                mChosenProviderMetric.getFinalPhaseLatencyMs(),
+                mChosenProviderMetric.getChosenProviderStatus());
+    }
+
+    protected boolean isSessionCancelled() {
+        return mCancellationSignal.isCanceled();
     }
 
     /**
@@ -197,6 +229,11 @@ abstract class RequestSession<T, U> implements CredentialManagerUi.CredentialMan
         Log.i(TAG, "In getProviderDataAndInitiateUi");
         Log.i(TAG, "In getProviderDataAndInitiateUi providers size: " + mProviders.size());
 
+        if (isSessionCancelled()) {
+            finishSession(/*propagateCancellation=*/true);
+            return;
+        }
+
         ArrayList<ProviderData> providerDataList = new ArrayList<>();
         for (ProviderSession session : mProviders.values()) {
             Log.i(TAG, "preparing data for : " + session.getComponentName());
@@ -208,7 +245,25 @@ abstract class RequestSession<T, U> implements CredentialManagerUi.CredentialMan
         }
         if (!providerDataList.isEmpty()) {
             Log.i(TAG, "provider list not empty about to initiate ui");
-            launchUiWithProviderData(providerDataList);
+            if (isSessionCancelled()) {
+                Log.i(TAG, "In getProviderDataAndInitiateUi but session has been cancelled");
+            } else {
+                launchUiWithProviderData(providerDataList);
+            }
         }
+    }
+
+    /**
+     * Called by RequestSession's upon chosen metric determination.
+     * @param componentName the componentName to associate with a provider
+     */
+    protected void setChosenMetric(ComponentName componentName) {
+        CandidateProviderMetric metric = this.mProviders.get(componentName.flattenToString())
+                .mCandidateProviderMetric;
+        mChosenProviderMetric.setChosenUid(metric.getCandidateUid());
+        mChosenProviderMetric.setFinalFinishTimeNanoseconds(System.nanoTime());
+        mChosenProviderMetric.setQueryFinishTimeNanoseconds(
+                metric.getQueryFinishTimeNanoseconds());
+        mChosenProviderMetric.setStartTimeNanoseconds(metric.getStartTimeNanoseconds());
     }
 }

@@ -42,7 +42,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ParceledListSlice;
 import android.database.DatabaseUtils;
-import android.healthconnect.HealthConnectManager;
+import android.health.connect.HealthConnectManager;
 import android.media.AudioAttributes.AttributeUsage;
 import android.os.Binder;
 import android.os.Build;
@@ -1355,11 +1355,12 @@ public class AppOpsManager {
             AppProtoEnums.APP_OP_RECEIVE_EXPLICIT_USER_INTERACTION_AUDIO;
 
     /**
-     * App can schedule long running jobs.
+     * App can schedule user-initiated jobs.
      *
      * @hide
      */
-    public static final int OP_RUN_LONG_JOBS = AppProtoEnums.APP_OP_RUN_LONG_JOBS;
+    public static final int OP_RUN_USER_INITIATED_JOBS =
+            AppProtoEnums.APP_OP_RUN_USER_INITIATED_JOBS;
 
     /**
      * Notify apps that they have been granted URI permission photos
@@ -1432,14 +1433,14 @@ public class AppOpsManager {
                     .APP_OP_SYSTEM_EXEMPT_FROM_FGS_BG_START_WHILE_IN_USE_PERMISSION_RESTRICTION;
 
     /**
-     * Hide foreground service stop button in quick settings.
+     * Allows an application to start an activity while running in the background.
      *
      * Only to be used by the system.
      *
      * @hide
      */
-    public static final int OP_SYSTEM_EXEMPT_FROM_FGS_STOP_BUTTON =
-            AppProtoEnums.APP_OP_SYSTEM_EXEMPT_FROM_FGS_STOP_BUTTON;
+    public static final int OP_SYSTEM_EXEMPT_FROM_ACTIVITY_BG_START_RESTRICTION =
+            AppProtoEnums.APP_OP_SYSTEM_EXEMPT_FROM_ACTIVITY_BG_START_RESTRICTION;
 
     /**
      * Allows an application to capture bugreport directly without consent dialog when using the
@@ -1461,9 +1462,17 @@ public class AppOpsManager {
      */
     public static final int OP_USE_FULL_SCREEN_INTENT = AppProtoEnums.APP_OP_USE_FULL_SCREEN_INTENT;
 
+    /**
+     * Prevent an app from being placed into hibernation.
+     *
+     * @hide
+     */
+    public static final int OP_SYSTEM_EXEMPT_FROM_HIBERNATION =
+            AppProtoEnums.APP_OP_SYSTEM_EXEMPT_FROM_HIBERNATION;
+
     /** @hide */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-    public static final int _NUM_OP = 134;
+    public static final int _NUM_OP = 135;
 
     /** Access to coarse location information. */
     public static final String OPSTR_COARSE_LOCATION = "android:coarse_location";
@@ -1965,11 +1974,11 @@ public class AppOpsManager {
             "android:receive_explicit_user_interaction_audio";
 
     /**
-     * App can schedule long running jobs.
+     * App can schedule user-initiated jobs.
      *
      * @hide
      */
-    public static final String OPSTR_RUN_LONG_JOBS = "android:run_long_jobs";
+    public static final String OPSTR_RUN_USER_INITIATED_JOBS = "android:run_user_initiated_jobs";
 
     /**
      * Prevent an app from being placed into app standby buckets.
@@ -2027,14 +2036,14 @@ public class AppOpsManager {
             "android:system_exempt_from_fgs_bg_start_while_in_use_permission_restriction";
 
     /**
-     * Hide foreground service stop button in quick settings.
+     * Allows an application to start an activity while running in the background.
      *
      * Only to be used by the system.
      *
      * @hide
      */
-    public static final String OPSTR_SYSTEM_EXEMPT_FROM_FGS_STOP_BUTTON =
-            "android:system_exempt_from_fgs_stop_button";
+    public static final String OPSTR_SYSTEM_EXEMPT_FROM_ACTIVITY_BG_START_RESTRICTION =
+            "android:system_exempt_from_activity_bg_start_restriction";
 
     /**
      * Allows an application to capture bugreport directly without consent dialog when using the
@@ -2056,6 +2065,15 @@ public class AppOpsManager {
      * @hide
      */
     public static final String OPSTR_USE_FULL_SCREEN_INTENT = "android:use_full_screen_intent";
+
+    /**
+     *  Prevent an app from being placed into hibernation.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String OPSTR_SYSTEM_EXEMPT_FROM_HIBERNATION =
+            "android:system_exempt_from_hibernation";
 
     /** {@link #sAppOpsToNote} not initialized yet for this op */
     private static final byte SHOULD_COLLECT_NOTE_OP_NOT_INITIALIZED = 0;
@@ -2151,7 +2169,7 @@ public class AppOpsManager {
             OP_SCHEDULE_EXACT_ALARM,
             OP_MANAGE_MEDIA,
             OP_TURN_SCREEN_ON,
-            OP_RUN_LONG_JOBS,
+            OP_RUN_USER_INITIATED_JOBS,
             OP_READ_MEDIA_VISUAL_USER_SELECTED,
             OP_FOREGROUND_SERVICE_SPECIAL_USE,
             OP_CAPTURE_CONSENTLESS_BUGREPORT_ON_USERDEBUG_BUILD,
@@ -2537,8 +2555,9 @@ public class AppOpsManager {
                 OPSTR_RECEIVE_EXPLICIT_USER_INTERACTION_AUDIO,
                 "RECEIVE_EXPLICIT_USER_INTERACTION_AUDIO").setDefaultMode(
                 AppOpsManager.MODE_ALLOWED).build(),
-        new AppOpInfo.Builder(OP_RUN_LONG_JOBS, OPSTR_RUN_LONG_JOBS, "RUN_LONG_JOBS")
-                .setDefaultMode(AppOpsManager.MODE_ALLOWED).build(),
+        new AppOpInfo.Builder(OP_RUN_USER_INITIATED_JOBS, OPSTR_RUN_USER_INITIATED_JOBS,
+                "RUN_USER_INITIATED_JOBS").setDefaultMode(AppOpsManager.MODE_ALLOWED)
+                .build(),
             new AppOpInfo.Builder(OP_READ_MEDIA_VISUAL_USER_SELECTED,
                     OPSTR_READ_MEDIA_VISUAL_USER_SELECTED, "READ_MEDIA_VISUAL_USER_SELECTED")
                     .setPermission(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
@@ -2562,9 +2581,9 @@ public class AppOpsManager {
                 OPSTR_SYSTEM_EXEMPT_FROM_FGS_BG_START_WHILE_IN_USE_PERMISSION_RESTRICTION,
                 "SYSTEM_EXEMPT_FROM_FGS_BG_START_WHILE_IN_USE_PERMISSION_RESTRICTION")
                 .build(),
-        new AppOpInfo.Builder(OP_SYSTEM_EXEMPT_FROM_FGS_STOP_BUTTON,
-                OPSTR_SYSTEM_EXEMPT_FROM_FGS_STOP_BUTTON,
-                "SYSTEM_EXEMPT_FROM_FGS_STOP_BUTTON").build(),
+        new AppOpInfo.Builder(OP_SYSTEM_EXEMPT_FROM_ACTIVITY_BG_START_RESTRICTION,
+                OPSTR_SYSTEM_EXEMPT_FROM_ACTIVITY_BG_START_RESTRICTION,
+                "SYSTEM_EXEMPT_FROM_ACTIVITY_BG_START_RESTRICTION").build(),
         new AppOpInfo.Builder(
                 OP_CAPTURE_CONSENTLESS_BUGREPORT_ON_USERDEBUG_BUILD,
                 OPSTR_CAPTURE_CONSENTLESS_BUGREPORT_ON_USERDEBUG_BUILD,
@@ -2578,7 +2597,10 @@ public class AppOpsManager {
                 .setDefaultMode(AppOpsManager.MODE_ALLOWED).build(),
         new AppOpInfo.Builder(OP_USE_FULL_SCREEN_INTENT, OPSTR_USE_FULL_SCREEN_INTENT,
                 "USE_FULL_SCREEN_INTENT").setPermission(Manifest.permission.USE_FULL_SCREEN_INTENT)
-                .build()
+                .build(),
+        new AppOpInfo.Builder(OP_SYSTEM_EXEMPT_FROM_HIBERNATION,
+                OPSTR_SYSTEM_EXEMPT_FROM_HIBERNATION,
+                "SYSTEM_EXEMPT_FROM_HIBERNATION").build()
     };
 
     // The number of longs needed to form a full bitmask of app ops

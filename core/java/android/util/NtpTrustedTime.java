@@ -130,7 +130,8 @@ public abstract class NtpTrustedTime implements TrustedTime {
      *
      * @hide
      */
-    public static final class TimeResult {
+    // Non-final for mocking frameworks
+    public static class TimeResult {
         private final long mUnixEpochTimeMillis;
         private final long mElapsedRealtimeMillis;
         private final int mUncertaintyMillis;

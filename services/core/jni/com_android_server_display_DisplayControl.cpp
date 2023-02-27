@@ -23,9 +23,11 @@
 
 namespace android {
 
-static jobject nativeCreateDisplay(JNIEnv* env, jclass clazz, jstring nameObj, jboolean secure) {
+static jobject nativeCreateDisplay(JNIEnv* env, jclass clazz, jstring nameObj, jboolean secure,
+                                   jfloat requestedRefreshRate) {
     ScopedUtfChars name(env, nameObj);
-    sp<IBinder> token(SurfaceComposerClient::createDisplay(String8(name.c_str()), bool(secure)));
+    sp<IBinder> token(SurfaceComposerClient::createDisplay(String8(name.c_str()), bool(secure),
+                                                           requestedRefreshRate));
     return javaObjectForIBinder(env, token);
 }
 
@@ -108,6 +110,15 @@ static jintArray nativeGetSupportedHdrOutputTypes(JNIEnv* env, jclass clazz) {
     return array;
 }
 
+static jboolean nativeGetHdrOutputConversionSupport(JNIEnv* env, jclass clazz) {
+    bool isSupported;
+    status_t err = SurfaceComposerClient::getHdrOutputConversionSupport(&isSupported);
+    if (err == OK) {
+        return isSupported;
+    }
+    return JNI_FALSE;
+}
+
 static jlongArray nativeGetPhysicalDisplayIds(JNIEnv* env, jclass clazz) {
     const auto displayIds = SurfaceComposerClient::getPhysicalDisplayIds();
     ScopedLongArrayRW values(env, env->NewLongArray(displayIds.size()));
@@ -134,7 +145,7 @@ static jobject nativeGetPhysicalDisplayToken(JNIEnv* env, jclass clazz, jlong ph
 
 static const JNINativeMethod sDisplayMethods[] = {
         // clang-format off
-    {"nativeCreateDisplay", "(Ljava/lang/String;Z)Landroid/os/IBinder;",
+    {"nativeCreateDisplay", "(Ljava/lang/String;ZF)Landroid/os/IBinder;",
             (void*)nativeCreateDisplay },
     {"nativeDestroyDisplay", "(Landroid/os/IBinder;)V",
             (void*)nativeDestroyDisplay },
@@ -148,6 +159,8 @@ static const JNINativeMethod sDisplayMethods[] = {
             (void*)nativeSetHdrConversionMode },
     {"nativeGetSupportedHdrOutputTypes", "()[I",
             (void*)nativeGetSupportedHdrOutputTypes },
+     {"nativeGetHdrOutputConversionSupport", "()Z",
+            (void*) nativeGetHdrOutputConversionSupport },
         // clang-format on
 };
 

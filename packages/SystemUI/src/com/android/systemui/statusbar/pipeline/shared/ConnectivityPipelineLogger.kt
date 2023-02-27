@@ -25,6 +25,7 @@ import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.log.dagger.StatusBarConnectivityLog
 import com.android.systemui.plugins.log.LogBuffer
 import com.android.systemui.plugins.log.LogLevel
+import com.android.systemui.statusbar.pipeline.mobile.data.model.SubscriptionModel
 import com.android.systemui.statusbar.pipeline.shared.ConnectivityPipelineLogger.Companion.toString
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
@@ -198,6 +199,47 @@ constructor(
                 str1 = displayInfo.toString()
             },
             { "onDisplayInfoChanged: subId=$int1 displayInfo=$str1" },
+        )
+    }
+
+    // TODO(b/238425913): We should split this class into mobile-specific and wifi-specific loggers.
+
+    fun logUiAdapterSubIdsUpdated(subs: List<Int>) {
+        buffer.log(
+            SB_LOGGING_TAG,
+            LogLevel.INFO,
+            { str1 = subs.toString() },
+            { "Sub IDs in MobileUiAdapter updated internally: $str1" },
+        )
+    }
+
+    fun logUiAdapterSubIdsSentToIconController(subs: List<Int>) {
+        buffer.log(
+            SB_LOGGING_TAG,
+            LogLevel.INFO,
+            { str1 = subs.toString() },
+            { "Sub IDs in MobileUiAdapter being sent to icon controller: $str1" },
+        )
+    }
+
+    fun logCarrierConfigChanged(subId: Int) {
+        buffer.log(
+            SB_LOGGING_TAG,
+            LogLevel.INFO,
+            { int1 = subId },
+            { "onCarrierConfigChanged: subId=$int1" },
+        )
+    }
+
+    fun logOnDataEnabledChanged(enabled: Boolean, subId: Int) {
+        buffer.log(
+            SB_LOGGING_TAG,
+            LogLevel.INFO,
+            {
+                int1 = subId
+                bool1 = enabled
+            },
+            { "onDataEnabledChanged: subId=$int1 enabled=$bool1" },
         )
     }
 

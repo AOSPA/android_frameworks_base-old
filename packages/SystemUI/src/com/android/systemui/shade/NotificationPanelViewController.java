@@ -691,6 +691,7 @@ public final class NotificationPanelViewController implements Dumpable {
     private boolean mInstantExpanding;
     private boolean mAnimateAfterExpanding;
     private boolean mIsFlinging;
+    private boolean mLastFlingWasExpanding;
     private String mViewName;
     private float mInitialExpandY;
     private float mInitialExpandX;
@@ -2154,6 +2155,8 @@ public final class NotificationPanelViewController implements Dumpable {
     @VisibleForTesting
     void flingToHeight(float vel, boolean expand, float target,
             float collapseSpeedUpFactor, boolean expandBecauseOfFalsing) {
+        mLastFlingWasExpanding = expand;
+        mShadeLog.logLastFlingWasExpanding(expand);
         mHeadsUpTouchHelper.notifyFling(!expand);
         mKeyguardStateController.notifyPanelFlingStart(!expand /* flingingToDismiss */);
         setClosingWithAlphaFadeout(!expand && !isOnKeyguard() && getFadeoutAlpha() == 1.0f);
@@ -2543,7 +2546,7 @@ public final class NotificationPanelViewController implements Dumpable {
         }
         // defer touches on QQS to shade while shade is collapsing. Added margin for error
         // as sometimes the qsExpansionFraction can be a tiny value instead of 0 when in QQS.
-        if (!mSplitShadeEnabled
+        if (!mSplitShadeEnabled && !mLastFlingWasExpanding
                 && computeQsExpansionFraction() <= 0.01 && getExpandedFraction() < 1.0) {
             mShadeLog.logMotionEvent(event,
                     "handleQsTouch: shade touched while collapsing, QS tracking disabled");
@@ -4137,7 +4140,7 @@ public final class NotificationPanelViewController implements Dumpable {
 
                     if (didFaceAuthRun) {
                         mUpdateMonitor.requestActiveUnlock(
-                                ActiveUnlockConfig.ACTIVE_UNLOCK_REQUEST_ORIGIN.UNLOCK_INTENT,
+                                ActiveUnlockConfig.ActiveUnlockRequestOrigin.UNLOCK_INTENT,
                                 "lockScreenEmptySpaceTap");
                     } else {
                         mLockscreenGestureLogger.write(MetricsEvent.ACTION_LS_HINT,
@@ -4634,6 +4637,7 @@ public final class NotificationPanelViewController implements Dumpable {
         ipw.println(mBlockingExpansionForCurrentTouch);
         ipw.print("mExpectingSynthesizedDown="); ipw.println(mExpectingSynthesizedDown);
         ipw.print("mLastEventSynthesizedDown="); ipw.println(mLastEventSynthesizedDown);
+        ipw.print("mLastFlingWasExpanding="); ipw.println(mLastFlingWasExpanding);
         ipw.print("mInterpolatedDarkAmount="); ipw.println(mInterpolatedDarkAmount);
         ipw.print("mLinearDarkAmount="); ipw.println(mLinearDarkAmount);
         ipw.print("mPulsing="); ipw.println(mPulsing);
@@ -6147,6 +6151,11 @@ public final class NotificationPanelViewController implements Dumpable {
 
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
+                    if (mTracking) {
+                        // TODO(b/247126247) fix underlying issue. Should be ACTION_POINTER_DOWN.
+                        mShadeLog.d("Don't intercept down event while already tracking");
+                        return false;
+                    }
                     mCentralSurfaces.userActivity();
                     mAnimatingOnDown = mHeightAnimator != null && !mIsSpringBackAnimation;
                     mMinExpandHeight = 0.0f;
@@ -6232,6 +6241,11 @@ public final class NotificationPanelViewController implements Dumpable {
                     // see b/193350347
                     mShadeLog.logMotionEvent(event,
                             "onTouch: duplicate down event detected... ignoring");
+                    return true;
+                }
+                if (mTracking) {
+                    // TODO(b/247126247) fix underlying issue. Should be ACTION_POINTER_DOWN.
+                    mShadeLog.d("Don't handle down event while already tracking");
                     return true;
                 }
                 mLastTouchDownTime = event.getDownTime();

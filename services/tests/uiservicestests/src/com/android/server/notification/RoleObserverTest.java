@@ -48,7 +48,6 @@ import android.companion.ICompanionDeviceManager;
 import android.content.Context;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
-import android.content.pm.PackageManagerInternal;
 import android.os.Looper;
 import android.os.UserHandle;
 import android.os.UserManager;
@@ -65,6 +64,7 @@ import android.util.Pair;
 import androidx.test.InstrumentationRegistry;
 
 import com.android.internal.app.IAppOpsService;
+import com.android.internal.config.sysui.TestableFlagResolver;
 import com.android.internal.logging.InstanceIdSequence;
 import com.android.internal.logging.InstanceIdSequenceFake;
 import com.android.server.LocalServices;
@@ -72,7 +72,6 @@ import com.android.server.UiServiceTestCase;
 import com.android.server.lights.LightsManager;
 import com.android.server.notification.NotificationManagerService.NotificationAssistants;
 import com.android.server.notification.NotificationManagerService.NotificationListeners;
-import com.android.server.pm.permission.PermissionManagerServiceInternal;
 import com.android.server.uri.UriGrantsManagerInternal;
 import com.android.server.utils.quota.MultiRateLimiter;
 import com.android.server.wm.ActivityTaskManagerInternal;
@@ -169,9 +168,8 @@ public class RoleObserverTest extends UiServiceTestCase {
                     mock(StatsManager.class), mock(TelephonyManager.class),
                     mock(ActivityManagerInternal.class),
                     mock(MultiRateLimiter.class), mock(PermissionHelper.class),
-                    mock(UsageStatsManagerInternal.class), mock(TelecomManager.class),
-                    mock(NotificationChannelLogger.class),
-                    mock(PermissionManagerServiceInternal.class));
+                    mock(UsageStatsManagerInternal.class), mock (TelecomManager.class),
+                    mock(NotificationChannelLogger.class), new TestableFlagResolver());
         } catch (SecurityException e) {
             if (!e.getMessage().contains("Permission Denial: not allowed to send broadcast")) {
                 throw e;
