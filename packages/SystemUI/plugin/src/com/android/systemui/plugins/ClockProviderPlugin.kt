@@ -17,11 +17,13 @@ import android.content.res.Resources
 import android.graphics.Rect
 import android.graphics.drawable.Drawable
 import android.view.View
+import com.android.internal.annotations.Keep
 import com.android.systemui.plugins.annotations.ProvidesInterface
 import com.android.systemui.plugins.log.LogBuffer
 import java.io.PrintWriter
 import java.util.Locale
 import java.util.TimeZone
+import org.json.JSONObject
 
 /** Identifies a clock design */
 typealias ClockId = String
@@ -41,7 +43,13 @@ interface ClockProvider {
     fun getClocks(): List<ClockMetadata>
 
     /** Initializes and returns the target clock design */
-    fun createClock(id: ClockId): ClockController
+    @Deprecated("Use overload with ClockSettings")
+    fun createClock(id: ClockId): ClockController {
+        return createClock(ClockSettings(id, null))
+    }
+
+    /** Initializes and returns the target clock design */
+    fun createClock(settings: ClockSettings): ClockController
 
     /** A static thumbnail for rendering in some examples */
     fun getClockThumbnail(id: ClockId): Drawable?
@@ -62,11 +70,16 @@ interface ClockController {
     val animations: ClockAnimations
 
     /** Initializes various rendering parameters. If never called, provides reasonable defaults. */
-    fun initialize(resources: Resources, dozeFraction: Float, foldFraction: Float) {
+    fun initialize(
+        resources: Resources,
+        dozeFraction: Float,
+        foldFraction: Float,
+    ) {
         events.onColorPaletteChanged(resources)
         animations.doze(dozeFraction)
         animations.fold(foldFraction)
-        events.onTimeTick()
+        smallClock.events.onTimeTick()
+        largeClock.events.onTimeTick()
     }
 
     /** Optional method for dumping debug information */
@@ -87,9 +100,6 @@ interface ClockFaceController {
 
 /** Events that should call when various rendering parameters change */
 interface ClockEvents {
-    /** Call every time tick */
-    fun onTimeTick() {}
-
     /** Call whenever timezone changes */
     fun onTimeZoneChanged(timeZone: TimeZone) {}
 
@@ -101,6 +111,9 @@ interface ClockEvents {
 
     /** Call whenever the color palette should update */
     fun onColorPaletteChanged(resources: Resources) {}
+
+    /** Call whenever the weather data should update */
+    fun onWeatherDataChanged(data: Weather) {}
 }
 
 /** Methods which trigger various clock animations */
@@ -131,6 +144,13 @@ interface ClockAnimations {
 
 /** Events that have specific data about the related face */
 interface ClockFaceEvents {
+    /** Call every time tick */
+    fun onTimeTick() {}
+
+    /** Expected interval between calls to onTimeTick. Can always reduce to PER_MINUTE in AOD. */
+    val tickRate: ClockTickRate
+        get() = ClockTickRate.PER_MINUTE
+
     /** Region Darkness specific to the clock face */
     fun onRegionDarknessChanged(isDark: Boolean) {}
 
@@ -150,8 +170,59 @@ interface ClockFaceEvents {
     fun onTargetRegionChanged(targetRegion: Rect?) {}
 }
 
+/** Tick rates for clocks */
+enum class ClockTickRate(val value: Int) {
+    PER_MINUTE(2), // Update the clock once per minute.
+    PER_SECOND(1), // Update the clock once per second.
+    PER_FRAME(0), // Update the clock every second.
+}
+
 /** Some data about a clock design */
 data class ClockMetadata(
     val clockId: ClockId,
     val name: String,
 )
+
+/** Structure for keeping clock-specific settings */
+@Keep
+data class ClockSettings(
+    val clockId: ClockId? = null,
+    val seedColor: Int? = null,
+) {
+    var _applied_timestamp: Long? = null
+
+    companion object {
+        private val KEY_CLOCK_ID = "clockId"
+        private val KEY_SEED_COLOR = "seedColor"
+        private val KEY_TIMESTAMP = "_applied_timestamp"
+
+        fun serialize(setting: ClockSettings?): String {
+            if (setting == null) {
+                return ""
+            }
+
+            return JSONObject()
+                .put(KEY_CLOCK_ID, setting.clockId)
+                .put(KEY_SEED_COLOR, setting.seedColor)
+                .put(KEY_TIMESTAMP, setting._applied_timestamp)
+                .toString()
+        }
+
+        fun deserialize(jsonStr: String?): ClockSettings? {
+            if (jsonStr.isNullOrEmpty()) {
+                return null
+            }
+
+            val json = JSONObject(jsonStr)
+            val result =
+                ClockSettings(
+                    json.getString(KEY_CLOCK_ID),
+                    if (!json.isNull(KEY_SEED_COLOR)) json.getInt(KEY_SEED_COLOR) else null
+                )
+            if (!json.isNull(KEY_TIMESTAMP)) {
+                result._applied_timestamp = json.getLong(KEY_TIMESTAMP)
+            }
+            return result
+        }
+    }
+}

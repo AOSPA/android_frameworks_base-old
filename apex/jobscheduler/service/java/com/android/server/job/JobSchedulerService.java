@@ -31,6 +31,7 @@ import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
 import android.app.AppGlobals;
+import android.app.BackgroundStartPrivileges;
 import android.app.IUidObserver;
 import android.app.compat.CompatChanges;
 import android.app.job.IJobScheduler;
@@ -953,8 +954,8 @@ public class JobSchedulerService extends com.android.server.SystemService
                     properties.getLong(
                             KEY_RUNTIME_MIN_USER_INITIATED_DATA_TRANSFER_GUARANTEE_MS,
                             DEFAULT_RUNTIME_MIN_USER_INITIATED_DATA_TRANSFER_GUARANTEE_MS));
-            // Data transfer requires RUN_LONG_JOBS permission, so the upper limit will be higher
-            // than other jobs.
+            // User-initiated requires RUN_USER_INITIATED_JOBS permission, so the upper limit will
+            // be higher than other jobs.
             // Max limit should be the min guarantee and the max of other user-initiated jobs.
             RUNTIME_USER_INITIATED_DATA_TRANSFER_LIMIT_MS = Math.max(
                     RUNTIME_MIN_USER_INITIATED_DATA_TRANSFER_GUARANTEE_MS,
@@ -1701,16 +1702,15 @@ public class JobSchedulerService extends com.android.server.SystemService
     }
 
     @VisibleForTesting
-    void stopUserVisibleJobsInternal(@NonNull String packageName, int userId) {
+    void notePendingUserRequestedAppStopInternal(@NonNull String packageName, int userId,
+            @Nullable String debugReason) {
         final int packageUid = mLocalPM.getPackageUid(packageName, 0, userId);
         if (packageUid < 0) {
             Slog.wtf(TAG, "Asked to stop jobs of an unknown package");
             return;
         }
         synchronized (mLock) {
-            mConcurrencyManager.stopUserVisibleJobsLocked(userId, packageName,
-                    JobParameters.STOP_REASON_USER,
-                    JobParameters.INTERNAL_STOP_REASON_USER_UI_STOP);
+            mConcurrencyManager.markJobsForUserStopLocked(userId, packageName, debugReason);
             final ArraySet<JobStatus> jobs = mJobs.getJobsByUid(packageUid);
             for (int i = jobs.size() - 1; i >= 0; i--) {
                 final JobStatus job = jobs.valueAt(i);
@@ -2387,12 +2387,25 @@ public class JobSchedulerService extends com.android.server.SystemService
      *
      * @param failureToReschedule Provided job status that we will reschedule.
      * @return A newly instantiated JobStatus with the same constraints as the last job except
-     * with adjusted timing constraints.
+     * with adjusted timing constraints, or {@code null} if the job shouldn't be rescheduled for
+     * some policy reason.
      * @see #maybeQueueReadyJobsForExecutionLocked
      */
+    @Nullable
     @VisibleForTesting
     JobStatus getRescheduleJobForFailureLocked(JobStatus failureToReschedule,
             @JobParameters.StopReason int stopReason, int internalStopReason) {
+        if (internalStopReason == JobParameters.INTERNAL_STOP_REASON_USER_UI_STOP
+                && failureToReschedule.isUserVisibleJob()) {
+            // If a user stops an app via Task Manager and the job was user-visible, then assume
+            // the user wanted to stop that task and not let it run in the future. It's in the
+            // app's best interests to provide action buttons in their notification to avoid this
+            // scenario.
+            Slog.i(TAG,
+                    "Dropping " + failureToReschedule.toShortString() + " because of user stop");
+            return null;
+        }
+
         final long elapsedNowMillis = sElapsedRealtimeClock.millis();
         final JobInfo job = failureToReschedule.getJob();
 
@@ -3293,7 +3306,8 @@ public class JobSchedulerService extends com.android.server.SystemService
     public long getMinJobExecutionGuaranteeMs(JobStatus job) {
         synchronized (mLock) {
             if (job.shouldTreatAsUserInitiatedJob()
-                    && checkRunLongJobsPermission(job.getSourceUid(), job.getSourcePackageName())) {
+                    && checkRunUserInitiatedJobsPermission(
+                            job.getSourceUid(), job.getSourcePackageName())) {
                 if (job.getJob().isDataTransfer()) {
                     final long estimatedTransferTimeMs =
                             mConnectivityController.getEstimatedTransferTimeMs(job);
@@ -3331,7 +3345,8 @@ public class JobSchedulerService extends com.android.server.SystemService
     public long getMaxJobExecutionTimeMs(JobStatus job) {
         synchronized (mLock) {
             final boolean allowLongerJob = job.shouldTreatAsUserInitiatedJob()
-                    && checkRunLongJobsPermission(job.getSourceUid(), job.getSourcePackageName());
+                    && checkRunUserInitiatedJobsPermission(
+                            job.getSourceUid(), job.getSourcePackageName());
             if (job.getJob().isDataTransfer() && allowLongerJob) { // UI+DT
                 return mConstants.RUNTIME_USER_INITIATED_DATA_TRANSFER_LIMIT_MS;
             }
@@ -3522,6 +3537,21 @@ public class JobSchedulerService extends com.android.server.SystemService
     }
 
     final class LocalService implements JobSchedulerInternal {
+
+        @Override
+        public List<JobInfo> getSystemScheduledOwnJobs(@Nullable String namespace) {
+            synchronized (mLock) {
+                final List<JobInfo> ownJobs = new ArrayList<>();
+                mJobs.forEachJob(Process.SYSTEM_UID, (job) -> {
+                    if (job.getSourceUid() == Process.SYSTEM_UID
+                            && Objects.equals(job.getNamespace(), namespace)
+                            && "android".equals(job.getSourcePackageName())) {
+                        ownJobs.add(job.getJob());
+                    }
+                });
+                return ownJobs;
+            }
+        }
 
         @Override
         public void cancelJobsForUid(int uid, boolean includeProxiedJobs,
@@ -3797,7 +3827,7 @@ public class JobSchedulerService extends com.android.server.SystemService
                 if (sourceUid != -1) {
                     // Check the permission of the source app.
                     final int sourceResult =
-                            validateRunLongJobsPermission(sourceUid, sourcePkgName);
+                            validateRunUserInitiatedJobsPermission(sourceUid, sourcePkgName);
                     if (sourceResult != JobScheduler.RESULT_SUCCESS) {
                         return sourceResult;
                     }
@@ -3807,9 +3837,28 @@ public class JobSchedulerService extends com.android.server.SystemService
                     // Source app is different from calling app. Make sure the calling app also has
                     // the permission.
                     final int callingResult =
-                            validateRunLongJobsPermission(callingUid, callingPkgName);
+                            validateRunUserInitiatedJobsPermission(callingUid, callingPkgName);
                     if (callingResult != JobScheduler.RESULT_SUCCESS) {
                         return callingResult;
+                    }
+                }
+
+                final int uid = sourceUid != -1 ? sourceUid : callingUid;
+                final int procState = mActivityManagerInternal.getUidProcessState(uid);
+                if (DEBUG) {
+                    Slog.d(TAG, "Uid " + uid + " proc state="
+                            + ActivityManager.procStateToString(procState));
+                }
+                if (procState != ActivityManager.PROCESS_STATE_TOP) {
+                    final BackgroundStartPrivileges bsp =
+                            mActivityManagerInternal.getBackgroundStartPrivileges(uid);
+                    if (DEBUG) {
+                        Slog.d(TAG, "Uid " + uid + ": " + bsp);
+                    }
+                    if (!bsp.allowsBackgroundActivityStarts()) {
+                        Slog.e(TAG,
+                                "Uid " + uid + " not in a state to schedule user-initiated jobs");
+                        return JobScheduler.RESULT_FAILURE;
                     }
                 }
             }
@@ -3844,10 +3893,10 @@ public class JobSchedulerService extends com.android.server.SystemService
             return JobScheduler.RESULT_SUCCESS;
         }
 
-        private int validateRunLongJobsPermission(int uid, String packageName) {
-            final int state = getRunLongJobsPermissionState(uid, packageName);
+        private int validateRunUserInitiatedJobsPermission(int uid, String packageName) {
+            final int state = getRunUserInitiatedJobsPermissionState(uid, packageName);
             if (state == PermissionChecker.PERMISSION_HARD_DENIED) {
-                throw new SecurityException(android.Manifest.permission.RUN_LONG_JOBS
+                throw new SecurityException(android.Manifest.permission.RUN_USER_INITIATED_JOBS
                         + " required to schedule user-initiated jobs.");
             }
             if (state == PermissionChecker.PERMISSION_SOFT_DENIED) {
@@ -4064,30 +4113,29 @@ public class JobSchedulerService extends com.android.server.SystemService
             }
         }
 
-        @Override
-        public boolean canRunLongJobs(@NonNull String packageName) {
+        public boolean canRunUserInitiatedJobs(@NonNull String packageName) {
             final int callingUid = Binder.getCallingUid();
             final int userId = UserHandle.getUserId(callingUid);
             final int packageUid = mLocalPM.getPackageUid(packageName, 0, userId);
             if (callingUid != packageUid) {
                 throw new SecurityException("Uid " + callingUid
-                        + " cannot query canRunLongJobs for package " + packageName);
+                        + " cannot query canRunUserInitiatedJobs for package " + packageName);
             }
 
-            return checkRunLongJobsPermission(packageUid, packageName);
+            return checkRunUserInitiatedJobsPermission(packageUid, packageName);
         }
 
-        @Override
-        public boolean hasRunLongJobsPermission(@NonNull String packageName,
+        public boolean hasRunUserInitiatedJobsPermission(@NonNull String packageName,
                 @UserIdInt int userId) {
             final int uid = mLocalPM.getPackageUid(packageName, 0, userId);
             final int callingUid = Binder.getCallingUid();
             if (callingUid != uid && !UserHandle.isCore(callingUid)) {
                 throw new SecurityException("Uid " + callingUid
-                        + " cannot query hasRunLongJobsPermission for package " + packageName);
+                        + " cannot query hasRunUserInitiatedJobsPermission for package "
+                        + packageName);
             }
 
-            return checkRunLongJobsPermission(uid, packageName);
+            return checkRunUserInitiatedJobsPermission(uid, packageName);
         }
 
         /**
@@ -4225,12 +4273,13 @@ public class JobSchedulerService extends com.android.server.SystemService
 
         @Override
         @EnforcePermission(allOf = {MANAGE_ACTIVITY_TASKS, INTERACT_ACROSS_USERS_FULL})
-        public void stopUserVisibleJobsForUser(@NonNull String packageName, int userId) {
-            super.stopUserVisibleJobsForUser_enforcePermission();
+        public void notePendingUserRequestedAppStop(@NonNull String packageName, int userId,
+                @Nullable String debugReason) {
+            super.notePendingUserRequestedAppStop_enforcePermission();
             if (packageName == null) {
                 throw new NullPointerException("packageName");
             }
-            JobSchedulerService.this.stopUserVisibleJobsInternal(packageName, userId);
+            notePendingUserRequestedAppStopInternal(packageName, userId, debugReason);
         }
     }
 
@@ -4277,15 +4326,18 @@ public class JobSchedulerService extends com.android.server.SystemService
     }
 
     // Shell command infrastructure: immediately timeout currently executing jobs
-    int executeTimeoutCommand(PrintWriter pw, String pkgName, int userId,
-            @Nullable String namespace, boolean hasJobId, int jobId) {
+    int executeStopCommand(PrintWriter pw, String pkgName, int userId,
+            @Nullable String namespace, boolean hasJobId, int jobId,
+            int stopReason, int internalStopReason) {
         if (DEBUG) {
-            Slog.v(TAG, "executeTimeoutCommand(): " + pkgName + "/" + userId + " " + jobId);
+            Slog.v(TAG, "executeStopJobCommand(): " + pkgName + "/" + userId + " " + jobId
+                    + ": " + stopReason + "("
+                    + JobParameters.getInternalReasonCodeDescription(internalStopReason) + ")");
         }
 
         synchronized (mLock) {
-            final boolean foundSome = mConcurrencyManager.executeTimeoutCommandLocked(pw,
-                    pkgName, userId, namespace, hasJobId, jobId);
+            final boolean foundSome = mConcurrencyManager.executeStopCommandLocked(pw,
+                    pkgName, userId, namespace, hasJobId, jobId, stopReason, internalStopReason);
             if (!foundSome) {
                 pw.println("No matching executing jobs found.");
             }
@@ -4466,14 +4518,14 @@ public class JobSchedulerService extends com.android.server.SystemService
     }
 
     /** Returns true if both the appop and permission are granted. */
-    private boolean checkRunLongJobsPermission(int packageUid, String packageName) {
-        return getRunLongJobsPermissionState(packageUid, packageName)
+    private boolean checkRunUserInitiatedJobsPermission(int packageUid, String packageName) {
+        return getRunUserInitiatedJobsPermissionState(packageUid, packageName)
                 == PermissionChecker.PERMISSION_GRANTED;
     }
 
-    private int getRunLongJobsPermissionState(int packageUid, String packageName) {
+    private int getRunUserInitiatedJobsPermissionState(int packageUid, String packageName) {
         return PermissionChecker.checkPermissionForPreflight(getTestableContext(),
-                android.Manifest.permission.RUN_LONG_JOBS, PermissionChecker.PID_UNKNOWN,
+                android.Manifest.permission.RUN_USER_INITIATED_JOBS, PermissionChecker.PID_UNKNOWN,
                 packageUid, packageName);
     }
 

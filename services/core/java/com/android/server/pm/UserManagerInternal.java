@@ -52,53 +52,30 @@ public abstract class UserManagerInternal {
     // TODO(b/248408342): Move keep annotation to the method referencing these fields reflectively.
     @Keep public static final int USER_ASSIGNMENT_RESULT_SUCCESS_VISIBLE = 1;
     @Keep public static final int USER_ASSIGNMENT_RESULT_SUCCESS_INVISIBLE = 2;
+    @Keep public static final int USER_ASSIGNMENT_RESULT_SUCCESS_ALREADY_VISIBLE = 3;
     @Keep public static final int USER_ASSIGNMENT_RESULT_FAILURE = -1;
 
     private static final String PREFIX_USER_ASSIGNMENT_RESULT = "USER_ASSIGNMENT_RESULT_";
     @IntDef(flag = false, prefix = {PREFIX_USER_ASSIGNMENT_RESULT}, value = {
             USER_ASSIGNMENT_RESULT_SUCCESS_VISIBLE,
             USER_ASSIGNMENT_RESULT_SUCCESS_INVISIBLE,
+            USER_ASSIGNMENT_RESULT_SUCCESS_ALREADY_VISIBLE,
             USER_ASSIGNMENT_RESULT_FAILURE
     })
     public @interface UserAssignmentResult {}
 
-    private static final String PREFIX_USER_START_MODE = "USER_START_MODE_";
+    // TODO(b/248408342): Move keep annotation to the method referencing these fields reflectively.
+    @Keep public static final int USER_START_MODE_FOREGROUND = 1;
+    @Keep public static final int USER_START_MODE_BACKGROUND = 2;
+    @Keep public static final int USER_START_MODE_BACKGROUND_VISIBLE = 3;
 
-    /**
-     * Type used to indicate how a user started.
-     */
+    private static final String PREFIX_USER_START_MODE = "USER_START_MODE_";
     @IntDef(flag = false, prefix = {PREFIX_USER_START_MODE}, value = {
             USER_START_MODE_FOREGROUND,
             USER_START_MODE_BACKGROUND,
             USER_START_MODE_BACKGROUND_VISIBLE
     })
     public @interface UserStartMode {}
-
-    // TODO(b/248408342): Move keep annotations below to the method referencing these fields
-    // reflectively.
-
-    /** (Full) user started on foreground (a.k.a. "current user"). */
-    @Keep public static final int USER_START_MODE_FOREGROUND = 1;
-
-    /**
-     * User (full or profile) started on background and is
-     * {@link UserManager#isUserVisible() invisible}.
-     *
-     * <p>This is the "traditional" way of starting a background user, and can be used to start
-     * profiles as well, although starting an invisible profile is not common from the System UI
-     * (it could be done through APIs or adb, though).
-     */
-    @Keep public static final int USER_START_MODE_BACKGROUND = 2;
-
-    /**
-     * User (full or profile) started on background and is
-     * {@link UserManager#isUserVisible() visible}.
-     *
-     * <p>This is the "traditional" way of starting a profile (i.e., when the profile of the current
-     * user is the current foreground user), but it can also be used to start a full user associated
-     * with a display (which is the case on automotives with passenger displays).
-     */
-    @Keep public static final int USER_START_MODE_BACKGROUND_VISIBLE = 3;
 
     public interface UserRestrictionsListener {
         /**
@@ -261,8 +238,9 @@ public abstract class UserManagerInternal {
      * the user is created (as it will be passed back to it through
      * {@link UserLifecycleListener#onUserCreated(UserInfo, Object)});
      */
-    public abstract UserInfo createUserEvenWhenDisallowed(String name, String userType,
-            int flags, String[] disallowedPackages, @Nullable Object token)
+    public abstract @NonNull UserInfo createUserEvenWhenDisallowed(
+            @Nullable String name, @NonNull String userType, @UserInfo.UserInfoFlag int flags,
+            @Nullable String[] disallowedPackages, @Nullable Object token)
             throws UserManager.CheckedUserOperationException;
 
     /**
@@ -551,11 +529,12 @@ public abstract class UserManagerInternal {
      * switched to.
      *
      * <p>Otherwise, in {@link UserManager#isHeadlessSystemUserMode() headless system user mode},
-     * this will be the user who was last in the foreground on this device. If there is no
-     * switchable user on the device, a new user will be created and its id will be returned.
+     * this will be the user who was last in the foreground on this device.
      *
-     * <p>In non-headless system user mode, the return value will be {@link UserHandle#USER_SYSTEM}.
+     * <p>In non-headless system user mode, the return value will be
+     * {@link android.os.UserHandle#USER_SYSTEM}.
+
+     * @throws UserManager.CheckedUserOperationException if no switchable user can be found
      */
-    public abstract @UserIdInt int getBootUser()
-            throws UserManager.CheckedUserOperationException;
+    public abstract @UserIdInt int getBootUser() throws UserManager.CheckedUserOperationException;
 }

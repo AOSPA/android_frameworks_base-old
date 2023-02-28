@@ -1069,11 +1069,6 @@ public class UserManager {
      * Specifies that windows besides app windows should not be
      * created. This will block the creation of the following types of windows.
      * <li>{@link LayoutParams#TYPE_TOAST}</li>
-     * <li>{@link LayoutParams#TYPE_PHONE}</li>
-     * <li>{@link LayoutParams#TYPE_PRIORITY_PHONE}</li>
-     * <li>{@link LayoutParams#TYPE_SYSTEM_ALERT}</li>
-     * <li>{@link LayoutParams#TYPE_SYSTEM_ERROR}</li>
-     * <li>{@link LayoutParams#TYPE_SYSTEM_OVERLAY}</li>
      * <li>{@link LayoutParams#TYPE_APPLICATION_OVERLAY}</li>
      *
      * <p>This can only be set by device owners and profile owners on the primary user.
@@ -2976,6 +2971,29 @@ public class UserManager {
     }
 
     /**
+     * @hide
+     */
+    public static boolean isVisibleBackgroundUsersOnDefaultDisplayEnabled() {
+        return SystemProperties.getBoolean("fw.visible_bg_users_on_default_display",
+                Resources.getSystem()
+                        .getBoolean(R.bool.config_multiuserVisibleBackgroundUsersOnDefaultDisplay));
+    }
+
+    /**
+     * Returns whether the device allows (full) users to be started in background visible in the
+     * {@link android.view.Display#DEFAULT_DISPLAY default display}.
+     *
+     * @return {@code false} for most devices, except passenger-only automotive build (i.e., when
+     * Android runs in a separate system in the back seat to manage the passenger displays).
+     *
+     * @hide
+     */
+    @TestApi
+    public boolean isVisibleBackgroundUsersOnDefaultDisplaySupported() {
+        return isVisibleBackgroundUsersOnDefaultDisplayEnabled();
+    }
+
+    /**
      * Checks if the user is visible at the moment.
      *
      * <p>Roughly speaking, a "visible user" is a user that can present UI on at least one display.
@@ -3594,7 +3612,7 @@ public class UserManager {
      *
      * <p>Requires {@link android.Manifest.permission#MANAGE_USERS}.
      * {@link android.Manifest.permission#CREATE_USERS} suffices if flags are in
-     * com.android.server.pm.UserManagerService#ALLOWED_FLAGS_FOR_CREATE_USERS_PERMISSION}.
+     * com.android.server.pm.UserManagerService#ALLOWED_FLAGS_FOR_CREATE_USERS_PERMISSION.
      *
      * @param name     the user's name
      * @param userType the type of user, such as {@link UserManager#USER_TYPE_FULL_GUEST}.
@@ -3668,7 +3686,7 @@ public class UserManager {
      *
      * <p>Requires {@link android.Manifest.permission#MANAGE_USERS}.
      * {@link android.Manifest.permission#CREATE_USERS} suffices if flags are in
-     * com.android.server.pm.UserManagerService#ALLOWED_FLAGS_FOR_CREATE_USERS_PERMISSION}.
+     * com.android.server.pm.UserManagerService#ALLOWED_FLAGS_FOR_CREATE_USERS_PERMISSION.
      *
      * @param userType the type of user, such as {@link UserManager#USER_TYPE_FULL_GUEST}.
      * @return the {@link UserInfo} object for the created user.
@@ -3700,25 +3718,23 @@ public class UserManager {
      */
     @RequiresPermission(anyOf = {Manifest.permission.MANAGE_USERS,
             Manifest.permission.CREATE_USERS})
-    public UserInfo createGuest(Context context) {
+    public @Nullable UserInfo createGuest(Context context) {
         try {
             final UserInfo guest = mService.createUserWithThrow(null, USER_TYPE_FULL_GUEST, 0);
-            if (guest != null) {
-                Settings.Secure.putStringForUser(context.getContentResolver(),
-                        Settings.Secure.SKIP_FIRST_USE_HINTS, "1", guest.id);
+            Settings.Secure.putStringForUser(context.getContentResolver(),
+                    Settings.Secure.SKIP_FIRST_USE_HINTS, "1", guest.id);
 
-                if (UserManager.isGuestUserAllowEphemeralStateChange()) {
-                    // Mark guest as (changeably) ephemeral if REMOVE_GUEST_ON_EXIT is 1
-                    // This is done so that a user via a UI controller can choose to
-                    // make a guest as ephemeral or not.
-                    // Settings.Global.REMOVE_GUEST_ON_EXIT holds the choice on what the guest state
-                    // should be, with default being ephemeral.
-                    boolean resetGuestOnExit = Settings.Global.getInt(context.getContentResolver(),
-                                                 Settings.Global.REMOVE_GUEST_ON_EXIT, 1) == 1;
+            if (UserManager.isGuestUserAllowEphemeralStateChange()) {
+                // Mark guest as (changeably) ephemeral if REMOVE_GUEST_ON_EXIT is 1
+                // This is done so that a user via a UI controller can choose to
+                // make a guest as ephemeral or not.
+                // Settings.Global.REMOVE_GUEST_ON_EXIT holds the choice on what the guest state
+                // should be, with default being ephemeral.
+                boolean resetGuestOnExit = Settings.Global.getInt(context.getContentResolver(),
+                                             Settings.Global.REMOVE_GUEST_ON_EXIT, 1) == 1;
 
-                    if (resetGuestOnExit && !guest.isEphemeral()) {
-                        setUserEphemeral(guest.id, true);
-                    }
+                if (resetGuestOnExit && !guest.isEphemeral()) {
+                    setUserEphemeral(guest.id, true);
                 }
             }
             return guest;
@@ -3837,7 +3853,7 @@ public class UserManager {
      */
     @RequiresPermission(anyOf = {Manifest.permission.MANAGE_USERS,
             Manifest.permission.CREATE_USERS})
-    public UserInfo createProfileForUser(String name, @NonNull String userType,
+    public @Nullable UserInfo createProfileForUser(String name, @NonNull String userType,
             @UserInfoFlag int flags, @UserIdInt int userId) {
         return createProfileForUser(name, userType, flags, userId, null);
     }
@@ -3882,7 +3898,7 @@ public class UserManager {
      */
     @RequiresPermission(anyOf = {Manifest.permission.MANAGE_USERS,
             Manifest.permission.CREATE_USERS})
-    public UserInfo createProfileForUserEvenWhenDisallowed(String name,
+    public @Nullable UserInfo createProfileForUserEvenWhenDisallowed(String name,
             @NonNull String userType, @UserInfoFlag int flags, @UserIdInt int userId,
             String[] disallowedPackages) {
         try {
@@ -3913,11 +3929,9 @@ public class UserManager {
         try {
             final int parentUserId = mUserId;
             final UserInfo profile = mService.createRestrictedProfileWithThrow(name, parentUserId);
-            if (profile != null) {
-                final UserHandle parentUserHandle = UserHandle.of(parentUserId);
-                AccountManager.get(mContext).addSharedAccountsFromParentUser(parentUserHandle,
-                        UserHandle.of(profile.id));
-            }
+            final UserHandle parentUserHandle = UserHandle.of(parentUserId);
+            AccountManager.get(mContext).addSharedAccountsFromParentUser(parentUserHandle,
+                    UserHandle.of(profile.id));
             return profile;
         } catch (ServiceSpecificException e) {
             return null;

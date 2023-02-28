@@ -22,7 +22,7 @@ import static android.os.IInputConstants.INVALID_INPUT_EVENT_ID;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
 import static android.view.InputDevice.SOURCE_CLASS_NONE;
-import static android.view.InsetsState.ITYPE_IME;
+import static android.view.InsetsSource.ID_IME;
 import static android.view.View.PFLAG_DRAW_ANIMATION;
 import static android.view.View.SYSTEM_UI_FLAG_FULLSCREEN;
 import static android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
@@ -292,7 +292,7 @@ public final class ViewRootImpl implements ViewParent,
      * @hide
      */
     public static final boolean CAPTION_ON_SHELL =
-            SystemProperties.getBoolean("persist.wm.debug.caption_on_shell", false);
+            SystemProperties.getBoolean("persist.wm.debug.caption_on_shell", true);
 
     /**
      * Whether the client should compute the window frame on its own.
@@ -710,6 +710,7 @@ public final class ViewRootImpl implements ViewParent,
 
     // These are accessed by multiple threads.
     final Rect mWinFrame; // frame given by window manager.
+    private final Rect mLastLayoutFrame;
     Rect mOverrideInsetsFrame;
 
     final Rect mPendingBackDropFrame = new Rect();
@@ -769,7 +770,12 @@ public final class ViewRootImpl implements ViewParent,
     private long mFpsPrevTime = -1;
     private int mFpsNumFrames;
 
-    private int mPointerIconType = PointerIcon.TYPE_NOT_SPECIFIED;
+    /**
+     * The resolved pointer icon type requested by this window.
+     * A null value indicates the resolved pointer icon has not yet been calculated.
+     */
+    @Nullable
+    private Integer mPointerIconType = null;
     private PointerIcon mCustomPointerIcon = null;
 
     /**
@@ -953,6 +959,7 @@ public final class ViewRootImpl implements ViewParent,
         mHeight = -1;
         mDirty = new Rect();
         mWinFrame = new Rect();
+        mLastLayoutFrame = new Rect();
         mWindow = new W(this);
         mLeashToken = new Binder();
         mTargetSdkVersion = context.getApplicationInfo().targetSdkVersion;
@@ -1317,7 +1324,7 @@ public final class ViewRootImpl implements ViewParent,
                         UNSPECIFIED_LENGTH, UNSPECIFIED_LENGTH,
                         mInsetsController.getRequestedVisibleTypes(), 1f /* compactScale */,
                         mTmpFrames);
-                setFrame(mTmpFrames.frame);
+                setFrame(mTmpFrames.frame, true /* withinRelayout */);
                 registerBackCallbackOnWindow();
                 if (DEBUG_LAYOUT) Log.v(mTag, "Added window " + mWindow);
                 if (res < WindowManagerGlobal.ADD_OKAY) {
@@ -1397,6 +1404,8 @@ public final class ViewRootImpl implements ViewParent,
                                 listener, listener.data, mHandler, true /*waitForPresentTime*/);
                         mAttachInfo.mThreadedRenderer.addObserver(mHardwareRendererObserver);
                     }
+                    // Update unbuffered request when set the root view.
+                    mUnbufferedInputSource = mView.mUnbufferedInputSource;
                 }
 
                 view.assignParent(this);
@@ -1844,7 +1853,7 @@ public final class ViewRootImpl implements ViewParent,
             onMovedToDisplay(displayId, mLastConfigurationFromResources);
         }
 
-        setFrame(frame);
+        setFrame(frame, false /* withinRelayout */);
         mTmpFrames.displayFrame.set(displayFrame);
         if (mTmpFrames.attachedFrame != null && attachedFrame != null) {
             mTmpFrames.attachedFrame.set(attachedFrame);
@@ -3735,7 +3744,7 @@ public final class ViewRootImpl implements ViewParent,
         }
 
         if (mAttachInfo.mContentCaptureEvents != null) {
-            notifyContentCatpureEvents();
+            notifyContentCaptureEvents();
         }
 
         mIsInTraversal = false;
@@ -3776,7 +3785,7 @@ public final class ViewRootImpl implements ViewParent,
         Trace.traceEnd(Trace.TRACE_TAG_VIEW);
     }
 
-    private void notifyContentCatpureEvents() {
+    private void notifyContentCaptureEvents() {
         Trace.traceBegin(Trace.TRACE_TAG_VIEW, "notifyContentCaptureEvents");
         try {
             MainContentCaptureSession mainSession = mAttachInfo.mContentCaptureManager
@@ -5811,7 +5820,7 @@ public final class ViewRootImpl implements ViewParent,
                 }
                 case MSG_SHOW_INSETS: {
                     final ImeTracker.Token statsToken = (ImeTracker.Token) msg.obj;
-                    ImeTracker.get().onProgress(statsToken,
+                    ImeTracker.forLogging().onProgress(statsToken,
                             ImeTracker.PHASE_CLIENT_HANDLE_SHOW_INSETS);
                     if (mView == null) {
                         Log.e(TAG,
@@ -5824,7 +5833,7 @@ public final class ViewRootImpl implements ViewParent,
                 }
                 case MSG_HIDE_INSETS: {
                     final ImeTracker.Token statsToken = (ImeTracker.Token) msg.obj;
-                    ImeTracker.get().onProgress(statsToken,
+                    ImeTracker.forLogging().onProgress(statsToken,
                             ImeTracker.PHASE_CLIENT_HANDLE_HIDE_INSETS);
                     mInsetsController.hide(msg.arg1, msg.arg2 == 1, statsToken);
                     break;
@@ -5839,7 +5848,7 @@ public final class ViewRootImpl implements ViewParent,
                         mTmpFrames.frame.right = l + w;
                         mTmpFrames.frame.top = t;
                         mTmpFrames.frame.bottom = t + h;
-                        setFrame(mTmpFrames.frame);
+                        setFrame(mTmpFrames.frame, false /* withinRelayout */);
                         maybeHandleWindowMove(mWinFrame);
                     }
                     break;
@@ -6896,13 +6905,13 @@ public final class ViewRootImpl implements ViewParent,
                         || event.getActionMasked() == MotionEvent.ACTION_HOVER_EXIT) {
                     // Other apps or the window manager may change the icon type outside of
                     // this app, therefore the icon type has to be reset on enter/exit event.
-                    mPointerIconType = PointerIcon.TYPE_NOT_SPECIFIED;
+                    mPointerIconType = null;
                 }
 
                 if (event.getActionMasked() != MotionEvent.ACTION_HOVER_EXIT) {
                     if (!updatePointerIcon(event) &&
                             event.getActionMasked() == MotionEvent.ACTION_HOVER_MOVE) {
-                        mPointerIconType = PointerIcon.TYPE_NOT_SPECIFIED;
+                        mPointerIconType = null;
                     }
                 }
             }
@@ -6941,7 +6950,7 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     private void resetPointerIcon(MotionEvent event) {
-        mPointerIconType = PointerIcon.TYPE_NOT_SPECIFIED;
+        mPointerIconType = null;
         updatePointerIcon(event);
     }
 
@@ -6971,9 +6980,9 @@ public final class ViewRootImpl implements ViewParent,
         }
 
         final int pointerType = (pointerIcon != null) ?
-                pointerIcon.getType() : PointerIcon.TYPE_DEFAULT;
+                pointerIcon.getType() : PointerIcon.TYPE_NOT_SPECIFIED;
 
-        if (mPointerIconType != pointerType) {
+        if (mPointerIconType == null || mPointerIconType != pointerType) {
             mPointerIconType = pointerType;
             mCustomPointerIcon = null;
             if (mPointerIconType != PointerIcon.TYPE_CUSTOM) {
@@ -8350,7 +8359,7 @@ public final class ViewRootImpl implements ViewParent,
             // If the position and the size of the frame are both changed, it will trigger a BLAST
             // sync, and we still need to call relayout to obtain the syncSeqId. Otherwise, we just
             // need to send attributes via relayoutAsync.
-            final Rect oldFrame = mWinFrame;
+            final Rect oldFrame = mLastLayoutFrame;
             final Rect newFrame = mTmpFrames.frame;
             final boolean positionChanged =
                     newFrame.top != oldFrame.top || newFrame.left != oldFrame.left;
@@ -8480,7 +8489,7 @@ public final class ViewRootImpl implements ViewParent,
             params.restore();
         }
 
-        setFrame(mTmpFrames.frame);
+        setFrame(mTmpFrames.frame, true /* withinRelayout */);
         return relayoutResult;
     }
 
@@ -8515,8 +8524,18 @@ public final class ViewRootImpl implements ViewParent,
         mIsSurfaceOpaque = opaque;
     }
 
-    private void setFrame(Rect frame) {
+    /**
+     * Set the mWinFrame of this window.
+     * @param frame the new frame of this window.
+     * @param withinRelayout {@code true} if this setting is within the relayout, or is the initial
+     *                       setting. That will make sure in the relayout process, we always compare
+     *                       the window frame with the last processed window frame.
+     */
+    private void setFrame(Rect frame, boolean withinRelayout) {
         mWinFrame.set(frame);
+        if (withinRelayout) {
+            mLastLayoutFrame.set(frame);
+        }
 
         final WindowConfiguration winConfig = getCompatWindowConfiguration();
         mPendingBackDropFrame.set(mPendingDragResizing && !winConfig.useWindowFrameForBackdrop()
@@ -8763,6 +8782,8 @@ public final class ViewRootImpl implements ViewParent,
 
         mInsetsController.dump(prefix, writer);
 
+        mOnBackInvokedDispatcher.dump(prefix, writer);
+
         writer.println(prefix + "View Hierarchy:");
         dumpViewHierarchy(innerPrefix, writer, mView);
     }
@@ -8964,7 +8985,7 @@ public final class ViewRootImpl implements ViewParent,
         if (mTranslator != null) {
             mTranslator.translateInsetsStateInScreenToAppWindow(insetsState);
         }
-        if (insetsState.getSourceOrDefaultVisibility(ITYPE_IME)) {
+        if (insetsState.isSourceOrDefaultVisible(ID_IME, Type.ime())) {
             ImeTracing.getInstance().triggerClientDump("ViewRootImpl#dispatchResized",
                     getInsetsController().getHost().getInputMethodManager(), null /* icProto */);
         }
@@ -8996,7 +9017,7 @@ public final class ViewRootImpl implements ViewParent,
             mTranslator.translateInsetsStateInScreenToAppWindow(insetsState);
             mTranslator.translateSourceControlsInScreenToAppWindow(activeControls);
         }
-        if (insetsState != null && insetsState.getSourceOrDefaultVisibility(ITYPE_IME)) {
+        if (insetsState != null && insetsState.isSourceOrDefaultVisible(ID_IME, Type.ime())) {
             ImeTracing.getInstance().triggerClientDump("ViewRootImpl#dispatchInsetsControlChanged",
                     getInsetsController().getHost().getInputMethodManager(), null /* icProto */);
         }
@@ -10396,10 +10417,10 @@ public final class ViewRootImpl implements ViewParent,
                         null /* icProto */);
             }
             if (viewAncestor != null) {
-                ImeTracker.get().onProgress(statsToken, ImeTracker.PHASE_CLIENT_SHOW_INSETS);
+                ImeTracker.forLogging().onProgress(statsToken, ImeTracker.PHASE_CLIENT_SHOW_INSETS);
                 viewAncestor.showInsets(types, fromIme, statsToken);
             } else {
-                ImeTracker.get().onFailed(statsToken, ImeTracker.PHASE_CLIENT_SHOW_INSETS);
+                ImeTracker.forLogging().onFailed(statsToken, ImeTracker.PHASE_CLIENT_SHOW_INSETS);
             }
         }
 
@@ -10413,10 +10434,10 @@ public final class ViewRootImpl implements ViewParent,
                         null /* icProto */);
             }
             if (viewAncestor != null) {
-                ImeTracker.get().onProgress(statsToken, ImeTracker.PHASE_CLIENT_HIDE_INSETS);
+                ImeTracker.forLogging().onProgress(statsToken, ImeTracker.PHASE_CLIENT_HIDE_INSETS);
                 viewAncestor.hideInsets(types, fromIme, statsToken);
             } else {
-                ImeTracker.get().onFailed(statsToken, ImeTracker.PHASE_CLIENT_HIDE_INSETS);
+                ImeTracker.forLogging().onFailed(statsToken, ImeTracker.PHASE_CLIENT_HIDE_INSETS);
             }
         }
 
@@ -10705,7 +10726,8 @@ public final class ViewRootImpl implements ViewParent,
         public int ensureDirectConnection() {
             if (mDirectConnectionId == AccessibilityNodeInfo.UNDEFINED_CONNECTION_ID) {
                 mDirectConnectionId = AccessibilityInteractionClient.addDirectConnection(
-                        new AccessibilityInteractionConnection(ViewRootImpl.this));
+                        new AccessibilityInteractionConnection(ViewRootImpl.this),
+                        mAccessibilityManager);
                 // Notify listeners in the app process.
                 mAccessibilityManager.notifyAccessibilityStateChanged();
             }
@@ -11436,33 +11458,25 @@ public final class ViewRootImpl implements ViewParent,
         });
     }
 
-    private class VRISurfaceSyncGroup extends SurfaceSyncGroup {
-        VRISurfaceSyncGroup(String name) {
-            super(name);
-        }
-
-        @Override
-        public void onSyncReady() {
-            Runnable runnable = () -> {
-                mNumPausedForSync--;
-                if (!mIsInTraversal && mNumPausedForSync == 0) {
-                    scheduleTraversals();
-                }
-            };
-
-            if (Thread.currentThread() == mThread) {
-                runnable.run();
-            } else {
-                mHandler.post(runnable);
-            }
-        }
-    }
-
     @Override
     public SurfaceSyncGroup getOrCreateSurfaceSyncGroup() {
         boolean newSyncGroup = false;
         if (mActiveSurfaceSyncGroup == null) {
-            mActiveSurfaceSyncGroup = new VRISurfaceSyncGroup(mTag);
+            mActiveSurfaceSyncGroup = new SurfaceSyncGroup(mTag);
+            mActiveSurfaceSyncGroup.setAddedToSyncListener(() -> {
+                Runnable runnable = () -> {
+                    mNumPausedForSync--;
+                    if (!mIsInTraversal && mNumPausedForSync == 0) {
+                        scheduleTraversals();
+                    }
+                };
+
+                if (Thread.currentThread() == mThread) {
+                    runnable.run();
+                } else {
+                    mHandler.post(runnable);
+                }
+            });
             updateSyncInProgressCount(mActiveSurfaceSyncGroup);
             newSyncGroup = true;
         }

@@ -38,6 +38,7 @@ import static android.view.KeyEvent.KEYCODE_DPAD_CENTER;
 import static android.view.KeyEvent.KEYCODE_DPAD_DOWN;
 import static android.view.KeyEvent.KEYCODE_HOME;
 import static android.view.KeyEvent.KEYCODE_POWER;
+import static android.view.KeyEvent.KEYCODE_STEM_PRIMARY;
 import static android.view.KeyEvent.KEYCODE_UNKNOWN;
 import static android.view.KeyEvent.KEYCODE_VOLUME_DOWN;
 import static android.view.KeyEvent.KEYCODE_VOLUME_UP;
@@ -128,6 +129,7 @@ import android.media.AudioSystem;
 import android.media.IAudioService;
 import android.media.session.MediaSessionLegacyHelper;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.DeviceIdleManager;
 import android.os.FactoryTest;
@@ -334,6 +336,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     static public final String SYSTEM_DIALOG_REASON_SCREENSHOT = "screenshot";
     static public final String SYSTEM_DIALOG_REASON_GESTURE_NAV = "gestureNav";
 
+    public static final String TRACE_WAIT_FOR_ALL_WINDOWS_DRAWN_METHOD = "waitForAllWindowsDrawn";
+
     private static final String TALKBACK_LABEL = "TalkBack";
 
     private static final int POWER_BUTTON_SUPPRESSION_DELAY_DEFAULT_MILLIS = 800;
@@ -522,7 +526,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     int mDoublePressOnStemPrimaryBehavior;
     int mTriplePressOnStemPrimaryBehavior;
     int mLongPressOnStemPrimaryBehavior;
-    boolean mStylusButtonsDisabled = false;
+    boolean mStylusButtonsEnabled = true;
     boolean mHasSoftInput = false;
     boolean mHapticTextHandleEnabled;
     boolean mUseTvRouting;
@@ -797,7 +801,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     Settings.Global.POWER_BUTTON_SUPPRESSION_DELAY_AFTER_GESTURE_WAKE), false, this,
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.Secure.getUriFor(
-                    Settings.Secure.STYLUS_BUTTONS_DISABLED), false, this,
+                    Settings.Secure.STYLUS_BUTTONS_ENABLED), false, this,
                     UserHandle.USER_ALL);
             updateSettings();
         }
@@ -2262,6 +2266,21 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                             cancelPendingScreenshotChordAction();
                         }
                     });
+            if (mHasFeatureWatch) {
+                mKeyCombinationManager.addRule(
+                        new TwoKeysCombinationRule(KEYCODE_POWER, KEYCODE_STEM_PRIMARY) {
+                            @Override
+                            void execute() {
+                                mPowerKeyHandled = true;
+                                interceptScreenshotChord(SCREENSHOT_KEY_CHORD,
+                                        getScreenshotChordLongPressDelay());
+                            }
+                            @Override
+                            void cancel() {
+                                cancelPendingScreenshotChordAction();
+                            }
+                        });
+            }
         }
 
         mKeyCombinationManager.addRule(
@@ -2617,9 +2636,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     mContext.getResources().getInteger(
                             com.android.internal.R.integer.config_keyChordPowerVolumeUp));
 
-            mStylusButtonsDisabled = Settings.Secure.getIntForUser(resolver,
-                    Secure.STYLUS_BUTTONS_DISABLED, 0, UserHandle.USER_CURRENT) == 1;
-            mInputManagerInternal.setStylusButtonMotionEventsEnabled(!mStylusButtonsDisabled);
+            mStylusButtonsEnabled = Settings.Secure.getIntForUser(resolver,
+                    Secure.STYLUS_BUTTONS_ENABLED, 1, UserHandle.USER_CURRENT) == 1;
+            mInputManagerInternal.setStylusButtonMotionEventsEnabled(mStylusButtonsEnabled);
         }
         if (updateRotation) {
             updateRotation(true);
@@ -3498,8 +3517,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     @Override
-    public void onKeyguardOccludedChangedLw(boolean occluded) {
-        if (mKeyguardDelegate != null && mKeyguardDelegate.isShowing()) {
+    public void onKeyguardOccludedChangedLw(boolean occluded, boolean waitAppTransition) {
+        if (mKeyguardDelegate != null && waitAppTransition) {
             mPendingKeyguardOccluded = occluded;
             mKeyguardOccludedChanged = true;
         } else {
@@ -4333,7 +4352,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             case KeyEvent.KEYCODE_STYLUS_BUTTON_SECONDARY:
             case KeyEvent.KEYCODE_STYLUS_BUTTON_TERTIARY:
             case KeyEvent.KEYCODE_STYLUS_BUTTON_TAIL: {
-                if (down && !mStylusButtonsDisabled) {
+                if (down && mStylusButtonsEnabled) {
                     sendSystemKeyToStatusBarAsync(keyCode);
                 }
                 result &= ~ACTION_PASS_TO_USER;
@@ -4920,10 +4939,15 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
         // ... eventually calls finishWindowsDrawn which will finalize our screen turn on
         // as well as enabling the orientation change logic/sensor.
+        Trace.asyncTraceBegin(Trace.TRACE_TAG_WINDOW_MANAGER,
+                TRACE_WAIT_FOR_ALL_WINDOWS_DRAWN_METHOD, /* cookie= */ 0);
         mWindowManagerInternal.waitForAllWindowsDrawn(() -> {
             if (DEBUG_WAKEUP) Slog.i(TAG, "All windows ready for every display");
             mHandler.sendMessage(mHandler.obtainMessage(MSG_WINDOW_MANAGER_DRAWN_COMPLETE,
                     INVALID_DISPLAY, 0));
+
+            Trace.asyncTraceEnd(Trace.TRACE_TAG_WINDOW_MANAGER,
+                    TRACE_WAIT_FOR_ALL_WINDOWS_DRAWN_METHOD, /* cookie= */ 0);
             }, WAITING_FOR_DRAWN_TIMEOUT, INVALID_DISPLAY);
     }
 
@@ -4979,10 +5003,16 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             }
         } else {
             mScreenOnListeners.put(displayId, screenOnListener);
+
+            Trace.asyncTraceBegin(Trace.TRACE_TAG_WINDOW_MANAGER,
+                    TRACE_WAIT_FOR_ALL_WINDOWS_DRAWN_METHOD, /* cookie= */ 0);
             mWindowManagerInternal.waitForAllWindowsDrawn(() -> {
                 if (DEBUG_WAKEUP) Slog.i(TAG, "All windows ready for display: " + displayId);
                 mHandler.sendMessage(mHandler.obtainMessage(MSG_WINDOW_MANAGER_DRAWN_COMPLETE,
                         displayId, 0));
+
+                Trace.asyncTraceEnd(Trace.TRACE_TAG_WINDOW_MANAGER,
+                        TRACE_WAIT_FOR_ALL_WINDOWS_DRAWN_METHOD, /* cookie= */ 0);
             }, WAITING_FOR_DRAWN_TIMEOUT, displayId);
         }
     }

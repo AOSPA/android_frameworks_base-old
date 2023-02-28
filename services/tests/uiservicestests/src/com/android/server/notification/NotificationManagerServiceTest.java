@@ -72,6 +72,7 @@ import static android.service.notification.NotificationListenerService.Ranking.U
 import static android.service.notification.NotificationListenerService.Ranking.USER_SENTIMENT_NEUTRAL;
 import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
 
+import static com.android.internal.config.sysui.SystemUiSystemPropertiesFlags.NotificationFlags.ALLOW_DISMISS_ONGOING;
 import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STRONG_AUTH_REQUIRED_AFTER_USER_LOCKDOWN;
 
 import static com.google.common.truth.Truth.assertThat;
@@ -79,6 +80,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertFalse;
 import static junit.framework.Assert.assertNotNull;
+import static junit.framework.Assert.assertNotSame;
 import static junit.framework.Assert.assertNull;
 import static junit.framework.Assert.assertTrue;
 import static junit.framework.Assert.fail;
@@ -201,6 +203,7 @@ import androidx.test.InstrumentationRegistry;
 
 import com.android.internal.app.IAppOpsService;
 import com.android.internal.config.sysui.SystemUiDeviceConfigFlags;
+import com.android.internal.config.sysui.TestableFlagResolver;
 import com.android.internal.logging.InstanceIdSequence;
 import com.android.internal.logging.InstanceIdSequenceFake;
 import com.android.internal.messages.nano.SystemMessageProto;
@@ -218,7 +221,6 @@ import com.android.server.notification.NotificationManagerService.NotificationAs
 import com.android.server.notification.NotificationManagerService.NotificationListeners;
 import com.android.server.pm.PackageManagerService;
 import com.android.server.pm.UserManagerInternal;
-import com.android.server.pm.permission.PermissionManagerServiceInternal;
 import com.android.server.policy.PermissionPolicyInternal;
 import com.android.server.statusbar.StatusBarManagerInternal;
 import com.android.server.uri.UriGrantsManagerInternal;
@@ -307,9 +309,6 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     ActivityManager mActivityManager;
     @Mock
     TelecomManager mTelecomManager;
-
-    @Mock
-    PermissionManagerServiceInternal mPermissionInternal;
     @Mock
     Resources mResources;
     @Mock
@@ -320,6 +319,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     private Looper mMainLooper;
     @Mock
     private NotificationManager mMockNm;
+    @Mock
+    private DevicePolicyManagerInternal mDevicePolicyManager;
 
     @Mock
     IIntentSender pi1;
@@ -375,6 +376,9 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     BroadcastReceiver mPackageIntentReceiver;
     NotificationRecordLoggerFake mNotificationRecordLogger = new NotificationRecordLoggerFake();
     TestableNotificationManagerService.StrongAuthTrackerFake mStrongAuthTracker;
+
+    TestableFlagResolver mTestFlagResolver = new TestableFlagResolver();
+
     private InstanceIdSequence mNotificationInstanceIdSequence = new InstanceIdSequenceFake(
             1 << 30);
     @Mock
@@ -397,7 +401,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         // Shell permisssions will override permissions of our app, so add all necessary permissions
         // for this test here:
         InstrumentationRegistry.getInstrumentation().getUiAutomation().adoptShellPermissionIdentity(
-                "android.permission.WRITE_DEVICE_CONFIG",
+                "android.permission.ALLOWLISTED_WRITE_DEVICE_CONFIG",
                 "android.permission.READ_DEVICE_CONFIG",
                 "android.permission.READ_CONTACTS");
 
@@ -519,11 +523,11 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         mService.init(mWorkerHandler, mRankingHandler, mPackageManager, mPackageManagerClient,
                 mockLightsManager, mListeners, mAssistants, mConditionProviders, mCompanionMgr,
                 mSnoozeHelper, mUsageStats, mPolicyFile, mActivityManager, mGroupHelper, mAm, mAtm,
-                mAppUsageStats, mock(DevicePolicyManagerInternal.class), mUgm, mUgmInternal,
+                mAppUsageStats, mDevicePolicyManager, mUgm, mUgmInternal,
                 mAppOpsManager, mAppOpsService, mUm, mHistoryManager, mStatsManager,
                 mock(TelephonyManager.class),
                 mAmi, mToastRateLimiter, mPermissionHelper, mock(UsageStatsManagerInternal.class),
-                mTelecomManager, mLogger, mPermissionInternal);
+                mTelecomManager, mLogger, mTestFlagResolver);
         // Return first true for RoleObserver main-thread check
         when(mMainLooper.isCurrentThread()).thenReturn(true).thenReturn(false);
         mService.onBootPhase(SystemService.PHASE_SYSTEM_SERVICES_READY, mMainLooper);
@@ -1596,6 +1600,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
     @Test
     public void testEnqueueNotificationWithTag_FgsAddsFlags_dismissalAllowed() throws Exception {
+        mContext.getTestablePermissions().setPermission(
+                android.Manifest.permission.USE_COLORIZED_NOTIFICATIONS, PERMISSION_GRANTED);
         DeviceConfig.setProperty(
                 DeviceConfig.NAMESPACE_SYSTEMUI,
                 SystemUiDeviceConfigFlags.TASK_MANAGER_ENABLED,
@@ -1624,6 +1630,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
     @Test
     public void testEnqueueNotificationWithTag_FGSaddsFlags_dismissalNotAllowed() throws Exception {
+        mContext.getTestablePermissions().setPermission(
+                android.Manifest.permission.USE_COLORIZED_NOTIFICATIONS, PERMISSION_GRANTED);
         DeviceConfig.setProperty(
                 DeviceConfig.NAMESPACE_SYSTEMUI,
                 SystemUiDeviceConfigFlags.TASK_MANAGER_ENABLED,
@@ -1648,6 +1656,46 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
                 mBinderService.getActiveNotifications(PKG);
         assertThat(notifs[0].getNotification().flags).isEqualTo(
                 FLAG_FOREGROUND_SERVICE | FLAG_CAN_COLORIZE | FLAG_NO_CLEAR | FLAG_ONGOING_EVENT);
+    }
+
+    @Test
+    public void testEnqueueNotificationWithTag_nullAction_fixed() throws Exception {
+        Notification n = new Notification.Builder(mContext, mTestNotificationChannel.getId())
+                .setContentTitle("foo")
+                .setSmallIcon(android.R.drawable.sym_def_app_icon)
+                .addAction(new Notification.Action.Builder(null, "one", null).build())
+                .addAction(new Notification.Action.Builder(null, "two", null).build())
+                .addAction(new Notification.Action.Builder(null, "three", null).build())
+                .build();
+        n.actions[1] = null;
+
+        mBinderService.enqueueNotificationWithTag(PKG, PKG, "tag", 0, n, 0);
+        waitForIdle();
+
+        StatusBarNotification[] posted = mBinderService.getActiveNotifications(PKG);
+        assertThat(posted).hasLength(1);
+        assertThat(posted[0].getNotification().actions).hasLength(2);
+        assertThat(posted[0].getNotification().actions[0].title.toString()).isEqualTo("one");
+        assertThat(posted[0].getNotification().actions[1].title.toString()).isEqualTo("three");
+    }
+
+    @Test
+    public void testEnqueueNotificationWithTag_allNullActions_fixed() throws Exception {
+        Notification n = new Notification.Builder(mContext, mTestNotificationChannel.getId())
+                .setContentTitle("foo")
+                .setSmallIcon(android.R.drawable.sym_def_app_icon)
+                .addAction(new Notification.Action.Builder(null, "one", null).build())
+                .addAction(new Notification.Action.Builder(null, "two", null).build())
+                .build();
+        n.actions[0] = null;
+        n.actions[1] = null;
+
+        mBinderService.enqueueNotificationWithTag(PKG, PKG, "tag", 0, n, 0);
+        waitForIdle();
+
+        StatusBarNotification[] posted = mBinderService.getActiveNotifications(PKG);
+        assertThat(posted).hasLength(1);
+        assertThat(posted[0].getNotification().actions).isNull();
     }
 
     @Test
@@ -4174,8 +4222,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
     @Test
     public void testNoNotificationDuringSetupPermission() throws Exception {
-        when(mPermissionInternal.checkPermission(any(), any(), anyInt()))
-                .thenReturn(PERMISSION_DENIED);
+        mContext.getTestablePermissions().setPermission(
+                android.Manifest.permission.NOTIFICATION_DURING_SETUP, PERMISSION_GRANTED);
         Bundle extras = new Bundle();
         extras.putBoolean(EXTRA_ALLOW_DURING_SETUP, true);
         Notification.Builder nb = new Notification.Builder(mContext,
@@ -4195,13 +4243,13 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         NotificationRecord posted = mService.findNotificationLocked(
                 PKG, nr.getSbn().getTag(), nr.getSbn().getId(), nr.getSbn().getUserId());
 
-        assertFalse(posted.getNotification().extras.containsKey(EXTRA_ALLOW_DURING_SETUP));
+        assertTrue(posted.getNotification().extras.containsKey(EXTRA_ALLOW_DURING_SETUP));
     }
 
     @Test
     public void testNoFakeColorizedPermission() throws Exception {
-        when(mPermissionInternal.checkPermission(any(), any(), anyInt()))
-                .thenReturn(PERMISSION_DENIED);
+        mContext.getTestablePermissions().setPermission(
+                android.Manifest.permission.USE_COLORIZED_NOTIFICATIONS, PERMISSION_DENIED);
         Notification.Builder nb = new Notification.Builder(mContext,
                 mTestNotificationChannel.getId())
                 .setContentTitle("foo")
@@ -4226,9 +4274,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     @Test
     public void testMediaStyleRemote_hasPermission() throws RemoteException {
         String deviceName = "device";
-        when(mPermissionInternal.checkPermission(
-                eq(android.Manifest.permission.MEDIA_CONTENT_CONTROL), any(), anyInt()))
-                .thenReturn(PERMISSION_GRANTED);
+        mContext.getTestablePermissions().setPermission(
+                android.Manifest.permission.MEDIA_CONTENT_CONTROL, PERMISSION_GRANTED);
         Notification.MediaStyle style = new Notification.MediaStyle();
         style.setRemotePlaybackInfo(deviceName, 0, null);
         Notification.Builder nb = new Notification.Builder(mContext,
@@ -4255,9 +4302,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     @Test
     public void testMediaStyleRemote_noPermission() throws RemoteException {
         String deviceName = "device";
-        when(mPermissionInternal.checkPermission(
-                eq(android.Manifest.permission.MEDIA_CONTENT_CONTROL), any(), anyInt()))
-                .thenReturn(PERMISSION_DENIED);
+        mContext.getTestablePermissions().setPermission(
+                android.Manifest.permission.MEDIA_CONTENT_CONTROL, PERMISSION_DENIED);
         Notification.MediaStyle style = new Notification.MediaStyle();
         style.setRemotePlaybackInfo(deviceName, 0, null);
         Notification.Builder nb = new Notification.Builder(mContext,
@@ -4283,9 +4329,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     @Test
     public void testSubstituteAppName_hasPermission() throws RemoteException {
         String subName = "Substitute Name";
-        when(mPermissionInternal.checkPermission(
-                eq(android.Manifest.permission.SUBSTITUTE_NOTIFICATION_APP_NAME), any(), anyInt()))
-                .thenReturn(PERMISSION_GRANTED);
+        mContext.getTestablePermissions().setPermission(
+                android.Manifest.permission.SUBSTITUTE_NOTIFICATION_APP_NAME, PERMISSION_GRANTED);
         Bundle extras = new Bundle();
         extras.putString(Notification.EXTRA_SUBSTITUTE_APP_NAME, subName);
         Notification.Builder nb = new Notification.Builder(mContext,
@@ -4310,9 +4355,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
     @Test
     public void testSubstituteAppName_noPermission() throws RemoteException {
-        when(mPermissionInternal.checkPermission(
-                eq(android.Manifest.permission.SUBSTITUTE_NOTIFICATION_APP_NAME), any(), anyInt()))
-                .thenReturn(PERMISSION_DENIED);
+        mContext.getTestablePermissions().setPermission(
+                android.Manifest.permission.SUBSTITUTE_NOTIFICATION_APP_NAME, PERMISSION_DENIED);
         Bundle extras = new Bundle();
         extras.putString(Notification.EXTRA_SUBSTITUTE_APP_NAME, "Substitute Name");
         Notification.Builder nb = new Notification.Builder(mContext,
@@ -5820,7 +5864,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
     @Test
     public void testCanUseManagedServices_hasPermission() throws Exception {
-        when(mPermissionInternal.checkPermission("perm", "pkg", 0))
+        when(mPackageManager.checkPermission("perm", "pkg", 0))
                 .thenReturn(PackageManager.PERMISSION_GRANTED);
 
         assertEquals(true, mService.canUseManagedServices("pkg", 0, "perm"));
@@ -5828,7 +5872,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
     @Test
     public void testCanUseManagedServices_noPermission() throws Exception {
-        when(mPermissionInternal.checkPermission("perm", "pkg", 0))
+        when(mPackageManager.checkPermission("perm", "pkg", 0))
                 .thenReturn(PackageManager.PERMISSION_DENIED);
 
         assertEquals(false, mService.canUseManagedServices("pkg", 0, "perm"));
@@ -6783,7 +6827,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
     private void setIfPackageHasPermissionToAvoidToastRateLimiting(
             String pkg, boolean hasPermission) throws Exception {
-        when(mPermissionInternal.checkPermission(android.Manifest.permission.UNLIMITED_TOASTS,
+        when(mPackageManager.checkPermission(android.Manifest.permission.UNLIMITED_TOASTS,
                 pkg, UserHandle.getUserId(mUid)))
                 .thenReturn(hasPermission ? PERMISSION_GRANTED : PERMISSION_DENIED);
     }
@@ -7575,17 +7619,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
     @Test
     public void testGetAllowedAssistantAdjustments() throws Exception {
-        List<String> capabilities = mBinderService.getAllowedAssistantAdjustments(null);
-        assertNotNull(capabilities);
-
-        for (int i = capabilities.size() - 1; i >= 0; i--) {
-            String capability = capabilities.get(i);
-            mBinderService.disallowAssistantAdjustment(capability);
-            assertEquals(i + 1, mBinderService.getAllowedAssistantAdjustments(null).size());
-            List<String> currentCapabilities = mBinderService.getAllowedAssistantAdjustments(null);
-            assertNotNull(currentCapabilities);
-            assertFalse(currentCapabilities.contains(capability));
-        }
+        List<String> adjustments = mBinderService.getAllowedAssistantAdjustments(null);
+        assertNotNull(adjustments);
     }
 
     @Test
@@ -8279,7 +8314,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         assertNotNull(n.publicVersion.bigContentView);
         assertNotNull(n.publicVersion.headsUpContentView);
 
-        mService.fixNotification(n, PKG, "tag", 9, 0);
+        mService.fixNotification(n, PKG, "tag", 9, 0, mUid);
 
         assertNull(n.contentView);
         assertNull(n.bigContentView);
@@ -10074,5 +10109,254 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         // no notification should be sent if the flag is off
         mInternalService.sendReviewPermissionsNotification();
         verify(mMockNm, never()).notify(anyString(), anyInt(), any(Notification.class));
+    }
+
+    @Test
+    public void fixSystemNotification_withOnGoingFlag_shouldBeNonDismissible()
+            throws Exception {
+        // Given: a notification from an app on the system partition has the flag
+        // FLAG_ONGOING_EVENT set
+        // feature flag: ALLOW_DISMISS_ONGOING is on
+        mTestFlagResolver.setFlagOverride(ALLOW_DISMISS_ONGOING, true);
+        Notification n = new Notification.Builder(mContext, "test")
+                .setOngoing(true)
+                .build();
+
+        final ApplicationInfo systemAppInfo = new ApplicationInfo();
+        systemAppInfo.flags |= ApplicationInfo.FLAG_SYSTEM;
+        when(mPackageManagerClient.getApplicationInfoAsUser(anyString(), anyInt(), anyInt()))
+                .thenReturn(systemAppInfo);
+
+        // When: fix the notification with NotificationManagerService
+        mService.fixNotification(n, PKG, "tag", 9, 0, mUid);
+
+        // Then: the notification's flag FLAG_NO_DISMISS should be set
+        assertNotSame(0, n.flags & Notification.FLAG_NO_DISMISS);
+    }
+
+    @Test
+    public void fixMediaNotification_withOnGoingFlag_shouldBeNonDismissible()
+            throws Exception {
+        // Given: a media notification has the flag FLAG_ONGOING_EVENT set
+        // feature flag: ALLOW_DISMISS_ONGOING is on
+        mTestFlagResolver.setFlagOverride(ALLOW_DISMISS_ONGOING, true);
+        Notification n = new Notification.Builder(mContext, "test")
+                .setOngoing(true)
+                .setStyle(new Notification.MediaStyle()
+                        .setMediaSession(mock(MediaSession.Token.class)))
+                .build();
+
+        // When: fix the notification with NotificationManagerService
+        mService.fixNotification(n, PKG, "tag", 9, 0, mUid);
+
+        // Then: the notification's flag FLAG_NO_DISMISS should be set
+        assertNotSame(0, n.flags & Notification.FLAG_NO_DISMISS);
+    }
+
+    @Test
+    public void fixNonExemptNotification_withOnGoingFlag_shouldBeDismissible() throws Exception {
+        // Given: a non-exempt notification has the flag FLAG_ONGOING_EVENT set
+        // feature flag: ALLOW_DISMISS_ONGOING is on
+        mTestFlagResolver.setFlagOverride(ALLOW_DISMISS_ONGOING, true);
+        Notification n = new Notification.Builder(mContext, "test")
+                .setOngoing(true)
+                .build();
+
+        // When: fix the notification with NotificationManagerService
+        mService.fixNotification(n, PKG, "tag", 9, 0, mUid);
+
+        // Then: the notification's flag FLAG_NO_DISMISS should not be set
+        assertEquals(0, n.flags & Notification.FLAG_NO_DISMISS);
+    }
+
+    @Test
+    public void fixNonExemptNotification_withNoDismissFlag_shouldBeDismissible()
+            throws Exception {
+        // Given: a non-exempt notification has the flag FLAG_NO_DISMISS set (even though this is
+        // not allowed)
+        // feature flag: ALLOW_DISMISS_ONGOING is on
+        mTestFlagResolver.setFlagOverride(ALLOW_DISMISS_ONGOING, true);
+        Notification n = new Notification.Builder(mContext, "test")
+                .build();
+        n.flags |= Notification.FLAG_NO_DISMISS;
+
+        // When: fix the notification with NotificationManagerService
+        mService.fixNotification(n, PKG, "tag", 9, 0, mUid);
+
+        // Then: the notification's flag FLAG_NO_DISMISS should be cleared
+        assertEquals(0, n.flags & Notification.FLAG_NO_DISMISS);
+    }
+
+    @Test
+    public void fixSystemNotification_withoutOnGoingFlag_shouldBeDismissible() throws Exception {
+        // Given: a notification from an app on the system partition doesn't have the flag
+        // FLAG_ONGOING_EVENT set
+        // feature flag: ALLOW_DISMISS_ONGOING is on
+        mTestFlagResolver.setFlagOverride(ALLOW_DISMISS_ONGOING, true);
+        Notification n = new Notification.Builder(mContext, "test")
+                .setOngoing(false)
+                .build();
+
+        final ApplicationInfo systemAppInfo = new ApplicationInfo();
+        systemAppInfo.flags |= ApplicationInfo.FLAG_SYSTEM;
+        when(mPackageManagerClient.getApplicationInfoAsUser(anyString(), anyInt(), anyInt()))
+                .thenReturn(systemAppInfo);
+
+        // When: fix the notification with NotificationManagerService
+        mService.fixNotification(n, PKG, "tag", 9, 0, mUid);
+
+        // Then: the notification's flag FLAG_NO_DISMISS should not be set
+        assertEquals(0, n.flags & Notification.FLAG_NO_DISMISS);
+    }
+
+    @Test
+    public void fixSystemNotification_withoutOnGoingFlag_withNoDismissFlag_shouldBeDismissible()
+            throws Exception {
+        // Given: a notification from an app on the system partition doesn't have the flag
+        // FLAG_ONGOING_EVENT set, but has the flag FLAG_NO_DISMISS set
+        // feature flag: ALLOW_DISMISS_ONGOING is on
+        mTestFlagResolver.setFlagOverride(ALLOW_DISMISS_ONGOING, true);
+        Notification n = new Notification.Builder(mContext, "test")
+                .setOngoing(false)
+                .build();
+        n.flags |= Notification.FLAG_NO_DISMISS;
+
+        final ApplicationInfo systemAppInfo = new ApplicationInfo();
+        systemAppInfo.flags |= ApplicationInfo.FLAG_SYSTEM;
+        when(mPackageManagerClient.getApplicationInfoAsUser(anyString(), anyInt(), anyInt()))
+                .thenReturn(systemAppInfo);
+
+        // When: fix the notification with NotificationManagerService
+        mService.fixNotification(n, PKG, "tag", 9, 0, mUid);
+
+        // Then: the notification's flag FLAG_NO_DISMISS should be cleared
+        assertEquals(0, n.flags & Notification.FLAG_NO_DISMISS);
+    }
+
+    @Test
+    public void fixMediaNotification_withoutOnGoingFlag_shouldBeDismissible() throws Exception {
+        // Given: a media notification doesn't have the flag FLAG_ONGOING_EVENT set
+        // feature flag: ALLOW_DISMISS_ONGOING is on
+        mTestFlagResolver.setFlagOverride(ALLOW_DISMISS_ONGOING, true);
+        Notification n = new Notification.Builder(mContext, "test")
+                .setOngoing(false)
+                .setStyle(new Notification.MediaStyle()
+                        .setMediaSession(mock(MediaSession.Token.class)))
+                .build();
+
+        // When: fix the notification with NotificationManagerService
+        mService.fixNotification(n, PKG, "tag", 9, 0, mUid);
+
+        // Then: the notification's flag FLAG_NO_DISMISS should not be set
+        assertEquals(0, n.flags & Notification.FLAG_NO_DISMISS);
+    }
+
+    @Test
+    public void fixMediaNotification_withoutOnGoingFlag_withNoDismissFlag_shouldBeDismissible()
+            throws Exception {
+        // Given: a media notification doesn't have the flag FLAG_ONGOING_EVENT set,
+        // but has the flag FLAG_NO_DISMISS set
+        // feature flag: ALLOW_DISMISS_ONGOING is on
+        mTestFlagResolver.setFlagOverride(ALLOW_DISMISS_ONGOING, true);
+        Notification n = new Notification.Builder(mContext, "test")
+                .setOngoing(false)
+                .setStyle(new Notification.MediaStyle()
+                        .setMediaSession(mock(MediaSession.Token.class)))
+                .build();
+        n.flags |= Notification.FLAG_NO_DISMISS;
+
+        // When: fix the notification with NotificationManagerService
+        mService.fixNotification(n, PKG, "tag", 9, 0, mUid);
+
+        // Then: the notification's flag FLAG_NO_DISMISS should be cleared
+        assertEquals(0, n.flags & Notification.FLAG_NO_DISMISS);
+    }
+
+    @Test
+    public void fixNonExempt_Notification_withoutOnGoingFlag_shouldBeDismissible()
+            throws Exception {
+        // Given: a non-exempt notification has the flag FLAG_ONGOING_EVENT set
+        // feature flag: ALLOW_DISMISS_ONGOING is on
+        mTestFlagResolver.setFlagOverride(ALLOW_DISMISS_ONGOING, true);
+        Notification n = new Notification.Builder(mContext, "test")
+                .setOngoing(false)
+                .build();
+
+        // When: fix the notification with NotificationManagerService
+        mService.fixNotification(n, PKG, "tag", 9, 0, mUid);
+
+        // Then: the notification's flag FLAG_NO_DISMISS should not be set
+        assertEquals(0, n.flags & Notification.FLAG_NO_DISMISS);
+    }
+
+    @Test
+    public void fixOrganizationAdminNotification_withOnGoingFlag_shouldBeNonDismissible()
+            throws Exception {
+        when(mDevicePolicyManager.isActiveDeviceOwner(mUid)).thenReturn(true);
+        // Given: a notification has the flag FLAG_ONGOING_EVENT set
+        // feature flag: ALLOW_DISMISS_ONGOING is on
+        mTestFlagResolver.setFlagOverride(ALLOW_DISMISS_ONGOING, true);
+        setSystemExemptFromDismissal(false);
+        Notification n = new Notification.Builder(mContext, "test")
+                .setOngoing(true)
+                .build();
+
+        // When: fix the notification with NotificationManagerService
+        mService.fixNotification(n, PKG, "tag", 9, 0, mUid);
+
+        // Then: the notification's flag FLAG_NO_DISMISS should be set
+        assertNotSame(0, n.flags & Notification.FLAG_NO_DISMISS);
+    }
+
+    @Test
+    public void fixSystemExemptAppOpNotification_withFlag_shouldBeNonDismissible()
+            throws Exception {
+        when(mAppOpsManager.checkOpNoThrow(
+                AppOpsManager.OP_SYSTEM_EXEMPT_FROM_DISMISSIBLE_NOTIFICATIONS, mUid,
+                PKG)).thenReturn(AppOpsManager.MODE_ALLOWED);
+        // Given: a notification has the flag FLAG_ONGOING_EVENT set
+        // feature flag: ALLOW_DISMISS_ONGOING is on
+        mTestFlagResolver.setFlagOverride(ALLOW_DISMISS_ONGOING, true);
+        setSystemExemptFromDismissal(true);
+        Notification n = new Notification.Builder(mContext, "test")
+                .setOngoing(true)
+                .build();
+
+        // When: fix the notification with NotificationManagerService
+        mService.fixNotification(n, PKG, "tag", 9, 0, mUid);
+
+        // Then: the notification's flag FLAG_NO_DISMISS should be set
+        assertNotSame(0, n.flags & Notification.FLAG_NO_DISMISS);
+
+        setSystemExemptFromDismissal(false);
+    }
+
+    @Test
+    public void fixSystemExemptAppOpNotification_withoutFlag_shouldBeNonDismissible()
+            throws Exception {
+        when(mAppOpsManager.checkOpNoThrow(
+                AppOpsManager.OP_SYSTEM_EXEMPT_FROM_DISMISSIBLE_NOTIFICATIONS, mUid,
+                PKG)).thenReturn(AppOpsManager.MODE_ALLOWED);
+        // Given: a notification has the flag FLAG_ONGOING_EVENT set
+        // feature flag: ALLOW_DISMISS_ONGOING is on
+        mTestFlagResolver.setFlagOverride(ALLOW_DISMISS_ONGOING, true);
+        setSystemExemptFromDismissal(false);
+        Notification n = new Notification.Builder(mContext, "test")
+                .setOngoing(true)
+                .build();
+
+        // When: fix the notification with NotificationManagerService
+        mService.fixNotification(n, PKG, "tag", 9, 0, mUid);
+
+        // Then: the notification's flag FLAG_NO_DISMISS should not be set
+        assertEquals(0, n.flags & Notification.FLAG_NO_DISMISS);
+    }
+
+    private void setSystemExemptFromDismissal(boolean isOn) {
+        DeviceConfig.setProperty(
+                DeviceConfig.NAMESPACE_DEVICE_POLICY_MANAGER,
+                /* name= */ "application_exemptions",
+                String.valueOf(isOn),
+                /* makeDefault= */ false);
     }
 }

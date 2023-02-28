@@ -39,6 +39,8 @@ import android.util.ArraySet;
 import android.util.DisplayMetrics;
 import android.util.proto.ProtoOutputStream;
 
+import com.android.internal.display.BrightnessSynchronizer;
+
 import java.util.Arrays;
 import java.util.Objects;
 
@@ -337,6 +339,16 @@ public final class DisplayInfo implements Parcelable {
     @Nullable
     public DisplayShape displayShape;
 
+    @Nullable
+    public SurfaceControl.RefreshRateRange layoutLimitedRefreshRate;
+
+    /**
+     * The current hdr/sdr ratio for the display. If the display doesn't support hdr/sdr ratio
+     * queries then this is NaN
+     */
+    public float hdrSdrRatio = Float.NaN;
+
+
     public static final @android.annotation.NonNull Creator<DisplayInfo> CREATOR = new Creator<DisplayInfo>() {
         @Override
         public DisplayInfo createFromParcel(Parcel source) {
@@ -411,7 +423,9 @@ public final class DisplayInfo implements Parcelable {
                 && brightnessDefault == other.brightnessDefault
                 && Objects.equals(roundedCorners, other.roundedCorners)
                 && installOrientation == other.installOrientation
-                && Objects.equals(displayShape, other.displayShape);
+                && Objects.equals(displayShape, other.displayShape)
+                && Objects.equals(layoutLimitedRefreshRate, other.layoutLimitedRefreshRate)
+                && BrightnessSynchronizer.floatEquals(hdrSdrRatio, other.hdrSdrRatio);
     }
 
     @Override
@@ -466,6 +480,8 @@ public final class DisplayInfo implements Parcelable {
         roundedCorners = other.roundedCorners;
         installOrientation = other.installOrientation;
         displayShape = other.displayShape;
+        layoutLimitedRefreshRate = other.layoutLimitedRefreshRate;
+        hdrSdrRatio = other.hdrSdrRatio;
     }
 
     public void readFromParcel(Parcel source) {
@@ -526,6 +542,8 @@ public final class DisplayInfo implements Parcelable {
         }
         installOrientation = source.readInt();
         displayShape = source.readTypedObject(DisplayShape.CREATOR);
+        layoutLimitedRefreshRate = source.readTypedObject(SurfaceControl.RefreshRateRange.CREATOR);
+        hdrSdrRatio = source.readFloat();
     }
 
     @Override
@@ -584,6 +602,8 @@ public final class DisplayInfo implements Parcelable {
         }
         dest.writeInt(installOrientation);
         dest.writeTypedObject(displayShape, flags);
+        dest.writeTypedObject(layoutLimitedRefreshRate, flags);
+        dest.writeFloat(hdrSdrRatio);
     }
 
     @Override
@@ -758,7 +778,7 @@ public final class DisplayInfo implements Parcelable {
         sb.append(name);
         sb.append("\", displayId ");
         sb.append(displayId);
-        sb.append("\", displayGroupId ");
+        sb.append(", displayGroupId ");
         sb.append(displayGroupId);
         sb.append(flagsToString(flags));
         sb.append(", real ");
@@ -843,6 +863,14 @@ public final class DisplayInfo implements Parcelable {
         sb.append(brightnessDefault);
         sb.append(", installOrientation ");
         sb.append(Surface.rotationToString(installOrientation));
+        sb.append(", layoutLimitedRefreshRate ");
+        sb.append(layoutLimitedRefreshRate);
+        sb.append(", hdrSdrRatio ");
+        if (Float.isNaN(hdrSdrRatio)) {
+            sb.append("not_available");
+        } else {
+            sb.append(hdrSdrRatio);
+        }
         sb.append("}");
         return sb.toString();
     }
@@ -905,6 +933,9 @@ public final class DisplayInfo implements Parcelable {
         }
         if ((flags & Display.FLAG_TOUCH_FEEDBACK_DISABLED) != 0) {
             result.append(", FLAG_TOUCH_FEEDBACK_DISABLED");
+        }
+        if ((flags & Display.FLAG_REAR) != 0) {
+            result.append(", FLAG_REAR_DISPLAY");
         }
         return result.toString();
     }

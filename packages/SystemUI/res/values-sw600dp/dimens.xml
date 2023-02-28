@@ -16,8 +16,9 @@
 */
 -->
 <resources>
-    <!-- Height of the status bar header bar when on Keyguard -->
-    <dimen name="status_bar_header_height_keyguard">60dp</dimen>
+    <!-- Height of the status bar header bar when on Keyguard.
+         On large screens should be the same as the regular status bar. -->
+    <dimen name="status_bar_header_height_keyguard">@dimen/status_bar_height</dimen>
 
     <!-- Size of user icon + frame in the qs user picker (incl. frame) -->
     <dimen name="qs_framed_avatar_size">60dp</dimen>
@@ -50,9 +51,6 @@
 
     <!-- Text size for user name in user switcher -->
     <dimen name="kg_user_switcher_text_size">18sp</dimen>
-
-    <dimen name="controls_header_bottom_margin">12dp</dimen>
-    <dimen name="controls_top_margin">24dp</dimen>
 
     <dimen name="global_actions_grid_item_layout_height">80dp</dimen>
 

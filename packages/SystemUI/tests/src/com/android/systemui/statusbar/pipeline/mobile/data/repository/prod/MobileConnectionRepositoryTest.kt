@@ -17,15 +17,13 @@
 package com.android.systemui.statusbar.pipeline.mobile.data.repository.prod
 
 import android.content.Intent
-import android.os.UserHandle
-import android.provider.Settings
+import android.telephony.CarrierConfigManager.KEY_INFLATE_SIGNAL_STRENGTH_BOOL
 import android.telephony.CellSignalStrengthCdma
 import android.telephony.NetworkRegistrationInfo
 import android.telephony.ServiceState
 import android.telephony.ServiceState.STATE_IN_SERVICE
 import android.telephony.ServiceState.STATE_OUT_OF_SERVICE
 import android.telephony.SignalStrength
-import android.telephony.SubscriptionInfo
 import android.telephony.TelephonyCallback
 import android.telephony.TelephonyCallback.DataActivityListener
 import android.telephony.TelephonyCallback.ServiceStateListener
@@ -41,6 +39,8 @@ import android.telephony.TelephonyManager.DATA_CONNECTED
 import android.telephony.TelephonyManager.DATA_CONNECTING
 import android.telephony.TelephonyManager.DATA_DISCONNECTED
 import android.telephony.TelephonyManager.DATA_DISCONNECTING
+import android.telephony.TelephonyManager.DATA_HANDOVER_IN_PROGRESS
+import android.telephony.TelephonyManager.DATA_SUSPENDED
 import android.telephony.TelephonyManager.DATA_UNKNOWN
 import android.telephony.TelephonyManager.ERI_OFF
 import android.telephony.TelephonyManager.ERI_ON
@@ -59,6 +59,9 @@ import com.android.systemui.statusbar.pipeline.mobile.data.model.NetworkNameMode
 import com.android.systemui.statusbar.pipeline.mobile.data.model.ResolvedNetworkType.DefaultNetworkType
 import com.android.systemui.statusbar.pipeline.mobile.data.model.ResolvedNetworkType.OverrideNetworkType
 import com.android.systemui.statusbar.pipeline.mobile.data.model.ResolvedNetworkType.UnknownNetworkType
+import com.android.systemui.statusbar.pipeline.mobile.data.model.SystemUiCarrierConfig
+import com.android.systemui.statusbar.pipeline.mobile.data.model.SystemUiCarrierConfigTest.Companion.configWithOverride
+import com.android.systemui.statusbar.pipeline.mobile.data.model.SystemUiCarrierConfigTest.Companion.createTestConfig
 import com.android.systemui.statusbar.pipeline.mobile.data.model.toNetworkNameModel
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.FakeMobileConnectionsRepository
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConnectionRepository.Companion.DEFAULT_NUM_LEVELS
@@ -67,10 +70,8 @@ import com.android.systemui.statusbar.pipeline.shared.ConnectivityPipelineLogger
 import com.android.systemui.statusbar.pipeline.shared.data.model.DataActivityModel
 import com.android.systemui.statusbar.pipeline.shared.data.model.toMobileDataActivityModel
 import com.android.systemui.util.mockito.any
-import com.android.systemui.util.mockito.argumentCaptor
 import com.android.systemui.util.mockito.mock
 import com.android.systemui.util.mockito.whenever
-import com.android.systemui.util.settings.FakeSettings
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -83,7 +84,6 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.mockito.Mock
-import org.mockito.Mockito
 import org.mockito.MockitoAnnotations
 
 @Suppress("EXPERIMENTAL_IS_NOT_ENABLED")
@@ -99,12 +99,15 @@ class MobileConnectionRepositoryTest : SysuiTestCase() {
 
     private val scope = CoroutineScope(IMMEDIATE)
     private val mobileMappings = FakeMobileMappingsProxy()
-    private val globalSettings = FakeSettings()
+    private val systemUiCarrierConfig =
+        SystemUiCarrierConfig(
+            SUB_1_ID,
+            createTestConfig(),
+        )
 
     @Before
     fun setUp() {
         MockitoAnnotations.initMocks(this)
-        globalSettings.userId = UserHandle.USER_ALL
         whenever(telephonyManager.subscriptionId).thenReturn(SUB_1_ID)
 
         connectionsRepo = FakeMobileConnectionsRepository(mobileMappings, tableLogger)
@@ -116,9 +119,8 @@ class MobileConnectionRepositoryTest : SysuiTestCase() {
                 DEFAULT_NAME,
                 SEP,
                 telephonyManager,
-                globalSettings,
+                systemUiCarrierConfig,
                 fakeBroadcastDispatcher,
-                connectionsRepo.globalMobileDataSettingChangedEvent,
                 mobileMappings,
                 IMMEDIATE,
                 logger,
@@ -255,6 +257,37 @@ class MobileConnectionRepositoryTest : SysuiTestCase() {
         }
 
     @Test
+    fun testFlowForSubId_dataConnectionState_suspended() =
+        runBlocking(IMMEDIATE) {
+            var latest: MobileConnectionModel? = null
+            val job = underTest.connectionInfo.onEach { latest = it }.launchIn(this)
+
+            val callback =
+                getTelephonyCallbackForType<TelephonyCallback.DataConnectionStateListener>()
+            callback.onDataConnectionStateChanged(DATA_SUSPENDED, 200 /* unused */)
+
+            assertThat(latest?.dataConnectionState).isEqualTo(DataConnectionState.Suspended)
+
+            job.cancel()
+        }
+
+    @Test
+    fun testFlowForSubId_dataConnectionState_handoverInProgress() =
+        runBlocking(IMMEDIATE) {
+            var latest: MobileConnectionModel? = null
+            val job = underTest.connectionInfo.onEach { latest = it }.launchIn(this)
+
+            val callback =
+                getTelephonyCallbackForType<TelephonyCallback.DataConnectionStateListener>()
+            callback.onDataConnectionStateChanged(DATA_HANDOVER_IN_PROGRESS, 200 /* unused */)
+
+            assertThat(latest?.dataConnectionState)
+                .isEqualTo(DataConnectionState.HandoverInProgress)
+
+            job.cancel()
+        }
+
+    @Test
     fun testFlowForSubId_dataConnectionState_unknown() =
         runBlocking(IMMEDIATE) {
             var latest: MobileConnectionModel? = null
@@ -265,6 +298,21 @@ class MobileConnectionRepositoryTest : SysuiTestCase() {
             callback.onDataConnectionStateChanged(DATA_UNKNOWN, 200 /* unused */)
 
             assertThat(latest?.dataConnectionState).isEqualTo(DataConnectionState.Unknown)
+
+            job.cancel()
+        }
+
+    @Test
+    fun testFlowForSubId_dataConnectionState_invalid() =
+        runBlocking(IMMEDIATE) {
+            var latest: MobileConnectionModel? = null
+            val job = underTest.connectionInfo.onEach { latest = it }.launchIn(this)
+
+            val callback =
+                getTelephonyCallbackForType<TelephonyCallback.DataConnectionStateListener>()
+            callback.onDataConnectionStateChanged(45, 200 /* unused */)
+
+            assertThat(latest?.dataConnectionState).isEqualTo(DataConnectionState.Invalid)
 
             job.cancel()
         }
@@ -352,52 +400,26 @@ class MobileConnectionRepositoryTest : SysuiTestCase() {
     @Test
     fun dataEnabled_initial_false() =
         runBlocking(IMMEDIATE) {
-            whenever(telephonyManager.isDataConnectionAllowed).thenReturn(true)
-
-            assertThat(underTest.dataEnabled.value).isFalse()
-        }
-
-    @Test
-    fun dataEnabled_isEnabled_true() =
-        runBlocking(IMMEDIATE) {
-            whenever(telephonyManager.isDataConnectionAllowed).thenReturn(true)
-            val job = underTest.dataEnabled.launchIn(this)
-
-            assertThat(underTest.dataEnabled.value).isTrue()
-
-            job.cancel()
-        }
-
-    @Test
-    fun dataEnabled_isDisabled() =
-        runBlocking(IMMEDIATE) {
             whenever(telephonyManager.isDataConnectionAllowed).thenReturn(false)
-            val job = underTest.dataEnabled.launchIn(this)
 
             assertThat(underTest.dataEnabled.value).isFalse()
-
-            job.cancel()
         }
 
     @Test
-    fun isDataConnectionAllowed_subIdSettingUpdate_valueUpdated() =
+    fun `is data enabled - tracks telephony callback`() =
         runBlocking(IMMEDIATE) {
-            val subIdSettingName = "${Settings.Global.MOBILE_DATA}$SUB_1_ID"
-
             var latest: Boolean? = null
             val job = underTest.dataEnabled.onEach { latest = it }.launchIn(this)
 
-            // We don't read the setting directly, we query telephony when changes happen
             whenever(telephonyManager.isDataConnectionAllowed).thenReturn(false)
-            globalSettings.putInt(subIdSettingName, 0)
-            assertThat(latest).isFalse()
+            assertThat(underTest.dataEnabled.value).isFalse()
 
-            whenever(telephonyManager.isDataConnectionAllowed).thenReturn(true)
-            globalSettings.putInt(subIdSettingName, 1)
+            val callback = getTelephonyCallbackForType<TelephonyCallback.DataEnabledListener>()
+
+            callback.onDataEnabledChanged(true, 1)
             assertThat(latest).isTrue()
 
-            whenever(telephonyManager.isDataConnectionAllowed).thenReturn(false)
-            globalSettings.putInt(subIdSettingName, 0)
+            callback.onDataEnabledChanged(false, 1)
             assertThat(latest).isFalse()
 
             job.cancel()
@@ -418,8 +440,6 @@ class MobileConnectionRepositoryTest : SysuiTestCase() {
     fun `roaming - cdma - queries telephony manager`() =
         runBlocking(IMMEDIATE) {
             var latest: Boolean? = null
-            // Start the telephony collection job so that cdmaRoaming starts updating
-            val telephonyJob = underTest.connectionInfo.launchIn(this)
             val job = underTest.cdmaRoaming.onEach { latest = it }.launchIn(this)
 
             val cb = getTelephonyCallbackForType<ServiceStateListener>()
@@ -439,7 +459,6 @@ class MobileConnectionRepositoryTest : SysuiTestCase() {
 
             assertThat(latest).isTrue()
 
-            telephonyJob.cancel()
             job.cancel()
         }
 
@@ -536,15 +555,50 @@ class MobileConnectionRepositoryTest : SysuiTestCase() {
         }
 
     @Test
-    fun `network name - broadcast not for this sub id - returns default`() =
+    fun `network name - broadcast not for this sub id - keeps old value`() =
         runBlocking(IMMEDIATE) {
             var latest: NetworkNameModel? = null
             val job = underTest.networkName.onEach { latest = it }.launchIn(this)
 
-            val intent = spnIntent(subId = 101)
-
+            val intent = spnIntent()
             fakeBroadcastDispatcher.registeredReceivers.forEach { receiver ->
                 receiver.onReceive(context, intent)
+            }
+            assertThat(latest).isEqualTo(intent.toNetworkNameModel(SEP))
+
+            // WHEN an intent with a different subId is sent
+            val wrongSubIntent = spnIntent(subId = 101)
+
+            fakeBroadcastDispatcher.registeredReceivers.forEach { receiver ->
+                receiver.onReceive(context, wrongSubIntent)
+            }
+
+            // THEN the previous intent's name is still used
+            assertThat(latest).isEqualTo(intent.toNetworkNameModel(SEP))
+
+            job.cancel()
+        }
+
+    @Test
+    fun `network name - broadcast has no data - updates to default`() =
+        runBlocking(IMMEDIATE) {
+            var latest: NetworkNameModel? = null
+            val job = underTest.networkName.onEach { latest = it }.launchIn(this)
+
+            val intent = spnIntent()
+            fakeBroadcastDispatcher.registeredReceivers.forEach { receiver ->
+                receiver.onReceive(context, intent)
+            }
+            assertThat(latest).isEqualTo(intent.toNetworkNameModel(SEP))
+
+            val intentWithoutInfo =
+                spnIntent(
+                    showSpn = false,
+                    showPlmn = false,
+                )
+
+            fakeBroadcastDispatcher.registeredReceivers.forEach { receiver ->
+                receiver.onReceive(context, intentWithoutInfo)
             }
 
             assertThat(latest).isEqualTo(DEFAULT_NAME)
@@ -553,7 +607,7 @@ class MobileConnectionRepositoryTest : SysuiTestCase() {
         }
 
     @Test
-    fun `network name - operatorAlphaShort - tracked`() =
+    fun `operatorAlphaShort - tracked`() =
         runBlocking(IMMEDIATE) {
             var latest: String? = null
 
@@ -625,16 +679,31 @@ class MobileConnectionRepositoryTest : SysuiTestCase() {
             job.cancel()
         }
 
-    private fun getTelephonyCallbacks(): List<TelephonyCallback> {
-        val callbackCaptor = argumentCaptor<TelephonyCallback>()
-        Mockito.verify(telephonyManager).registerTelephonyCallback(any(), callbackCaptor.capture())
-        return callbackCaptor.allValues
-    }
+    @Test
+    fun `number of levels - uses carrier config`() =
+        runBlocking(IMMEDIATE) {
+            var latest: Int? = null
+            val job = underTest.numberOfLevels.onEach { latest = it }.launchIn(this)
+
+            assertThat(latest).isEqualTo(DEFAULT_NUM_LEVELS)
+
+            systemUiCarrierConfig.processNewCarrierConfig(
+                configWithOverride(KEY_INFLATE_SIGNAL_STRENGTH_BOOL, true)
+            )
+
+            assertThat(latest).isEqualTo(DEFAULT_NUM_LEVELS + 1)
+
+            systemUiCarrierConfig.processNewCarrierConfig(
+                configWithOverride(KEY_INFLATE_SIGNAL_STRENGTH_BOOL, false)
+            )
+
+            assertThat(latest).isEqualTo(DEFAULT_NUM_LEVELS)
+
+            job.cancel()
+        }
 
     private inline fun <reified T> getTelephonyCallbackForType(): T {
-        val cbs = getTelephonyCallbacks().filterIsInstance<T>()
-        assertThat(cbs.size).isEqualTo(1)
-        return cbs[0]
+        return MobileTelephonyHelpers.getTelephonyCallbackForType(telephonyManager)
     }
 
     /** Convenience constructor for SignalStrength */
@@ -668,8 +737,6 @@ class MobileConnectionRepositoryTest : SysuiTestCase() {
     companion object {
         private val IMMEDIATE = Dispatchers.Main.immediate
         private const val SUB_1_ID = 1
-        private val SUB_1 =
-            mock<SubscriptionInfo>().also { whenever(it.subscriptionId).thenReturn(SUB_1_ID) }
 
         private val DEFAULT_NAME = NetworkNameModel.Default("default name")
         private const val SEP = "-"

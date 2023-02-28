@@ -1103,6 +1103,17 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
     public static final long ALWAYS_SANDBOX_DISPLAY_APIS = 185004937L; // buganizer id
 
     /**
+     * This change id excludes the packages it is applied to from ignoreOrientationRequest behaviour
+     * that can be enabled by the device manufacturers for the com.android.server.wm.DisplayArea
+     * or for the whole display.
+     * @hide
+     */
+    @ChangeId
+    @Overridable
+    @Disabled
+    public static final long OVERRIDE_RESPECT_REQUESTED_ORIENTATION = 236283604L; // buganizer id
+
+    /**
      * This change id excludes the packages it is applied to from the camera compat force rotation
      * treatment. See com.android.server.wm.DisplayRotationCompatPolicy for context.
      * @hide
@@ -1283,6 +1294,18 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
     @Disabled
     @Overridable
     public static final long OVERRIDE_ANY_ORIENTATION = 265464455L;
+
+    /**
+     * When enabled, activates OVERRIDE_LANDSCAPE_ORIENTATION_TO_REVERSE_LANDSCAPE,
+     * OVERRIDE_UNDEFINED_ORIENTATION_TO_NOSENSOR and OVERRIDE_UNDEFINED_ORIENTATION_TO_PORTRAIT
+     * only when an app is connected to the camera. See
+     * com.android.server.wm.DisplayRotationCompatPolicy for more context.
+     * @hide
+     */
+    @ChangeId
+    @Disabled
+    @Overridable
+    public static final long OVERRIDE_ORIENTATION_ONLY_FOR_CAMERA = 265456536L;
 
     /**
      * This override fixes display orientation to landscape natural orientation when a task is

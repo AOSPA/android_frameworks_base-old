@@ -3938,13 +3938,12 @@ public class CarrierConfigManager {
      * NR_SA - NR SA is unmetered for sub-6 frequencies
      * NR_SA_MMWAVE - NR SA is unmetered for mmwave frequencies
      *
-     * Note that this config only applies if an unmetered SubscriptionPlan is set via
-     * {@link SubscriptionManager#setSubscriptionPlans(int, List)} or an unmetered override is set
+     * Note that this config only applies if an unmetered SubscriptionPlan is set via {@link
+     * SubscriptionManager#setSubscriptionPlans(int, List, long)} or an unmetered override is set
      * via {@link SubscriptionManager#setSubscriptionOverrideUnmetered(int, boolean, int[], long)}
      * or {@link SubscriptionManager#setSubscriptionOverrideUnmetered(int, boolean, long)}.
      * If neither SubscriptionPlans nor an override are set, then no network types can be unmetered
      * regardless of the value of this config.
-     * TODO: remove other unmetered keys and replace with this
      * @hide
      */
     public static final String KEY_UNMETERED_NETWORK_TYPES_STRING_ARRAY =
@@ -3959,71 +3958,16 @@ public class CarrierConfigManager {
      * NR_SA - NR SA is unmetered when roaming for sub-6 frequencies
      * NR_SA_MMWAVE - NR SA is unmetered when roaming for mmwave frequencies
      *
-     * Note that this config only applies if an unmetered SubscriptionPlan is set via
-     * {@link SubscriptionManager#setSubscriptionPlans(int, List)} or an unmetered override is set
+     * Note that this config only applies if an unmetered SubscriptionPlan is set via {@link
+     * SubscriptionManager#setSubscriptionPlans(int, List, long)} or an unmetered override is set
      * via {@link SubscriptionManager#setSubscriptionOverrideUnmetered(int, boolean, int[], long)}
      * or {@link SubscriptionManager#setSubscriptionOverrideUnmetered(int, boolean, long)}.
      * If neither SubscriptionPlans nor an override are set, then no network types can be unmetered
      * when roaming regardless of the value of this config.
-     * TODO: remove KEY_UNMETERED_NR_NSA_WHEN_ROAMING_BOOL and replace with this
      * @hide
      */
     public static final String KEY_ROAMING_UNMETERED_NETWORK_TYPES_STRING_ARRAY =
             "roaming_unmetered_network_types_string_array";
-
-    /**
-     * Whether NR (non-standalone) should be unmetered for all frequencies.
-     * If either {@link #KEY_UNMETERED_NR_NSA_MMWAVE_BOOL} or
-     * {@link #KEY_UNMETERED_NR_NSA_SUB6_BOOL} are true, then this value will be ignored.
-     * @hide
-     */
-    public static final String KEY_UNMETERED_NR_NSA_BOOL = "unmetered_nr_nsa_bool";
-
-    /**
-     * Whether NR (non-standalone) frequencies above 6GHz (millimeter wave) should be unmetered.
-     * If this is true, then the value for {@link #KEY_UNMETERED_NR_NSA_BOOL} will be ignored.
-     * @hide
-     */
-    public static final String KEY_UNMETERED_NR_NSA_MMWAVE_BOOL = "unmetered_nr_nsa_mmwave_bool";
-
-    /**
-     * Whether NR (non-standalone) frequencies below 6GHz (sub6) should be unmetered.
-     * If this is true, then the value for {@link #KEY_UNMETERED_NR_NSA_BOOL} will be ignored.
-     * @hide
-     */
-    public static final String KEY_UNMETERED_NR_NSA_SUB6_BOOL = "unmetered_nr_nsa_sub6_bool";
-
-    /**
-     * Whether NR (non-standalone) should be unmetered when the device is roaming.
-     * If false, then the values for {@link #KEY_UNMETERED_NR_NSA_BOOL},
-     * {@link #KEY_UNMETERED_NR_NSA_MMWAVE_BOOL}, {@link #KEY_UNMETERED_NR_NSA_SUB6_BOOL},
-     * and unmetered {@link SubscriptionPlan} will be ignored.
-     * @hide
-     */
-    public static final String KEY_UNMETERED_NR_NSA_WHEN_ROAMING_BOOL =
-            "unmetered_nr_nsa_when_roaming_bool";
-
-    /**
-     * Whether NR (standalone) should be unmetered for all frequencies.
-     * If either {@link #KEY_UNMETERED_NR_SA_MMWAVE_BOOL} or
-     * {@link #KEY_UNMETERED_NR_SA_SUB6_BOOL} are true, then this value will be ignored.
-     * @hide
-     */
-    public static final String KEY_UNMETERED_NR_SA_BOOL = "unmetered_nr_sa_bool";
-
-    /**
-     * Whether NR (standalone) frequencies above 6GHz (millimeter wave) should be unmetered.
-     * If this is true, then the value for {@link #KEY_UNMETERED_NR_SA_BOOL} will be ignored.
-     * @hide
-     */
-    public static final String KEY_UNMETERED_NR_SA_MMWAVE_BOOL = "unmetered_nr_sa_mmwave_bool";
-
-    /**
-     * Whether NR (standalone) frequencies below 6GHz (sub6) should be unmetered.
-     * If this is true, then the value for {@link #KEY_UNMETERED_NR_SA_BOOL} will be ignored.
-     * @hide
-     */
-    public static final String KEY_UNMETERED_NR_SA_SUB6_BOOL = "unmetered_nr_sa_sub6_bool";
 
     /**
      * Support ASCII 7-BIT encoding for long SMS. This carrier config is used to enable
@@ -7118,11 +7062,11 @@ public class CarrierConfigManager {
 
         /**
          * Maximum Retry Count for SMS over IMS on Failure, If the Retry Count exceeds this value,
-         * and if the retry count is less than KEY_SMS_MAX_RETRY_COUNT_INT
+         * and if the retry count is less than {@link #KEY_SMS_MAX_RETRY_COUNT_INT}
          * sending SMS should fallback to CS
          */
-        public static final String KEY_SMS_MAX_RETRY_COUNT_OVER_IMS_INT =
-                KEY_PREFIX + "sms_max_retry_count_over_ims_int";
+        public static final String KEY_SMS_MAX_RETRY_OVER_IMS_COUNT_INT =
+                KEY_PREFIX + "sms_max_retry_over_ims_count_int";
 
         /**
          * Delay Timer Value in milliseconds
@@ -7190,7 +7134,7 @@ public class CarrierConfigManager {
             defaults.putInt(KEY_SMS_OVER_IMS_FORMAT_INT, SMS_FORMAT_3GPP);
 
             defaults.putInt(KEY_SMS_MAX_RETRY_COUNT_INT, 3);
-            defaults.putInt(KEY_SMS_MAX_RETRY_COUNT_OVER_IMS_INT, 3);
+            defaults.putInt(KEY_SMS_MAX_RETRY_OVER_IMS_COUNT_INT, 3);
             defaults.putInt(KEY_SMS_OVER_IMS_SEND_RETRY_DELAY_MILLIS_INT,
                     2000);
             defaults.putInt(KEY_SMS_TR1_TIMER_MILLIS_INT, 130000);
@@ -9117,8 +9061,9 @@ public class CarrierConfigManager {
             "carrier_certificate_string_array";
 
     /**
-     * Flag specifying whether the incoming call number should be formatted to national number
-     * for Japan. @return {@code true} convert to the national format, {@code false} otherwise.
+     * Flag specifying whether the incoming call number and the conference participant number
+     * should be formatted to national number for Japan.
+     * @return {@code true} convert to the national format, {@code false} otherwise.
      * e.g. "+819012345678" -> "09012345678"
      * @hide
      */
@@ -10243,13 +10188,6 @@ public class CarrierConfigManager {
         sDefaults.putStringArray(KEY_UNMETERED_NETWORK_TYPES_STRING_ARRAY, new String[] {
                 "NR_NSA", "NR_NSA_MMWAVE", "NR_SA", "NR_SA_MMWAVE"});
         sDefaults.putStringArray(KEY_ROAMING_UNMETERED_NETWORK_TYPES_STRING_ARRAY, new String[0]);
-        sDefaults.putBoolean(KEY_UNMETERED_NR_NSA_BOOL, false);
-        sDefaults.putBoolean(KEY_UNMETERED_NR_NSA_MMWAVE_BOOL, false);
-        sDefaults.putBoolean(KEY_UNMETERED_NR_NSA_SUB6_BOOL, false);
-        sDefaults.putBoolean(KEY_UNMETERED_NR_NSA_WHEN_ROAMING_BOOL, false);
-        sDefaults.putBoolean(KEY_UNMETERED_NR_SA_BOOL, false);
-        sDefaults.putBoolean(KEY_UNMETERED_NR_SA_MMWAVE_BOOL, false);
-        sDefaults.putBoolean(KEY_UNMETERED_NR_SA_SUB6_BOOL, false);
         sDefaults.putBoolean(KEY_ASCII_7_BIT_SUPPORT_FOR_LONG_MESSAGE_BOOL, false);
         sDefaults.putBoolean(KEY_SHOW_WIFI_CALLING_ICON_IN_STATUS_BAR_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_SUPPORTS_OPP_DATA_AUTO_PROVISIONING_BOOL, false);
@@ -10322,7 +10260,7 @@ public class CarrierConfigManager {
         sDefaults.putAll(Bsf.getDefaults());
         sDefaults.putAll(Iwlan.getDefaults());
         sDefaults.putStringArray(KEY_CARRIER_CERTIFICATE_STRING_ARRAY, new String[0]);
-         sDefaults.putBoolean(KEY_FORMAT_INCOMING_NUMBER_TO_NATIONAL_FOR_JP_BOOL, false);
+        sDefaults.putBoolean(KEY_FORMAT_INCOMING_NUMBER_TO_NATIONAL_FOR_JP_BOOL, false);
         sDefaults.putIntArray(KEY_DISCONNECT_CAUSE_PLAY_BUSYTONE_INT_ARRAY,
                 new int[] {4 /* BUSY */});
         sDefaults.putBoolean(KEY_PREVENT_CLIR_ACTIVATION_AND_DEACTIVATION_CODE_BOOL, false);
@@ -10986,5 +10924,39 @@ public class CarrierConfigManager {
             throw new IllegalStateException("Telephony registry service is null");
         }
         trm.removeCarrierConfigChangedListener(listener);
+    }
+
+    /**
+     * Get subset of specified carrier configuration if available or empty bundle, without throwing
+     * {@link RuntimeException} to caller.
+     *
+     * <p>This is a system internally used only utility to reduce the repetitive logic.
+     *
+     * <p>Requires Permission:
+     * {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}, or the calling app
+     * has carrier privileges on the specified subscription (see
+     * {@link TelephonyManager#hasCarrierPrivileges()}).
+     *
+     * @param context Context used to get the CarrierConfigManager service.
+     * @param subId The subscription ID to get the config from.
+     * @param keys The config keys the client is interested in.
+     * @return Config bundle with key/value for the specified keys or empty bundle when failed
+     * @hide
+     */
+    @RequiresPermission(anyOf = {
+            Manifest.permission.READ_PHONE_STATE,
+            "carrier privileges",
+    })
+    @NonNull
+    public static PersistableBundle getCarrierConfigSubset(
+            @NonNull Context context, int subId, @NonNull String... keys) {
+        PersistableBundle configs = null;
+        CarrierConfigManager ccm = context.getSystemService(CarrierConfigManager.class);
+        try {
+            configs = ccm.getConfigForSubId(subId, keys);
+        } catch (RuntimeException exception) {
+            Rlog.w(TAG, "CarrierConfigLoader is not available.");
+        }
+        return configs != null ? configs : new PersistableBundle();
     }
 }

@@ -2445,13 +2445,12 @@ public abstract class Context {
      * @see #sendBroadcast(Intent)
      * @see #sendOrderedBroadcast(Intent, String)
      * @see #sendOrderedBroadcast(Intent, String, BroadcastReceiver, Handler, int, String, Bundle)
-     * @hide
      */
-    @SuppressWarnings("HiddenAbstractMethod")
-    @SystemApi
-    public abstract void sendBroadcast(Intent intent,
+    public void sendBroadcast(@NonNull Intent intent,
             @Nullable String receiverPermission,
-            @Nullable Bundle options);
+            @Nullable Bundle options) {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
 
     /**
      * Like {@link #sendBroadcast(Intent, String)}, but also allows specification
@@ -2485,6 +2484,32 @@ public abstract class Context {
      */
     public abstract void sendOrderedBroadcast(@RequiresPermission Intent intent,
             @Nullable String receiverPermission);
+
+    /**
+     * Broadcast the given intent to all interested BroadcastReceivers, delivering
+     * them one at a time to allow more preferred receivers to consume the
+     * broadcast before it is delivered to less preferred receivers.  This
+     * call is asynchronous; it returns immediately, and you will continue
+     * executing while the receivers are run.
+     *
+     * <p>See {@link BroadcastReceiver} for more information on Intent broadcasts.
+     *
+     * @param intent             The Intent to broadcast; all receivers matching this
+     *                           Intent will receive the broadcast.
+     * @param receiverPermission (optional) String naming a permissions that
+     *                           a receiver must hold in order to receive your broadcast.
+     *                           If null, no permission is required.
+     * @param options            (optional) Additional sending options, generated from a
+     *                           {@link android.app.BroadcastOptions}.
+     * @see android.content.BroadcastReceiver
+     * @see #registerReceiver
+     * @see #sendBroadcast(Intent)
+     * @see #sendOrderedBroadcast(Intent, String, BroadcastReceiver, Handler, int, String, Bundle)
+     */
+    public void sendOrderedBroadcast(@NonNull Intent intent, @Nullable String receiverPermission,
+            @Nullable Bundle options) {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
 
     /**
      * Version of {@link #sendBroadcast(Intent)} that allows you to
@@ -2572,14 +2597,13 @@ public abstract class Context {
      * @see android.content.BroadcastReceiver
      * @see #registerReceiver
      * @see android.app.Activity#RESULT_OK
-     * @hide
      */
-    @SuppressWarnings("HiddenAbstractMethod")
-    @SystemApi
-    public abstract void sendOrderedBroadcast(@NonNull Intent intent,
+    public void sendOrderedBroadcast(@NonNull Intent intent,
             @Nullable String receiverPermission, @Nullable Bundle options,
             @Nullable BroadcastReceiver resultReceiver, @Nullable Handler scheduler,
-            int initialCode, @Nullable String initialData, @Nullable Bundle initialExtras);
+            int initialCode, @Nullable String initialData, @Nullable Bundle initialExtras) {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
 
     /**
      * Like {@link #sendOrderedBroadcast(Intent, String, BroadcastReceiver, android.os.Handler,
@@ -6151,10 +6175,10 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
-     * {@link android.healthconnect.HealthConnectManager}.
+     * {@link android.health.connect.HealthConnectManager}.
      *
      * @see #getSystemService(String)
-     * @see android.healthconnect.HealthConnectManager
+     * @see android.health.connect.HealthConnectManager
      */
     public static final String HEALTHCONNECT_SERVICE = "healthconnect";
 
@@ -6208,12 +6232,24 @@ public abstract class Context {
     public static final String SATELLITE_SERVICE = "satellite";
 
     /**
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.net.wifi.sharedconnectivity.app.SharedConnectivityManager} for accessing
+     * shared connectivity services.
+     *
+     * @see #getSystemService(String)
+     * @see android.net.wifi.sharedconnectivity.app.SharedConnectivityManager
+     * @hide
+     */
+    @SystemApi
+    public static final String SHARED_CONNECTIVITY_SERVICE = "shared_connectivity";
+
+    /**
      * Determine whether the given permission is allowed for a particular
      * process and user ID running in the system.
      *
      * @param permission The name of the permission being checked.
      * @param pid The process ID being checked against.  Must be > 0.
-     * @param uid The user ID being checked against.  A uid of 0 is the root
+     * @param uid The UID being checked against.  A uid of 0 is the root
      * user, which will pass every permission check.
      *
      * @return {@link PackageManager#PERMISSION_GRANTED} if the given
@@ -6303,7 +6339,7 @@ public abstract class Context {
      *
      * @param permission The name of the permission being checked.
      * @param pid The process ID being checked against.  Must be &gt; 0.
-     * @param uid The user ID being checked against.  A uid of 0 is the root
+     * @param uid The UID being checked against.  A uid of 0 is the root
      * user, which will pass every permission check.
      * @param message A message to include in the exception if it is thrown.
      *
@@ -6447,7 +6483,7 @@ public abstract class Context {
      *
      * @param uri The uri that is being checked.
      * @param pid The process ID being checked against.  Must be &gt; 0.
-     * @param uid The user ID being checked against.  A uid of 0 is the root
+     * @param uid The UID being checked against.  A uid of 0 is the root
      * user, which will pass every permission check.
      * @param modeFlags The access modes to check.
      *
@@ -6475,7 +6511,7 @@ public abstract class Context {
      *
      * @param uris The list of URIs that is being checked.
      * @param pid The process ID being checked against.  Must be &gt; 0.
-     * @param uid The user ID being checked against.  A uid of 0 is the root
+     * @param uid The UID being checked against.  A uid of 0 is the root
      * user, which will pass every permission check.
      * @param modeFlags The access modes to check for the list of uris
      *
@@ -6601,7 +6637,7 @@ public abstract class Context {
      * @param writePermission The permission that provides overall write
      * access, or null to not do this check.
      * @param pid The process ID being checked against.  Must be &gt; 0.
-     * @param uid The user ID being checked against.  A uid of 0 is the root
+     * @param uid The UID being checked against.  A uid of 0 is the root
      * user, which will pass every permission check.
      * @param modeFlags The access modes to check.
      *
@@ -6625,7 +6661,7 @@ public abstract class Context {
      *
      * @param uri The uri that is being checked.
      * @param pid The process ID being checked against.  Must be &gt; 0.
-     * @param uid The user ID being checked against.  A uid of 0 is the root
+     * @param uid The UID being checked against.  A uid of 0 is the root
      * user, which will pass every permission check.
      * @param modeFlags The access modes to enforce.
      * @param message A message to include in the exception if it is thrown.
@@ -6684,7 +6720,7 @@ public abstract class Context {
      * @param writePermission The permission that provides overall write
      * access, or null to not do this check.
      * @param pid The process ID being checked against.  Must be &gt; 0.
-     * @param uid The user ID being checked against.  A uid of 0 is the root
+     * @param uid The UID being checked against.  A uid of 0 is the root
      * user, which will pass every permission check.
      * @param modeFlags The access modes to enforce.
      * @param message A message to include in the exception if it is thrown.
