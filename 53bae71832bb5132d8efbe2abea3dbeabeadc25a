@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "8d3ebdbb_4afc7ac7",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000541
+      },
+      "writtenOn": "2023-03-01T20:07:52Z",
+      "side": 1,
+      "message": "id propose renaming this to Charge Control or something - \"Smart Charging\" doesn\u0027t seem fitting, since there\u0027s nothing smart about it. We could also look into LOS\u0027s charging control (https://review.lineageos.org/q/topic:charging-control-hal-20)",
+      "revId": "53bae71832bb5132d8efbe2abea3dbeabeadc25a",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
