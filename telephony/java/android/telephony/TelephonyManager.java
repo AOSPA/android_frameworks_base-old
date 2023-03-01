@@ -667,6 +667,58 @@ public class TelephonyManager {
         return mSimVoiceConfig == MultiSimVoiceCapability.DSDA;
     }
 
+
+    /**
+     * Returns true if device is in DSDA mode where concurrent calls on both subscriptions are
+     * possible or if device is in a mode that supports DSDA features ex.DSDS Transition mode
+     * Returns false for other cases.
+     */
+    /** {@hide} */
+    public boolean isDsdaOrDsdsTransitionMode() {
+        return isConcurrentCallsPossible() || isDsdsTransitionMode();
+    }
+
+    /**
+     * DSDS Transition mode is a mode when the device in DSDA transitions into DSDS mode due
+     * to temporary RAT changes while still retaining the calls on both subscriptions.
+     * In this mode, incoming calls and call swap work like DSDA mode but outgoing concurrent
+     * calls are only allowed on the subscription that has a call in ACTIVE state. Outgoing
+     * calls made on the subscription with call(s) in non-ACTIVE state will result in framework
+     * disconnecting calls on the other subscription.
+     * This API is not guaranteed to work when invoked from ImsPhoneCallTracker as the call states
+     * might not be updated at the time of invocation.
+     *
+     * Returns true if there are calls on both subscriptions in DSDS mode
+     * Returns false otherwise
+     */
+    /** {@hide} */
+    public boolean isDsdsTransitionMode() {
+        if (!isDsdsTransitionSupported()) {
+            return false;
+        }
+
+        if (TelephonyProperties.multi_sim_voice_capability().orElse(
+                MultiSimVoiceCapability.UNKNOWN) != MultiSimVoiceCapability.DSDS) {
+            return false;
+        }
+
+        for (int i = 0; i < getActiveModemCount(); i++) {
+            if (getCallState(SubscriptionManager.getSubscriptionId(i))== CALL_STATE_IDLE) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Returns true if on multisim devices, DSDA features are supported in non-DSDA modes
+     * Returns false otherwise
+     */
+    /** {@hide} */
+    public static boolean isDsdsTransitionSupported() {
+        return TelephonyProperties.dsds_transition_supported().orElse(false);
+    }
+
     /**
      * Returns the number of phones available.
      * Returns 0 if none of voice, sms, data is not supported
